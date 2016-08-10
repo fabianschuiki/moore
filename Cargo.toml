@@ -2,3 +2,4 @@
 name = "moore"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@student.ethz.ch>"]
+build = "pre/build.rs"
