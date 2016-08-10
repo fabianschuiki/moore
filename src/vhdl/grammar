@@ -1,0 +1,89 @@
+# Copyright (c) 2016 Fabian Schuiki
+# VHDL Grammar as per IEEE 1076-2000
+
+design_file : design_unit_list ;
+
+# 1.1 Entity declarations
+entity_decl_p0 : ENTITY IDENT IS entity_header entity_decl_part ;
+entity_decl_p1 : entity_decl_p0 | entity_decl_p0 BEGIN entity_stmt_part ;
+entity_decl_p2 : entity_decl_p1 END ;
+entity_decl_p3 : entity_decl_p2 ENTITY ;
+entity_decl_p4 : entity_decl_p3 simple_name ;
+entity_decl "Entity" : entity_decl_p4 SEMICOLON ;
+
+# 1.1.1 Entity header
+entity_header : generic_clause | port_clause ;
+generic_clause : GENERIC LPAREN intf_list RPAREN ;
+port_clause : PORT LPAREN intf_list RPAREN ;
+
+entity_decl_part : entity_decl_item | entity_decl_part entity_decl_item ;
+entity_decl_item ;
+
+entity_stmt_part : entity_stmt | entity_stmt_part entity_stmt ;
+entity_stmt ;
+
+# 1.2 Architecture bodies
+arch_body_p0 : ARCHITECTURE IDENT OF name IS arch_decl_part BEGIN arch_stmt_part END;
+arch_body_p1 : arch_body_p0 | arch_body_p0 ARCHITECTURE ;
+arch_body_p2 : arch_body_p1 | arch_body_p1 simple_name ;
+arch_body : arch_body_p2 SEMICOLON ;
+
+arch_decl_part;
+arch_stmt_part;
+
+# ?.? Subtype declarations
+subtype_indication_p0 : name ;
+subtype_indication : subtype_indication_p0 | subtype_indication_p0 constraint ;
+
+constraint : range_constraint | array_constraint ;
+range_constraint : RANGE range ;
+range : LPAREN IDENT direction IDENT RPAREN ;
+direction : TO | DOWNTO ;
+array_constraint : LPAREN range RPAREN ;
+
+# ?.? Interface declarations
+intf_decl
+	: intf_signal_decl
+	;
+
+intf_signal_decl : ident_list COLON mode subtype_indication ;
+
+mode : IN | OUT | INOUT | BUFFER | LINKAGE ;
+intf_list : intf_decl | intf_list SEMICOLON intf_decl ;
+ident_list : IDENT | ident_list COMMA IDENT ;
+
+# 6.1 Names
+name : simple_name | selected_name ;
+prefix : name ;
+
+# name (Name)
+# 	: simple_name, reduce_name_a;
+# 	: selected_name, reduce_name_b;
+
+# 6.2 Simple names
+simple_name : IDENT ;
+
+# simple_name (String)
+# 	: IDENT, reduce_simple_name;
+
+# 6.3 Selected names
+selected_name : prefix PERIOD suffix ;
+suffix : simple_name | ALL ;
+
+# 10.4 Use clauses
+use_clause_p0 : USE selected_name | use_clause COMMA selected_name ;
+use_clause : use_clause_p0 SEMICOLON ;
+
+# 11.1 Design units
+design_unit_list : design_unit | design_unit_list design_unit ;
+design_unit : library_unit | context_clause library_unit ;
+
+library_unit : entity_decl | arch_body ;
+
+# 11.2 Design libraries
+library_clause : LIBRARY library_name_list SEMICOLON > reduce_library_clause ;
+library_name_list "Vec<String>" : IDENT > reduce_library_name_list_x | library_name_list COMMA IDENT > reduce_library_name_list_xs ;
+
+# 11.3 Context clauses
+context_clause : context_item | context_clause context_item ;
+context_item : library_clause | use_clause ;

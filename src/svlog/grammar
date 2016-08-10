@@ -1,0 +1,6 @@
+# Copyright (c) 2016 Fabian Schuiki
+# SystemVerilog Grammar
+
+module
+	: blahrg ;
+	: hello ;
