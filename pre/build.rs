@@ -10,5 +10,5 @@ fn main() {
 	println!("build.rs into {}", dst_path.to_str().unwrap());
 
 	// pargen::generate(Path::new("src/svlog/grammar"), &dst_path.join("svlog-parser.rs"));
-	pargen::generate(Path::new("src/vhdl/grammar"), &dst_path.join("vhdl-parser.rs"));
+	// pargen::generate(Path::new("src/vhdl/grammar"), &dst_path.join("vhdl-parser.rs"));
 }

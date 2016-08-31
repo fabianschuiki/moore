@@ -1,332 +1,111 @@
 // Copyright (c) 2016 Fabian Schuiki
 use std;
 use std::rc::{Rc, Weak};
-use std::cell::{RefCell};
+use std::cell::{Cell,RefCell,Ref};
 use std::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
 
 
-pub struct Grammar {
-	pub rules: Vec<Rc<RefCell<Rule>>>,
+/// A parsed grammar file.
+pub struct Grammar<'a> {
+	rules: Vec<Box<Rule<'a>>>,
+	rules_by_name: HashMap<Box<str>, &'a Rule<'a>>,
+	root: &'a Rule<'a>,
 }
 
-pub struct Rule {
-	pub id: usize,
-	pub grammar: Weak<RefCell<Grammar>>,
-	pub name: Box<str>,
-	pub variants: Vec<Rc<RefCell<Variant>>>,
-	pub retype: Option<Box<str>>,
+/// An individual rule within a grammar. A rule consists of multiple variants,
+/// or productions.
+pub struct Rule<'a> {
+	id: usize,
+	// grammar: Weak<RefCell<Grammar>>,
+	grammar: Cell<&'a Grammar<'a>>,
+	name: Box<str>,
+	// variants: Vec<Rc<RefCell<Variant>>>,
+	variants: Vec<Box<Variant<'a>>>,
+	// retype: Option<Box<str>>,
+	reduced_type: Option<Box<str>>,
 }
 
-pub struct Variant {
-	pub id: usize,
-	pub rule: Weak<RefCell<Rule>>,
-	pub symbols: Vec<RefCell<Symbol>>,
-	pub reducer: Option<Box<str>>,
+/// A variant or production of a rule.
+pub struct Variant<'a> {
+	id: usize,
+	// rule: Weak<RefCell<Rule>>,
+	rule: Cell<&'a Rule<'a>>,
+	symbols: Vec<Symbol<'a>>,
+	// reducer: Option<Box<str>>,
+	reducer_fn: Option<Box<str>>,
 }
 
 #[derive(Clone)]
-pub enum Symbol {
+pub enum Symbol<'a> {
 	End,
-	Unresolved(String),
-	Terminal(String),
-	NonTerminal(Weak<RefCell<Rule>>),
+	Unresolved(Box<str>),
+	Terminal(Box<str>),
+	// NonTerminal(Weak<RefCell<Rule>>),
+	NonTerminal(&'a Rule<'a>),
 }
 
+type RulesIterator<'a,'b> = std::slice::Iter<'b, Box<Rule<'a>>>;
+type VariantsIterator<'a,'b> = std::slice::Iter<'b, Box<Variant<'a>>>;
+type SymbolsIterator<'a,'b> = std::slice::Iter<'b, Symbol<'a>>;
 
-pub fn parse(grammar_path: &Path) -> Rc<RefCell<Grammar>> {
 
-	// Read the entire grammar file into a string.
-	let mut src = String::new();
-	File::open(grammar_path).unwrap().read_to_string(&mut src).unwrap();
+impl<'a> Grammar<'a> {
+	// pub fn link(&self) {
+	// 	// Build a rule lookup table.
+	// 	let rule_table = {
+	// 		let mut tbl = HashMap::<Box<str>, Weak<RefCell<Rule>>>::new();
+	// 		for rule in &self.rules {
+	// 			tbl.insert(rule.borrow().name.clone(), Rc::downgrade(&rule));
+	// 		}
+	// 		tbl
+	// 	};
 
-	// Create a lexer for the grammar.
-	let mut src_iter = src.chars().into_iter();
-	let mut lexer = Lexer::new(&mut src_iter);
+	// 	// Link the symbols.
+	// 	let mut id = 0;
+	// 	for rule_cell in &self.rules {
+	// 		let mut rule = rule_cell.borrow_mut();
+	// 		rule.id = id;
+	// 		id += 1;
 
-	// Create a parser for the grammar and parse the rules.
-	let mut parser = Parser::new(&mut lexer);
-	let grammar = Rc::new(RefCell::new(Grammar {
-		rules: Vec::new(),
-	}));
+	// 		for variant_cell in &rule.variants {
+	// 			let mut variant = variant_cell.borrow_mut();
+	// 			variant.id = id;
+	// 			id += 1;
 
-	while !parser.done() {
-		parse_rule(&mut parser, &grammar);
+	// 			for symbol in &variant.symbols {
+	// 				let replacement =
+	// 					if let Symbol::Unresolved(ref name) = *symbol.borrow() {
+	// 						if let Some(rule) = rule_table.get(name.as_str()) {
+	// 							Symbol::NonTerminal(rule.clone())
+	// 						} else {
+	// 							Symbol::Terminal(name.clone())
+	// 						}
+	// 					} else {
+	// 						continue;
+	// 					};
+	// 				*symbol.borrow_mut() = replacement;
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// rules
+	// root
+
+	pub fn rules<'b>(&'b self) -> RulesIterator<'a,'b> {
+		self.rules.iter()
 	}
 
-	grammar.borrow().link();
-	grammar
-}
-
-
-fn parse_rule(parser: &mut Parser, grammar: &Rc<RefCell<Grammar>>) {
-
-	// Rule name.
-	let rule_name = match parser.token {
-		Some(Token::Ident(ref x)) => x.clone(),
-		_ => panic!("expected rule name")
-	};
-	parser.next();
-
-	let retype = match parser.token {
-		Some(Token::String(ref n)) => Some(n.clone().into_boxed_str()),
-		_ => None
-	};
-	if retype.is_some() {
-		parser.next();
+	pub fn get_root(&self) -> &'a Rule<'a> {
+		self.root
 	}
 
-	let rule_cell = {
-		let mut grammar_mut = grammar.borrow_mut();
-		let rule = Rc::new(RefCell::new(Rule {
-			id: grammar_mut.rules.len(),
-			grammar: Rc::downgrade(grammar),
-			name: rule_name.into_boxed_str(),
-			variants: Vec::new(),
-			retype: retype,
-		}));
-		grammar_mut.rules.push(rule.clone());
-		rule
-	};
-	let mut rule = rule_cell.borrow_mut();
-
-	match parser.token {
-		Some(Token::Colon) => parser.next(),
-		Some(Token::Semicolon) => { parser.next(); return; },
-		ref x => panic!("In rule '{}': Expected ':' or ';' after rule name, got {:?} instead", rule.name, x)
-	};
-
-	// Variants.
-	loop {
-		let mut variant = Variant {
-			id: rule.variants.len(),
-			rule: Rc::downgrade(&rule_cell),
-			symbols: Vec::new(),
-			reducer: None,
-		};
-
-		loop {
-			variant.symbols.push(match parser.token {
-				Some(Token::Ident(ref x)) => RefCell::new(Symbol::Unresolved(x.clone())),
-				_ => break,
-			});
-			parser.next();
-		}
-
-		// Parse the reduction rule name.
-		match parser.token {
-			Some(Token::Greater) => {
-				parser.next();
-				match parser.token {
-					Some(Token::Ident(ref x)) => variant.reducer = Some(x.clone().into_boxed_str()),
-					ref x => panic!("In rule '{}': Expected reducer name after '>', got {:?} instead", rule.name, x)
-				};
-				parser.next();
-			},
-			_ => (),
-		}
-
-		// Add the variant to the rule.
-		rule.variants.push(Rc::new(RefCell::new(variant)));
-
-		// Decide whether to continue or finish this rule.
-	    match parser.token {
-	    	Some(Token::Pipe) => { parser.next(); continue; },
-	    	Some(Token::Semicolon) => { parser.next(); break; },
-			ref x => panic!("In rule '{}': Expected terminal, non-terminal, '|', or ';', got {:?} instead", rule.name, x)
-	    }
-	}
-}
-
-
-struct Lexer<'a> {
-	line: u32,
-	column: u32,
-	iter: &'a mut Iterator<Item=char>,
-	chr: Option<char>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum Token {
-	Colon,
-	Semicolon,
-	Pipe,
-	Greater,
-	Ident(String),
-	String(String),
-	Terminal(String),
-}
-
-fn is_ident(c: char) -> bool {
-	c == '_' || c.is_alphanumeric()
-}
-
-impl<'a> Iterator for Lexer<'a> {
-	type Item = Token;
-
-	fn next(&mut self) -> Option<Token> {
-		while let Some(c) = self.chr {
-
-			// Skip whitespace.
-			if c.is_whitespace() {
-				self.eat();
-				continue;
-			}
-
-			// Skip comments.
-			if c == '#' {
-				self.eat();
-				while let Some(c) = self.chr {
-		    		if c == '\n' {
-		    			break;
-		    		}
-			    	self.eat();
-			    }
-			    continue;
-			}
-
-			// Match symbols and identifiers.
-			return match c {
-			    ':' => { self.eat(); Some(Token::Colon) },
-			    ';' => { self.eat(); Some(Token::Semicolon) },
-			    '|' => { self.eat(); Some(Token::Pipe) },
-			    '>' => { self.eat(); Some(Token::Greater) },
-			    '@' => { self.eat(); Some(Token::Terminal(self.eat_ident())) },
-			    '"' => {
-			    	self.eat();
-			    	let mut buffer = String::new();
-					while let Some(c) = self.chr {
-						if c == '"' {
-							self.eat();
-							break;
-						}
-						buffer.push(c);
-						self.eat();
-					}
-					Some(Token::String(buffer))
-			    }
-			    x => {
-					if is_ident(x) {
-						Some(Token::Ident(self.eat_ident()))
-					} else {
-						panic!("{}.{}: unexpected character '{}'", self.line+1, self.column+1, c)
-					}
-			    }
-			}
-		}
-		return None
-	}
-}
-
-impl<'a> Lexer<'a> {
-	fn new(chars: &'a mut Iterator<Item=char>) -> Self {
-		let c = chars.next();
-		Lexer {
-			line: 0,
-			column: 0,
-			iter: chars,
-			chr: c,
-		}
-	}
-
-	fn eat(&mut self) {
-		if let Some(c) = self.chr {
-			if c == '\n' {
-				self.line += 1;
-				self.column = 0;
-			} else {
-				self.column += 1;
-			}
-			self.chr = self.iter.next();
-		}
-	}
-
-	fn eat_ident(&mut self) -> String {
-		let mut buffer = String::new();
-		while let Some(c) = self.chr {
-			if !is_ident(c) {
-				break;
-			}
-			buffer.push(c);
-			self.eat();
-		}
-		buffer
-	}
-}
-
-
-struct Parser<'a> {
-	lexer: &'a mut Lexer<'a>,
-	token: Option<Token>
-}
-
-impl<'a> Parser<'a> {
-	fn new(lexer: &'a mut Lexer<'a>) -> Self {
-		let tkn = lexer.next();
-		Parser {
-			lexer: lexer,
-			token: tkn,
-		}
-	}
-
-	fn next(&mut self) {
-		self.token = self.lexer.next();
-	}
-
-	fn done(&mut self) -> bool {
-		self.token.is_none()
-	}
-}
-
-
-
-impl Grammar {
-	pub fn link(&self) {
-		// Build a rule lookup table.
-		let rule_table = {
-			let mut tbl = HashMap::<Box<str>, Weak<RefCell<Rule>>>::new();
-			for rule in &self.rules {
-				tbl.insert(rule.borrow().name.clone(), Rc::downgrade(&rule));
-			}
-			tbl
-		};
-
-		// Link the symbols.
-		let mut id = 0;
-		for rule_cell in &self.rules {
-			let mut rule = rule_cell.borrow_mut();
-			rule.id = id;
-			id += 1;
-
-			for variant_cell in &rule.variants {
-				let mut variant = variant_cell.borrow_mut();
-				variant.id = id;
-				id += 1;
-
-				for symbol in &variant.symbols {
-					let replacement =
-						if let Symbol::Unresolved(ref name) = *symbol.borrow() {
-							if let Some(rule) = rule_table.get(name.as_str()) {
-								Symbol::NonTerminal(rule.clone())
-							} else {
-								Symbol::Terminal(name.clone())
-							}
-						} else {
-							continue;
-						};
-					*symbol.borrow_mut() = replacement;
-				}
-			}
-		}
-	}
-
-	pub fn get_root(&self) -> &Rc<RefCell<Rule>> {
-		return &self.rules[0];
-	}
+	// pub fn get_root(&self) -> &Rc<RefCell<Rule>> {
+	// 	assert!(self.rules.len() > 0);
+	// 	return &self.rules[0];
+	// }
 
 	pub fn get_pattern(&self, name: &str) -> String {
 		let mut s = String::from("Token::");
@@ -366,30 +145,176 @@ impl Grammar {
 	}
 }
 
-
-impl Rule {
-	pub fn get_name(&self) -> &str {
-		self.name.as_ref()
+impl<'a> Debug for Grammar<'a> {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		for rule in &self.rules {
+			try!(write!(f, "{:?}\n", rule));
+		}
+		Ok(())
 	}
+}
+
+
+
+// -----------------------------------------------------------------------------
+// Rule
+// -----------------------------------------------------------------------------
+
+impl<'a> Rule<'a> {
+	// id
+	// grammar
+	// name
+	// variants
+	// reduced_type
 
 	pub fn get_id(&self) -> usize {
 		self.id
 	}
 
-	pub fn get_variants(&self) -> &Vec<Rc<RefCell<Variant>>> {
-		&self.variants
+	pub fn get_grammar(&self) -> &'a Grammar<'a> {
+		self.grammar.get()
+	}
+
+	pub fn get_name(&self) -> &str {
+		self.name.as_ref()
+	}
+
+	pub fn variants<'b>(&'b self) -> VariantsIterator<'a,'b> {
+		self.variants.iter()
+	}
+
+	pub fn get_reduced_type(&self) -> Option<&Box<str>> {
+		self.reduced_type.as_ref()
+	}
+
+	// pub fn get_variants(&self) -> &Vec<Rc<RefCell<Variant>>> {
+	// 	&self.variants
+	// }
+}
+
+impl<'a> Ord for Rule<'a> {
+	fn cmp(&self, other: &Self) -> Ordering {
+		// self.id.cmp(&other.id)
+		match self.variants.cmp(&other.variants) {
+			Ordering::Equal => (),
+			o => return o
+		}
+		return self.reduced_type.cmp(&other.reduced_type);
+	}
+}
+
+impl<'a> PartialOrd for Rule<'a> {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl<'a> PartialEq for Rule<'a> {
+	fn eq(&self, other: &Self) -> bool {
+		// self.id == other.id
+		self.cmp(&other) == Ordering::Equal
+	}
+}
+
+impl<'a> Eq for Rule<'a> {}
+
+impl<'a> Debug for Rule<'a> {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		try!(write!(f, "{}", self.name));
+		let mut sep = ':';
+		for variant in &self.variants {
+			try!(write!(f, "\n    {} {:?}", sep, variant));
+			sep = '|';
+		}
+		write!(f, " ;")
 	}
 }
 
 
-impl Variant {
-	pub fn get_symbols(&self) -> &Vec<RefCell<Symbol>> {
-		&self.symbols
+
+// -----------------------------------------------------------------------------
+// Variant
+// -----------------------------------------------------------------------------
+
+impl<'a> Variant<'a> {
+	// id
+	// rule
+	// symbols
+	// reducer_fn
+
+	pub fn get_id(&self) -> usize {
+		self.id
+	}
+
+	pub fn get_rule(&self) -> &'a Rule<'a> {
+		self.rule.get()
+	}
+
+	pub fn symbols<'b>(&'b self) -> SymbolsIterator<'a,'b> {
+		// SymbolsIterator { r: self.symbols.borrow(), it: self.symbols.borrow().iter() }
+		self.symbols.iter()
+	}
+
+	pub fn get_symbol(&self, idx: usize) -> &Symbol<'a> {
+		&self.symbols[idx]
+	}
+
+	// pub fn get_symbols(&self) -> &'a Vec<RefCell<Symbol<'a>>> {
+	// 	&self.symbols
+	// }
+
+	pub fn get_reducer_fn(&self) -> Option<&Box<str>> {
+		self.reducer_fn.as_ref()
+	}
+}
+
+impl<'a> Ord for Variant<'a> {
+	fn cmp(&self, other: &Self) -> Ordering {
+		// self.id.cmp(&other.id)
+		match self.symbols.cmp(&other.symbols) {
+			Ordering::Equal => (),
+			o => return o
+		}
+		return self.reducer_fn.cmp(&other.reducer_fn);
+	}
+}
+
+impl<'a> PartialOrd for Variant<'a> {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl<'a> PartialEq for Variant<'a> {
+	fn eq(&self, other: &Self) -> bool {
+		// self.id == other.id
+		self.cmp(&other) == Ordering::Equal
+	}
+}
+
+impl<'a> Eq for Variant<'a> {}
+
+impl<'a> Debug for Variant<'a> {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		let mut it = self.symbols();
+		if let Some(sym) = it.next() {
+			try!(sym.fmt(f));
+			for sym in it {
+				try!(write!(f, " "));
+				try!(sym.fmt(f));
+			}
+		}
+		Ok(())
 	}
 }
 
 
-impl Symbol {
+
+// -----------------------------------------------------------------------------
+// Symbol
+// -----------------------------------------------------------------------------
+
+impl<'a> Symbol<'a> {
 	fn cardinal(&self) -> u32 {
 		match *self {
 			Symbol::End => 0,
@@ -399,7 +324,7 @@ impl Symbol {
 		}
 	}
 
-	fn get_name(&self) -> &String {
+	fn get_name(&self) -> &str {
 		match *self {
 			Symbol::Unresolved(ref name) => name,
 			Symbol::Terminal(ref name) => name,
@@ -407,68 +332,22 @@ impl Symbol {
 		}
 	}
 
-	fn get_rule(&self) -> Rc<RefCell<Rule>> {
+	fn get_rule(&self) -> &Rule<'a> {
 		match *self {
-			Symbol::NonTerminal(ref rule) => rule.upgrade().unwrap(),
+			Symbol::NonTerminal(rule) => rule,
 			_ => panic!("{:?} has no rule", self),
 		}
 	}
 }
 
-
-
-impl Ord for Rule {
-	fn cmp(&self, other: &Self) -> Ordering {
-		self.id.cmp(&other.id)
-	}
-}
-
-impl PartialOrd for Rule {
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl PartialEq for Rule {
-	fn eq(&self, other: &Self) -> bool {
-		self.id == other.id
-	}
-}
-
-impl Eq for Rule {}
-
-
-
-impl Ord for Variant {
-	fn cmp(&self, other: &Self) -> Ordering {
-		self.id.cmp(&other.id)
-	}
-}
-
-impl PartialOrd for Variant {
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl PartialEq for Variant {
-	fn eq(&self, other: &Self) -> bool {
-		self.id == other.id
-	}
-}
-
-impl Eq for Variant {}
-
-
-
-impl Ord for Symbol {
+impl<'a> Ord for Symbol<'a> {
 	fn cmp(&self, other: &Self) -> Ordering {
 		let o = self.cardinal().cmp(&other.cardinal());
 		if o == Ordering::Equal {
 			match *self {
-				Symbol::Unresolved(ref name) => name.cmp(other.get_name()),
-				Symbol::Terminal(ref name) => name.cmp(other.get_name()),
-				Symbol::NonTerminal(ref rule) => rule.upgrade().unwrap().cmp(&other.get_rule()),
+				Symbol::Unresolved(ref name) => name.as_ref().cmp(other.get_name()),
+				Symbol::Terminal(ref name) => name.as_ref().cmp(other.get_name()),
+				Symbol::NonTerminal(rule) => rule.cmp(other.get_rule()),
 				_ => o,
 			}
 		} else {
@@ -477,67 +356,241 @@ impl Ord for Symbol {
 	}
 }
 
-impl PartialOrd for Symbol {
+impl<'a> PartialOrd for Symbol<'a> {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		Some(self.cmp(other))
 	}
 }
 
-impl PartialEq for Symbol {
+impl<'a> PartialEq for Symbol<'a> {
 	fn eq(&self, other: &Self) -> bool {
 		self.cmp(other) == Ordering::Equal
 	}
 }
 
-impl Eq for Symbol {}
+impl<'a> Eq for Symbol<'a> {}
 
-
-
-impl Debug for Grammar {
+impl<'a> Debug for Symbol<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		for rule in &self.rules {
-			try!(write!(f, "{:?}\n", *rule.borrow()));
+		match *self {
+			Symbol::Unresolved(ref x) => write!(f, "<?'{}'>", x),
+			Symbol::Terminal(ref x) => write!(f, "{}", x),
+			Symbol::NonTerminal(rule) => {
+				return write!(f, "{}", rule.get_name());
+			},
+			Symbol::End => write!(f, "$"),
 		}
-		Ok(())
 	}
 }
 
-impl Debug for Rule {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		try!(write!(f, "{}", self.name));
-		let mut sep = ':';
-		for variant in &self.variants {
-			try!(write!(f, "\n    {} {:?}", sep, *variant.borrow()));
-			sep = '|';
-		}
-		write!(f, " ;")
-	}
+
+#[derive(Debug)]
+pub struct GrammarBuilder {
+	terminals: HashMap<Box<str>, Box<str>>,
+	rule_builders: Vec<RuleBuilder>,
+	root: Option<Box<str>>,
 }
 
-impl Debug for Variant {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		let mut it = self.symbols.iter();
-		if let Some(sym) = it.next() {
-			try!(sym.borrow().fmt(f));
-			for sym in it {
-				try!(write!(f, " "));
-				try!(sym.borrow().fmt(f));
+#[derive(Debug)]
+pub struct RuleBuilder {
+	grammar: *mut GrammarBuilder,
+	name: Box<str>,
+	variant_builders: Vec<VariantBuilder>,
+	reduced_type: Option<Box<str>>,
+}
+
+#[derive(Debug)]
+pub struct VariantBuilder {
+	rule: *mut RuleBuilder,
+	symbols: Vec<Box<str>>,
+	reducer_fn: Option<Box<str>>,
+}
+
+impl GrammarBuilder {
+	pub fn new() -> GrammarBuilder {
+		GrammarBuilder {
+			terminals: HashMap::new(),
+			rule_builders: Vec::new(),
+			root: None,
+		}
+	}
+
+	pub fn add_terminal(&mut self, name: Box<str>, pattern: Box<str>) {
+		self.terminals.insert(name, pattern);
+	}
+
+	pub fn new_rule(&mut self, name: Box<str>) -> RuleBuilder {
+		RuleBuilder {
+			grammar: self,
+			name: name,
+			variant_builders: Vec::new(),
+			reduced_type: None,
+		}
+	}
+
+	pub fn set_root(&mut self, name: Box<str>) {
+		self.root = Some(name);
+	}
+
+	pub fn build<'a>(self) -> Box<Grammar<'a>> {
+		let mut grammar = Box::new(Grammar {
+			rules: Vec::new(),
+			rules_by_name: HashMap::new(),
+			root: unsafe { &*(0 as *const Rule<'a>) },
+		});
+
+		let mut root_rule = None;
+		let root_name = self.root.expect("No root rule has been specified");
+		let mut rule_id = 0;
+		let mut variant_id = 0;
+		let mut symbols_by_variant = HashMap::<*const Variant, Vec<Box<str>>>::new();
+
+		for rb in self.rule_builders {
+			rule_id += 1;
+			println!("processing rule builder {}: {:?}", rule_id, rb);
+			let mut rule = Box::new(Rule {
+				id: rule_id,
+				grammar: Cell::new(unsafe { &*(grammar.as_ref() as *const Grammar<'a>) }),
+				name: rb.name,
+				variants: Vec::new(),
+				reduced_type: rb.reduced_type,
+			});
+
+			// Check if this is the root rule and keep a reference around if it
+			// is. Use an unsafe block here to stop the borrow checker from
+			// whining since we guarantee that the pointed-to rule lives as long
+			// as the containing grammar lives anyway.
+			if root_name == rule.name {
+				assert!(root_rule.is_none(), "Root rule \"{}\" is defined multiple times", root_name);
+				root_rule = Some(unsafe { &*(rule.as_ref() as *const Rule) });
+			}
+
+			// Build the variants contained within this rule.
+			for vb in rb.variant_builders {
+				variant_id += 1;
+				println!("processing variant builder {}: {:?}",  variant_id, vb);
+				let mut variant = Box::new(Variant {
+					id: variant_id,
+					rule: Cell::new(unsafe { &*(rule.as_ref() as *const Rule<'a>) }),
+					symbols: Vec::new(),
+					reducer_fn: vb.reducer_fn,
+				});
+				symbols_by_variant.insert(variant.as_ref(), vb.symbols);
+
+				// Add the variant to the list.
+				rule.variants.push(variant);
+			}
+
+			// Add the rule to the list.
+			grammar.rules.push(rule);
+		}
+
+		// Make a lookup table of rules.
+		let mut rules_by_name = HashMap::new();
+		for rule in &grammar.rules {
+			let result = rules_by_name.insert(
+				rule.get_name().to_string().into_boxed_str(),
+				unsafe { &*(rule.as_ref() as *const Rule) },
+			);
+			if let Some(existing) = result {
+				panic!("Multiple definitions of rule \"{}\". The old rule was: {:?}", rule.get_name(), existing);
 			}
 		}
-		Ok(())
+
+		// Resolve the symbol references.
+		for rule in &mut grammar.rules {
+			for variant in &mut rule.variants {
+				variant.symbols = symbols_by_variant
+					.get_mut(&(variant.as_ref() as *const Variant))
+					.unwrap()
+					.drain(..)
+					.map(|x| {
+						if let Some(rule) = rules_by_name.get(x.as_ref()) {
+							Symbol::NonTerminal(rule)
+						} else {
+							Symbol::Terminal(x)
+						}
+					}).collect();
+			}
+		}
+		grammar.rules_by_name = rules_by_name;
+
+		// Ensure that we have actually found the root rule.
+		if root_rule.is_none() {
+			panic!("Root rule \"{}\" has not been defined", root_name);
+		} else {
+			grammar.root = root_rule.unwrap();
+			println!("The root rule is {:?}", grammar.root);
+		}
+
+		grammar
 	}
 }
 
-impl Debug for Symbol {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		match self {
-			&Symbol::Unresolved(ref x) => write!(f, "<?'{}'>", x),
-			&Symbol::Terminal(ref x) => write!(f, "{}", x),
-			&Symbol::NonTerminal(ref rc) => {
-				let r = rc.upgrade().unwrap();
-				return write!(f, "{}", r.borrow().name);
-			},
-			&Symbol::End => write!(f, "$"),
+impl RuleBuilder {
+	pub fn new_variant(&mut self) -> VariantBuilder {
+		VariantBuilder {
+			rule: self,
+			symbols: Vec::new(),
+			reducer_fn: None,
 		}
 	}
+
+	pub fn set_reduced_type(&mut self, ty: Box<str>) {
+		self.reduced_type = Some(ty);
+	}
+
+	pub fn build(self) {
+		unsafe { (*(self.grammar as *mut GrammarBuilder)).rule_builders.push(self); }
+	}
 }
+
+impl VariantBuilder {
+	pub fn add_symbol(&mut self, sym: Box<str>) {
+		self.symbols.push(sym);
+	}
+
+	pub fn set_reducer_fn(&mut self, fname: Box<str>) {
+		self.reducer_fn = Some(fname);
+	}
+
+	pub fn build(self) {
+		unsafe { (*(self.rule as *mut RuleBuilder)).variant_builders.push(self); }
+	}
+}
+
+
+
+/// A wrapper around a borrowed RefCell that contains a vector. This allows an
+/// iterator to the vector to be returned, by wrapping and returning the Ref to
+/// the caller, thus ensuring it has sufficient lifetime.
+struct VecRefWrapper<'a, T: 'a> {
+	r: Ref<'a, Vec<T>>
+}
+
+impl<'a, 'b: 'a, T: 'a> IntoIterator for &'b VecRefWrapper<'a, T> {
+	type IntoIter = std::slice::Iter<'a, T>;
+	type Item = &'a T;
+
+	fn into_iter(self) -> std::slice::Iter<'a, T> {
+		self.r.iter()
+	}
+}
+
+
+
+// A symbol iterator that also holds a Ref to the vector of symbols. This is
+// necessary since the symbols are listed in a RefCell<Vec<...>>, and must
+// therefore be accessed through a Ref<Vec<...>> at runtime.
+// struct SymbolsIterator<'tr, 'tg: 'tr> {
+// 	r: Ref<'tr, Vec<Symbol<'tg>>>,
+// 	it: std::slice::Iter<'tr, Symbol<'tg>>,
+// }
+
+// impl<'tr,'tg> Iterator for SymbolsIterator<'tr,'tg> {
+// 	type Item = Symbol<'tg>;
+
+// 	fn next(&mut self) -> Option<Symbol<'tg>> {
+
+// 	}
+// }

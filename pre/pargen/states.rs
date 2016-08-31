@@ -7,7 +7,7 @@ use std::fmt;
 use pargen::grammar::{Grammar, Rule, Variant, Symbol};
 
 
-pub fn translate<'a>(grammar: &Grammar) -> Vec<Box<State>> {
+pub fn translate<'a>(grammar: &'a Grammar<'a>) -> Vec<Box<State<'a>>> {
 
 	let mut states = Vec::new();
 	let mut states_head = 0;
@@ -17,7 +17,7 @@ pub fn translate<'a>(grammar: &Grammar) -> Vec<Box<State>> {
 	states.push({
 		let mut initial = Box::new(State::new());
 		let root = grammar.get_root();
-		for v in root.borrow().get_variants() {
+		for v in root.variants() {
 			let mut follow = BTreeSet::new();
 			follow.insert(Symbol::End);
 			initial.add(Lead { rule: root.clone(), variant: v.clone(), pos: 0, follow: follow });
@@ -46,7 +46,7 @@ pub fn translate<'a>(grammar: &Grammar) -> Vec<Box<State>> {
 			// with leads.
 			if !lead.is_at_end() {
 				let sym = lead.get_next(0);
-				if !next_states.contains_key(&sym) {
+				if !next_states.contains_key(sym) {
 					next_states.insert(sym.clone(), Box::new(State::new()));
 				}
 				let mut next_lead = lead.clone();
@@ -101,7 +101,7 @@ pub fn translate<'a>(grammar: &Grammar) -> Vec<Box<State>> {
 				if states_by_leads.contains_key(&next_state.leads) {
 					*states_by_leads.get(&next_state.leads).unwrap()
 				} else {
-					let id = states.len() as u32;
+					let id = states.len();
 					next_state.id = id;
 					states_by_leads.insert(next_state.leads.clone(), id);
 					states.push(next_state);
@@ -131,44 +131,40 @@ pub fn translate<'a>(grammar: &Grammar) -> Vec<Box<State>> {
 
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Lead {
-	rule: Rc<RefCell<Rule>>,
-	variant: Rc<RefCell<Variant>>,
+pub struct Lead<'a> {
+	rule: &'a Rule<'a>,
+	variant: &'a Variant<'a>,
 	pos: usize,
-	follow: SymbolSet,
+	follow: SymbolSet<'a>,
 }
 
-pub struct State {
-	pub id: u32,
-	pub leads: BTreeSet<Lead>,
-	pub actions: BTreeMap<Symbol, Action>,
+pub struct State<'a> {
+	id: usize,
+	leads: BTreeSet<Lead<'a>>,
+	actions: BTreeMap<Symbol<'a>, Action<'a>>,
 }
 
-type SymbolSet = BTreeSet<Symbol>;
+type SymbolSet<'a> = BTreeSet<Symbol<'a>>;
 
 #[derive(Debug)]
-pub enum Action {
-	Shift(u32),
-	Goto(u32),
-	Reduce(Rc<RefCell<Variant>>),
+pub enum Action<'a> {
+	Shift(usize),
+	Goto(usize),
+	Reduce(&'a Variant<'a>),
 }
 
 
-impl Lead {
-	fn get_next(&self, off: usize) -> Symbol {
-		let ref v = *self.variant.borrow();
-		let ref s = *v.get_symbols()[self.pos+off].borrow();
-		s.clone()
+impl<'a> Lead<'a> {
+	fn get_next(&self, off: usize) -> &Symbol<'a> {
+		self.variant.get_symbol(self.pos+off)
 	}
 
 	fn is_at_end(&self) -> bool {
-		self.pos == self.variant.borrow().get_symbols().len()
+		self.pos == self.variant.symbols().len()
 	}
 
-	fn make_follow_set(&self) -> SymbolSet {
-		let ref v = *self.variant.borrow();
-		let syms = v.get_symbols();
-		let num_syms = syms.len();
+	fn make_follow_set(&self) -> SymbolSet<'a> {
+		let num_syms = self.variant.symbols().len();
 
 		let mut first = SymbolSet::new();
 		let mut contained_epsilon = true;
@@ -176,11 +172,10 @@ impl Lead {
 
 		while contained_epsilon && pos < num_syms {
 			let mut rules_seen = BTreeSet::new();
-			let sym = syms[pos].borrow().clone();
+			let sym = self.variant.get_symbol(pos).clone();
 
-			if let Symbol::NonTerminal(rule_weak) = sym {
-				let rule = rule_weak.upgrade().unwrap();
-				contained_epsilon = gather_first(&mut first, &rule.borrow(), &mut rules_seen);
+			if let Symbol::NonTerminal(rule) = sym {
+				contained_epsilon = gather_first(&mut first, rule, &mut rules_seen);
 			} else {
 				first.insert(sym);
 				contained_epsilon = false;
@@ -202,37 +197,36 @@ impl Lead {
 }
 
 
-fn gather_first(first: &mut SymbolSet, rule: &Rule, seen: &mut BTreeSet<Rc<RefCell<Rule>>>) -> bool {
-	let vars = rule.get_variants();
-	if vars.is_empty() {
+fn gather_first<'a>(first: &mut SymbolSet<'a>, rule: &Rule<'a>, seen: &mut BTreeSet<&Rule<'a>>) -> bool {
+	let vars = rule.variants();
+	if vars.len() == 0 {
 		return true;
 	}
 
 	let mut any_epsilon = false;
-	for variant_cell in vars {
-		let mut pos: usize = 0;
+	for variant in vars {
+		// let mut pos: usize = 0;
 		let mut epsilon = true;
-		let variant = variant_cell.borrow();
-		let syms = variant.get_symbols();
 
-		while pos < syms.len() && epsilon == true {
-			let sym = syms[pos].borrow();
+		for sym in variant.symbols() {
+			if !epsilon {
+				break;
+			}
 			match *sym {
-				Symbol::NonTerminal(ref rule_weak) => {
-					let rule = rule_weak.upgrade().unwrap();
+				Symbol::NonTerminal(rule) => {
 					if !seen.contains(&rule) {
-						seen.insert(rule.clone());
-						epsilon = gather_first(first, &rule.borrow(), seen);
+						seen.insert(rule);
+						epsilon = gather_first(first, rule, seen);
 					} else {
 						epsilon = false;
 					}
 				}
-				_ => {
-					first.insert(sym.clone());
+				ref x => {
+					first.insert(x.clone());
 					epsilon = false;
 				}
 			}
-			pos += 1;
+			// pos += 1;
 		}
 
 		if epsilon {
@@ -244,7 +238,7 @@ fn gather_first(first: &mut SymbolSet, rule: &Rule, seen: &mut BTreeSet<Rc<RefCe
 }
 
 
-impl State {
+impl<'a> State<'a> {
 	fn new() -> Self {
 		State {
 			id: 0,
@@ -253,7 +247,7 @@ impl State {
 		}
 	}
 
-	fn add(&mut self, lead: Lead) {
+	fn add(&mut self, lead: Lead<'a>) {
 		self.leads.insert(lead);
 	}
 
@@ -262,19 +256,18 @@ impl State {
 			let mut new_states = Vec::new();
 
 			for lead in &self.leads {
-				let num_syms = lead.variant.borrow().get_symbols().len();
+				let num_syms = lead.variant.symbols().len();
 				if lead.pos < num_syms {
 					let next = lead.get_next(0);
-					if let Symbol::NonTerminal(ref rule_weak) = next {
-						let rule = rule_weak.upgrade().unwrap();
+					if let &Symbol::NonTerminal(rule) = next {
 						let follow = lead.make_follow_set();
 						if follow.len() == 0 {
 							panic!("For symbol {:?}, lead produced empty follow set: {:?}, in state {:?}", next, lead, self);
 						}
-						for v in rule.borrow().get_variants() {
+						for v in rule.variants() {
 							let lead = Lead {
-								rule: rule.clone(),
-								variant: v.clone(),
+								rule: rule,
+								variant: v,
 								pos: 0,
 								follow: follow.clone()
 							};
@@ -324,19 +317,34 @@ impl State {
 			self.leads.insert(lead);
 		}
 	}
+
+	/// Return the state's unique ID.
+	pub fn get_id(&self) -> usize {
+		self.id
+	}
+
+	/// Return an iterator to the leads following from this state.
+	pub fn leads(&self) -> std::collections::btree_set::Iter<Lead<'a>> {
+		self.leads.iter()
+	}
+
+	/// Return an iterator to the actions to be taken when in this state.
+	pub fn actions(&self) -> std::collections::btree_map::Iter<Symbol<'a>, Action<'a>> {
+		self.actions.iter()
+	}
 }
 
 
-impl fmt::Debug for Lead {
+impl<'a> fmt::Debug for Lead<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		try!(write!(f, "[{} → ", self.rule.borrow().get_name()));
+		try!(write!(f, "[{} → ", self.rule.get_name()));
 		let mut i = 0;
-		for sym in self.variant.borrow().get_symbols() {
+		for sym in self.variant.symbols() {
 			if self.pos == i {
 				try!(write!(f, ". "));
 			}
 			i += 1;
-			try!(write!(f, "{:?} ", sym.borrow()));
+			try!(write!(f, "{:?} ", sym));
 		}
 		if self.pos == i {
 			try!(write!(f, ". "));
@@ -345,7 +353,7 @@ impl fmt::Debug for Lead {
 	}
 }
 
-impl fmt::Debug for State {
+impl<'a> fmt::Debug for State<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		try!(write!(f, "{{"));
 		let mut it = self.leads.iter();

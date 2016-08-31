@@ -1,144 +1,183 @@
 // Copyright (c) 2016 Fabian Schuiki
-#![allow(dead_code,unused_imports)]
-use std;
-use vhdl::lexer::{Token,Keyword,Symbol};
 
-enum TokenId {
-	ARCHITECTURE,
-	ENTITY,
-	LIBRARY,
-	USE,
-	IDENT,
-	BEGIN,
-	END,
-	PERIOD,
-	SEMICOLON,
-	COMMA,
-	LPAREN,
-	RPAREN,
-	IS,
-	OF,
-	SUFFIX,
-	GENERIC,
-	PORT,
+//! A parser for VHDL token streams, based on IEEE 1076-2000.
+
+use errors::{DiagnosticBuilder, DiagResult, DUMMY_HANDLER};
+use vhdl::lexer::{Lexer, Span};
+use vhdl::name::Name;
+use vhdl::token::{self, Token, keywords};
+use vhdl::ast::*;
+
+
+pub struct Parser {
+	pub lexer: Box<Lexer>,
+	pub token: Token,
+	pub span: Span,
 }
 
-// #[derive(Debug)]
-// enum Reduction {
-// 	None,
-// 	LibraryNameList(Vec<String>),
-// }
+impl<'a> Parser {
+	pub fn new(mut lexer: Box<Lexer>) -> Parser {
+		let next = match lexer.next_token() {
+			Ok(tknspn) => tknspn,
+			Err(_) => panic!("initial token invalid"),
+		};
 
-#[derive(Debug)]
-enum Item {
-	End,
-	Shifted(Token),
-	Reduced(RuleId, Reduction),
-}
-
-enum Action {
-	Shift(StateFn),
-	Goto(StateFn),
-	Reduce(RuleId, u32, ReduceFn),
-}
-
-type StateFn = fn(&Item) -> Action;
-type ReduceFn = fn(Vec<Item>) -> Reduction;
-
-
-pub struct Parser<'a> {
-	lexer: &'a mut Iterator<Item = Token>,
-	item_stack: Vec<Item>,
-	lookahead: usize,
-	state_stack: Vec<StateFn>,
-}
-
-
-fn next_item(lexer: &mut Iterator<Item = Token>) -> Item {
-	loop {
-		match lexer.next() {
-			Some(Token::Comment(_)) => (),
-			Some(tkn) => return Item::Shifted(tkn),
-			None => return Item::End,
-		}
-	}
-}
-
-
-impl<'a> Parser<'a> {
-	pub fn new(lexer: &'a mut Iterator<Item = Token>) -> Parser {
-		let next = next_item(lexer);
 		Parser {
 			lexer: lexer,
-			item_stack: vec![next],
-			lookahead: 0,
-			state_stack: vec![action_0],
+			token: next.tkn,
+			span: next.sp,
 		}
 	}
 
-	pub fn next(&mut self) {
-		let action = (self.state_stack[self.state_stack.len()-1])(&self.item_stack[self.lookahead]);
-		match action {
-			Action::Shift(tr) => {
-				// println!("shift {:?}", &self.item_stack[self.lookahead]);
-				let next = next_item(self.lexer);
-				self.item_stack.push(next);
-				self.lookahead += 1;
-				self.state_stack.push(tr);
-				// println!("item_stack: {:?}", self.item_stack);
-				// println!("state_stack: {} states", self.state_stack.len());
-			},
-			Action::Goto(tr) => {
-				// println!("goto with {:?}", &self.item_stack[self.lookahead]);
-				// println!("item_stack: {:?}", self.item_stack);
-				self.state_stack.push(tr);
-				self.lookahead += 1;
-			},
-			Action::Reduce(id, num, reducefn) => {
-				// println!("reduce {:?} covering {} items", id, num);
-				// println!("item_stack: {:?}", self.item_stack);
-				let lookahead = self.item_stack.pop().unwrap();
-				let items = {
-					let new_len = self.item_stack.len() - num as usize;
-					self.item_stack.split_off(new_len)
-				};
-				let new_len = self.state_stack.len() - num as usize;
-				self.state_stack.truncate(new_len);
-				self.item_stack.push(Item::Reduced(id, reducefn(items)));
-				self.item_stack.push(lookahead);
-				self.lookahead -= num as usize;
-				// println!("item_stack: {:?}", self.item_stack);
-				// println!("state_stack: {} states", self.state_stack.len());
+	/// Advance the parser by one token.
+	fn next(&mut self) -> DiagResult<'a,()> {
+		let next = try!(self.lexer.next_token());
+		self.token = next.tkn;
+		self.span = next.sp;
+		Ok(())
+	}
+
+	fn eat(&mut self, token: &token::Token) -> DiagResult<'a, bool> {
+		if self.token == *token {
+			try!(self.next());
+			Ok(true)
+		} else {
+			Ok(false)
+		}
+	}
+
+	/// If the current token is the given keyword, consume it and return true.
+	/// Otherwise return false.
+	fn eat_keyword(&mut self, kw: Name) -> DiagResult<'a, bool> {
+		if self.check_keyword(kw) {
+			try!(self.next());
+			Ok(true)
+		} else {
+			Ok(false)
+		}
+	}
+
+	/// Check if the current token is the given keyword.
+	fn check_keyword(&mut self, kw: Name) -> bool {
+		self.token.is_keyword(kw)
+	}
+
+	fn expect(&mut self, tkn: &token::Token) -> DiagResult<'a,()> {
+		if self.token == *tkn {
+			try!(self.next());
+			Ok(())
+		} else {
+			let exp_token_str = Self::token_to_string(tkn);
+			let act_token_str = self.this_token_to_string();
+			Err(self.fatal(&format!(
+				"expected `{}`, found `{}`",
+				exp_token_str,
+				act_token_str
+			)))
+		}
+	}
+
+	fn this_token_to_string(&self) -> String {
+		Self::token_to_string(&self.token)
+	}
+
+	fn token_to_string(tkn: &token::Token) -> String {
+		tkn.to_string()
+	}
+
+	fn fatal(&self, msg: &str) -> DiagnosticBuilder<'a> {
+		DiagnosticBuilder {
+			handler: &DUMMY_HANDLER,
+			message: String::from(msg),
+		}
+	}
+
+	/// This is the main entry point into the parser.
+	pub fn parse_design_file(&mut self) -> DiagResult<'a, Vec<Box<DesignUnit>>> {
+		let mut units: Vec<Box<DesignUnit>> = Vec::new();
+		while let Some(unit) = try!(self.parse_design_unit()) {
+			units.push(unit);
+		}
+		if !try!(self.eat(&token::Eof)) {
+			let token_str = self.this_token_to_string();
+			return Err(self.fatal(&format!("expected design unit, found `{}`", token_str)));
+		}
+		Ok(units)
+	}
+
+	/// Parse a design unit. See IEEE 1076-2000 section 11.1.
+	fn parse_design_unit(&mut self) -> DiagResult<'a, Option<Box<DesignUnit>>> {
+		// Parse the context clauses.
+		let mut ctx_clauses = Vec::new();
+		while let Some(cc) = try!(self.parse_context_clause()) {
+			println!("parsed a context clause");
+			ctx_clauses.push(cc);
+		}
+
+		// Parse the library unit.
+		Err(self.fatal("not implemented"))
+	}
+
+	/// Parse a context clause. See IEEE 1076-2000 section 11.3.
+	fn parse_context_clause(&mut self) -> DiagResult<'a, Option<Box<ContextClause>>> {
+		// Library clause
+		// LIBRARY logical_name {COMMA logical_name} SEMICOLON
+		if try!(self.eat_keyword(keywords::Library)) {
+			let mut names = Vec::new();
+			while let Some(ln) = try!(self.parse_logical_name()) {
+				names.push(ln);
+				if !try!(self.eat(&token::Comma)) {
+					break;
+				}
 			}
+			try!(self.expect(&token::Semicolon));
+			return Ok(Some(Box::new(ContextClause::Library(names))));
 		}
-		assert!(self.lookahead < self.state_stack.len());
-	}
-}
 
-
-fn reduce_library_clause(_: Token, names: Vec<String>, _: Token) -> Reduction {
-	println!("Found a library clause {:?}", names);
-	// Reduction::Debug("a library clause".to_owned())
-	Reduction::None
-}
-
-fn reduce_library_name_list_x(x: Token) -> Vec<String> {
-	match x {
-		Token::Ident(name) => vec![name],
-		_ => panic!("invalid token"),
-	}
-}
-
-fn reduce_library_name_list_xs(mut ls: Vec<String>, _: Token, x: Token) -> Vec<String> {
-	match x {
-		Token::Ident(name) => {
-			ls.push(name);
-			ls
+		// Use clause
+		// USE selected_name {COMMA selected_name} SEMICOLON
+		if try!(self.eat_keyword(keywords::Use)) {
+			let mut names = Vec::new();
+			while let Some(sn) = try!(self.parse_selected_name()) {
+				names.push(sn);
+				if !try!(self.eat(&token::Comma)) {
+					break;
+				}
+			}
+			try!(self.expect(&token::Semicolon));
+			return Ok(Some(Box::new(ContextClause::Use(names))));
 		}
-		_ => panic!("invalid token"),
+
+		Ok(None)
+	}
+
+	fn parse_logical_name(&mut self) -> DiagResult<'a, Option<Name>> {
+		match self.token {
+			token::Ident(nm) => {
+				try!(self.next());
+				Ok(Some(nm))
+			},
+			_ => Ok(None)
+		}
+	}
+
+	/// Parse a name. See IEEE 1076-2000 section 6.
+	/// IDENT|OP PERIOD IDENT|CHARLIT|OP|ALL ...
+	/// IDENT|OP LPAREN expr (, expr)* RPAREN ...
+	/// IDENT|OP LPAREN discrete_range RPAREN ...
+	/// IDENT|OP (LBRACK signature RBRACK)? APOSTROPHE IDENT (LPAREN expr RPAREN)? ...
+	fn parse_name(&mut self) -> DiagResult<'a, Option<u32>> {
+
+	}
+
+	/// Parse a selected name. See IEEE 1076-2000 section 6.3.
+	fn parse_selected_name(&mut self) -> DiagResult<'a, Option<Name>> {
+		// Parse the prefix.
+		// simple_name=IDENT | operator_symbol=OP | selected_name | indexed_name | slice_name | attribute_name | function_call
+
+		// Parse the suffix.
+		// simple_name | character_literal | operator_symbol | ALL
+
+		Ok(None)
 	}
 }
-
-
-// Include the automatically generated part of the parser.
-include!(concat!(env!("OUT_DIR"), "/vhdl-parser.rs"));

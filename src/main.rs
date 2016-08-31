@@ -3,6 +3,7 @@ use std::env;
 pub mod lexer;
 pub mod svlog;
 pub mod vhdl;
+pub mod errors;
 
 /// Print a line to standard error.
 macro_rules! stderrln {
@@ -25,14 +26,37 @@ fn main() {
 	// Process each file passed on the command line.
 	for filename in &args[1..] {
 		println!("Processing file {}", filename);
-		let mut lexer = vhdl::lexer::make(filename);
-		let mut parser = vhdl::parser::Parser::new(&mut lexer);
-		loop {
-			parser.next();
-		}
-		// for token in lexer {
-		// 	println!("  Token {:?}", token);
+		let lexer = vhdl::lexer::make(filename);
+
+		// loop {
+		// 	match lexer.next_token() {
+		// 		Ok(next) => {
+		// 			println!("token: {:?}", next.tkn);
+		// 			if next.tkn == vhdl::token::Eof {
+		// 				break;
+		// 			}
+		// 		},
+		// 		Err(err) => {
+		// 			use std::io::Write;
+		// 			writeln!(&mut std::io::stderr(), "error: {}", err.message).unwrap();
+		// 			std::process::exit(1)
+		// 		},
+		// 	}
 		// }
-		// println!("  Arrived at end of file");
+
+		let mut parser = vhdl::parser::Parser::new(Box::new(lexer));
+		match parser.parse_design_file() {
+			Ok(_) => {
+				println!("parsed design file");
+			},
+			Err(err) => {
+				use std::io::Write;
+				writeln!(&mut std::io::stderr(), "error: {}", err.message).unwrap();
+				std::process::exit(1)
+			},
+		}
+		// loop {
+		// 	parser.next();
+		// }
 	}
 }
