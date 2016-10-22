@@ -1,3 +1,6 @@
 // Copyright (c) 2016 Fabian Schuiki
-// This is the SystemVerilog module.
+
+//! The SystemVerilog module of the moore compiler.
+
 pub mod lexer;
+pub mod token;

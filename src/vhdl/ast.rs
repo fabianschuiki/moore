@@ -1,6 +1,6 @@
 // Copyright (c) 2016 Fabian Schuiki
 
-use vhdl::name::Name;
+use name::Name;
 
 pub struct DesignUnit {
 

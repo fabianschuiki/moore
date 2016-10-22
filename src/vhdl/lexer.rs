@@ -5,7 +5,7 @@
 use std::fs::File;
 use lexer::AccumulatingReader;
 use vhdl::token;
-use vhdl::name::get_name_table;
+use name::get_name_table;
 use errors::{DiagnosticBuilder, DiagResult, DUMMY_HANDLER};
 pub use vhdl::token::Token;
 

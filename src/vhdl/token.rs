@@ -7,7 +7,7 @@
 pub use self::DelimToken::*;
 pub use self::Lit::*;
 pub use self::Token::*;
-use vhdl::name::{Name, NameTable};
+use name::{Name, NameTable};
 
 
 /// A primary token emitted by the Lexer.
@@ -131,7 +131,7 @@ macro_rules! declare_keywords {(
 	$( ($index: expr, $konst: ident, $string: expr) )*
 ) => {
 	pub mod keywords {
-		use vhdl::name::{Name, NameTable};
+		use name::{Name, NameTable};
 		$(
 			#[allow(non_upper_case_globals)]
 			pub const $konst: Name = Name($index);
