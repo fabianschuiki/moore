@@ -177,6 +177,13 @@ impl Lexer {
 
 
 			// IEEE 1800-2009 5.7 Numbers
+			// An apostrophe immediately followed by [01xXzZ?] is an unbased,
+			// unsized literal.
+			if c0 == '\'' && c1.map_or(false, |x| x == '0' || x == '1' || x == 'x' || x == 'X' || x == 'z' || x == 'Z' || x == '?') {
+				self.rd.consume(2);
+				return Ok(token::Literal(token::UnbasedUnsized(c1.unwrap())));
+			}
+
 			// TODO: Numbers generally consist of three tokens, some of which
 			// are optional. If whitespaces are allowed in between these tokens,
 			// the number parsing process can be moved to the parser, which
@@ -237,7 +244,35 @@ impl Lexer {
 			}
 
 
+			// IEEE 1800-2009 5.5 Operators & 11.3 Operators
+
 			// 2-character symbols
+			match (c0,c1) {
+				('+', Some('=')) => { self.rd.consume(2); return Ok(token::PlusEq); },
+				('-', Some('=')) => { self.rd.consume(2); return Ok(token::MinusEq); },
+				('*', Some('=')) => { self.rd.consume(2); return Ok(token::StarEq); },
+				('/', Some('=')) => { self.rd.consume(2); return Ok(token::SlashEq); },
+				('%', Some('=')) => { self.rd.consume(2); return Ok(token::ModEq); },
+				('&', Some('=')) => { self.rd.consume(2); return Ok(token::AmpEq); },
+				('|', Some('=')) => { self.rd.consume(2); return Ok(token::PipeEq); },
+				('^', Some('=')) => { self.rd.consume(2); return Ok(token::CaretEq); },
+				('=', Some('=')) => { self.rd.consume(2); return Ok(token::EqEq); },
+				('!', Some('=')) => { self.rd.consume(2); return Ok(token::NotEq); },
+				('<', Some('=')) => { self.rd.consume(2); return Ok(token::LtEq); },
+				('>', Some('=')) => { self.rd.consume(2); return Ok(token::GtEq); },
+				('&', Some('&')) => { self.rd.consume(2); return Ok(token::AmpAmp); },
+				('~', Some('&')) => { self.rd.consume(2); return Ok(token::TildaAmp); },
+				('|', Some('|')) => { self.rd.consume(2); return Ok(token::PipePipe); },
+				('*', Some('*')) => { self.rd.consume(2); return Ok(token::StarStar); },
+				('<', Some('<')) => { self.rd.consume(2); return Ok(token::LtLt); },
+				('>', Some('>')) => { self.rd.consume(2); return Ok(token::GtGt); },
+				('+', Some('+')) => { self.rd.consume(2); return Ok(token::PlusPlus); },
+				('-', Some('-')) => { self.rd.consume(2); return Ok(token::MinusMinus); },
+				('-', Some('>')) => { self.rd.consume(2); return Ok(token::Impl); },
+				('^', Some('~')) => { self.rd.consume(2); return Ok(token::CaretTilda); },
+				('~', Some('^')) => { self.rd.consume(2); return Ok(token::TildaCaret); },
+				(_,_) => ()
+			}
 
 			// 1-character symbols
 			match c0 {
@@ -258,8 +293,16 @@ impl Lexer {
 				'-'  => { self.rd.consume(1); return Ok(token::Minus); },
 				'*'  => { self.rd.consume(1); return Ok(token::Star); },
 				'/'  => { self.rd.consume(1); return Ok(token::Slash); },
+				'~'  => { self.rd.consume(1); return Ok(token::Tilda); },
+				'|'  => { self.rd.consume(1); return Ok(token::Pipe); },
 				'<'  => { self.rd.consume(1); return Ok(token::Lt); },
 				'>'  => { self.rd.consume(1); return Ok(token::Gt); },
+				'!'  => { self.rd.consume(1); return Ok(token::Not); },
+				'%'  => { self.rd.consume(1); return Ok(token::Mod); },
+				'^'  => { self.rd.consume(1); return Ok(token::Caret); },
+				'&'  => { self.rd.consume(1); return Ok(token::Amp); },
+				'?'  => { self.rd.consume(1); return Ok(token::Quest); },
+				'@'  => { self.rd.consume(1); return Ok(token::At); },
 				_ => ()
 			}
 
