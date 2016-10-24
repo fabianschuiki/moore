@@ -2,9 +2,37 @@
 
 //! A lexical analyzer for SystemVerilog files, based on IEEE 1800-2009, section
 //! 5.
+//!
+//! Getting lexical analysis right for SystemVerilog is very complicated. The
+//! language supports many different literals and variations thereof, as well as
+//! an entire preprocessor. Currently, the Lexer analyzes the input stream of
+//! characters and emits tokens, which are in turn modified by the Preprocessor
+//! lexer. This approach is not ideal, since the body of macro definitions needs
+//! to be lexically analyzed, separating symbols, whitespace, and alphanumeric
+//! characters into tokens. However, number literals shall not yet be processed,
+//! since macro substitution can generate new literals (`965``ab123_456).
+//! Therefore it seems wise to separate lexical analysis into multiple layers:
+//!
+//! 1. Read the source file or string and separate it into characters,
+//!    whitespaces, comments, symbols, and identifiers, emitting these as
+//!    tokens.
+//! 2. Perform preprocessing such as macro substitution, resolution of `ifdef
+//!    and similar constructs, and including other files.
+//! 3. Perform fine-grained lexical analysis, forming complex tokens such as
+//!    string and number literals, identifiers, and compound symbols. This is
+//!    also where string internalizing should take place, which automatically
+//!    classifies identifiers as keywords if appropriate.
+//! 4. Regular parsing.
+//!
+//! This allows for proper preprocessing, since the first step leaves all
+//! whitespaces and comments in the token stream, which form part of the syntax
+//! of the preprocessor. Also, macro substitution is allowed to generate new
+//! compound tokens (e.g. `965``ab123_456) which are then properly classified as
+//! number literals (or any other kind of token).
 
 use std::fs::File;
-use lexer::AccumulatingReader;
+// use std::path::Path;
+use lexer::{Reader, AccumulatingReader};
 use svlog::token;
 use name::get_name_table;
 use errors::{DiagnosticBuilder, DiagResult, DUMMY_HANDLER};
@@ -13,16 +41,22 @@ pub use svlog::token::Token;
 /// A lexical analyzer for SystemVerilog files.
 pub struct Lexer {
 	rd: AccumulatingReader,
+	path: String,
 }
 
 pub fn make(filename: &str) -> Lexer {
 	let f = File::open(filename).unwrap();
 	Lexer {
 		rd: AccumulatingReader::new(Box::new(f)),
+		path: filename.to_string(),
 	}
 }
 
 impl Lexer {
+	pub fn get_path(&self) -> &str {
+		&self.path
+	}
+
 	/// Returns the next token in the input stream.
 	pub fn next_token<'b>(&mut self) -> DiagResult<'b, TokenAndSpan> {
 		self.next_token_inner().map(|x| TokenAndSpan { tkn: x, sp: Span { src: 0, lo: 0, hi: 0 }})
@@ -158,9 +192,104 @@ impl Lexer {
 				// leading backtick '`'.
 				'`' => {
 					self.rd.consume(1);
+					self.rd.clear();
 					consume_ident(&mut self.rd);
-					let name = intern_str(self.rd.to_string());
-					return Ok(token::CompDir(name));
+					let nm = self.rd.to_string();
+
+					if nm == "include" {
+						// Skip any whitespace.
+						while let Some(c) = self.rd.peek(0) {
+							if is_whitespace(c) {
+								self.rd.consume(1);
+								self.rd.clear();
+							} else {
+								break;
+							}
+						}
+
+						// Read the filename, which is either enclosed in
+						// double quotes "..." or angle brackets <...>.
+						let lquote = self.rd.peek(0);
+						let rquote;
+						match lquote {
+							Some('"') => rquote = '"',
+							Some('<') => rquote = '>',
+							_ => panic!("expected filename within double quotes \"...\" or angle brackets <...> after `include"),
+						}
+						self.rd.consume(1);
+						self.rd.clear();
+
+						while let Some(c) = self.rd.peek(0) {
+							if c == rquote {
+								break;
+							} else if c == '\n' {
+								panic!("expected closing '{}' before newline in `include", rquote);
+							} else {
+								self.rd.consume(1);
+							}
+						}
+						let filename = self.rd.to_string();
+
+						// Ignore everything up to the next newline.
+						while let Some(c) = self.rd.peek(0) {
+							if c == '\n' {
+								break;
+							} else {
+								self.rd.consume(1);
+								self.rd.clear();
+							}
+						}
+
+						return Ok(token::Include(intern_str(filename)));
+					}
+
+					if nm == "define" {
+						// Skip any whitespace.
+						while let Some(c) = self.rd.peek(0) {
+							if is_whitespace(c) && c != '\n' {
+								self.rd.consume(1);
+								self.rd.clear();
+							} else {
+								break;
+							}
+						}
+
+						// Read the defined name.
+						consume_ident(&mut self.rd);
+						let name = self.rd.to_string();
+						self.rd.clear();
+
+						// Skip any whitespace.
+						while let Some(c) = self.rd.peek(0) {
+							if is_whitespace(c) && c != '\n' {
+								self.rd.consume(1);
+								self.rd.clear();
+							} else {
+								break;
+							}
+						}
+
+						// If there are opening parenthesis present, parse the
+						// macro argument list.
+						if self.rd.peek(0) == Some('(') {
+							panic!("`define with arguments not implemented");
+						}
+
+						// Read the macro body, which lasts until the end of the
+						// line.
+						while let Some(c) = self.rd.peek(0) {
+							if c != '\n' {
+								self.rd.consume(1);
+							} else {
+								break;
+							}
+						}
+						let body = self.rd.to_string();
+
+						return Ok(token::Define(intern_str(name), intern_str(body)));
+					}
+
+					return Ok(token::CompDir(intern_str(nm)));
 				},
 
 				_ => ()

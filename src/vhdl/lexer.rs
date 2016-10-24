@@ -3,7 +3,7 @@
 //! A lexical analyzer for VHDL files, based on IEEE 1076-2000, section 13.
 
 use std::fs::File;
-use lexer::AccumulatingReader;
+use lexer::{Reader, AccumulatingReader};
 use vhdl::token;
 use name::get_name_table;
 use errors::{DiagnosticBuilder, DiagResult, DUMMY_HANDLER};

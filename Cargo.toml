@@ -3,3 +3,7 @@ name = "moore"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@student.ethz.ch>"]
 build = "pre/build.rs"
+
+[dependencies]
+memmap = "0.5.0"
+owning_ref = "0.2.2"

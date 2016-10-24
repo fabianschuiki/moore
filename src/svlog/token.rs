@@ -67,7 +67,11 @@ pub enum Token {
 	Literal(Lit),
 	/// A system task or function identifier, e.g. "$display"
 	SysIdent(Name),
-	/// A compiler directive, e.g. "`include"
+	/// A `define compiler directive
+	Define(Name,Name),
+	/// An `include compiler directive
+	Include(Name),
+	/// A compiler directive, e.g. "`timescale"
 	CompDir(Name),
 	/// An identifier
 	Ident(Name),

@@ -4,3 +4,5 @@
 
 pub mod lexer;
 pub mod token;
+pub mod preproc;
+pub mod cat;
