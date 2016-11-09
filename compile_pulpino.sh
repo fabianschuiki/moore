@@ -4,6 +4,7 @@
 
 MOORE="cargo run --"
 SRC=pulpino/rtl
+RTL_FLAGS="-I ${SRC}/includes"
 set -e
 
 ${MOORE} ${SRC}/components/cluster_clock_gating.sv
@@ -15,21 +16,20 @@ ${MOORE} ${SRC}/components/generic_fifo.sv
 ${MOORE} ${SRC}/components/rstgen.sv
 ${MOORE} ${SRC}/components/sp_ram.sv
 
-${MOORE} ${SRC}/core_region.sv
-${MOORE} ${SRC}/random_stalls.sv
-
-${MOORE} ${SRC}/boot_rom_wrap.sv
-${MOORE} ${SRC}/boot_code.sv
-${MOORE} ${SRC}/instr_ram_wrap.sv
-${MOORE} ${SRC}/sp_ram_wrap.sv
-${MOORE} ${SRC}/ram_mux.sv
-${MOORE} ${SRC}/axi_node_intf_wrap.sv
-${MOORE} ${SRC}/top.sv
-${MOORE} ${SRC}/peripherals.sv
-${MOORE} ${SRC}/periph_bus_wrap.sv
-${MOORE} ${SRC}/axi2apb_wrap.sv
-${MOORE} ${SRC}/axi_spi_slave_wrap.sv
-${MOORE} ${SRC}/axi_mem_if_SP_wrap.sv
-${MOORE} ${SRC}/clk_rst_gen.sv
-${MOORE} ${SRC}/axi_slice_wrap.sv
-${MOORE} ${SRC}/core2axi_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/core_region.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/random_stalls.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/boot_rom_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/boot_code.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/instr_ram_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/sp_ram_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/ram_mux.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/axi_node_intf_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/top.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/peripherals.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/periph_bus_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/axi2apb_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/axi_spi_slave_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/axi_mem_if_SP_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/clk_rst_gen.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/axi_slice_wrap.sv
+${MOORE} ${RTL_FLAGS} ${SRC}/core2axi_wrap.sv

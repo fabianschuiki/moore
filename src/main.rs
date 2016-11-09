@@ -1,67 +1,41 @@
 // Copyright (c) 2016 Fabian Schuiki
 extern crate owning_ref;
-use std::env;
-use lexer::Lexer;
+extern crate clap;
 pub mod lexer;
 pub mod svlog;
 pub mod vhdl;
 pub mod errors;
 pub mod name;
 pub mod source;
+use clap::{Arg, App};
 
-/// Print a line to standard error.
-macro_rules! stderrln {
-	($($arg:tt)*) => ({
-		use std::io::Write;
-		match writeln!(&mut std::io::stderr(), $($arg)*) {
-			Ok(_) => {},
-			Err(x) => panic!("Unable to write to stderr (file handle closed?): {}", x),
-		}
-	})
-}
 
 fn main() {
-	let args: Vec<String> = env::args().collect();
-	if args.len() < 2 {
-		stderrln!("usage: {} FILE [FILE ...]", args[0]);
-		std::process::exit(1)
-	}
+	let matches = App::new("moore")
+		.arg(Arg::with_name("inc")
+			.short("I")
+			.value_name("DIR")
+			.help("Adds a search path for SystemVerilog includes")
+			.multiple(true)
+			.takes_value(true)
+			.number_of_values(1))
+		.arg(Arg::with_name("INPUT")
+			.help("The input file to use")
+			.required(true)
+			.index(1))
+		.get_matches();
 
-	// Process each file passed on the command line.
-	for filename in &args[1..] {
-		println!("Processing file {}", filename);
-		// let mut lexer = svlog::lexer::make(filename);
-		// let mut lexer = svlog::preproc::Preprocessor::new(filename);
+	// Prepare a list of include paths.
+	let include_paths: Vec<_> = match matches.values_of("inc") {
+		Some(args) => args.map(|x| std::path::Path::new(x)).collect(),
+		None => Vec::new()
+	};
+	let filename = matches.value_of("INPUT").unwrap();
 
-		// loop {
-		// 	match lexer.next_token() {
-		// 		Ok(next) => {
-		// 			println!("token: {:?}", next);
-		// 			if next == svlog::cat::Eof {
-		// 				break;
-		// 			}
-		// 		},
-		// 		Err(err) => {
-		// 			use std::io::Write;
-		// 			writeln!(&mut std::io::stderr(), "error: {}", err.message).unwrap();
-		// 			std::process::exit(1)
-		// 		},
-		// 	}
-		// }
-
-		// let mut parser = vhdl::parser::Parser::new(Box::new(lexer));
-		// match parser.parse_design_file() {
-		// 	Ok(_) => {
-		// 		println!("parsed design file");
-		// 	},
-		// 	Err(err) => {
-		// 		use std::io::Write;
-		// 		writeln!(&mut std::io::stderr(), "error: {}", err.message).unwrap();
-		// 		std::process::exit(1)
-		// 	},
-		// }
-		// loop {
-		// 	parser.next();
-		// }
+	// Run the input file through the SystemVerilog preprocessor for now.
+	let sm = source::get_source_manager();
+	let pp = svlog::preproc::Preprocessor::new(sm.open(&filename).unwrap(), &include_paths);
+	for res in pp {
+		print!("{}", res.unwrap().1.extract());
 	}
 }

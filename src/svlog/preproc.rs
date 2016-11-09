@@ -28,6 +28,7 @@ pub struct Preprocessor<'a> {
 	macro_defs: HashMap<String, Vec<TokenAndSpan>>,
 	/// The stack used to inject expanded macros into the token stream.
 	macro_stack: Vec<TokenAndSpan>,
+	include_paths: &'a [&'a Path],
 }
 
 type TokenAndSpan = (CatTokenKind, Span);
@@ -40,7 +41,7 @@ struct Stream<'a> {
 
 impl<'a> Preprocessor<'a> {
 	/// Create a new preprocessor for the given source file.
-	pub fn new(source: Source) -> Preprocessor<'a> {
+	pub fn new(source: Source, include_paths: &'a [&'a Path]) -> Preprocessor<'a> {
 		let content = source.get_content();
 		let content_unbound = unsafe { &*(content.as_ref() as *const SourceContent) };
 		let iter = content_unbound.iter();
@@ -54,6 +55,7 @@ impl<'a> Preprocessor<'a> {
 			token: None,
 			macro_defs: HashMap::new(),
 			macro_stack: Vec::new(),
+			include_paths: include_paths,
 		}
 	}
 
@@ -120,8 +122,11 @@ impl<'a> Preprocessor<'a> {
 
 			// Create a new lexer for the included filename and push it onto the
 			// stream stack.
-			println!("including file \"{}\"", filename);
-			let included_source = match get_source_manager().open(&filename) {
+			// TODO: Search relative to current file instead of in the CWD
+			// TODO: Search through include paths provided via -I
+			// TODO: Search only system location if `include <...> is used
+			// println!("including file \"{}\"", filename);
+			let included_source = match self.open_include(&filename, &span.source.get_path()) {
 				Some(src) => src,
 				None => {
 					return Err(
@@ -130,7 +135,7 @@ impl<'a> Preprocessor<'a> {
 					);
 				}
 			};
-			println!("including file {:?}", included_source);
+			// println!("including file {:?}", included_source);
 
 			let content = included_source.get_content();
 			let content_unbound = unsafe { &*(content.as_ref() as *const SourceContent) };
@@ -217,6 +222,25 @@ impl<'a> Preprocessor<'a> {
 		// panic!("Unknown compiler directive '`{}'", dir);
 		// Ok(())
 	}
+
+	fn open_include(&mut self, filename: &str, current_file: &str) -> Option<Source> {
+		println!("Resolving include '{}' from '{}'", filename, current_file);
+		let first = [Path::new(current_file)
+			.parent()
+			.expect("current file path must have a valid parent")];
+		let prefices = first.iter().chain(self.include_paths.iter());
+		let sm = get_source_manager();
+		for prefix in prefices {
+			let mut buf = prefix.to_path_buf();
+			buf.push(filename);
+			println!("  trying {}", buf.to_str().unwrap());
+			let src = sm.open(buf.to_str().unwrap());
+			if src.is_some() {
+				return src;
+			}
+		}
+		return None;
+	}
 }
 
 impl<'a> Iterator for Preprocessor<'a> {
@@ -270,7 +294,7 @@ mod tests {
 		let sm = get_source_manager();
 		sm.add("other.sv", "/* World */\n`define foo 42\n");
 		sm.add("test.sv", "// Hello\n`include \"other.sv\"\n`foo something\n");
-		let mut pp = Preprocessor::new(sm.open("test.sv").unwrap());
+		let mut pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
 		let actual: String = pp.map(|x| x.unwrap().1.extract()).collect();
 		let expected = "// Hello\n/* World */\n\n42 something\n";
 		assert_eq!(actual, expected);

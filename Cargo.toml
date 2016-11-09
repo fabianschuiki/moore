@@ -7,3 +7,4 @@ build = "pre/build.rs"
 [dependencies]
 memmap = "0.5.0"
 owning_ref = "0.2.2"
+clap = "2"
