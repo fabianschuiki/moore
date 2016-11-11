@@ -75,6 +75,8 @@ pub enum Token {
 	CompDir(Name),
 	/// An identifier
 	Ident(Name),
+	/// An escaped identifier
+	EscIdent(Name),
 
 	// The end of the input file
 	Eof,

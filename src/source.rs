@@ -5,7 +5,7 @@
 //! simple querying of information.
 
 extern crate memmap;
-pub use name::RcStr;
+use name::RcStr;
 use self::memmap::Mmap;
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -15,6 +15,12 @@ use std::hash::Hash;
 use std::iter::Iterator;
 use std::path::Path;
 use std::rc::Rc;
+
+
+
+pub const INVALID_SOURCE: Source = Source(0);
+pub const INVALID_LOCATION: Location = Location { source: INVALID_SOURCE, offset: 0 };
+pub const INVALID_SPAN: Span = Span { source: INVALID_SOURCE, begin: 0, end: 0 };
 
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -76,10 +82,19 @@ pub trait SourceContent {
 	/// with their respective byte positions.
 	fn iter(&self) -> Box<CharIter>;
 
+	/// Obtain an iterator over the characters within the source file, starting
+	/// at the provided location `offset`, together with their respective byte
+	/// positions.
+	fn iter_from(&self, offset: usize) -> Box<CharIter>;
+
 	/// Copy a range of the source content into a String instance owned by the
 	/// caller, possibly converting the encoding such that the result is in
 	/// UTF-8.
 	fn extract(&self, begin: usize, end: usize) -> String;
+
+	/// Obtain an iterator over an extract of the source content. This might be
+	/// more efficient than copying the extract into a String.
+	fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter>;
 }
 
 
@@ -102,8 +117,9 @@ impl SourceManager {
 	pub fn with<F, R>(&self, id: Source, f: F) -> R
 	where F: FnOnce(&SourceFile) -> R {
 		let ref vect = *self.vect.borrow();
-		assert!((id.0 as usize) < vect.len(), "unknown source file: Source({}) >= {}", id.0, vect.len());
-		f(&*vect[id.0 as usize])
+		assert!(id.0 > 0, "invalid source");
+		assert!((id.0 as usize - 1) < vect.len(), "unknown source file: Source({}) >= {}", id.0, vect.len());
+		f(&*vect[id.0 as usize - 1])
 	}
 
 	pub fn find<Q: ?Sized>(&self, filename: &Q) -> Option<Source>
@@ -121,7 +137,7 @@ impl SourceManager {
 		// Check whether the file exists and allocate a new index for it.
 		if Path::new(filename).exists() {
 			let mut vect = self.vect.borrow_mut();
-			let new_id = Source(vect.len() as u32);
+			let new_id = Source(vect.len() as u32 + 1);
 			let v = RcStr::new(filename);
 			map.insert(v.clone(), new_id);
 			vect.push(Box::new(DiskSourceFile {
@@ -142,7 +158,7 @@ impl SourceManager {
 		let mut map = self.map.borrow_mut();
 		assert!(!map.contains_key(filename), "add failed: source \"{}\" already exists", filename);
 		let mut vect = self.vect.borrow_mut();
-		let new_id = Source(vect.len() as u32);
+		let new_id = Source(vect.len() as u32 + 1);
 		let v = RcStr::new(filename);
 		map.insert(v.clone(), new_id);
 		vect.push(Box::new(VirtualSourceFile {
@@ -195,8 +211,16 @@ impl SourceContent for VirtualSourceContent {
 		Box::new(self.0.char_indices())
 	}
 
+	fn iter_from(&self, offset: usize) -> Box<CharIter> {
+		Box::new(self.0[offset..].char_indices())
+	}
+
 	fn extract(&self, begin: usize, end: usize) -> String {
 		self.0[begin..end].to_string()
+	}
+
+	fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter> {
+		Box::new(self.0[begin..end].char_indices())
 	}
 }
 
@@ -242,9 +266,19 @@ impl SourceContent for DiskSourceContent {
 		Box::new(str::from_utf8(unsafe { self.0.as_slice() }).unwrap().char_indices())
 	}
 
+	fn iter_from(&self, offset: usize) -> Box<CharIter> {
+		use std::str;
+		Box::new(str::from_utf8(unsafe { &self.0.as_slice()[offset..] }).unwrap().char_indices())
+	}
+
 	fn extract(&self, begin: usize, end: usize) -> String {
 		use std::str;
 		str::from_utf8(unsafe { &self.0.as_slice()[begin..end] }).unwrap().to_string()
+	}
+
+	fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter> {
+		use std::str;
+		Box::new(str::from_utf8(unsafe { &self.0.as_slice()[begin..end] }).unwrap().char_indices())
 	}
 }
 
@@ -267,6 +301,11 @@ impl Location {
 	/// Create a new location.
 	pub fn new(source: Source, offset: usize) -> Location {
 		Location { source: source, offset: offset }
+	}
+
+	/// Obtain an iterator into the source file at this location.
+	pub fn iter<'a>(self, content: &'a Rc<SourceContent>) -> Box<CharIter<'a>> {
+		content.iter_from(self.offset)
 	}
 }
 
@@ -327,6 +366,12 @@ impl Span {
 	pub fn extract(&self) -> String {
 		self.source.get_content().extract(self.begin, self.end)
 	}
+
+	/// Obtain an iterator over the extract of the source file describe by this
+	/// span.
+	pub fn iter<'a>(self, content: &'a Rc<SourceContent>) -> Box<CharIter<'a>> {
+		content.extract_iter(self.begin, self.end)
+	}
 }
 
 impl fmt::Debug for Span {
@@ -338,13 +383,19 @@ impl fmt::Debug for Span {
 
 
 #[cfg(test)]
-mod test {
+mod tests {
 	use super::*;
 
 	#[test]
-	#[should_panic(expected = "unknown source file")]
+	#[should_panic(expected = "invalid source")]
 	fn invalid_source_id() {
 		get_source_manager().with(Source(0), |_|());
+	}
+
+	#[test]
+	#[should_panic(expected = "unknown source file")]
+	fn unknown_source_id() {
+		get_source_manager().with(Source(1), |_|());
 	}
 
 	#[test]

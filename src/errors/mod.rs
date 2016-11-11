@@ -33,6 +33,7 @@ pub type DiagResult<'a, T> = Result<T, DiagnosticBuilder<'a>>;
 #[derive(Clone, Debug)]
 pub struct DiagBuilder2 {
 	pub message: String,
+	pub span: Option<Span>,
 }
 
 /// A diagnostic result type. Either carries the result `T` in the Ok variant,
@@ -41,10 +42,16 @@ pub type DiagResult2<T> = Result<T, DiagBuilder2>;
 
 impl DiagBuilder2 {
 	pub fn fatal<S: Into<String>>(message: S) -> DiagBuilder2 {
-		DiagBuilder2 { message: message.into() }
+		DiagBuilder2 {
+			message: message.into(),
+			span: None,
+		}
 	}
 
 	pub fn span(self, span: Span) -> DiagBuilder2 {
-		self
+		DiagBuilder2 {
+			span: Some(span),
+			..self
+		}
 	}
 }

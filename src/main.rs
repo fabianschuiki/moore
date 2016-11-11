@@ -19,6 +19,9 @@ fn main() {
 			.multiple(true)
 			.takes_value(true)
 			.number_of_values(1))
+		.arg(Arg::with_name("preproc")
+			.short("E")
+			.help("Only preprocess input files"))
 		.arg(Arg::with_name("INPUT")
 			.help("The input file to use")
 			.required(true)
@@ -31,11 +34,20 @@ fn main() {
 		None => Vec::new()
 	};
 	let filename = matches.value_of("INPUT").unwrap();
-
-	// Run the input file through the SystemVerilog preprocessor for now.
 	let sm = source::get_source_manager();
-	let pp = svlog::preproc::Preprocessor::new(sm.open(&filename).unwrap(), &include_paths);
-	for res in pp {
-		print!("{}", res.unwrap().1.extract());
+	let source = match sm.open(&filename) {
+		Some(s) => s,
+		None => panic!("Unable to open input file '{}'", filename),
+	};
+
+	// Run the input file only through the SystemVerilog preprocessor if so
+	// requested on the command line.
+	let preproc = svlog::preproc::Preprocessor::new(source, &include_paths);
+	if matches.is_present("preproc") {
+		for res in preproc {
+			print!("{}", res.unwrap().1.extract());
+		}
+	} else {
+		let lexer = svlog::lexer::Lexer::new(preproc);
 	}
 }

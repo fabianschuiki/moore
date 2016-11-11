@@ -11,8 +11,6 @@
 //! ```
 
 use source::*;
-use errors::*;
-use lexer::{Reader, Lexer};
 pub use self::CatTokenKind::*;
 
 
@@ -118,7 +116,7 @@ impl<'a> Iterator for Cat<'a> {
 			}
 
 			// Consume text.
-			(Some(c), _) => {
+			(Some(_), _) => {
 				let p0 = self.indices.0;
 				while let (Some(c), _) = self.chars {
 					if c == '\n' || is_whitespace(c) || is_symbol(c) {
@@ -169,6 +167,8 @@ fn is_symbol(c: char) -> bool {
 		'\'' |
 		'"' |
 		'`' |
+		'$' |
+		'\\' |
 		'@' => true,
 		_ => false,
 	}
@@ -188,6 +188,7 @@ pub enum CatTokenKind {
 	Comment,
 	Symbol(char),
 	Text,
+	Eof,
 }
 
 
