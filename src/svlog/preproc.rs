@@ -79,6 +79,9 @@ impl<'a> Preprocessor<'a> {
 		}
 	}
 
+	/// Called whenever we have encountered a backtick followed by a text token.
+	/// This function handles all compiler directives and performs file
+	/// inclusion and macro expansion.
 	fn handle_directive<S: AsRef<str>>(&mut self, dir_name: S, span: Span) -> DiagResult2<()> {
 		let dir_name = dir_name.as_ref();
 		let dir = DIRECTIVES_TABLE.with(|tbl| tbl.get(dir_name).map(|x| *x).unwrap_or(Directive::Unknown));
@@ -90,7 +93,6 @@ impl<'a> Preprocessor<'a> {
 				}
 
 				// Skip leading whitespace.
-				self.bump();
 				match self.token {
 					Some((Whitespace, _)) => self.bump(),
 					_ => ()
@@ -132,6 +134,7 @@ impl<'a> Preprocessor<'a> {
 				let included_source = match self.open_include(&filename, &span.source.get_path()) {
 					Some(src) => src,
 					None => {
+						// TODO: Add notes to the message indicating which files have been tried.
 						return Err(
 							DiagBuilder2::fatal(format!("Cannot open included file \"{}\"", filename))
 							.span(Span::union(name_p, name_q))
@@ -148,6 +151,7 @@ impl<'a> Preprocessor<'a> {
 					iter: Cat::new(iter)
 				});
 
+				self.bump();
 				return Ok(());
 			}
 
@@ -157,18 +161,16 @@ impl<'a> Preprocessor<'a> {
 				}
 
 				// Skip leading whitespace.
-				self.bump();
 				match self.token {
 					Some((Whitespace, _)) => self.bump(),
 					_ => ()
 				}
 
 				// Consume the macro name.
-				let (name, name_span) = match self.token {
-					Some((Text, sp)) => (sp.extract(), sp),
-					_ => return Err(DiagBuilder2::fatal("Expected macro name after `define").span(span))
+				let (name, name_span) = match self.try_eat_name() {
+					Some(x) => x,
+					None => return Err(DiagBuilder2::fatal("Expected macro name after \"`define\"").span(span))
 				};
-				self.bump();
 				let mut makro = Macro::new(name.clone(), name_span);
 
 				// NOTE: No whitespace is allowed after the macro name such that
@@ -188,11 +190,10 @@ impl<'a> Preprocessor<'a> {
 							}
 
 							// Consume the argument name.
-							let (name, name_span) = match self.token {
-								Some((Text, sp)) => (sp.extract(), sp),
-								_ => return Err(DiagBuilder2::fatal("Expected macro argument").span(span))
+							let (name, name_span) = match self.try_eat_name() {
+								Some(x) => x,
+								_ => return Err(DiagBuilder2::fatal("Expected macro argument name").span(span))
 							};
-							self.bump();
 							makro.args.push(MacroArg::new(name, name_span));
 							// TODO: Support default parameters.
 
@@ -225,7 +226,7 @@ impl<'a> Preprocessor<'a> {
 				// by a backslash, ignoring comments, whitespace and newlines.
 				loop {
 					match self.token {
-						Some((Newline, _)) => { break; },
+						Some((Newline, _)) => { self.bump(); break; },
 						// Some((Whitespace, _)) => self.bump(),
 						// Some((Comment, _)) => self.bump(),
 						Some((Symbol('\\'), _)) => {
@@ -249,16 +250,15 @@ impl<'a> Preprocessor<'a> {
 
 			Directive::Ifdef | Directive::Ifndef | Directive::Elsif => {
 				// Skip leading whitespace.
-				self.bump();
 				match self.token {
 					Some((Whitespace, _)) => self.bump(),
 					_ => ()
 				}
 
 				// Consume the macro name.
-				let name = match self.token {
-					Some((Text, sp)) => sp.extract(),
-					_ => return Err(DiagBuilder2::fatal("Expected macro name after `ifdef").span(span))
+				let name = match self.try_eat_name() {
+					Some((x,_)) => x,
+					_ => return Err(DiagBuilder2::fatal(format!("Expected macro name after {}", dir_name)).span(span))
 				};
 				let exists = self.macro_defs.contains_key(&name);
 
@@ -327,12 +327,11 @@ impl<'a> Preprocessor<'a> {
 					let mut params = HashMap::<String, Vec<TokenAndSpan>>::new();
 					let mut args = makro.args.iter();
 					if !makro.args.is_empty() {
-						// Skip whitespace.
-						self.bump();
-						match self.token {
-							Some((Whitespace, _)) => self.bump(),
-							_ => ()
-						}
+						// // Skip whitespace.
+						// match self.token {
+						// 	Some((Whitespace, _)) => self.bump(),
+						// 	_ => ()
+						// }
 
 						// Consume the opening paranthesis.
 						match self.token {
@@ -348,10 +347,10 @@ impl<'a> Preprocessor<'a> {
 							// 	Some((Whitespace, _)) => self.bump(),
 							// 	_ => ()
 							// }
-							// match self.token {
-							// 	Some((Symbol(')'), _)) => break,
-							// 	_ => ()
-							// }
+							match self.token {
+								Some((Symbol(')'), _)) => break,
+								_ => ()
+							}
 
 							// Fetch the next argument.
 							let arg = match args.next() {
@@ -399,6 +398,22 @@ impl<'a> Preprocessor<'a> {
 								}
 							}
 						}
+						self.bump();
+					}
+
+					// Now we have a problem. All the tokens of the macro name
+					// have been parsed and we would like to continue by
+					// injecting the tokens of the macro body, such as to
+					// perform substitution. The token just after the macro use,
+					// e.g. the whitespace in "`foo ", is already in the buffer.
+					// However, we don't want this token to be the next, but
+					// rather have it follow after the macro expansion. To do
+					// this, we need to push the token onto the macro stack and
+					// then call `self.bump()` once the expansion has been added
+					// to the stack.
+					match self.token {
+						Some(x) => self.macro_stack.push(x),
+						None => (),
 					}
 
 					// Push the tokens of the macro onto the stack, potentially
@@ -407,6 +422,8 @@ impl<'a> Preprocessor<'a> {
 						self.macro_stack.extend(makro.body.iter().rev());
 					} else {
 						let mut replacement = Vec::<TokenAndSpan>::new();
+						// TODO: Make this work for argument names that contain
+						// underscores.
 						for tkn in &makro.body {
 							match *tkn {
 								(Text, sp) => {
@@ -422,6 +439,8 @@ impl<'a> Preprocessor<'a> {
 						}
 						self.macro_stack.extend(replacement.iter().rev());
 					}
+
+					self.bump();
 					return Ok(());
 				}
 			}
@@ -433,9 +452,6 @@ impl<'a> Preprocessor<'a> {
 			DiagBuilder2::fatal(format!("Unknown compiler directive '`{}'", dir_name))
 			.span(span)
 		);
-
-		// panic!("Unknown compiler directive '`{}'", dir);
-		// Ok(())
 	}
 
 	fn open_include(&mut self, filename: &str, current_file: &str) -> Option<Source> {
@@ -466,6 +482,31 @@ impl<'a> Preprocessor<'a> {
 			_ => true,
 		}
 	}
+
+	fn try_eat_name(&mut self) -> Option<(String, Span)> {
+		// Eat the first token of the name, which may either be a letter or an
+		// underscore.
+		let (mut name, mut span) = match self.token {
+			Some((Text, sp)) | Some((Symbol('_'), sp)) => (sp.extract(), sp),
+			_ => return None
+		};
+		self.bump();
+
+		// Eat the remaining tokens of the name, which may be letters, digits,
+		// or underscores.
+		loop {
+			match self.token {
+				Some((Text, sp)) | Some((Digits, sp)) | Some((Symbol('_'), sp)) => {
+					name.push_str(&sp.extract());
+					span.expand(sp);
+					self.bump();
+				},
+				_ => break,
+			}
+		}
+
+		Some((name, span))
+	}
 }
 
 impl<'a> Iterator for Preprocessor<'a> {
@@ -486,26 +527,30 @@ impl<'a> Iterator for Preprocessor<'a> {
 			match self.token {
 				Some((Symbol('`'), sp_backtick)) => {
 					self.bump(); // consume the backtick
-					match self.token {
-						Some((Text, sp)) => {
+					match self.try_eat_name() {
+						Some((name, sp)) => {
 							// We arrive here if the sequence a backtick
 							// followed by text was encountered. In this case we
 							// call upon the handle_directive function to
 							// perform the necessary actions.
 							let dir_span = Span::union(sp_backtick, sp);
-							match self.handle_directive(sp.extract(), dir_span) {
+							println!("Directive \"{}\" {:?}", name, dir_span);
+							match self.handle_directive(name, dir_span) {
 								Err(x) => return Some(Err(x)),
 								_ => ()
 							}
 
-							// It is important that the lexer is bumped here,
-							// after handling the directive. This makes sure
-							// that if an include was handled, the next token
-							// after the directive actually comes from that
-							// file.
-							self.bump();
+							// // It is important that the lexer is bumped here,
+							// // after handling the directive. This makes sure
+							// // that if an include was handled, the next token
+							// // after the directive actually comes from that
+							// // file.
+							// self.bump();
 							continue;
-						}
+						},
+						_ => ()
+					}
+					match self.token {
 						Some((Symbol('`'), sp)) => {
 							return Some(Err(
 								DiagBuilder2::fatal("Preprocessor concatenation '``' used outside of `define")
@@ -622,16 +667,63 @@ enum Defcond {
 mod tests {
 	use super::*;
 	use source::*;
+	use svlog::cat::CatTokenKind;
+	use svlog::cat::CatTokenKind::*;
+
+	fn preproc(input: &str) -> Preprocessor {
+		use std::cell::Cell;
+		thread_local!(static INDEX: Cell<usize> = Cell::new(0));
+		let sm = get_source_manager();
+		let idx = INDEX.with(|i| {
+			let v = i.get();
+			i.set(v+1);
+			v
+		});
+		let source = sm.add(&format!("test_{}.sv", idx), input);
+		Preprocessor::new(source, &[])
+	}
+
+	fn check(input: &str, expected: &[CatTokenKind]) {
+		let mut pp = preproc(input);
+		let actual: Vec<_> = pp.map(|x| x.unwrap().0).collect();
+		assert_eq!(actual, expected);
+	}
+
+	fn check_str(input: &str, expected: &str) {
+		let mut pp = preproc(input);
+		let actual: String = pp.map(|x| x.unwrap().1.extract()).collect();
+		assert_eq!(actual, expected);
+	}
+
+	#[test]
+	fn include() {
+		let sm = get_source_manager();
+		sm.add("other.sv", "bar\n");
+		sm.add("test.sv", "foo\n`include \"other.sv\"\nbaz");
+		let mut pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
+		let actual: Vec<_> = pp.map(|x| x.unwrap().0).collect();
+		assert_eq!(actual, &[
+			Text,
+			Newline,
+			Text,
+			Newline,
+			Newline,
+			Text,
+		]);
+	}
 
 	#[test]
 	fn include_and_define() {
 		let sm = get_source_manager();
-		sm.add("other.sv", "/* World */\n`define foo 42\n");
+		sm.add("other.sv", "/* World */\n`define foo 42\nbar");
 		sm.add("test.sv", "// Hello\n`include \"other.sv\"\n`foo something\n");
 		let mut pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
-		let actual: String = pp.map(|x| x.unwrap().1.extract()).collect();
-		let expected = "// Hello\n/* World */\n\n42 something\n";
-		assert_eq!(actual, expected);
+		let actual: String = pp.map(|x| {
+			let x = x.unwrap();
+			println!("{:?}", x);
+			x.1.extract()
+		}).collect();
+		assert_eq!(actual, "// Hello\n/* World */\nbar\n42 something\n");
 	}
 
 	#[test]
@@ -647,23 +739,27 @@ mod tests {
 
 	#[test]
 	fn macro_args() {
-		let sm = get_source_manager();
-		let source = sm.add("test.sv", "`define foo(x,y) {x + y _bar}\n`foo(12, foo)\n");
-		let mut pp = Preprocessor::new(source, &[]);
-		let actual: String = pp.map(|x| x.unwrap().1.extract()).collect();
-		let expected = "{12 +  foo _bar}\n";
-		assert_eq!(actual, expected);
+		check_str(
+			"`define foo(x,y) {x + y _bar}\n`foo(12, foo)\n",
+			"{12 +  foo _bar}\n"
+		);
 	}
 
 	/// Verify that macros that take no arguments but have parantheses around
 	/// their body parse properly.
 	#[test]
 	fn macro_noargs_parentheses() {
-		let sm = get_source_manager();
-		let source = sm.add("test.sv", "`define FOO 4\n`define BAR (`FOO+$clog2(2))\n`BAR");
-		let mut pp = Preprocessor::new(source, &[]);
-		let actual: String = pp.map(|x| x.unwrap().1.extract()).collect();
-		let expected = "(4+$clog2(2))";
-		assert_eq!(actual, expected);
+		check_str(
+			"`define FOO 4\n`define BAR (`FOO+$clog2(2))\n`BAR",
+			"(4+$clog2(2))"
+		);
+	}
+
+	#[test]
+	fn macro_name_with_digits_and_underscores() {
+		check_str(
+			"`define AXI_BUS21_SV 42\n`AXI_BUS21_SV",
+			"42"
+		);
 	}
 }

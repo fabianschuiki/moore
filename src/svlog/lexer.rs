@@ -53,7 +53,7 @@ impl<'a> Lexer<'a> {
 		let name_table = get_name_table();
 
 		loop {
-			self.skip_noise();
+			self.skip_noise()?;
 
 			// Match single-character symbols.
 			if let CatTokenKind::Symbol(c0) = self.peek[0].0 {
@@ -62,7 +62,7 @@ impl<'a> Lexer<'a> {
 					_ => None,
 				};
 				if let Some(tkn) = sym {
-					try!(self.bump());
+					self.bump()?;
 					return Ok((tkn, self.peek[0].1));
 				}
 			}
@@ -75,7 +75,7 @@ impl<'a> Lexer<'a> {
 				// IEEE 1800-2009 5.6 Identifiers
 				(CatTokenKind::Text, _) |
 				(CatTokenKind::Symbol('_'), _) => {
-					let (m, msp) = try!(self.match_ident());
+					let (m, msp) = self.match_ident()?;
 					return Ok((Ident(name_table.intern(&m, true)), msp));
 				}
 
@@ -93,22 +93,21 @@ impl<'a> Lexer<'a> {
 				// IEEE 1800-2009 5.6.3 System tasks and system functions
 				(CatTokenKind::Symbol('$'), sp) => {
 					self.bump();
-					let (m, msp) = try!(self.match_ident());
+					let (m, msp) = self.match_ident()?;
 					return Ok((SysIdent(name_table.intern(&m, true)), Span::union(sp,msp)));
 				},
 
 				// Escaped identifiers are introduced with a backslash and last
 				// until the next whitespace or newline character.
 				// IEEE 1800-2009 5.6.1 Escaped identifiers
-				(CatTokenKind::Symbol('\\'), sp) => {
+				(CatTokenKind::Symbol('\\'), mut sp) => {
 					let mut s = String::new();
-					let mut sp = sp;
 					loop {
 						self.bump();
 						if self.peek[0].0 == CatTokenKind::Whitespace || self.peek[0].0 == CatTokenKind::Newline || self.peek[0].0 == CatTokenKind::Eof {
 							break;
 						}
-						sp = Span::union(sp, self.peek[0].1);
+						sp.expand(self.peek[0].1);
 						s.push_str(&self.peek[0].1.extract());
 					}
 					if s.is_empty() {
@@ -148,10 +147,8 @@ impl<'a> Lexer<'a> {
 				}
 
 				(CatTokenKind::Eof, sp) => return Ok((Eof, sp)),
-				_ => ()
+				(tkn, sp) => return Err(DiagBuilder2::fatal(format!("Unknown token {:?}", tkn)).span(sp)),
 			}
-
-			return Err(DiagBuilder2::fatal(format!("Unknown token {:?}", self.peek[0].0)).span(self.peek[0].1));
 		}
 	}
 
@@ -162,7 +159,7 @@ impl<'a> Lexer<'a> {
 	fn skip_noise(&mut self) -> DiagResult2<()> {
 		loop {
 			match self.peek[0].0 {
-				CatTokenKind::Whitespace | CatTokenKind::Newline | CatTokenKind::Comment => try!(self.bump()),
+				CatTokenKind::Whitespace | CatTokenKind::Newline | CatTokenKind::Comment => self.bump()?,
 				_ => return Ok(())
 			}
 		}
