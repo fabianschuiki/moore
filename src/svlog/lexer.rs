@@ -3,14 +3,12 @@
 //! A lexical analyzer for SystemVerilog files, based on IEEE 1800-2009, section
 //! 5.
 
-pub use svlog::token::Token;
+pub use svlog::token::*;
 use errors::*;
 use source::*;
-use name::get_name_table;
+use name::*;
 use svlog::cat::CatTokenKind;
 use svlog::preproc::*;
-use svlog::token::Token::*;
-use svlog::token;
 
 
 type CatTokenAndSpan = (CatTokenKind, Span);
@@ -56,7 +54,18 @@ impl<'a> Lexer<'a> {
 
 		loop {
 			self.skip_noise();
-			println!("peek: {:?}", self.peek);
+
+			// Match single-character symbols.
+			if let CatTokenKind::Symbol(c0) = self.peek[0].0 {
+				let sym = match c0 {
+					';' => Some(Semicolon),
+					_ => None,
+				};
+				if let Some(tkn) = sym {
+					try!(self.bump());
+					return Ok((tkn, self.peek[0].1));
+				}
+			}
 
 			match self.peek[0] {
 				// A text token either represents an identifier or a number,
@@ -64,15 +73,7 @@ impl<'a> Lexer<'a> {
 				// addition to that, underscores '_' also introduce an
 				// identifier.
 				// IEEE 1800-2009 5.6 Identifiers
-				(CatTokenKind::Text, sp) => {
-					let src = sp.source.get_content();
-					if sp.iter(&src).next().unwrap().1.is_digit(10) {
-						return self.match_number(sp);
-					} else {
-						let (m, msp) = try!(self.match_ident());
-						return Ok((Ident(name_table.intern(&m, true)), msp));
-					}
-				}
+				(CatTokenKind::Text, _) |
 				(CatTokenKind::Symbol('_'), _) => {
 					let (m, msp) = try!(self.match_ident());
 					return Ok((Ident(name_table.intern(&m, true)), msp));
@@ -116,6 +117,36 @@ impl<'a> Lexer<'a> {
 					return Ok((EscIdent(name_table.intern(&s, true)), sp));
 				}
 
+				// Numbers are either introduced by a set of digits in the case
+				// of a sized literal or unsigned number, or an apostrophe in
+				// the case of an unsized based number.
+				// IEEE 1800-2009 5.7 Numbers
+				(CatTokenKind::Symbol('\''), sp) => {
+					self.bump()?; // eat the apostrophe
+					return self.match_based_number(None, sp);
+				}
+				(CatTokenKind::Digits, mut sp) => {
+					// Consume the leading digits. These represent either the
+					// size of the literal if followed by an apostrophe and a
+					// base specification, or the number itself otherwise.
+					let value = {
+						let mut s = String::new();
+						s.push_str(&sp.extract());
+						self.bump()?; // eat the digits that were pushed onto the string above
+						self.eat_number_body_into(&mut s, &mut sp, false)?;
+						name_table.intern(&s, true)
+					};
+					self.skip_noise(); // whitespace allowed after size indication
+					println!("found unsigned_number '{}'", value);
+					match self.peek[0] {
+						(CatTokenKind::Symbol('\''), _) => {
+							self.bump()?; // eat the apostrophe
+							return self.match_based_number(Some(value), sp)
+						},
+						_ => return Ok((UnsignedNumber(value), sp))
+					}
+				}
+
 				(CatTokenKind::Eof, sp) => return Ok((Eof, sp)),
 				_ => ()
 			}
@@ -148,10 +179,11 @@ impl<'a> Lexer<'a> {
 		loop {
 			match self.peek[0] {
 				(CatTokenKind::Text, this_sp) |
+				(CatTokenKind::Digits, this_sp) |
 				(CatTokenKind::Symbol('_'), this_sp) |
 				(CatTokenKind::Symbol('$'), this_sp) => {
 					s.push_str(&this_sp.extract());
-					sp = Span::union(sp, this_sp);
+					sp.expand(this_sp);
 					try!(self.bump());
 				},
 				_ => break,
@@ -161,8 +193,113 @@ impl<'a> Lexer<'a> {
 		Ok((s, sp))
 	}
 
-	fn match_number(&mut self, first_sp: Span) -> DiagResult2<TokenAndSpan> {
+	fn match_number(&mut self) -> DiagResult2<TokenAndSpan> {
 		unimplemented!();
+	}
+
+	/// This function assumes that we have just consumed the apostrophe `'`
+	/// before the base indication.
+	fn match_based_number(&mut self, size: Option<Name>, mut span: Span) -> DiagResult2<TokenAndSpan> {
+		println!("would match based number (size {:?}) span {:?}", size, span);
+
+		match self.peek[0] {
+			(CatTokenKind::Text, sp) => {
+				self.bump()?;
+				let text = sp.extract();
+				span.expand(sp);
+				let mut chars = text.chars();
+				let mut c = chars.next();
+
+				// Consume the optional sign indicator or emit an unbased and
+				// unsized literal if the apostrophe is immediately followed by
+				// [zZxX].
+				let signed = match c {
+					Some('s') | Some('S') => {
+						c = chars.next();
+						true
+					},
+					Some('z') | Some('Z') if text.len() == 1 => return Ok((Literal(UnbasedUnsized('z')), span)),
+					Some('x') | Some('X') if text.len() == 1 => return Ok((Literal(UnbasedUnsized('x')), span)),
+					_ => false
+				};
+
+				// Consume the base of the number.
+				let base = match c {
+					Some('d') | Some('D') => 'd',
+					Some('b') | Some('B') => 'b',
+					Some('o') | Some('O') => 'o',
+					Some('h') | Some('H') => 'h',
+					Some(x) => return Err(DiagBuilder2::fatal(format!("`{}` is not a valid number base", x)).span(span)),
+					None => return Err(DiagBuilder2::fatal("Missing number base").span(span)),
+				};
+				c = chars.next();
+
+				// If no more characters remain, a whitespace and subsequent
+				// digits may follow. Otherwise, the remaining characters are to
+				// be treated as part of the number body and no whitespace
+				// follows.
+				let mut body = String::new();
+				if let Some(c) = c {
+					body.push(c);
+					body.push_str(chars.as_str());
+				} else {
+					self.skip_noise();
+				}
+				try!(self.eat_number_body_into(&mut body, &mut span, true));
+
+				println!("size {:?}, base {}, signed {}, body {}, span {:?}", size, base, signed, body, span);
+				return Ok((Literal(BasedInteger(
+					size,
+					signed,
+					base,
+					get_name_table().intern(&body, true),
+				)), span));
+			}
+
+			(CatTokenKind::Digits, sp) if size.is_none() => {
+				self.bump()?;
+				let value = sp.extract();
+				span.expand(sp);
+				match value.chars().next() {
+					Some('0') if value.len() == 1 => return Ok((Literal(UnbasedUnsized('0')), span)),
+					Some('1') if value.len() == 1 => return Ok((Literal(UnbasedUnsized('1')), span)),
+					_ => return Err(DiagBuilder2::fatal("Unbased unsized literal may only be '0, '1, 'x, or 'z").span(span))
+				}
+			}
+
+			(CatTokenKind::Symbol('?'), sp) => {
+				self.bump()?;
+				span.expand(sp);
+				return Ok((Literal(UnbasedUnsized('z')), span));
+			}
+
+			(_, sp) => return Err(DiagBuilder2::fatal("Invalid number base").span(sp))
+		}
+	}
+
+	/// Eats all text, digits, and underscore tokens, accumulating them (except
+	/// for the underscores) in a String.
+	fn eat_number_body_into(&mut self, into: &mut String, span: &mut Span, allow_alphabetic: bool) -> DiagResult2<()> {
+		loop {
+			match self.peek[0] {
+				(CatTokenKind::Digits, sp) |
+				(CatTokenKind::Text, sp) => {
+					if self.peek[0].0 == CatTokenKind::Text && !allow_alphabetic {
+						return Err(DiagBuilder2::fatal("Unsigned number or size of literal must be a decimal and thus cannot contain any letters").span(sp));
+					}
+					into.push_str(&sp.extract());
+					span.expand(sp);
+				},
+				(CatTokenKind::Symbol('_'), _) => (),
+				(CatTokenKind::Symbol('?'), sp) => {
+					into.push('?');
+					span.expand(sp);
+				},
+				_ => break
+			}
+			try!(self.bump());
+		}
+		Ok(())
 	}
 }
 
@@ -185,15 +322,25 @@ mod tests {
 	use source::*;
 	use name::*;
 	use svlog::preproc::*;
-	use svlog::token::Token::*;
 
 	fn check(input: &str, expected: &[Token]) {
+		use std::cell::Cell;
+		thread_local!(static INDEX: Cell<usize> = Cell::new(0));
 		let sm = get_source_manager();
-		let source = sm.add("test.sv", input);
+		let idx = INDEX.with(|i| {
+			let v = i.get();
+			i.set(v+1);
+			v
+		});
+		let source = sm.add(&format!("test_{}.sv", idx), input);
 		let pp = Preprocessor::new(source, &[]);
 		let lexer = Lexer::new(pp);
 		let actual: Vec<_> = lexer.map(|x| x.unwrap().0).collect();
 		assert_eq!(actual, expected);
+	}
+
+	fn check_single(input: &str, expected: Token) {
+		check(input, &[expected]);
 	}
 
 	fn name(n: &str) -> Name {
@@ -243,5 +390,64 @@ mod tests {
 				SysIdent(name("01_ad$as3_")),
 			]
 		);
+	}
+
+	/// According to IEEE 1800-2009 5.7.1
+	#[test]
+	fn unbased_unsized_literal() {
+		check_single("'0", Literal(UnbasedUnsized('0')));
+		check_single("'1", Literal(UnbasedUnsized('1')));
+		check_single("'X", Literal(UnbasedUnsized('x')));
+		check_single("'x", Literal(UnbasedUnsized('x')));
+		check_single("'Z", Literal(UnbasedUnsized('z')));
+		check_single("'z", Literal(UnbasedUnsized('z')));
+		check_single("'?", Literal(UnbasedUnsized('z')));
+	}
+
+	#[test]
+	fn unsized_literal_constant_numbers() {
+		check(
+			"659; 'h 837FF; 'o7460", &[
+			UnsignedNumber(name("659")), Semicolon,
+			Literal(BasedInteger(None, false, 'h', name("837FF"))), Semicolon,
+			Literal(BasedInteger(None, false, 'o', name("7460"))),
+		]);
+	}
+
+	#[test]
+	#[should_panic(expected = "Unsigned number or size of literal must be a decimal")]
+	fn unsized_literal_constant_numbers_illegal() {
+		check("4af", &vec![]);
+	}
+
+	#[test]
+	fn sized_literal_constant_numbers() {
+		check(
+			"4'b1001; 5 'D 3; 3'b01x; 12'hx; 16'hz", &[
+			Literal(BasedInteger(Some(name("4")), false, 'b', name("1001"))), Semicolon,
+			Literal(BasedInteger(Some(name("5")), false, 'd', name("3"))), Semicolon,
+			Literal(BasedInteger(Some(name("3")), false, 'b', name("01x"))), Semicolon,
+			Literal(BasedInteger(Some(name("12")), false, 'h', name("x"))), Semicolon,
+			Literal(BasedInteger(Some(name("16")), false, 'h', name("z"))),
+		]);
+	}
+
+	#[test]
+	fn signed_literal_constant_numbers() {
+		check(
+			"4 'shf; 16'sd?", &[
+			Literal(BasedInteger(Some(name("4")), true, 'h', name("f"))), Semicolon,
+			Literal(BasedInteger(Some(name("16")), true, 'd', name("?"))),
+		]);
+	}
+
+	#[test]
+	fn underscores_in_literal_constant_numbers() {
+		check(
+			"27_195_000; 16'b0011_0101_0001_1111; 32 'h 12ab_f001", &[
+			UnsignedNumber(name("27195000")), Semicolon,
+			Literal(BasedInteger(Some(name("16")), false, 'b', name("0011010100011111"))), Semicolon,
+			Literal(BasedInteger(Some(name("32")), false, 'h', name("12abf001"))),
+		]);
 	}
 }

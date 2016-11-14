@@ -77,6 +77,8 @@ pub enum Token {
 	Ident(Name),
 	/// An escaped identifier
 	EscIdent(Name),
+	/// An unsigned number
+	UnsignedNumber(Name),
 
 	// The end of the input file
 	Eof,
@@ -102,6 +104,6 @@ pub enum DelimToken {
 pub enum Lit {
 	Str(Name),
 	Decimal(Name),
-	BasedInteger(Option<Name>, char, Name),
+	BasedInteger(Option<Name>, bool, char, Name),
 	UnbasedUnsized(char),
 }

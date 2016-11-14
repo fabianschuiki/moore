@@ -115,6 +115,18 @@ impl<'a> Iterator for Cat<'a> {
 				Some(t)
 			}
 
+			// Consume digits.
+			(Some(c), _) if is_digit(c) => {
+				let p0 = self.indices.0;
+				while let (Some(c), _) = self.chars {
+					if !is_digit(c) {
+						break;
+					}
+					self.bump();
+				}
+				Some(CatToken(Digits, p0, self.indices.0))
+			}
+
 			// Consume text.
 			(Some(_), _) => {
 				let p0 = self.indices.0;
@@ -134,6 +146,11 @@ impl<'a> Iterator for Cat<'a> {
 /// SystemVerilog.
 fn is_whitespace(c: char) -> bool {
 	c == ' ' || c == '\t' || c == '\r' || c == (0xA0 as char)
+}
+
+/// Check whether the given character is a digit.
+fn is_digit(c: char) -> bool {
+	c >= '0' && c <= '9'
 }
 
 /// Check whether the given character is considered a symbol in SystemVerilog.
@@ -169,6 +186,7 @@ fn is_symbol(c: char) -> bool {
 		'`' |
 		'$' |
 		'\\' |
+		'_' |
 		'@' => true,
 		_ => false,
 	}
@@ -188,6 +206,7 @@ pub enum CatTokenKind {
 	Comment,
 	Symbol(char),
 	Text,
+	Digits,
 	Eof,
 }
 
@@ -196,8 +215,6 @@ pub enum CatTokenKind {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use errors::*;
-	use lexer::{Lexer, StringReader};
 
 	fn lex(input: &str) -> Vec<CatToken> {
 		Cat::new(Box::new(input.char_indices())).collect()
@@ -210,13 +227,14 @@ mod tests {
 
 	#[test]
 	fn non_empty() {
-		assert_eq!(lex("Löwe 老虎 Léopard\n"), vec![
+		assert_eq!(lex("Löwe 老虎 1234Léopard\n"), vec![
 			CatToken(Text, 0, 5),
 			CatToken(Whitespace, 5, 6),
 			CatToken(Text, 6, 12),
 			CatToken(Whitespace, 12, 13),
-			CatToken(Text, 13, 21),
-			CatToken(Newline, 21, 22),
+			CatToken(Digits, 13, 17),
+			CatToken(Text, 17, 25),
+			CatToken(Newline, 25, 26),
 		]);
 	}
 }

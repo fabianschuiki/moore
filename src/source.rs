@@ -352,6 +352,17 @@ impl Span {
 		}
 	}
 
+	/// Modify this range to also cover the entirety of the `other` range. The
+	/// `other` range must lie in the same source as `self`.
+	pub fn expand<S: Into<Span>>(&mut self, other: S) -> &mut Self {
+		use std::cmp::{min, max};
+		let o = other.into();
+		assert_eq!(self.source, o.source);
+		self.begin = min(self.begin, o.begin);
+		self.end = max(self.end, o.end);
+		self
+	}
+
 	/// Return the location just before the first character in this span.
 	pub fn begin(&self) -> Location {
 		Location::new(self.source, self.begin)
