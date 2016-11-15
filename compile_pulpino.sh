@@ -4,7 +4,7 @@
 
 # MOORE="cargo run --"
 MOORE="target/debug/moore"
-MOORE_FLAGS="-E"
+MOORE_FLAGS=""
 SRC=pulpino/rtl
 RTL_FLAGS="-I ${SRC}/includes"
 set -e

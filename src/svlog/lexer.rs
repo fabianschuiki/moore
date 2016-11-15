@@ -55,15 +55,73 @@ impl<'a> Lexer<'a> {
 		loop {
 			self.skip_noise()?;
 
-			// Match single-character symbols.
-			if let CatTokenKind::Symbol(c0) = self.peek[0].0 {
-				let sym = match c0 {
-					';' => Some(Semicolon),
+			// Match 2-character symbols
+			if let (CatTokenKind::Symbol(c0), CatTokenKind::Symbol(c1)) = (self.peek[0].0, self.peek[1].0) {
+				let sym = match (c0,c1) {
+					('+','=') => Some(AssignAdd),
+					('-','=') => Some(AssignSub),
+					('*','=') => Some(AssignMul),
+					('/','=') => Some(AssignDiv),
+					('%','=') => Some(AssignMod),
+					('&','=') => Some(AssignAnd),
+					('|','=') => Some(AssignOr),
+					('^','=') => Some(AssignXor),
+					('<','=') => Some(Leq),
+					('>','=') => Some(Geq),
+					('~','&') => Some(Nand),
+					('~','|') => Some(Nor),
+					('~','^') => Some(Nxor),
+					('^','~') => Some(Xnor),
+					('*','*') => Some(Pow),
+					('+','+') => Some(Inc),
+					('-','-') => Some(Dec),
+					('<','<') => Some(Shl),
+					('>','>') => Some(Shr),
+					('-','>') => Some(Rarrow),
 					_ => None,
 				};
 				if let Some(tkn) = sym {
+					let sp = Span::union(self.peek[0].1, self.peek[1].1);
 					self.bump()?;
-					return Ok((tkn, self.peek[0].1));
+					return Ok((tkn, sp));
+				}
+			}
+
+			// Match 1-character symbols.
+			if let CatTokenKind::Symbol(c0) = self.peek[0].0 {
+				let sym = match c0 {
+					'(' => Some(OpenDelim(Paren)),
+					')' => Some(CloseDelim(Paren)),
+					'[' => Some(OpenDelim(Brack)),
+					']' => Some(CloseDelim(Brack)),
+					'{' => Some(OpenDelim(Brace)),
+					'}' => Some(CloseDelim(Brace)),
+					'#' => Some(Hashtag),
+					',' => Some(Comma),
+					'.' => Some(Period),
+					':' => Some(Colon),
+					';' => Some(Semicolon),
+					'=' => Some(Assign),
+					'+' => Some(Add),
+					'-' => Some(Sub),
+					'*' => Some(Mul),
+					'/' => Some(Div),
+					'%' => Some(Mod),
+					'<' => Some(Lt),
+					'>' => Some(Gt),
+					'^' => Some(Xor),
+					'?' => Some(Ternary),
+					'!' => Some(Not),
+					'~' => Some(Neg),
+					'&' => Some(And),
+					'|' => Some(Or),
+					'@' => Some(At),
+					_ => None,
+				};
+				if let Some(tkn) = sym {
+					let sp = self.peek[0].1;
+					self.bump()?;
+					return Ok((tkn, sp));
 				}
 			}
 
@@ -136,7 +194,6 @@ impl<'a> Lexer<'a> {
 						name_table.intern(&s, true)
 					};
 					self.skip_noise(); // whitespace allowed after size indication
-					println!("found unsigned_number '{}'", value);
 					match self.peek[0] {
 						(CatTokenKind::Symbol('\''), _) => {
 							self.bump()?; // eat the apostrophe
@@ -144,6 +201,48 @@ impl<'a> Lexer<'a> {
 						},
 						_ => return Ok((UnsignedNumber(value), sp))
 					}
+				}
+
+				// IEEE 1800-2009 5.9 String literals
+				(CatTokenKind::Symbol('"'), mut span) => {
+					self.bump()?;
+					let mut s = String::new();
+					loop {
+						match self.peek[0] {
+							(CatTokenKind::Symbol('"'), sp) => {
+								span.expand(sp);
+								self.bump()?;
+								break;
+							}
+							(CatTokenKind::Symbol('\\'), sp) => {
+								span.expand(sp);
+								self.bump()?;
+								match self.peek[0] {
+									(CatTokenKind::Symbol('\\'), sp) => {
+										span.expand(sp);
+										s.push('\\');
+									}
+									(CatTokenKind::Newline, sp) => { span.expand(sp); },
+									(CatTokenKind::Symbol('"'), sp) => {
+										span.expand(sp);
+										s.push('"');
+									}
+									(CatTokenKind::Text, sp) => {
+										span.expand(sp);
+										s.push_str(&sp.extract());
+									}
+									_ => return Err(DiagBuilder2::fatal("Unknown escape sequence in string").span(span))
+								}
+							}
+							(CatTokenKind::Newline, sp) => return Err(DiagBuilder2::fatal("String literals cannot contain unescaped newlines").span(sp)),
+							(x, sp) => {
+								span.expand(sp);
+								s.push_str(&sp.extract());
+							}
+						}
+						self.bump()?;
+					}
+					return Ok((Literal(Str(name_table.intern(&s, true))), span));
 				}
 
 				(CatTokenKind::Eof, sp) => return Ok((Eof, sp)),
@@ -197,8 +296,6 @@ impl<'a> Lexer<'a> {
 	/// This function assumes that we have just consumed the apostrophe `'`
 	/// before the base indication.
 	fn match_based_number(&mut self, size: Option<Name>, mut span: Span) -> DiagResult2<TokenAndSpan> {
-		println!("would match based number (size {:?}) span {:?}", size, span);
-
 		match self.peek[0] {
 			(CatTokenKind::Text, sp) => {
 				self.bump()?;
@@ -242,9 +339,8 @@ impl<'a> Lexer<'a> {
 				} else {
 					self.skip_noise();
 				}
-				try!(self.eat_number_body_into(&mut body, &mut span, true));
+				self.eat_number_body_into(&mut body, &mut span, true)?;
 
-				println!("size {:?}, base {}, signed {}, body {}, span {:?}", size, base, signed, body, span);
 				return Ok((Literal(BasedInteger(
 					size,
 					signed,
@@ -445,6 +541,18 @@ mod tests {
 			UnsignedNumber(name("27195000")), Semicolon,
 			Literal(BasedInteger(Some(name("16")), false, 'b', name("0011010100011111"))), Semicolon,
 			Literal(BasedInteger(Some(name("32")), false, 'h', name("12abf001"))),
+		]);
+	}
+
+	/// According to IEEE 1800-2009 5.9
+	#[test]
+	fn multiline_string_literal() {
+		check(
+			"$display(\"Humpty Dumpty sat on a wall. \\\nHumpty Dumpty had a great fall.\")", &[
+			SysIdent(name("display")),
+			OpenDelim(Paren),
+			Literal(Str(name("Humpty Dumpty sat on a wall. Humpty Dumpty had a great fall."))),
+			CloseDelim(Paren),
 		]);
 	}
 }

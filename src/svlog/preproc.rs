@@ -527,42 +527,22 @@ impl<'a> Iterator for Preprocessor<'a> {
 			match self.token {
 				Some((Symbol('`'), sp_backtick)) => {
 					self.bump(); // consume the backtick
-					match self.try_eat_name() {
-						Some((name, sp)) => {
-							// We arrive here if the sequence a backtick
-							// followed by text was encountered. In this case we
-							// call upon the handle_directive function to
-							// perform the necessary actions.
-							let dir_span = Span::union(sp_backtick, sp);
-							println!("Directive \"{}\" {:?}", name, dir_span);
-							match self.handle_directive(name, dir_span) {
-								Err(x) => return Some(Err(x)),
-								_ => ()
-							}
-
-							// // It is important that the lexer is bumped here,
-							// // after handling the directive. This makes sure
-							// // that if an include was handled, the next token
-							// // after the directive actually comes from that
-							// // file.
-							// self.bump();
-							continue;
-						},
-						_ => ()
-					}
-					match self.token {
-						Some((Symbol('`'), sp)) => {
-							return Some(Err(
-								DiagBuilder2::fatal("Preprocessor concatenation '``' used outside of `define")
-								.span(Span::union(sp_backtick, sp))
-							));
+					if let Some((name, sp)) = self.try_eat_name() {
+						// We arrive here if the sequence a backtick
+						// followed by text was encountered. In this case we
+						// call upon the handle_directive function to
+						// perform the necessary actions.
+						let dir_span = Span::union(sp_backtick, sp);
+						match self.handle_directive(name, dir_span) {
+							Err(x) => return Some(Err(x)),
+							_ => ()
 						}
-						_ => {
-							return Some(Err(
-								DiagBuilder2::fatal("Expected compiler directive after '`'")
-								.span(sp_backtick)
-							));
-						}
+						continue;
+					} else {
+						return Some(Err(
+							DiagBuilder2::fatal("Expected compiler directive after '`'")
+							.span(sp_backtick)
+						));
 					}
 				}
 				_ => {
