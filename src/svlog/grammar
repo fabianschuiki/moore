@@ -1,6 +1,145 @@
 # Copyright (c) 2016 Fabian Schuiki
-# SystemVerilog Grammar
+# SystemVerilog Grammar, based on IEEE 1800-2009.
 
-module
-	: blahrg ;
-	: hello ;
+@tokenlist "Token::Keyword(Kw::@)" {
+	INTERFACE "Interface";
+	PARAMETER "Parameter";
+}
+
+@tokenlist "OpenDelim(@)" {
+	LPAREN "Paren";
+	LBRACK "Brack";
+	LBRACE "Brace";
+}
+
+@tokenlist "CloseDelim(@)" {
+	RPAREN "Paren";
+	RBRACK "Brack";
+	RBRACE "Brace";
+}
+
+@tokenlist "Token::@" {
+	SEMICOLON "Semicolon";
+	COMMA "Comma";
+	HASHTAG "Hashtag";
+}
+
+@token IDENT "Token::Ident(_)";
+
+@root source_text;
+
+
+# IEEE 1800-2009 A.1.2 SystemVerilog source text
+source_text "SourceText"
+	: description
+	# : timeunits_decl description
+	: source_text description
+	;
+
+description
+	# : module_decl
+	: interface_decl
+	;
+
+interface_decl "IntfDecl"
+	: interface_nonansi_header
+	: interface_ansi_header ;
+
+interface_nonansi_header
+	: interface_common_header list_of_ports SEMICOLON
+	;
+
+interface_ansi_header
+	: interface_common_header SEMICOLON
+	: interface_common_header list_of_port_declarations SEMICOLON
+	;
+
+interface_common_header
+	: INTERFACE IDENT
+	: INTERFACE IDENT parameter_port_list
+	;
+
+
+# IEEE 1800-2009 A.1.3 Module parameters and ports
+parameter_port_list
+	: HASHTAG LPAREN parameter_port_decl_list RPAREN
+	: HASHTAG LPAREN RPAREN
+	;
+parameter_port_decl_list
+	: parameter_port_decl
+	: parameter_port_decl_list COMMA parameter_port_decl
+	;
+
+parameter_port_decl
+	: parameter_decl
+	;
+
+list_of_ports
+	: LPAREN list_of_ports_0 RPAREN
+	;
+list_of_ports_0
+	: port
+	: list_of_ports_0 COMMA port
+	;
+
+port
+	: INTERFACE
+	;
+
+list_of_port_declarations
+	: LPAREN IDENT RPAREN
+	;
+
+
+# IEEE 1800-2009 A.2.1.1 Module parameter declarations
+parameter_decl
+	: PARAMETER data_type_or_implicit list_of_param_assignments
+	;
+
+
+# IEEE 1800-2009 A.2.2.1 Net and variable types
+data_type;
+
+data_type_or_implicit
+	: data_type
+	# : implicit_data_type
+	;
+
+implicit_data_type
+	;
+
+
+# IEEE 1800-2009 A.2.3 Declaration lists
+list_of_param_assignments
+	: param_assignment
+	: list_of_param_assignments COMMA param_assignment
+	;
+
+
+# IEEE 1800-2009 A.2.4 Declaration assignments
+param_assignment
+	: IDENT
+	: IDENT unpacked_dimension_list
+	: IDENT ASSIGN constant_param_expr
+	: IDENT unpacked_dimension_list ASSIGN constant_param_expr
+	;
+
+
+# IEEE 1800-2009 A.2.5 Declaration ranges
+unpacked_dimension
+	: LBRACK constant_range RBRACK
+	: LBRACK constant_expr RBRACK
+	;
+unpacked_dimension_list
+	: unpacked_dimension
+	: unpacked_dimension_list unpacked_dimension
+	;
+
+packed_dimension
+	: LBRACK constant_range RBRACK
+	: LBRACK RBRACK
+	;
+packed_dimension_list
+	: packed_dimension
+	: packed_dimension_list packed_dimension
+	;

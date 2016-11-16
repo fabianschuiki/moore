@@ -6,7 +6,6 @@ use std::io::Read;
 use std::cmp::max;
 use errors::DiagResult;
 use std::collections::VecDeque;
-use source::Source;
 
 
 /// A trait that can supply a peekable stream of characters.
@@ -332,6 +331,7 @@ impl<T: Clone + PartialEq> BufferedLexer<T> {
 
 	/// Insert a token in front of the stream such that it becomes the next
 	/// token to be returned from `peek(0)` or `pop()`.
+	#[allow(unused_variables)]
 	pub fn push(&mut self, token: T) {
 		unimplemented!();
 	}

@@ -12,7 +12,7 @@ use svlog::preproc::*;
 
 
 type CatTokenAndSpan = (CatTokenKind, Span);
-type TokenAndSpan = (Token, Span);
+pub type TokenAndSpan = (Token, Span);
 
 
 /// A lexical analyzer for SystemVerilog files.
@@ -45,9 +45,9 @@ impl<'a> Lexer<'a> {
 		// Upon the first invocation the peek buffer is still empty. In that
 		// case we need to load the first batch of tokens.
 		if self.peek[0].0 == CatTokenKind::Eof {
-			self.bump();
-			self.bump();
-			self.bump();
+			self.bump()?;
+			self.bump()?;
+			self.bump()?;
 		}
 
 		let name_table = get_name_table();
@@ -129,28 +129,25 @@ impl<'a> Lexer<'a> {
 				// A text token either represents an identifier or a number,
 				// depending on whether it starts with a digit or a letter. In
 				// addition to that, underscores '_' also introduce an
-				// identifier.
+				// identifier. In case the identifier corresponds to a keyword,
+				// we emit a separate `Keyword(...)` token.
 				// IEEE 1800-2009 5.6 Identifiers
+				// IEEE 1800-2009 5.6.2 Keywords
 				(CatTokenKind::Text, _) |
 				(CatTokenKind::Symbol('_'), _) => {
 					let (m, msp) = self.match_ident()?;
-					return Ok((Ident(name_table.intern(&m, true)), msp));
+					return match find_keyword(&m) {
+						Some(kw) => Ok((Keyword(kw), msp)),
+						None => Ok((Ident(name_table.intern(&m, true)), msp)),
+					};
 				}
-
-				// IEEE 1800-2009 5.6.2 Keywords
-				// TODO: How are keywords handled? Currently they would be
-				// identified by the name table, but that is shared among VHDL
-				// and SystemVerilog, which is definitely not what we want.
-				// Maybe a special static lookup table for keywords should be
-				// used such that we don't rely on the name table at all and
-				// have a separate, proper enum variant Kw(...).
 
 				// System tasks and system functions start with the dollar sign
 				// '$', after which all regular identifier characters are
 				// allowed.
 				// IEEE 1800-2009 5.6.3 System tasks and system functions
 				(CatTokenKind::Symbol('$'), sp) => {
-					self.bump();
+					self.bump()?;
 					let (m, msp) = self.match_ident()?;
 					return Ok((SysIdent(name_table.intern(&m, true)), Span::union(sp,msp)));
 				},
@@ -161,7 +158,7 @@ impl<'a> Lexer<'a> {
 				(CatTokenKind::Symbol('\\'), mut sp) => {
 					let mut s = String::new();
 					loop {
-						self.bump();
+						self.bump()?;
 						if self.peek[0].0 == CatTokenKind::Whitespace || self.peek[0].0 == CatTokenKind::Newline || self.peek[0].0 == CatTokenKind::Eof {
 							break;
 						}
@@ -193,7 +190,7 @@ impl<'a> Lexer<'a> {
 						self.eat_number_body_into(&mut s, &mut sp, false)?;
 						name_table.intern(&s, true)
 					};
-					self.skip_noise(); // whitespace allowed after size indication
+					self.skip_noise()?; // whitespace allowed after size indication
 					match self.peek[0] {
 						(CatTokenKind::Symbol('\''), _) => {
 							self.bump()?; // eat the apostrophe
@@ -235,7 +232,7 @@ impl<'a> Lexer<'a> {
 								}
 							}
 							(CatTokenKind::Newline, sp) => return Err(DiagBuilder2::fatal("String literals cannot contain unescaped newlines").span(sp)),
-							(x, sp) => {
+							(_, sp) => {
 								span.expand(sp);
 								s.push_str(&sp.extract());
 							}
@@ -289,10 +286,6 @@ impl<'a> Lexer<'a> {
 		Ok((s, sp))
 	}
 
-	fn match_number(&mut self) -> DiagResult2<TokenAndSpan> {
-		unimplemented!();
-	}
-
 	/// This function assumes that we have just consumed the apostrophe `'`
 	/// before the base indication.
 	fn match_based_number(&mut self, size: Option<Name>, mut span: Span) -> DiagResult2<TokenAndSpan> {
@@ -337,7 +330,7 @@ impl<'a> Lexer<'a> {
 					body.push(c);
 					body.push_str(chars.as_str());
 				} else {
-					self.skip_noise();
+					self.skip_noise()?;
 				}
 				self.eat_number_body_into(&mut body, &mut span, true)?;
 

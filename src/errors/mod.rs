@@ -48,9 +48,23 @@ impl DiagBuilder2 {
 		}
 	}
 
-	pub fn span(self, span: Span) -> DiagBuilder2 {
+	pub fn error<S: Into<String>>(message: S) -> DiagBuilder2 {
 		DiagBuilder2 {
-			span: Some(span),
+			message: message.into(),
+			span: None,
+		}
+	}
+
+	pub fn warning<S: Into<String>>(message: S) -> DiagBuilder2 {
+		DiagBuilder2 {
+			message: message.into(),
+			span: None,
+		}
+	}
+
+	pub fn span<S: Into<Span>>(self, span: S) -> DiagBuilder2 {
+		DiagBuilder2 {
+			span: Some(span.into()),
 			..self
 		}
 	}

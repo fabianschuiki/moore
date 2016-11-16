@@ -6,3 +6,5 @@ pub mod lexer;
 pub mod token;
 pub mod preproc;
 pub mod cat;
+pub mod parser;
+pub mod ast;

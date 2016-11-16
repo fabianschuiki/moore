@@ -23,6 +23,7 @@ pub fn generate(grammar_path: &Path, output_path: &Path) {
 
 	// Translate the grammar into the state machine that recognizes it.
 	let states = states::translate(&grammar);
+	println!("States translated");
 
 	// // Generate the output rust code.
 	let mut f = File::create(output_path).unwrap();

@@ -20,12 +20,14 @@ pub fn translate<'a>(grammar: &'a Grammar<'a>) -> Vec<Box<State<'a>>> {
 		for v in root.variants() {
 			let mut follow = BTreeSet::new();
 			follow.insert(Symbol::End);
-			initial.add(Lead { rule: root.clone(), variant: v.clone(), pos: 0, follow: follow });
+			// println!("Pre-add");
+			initial.add(Lead { variant: v, pos: 0, follow: follow });
 		}
 
-		// println!("Initial State: {:?}", &initial);
+		// println!("Aggregated initial");
+		println!("Initial State: {:?}", &initial);
 		initial.close();
-		// println!("Closed: {:?}", &initial);
+		println!("Closed: {:?}", &initial);
 		initial
 	});
 
@@ -132,7 +134,6 @@ pub fn translate<'a>(grammar: &'a Grammar<'a>) -> Vec<Box<State<'a>>> {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Lead<'a> {
-	rule: &'a Rule<'a>,
 	variant: &'a Variant<'a>,
 	pos: usize,
 	follow: SymbolSet<'a>,
@@ -252,37 +253,45 @@ impl<'a> State<'a> {
 	}
 
 	fn close(&mut self) {
+		// println!("closing");
 		loop {
 			let mut new_states = Vec::new();
+			// println!("- iteration");
 
 			for lead in &self.leads {
 				let num_syms = lead.variant.symbols().len();
+				// println!("  lead {:?}", lead);
 				if lead.pos < num_syms {
 					let next = lead.get_next(0);
 					if let &Symbol::NonTerminal(rule) = next {
+						// println!("  - non-terminal \"{}\"", rule.get_name());
 						let follow = lead.make_follow_set();
+						// println!("    made follow set {:?}", follow);
 						if follow.len() == 0 {
 							panic!("For symbol {:?}, lead produced empty follow set: {:?}, in state {:?}", next, lead, self);
 						}
 						for v in rule.variants() {
 							let lead = Lead {
-								rule: rule,
 								variant: v,
 								pos: 0,
 								follow: follow.clone()
 							};
+							// println!("    spawned lead {:?}", lead);
 							if !self.leads.contains(&lead) {
+								// println!("    - added");
 								new_states.push(lead);
 							}
 						}
 					}
 				}
 			}
+			// println!("  {} new states", new_states.len());
 
 			if new_states.len() == 0 {
 				break;
 			} else {
 				for s in new_states {
+					// println!("  adding new state {:?}", s);
 					self.leads.insert(s);
 				}
 			}
@@ -298,9 +307,11 @@ impl<'a> State<'a> {
 		let current_states = std::mem::replace(&mut self.leads, BTreeSet::new());
 		let mut base: Option<Lead> = None;
 		for lead in current_states {
+			// println!("Current state {:?}", lead);
 			base =
 				if let Some(mut b) = base {
-					if b.rule == lead.rule && b.variant == lead.variant && b.pos == lead.pos {
+					if b.variant == lead.variant && b.pos == lead.pos {
+						// println!("Compacting {:?} and {:?}", b, lead);
 						for f in lead.follow {
 							b.follow.insert(f);
 						}
@@ -337,7 +348,7 @@ impl<'a> State<'a> {
 
 impl<'a> fmt::Debug for Lead<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		try!(write!(f, "[{} → ", self.rule.get_name()));
+		try!(write!(f, "[{} → ", self.variant.get_rule().get_name()));
 		let mut i = 0;
 		for sym in self.variant.symbols() {
 			if self.pos == i {

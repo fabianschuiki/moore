@@ -49,8 +49,9 @@ fn main() {
 		}
 	} else {
 		let lexer = svlog::lexer::Lexer::new(preproc);
-		for (token, sp) in lexer.map(|x| x.unwrap()) {
-			println!("{} [{:?}, {:?}]", sp.extract(), token, sp);
-		}
+		svlog::parser::parse(lexer);
+		// for (token, sp) in lexer.map(|x| x.unwrap()) {
+		// 	println!("{} [{:?}, {:?}]", sp.extract(), token, sp);
+		// }
 	}
 }

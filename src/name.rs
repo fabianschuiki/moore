@@ -12,7 +12,6 @@ use std::fmt;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::rc::Rc;
-use vhdl::token;
 
 
 /// A name is a lightweight 32 bit tag that refers to a string in a name table.
@@ -167,8 +166,8 @@ impl NameTable {
 /// Get this thread's current name table.
 pub fn get_name_table() -> Rc<NameTable> {
 	thread_local!(static TBL: Rc<NameTable> = {
-		let mut nt = NameTable::new();
-		token::prefill_name_table(&mut nt);
+		let nt = NameTable::new();
+		// token::prefill_name_table(&mut nt);
 		Rc::new(nt)
 	});
 	TBL.with(|x| x.clone())

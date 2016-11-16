@@ -12,6 +12,7 @@ pub struct Grammar<'a> {
 	rules: Vec<Box<Rule<'a>>>,
 	rules_by_name: HashMap<Box<str>, &'a Rule<'a>>,
 	root: &'a Rule<'a>,
+	terminals: HashMap<Box<str>, Box<str>>,
 }
 
 /// An individual rule within a grammar. A rule consists of multiple variants,
@@ -108,40 +109,45 @@ impl<'a> Grammar<'a> {
 	// }
 
 	pub fn get_pattern(&self, name: &str) -> String {
-		let mut s = String::from("Token::");
-		match name {
-			"IDENT" => s.push_str("Ident(_)"),
-			"LPAREN" => s.push_str("Symbol(Symbol::LParen)"),
-			"RPAREN" => s.push_str("Symbol(Symbol::RParen)"),
-			"LBRACE" => s.push_str("Symbol(Symbol::LBrace)"),
-			"RBRACE" => s.push_str("Symbol(Symbol::RBrace)"),
-			"LBRACK" => s.push_str("Symbol(Symbol::LBrack)"),
-			"RBRACK" => s.push_str("Symbol(Symbol::RBrack)"),
-			"SUFFIX" => s.push_str("Ident(_)"),
-			"SEMICOLON"|"COMMA"|"COLON"|"PERIOD" => {
-				s.push_str("Symbol(Symbol::");
-				let mut it = name.chars();
-				if let Some(c) = it.next() {
-					s.push(c.to_uppercase().next().unwrap());
-				}
-				while let Some(c) = it.next() {
-					s.push(c.to_lowercase().next().unwrap());
-				}
-				s.push_str(")");
-			},
-			_ => {
-				s.push_str("Keyword(Keyword::");
-				let mut it = name.chars();
-				if let Some(c) = it.next() {
-					s.push(c.to_uppercase().next().unwrap());
-				}
-				while let Some(c) = it.next() {
-					s.push(c.to_lowercase().next().unwrap());
-				}
-				s.push_str(")");
-			}
+		// let mut s = String::from("Token::");
+		// match name {
+		// 	"IDENT" => s.push_str("Ident(_)"),
+		// 	"LPAREN" => s.push_str("Symbol(Symbol::LParen)"),
+		// 	"RPAREN" => s.push_str("Symbol(Symbol::RParen)"),
+		// 	"LBRACE" => s.push_str("Symbol(Symbol::LBrace)"),
+		// 	"RBRACE" => s.push_str("Symbol(Symbol::RBrace)"),
+		// 	"LBRACK" => s.push_str("Symbol(Symbol::LBrack)"),
+		// 	"RBRACK" => s.push_str("Symbol(Symbol::RBrack)"),
+		// 	"SUFFIX" => s.push_str("Ident(_)"),
+		// 	"SEMICOLON"|"COMMA"|"COLON"|"PERIOD" => {
+		// 		s.push_str("Symbol(Symbol::");
+		// 		let mut it = name.chars();
+		// 		if let Some(c) = it.next() {
+		// 			s.push(c.to_uppercase().next().unwrap());
+		// 		}
+		// 		while let Some(c) = it.next() {
+		// 			s.push(c.to_lowercase().next().unwrap());
+		// 		}
+		// 		s.push_str(")");
+		// 	},
+		// 	_ => {
+		// 		s.push_str("Keyword(Keyword::");
+		// 		let mut it = name.chars();
+		// 		if let Some(c) = it.next() {
+		// 			s.push(c.to_uppercase().next().unwrap());
+		// 		}
+		// 		while let Some(c) = it.next() {
+		// 			s.push(c.to_lowercase().next().unwrap());
+		// 		}
+		// 		s.push_str(")");
+		// 	}
+		// }
+		// return s
+		// return name.into();
+		match self.terminals.get(name) {
+			Some(x) => String::from(x.as_ref()),
+			None => panic!("Unknown terminal \"{}\"", name)
 		}
-		return s
 	}
 }
 
@@ -271,6 +277,10 @@ impl<'a> Variant<'a> {
 impl<'a> Ord for Variant<'a> {
 	fn cmp(&self, other: &Self) -> Ordering {
 		// self.id.cmp(&other.id)
+		match (self.get_rule() as *const _).cmp(&(other.get_rule() as *const _)) {
+			Ordering::Equal => (),
+			o => return o
+		}
 		match self.symbols.cmp(&other.symbols) {
 			Ordering::Equal => (),
 			o => return o
@@ -347,7 +357,7 @@ impl<'a> Ord for Symbol<'a> {
 			match *self {
 				Symbol::Unresolved(ref name) => name.as_ref().cmp(other.get_name()),
 				Symbol::Terminal(ref name) => name.as_ref().cmp(other.get_name()),
-				Symbol::NonTerminal(rule) => rule.cmp(other.get_rule()),
+				Symbol::NonTerminal(rule) => rule.get_id().cmp(&other.get_rule().get_id()),
 				_ => o,
 			}
 		} else {
@@ -436,6 +446,7 @@ impl GrammarBuilder {
 		let mut grammar = Box::new(Grammar {
 			rules: Vec::new(),
 			rules_by_name: HashMap::new(),
+			terminals: self.terminals,
 			root: unsafe { &*(0 as *const Rule<'a>) },
 		});
 
