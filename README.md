@@ -1,13 +1,13 @@
 # moore
 
-Moore is a compiler for hardware description languages that outputs LLHD. It focuses on being usable and producing helpful diagnostic messages.
+Moore is a compiler for hardware description languages that outputs [LLHD][2], with a focus on usability, clear error reporting, and completeness.
 
 ## Roadmap
 
-1. Parse the entire source code of pulpino [1]
-2. Elaborate and link pulpino
-3. Generate LLHD code for pulpino
-4. Pass pulpino continuous integration testbenches
+1. Parse the entire source code of [PULPino][1]
+2. Elaborate and link PULPino
+3. Generate LLHD code for PULPino
+4. Pass PULPino continuous integration testbenches
 
 ## Todo
 
@@ -15,3 +15,4 @@ Moore is a compiler for hardware description languages that outputs LLHD. It foc
 
 
 [1]: https://github.com/pulp-platform/pulpino
+[2]: https://github.com/fabianschuiki/llhd
