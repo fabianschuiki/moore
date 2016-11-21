@@ -82,6 +82,7 @@ impl<'a> Parser<'a> {
 	fn eat_ident_or(&mut self, msg: &str) -> ParseResult<(Name, Span)> {
 		match self.peek(0) {
 			(Ident(name), span) => { self.bump(); Ok((name, span)) },
+			(EscIdent(name), span) => { self.bump(); Ok((name, span)) },
 			(tkn, span) => Err(DiagBuilder2::error(format!("Expected {} before {:?}", msg, tkn)).span(span)),
 		}
 	}
@@ -245,22 +246,58 @@ fn parse_parameter_port_list(p: &mut Parser) {
 		// TODO: Parse data type or implicit type.
 
 		// Eat the list of parameter assignments.
-		// parameter_identifier { unpacked_dimension } [ = constant_param_expression ]
-		let (name, name_sp) = match p.eat_ident_or("parameter name") {
-			Ok(x) => x,
-			Err(e) => {
-				p.add_diag(e);
-				p.recover_balanced(&[Comma, CloseDelim(Paren)]);
-				break;
+		loop {
+			// parameter_identifier { unpacked_dimension } [ = constant_param_expression ]
+			let (name, name_sp) = match p.eat_ident_or("parameter name") {
+				Ok(x) => x,
+				Err(e) => {
+					p.add_diag(e);
+					p.recover_balanced(&[Comma, CloseDelim(Paren)]);
+					break;
+				}
+			};
+
+			// TODO: Eat the unpacked dimensions.
+
+			if p.try_eat(Assign) {
+				match parse_constant_expr(p) {
+					Ok(_) => (),
+					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)])
+				}
+				// let q = p.peek(0).1.end();
+				// p.add_diag(DiagBuilder2::error("Parameter assignment not implemented").span(q));
 			}
-		};
 
-		// TODO: Eat the unpacked dimensions.
+			// Eat the trailing comma or closing parenthesis.
+			match p.peek(0) {
+				(Comma, sp) => {
+					p.bump();
+					match p.peek(0) {
+						// The `parameter` keyword terminates this list of
+						// assignments and introduces the next parameter.
+						(Keyword(Kw::Parameter), _) => break,
 
-		if p.try_eat(Assign) {
-			let q = p.peek(0).1.end();
-			p.add_diag(DiagBuilder2::error("Parameter assignment not implemented").span(q));
-			p.recover_balanced(&[Comma, CloseDelim(Paren)]);
+						// A closing parenthesis indicates that the previous
+						// comma was superfluous. Report the issue but continue
+						// gracefully.
+						(CloseDelim(Paren), _) => {
+							// TODO: This should be an error in pedantic mode.
+							p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+							break;
+						}
+
+						// All other tokens indicate the next assignment in the
+						// list, so we just continue with the next iteration.
+						_ => continue,
+					}
+				},
+				(CloseDelim(Paren), _) => break,
+				(_, sp) => {
+					p.add_diag(DiagBuilder2::error("Expected , or ) after parameter assignment").span(sp));
+					p.recover_balanced(&[CloseDelim(Paren)]);
+					break;
+				}
+			}
 		}
 	}
 
@@ -268,6 +305,48 @@ fn parse_parameter_port_list(p: &mut Parser) {
 		Ok(()) => (),
 		Err(e) => p.add_diag(e)
 	}
+}
+
+
+fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
+	let (tkn, span) = p.peek(0);
+
+	// Try the unary operators.
+	let unary_op = match tkn {
+		Add =>  Some(()),
+		Sub =>  Some(()),
+		Not =>  Some(()),
+		Neg =>  Some(()),
+		And =>  Some(()),
+		Nand => Some(()),
+		Or =>   Some(()),
+		Xor =>  Some(()),
+		Nxor => Some(()),
+		Xnor => Some(()),
+		_ => None,
+	};
+	if let Some(x) = unary_op {
+		p.bump();
+		return parse_constant_expr(p);
+	}
+
+	// Parse the constant primary.
+	let expr = match tkn {
+		// Primary literals.
+		UnsignedNumber(x) => { p.bump(); () },
+		Literal(Str(x)) => { p.bump(); () },
+		Literal(BasedInteger(size, signed, base, value)) => { p.bump(); () },
+		Literal(UnbasedUnsized(x)) => { p.bump(); () },
+		_ => {
+			p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
+			return Err(());
+		}
+	};
+
+	// TODO: Parse binary operators.
+	// TODO: Parse ternary operator.
+
+	Ok(())
 }
 
 
