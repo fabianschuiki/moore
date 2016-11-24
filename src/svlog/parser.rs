@@ -10,6 +10,13 @@ use svlog::ast::*;
 use name::*;
 use source::*;
 
+// The problem with data_declaration and data_type_or_implicit:
+//
+//     [7:0] foo;            # implicit "[7:0]", var "foo"
+//     foo bar;              # explicit "foo", var "bar"
+//     foo [7:0];            # implicit, var "foo[7:0]"
+//     foo [7:0] bar [7:0];  # explicit "foo[7:0]", var "bar[7:0]"
+
 
 /// Return type of the lower parse primitives, allowing for further adjustment
 /// of the diagnostic message that would be generated.
@@ -101,7 +108,28 @@ impl<'a> Parser<'a> {
 		}
 	}
 
+	fn recover(&mut self, terminators: &[Token], eat_terminator: bool) {
+		println!("recovering to {:?}", terminators);
+		loop {
+			match self.peek(0) {
+				(Eof, _) => return,
+				(tkn, _) => {
+					for t in terminators {
+						if *t == tkn {
+							if eat_terminator {
+								self.bump();
+							}
+							return;
+						}
+					}
+					self.bump();
+				}
+			}
+		}
+	}
+
 	fn recover_balanced(&mut self, terminators: &[Token]) {
+		println!("recovering (balanced) to {:?}", terminators);
 		let mut stack = Vec::new();
 		loop {
 			let (tkn, sp) = self.peek(0);
@@ -128,6 +156,7 @@ impl<'a> Parser<'a> {
 						break;
 					}
 				}
+				Eof => break,
 				_ => (),
 			}
 			self.bump();
@@ -211,6 +240,19 @@ fn parse_interface_decl(p: &mut Parser) -> Option<IntfDecl> {
 	if !p.try_eat(Semicolon) {
 		let q = p.peek(0).1.end();
 		p.add_diag(DiagBuilder2::error(format!("Missing semicolon \";\" after header of interface \"{}\"", name)).span(q));
+	}
+
+	// Eat the items in the interface.
+	while p.peek(0).0 != Keyword(Kw::Endinterface) {
+		match try_hierarchy_item(p) {
+			Some(Ok(())) => println!("some item"),
+			Some(Err(())) => println!("failed item"),
+			None => {
+				let (tkn, q) = p.peek(0);
+				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
+				p.recover(&[Keyword(Kw::Endinterface)], false);
+			}
+		}
 	}
 
 	// Eat the endinterface keyword.
@@ -337,13 +379,33 @@ fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
 		Literal(Str(x)) => { p.bump(); () },
 		Literal(BasedInteger(size, signed, base, value)) => { p.bump(); () },
 		Literal(UnbasedUnsized(x)) => { p.bump(); () },
+		Ident(x) => { p.bump(); () },
 		_ => {
 			p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
 			return Err(());
 		}
 	};
 
-	// TODO: Parse binary operators.
+	// Try the binary operators.
+	let (tkn, span) = p.peek(0);
+	let binary_op = match tkn {
+		Add =>  Some(()),
+		Sub =>  Some(()),
+		Mul =>  Some(()),
+		Div =>  Some(()),
+		Mod =>  Some(()),
+		And =>  Some(()),
+		Or =>  Some(()),
+		Xor =>  Some(()),
+		Xnor =>  Some(()),
+		Nxor =>  Some(()),
+		_ => None,
+	};
+	if let Some(x) = binary_op {
+		p.bump();
+		return parse_constant_expr(p);
+	}
+
 	// TODO: Parse ternary operator.
 
 	Ok(())
@@ -362,6 +424,292 @@ fn parse_module_decl(p: &mut Parser) -> Option<ModDecl> {
 	// 	}
 	// }
 	// Ok(())
+}
+
+
+fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
+	// First attempt the simple cases where a keyword reliably identifies the
+	// following item.
+	let (tkn, _) = p.peek(0);
+	let f = |p, func, term| Some(hierarchy_item_wrapper(p, func, term));
+	match tkn {
+		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
+		Keyword(Kw::Parameter) => return f(p, parse_parameter_decl, Semicolon),
+		_ => ()
+	}
+
+	// TODO: Handle the const and var keywords that may appear in front of a
+	// data declaration, as well as the optional lifetime.
+
+	// Now attempt to parse a data type or implicit type, which could introduce
+	// and instantiation or data declaration. Due to the nature of implicit
+	// types, a data declaration such as `foo[7:0];` would initially parse as an
+	// explicit type `foo[7:0]`, and can only be identified as having an
+	// implicit type when the semicolon is parsed. I.e. declarations that appear
+	// to consist only of a type are actually declarations with an implicit
+	// type.
+	let ty = match parse_data_type(p) {
+		Ok(x) => x,
+		Err(_) => {
+			p.recover(&[Semicolon], true);
+			return Some(Err(()));
+		}
+	};
+
+	// TODO: Handle the special case where the token following the parsed data
+	// type is a [,;=], which indicates that the parsed type is actually a
+	// variable declaration with implicit type (they look the same).
+
+	// Parse the list of variable declaration assignments.
+	loop {
+		let (name, span) = match p.eat_ident_or("variable name") {
+			Ok(x) => x,
+			Err(e) => {
+				p.add_diag(e);
+				return Some(Err(()));
+			}
+		};
+
+		// Parse the optional variable dimensions.
+		let dims = match parse_optional_dimensions(p) {
+			Ok(x) => x,
+			Err(_) => return Some(Err(())),
+		};
+
+		// Parse the optional assignment.
+		if p.try_eat(Assign) {
+			let q = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error("Default variable assignments not implemented").span(q));
+			p.recover(&[Comma, Semicolon], false);
+		}
+
+		// Either parse the next variable declaration or break out of the loop
+		// if we have encountered the semicolon that terminates the statement.
+		match p.peek(0) {
+			(Semicolon, _) => { p.bump(); break; },
+			(Comma, sp) => {
+				p.bump();
+				if p.peek(0).0 == Semicolon {
+					// TODO: Make this an error in pedantic mode.
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					p.bump();
+					break;
+				} else {
+					continue;
+				}
+			}
+			(_, sp) => {
+				p.add_diag(DiagBuilder2::error("Expected , or ; after variable declaration").span(sp));
+				p.recover(&[Semicolon], true);
+				return Some(Err(()));
+			}
+		}
+	}
+
+	println!("Parsed variable declaration");
+	Some(Ok(()))
+}
+
+
+fn hierarchy_item_wrapper(p: &mut Parser, func: fn(&mut Parser) -> ReportedResult<()>, term: Token) -> ReportedResult<()> {
+	p.bump();
+	match func(p) {
+		Ok(x) => {
+			match p.require(Semicolon) {
+				Err(d) => p.add_diag(d),
+				_ => ()
+			}
+			Ok(x)
+		}
+		Err(e) => {
+			p.recover(&[term], true);
+			Err(e)
+		}
+	}
+}
+
+
+fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
+	// TODO: Parse data type or implicit type.
+
+	// Eat the list of parameter assignments.
+	loop {
+		// parameter_identifier { unpacked_dimension } [ = constant_param_expression ]
+		let (name, name_sp) = match p.eat_ident_or("parameter name") {
+			Ok(x) => x,
+			Err(e) => {
+				p.add_diag(e);
+				return Err(());
+			}
+		};
+
+		// TODO: Eat the unpacked dimensions.
+
+		// Eat the optional assignment.
+		if p.try_eat(Assign) {
+			match parse_constant_expr(p) {
+				Ok(_) => (),
+				Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)])
+			}
+		}
+
+		// Eat the trailing comma or semicolon.
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+
+				// A closing parenthesis indicates that the previous
+				// comma was superfluous. Report the issue but continue
+				// gracefully.
+				if p.peek(0).0 == Semicolon {
+					// TODO: This should be an error in pedantic mode.
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				}
+			},
+			(Semicolon, _) => break,
+			(x, sp) => {
+				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after parameter assignment, got `{:?}`", x)).span(sp));
+				return Err(());
+			}
+		}
+	}
+
+	println!("localparam");
+	Ok(())
+}
+
+
+fn parse_parameter_decl(p: &mut Parser) -> ReportedResult<()> {
+	let q = p.peek(0).1;
+	p.add_diag(DiagBuilder2::error("Parameter declarations not implemented").span(q));
+	Err(())
+}
+
+
+fn parse_data_type(p: &mut Parser) -> ReportedResult<()> {
+	let (tkn, sp) = p.peek(0);
+	match tkn {
+		Keyword(Kw::Bit) =>   { p.bump(); return parse_integer_vector_type(p, ()); },
+		Keyword(Kw::Logic) => { p.bump(); return parse_integer_vector_type(p, ()); },
+		Keyword(Kw::Reg) =>   { p.bump(); return parse_integer_vector_type(p, ()); },
+		// TODO: Handle `[` introducing an implicit type.
+		// TODO: Handle `signed` and `unsigned` introducing an implicit type.
+		_ => (),
+	}
+
+	p.add_diag(DiagBuilder2::error(format!("Expected data type, got {:?}", tkn)).span(sp));
+	Err(())
+}
+
+
+#[derive(Debug, Clone)]
+pub enum Signing {
+	None,
+	Signed,
+	Unsigned,
+}
+
+/// Consumes a `signed` or `unsigned` keyword if present.
+fn parse_optional_signing(p: &mut Parser) -> Signing {
+	match p.peek(0).0 {
+		Keyword(Kw::Signed) => {
+			p.bump();
+			return Signing::Signed;
+		},
+		Keyword(Kw::Unsigned) => {
+			p.bump();
+			return Signing::Unsigned;
+		},
+		_ => return Signing::None,
+	}
+}
+
+
+fn parse_optional_dimensions(p: &mut Parser) -> ReportedResult<Vec<Dimensions>> {
+	let mut v = Vec::new();
+	while let Some(result) = try_dimension(p) {
+		match result {
+			Ok(d) => v.push(d),
+			Err(_) => return Err(()),
+		}
+	}
+	Ok(v)
+}
+
+
+#[derive(Debug, Clone)]
+pub enum Dimensions {
+	Expr,
+	Range,
+	Queue,
+	Unsized,
+	Associative,
+}
+
+fn try_dimension(p: &mut Parser) -> Option<ReportedResult<Dimensions>> {
+	// Eat the leading opening brackets.
+	if !p.try_eat(OpenDelim(Brack)) {
+		return None;
+	}
+
+	let dim = match p.peek(0).0 {
+		CloseDelim(Brack) => {
+			p.bump();
+			Dimensions::Unsized
+		},
+		Mul => {
+			p.bump();
+			Dimensions::Associative
+		},
+		// TODO: Handle the queue case [$] and [$:<const_expr>]
+		_ => {
+			// What's left must either be a single constant expression, or a range
+			// consisting of two constant expressions.
+			let expr = match parse_constant_expr(p) {
+				Ok(x) => x,
+				Err(_) => {
+					p.recover(&[CloseDelim(Brack)], true);
+					return Some(Err(()));
+				}
+			};
+
+			// If the expression is followed by a colon `:`, this is a constant range
+			// rather than a constant expression.
+			if p.try_eat(Colon) {
+				let other = match parse_constant_expr(p) {
+					Ok(x) => x,
+					Err(_) => {
+						p.recover(&[CloseDelim(Brack)], true);
+						return Some(Err(()));
+					}
+				};
+				Dimensions::Range
+			} else {
+				Dimensions::Expr
+			}
+		}
+	};
+
+	// Eat the closing brackets.
+	match p.peek(0) {
+		(CloseDelim(Brack), _) => {
+			p.bump();
+			return Some(Ok(dim));
+		},
+		(tkn, sp) => {
+			p.add_diag(DiagBuilder2::error(format!("Expected closing brackets `]` after dimension, got {:?}", tkn)).span(sp));
+			return Some(Err(()));
+		}
+	}
+}
+
+
+fn parse_integer_vector_type(p: &mut Parser, ty: ()) -> ReportedResult<()> {
+	let signing = parse_optional_signing(p);
+	let dims = parse_optional_dimensions(p)?;
+	println!("Parsed integer vector type {:?} with signing {:?} and dims {:?}", ty, signing, dims);
+	Ok(())
 }
 
 

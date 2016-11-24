@@ -13,6 +13,10 @@ use name::Name;
 /// A primary token emitted by the lexer.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Token {
+	// TODO: Sort these and separate logic and bitwise operators (e.g. logic AND
+	// and bitwise AND), as well as the various relational operators. Also
+	// introduce a precedence function that assigns each operator a precedence.
+
 	// Symbols
 	Add,
 	Amp,
