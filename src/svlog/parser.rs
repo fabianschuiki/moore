@@ -149,7 +149,7 @@ impl<'a> Parser<'a> {
 		}
 	}
 
-	fn recover_balanced(&mut self, terminators: &[Token]) {
+	fn recover_balanced(&mut self, terminators: &[Token], eat_terminator: bool) {
 		println!("recovering (balanced) to {:?}", terminators);
 		let mut stack = Vec::new();
 		loop {
@@ -157,6 +157,9 @@ impl<'a> Parser<'a> {
 			if stack.is_empty() {
 				for t in terminators {
 					if *t == tkn {
+						if eat_terminator {
+							self.bump();
+						}
 						return;
 					}
 				}
@@ -250,7 +253,6 @@ fn as_lifetime(tkn: Token) -> Option<Lifetime> {
 
 
 fn parse_interface_decl(p: &mut Parser) -> Option<IntfDecl> {
-	println!("interface");
 
 	// TODO: Parse optional lifetime.
 
@@ -329,7 +331,7 @@ fn parse_parameter_port_list(p: &mut Parser) {
 				Ok(x) => x,
 				Err(e) => {
 					p.add_diag(e);
-					p.recover_balanced(&[Comma, CloseDelim(Paren)]);
+					p.recover_balanced(&[Comma, CloseDelim(Paren)], false);
 					break;
 				}
 			};
@@ -339,7 +341,7 @@ fn parse_parameter_port_list(p: &mut Parser) {
 			if p.try_eat(Assign) {
 				match parse_constant_expr(p) {
 					Ok(_) => (),
-					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)])
+					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
 				}
 				// let q = p.peek(0).1.end();
 				// p.add_diag(DiagBuilder2::error("Parameter assignment not implemented").span(q));
@@ -371,7 +373,7 @@ fn parse_parameter_port_list(p: &mut Parser) {
 				(CloseDelim(Paren), _) => break,
 				(_, sp) => {
 					p.add_diag(DiagBuilder2::error("Expected , or ) after parameter assignment").span(sp));
-					p.recover_balanced(&[CloseDelim(Paren)]);
+					p.recover_balanced(&[CloseDelim(Paren)], false);
 					break;
 				}
 			}
@@ -482,7 +484,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 		p.add_diag(DiagBuilder2::error(format!("Missing ; after header of module \"{}\"", name)).span(q));
 	}
 
-	// Eat the items in the interface.
+	// Eat the items in the module.
 	while p.peek(0).0 != Keyword(Kw::Endmodule) {
 		match try_hierarchy_item(p) {
 			Some(Ok(())) => (),
@@ -543,6 +545,14 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 	// type is a [,;=], which indicates that the parsed type is actually a
 	// variable declaration with implicit type (they look the same).
 
+	// In case this is an instantiation, some parameter assignments may follow.
+	if p.try_eat(Hashtag) {
+		p.bump();
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::error("Parameter assignments for instantiations not implemented").span(q));
+		p.recover_balanced(&[CloseDelim(Paren)], true);
+	}
+
 	// Parse the list of variable declaration assignments.
 	loop {
 		let (name, span) = match p.eat_ident_or("variable name") {
@@ -560,10 +570,17 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 		};
 
 		// Parse the optional assignment.
-		if p.try_eat(Assign) {
-			let q = p.peek(0).1;
-			p.add_diag(DiagBuilder2::error("Default variable assignments not implemented").span(q));
-			p.recover(&[Comma, Semicolon], false);
+		match p.peek(0) {
+			(Assign, sp) => {
+				p.add_diag(DiagBuilder2::error(format!("Default variable assignments not implemented, for variable `{}`", name)).span(sp));
+				p.recover_balanced(&[Comma, Semicolon], false);
+			}
+			(OpenDelim(Paren), sp) => {
+				p.bump();
+				p.add_diag(DiagBuilder2::error(format!("Instantiations not implemented, for instance named `{}`", name)).span(sp));
+				p.recover_balanced(&[CloseDelim(Paren)], true);
+			}
+			_ => ()
 		}
 
 		// Either parse the next variable declaration or break out of the loop
@@ -631,7 +648,7 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 		if p.try_eat(Assign) {
 			match parse_constant_expr(p) {
 				Ok(_) => (),
-				Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)])
+				Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
 			}
 		}
 
@@ -836,6 +853,7 @@ fn as_port_direction(tkn: Token) -> Option<PortDir> {
 }
 
 
+/// Parse a data type.
 fn parse_data_type(p: &mut Parser) -> ReportedResult<()> {
 	let (tkn, sp) = p.peek(0);
 	match tkn {
@@ -844,6 +862,10 @@ fn parse_data_type(p: &mut Parser) -> ReportedResult<()> {
 		Keyword(Kw::Reg) =>   { p.bump(); return parse_integer_vector_type(p, ()); },
 		// TODO: Handle `[` introducing an implicit type.
 		// TODO: Handle `signed` and `unsigned` introducing an implicit type.
+		Ident(n) | EscIdent(n) => {
+			p.bump();
+			return Ok(());
+		}
 		_ => (),
 	}
 
