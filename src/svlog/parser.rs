@@ -94,10 +94,31 @@ impl<'a> Parser<'a> {
 		}
 	}
 
+	fn eat_ident(&mut self, msg: &str) -> ReportedResult<(Name, Span)> {
+		match self.peek(0) {
+			(Ident(name), span) => { self.bump(); Ok((name, span)) }
+			(EscIdent(name), span) => { self.bump(); Ok((name, span)) }
+			(tkn, span) => {
+				self.add_diag(DiagBuilder2::error(format!("Expected {} before {:?}", msg, tkn)).span(span));
+				Err(())
+			}
+		}
+	}
+
 	fn require(&mut self, expect: Token) -> Result<(), DiagBuilder2> {
 		match self.peek(0) {
 			(actual, _) if actual == expect => { self.bump(); Ok(()) },
 			(wrong, span) => Err(DiagBuilder2::error(format!("Expected {:?}, but found {:?} instead", expect, wrong)).span(span))
+		}
+	}
+
+	fn require_reported(&mut self, expect: Token) -> ReportedResult<()> {
+		match self.require(expect) {
+			Ok(x) => Ok(x),
+			Err(e) => {
+				self.add_diag(e);
+				Err(())
+			}
 		}
 	}
 
@@ -181,8 +202,8 @@ fn parse_source_text(p: &mut Parser) {
 			(Keyword(Kw::Module), _) => {
 				p.bump();
 				match parse_module_decl(p) {
-					Some(_) => true,
-					None => false,
+					Ok(_) => true,
+					Err(_) => false,
 				}
 			}
 			(Keyword(Kw::Interface),_) => {
@@ -210,6 +231,20 @@ fn parse_source_text(p: &mut Parser) {
 				}
 			}
 		}
+	}
+}
+
+
+pub enum Lifetime {
+	Static,
+	Automatic,
+}
+
+fn as_lifetime(tkn: Token) -> Option<Lifetime> {
+	match tkn {
+		Keyword(Kw::Static) => Some(Lifetime::Static),
+		Keyword(Kw::Automatic) => Some(Lifetime::Automatic),
+		_ => None,
 	}
 }
 
@@ -245,8 +280,8 @@ fn parse_interface_decl(p: &mut Parser) -> Option<IntfDecl> {
 	// Eat the items in the interface.
 	while p.peek(0).0 != Keyword(Kw::Endinterface) {
 		match try_hierarchy_item(p) {
-			Some(Ok(())) => println!("some item"),
-			Some(Err(())) => println!("failed item"),
+			Some(Ok(())) => (),
+			Some(Err(())) => (),
 			None => {
 				let (tkn, q) = p.peek(0);
 				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
@@ -412,18 +447,65 @@ fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_module_decl(p: &mut Parser) -> Option<ModDecl> {
-	println!("module");
-	p.add_diag(DiagBuilder2::fatal("Modules not implemented"));
-	None
-	// loop {
-	// 	match p.peek(0) {
-	// 		(Keyword(Kw::Endmodule), _) => { p.bump(); break; },
-	// 		(Eof, _) => break,
-	// 		_ => p.bump(),
-	// 	}
-	// }
-	// Ok(())
+/// Parse a module declaration, assuming that the leading `module` keyword has
+/// already been consumed.
+fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
+
+	// Eat the optional lifetime.
+	let lifetime = as_lifetime(p.peek(0).0);
+	if lifetime.is_some() {
+		p.bump();
+	}
+
+	// Eat the module name.
+	let (name, name_sp) = p.eat_ident("module name")?;
+	println!("module {}", name);
+
+	// TODO: Parse package import declarations.
+
+	// Eat the optional parameter port list.
+	if p.try_eat(Hashtag) {
+		parse_parameter_port_list(p);
+	}
+
+	// Eat the optional list of ports. Not having such a list requires the ports
+	// to be defined further down in the body of the module.
+	if p.try_eat(OpenDelim(Paren)) {
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::fatal("Module ports not implemented").span(q));
+		p.recover(&[CloseDelim(Paren)], true);
+	}
+
+	// Eat the semicolon after the header.
+	if !p.try_eat(Semicolon) {
+		let q = p.peek(0).1.end();
+		p.add_diag(DiagBuilder2::error(format!("Missing ; after header of module \"{}\"", name)).span(q));
+	}
+
+	// Eat the items in the interface.
+	while p.peek(0).0 != Keyword(Kw::Endmodule) {
+		match try_hierarchy_item(p) {
+			Some(Ok(())) => (),
+			Some(Err(())) => (),
+			None => {
+				let (tkn, q) = p.peek(0);
+				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
+				p.recover(&[Keyword(Kw::Endmodule)], false);
+			}
+		}
+	}
+
+	// Eat the endmodule keyword.
+	if !p.try_eat(Keyword(Kw::Endmodule)) {
+		let q = p.peek(0).1.end();
+		p.add_diag(DiagBuilder2::error(format!("Missing \"endmodule\" at the end of \"{}\"", name)).span(q));
+	}
+
+	Ok(ModDecl {
+		name: name,
+		name_span: name_sp,
+		span: name_sp,
+	})
 }
 
 
@@ -435,6 +517,7 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 	match tkn {
 		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
 		Keyword(Kw::Parameter) => return f(p, parse_parameter_decl, Semicolon),
+		Keyword(Kw::Modport) => return f(p, parse_modport_decl, Semicolon),
 		_ => ()
 	}
 
@@ -506,7 +589,6 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 		}
 	}
 
-	println!("Parsed variable declaration");
 	Some(Ok(()))
 }
 
@@ -575,7 +657,6 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 		}
 	}
 
-	println!("localparam");
 	Ok(())
 }
 
@@ -584,6 +665,174 @@ fn parse_parameter_decl(p: &mut Parser) -> ReportedResult<()> {
 	let q = p.peek(0).1;
 	p.add_diag(DiagBuilder2::error("Parameter declarations not implemented").span(q));
 	Err(())
+}
+
+
+/// Parse a modport declaration.
+///
+/// ```
+/// modport_decl: "modport" modport_item {"," modport_item} ";"
+/// modport_item: ident "(" modport_ports_decl {"," modport_ports_decl} ")"
+/// modport_ports_decl:
+///   port_direction modport_simple_port {"," modport_simple_port} |
+///   ("import"|"export") modport_tf_port {"," modport_tf_port} |
+///   "clocking" ident
+/// modport_simple_port: ident | "." ident "(" [expr] ")"
+/// ```
+fn parse_modport_decl(p: &mut Parser) -> ReportedResult<()> {
+	loop {
+		parse_modport_item(p)?;
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if let (Semicolon, _) = p.peek(0) {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				} else {
+					continue;
+				}
+			},
+			(Semicolon, _) => break,
+			(x, sp) => {
+				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
+				return Err(());
+			}
+		}
+	}
+
+	Ok(())
+}
+
+
+fn parse_modport_item(p: &mut Parser) -> ReportedResult<()> {
+	let (name, span) = match p.eat_ident_or("modport name") {
+		Ok(x) => x,
+		Err(e) => {
+			p.add_diag(e);
+			return Err(());
+		}
+	};
+	println!("modport {}", name);
+
+	// Eat the opening parenthesis.
+	if !p.try_eat(OpenDelim(Paren)) {
+		let (tkn, q) = p.peek(0);
+		p.add_diag(DiagBuilder2::error(format!("Expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
+		return Err(());
+	}
+
+	// Parse the port declarations.
+	loop {
+		match parse_modport_port_decl(p) {
+			Ok(x) => x,
+			Err(_) => {
+				p.recover(&[CloseDelim(Paren)], true);
+				return Err(());
+			}
+		}
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if let (CloseDelim(Paren), _) = p.peek(0) {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				} else {
+					continue;
+				}
+			}
+			(CloseDelim(Paren), _) => break,
+			(x, sp) => {
+				p.add_diag(DiagBuilder2::error(format!("Expected , or ) after port declaration, got `{:?}`", x)).span(sp));
+				return Err(());
+			}
+		}
+	}
+
+	// Eat the closing parenthesis.
+	if !p.try_eat(CloseDelim(Paren)) {
+		let (tkn, q) = p.peek(0);
+		p.add_diag(DiagBuilder2::error(format!("Expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
+		return Err(());
+	}
+
+	Ok(())
+}
+
+
+/// ```
+/// modport_ports_decl:
+///   port_direction modport_simple_port {"," modport_simple_port} |
+///   ("import"|"export") modport_tf_port {"," modport_tf_port} |
+///   "clocking" ident
+/// modport_simple_port: ident | "." ident "(" [expr] ")"
+/// ```
+fn parse_modport_port_decl(p: &mut Parser) -> ReportedResult<()> {
+	let (tkn, span) = p.peek(0);
+
+	// Attempt to parse a simple port introduced by one of the port direction
+	// keywords.
+	if let Some(dir) = as_port_direction(tkn) {
+		p.bump();
+		loop {
+			if p.try_eat(Period) {
+				let (name, span) = p.eat_ident("port name")?;
+				p.require_reported(OpenDelim(Paren))?;
+				// TODO: Parse expression.
+				p.require_reported(CloseDelim(Paren))?;
+			} else {
+				let (name, span) = p.eat_ident("port_name")?;
+			}
+
+			// Decide whether we should continue iterating and thus consuming
+			// more simple ports. According to the grammar, a comma followed by
+			// a keyword indicates a different port declaration, so we abort.
+			// Otherwise, if the next item is a comma still, we continue
+			// iteration. In all other cases, we assume the port declaration to
+			// be done.
+			match (p.peek(0).0, p.peek(1).0) {
+				(Comma, Keyword(_)) => break,
+				(Comma, _) => {
+					p.bump();
+					continue;
+				},
+				_ => break,
+			}
+		}
+		return Ok(());
+	}
+
+	// TODO: Parse modport_tf_port.
+
+	// Attempt to parse a clocking declaration.
+	if p.try_eat(Keyword(Kw::Clocking)) {
+		// TODO: Parse modport_clocking_declaration.
+		p.add_diag(DiagBuilder2::error("modport clocking declaration not implemented").span(span));
+		return Err(());
+	}
+
+	// If we've come thus far, none of the above matched.
+	p.add_diag(DiagBuilder2::error("Expected port declaration").span(span));
+	Err(())
+}
+
+
+pub enum PortDir {
+	Input,
+	Output,
+	Inout,
+	Ref,
+}
+
+/// Convert a token to the corresponding PortDir. The token may be one of the
+/// keywords `input`, `output`, `inout`, or `ref`. Otherwise `None` is returned.
+fn as_port_direction(tkn: Token) -> Option<PortDir> {
+	match tkn {
+		Keyword(Kw::Input) => Some(PortDir::Input),
+		Keyword(Kw::Output) => Some(PortDir::Output),
+		Keyword(Kw::Inout) => Some(PortDir::Inout),
+		Keyword(Kw::Ref) => Some(PortDir::Ref),
+		_ => None,
+	}
 }
 
 
@@ -708,7 +957,6 @@ fn try_dimension(p: &mut Parser) -> Option<ReportedResult<Dimensions>> {
 fn parse_integer_vector_type(p: &mut Parser, ty: ()) -> ReportedResult<()> {
 	let signing = parse_optional_signing(p);
 	let dims = parse_optional_dimensions(p)?;
-	println!("Parsed integer vector type {:?} with signing {:?} and dims {:?}", ty, signing, dims);
 	Ok(())
 }
 

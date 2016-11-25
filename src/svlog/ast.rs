@@ -5,9 +5,9 @@ use name::Name;
 
 
 pub struct ModDecl {
-	name: Name,
-	name_span: Span,
-	span: Span,
+	pub name: Name,
+	pub name_span: Span,
+	pub span: Span,
 }
 
 pub struct IntfDecl {
