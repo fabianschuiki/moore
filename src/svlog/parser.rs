@@ -72,7 +72,61 @@ impl<'a> Parser<'a> {
 	}
 
 	fn add_diag(&mut self, diag: DiagBuilder2) {
-		println!("*** {:?}", diag);
+		// println!("*** {:?}", diag);
+		println!("{}: {}", diag.get_severity(), diag.get_message());
+
+		// Dump the part of the source file that is affected.
+		if let Some(sp) = diag.get_span() {
+			let c = sp.source.get_content();
+			let mut iter = c.extract_iter(0, sp.begin);
+
+			// Look for the start of the line.
+			let mut col = 1;
+			let mut line = 1;
+			let mut line_offset = 0;
+			while let Some(c) = iter.next_back() {
+				match c.1 {
+					'\n' => { line += 1; break; },
+					'\r' => continue,
+					_ => {
+						col += 1;
+						line_offset = c.0;
+					}
+				}
+			}
+
+			// Count the number of lines.
+			while let Some(c) = iter.next_back() {
+				if c.1 == '\n' {
+					line += 1;
+				}
+			}
+
+			let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
+			println!("{}:{}:{}-{}:", sp.source.get_path(), line, col, col + sp.extract().len());
+			for c in text.chars() {
+				match c {
+					'\t' => print!("    "),
+					c => print!("{}", c),
+				}
+			}
+			print!("\n");
+
+			for (mut i,c) in text.char_indices() {
+				i += line_offset;
+				let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
+					'^'
+				} else {
+					' '
+				};
+				match c {
+					'\t' => print!("{}{}{}{}", d, d, d, d),
+					_ => print!("{}", d),
+				}
+			}
+			print!("\n\n");
+		}
+
 		self.diagnostics.push(diag);
 		// TODO: Keep track of the worst diagnostic encountered, such that fatal
 		// errors can properly abort parsing.
@@ -130,7 +184,7 @@ impl<'a> Parser<'a> {
 	}
 
 	fn recover(&mut self, terminators: &[Token], eat_terminator: bool) {
-		println!("recovering to {:?}", terminators);
+		// println!("recovering to {:?}", terminators);
 		loop {
 			match self.peek(0) {
 				(Eof, _) => return,
@@ -150,7 +204,7 @@ impl<'a> Parser<'a> {
 	}
 
 	fn recover_balanced(&mut self, terminators: &[Token], eat_terminator: bool) {
-		println!("recovering (balanced) to {:?}", terminators);
+		// println!("recovering (balanced) to {:?}", terminators);
 		let mut stack = Vec::new();
 		loop {
 			let (tkn, sp) = self.peek(0);
@@ -169,9 +223,7 @@ impl<'a> Parser<'a> {
 				OpenDelim(x) => stack.push(x),
 				CloseDelim(x) => {
 					if let Some(open) = stack.pop() {
-						if open == x {
-							break;
-						} else {
+						if open != x {
 							self.add_diag(DiagBuilder2::error(format!("Found closing {:?} which is not the complement to the previous opening {:?}", x, open)).span(sp));
 							break;
 						}

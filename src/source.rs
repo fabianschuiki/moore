@@ -286,7 +286,7 @@ impl SourceContent for DiskSourceContent {
 
 /// An iterator that yields the characters from an input file together with the
 /// byte positions within the stream.
-pub type CharIter<'a> = Iterator<Item = (usize, char)> + 'a;
+pub type CharIter<'a> = DoubleEndedIterator<Item = (usize, char)> + 'a;
 
 
 
