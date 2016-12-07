@@ -1,0 +1,42 @@
+This file contains a destilled version of the SystemVerilog grammar, which, as
+it is layed out in the standard, is a mixture of both syntax and semantics.
+
+# EXPRESSION
+primary
+primary assignment_operator expression => operator_assignment
+unary_operator primary
+"tagged" member_identifier [expression]  => tagged_union_expression
+("++"|"--") expression                   => inc_or_dec_expression
+
+expression binary_operator expression
+expression "inside" "{" open_range_list "}"  => inside_expression
+expression "matches" pattern                 => cond_predicate
+expression "&&&" expression_or_cond_pattern  => cond_predicate
+expression "?" expression ":" expression     => conditional_expression
+expression ("++"|"--")                       => inc_or_dec_expression
+
+
+# PRIMARY
+"this"
+"super"
+"$"
+"null"
+"$root"
+"$unit"
+primary_literal
+"{" "}" => empty_queue
+"(" expression ")"
+"(" expression ":" expression ":" expression ")"        => mintypmax_expression
+"{" expression {"," expression} "}"                     => concatenation
+"{" expression "{" expression {"," expression} "}" "}"  => multiple_concatenation
+"{" ("<<"|">>") [slice_size] stream_concatenation "}"   => streaming_concatenation
+
+primary "." identifier
+primary "." "super"
+primary "::" identifier
+primary "[" range_expression "]"
+primary "(" [list_of_arguments] ")" => function_subroutine_call
+
+## Ignored
+casting_type "'" "(" expression ")" => cast
+assignment_pattern_expression_type assignment_pattern   => assignment_pattern_expression
