@@ -78,6 +78,7 @@ impl<'a> Lexer<'a> {
 					('<','<') => Some(Shl),
 					('>','>') => Some(Shr),
 					('-','>') => Some(Rarrow),
+					(':',':') => Some(Namespace),
 					_ => None,
 				};
 				if let Some(tkn) = sym {

@@ -59,6 +59,7 @@ pub enum Token {
 	Mod,
 	ModEq,
 	Mul,
+	Namespace,
 	Nand,
 	Neg,
 	Nor,
