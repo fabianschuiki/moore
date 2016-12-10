@@ -1132,8 +1132,14 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()>
 		// Index: "[" range_expression "]"
 		OpenDelim(Brack) if precedence <= Precedence::Scope => {
 			p.bump();
-			p.add_diag(DiagBuilder2::error("Don't know how to handle index expressions").span(sp));
-			p.recover_balanced(&[CloseDelim(Brack)], true);
+			match parse_range_expr(p) {
+				Ok(x) => x,
+				Err(e) => {
+					p.recover_balanced(&[CloseDelim(Brack)], true);
+					return Err(e);
+				}
+			}
+			p.require_reported(CloseDelim(Brack));
 			return Ok(());
 		}
 
@@ -1180,8 +1186,6 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()>
 		}
 	}
 
-	// TODO: Implement all the different suffixes, such as binary operators and
-	// the like.
 	Ok(prefix)
 }
 
@@ -1368,6 +1372,45 @@ fn parse_primary_parenthesis(p: &mut Parser) -> ReportedResult<()> {
 		parse_expr_prec(p, Precedence::Scope)?;
 	}
 	return Ok(());
+}
+
+
+/// Parse a range expression.
+///
+/// ## Syntax
+/// ```
+/// expression
+/// expression ":" expression
+/// expression "+:" expression
+/// expression "-:" expression
+/// ```
+fn parse_range_expr(p: &mut Parser) -> ReportedResult<()> {
+	let first_expr = parse_expr(p)?;
+
+	match p.peek(0).0 {
+		Colon => {
+			p.bump();
+			parse_expr(p)?;
+			return Ok(());
+		}
+
+		AddColon => {
+			p.bump();
+			parse_expr(p)?;
+			return Ok(());
+		}
+
+		SubColon => {
+			p.bump();
+			parse_expr(p)?;
+			return Ok(());
+		}
+
+		// Otherwise the index expression consists only of one expression.
+		_ => {
+			return Ok(());
+		}
+	}
 }
 
 

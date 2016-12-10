@@ -19,6 +19,7 @@ pub enum Token {
 
 	// Symbols
 	Add,
+	AddColon,
 	Amp,
 	AmpAmp,
 	AmpEq,
@@ -86,6 +87,7 @@ pub enum Token {
 	StarEq,
 	StarStar,
 	Sub,
+	SubColon,
 	Ternary,
 	Tilda,
 	TildaAmp,
