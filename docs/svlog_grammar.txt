@@ -97,7 +97,6 @@ To maintain sanity, the ANSI and non-ANSI variants shall be collapsed into one,
 and the verification that a list of declarations is provided in the ANSI case
 shall be performed at a later stage, once the AST has been built.
 
-	// header
 	module_header
 		:= {attribute_instance} module_keyword [lifetime] module_identifier {package_import_declaration} [parameter_port_list] [list_of_ports] ";"
 	list_of_ports
@@ -126,3 +125,30 @@ shall be performed at a later stage, once the AST has been built.
 	variable_port_type
 		:= data_type
 		:= "var" data_type_or_implicit
+
+Removing all sorts of semantics from the port syntax, postponing verification
+interpretation to when the AST has been built, we arrive at the following
+syntax. Also, support for attribute instances shall be dropped for now.
+
+	module_header
+		:= module_keyword [lifetime] module_identifier {package_import_declaration} [parameter_port_list] [list_of_ports] ";"
+	list_of_ports
+		:= "(" [port {"," port}] ")"
+	port
+		:= "{" port_reference {"," port_reference} "}"
+		:= [port_direction] [port_header] port_identifier {"[" range_expression "]"} ["=" constant_expression]
+		:= [port_direction] "." port_identifier "(" [expression] ")"
+	port_reference
+		:= port_identifier {"[" range_expression "]"}
+	port_header
+		:= [net_type | "var"] data_type_or_implicit
+		:= (interface_identifier | "interface") ["." modport_identifier]  -> interface_port_header
+	port_direction
+		:= "input" | "output" | "inout" | "ref"
+	net_type
+		:= "supply0" | "supply1" | "tri" | "triand" | "trior" | "trireg" | "tri0" | "tri1" | "uwire" | "wire" | "wand" | "wor"
+
+	port_with_first_class_types
+		:= "{" expression {"," expression} "}"
+		:= [port_direction] expression expression "=" expression  /* careful about precedence */
+		:= [port_direction] "." identifier "(" [expression] ")"
