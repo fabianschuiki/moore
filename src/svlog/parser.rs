@@ -140,6 +140,14 @@ impl<'a> Parser<'a> {
 		false
 	}
 
+	fn try_eat_ident(&mut self) -> Option<(Name, Span)> {
+		match self.peek(0) {
+			(Ident(name), span) => { self.bump(); Some((name, span)) },
+			(EscIdent(name), span) => { self.bump(); Some((name, span)) },
+			_ => None,
+		}
+	}
+
 	fn eat_ident_or(&mut self, msg: &str) -> ParseResult<(Name, Span)> {
 		match self.peek(0) {
 			(Ident(name), span) => { self.bump(); Ok((name, span)) },
@@ -395,8 +403,6 @@ fn parse_parameter_port_list(p: &mut Parser) {
 					Ok(_) => (),
 					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
 				}
-				// let q = p.peek(0).1.end();
-				// p.add_diag(DiagBuilder2::error("Parameter assignment not implemented").span(q));
 			}
 
 			// Eat the trailing comma or closing parenthesis.
@@ -631,8 +637,6 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 			(OpenDelim(Paren), sp) => {
 				p.bump();
 				parse_list_of_port_connections(p);
-				// p.add_diag(DiagBuilder2::error(format!("Instantiations not implemented, for instance named `{}`", name)).span(sp));
-				// p.recover_balanced(&[CloseDelim(Paren)], true);
 				match p.require_reported(CloseDelim(Paren)) {
 					Ok(_) => (),
 					Err(x) => return Some(Err(x)),
@@ -891,6 +895,7 @@ fn parse_modport_port_decl(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum PortDir {
 	Input,
 	Output,
@@ -1522,13 +1527,37 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 		p.bump();
 	}
 
-	// Try to consume ports of the form:
+	// Try to parse ports of the form:
 	// "." port_identifier "(" [expression] ")"
 	if p.try_eat(Period) {
 		let q = p.peek(0).1;
 		p.add_diag(DiagBuilder2::error("Ports starting with a . not yet supported").span(q));
 		return Err(())
 	}
+
+	// Otherwise parse the port data type, which may be a whole host of
+	// different things.
+	let ty = parse_data_type(p)?;
+
+	// Here goes the tricky part: If the data type not followed by the name (and
+	// optional dimensions) of the port, the data type actually was the port
+	// name. These are indistinguishable.
+	let (name, name_span, dims) = if let Some((name, span)) = p.try_eat_ident() {
+		(name, span, parse_optional_dimensions(p)?)
+	} else {
+		// TODO: Extract name and dimensions from data type.
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::error("Ports with implicit data types not yet supported").span(q));
+		return Err(());
+	};
+
+	// Parse the optional initial assignment for this port.
+	if p.try_eat(Equal) {
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
+	}
+
+	println!("port: dir = {:?}, type = {:?}, name = {}, dims = {:?}", dir, ty, name, dims);
 
 	Ok(())
 }
