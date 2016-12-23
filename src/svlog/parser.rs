@@ -31,6 +31,7 @@ struct Parser<'a> {
 	input: Lexer<'a>,
 	queue: VecDeque<TokenAndSpan>,
 	diagnostics: Vec<DiagBuilder2>,
+	last_span: Span,
 }
 
 impl<'a> Parser<'a> {
@@ -39,6 +40,7 @@ impl<'a> Parser<'a> {
 			input: input,
 			queue: VecDeque::new(),
 			diagnostics: Vec::new(),
+			last_span: INVALID_SPAN,
 		}
 	}
 
@@ -68,7 +70,13 @@ impl<'a> Parser<'a> {
 		if self.queue.is_empty() {
 			self.ensure_queue_filled(1);
 		}
-		self.queue.pop_front();
+		if let Some((_,sp)) = self.queue.pop_front() {
+			self.last_span = sp;
+		}
+	}
+
+	fn last_span(&self) -> Span {
+		self.last_span
 	}
 
 	fn add_diag(&mut self, diag: DiagBuilder2) {
