@@ -194,7 +194,7 @@ impl<'a> Parser<'a> {
 
 	fn try_eat(&mut self, expect: Token) -> bool {
 		match self.peek(0) {
-			(actual, span) if actual == expect => { self.bump(); true},
+			(actual, _) if actual == expect => { self.bump(); true },
 			_ => false
 		}
 	}
@@ -280,8 +280,8 @@ fn parse_source_text(p: &mut Parser) {
 			(Keyword(Kw::Interface),_) => {
 				p.bump();
 				match parse_interface_decl(p) {
-					Some(_) => true,
-					None => false,
+					Ok(_) => true,
+					Err(_) => false,
 				}
 			}
 			(Eof,_) => break,
@@ -306,11 +306,9 @@ fn parse_source_text(p: &mut Parser) {
 }
 
 
-pub enum Lifetime {
-	Static,
-	Automatic,
-}
 
+/// Convert a token to the corresponding lifetime. Yields `None` if the token
+/// does not correspond to a lifetime.
 fn as_lifetime(tkn: Token) -> Option<Lifetime> {
 	match tkn {
 		Keyword(Kw::Static) => Some(Lifetime::Static),
@@ -320,26 +318,35 @@ fn as_lifetime(tkn: Token) -> Option<Lifetime> {
 }
 
 
-fn parse_interface_decl(p: &mut Parser) -> Option<IntfDecl> {
+fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
+	let mut span = p.last_span();
 
-	// TODO: Parse optional lifetime.
+	// Eat the optional lifetime.
+	let lifetime = match as_lifetime(p.peek(0).0) {
+		Some(l) => { p.bump(); l },
+		None => Lifetime::Static,
+	};
 
 	// Eat the interface name.
-	let (name, name_sp) = match p.eat_ident_or("interface name") {
-		Ok(x) => x,
-		Err(x) => { p.add_diag(x); return None; }
-	};
+	let (name, name_sp) = p.eat_ident("interface name")?;
 	println!("interface {}", name);
 
 	// TODO: Parse package import declarations.
 
 	// Eat the parameter port list.
-	if p.try_eat(Hashtag) {
-		parse_parameter_port_list(p);
-	}
+	let param_ports = if p.try_eat(Hashtag) {
+		parse_parameter_port_list(p)?
+	} else {
+		Vec::new()
+	};
 
-	// Eat either the list of ports or port declarations, depending on whether
-	// this is an ANSI or non-ANSI interface header.
+	// Eat the optional list of ports.
+	let ports = if p.try_eat(OpenDelim(Paren)) {
+		parse_port_list(p)?
+	} else {
+		Vec::new()
+	};
+	println!("interface {} has {} ports, {} param ports", name, ports.len(), param_ports.len());
 
 	// Eat the semicolon at the end of the header.
 	if !p.try_eat(Semicolon) {
@@ -366,10 +373,13 @@ fn parse_interface_decl(p: &mut Parser) -> Option<IntfDecl> {
 		p.add_diag(DiagBuilder2::error(format!("Missing \"endinterface\" at the end of \"{}\"", name)).span(q));
 	}
 
-	Some(IntfDecl {
+	span.expand(p.last_span());
+	Ok(IntfDecl {
+		span: span,
+		lifetime: lifetime,
 		name: name,
 		name_span: name_sp,
-		span: name_sp,
+		ports: ports,
 	})
 	// None
 	// loop {
@@ -383,11 +393,9 @@ fn parse_interface_decl(p: &mut Parser) -> Option<IntfDecl> {
 }
 
 
-fn parse_parameter_port_list(p: &mut Parser) {
-	match p.require(OpenDelim(Paren)) {
-		Ok(()) => (),
-		Err(e) => { p.add_diag(e); return; }
-	}
+fn parse_parameter_port_list(p: &mut Parser) -> ReportedResult<Vec<()>> {
+	let mut v = Vec::new();
+	p.require_reported(OpenDelim(Paren))?;
 
 	while p.try_eat(Keyword(Kw::Parameter)) {
 		// TODO: Parse data type or implicit type.
@@ -395,10 +403,9 @@ fn parse_parameter_port_list(p: &mut Parser) {
 		// Eat the list of parameter assignments.
 		loop {
 			// parameter_identifier { unpacked_dimension } [ = constant_param_expression ]
-			let (name, name_sp) = match p.eat_ident_or("parameter name") {
+			let (name, name_sp) = match p.eat_ident("parameter name") {
 				Ok(x) => x,
-				Err(e) => {
-					p.add_diag(e);
+				Err(()) => {
 					p.recover_balanced(&[Comma, CloseDelim(Paren)], false);
 					break;
 				}
@@ -412,6 +419,8 @@ fn parse_parameter_port_list(p: &mut Parser) {
 					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
 				}
 			}
+
+			v.push(());
 
 			// Eat the trailing comma or closing parenthesis.
 			match p.peek(0) {
@@ -446,10 +455,8 @@ fn parse_parameter_port_list(p: &mut Parser) {
 		}
 	}
 
-	match p.require(CloseDelim(Paren)) {
-		Ok(()) => (),
-		Err(e) => p.add_diag(e)
-	}
+	p.require_reported(CloseDelim(Paren))?;
+	Ok(v)
 }
 
 
@@ -518,12 +525,13 @@ fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
 /// Parse a module declaration, assuming that the leading `module` keyword has
 /// already been consumed.
 fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
+	let mut span = p.last_span();
 
 	// Eat the optional lifetime.
-	let lifetime = as_lifetime(p.peek(0).0);
-	if lifetime.is_some() {
-		p.bump();
-	}
+	let lifetime = match as_lifetime(p.peek(0).0) {
+		Some(l) => { p.bump(); l },
+		None => Lifetime::Static,
+	};
 
 	// Eat the module name.
 	let (name, name_sp) = p.eat_ident("module name")?;
@@ -532,18 +540,20 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 	// TODO: Parse package import declarations.
 
 	// Eat the optional parameter port list.
-	if p.try_eat(Hashtag) {
-		parse_parameter_port_list(p);
-	}
+	let param_ports = if p.try_eat(Hashtag) {
+		parse_parameter_port_list(p)?
+	} else {
+		Vec::new()
+	};
 
 	// Eat the optional list of ports. Not having such a list requires the ports
 	// to be defined further down in the body of the module.
-	if p.try_eat(OpenDelim(Paren)) {
-		parse_port_list(p)?;
-		// let q = p.peek(0).1;
-		// p.add_diag(DiagBuilder2::fatal("Module ports not implemented").span(q));
-		// p.recover(&[CloseDelim(Paren)], true);
-	}
+	let ports = if p.try_eat(OpenDelim(Paren)) {
+		parse_port_list(p)?
+	} else {
+		Vec::new()
+	};
+	println!("module {} has {} ports, {} param ports", name, ports.len(), param_ports.len());
 
 	// Eat the semicolon after the header.
 	if !p.try_eat(Semicolon) {
@@ -570,10 +580,13 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 		p.add_diag(DiagBuilder2::error(format!("Missing \"endmodule\" at the end of \"{}\"", name)).span(q));
 	}
 
+	span.expand(p.last_span());
 	Ok(ModDecl {
+		span: span,
+		lifetime: lifetime,
 		name: name,
 		name_span: name_sp,
-		span: name_sp,
+		ports: ports,
 	})
 }
 
@@ -646,7 +659,10 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 			}
 			(OpenDelim(Paren), sp) => {
 				p.bump();
-				parse_list_of_port_connections(p);
+				match parse_list_of_port_connections(p) {
+					Ok(x) => x,
+					Err(()) => return Some(Err(())),
+				};
 				match p.require_reported(CloseDelim(Paren)) {
 					Ok(_) => (),
 					Err(x) => return Some(Err(x)),
@@ -904,15 +920,6 @@ fn parse_modport_port_decl(p: &mut Parser) -> ReportedResult<()> {
 	Err(())
 }
 
-
-#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub enum PortDir {
-	Input,
-	Output,
-	Inout,
-	Ref,
-}
-
 /// Convert a token to the corresponding PortDir. The token may be one of the
 /// keywords `input`, `output`, `inout`, or `ref`. Otherwise `None` is returned.
 fn as_port_direction(tkn: Token) -> Option<PortDir> {
@@ -982,29 +989,6 @@ fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
 		sign: sign,
 		dims: dims,
 	})
-}
-
-
-#[derive(Debug, Clone)]
-pub enum Signing {
-	None,
-	Signed,
-	Unsigned,
-}
-
-/// Consumes a `signed` or `unsigned` keyword if present.
-fn parse_optional_signing(p: &mut Parser) -> Signing {
-	match p.peek(0).0 {
-		Keyword(Kw::Signed) => {
-			p.bump();
-			return Signing::Signed;
-		},
-		Keyword(Kw::Unsigned) => {
-			p.bump();
-			return Signing::Unsigned;
-		},
-		_ => return Signing::None,
-	}
 }
 
 
@@ -1085,13 +1069,6 @@ fn try_dimension(p: &mut Parser) -> ReportedResult<Option<(TypeDim, Span)>> {
 }
 
 
-fn parse_integer_vector_type(p: &mut Parser, ty: ()) -> ReportedResult<()> {
-	let signing = parse_optional_signing(p);
-	let dims = parse_optional_dimensions(p)?;
-	Ok(())
-}
-
-
 fn parse_list_of_port_connections(p: &mut Parser) -> ReportedResult<Vec<()>> {
 	let mut v = Vec::new();
 	if p.peek(0).0 == CloseDelim(Paren) {
@@ -1101,6 +1078,8 @@ fn parse_list_of_port_connections(p: &mut Parser) -> ReportedResult<Vec<()>> {
 		if p.try_eat(Period) {
 			if p.try_eat(Mul) {
 				// handle .* case
+				let q = p.last_span();
+				p.add_diag(DiagBuilder2::error("Don't know how to handle .* port connections").span(q));
 			} else {
 				let (name, name_sp) = p.eat_ident("port name")?;
 				// handle .name, .name(), and .name(expr) cases
@@ -1174,9 +1153,6 @@ enum Precedence {
 
 fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()> {
 	let prefix = parse_expr_first(p, precedence)?;
-	// let q = p.peek(0).1;
-	// p.add_diag(DiagBuilder2::fatal("Expressions not implemented").span(q));
-	// Err(())
 
 	// Try to parse the index and call expressions.
 	let (tkn, sp) = p.peek(0);
@@ -1191,7 +1167,7 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()>
 					return Err(e);
 				}
 			}
-			p.require_reported(CloseDelim(Brack));
+			p.require_reported(CloseDelim(Brack))?;
 			return Ok(());
 		}
 
@@ -1536,14 +1512,24 @@ fn as_binary_operator(tkn: Token) -> Option<BinaryOp> {
 }
 
 
-fn parse_port_list(p: &mut Parser) -> ReportedResult<()> {
+/// Parse a comma-separated list of ports, up to a closing parenthesis. Assumes
+/// that the opening parenthesis has already been consumed.
+fn parse_port_list(p: &mut Parser) -> ReportedResult<Vec<Port>> {
 	let mut v = Vec::new();
+
+	// In case the port list is empty.
+	if p.try_eat(CloseDelim(Paren)) {
+		return Ok(v);
+	}
+
 	loop {
-		match parse_port(p) {
+		// Parse a port.
+		match parse_port(p, v.last()) {
 			Ok(x) => v.push(x),
 			Err(()) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
 		}
 
+		// Depending on what follows, continue or break out of the loop.
 		match p.peek(0) {
 			(Comma, sp) => {
 				p.bump();
@@ -1562,14 +1548,45 @@ fn parse_port_list(p: &mut Parser) -> ReportedResult<()> {
 	}
 
 	p.require_reported(CloseDelim(Paren))?;
-	Ok(())
+	Ok(v)
 }
 
 
-fn parse_port(p: &mut Parser) -> ReportedResult<()> {
+/// Parse one port in a module or interface port list. The `prev` argument shall
+/// be a reference to the previously parsed port, or `None` if this is the first
+/// port in the list. This is required since ports inherit certain information
+/// from their predecessor if omitted.
+fn parse_port(p: &mut Parser, prev: Option<&Port>) -> ReportedResult<Port> {
+	let mut span = p.peek(0).1;
+
 	// Consume the optional port direction.
-	let dir = as_port_direction(p.peek(0).0);
+	let mut dir = as_port_direction(p.peek(0).0);
 	if dir.is_some() {
+		p.bump();
+	}
+
+	// Consume the optional net type or var keyword, which determines the port
+	// kind.
+	let mut kind = match p.peek(0).0 {
+		// Net Types
+		Keyword(Kw::Supply0) => Some(NetPort),
+		Keyword(Kw::Supply1) => Some(NetPort),
+		Keyword(Kw::Tri)     => Some(NetPort),
+		Keyword(Kw::Triand)  => Some(NetPort),
+		Keyword(Kw::Trior)   => Some(NetPort),
+		Keyword(Kw::Trireg)  => Some(NetPort),
+		Keyword(Kw::Tri0)    => Some(NetPort),
+		Keyword(Kw::Tri1)    => Some(NetPort),
+		Keyword(Kw::Uwire)   => Some(NetPort),
+		Keyword(Kw::Wire)    => Some(NetPort),
+		Keyword(Kw::Wand)    => Some(NetPort),
+		Keyword(Kw::Wor)     => Some(NetPort),
+
+		// Var Kind
+		Keyword(Kw::Var)     => Some(VarPort),
+		_ => None
+	};
+	if kind.is_some() {
 		p.bump();
 	}
 
@@ -1583,7 +1600,7 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 
 	// Otherwise parse the port data type, which may be a whole host of
 	// different things.
-	let ty = parse_data_type(p)?;
+	let mut ty = Some(parse_data_type(p)?);
 
 	// Here goes the tricky part: If the data type not followed by the name (and
 	// optional dimensions) of the port, the data type actually was the port
@@ -1591,11 +1608,50 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
 		(name, span, parse_optional_dimensions(p)?)
 	} else {
-		// TODO: Extract name and dimensions from data type.
+		// TODO: Extract name and dimensions from data type and change type to
+		// None.
 		let q = p.peek(0).1;
 		p.add_diag(DiagBuilder2::error("Ports with implicit data types not yet supported").span(q));
 		return Err(());
 	};
+
+	// Determine the kind of the port based on the optional kind keywords, the
+	// direction, and the type.
+	if dir.is_none() && kind.is_none() && ty.is_none() && prev.is_some() {
+		dir = Some(prev.unwrap().dir.clone());
+		kind = Some(prev.unwrap().kind.clone());
+		ty = Some(prev.unwrap().ty.clone());
+	} else {
+		// The direction defaults to inout.
+		if dir.is_none() {
+			dir = Some(PortDir::Inout);
+		}
+
+		// The type defaults to logic.
+		if ty.is_none() {
+			ty = Some(Type {
+				span: INVALID_SPAN,
+				data: LogicType,
+				sign: TypeSign::None,
+				dims: Vec::new(),
+			});
+		}
+
+		// The kind defaults to different things based on the direction and
+		// type:
+		// - input,inout: default net
+		// - ref: var
+		// - output (implicit type): net
+		// - output (explicit type): var
+		if kind.is_none() {
+			kind = Some(match dir.unwrap() {
+				PortDir::Input | PortDir::Inout => NetPort,
+				PortDir::Ref => VarPort,
+				PortDir::Output if ty.clone().unwrap().data == ImplicitType => NetPort,
+				PortDir::Output => VarPort,
+			});
+		}
+	}
 
 	// Parse the optional initial assignment for this port.
 	if p.try_eat(Equal) {
@@ -1603,10 +1659,18 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
 	}
 
-	// p.add_diag(DiagBuilder2::note("Parsed port type").span(ty.span));
-	println!("port: dir = {:?}, type = {:?}, name = {}, dims = {:?}", dir, ty, name, dims);
+	// Update the port's span to cover all of the tokens consumed.
+	span.expand(p.last_span());
 
-	Ok(())
+	Ok(Port {
+		span: span,
+		name: name,
+		name_span: name_span,
+		kind: kind.unwrap(),
+		ty: ty.unwrap(),
+		dir: dir.unwrap(),
+		dims: dims,
+	})
 }
 
 

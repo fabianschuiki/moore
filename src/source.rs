@@ -12,7 +12,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
-use std::iter::Iterator;
 use std::path::Path;
 use std::rc::Rc;
 
