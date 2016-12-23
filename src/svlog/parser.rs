@@ -544,7 +544,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 	}
 
 	// Eat the items in the module.
-	while p.peek(0).0 != Keyword(Kw::Endmodule) {
+	while p.peek(0).0 != Keyword(Kw::Endmodule) && p.peek(0).0 != Eof {
 		match try_hierarchy_item(p) {
 			Some(Ok(())) => (),
 			Some(Err(())) => (),
