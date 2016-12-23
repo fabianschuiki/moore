@@ -608,6 +608,8 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 		}
 	};
 
+	println!("data type: {:?}", ty);
+
 	// TODO: Handle the special case where the token following the parsed data
 	// type is a [,;=], which indicates that the parsed type is actually a
 	// variable declaration with implicit type (they look the same).
@@ -925,23 +927,61 @@ fn as_port_direction(tkn: Token) -> Option<PortDir> {
 
 
 /// Parse a data type.
-fn parse_data_type(p: &mut Parser) -> ReportedResult<()> {
-	let (tkn, sp) = p.peek(0);
-	match tkn {
-		Keyword(Kw::Bit) =>   { p.bump(); return parse_integer_vector_type(p, ()); },
-		Keyword(Kw::Logic) => { p.bump(); return parse_integer_vector_type(p, ()); },
-		Keyword(Kw::Reg) =>   { p.bump(); return parse_integer_vector_type(p, ()); },
-		// TODO: Handle `[` introducing an implicit type.
-		// TODO: Handle `signed` and `unsigned` introducing an implicit type.
-		Ident(n) | EscIdent(n) => {
-			p.bump();
-			return Ok(());
+fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
+	use svlog::ast::*;
+
+	// Decide what general type this is.
+	let (tkn, mut span) = p.peek(0);
+	let data = {
+		match tkn {
+			Keyword(kw) => {
+				match kw {
+					// Integer Vector Types
+					Kw::Bit => BitType,
+					Kw::Logic => LogicType,
+					Kw::Reg => RegType,
+
+					// Integer Atom Types
+					Kw::Byte => ByteType,
+					Kw::Shortint => ShortIntType,
+					Kw::Int => IntType,
+					Kw::Longint => LongIntType,
+					Kw::Integer => IntType,
+					Kw::Time => TimeType,
+
+					e => {
+						p.add_diag(DiagBuilder2::error(format!("Expected data type, found keyword {:?}", kw)).span(span));
+						return Err(());
+					}
+				}
+			},
+			Ident(n) | EscIdent(n) => NamedType(n),
+			_ => ImplicitType,
 		}
-		_ => (),
+	};
+	if data != ImplicitType {
+		p.bump();
 	}
 
-	p.add_diag(DiagBuilder2::error(format!("Expected data type, got {:?}", tkn)).span(sp));
-	Err(())
+	// Parse the optional sign information.
+	let sign = match p.peek(0) {
+		(Keyword(Kw::Signed), q) => { span.expand(q); p.bump(); TypeSign::Signed },
+		(Keyword(Kw::Unsigned), q) => { span.expand(q); p.bump(); TypeSign::Unsigned },
+		_ => TypeSign::None
+	};
+
+	// Parse the optional dimensions.
+	let (dims, dims_span) = parse_optional_dimensions(p)?;
+	if !dims.is_empty() {
+		span.expand(dims_span);
+	}
+
+	Ok(Type {
+		span: span,
+		data: data,
+		sign: sign,
+		dims: dims,
+	})
 }
 
 
@@ -968,41 +1008,38 @@ fn parse_optional_signing(p: &mut Parser) -> Signing {
 }
 
 
-fn parse_optional_dimensions(p: &mut Parser) -> ReportedResult<Vec<Dimensions>> {
+fn parse_optional_dimensions(p: &mut Parser) -> ReportedResult<(Vec<TypeDim>, Span)> {
 	let mut v = Vec::new();
-	while let Some(result) = try_dimension(p) {
-		match result {
-			Ok(d) => v.push(d),
-			Err(_) => return Err(()),
-		}
+	let mut span;
+	if let Some((d,sp)) = try_dimension(p)? {
+		span = sp;
+		v.push(d);
+	} else {
+		return Ok((v, INVALID_SPAN));
 	}
-	Ok(v)
+	while let Some((d,sp)) = try_dimension(p)? {
+		v.push(d);
+		span.expand(sp);
+	}
+	Ok((v, span))
 }
 
 
-#[derive(Debug, Clone)]
-pub enum Dimensions {
-	Expr,
-	Range,
-	Queue,
-	Unsized,
-	Associative,
-}
-
-fn try_dimension(p: &mut Parser) -> Option<ReportedResult<Dimensions>> {
+fn try_dimension(p: &mut Parser) -> ReportedResult<Option<(TypeDim, Span)>> {
 	// Eat the leading opening brackets.
 	if !p.try_eat(OpenDelim(Brack)) {
-		return None;
+		return Ok(None);
 	}
+	let mut span = p.last_span();
 
 	let dim = match p.peek(0).0 {
 		CloseDelim(Brack) => {
 			p.bump();
-			Dimensions::Unsized
+			TypeDim::Unsized
 		},
 		Mul => {
 			p.bump();
-			Dimensions::Associative
+			TypeDim::Associative
 		},
 		// TODO: Handle the queue case [$] and [$:<const_expr>]
 		_ => {
@@ -1011,8 +1048,8 @@ fn try_dimension(p: &mut Parser) -> Option<ReportedResult<Dimensions>> {
 			let expr = match parse_constant_expr(p) {
 				Ok(x) => x,
 				Err(_) => {
-					p.recover(&[CloseDelim(Brack)], true);
-					return Some(Err(()));
+					p.recover_balanced(&[CloseDelim(Brack)], true);
+					return Err(());
 				}
 			};
 
@@ -1022,26 +1059,27 @@ fn try_dimension(p: &mut Parser) -> Option<ReportedResult<Dimensions>> {
 				let other = match parse_constant_expr(p) {
 					Ok(x) => x,
 					Err(_) => {
-						p.recover(&[CloseDelim(Brack)], true);
-						return Some(Err(()));
+						p.recover_balanced(&[CloseDelim(Brack)], true);
+						return Err(());
 					}
 				};
-				Dimensions::Range
+				TypeDim::Range
 			} else {
-				Dimensions::Expr
+				TypeDim::Expr
 			}
 		}
 	};
 
 	// Eat the closing brackets.
 	match p.peek(0) {
-		(CloseDelim(Brack), _) => {
+		(CloseDelim(Brack), sp) => {
+			span.expand(sp);
 			p.bump();
-			return Some(Ok(dim));
+			return Ok(Some((dim, span)));
 		},
 		(tkn, sp) => {
 			p.add_diag(DiagBuilder2::error(format!("Expected closing brackets `]` after dimension, got {:?}", tkn)).span(sp));
-			return Some(Err(()));
+			return Err(());
 		}
 	}
 }
@@ -1550,7 +1588,7 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 	// Here goes the tricky part: If the data type not followed by the name (and
 	// optional dimensions) of the port, the data type actually was the port
 	// name. These are indistinguishable.
-	let (name, name_span, dims) = if let Some((name, span)) = p.try_eat_ident() {
+	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
 		(name, span, parse_optional_dimensions(p)?)
 	} else {
 		// TODO: Extract name and dimensions from data type.
@@ -1565,6 +1603,7 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
 	}
 
+	// p.add_diag(DiagBuilder2::note("Parsed port type").span(ty.span));
 	println!("port: dir = {:?}, type = {:?}, name = {}, dims = {:?}", dir, ty, name, dims);
 
 	Ok(())
