@@ -67,6 +67,14 @@ impl DiagBuilder2 {
 		}
 	}
 
+	pub fn note<S: Into<String>>(message: S) -> DiagBuilder2 {
+		DiagBuilder2 {
+			severity: Severity::Note,
+			message: message.into(),
+			span: None,
+		}
+	}
+
 	pub fn span<S: Into<Span>>(self, span: S) -> DiagBuilder2 {
 		DiagBuilder2 {
 			span: Some(span.into()),
