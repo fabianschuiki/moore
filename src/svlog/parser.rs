@@ -525,9 +525,10 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 	// Eat the optional list of ports. Not having such a list requires the ports
 	// to be defined further down in the body of the module.
 	if p.try_eat(OpenDelim(Paren)) {
-		let q = p.peek(0).1;
-		p.add_diag(DiagBuilder2::fatal("Module ports not implemented").span(q));
-		p.recover(&[CloseDelim(Paren)], true);
+		parse_port_list(p)?;
+		// let q = p.peek(0).1;
+		// p.add_diag(DiagBuilder2::fatal("Module ports not implemented").span(q));
+		// p.recover(&[CloseDelim(Paren)], true);
 	}
 
 	// Eat the semicolon after the header.
@@ -1481,6 +1482,55 @@ fn as_binary_operator(tkn: Token) -> Option<BinaryOp> {
 		Rarrow => Some(BinaryOp::Stuff),
 		_ => None,
 	}
+}
+
+
+fn parse_port_list(p: &mut Parser) -> ReportedResult<()> {
+	let mut v = Vec::new();
+	loop {
+		match parse_port(p) {
+			Ok(x) => v.push(x),
+			Err(()) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
+		}
+
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if p.peek(0).0 == CloseDelim(Paren) {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				}
+			},
+			(CloseDelim(Paren), _) => break,
+			(_, sp) => {
+				p.add_diag(DiagBuilder2::error("Expected , or ) after port").span(sp));
+				p.recover_balanced(&[CloseDelim(Paren)], false);
+				break;
+			}
+		}
+	}
+
+	p.require_reported(CloseDelim(Paren))?;
+	Ok(())
+}
+
+
+fn parse_port(p: &mut Parser) -> ReportedResult<()> {
+	// Consume the optional port direction.
+	let dir = as_port_direction(p.peek(0).0);
+	if dir.is_some() {
+		p.bump();
+	}
+
+	// Try to consume ports of the form:
+	// "." port_identifier "(" [expression] ")"
+	if p.try_eat(Period) {
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::error("Ports starting with a . not yet supported").span(q));
+		return Err(())
+	}
+
+	Ok(())
 }
 
 
