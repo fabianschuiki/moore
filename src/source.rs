@@ -47,7 +47,11 @@ impl Source {
 
 impl fmt::Debug for Source {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "Source({}; \"{}\")", self.0, self.get_path())
+		if self.0 > 0 {
+			write!(f, "Source({}; \"{}\")", self.0, self.get_path())
+		} else {
+			write!(f, "Source(INVALID)")
+		}
 	}
 }
 
