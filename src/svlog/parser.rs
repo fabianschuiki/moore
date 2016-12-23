@@ -614,10 +614,10 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 
 	// In case this is an instantiation, some parameter assignments may follow.
 	if p.try_eat(Hashtag) {
-		p.bump();
-		let q = p.peek(0).1;
-		p.add_diag(DiagBuilder2::error("Parameter assignments for instantiations not implemented").span(q));
-		p.recover_balanced(&[CloseDelim(Paren)], true);
+		match parse_parameter_assignments(p) {
+			Ok(x) => x,
+			Err(()) => return Some(Err(()))
+		};
 	}
 
 	// Parse the list of variable declaration assignments.
@@ -1568,6 +1568,68 @@ fn parse_port(p: &mut Parser) -> ReportedResult<()> {
 	println!("port: dir = {:?}, type = {:?}, name = {}, dims = {:?}", dir, ty, name, dims);
 
 	Ok(())
+}
+
+
+fn parse_parameter_assignments(p: &mut Parser) -> ReportedResult<Vec<()>> {
+	let mut v = Vec::new();
+	p.require_reported(OpenDelim(Paren))?;
+
+	// In case there are no parameter assignments, the opening parenthesis is
+	// directly followed by a closing one.
+	if p.try_eat(CloseDelim(Paren)) {
+		return Ok(v);
+	}
+
+	loop {
+		match parse_parameter_assignment(p) {
+			Ok(x) => v.push(x),
+			Err(()) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
+		}
+
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if p.peek(0).0 == CloseDelim(Paren) {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				}
+			},
+			(CloseDelim(Paren), _) => break,
+			(_, sp) => {
+				p.add_diag(DiagBuilder2::error("Expected , or ) after parameter assignment, found").span(sp));
+				p.recover_balanced(&[CloseDelim(Paren)], false);
+				break;
+			}
+		}
+	}
+
+	p.require_reported(CloseDelim(Paren))?;
+	Ok(v)
+}
+
+
+fn parse_parameter_assignment(p: &mut Parser) -> ReportedResult<()> {
+	// If the parameter assignment starts with a ".", this is a named
+	// assignment. Otherwise it's an ordered assignment.
+	if p.try_eat(Period) {
+		let (name, name_span) = p.eat_ident("parameter name")?;
+		p.require_reported(OpenDelim(Paren))?;
+		let expr = match parse_expr(p) {
+			Ok(x) => x,
+			Err(()) => {
+				p.recover_balanced(&[CloseDelim(Paren)], true);
+				return Err(());
+			}
+		};
+		p.require_reported(CloseDelim(Paren))?;
+		println!("named param assignment: {} = {:?}", name, expr);
+		Ok(())
+	} else {
+		let expr = parse_expr(p)?;
+		println!("ordered param assignment: {:?}", expr);
+		Ok(())
+	}
 }
 
 
