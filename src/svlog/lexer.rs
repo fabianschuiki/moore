@@ -140,6 +140,8 @@ impl<'a> Lexer<'a> {
 				(CatTokenKind::Symbol('_'), _) => {
 					let (m, msp) = self.match_ident()?;
 					return match find_keyword(&m) {
+						Some(Kw::Begin) => Ok((OpenDelim(Bgend), msp)),
+						Some(Kw::End) => Ok((CloseDelim(Bgend), msp)),
 						Some(kw) => Ok((Keyword(kw), msp)),
 						None => Ok((Ident(name_table.intern(&m, true)), msp)),
 					};

@@ -3,7 +3,12 @@
 use source::Span;
 use name::Name;
 
+pub use self::TypeData::*;
+pub use self::PortKind::*;
+pub use self::StmtData::*;
 
+
+#[derive(Debug)]
 pub struct ModDecl {
 	pub span: Span,
 	pub lifetime: Lifetime, // default static
@@ -12,6 +17,7 @@ pub struct ModDecl {
 	pub ports: Vec<Port>,
 }
 
+#[derive(Debug)]
 pub struct IntfDecl {
 	pub span: Span,
 	pub lifetime: Lifetime, // default static
@@ -38,9 +44,6 @@ pub struct Type {
 	pub sign: TypeSign,
 	pub dims: Vec<TypeDim>,
 }
-
-pub use self::TypeData::*;
-pub use self::PortKind::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypeData {
@@ -114,4 +117,56 @@ pub struct ParamPort {
 	pub ty: Type,
 	pub dims: Vec<TypeDim>,
 	pub init: (),
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Procedure {
+	pub span: Span,
+	pub kind: ProcedureKind,
+	pub stmt: Stmt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcedureKind {
+	Initial,
+	Always,
+	AlwaysComb,
+	AlwaysLatch,
+	AlwaysFf,
+	Final,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stmt {
+	pub span: Span,
+	pub label: Option<Name>,
+	pub data: StmtData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StmtData {
+	NullStmt,
+	SequentialBlock(Vec<Stmt>),
+	ParallelBlock(Vec<Stmt>, JoinKind),
+}
+
+impl Stmt {
+	pub fn new_null(span: Span) -> Stmt {
+		Stmt {
+			span: span,
+			label: None,
+			data: NullStmt,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoinKind {
+	All,
+	Any,
+	None,
 }

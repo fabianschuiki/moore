@@ -358,7 +358,7 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 	while p.peek(0).0 != Keyword(Kw::Endinterface) {
 		match try_hierarchy_item(p) {
 			Some(Ok(())) => (),
-			Some(Err(())) => (),
+			Some(Err(())) => p.recover(&[Keyword(Kw::Endinterface)], false),
 			None => {
 				let (tkn, q) = p.peek(0);
 				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
@@ -381,15 +381,6 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 		name_span: name_sp,
 		ports: ports,
 	})
-	// None
-	// loop {
-	// 	match p.peek(0) {
-	// 		(Keyword(Kw::Endinterface), _) => { p.bump(); break; },
-	// 		(Eof, _) => break,
-	// 		_ => p.bump(),
-	// 	}
-	// }
-	// Ok(())
 }
 
 
@@ -565,7 +556,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 	while p.peek(0).0 != Keyword(Kw::Endmodule) && p.peek(0).0 != Eof {
 		match try_hierarchy_item(p) {
 			Some(Ok(())) => (),
-			Some(Err(())) => (),
+			Some(Err(())) => p.recover(&[Keyword(Kw::Endmodule)], false),
 			None => {
 				let (tkn, q) = p.peek(0);
 				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
@@ -596,10 +587,25 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 	// following item.
 	let (tkn, _) = p.peek(0);
 	let f = |p, func, term| Some(hierarchy_item_wrapper(p, func, term));
+	let map_proc = |result: ReportedResult<Procedure>| Some(result.map(|r| {
+		println!("parsed proc {:?}", r);
+		()
+	}));
 	match tkn {
 		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
 		Keyword(Kw::Parameter) => return f(p, parse_parameter_decl, Semicolon),
 		Keyword(Kw::Modport) => return f(p, parse_modport_decl, Semicolon),
+
+		// Structured procedures as per IEEE 1800-2009 section 9.2
+		Keyword(Kw::Initial)     => return map_proc(parse_procedure(p, ProcedureKind::Initial)),
+		Keyword(Kw::Always)      => return map_proc(parse_procedure(p, ProcedureKind::Always)),
+		Keyword(Kw::AlwaysComb)  => return map_proc(parse_procedure(p, ProcedureKind::AlwaysComb)),
+		Keyword(Kw::AlwaysLatch) => return map_proc(parse_procedure(p, ProcedureKind::AlwaysLatch)),
+		Keyword(Kw::AlwaysFf)    => return map_proc(parse_procedure(p, ProcedureKind::AlwaysFf)),
+		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
+		Keyword(Kw::Function)    => return Some(parse_func_decl(p)),
+		Keyword(Kw::Task)        => return Some(parse_task_decl(p)),
+
 		_ => ()
 	}
 
@@ -616,12 +622,10 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 	let ty = match parse_data_type(p) {
 		Ok(x) => x,
 		Err(_) => {
-			p.recover(&[Semicolon], true);
+			p.recover_balanced(&[Semicolon], true);
 			return Some(Err(()));
 		}
 	};
-
-	println!("data type: {:?}", ty);
 
 	// TODO: Handle the special case where the token following the parsed data
 	// type is a [,;=], which indicates that the parsed type is actually a
@@ -640,6 +644,7 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 		let (name, span) = match p.eat_ident_or("variable or instance name") {
 			Ok(x) => x,
 			Err(e) => {
+				p.bump();
 				p.add_diag(e);
 				return Some(Err(()));
 			}
@@ -1726,14 +1731,162 @@ fn parse_parameter_assignment(p: &mut Parser) -> ReportedResult<()> {
 			}
 		};
 		p.require_reported(CloseDelim(Paren))?;
-		println!("named param assignment: {} = {:?}", name, expr);
+		// println!("named param assignment: {} = {:?}", name, expr);
 		Ok(())
 	} else {
 		let expr = parse_expr(p)?;
-		println!("ordered param assignment: {:?}", expr);
+		// println!("ordered param assignment: {:?}", expr);
 		Ok(())
 	}
 }
+
+
+fn parse_procedure(p: &mut Parser, kind: ProcedureKind) -> ReportedResult<Procedure> {
+	p.bump();
+	let mut span = p.last_span();
+	let stmt = parse_stmt(p)?;
+	span.expand(p.last_span());
+	Ok(Procedure {
+		span: span,
+		kind: kind,
+		stmt: stmt,
+	})
+}
+
+
+fn parse_func_decl(p: &mut Parser) -> ReportedResult<()> {
+	let q = p.peek(0).1;
+	p.bump();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse function declarations").span(q));
+	p.recover_balanced(&[Keyword(Kw::Endfunction)], true);
+	Err(())
+}
+
+
+fn parse_task_decl(p: &mut Parser) -> ReportedResult<()> {
+	let q = p.peek(0).1;
+	p.bump();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse task declarations").span(q));
+	p.recover_balanced(&[Keyword(Kw::Endtask)], true);
+	Err(())
+}
+
+
+fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
+	let mut span = p.peek(0).1;
+
+	// Null statements simply consist of a semicolon.
+	if p.try_eat(Semicolon) {
+		return Ok(Stmt::new_null(span));
+	}
+
+	// Consume the optional statement label.
+	let mut label = if p.peek(1).0 == Colon {
+		let (n,_) = p.eat_ident("statement label")?;
+		p.bump(); // eat the colon
+		Some(n)
+	} else {
+		None
+	};
+
+	// Parse the actual statement item.
+	let (tkn, sp) = p.peek(0);
+	let data = match tkn {
+		// Sequential blocks
+		OpenDelim(Bgend) => {
+			p.bump();
+			let (stmts, _) = parse_block(p, &mut label, &[CloseDelim(Bgend)])?;
+			SequentialBlock(stmts)
+		}
+
+		// Parallel blocks
+		Keyword(Kw::Fork) => {
+			p.bump();
+			let (stmts, terminator) = parse_block(p, &mut label, &[Keyword(Kw::Join), Keyword(Kw::JoinAny), Keyword(Kw::JoinNone)])?;
+			let join = match terminator {
+				Keyword(Kw::Join) => JoinKind::All,
+				Keyword(Kw::JoinAny) => JoinKind::Any,
+				Keyword(Kw::JoinNone) => JoinKind::None,
+				x => panic!("Invalid parallel block terminator {:?}", x),
+			};
+			ParallelBlock(stmts, join)
+		}
+
+		x => {
+			p.add_diag(DiagBuilder2::error(format!("Expected statement, got {:?} instead", x)).span(sp));
+			p.recover_balanced(&[Semicolon], true);
+			return Err(());
+		}
+	};
+	span.expand(p.last_span());
+
+	Ok(Stmt {
+		span: span,
+		label: label,
+		data: data,
+	})
+}
+
+
+fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) -> ReportedResult<(Vec<Stmt>, Token)> {
+	let span = p.last_span();
+
+	// Consume the optional block label. If the block has already been labelled
+	// via a statement label, an additional block label is illegal.
+	if p.try_eat(Colon) {
+		let (name, name_span) = p.eat_ident("block label")?;
+		if let Some(existing) = *label {
+			if name == existing {
+				p.add_diag(DiagBuilder2::warning(format!("Block {} labelled twice", name)).span(name_span));
+			} else {
+				p.add_diag(DiagBuilder2::error(format!("Block has been given two conflicting labels, {} and {}", existing, name)).span(name_span));
+			}
+		} else {
+			*label = Some(name);
+		}
+	}
+
+	// Parse the block statements.
+	let mut v = Vec::new();
+	let terminator;
+	'outer: loop {
+		// Check if we have reached one of the terminators.
+		let tkn = p.peek(0).0;
+		for term in terminators {
+			if tkn == *term {
+				terminator = *term;
+				break 'outer;
+			}
+		}
+
+		// Otherwise parse the next statement.
+		match parse_stmt(p) {
+			Ok(x) => v.push(x),
+			Err(()) => {
+				p.recover_balanced(terminators, false);
+				terminator = p.peek(0).0;
+				p.bump();
+				break;
+			}
+		}
+	}
+
+	// Consume the optional block label after the terminator and verify that it
+	// matches the label provided at the beginning of the block.
+	if p.try_eat(Colon) {
+		let (name, name_span) = p.eat_ident("block label")?;
+		if let Some(before) = *label {
+			if before != name {
+				p.add_diag(DiagBuilder2::error(format!("Block label {} at end of block does not match label {} at beginning of block", name, before)).span(name_span));
+			}
+		} else {
+			p.add_diag(DiagBuilder2::error(format!("Block label {} provided at the end of the block, but not at the beginning", name)).span(name_span));
+		}
+	}
+
+	Ok((v, terminator))
+}
+
 
 
 #[cfg(test)]
