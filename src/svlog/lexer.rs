@@ -68,6 +68,8 @@ impl<'a> Lexer<'a> {
 					('^','=') => Some(AssignXor),
 					('<','=') => Some(Leq),
 					('>','=') => Some(Geq),
+					('=','=') => Some(Eq),
+					('!','=') => Some(Neq),
 					('~','&') => Some(Nand),
 					('~','|') => Some(Nor),
 					('~','^') => Some(Nxor),
@@ -85,6 +87,7 @@ impl<'a> Lexer<'a> {
 				};
 				if let Some(tkn) = sym {
 					let sp = Span::union(self.peek[0].1, self.peek[1].1);
+					self.bump()?;
 					self.bump()?;
 					return Ok((tkn, sp));
 				}

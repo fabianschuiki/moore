@@ -355,14 +355,14 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 	}
 
 	// Eat the items in the interface.
-	while p.peek(0).0 != Keyword(Kw::Endinterface) {
-		match try_hierarchy_item(p) {
-			Some(Ok(())) => (),
-			Some(Err(())) => p.recover(&[Keyword(Kw::Endinterface)], false),
-			None => {
-				let (tkn, q) = p.peek(0);
-				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
+	while p.peek(0).0 != Keyword(Kw::Endinterface) && p.peek(0).0 != Eof {
+		let q = p.peek(0).1;
+		match parse_hierarchy_item(p) {
+			Ok(_) => (),
+			Err(()) => {
+				p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
 				p.recover(&[Keyword(Kw::Endinterface)], false);
+				break;
 			}
 		}
 	}
@@ -554,13 +554,13 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 
 	// Eat the items in the module.
 	while p.peek(0).0 != Keyword(Kw::Endmodule) && p.peek(0).0 != Eof {
-		match try_hierarchy_item(p) {
-			Some(Ok(())) => (),
-			Some(Err(())) => p.recover(&[Keyword(Kw::Endmodule)], false),
-			None => {
-				let (tkn, q) = p.peek(0);
-				p.add_diag(DiagBuilder2::error(format!("Expected hierarchy item, got {:?}", tkn)).span(q));
+		let q = p.peek(0).1;
+		match parse_hierarchy_item(p) {
+			Ok(_) => (),
+			Err(()) => {
+				p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
 				p.recover(&[Keyword(Kw::Endmodule)], false);
+				break;
 			}
 		}
 	}
@@ -582,15 +582,15 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 }
 
 
-fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
+fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 	// First attempt the simple cases where a keyword reliably identifies the
 	// following item.
 	let (tkn, _) = p.peek(0);
-	let f = |p, func, term| Some(hierarchy_item_wrapper(p, func, term));
-	let map_proc = |result: ReportedResult<Procedure>| Some(result.map(|r| {
+	let f = |p, func, term| hierarchy_item_wrapper(p, func, term);
+	let map_proc = |result: ReportedResult<Procedure>| result.map(|r| {
 		println!("parsed proc {:?}", r);
 		()
-	}));
+	});
 	match tkn {
 		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
 		Keyword(Kw::Parameter) => return f(p, parse_parameter_decl, Semicolon),
@@ -603,8 +603,11 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 		Keyword(Kw::AlwaysLatch) => return map_proc(parse_procedure(p, ProcedureKind::AlwaysLatch)),
 		Keyword(Kw::AlwaysFf)    => return map_proc(parse_procedure(p, ProcedureKind::AlwaysFf)),
 		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
-		Keyword(Kw::Function)    => return Some(parse_func_decl(p)),
-		Keyword(Kw::Task)        => return Some(parse_task_decl(p)),
+		Keyword(Kw::Function)    => return parse_func_decl(p),
+		Keyword(Kw::Task)        => return parse_task_decl(p),
+
+		// Continuous assign
+		Keyword(Kw::Assign)      => { parse_continuous_assign(p)?; return Ok(()); },
 
 		_ => ()
 	}
@@ -623,7 +626,7 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 		Ok(x) => x,
 		Err(_) => {
 			p.recover_balanced(&[Semicolon], true);
-			return Some(Err(()));
+			return Err(());
 		}
 	};
 
@@ -633,27 +636,17 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 
 	// In case this is an instantiation, some parameter assignments may follow.
 	if p.try_eat(Hashtag) {
-		match parse_parameter_assignments(p) {
-			Ok(x) => x,
-			Err(()) => return Some(Err(()))
-		};
+		parse_parameter_assignments(p)?;
 	}
 
 	// Parse the list of variable declaration assignments.
 	loop {
-		let (name, span) = match p.eat_ident_or("variable or instance name") {
-			Ok(x) => x,
-			Err(e) => {
-				p.bump();
-				p.add_diag(e);
-				return Some(Err(()));
-			}
-		};
+		let (name, span) = p.eat_ident("variable or instance name")?;
 
 		// Parse the optional variable dimensions.
 		let dims = match parse_optional_dimensions(p) {
 			Ok(x) => x,
-			Err(_) => return Some(Err(())),
+			Err(_) => return Err(()),
 		};
 
 		// Parse the optional assignment.
@@ -664,14 +657,8 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 			}
 			(OpenDelim(Paren), sp) => {
 				p.bump();
-				match parse_list_of_port_connections(p) {
-					Ok(x) => x,
-					Err(()) => return Some(Err(())),
-				};
-				match p.require_reported(CloseDelim(Paren)) {
-					Ok(_) => (),
-					Err(x) => return Some(Err(x)),
-				}
+				parse_list_of_port_connections(p)?;
+				p.require_reported(CloseDelim(Paren))?;
 			}
 			_ => ()
 		}
@@ -694,12 +681,12 @@ fn try_hierarchy_item(p: &mut Parser) -> Option<ReportedResult<()>> {
 			(_, sp) => {
 				p.add_diag(DiagBuilder2::error("Expected , or ; after variable declaration").span(sp));
 				p.recover(&[Semicolon], true);
-				return Some(Err(()));
+				return Err(());
 			}
 		}
 	}
 
-	Some(Ok(()))
+	Ok(())
 }
 
 
@@ -1512,6 +1499,12 @@ fn as_binary_operator(tkn: Token) -> Option<BinaryOp> {
 		Shr => Some(BinaryOp::Stuff),
 		Pow => Some(BinaryOp::Stuff),
 		Rarrow => Some(BinaryOp::Stuff),
+		Eq => Some(BinaryOp::Stuff),
+		Neq => Some(BinaryOp::Stuff),
+		Leq => Some(BinaryOp::Stuff),
+		Geq => Some(BinaryOp::Stuff),
+		Lt => Some(BinaryOp::Stuff),
+		Gt => Some(BinaryOp::Stuff),
 		_ => None,
 	}
 }
@@ -1812,6 +1805,12 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 			ParallelBlock(stmts, join)
 		}
 
+		// If and case statements
+		Keyword(Kw::Unique)   => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Unique))? }
+		Keyword(Kw::Unique0)  => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Unique0))? }
+		Keyword(Kw::Priority) => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Priority))? }
+		Keyword(Kw::If) | Keyword(Kw::Case) | Keyword(Kw::Casex) | Keyword(Kw::Casez) => parse_if_or_case(p, None)?,
+
 		x => {
 			p.add_diag(DiagBuilder2::error(format!("Expected statement, got {:?} instead", x)).span(sp));
 			p.recover_balanced(&[Semicolon], true);
@@ -1887,6 +1886,68 @@ fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) 
 	Ok((v, terminator))
 }
 
+
+fn parse_continuous_assign(p: &mut Parser) -> ReportedResult<()> {
+	p.bump();
+	let mut span = p.last_span();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse continuous assigns").span(span));
+	p.recover_balanced(&[Semicolon], true);
+	Err(())
+}
+
+
+fn parse_if_or_case(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
+	let (tkn, span) = p.peek(0);
+	match tkn {
+		// Case statements
+		Keyword(Kw::Case)  => { p.bump(); parse_case(p, up, CaseKind::Normal) },
+		Keyword(Kw::Casez) => { p.bump(); parse_case(p, up, CaseKind::DontCareZ) },
+		Keyword(Kw::Casex) => { p.bump(); parse_case(p, up, CaseKind::DontCareXZ) },
+
+		// If statement
+		Keyword(Kw::If) => { p.bump(); parse_if(p, up) },
+
+		x => {
+			p.add_diag(DiagBuilder2::error(format!("Expected case or if statement, got {:?}", x)).span(span));
+			Err(())
+		}
+	}
+}
+
+
+fn parse_case(p: &mut Parser, up: Option<UniquePriority>, kind: CaseKind) -> ReportedResult<StmtData> {
+	let q = p.last_span();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse case statements").span(q));
+	p.recover_balanced(&[Keyword(Kw::Endcase)], true);
+	Err(())
+}
+
+
+fn parse_if(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
+	// Parse the condition expression surrounded by parenthesis.
+	p.require_reported(OpenDelim(Paren))?;
+	let cond = match parse_expr(p) {
+		Ok(x) => x,
+		Err(()) => {
+			p.recover_balanced(&[CloseDelim(Paren)], true);
+			return Err(());
+		}
+	};
+	p.require_reported(CloseDelim(Paren))?;
+
+	// Parse the main statement.
+	let main_stmt = parse_stmt(p)?;
+
+	// Parse the optional "else" branch.
+	let else_stmt = if p.peek(0).0 == Keyword(Kw::Else) {
+		p.bump();
+		Some(parse_stmt(p)?)
+	} else {
+		None
+	};
+
+	Ok(NullStmt)
+}
 
 
 #[cfg(test)]

@@ -170,3 +170,17 @@ pub enum JoinKind {
 	Any,
 	None,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UniquePriority {
+	Unique,
+	Unique0,
+	Priority,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaseKind {
+	Normal,
+	DontCareZ,
+	DontCareXZ,
+}
