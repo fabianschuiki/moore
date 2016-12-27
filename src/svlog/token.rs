@@ -8,94 +8,25 @@ pub use self::DelimToken::*;
 pub use self::Token::*;
 pub use self::Lit::*;
 use name::Name;
+use std::fmt::{Display, Formatter, Result};
 
 
 /// A primary token emitted by the lexer.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Token {
-	// TODO: Sort these and separate logic and bitwise operators (e.g. logic AND
-	// and bitwise AND), as well as the various relational operators. Also
-	// introduce a precedence function that assigns each operator a precedence.
-
 	// Symbols
-	Add,
-	AddColon,
-	Amp,
-	AmpAmp,
-	AmpEq,
-	And,
-	Assign,
-	AssignAdd,
-	AssignAnd,
-	AssignDiv,
-	AssignMod,
-	AssignMul,
-	AssignOr,
-	AssignSub,
-	AssignXor,
-	At,
-	Caret,
-	CaretEq,
-	CaretTilda,
-	Colon,
 	Comma,
-	Dec,
-	Div,
-	Eq,
-	EqEq,
-	Equal,
-	Geq,
-	Gt,
-	GtEq,
-	GtGt,
-	Hashtag,
-	Impl,
-	Inc,
-	Leq,
-	Lt,
-	LtEq,
-	LtLt,
-	Minus,
-	MinusEq,
-	MinusMinus,
-	Mod,
-	ModEq,
-	Mul,
-	Namespace,
-	Nand,
-	Neg,
-	Neq,
-	Nor,
-	Not,
-	NotEq,
-	Nxor,
-	Or,
 	Period,
-	Pipe,
-	PipeEq,
-	PipePipe,
-	Plus,
-	PlusEq,
-	PlusPlus,
-	Pow,
-	Quest,
-	Rarrow,
+	Colon,
 	Semicolon,
-	Shl,
-	Shr,
-	Slash,
-	SlashEq,
-	Star,
-	StarEq,
-	StarStar,
-	Sub,
-	SubColon,
+	At,
+	Hashtag,
+	Namespace,
 	Ternary,
-	Tilda,
-	TildaAmp,
-	TildaCaret,
-	Xnor,
-	Xor,
+	AddColon,
+	SubColon,
+
+	Operator(Op),
 
 	/// An opening delimiter
 	OpenDelim(DelimToken),
@@ -106,10 +37,6 @@ pub enum Token {
 	Literal(Lit),
 	/// A system task or function identifier, e.g. "$display"
 	SysIdent(Name),
-	/// A `define compiler directive
-	Define(Name,Name),
-	/// An `include compiler directive
-	Include(Name),
 	/// A compiler directive, e.g. "`timescale"
 	CompDir(Name),
 	/// An identifier
@@ -123,6 +50,47 @@ pub enum Token {
 
 	// The end of the input file
 	Eof,
+}
+
+impl Token {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			// Symbols
+			Comma     => ",",
+			Period    => ".",
+			Colon     => ":",
+			Semicolon => ";",
+			At        => "@",
+			Hashtag   => "#",
+			Namespace => "::",
+			Ternary   => "?",
+			AddColon  => "+:",
+			SubColon  => "-:",
+
+			Operator(op) => op.as_str(),
+
+			// Opening and closing delimiters
+			OpenDelim(Paren) => "(",
+			OpenDelim(Brack) => "[",
+			OpenDelim(Brace) => "{",
+			OpenDelim(Bgend) => "begin",
+			CloseDelim(Paren) => ")",
+			CloseDelim(Brack) => "]",
+			CloseDelim(Brace) => "}",
+			CloseDelim(Bgend) => "end",
+
+			Keyword(kw) => kw.as_str(),
+
+			Literal(_)        => "literal",
+			SysIdent(_)       => "system identifier",
+			CompDir(_)        => "compiler directive",
+			Ident(_)          => "identifier",
+			EscIdent(_)       => "escaped identifier",
+			UnsignedNumber(_) => "unsigned number",
+
+			Eof       => "end of file",
+		}
+	}
 }
 
 
@@ -147,6 +115,242 @@ pub enum Lit {
 	Decimal(Name),
 	BasedInteger(Option<Name>, bool, char, Name),
 	UnbasedUnsized(char),
+	Real(Name),
+	Time(Name),
+}
+
+
+/// Operator symbols.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Op {
+	// Assignment
+	Assign,
+	AssignAdd,
+	AssignSub,
+	AssignMul,
+	AssignDiv,
+	AssignMod,
+	AssignBitAnd,
+	AssignBitOr,
+	AssignBitXor,
+	AssignLogicShL,
+	AssignLogicShR,
+	AssignArithShL,
+	AssignArithShR,
+
+	// Arithmetic
+	Add,
+	Sub,
+	Mul,
+	Div,
+	Mod,
+	Pow,
+	Inc,
+	Dec,
+
+	// Equality
+	LogicEq,
+	LogicNeq,
+	CaseEq,
+	CaseNeq,
+	WildcardEq,
+	WildcardNeq,
+
+	// Relational
+	Lt,
+	Leq,
+	Gt,
+	Geq,
+
+	// Logic
+	LogicNot,
+	LogicAnd,
+	LogicOr,
+	LogicImpl,
+	LogicEquiv,
+
+	// Bitwise
+	BitNot,
+	BitAnd,
+	BitNand,
+	BitOr,
+	BitNor,
+	BitXor,
+	BitXnor,
+	BitNxor,
+
+	// Shift
+	LogicShL,
+	LogicShR,
+	ArithShL,
+	ArithShR,
+}
+
+impl Op {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			// Assignment
+			Op::Assign          => "=",
+			Op::AssignAdd       => "+=",
+			Op::AssignSub       => "-=",
+			Op::AssignMul       => "*=",
+			Op::AssignDiv       => "/=",
+			Op::AssignMod       => "%=",
+			Op::AssignBitAnd    => "&=",
+			Op::AssignBitOr     => "|=",
+			Op::AssignBitXor    => "^=",
+			Op::AssignLogicShL  => "<<=",
+			Op::AssignLogicShR  => ">>=",
+			Op::AssignArithShL  => "<<<=",
+			Op::AssignArithShR  => ">>>=",
+
+			// Arithmetic
+			Op::Add         => "+",
+			Op::Sub         => "-",
+			Op::Mul         => "*",
+			Op::Div         => "/",
+			Op::Mod         => "%",
+			Op::Pow         => "**",
+			Op::Inc         => "++",
+			Op::Dec         => "--",
+
+			// Equality
+			Op::LogicEq     => "==",
+			Op::LogicNeq    => "!=",
+			Op::CaseEq      => "===",
+			Op::CaseNeq     => "!==",
+			Op::WildcardEq  => "==?",
+			Op::WildcardNeq => "!=?",
+
+			// Relational
+			Op::Lt          => "<",
+			Op::Leq         => "<=",
+			Op::Gt          => ">",
+			Op::Geq         => ">=",
+
+			// Logic
+			Op::LogicNot    => "!",
+			Op::LogicAnd    => "&&",
+			Op::LogicOr     => "||",
+			Op::LogicImpl   => "->",
+			Op::LogicEquiv  => "<->",
+
+			// Bitwise
+			Op::BitNot      => "~",
+			Op::BitAnd      => "&",
+			Op::BitNand     => "~&",
+			Op::BitOr       => "|",
+			Op::BitNor      => "~|",
+			Op::BitXor      => "^",
+			Op::BitXnor     => "^~",
+			Op::BitNxor     => "~^",
+
+			// Shift
+			Op::LogicShL    => "<<",
+			Op::LogicShR    => ">>",
+			Op::ArithShL    => "<<<",
+			Op::ArithShR    => ">>>",
+		}
+	}
+
+	pub fn get_precedence(self) -> Precedence {
+		match self {
+			// Assignment
+			Op::Assign          |
+			Op::AssignAdd       |
+			Op::AssignSub       |
+			Op::AssignMul       |
+			Op::AssignDiv       |
+			Op::AssignMod       |
+			Op::AssignBitAnd    |
+			Op::AssignBitOr     |
+			Op::AssignBitXor    |
+			Op::AssignLogicShL  |
+			Op::AssignLogicShR  |
+			Op::AssignArithShL  |
+			Op::AssignArithShR  => Precedence::Assignment,
+
+			// Arithmetic
+			Op::Add         |
+			Op::Sub         => Precedence::Add,
+			Op::Mul         |
+			Op::Div         |
+			Op::Mod         => Precedence::Mul,
+			Op::Pow         => Precedence::Pow,
+			Op::Inc         |
+			Op::Dec         => Precedence::Unary,
+
+			// Equality
+			Op::LogicEq     |
+			Op::LogicNeq    |
+			Op::CaseEq      |
+			Op::CaseNeq     |
+			Op::WildcardEq  |
+			Op::WildcardNeq => Precedence::Equality,
+
+			// Relational
+			Op::Lt          |
+			Op::Leq         |
+			Op::Gt          |
+			Op::Geq         => Precedence::Relational,
+
+			// Logic
+			Op::LogicNot    => Precedence::Unary,
+			Op::LogicAnd    => Precedence::LogicAnd,
+			Op::LogicOr     => Precedence::LogicOr,
+			Op::LogicImpl   |
+			Op::LogicEquiv  => Precedence::Implication,
+
+			// Bitwise
+			Op::BitNot      => Precedence::Unary,
+			Op::BitAnd      => Precedence::BitAnd,
+			Op::BitNand     => Precedence::Unary,
+			Op::BitOr       => Precedence::BitOr,
+			Op::BitNor      => Precedence::Unary,
+			Op::BitXor      |
+			Op::BitXnor     |
+			Op::BitNxor     => Precedence::BitXor,
+
+			// Shift
+			Op::LogicShL    |
+			Op::LogicShR    |
+			Op::ArithShL    |
+			Op::ArithShR    => Precedence::Shift,
+		}
+	}
+}
+
+impl Display for Op {
+	fn fmt(&self, f: &mut Formatter) -> Result {
+		write!(f, "{}", self.as_str())
+	}
+}
+
+
+/// Expression precedence. Note that a few kinds of expression are
+/// right-associative rather than the default left-associative.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Precedence {
+	Min,
+	MinTypMax,
+	Concatenation, // no associativity
+	Assignment,    // no associativity
+	Implication,   // right-associative
+	Ternary,       // right-associative
+	LogicOr,
+	LogicAnd,
+	BitOr,
+	BitXor,
+	BitAnd,
+	Equality,
+	Relational,
+	Shift,
+	Add,
+	Mul,
+	Pow,
+	Unary,
+	Scope,
+	Max,
 }
 
 
@@ -159,7 +363,7 @@ macro_rules! declare_keywords {(
 	}
 
 	impl Kw {
-		pub fn to_str(self) -> &'static str {
+		pub fn as_str(self) -> &'static str {
 			match self {
 				$(Kw::$konst => $string,)*
 			}

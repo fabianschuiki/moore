@@ -18,24 +18,25 @@ pub type TokenAndSpan = (Token, Span);
 /// A lexical analyzer for SystemVerilog files.
 pub struct Lexer<'a> {
 	input: Preprocessor<'a>,
-	peek: [CatTokenAndSpan; 3],
+	peek: [CatTokenAndSpan; 4],
 }
 
 impl<'a> Lexer<'a> {
 	pub fn new(input: Preprocessor<'a>) -> Lexer {
 		Lexer {
 			input: input,
-			peek: [(CatTokenKind::Eof, INVALID_SPAN); 3],
+			peek: [(CatTokenKind::Eof, INVALID_SPAN); 4],
 		}
 	}
 
 	pub fn bump(&mut self) -> DiagResult2<()> {
 		self.peek[0] = self.peek[1];
 		self.peek[1] = self.peek[2];
-		self.peek[2] = match self.input.next() {
+		self.peek[2] = self.peek[3];
+		self.peek[3] = match self.input.next() {
 			Some(Err(e)) => return Err(e),
 			Some(Ok(x)) => x,
-			None => (CatTokenKind::Eof, self.peek[1].1),
+			None => (CatTokenKind::Eof, self.peek[2].1),
 		};
 
 		Ok(())
@@ -48,6 +49,7 @@ impl<'a> Lexer<'a> {
 			self.bump()?;
 			self.bump()?;
 			self.bump()?;
+			self.bump()?;
 		}
 
 		let name_table = get_name_table();
@@ -55,31 +57,92 @@ impl<'a> Lexer<'a> {
 		loop {
 			self.skip_noise()?;
 
+			// Match 4-character symbols
+			if let (CatTokenKind::Symbol(c0), CatTokenKind::Symbol(c1), CatTokenKind::Symbol(c2), CatTokenKind::Symbol(c3)) = (self.peek[0].0, self.peek[1].0, self.peek[2].0, self.peek[3].0) {
+				let sym = match (c0,c1,c2,c3) {
+					// Assignment
+					('<','<','<','=') => Some(Operator(Op::AssignArithShL)),
+					('>','>','>','=') => Some(Operator(Op::AssignArithShR)),
+					_ => None,
+				};
+				if let Some(tkn) = sym {
+					let sp = Span::union(self.peek[0].1, self.peek[3].1);
+					self.bump()?;
+					self.bump()?;
+					self.bump()?;
+					self.bump()?;
+					return Ok((tkn, sp));
+				}
+			}
+
+			// Match 3-character symbols
+			if let (CatTokenKind::Symbol(c0), CatTokenKind::Symbol(c1), CatTokenKind::Symbol(c2)) = (self.peek[0].0, self.peek[1].0, self.peek[2].0) {
+				let sym = match (c0,c1,c2) {
+					// Assignment
+					('<','<','=') => Some(Operator(Op::AssignLogicShL)),
+					('>','>','=') => Some(Operator(Op::AssignLogicShR)),
+
+					// Equality
+					('=','=','=') => Some(Operator(Op::CaseEq)),
+					('!','=','=') => Some(Operator(Op::CaseNeq)),
+					('=','=','?') => Some(Operator(Op::WildcardEq)),
+					('!','=','?') => Some(Operator(Op::WildcardNeq)),
+
+					// Logic
+					('<','-','>') => Some(Operator(Op::LogicEquiv)),
+
+					// Shift
+					('<','<','<') => Some(Operator(Op::ArithShL)),
+					('>','>','>') => Some(Operator(Op::ArithShR)),
+					_ => None,
+				};
+				if let Some(tkn) = sym {
+					let sp = Span::union(self.peek[0].1, self.peek[2].1);
+					self.bump()?;
+					self.bump()?;
+					self.bump()?;
+					return Ok((tkn, sp));
+				}
+			}
+
 			// Match 2-character symbols
 			if let (CatTokenKind::Symbol(c0), CatTokenKind::Symbol(c1)) = (self.peek[0].0, self.peek[1].0) {
 				let sym = match (c0,c1) {
-					('+','=') => Some(AssignAdd),
-					('-','=') => Some(AssignSub),
-					('*','=') => Some(AssignMul),
-					('/','=') => Some(AssignDiv),
-					('%','=') => Some(AssignMod),
-					('&','=') => Some(AssignAnd),
-					('|','=') => Some(AssignOr),
-					('^','=') => Some(AssignXor),
-					('<','=') => Some(Leq),
-					('>','=') => Some(Geq),
-					('=','=') => Some(Eq),
-					('!','=') => Some(Neq),
-					('~','&') => Some(Nand),
-					('~','|') => Some(Nor),
-					('~','^') => Some(Nxor),
-					('^','~') => Some(Xnor),
-					('*','*') => Some(Pow),
-					('+','+') => Some(Inc),
-					('-','-') => Some(Dec),
-					('<','<') => Some(Shl),
-					('>','>') => Some(Shr),
-					('-','>') => Some(Rarrow),
+					// Assignment
+					('+','=') => Some(Operator(Op::AssignAdd)),
+					('-','=') => Some(Operator(Op::AssignSub)),
+					('*','=') => Some(Operator(Op::AssignMul)),
+					('/','=') => Some(Operator(Op::AssignDiv)),
+					('%','=') => Some(Operator(Op::AssignMod)),
+					('&','=') => Some(Operator(Op::AssignBitAnd)),
+					('|','=') => Some(Operator(Op::AssignBitOr)),
+					('^','=') => Some(Operator(Op::AssignBitXor)),
+
+					// Arithmetic
+					('+','+') => Some(Operator(Op::Inc)),
+					('-','-') => Some(Operator(Op::Dec)),
+					('*','*') => Some(Operator(Op::Pow)),
+
+					// Relational
+					('<','=') => Some(Operator(Op::Leq)),
+					('>','=') => Some(Operator(Op::Geq)),
+
+					// Logic
+					('=','=') => Some(Operator(Op::LogicEq)),
+					('!','=') => Some(Operator(Op::LogicNeq)),
+					('-','>') => Some(Operator(Op::LogicImpl)),
+
+					// Bitwise
+					('~','&') => Some(Operator(Op::BitNand)),
+					('~','|') => Some(Operator(Op::BitNor)),
+					('~','^') => Some(Operator(Op::BitNxor)),
+					('^','~') => Some(Operator(Op::BitXnor)),
+
+					// Shift
+					('<','<') => Some(Operator(Op::LogicShL)),
+					('>','>') => Some(Operator(Op::LogicShR)),
+
+					// Others
 					(':',':') => Some(Namespace),
 					('+',':') => Some(AddColon),
 					('-',':') => Some(SubColon),
@@ -96,6 +159,30 @@ impl<'a> Lexer<'a> {
 			// Match 1-character symbols.
 			if let CatTokenKind::Symbol(c0) = self.peek[0].0 {
 				let sym = match c0 {
+					// Assignment
+					'=' => Some(Operator(Op::Assign)),
+
+					// Arithmetic
+					'+' => Some(Operator(Op::Add)),
+					'-' => Some(Operator(Op::Sub)),
+					'*' => Some(Operator(Op::Mul)),
+					'/' => Some(Operator(Op::Div)),
+					'%' => Some(Operator(Op::Mod)),
+
+					// Relational
+					'<' => Some(Operator(Op::Lt)),
+					'>' => Some(Operator(Op::Gt)),
+
+					// Logic
+					'!' => Some(Operator(Op::LogicNot)),
+
+					// Bitwise
+					'~' => Some(Operator(Op::BitNot)),
+					'&' => Some(Operator(Op::BitAnd)),
+					'|' => Some(Operator(Op::BitOr)),
+					'^' => Some(Operator(Op::BitXor)),
+
+					// Others
 					'(' => Some(OpenDelim(Paren)),
 					')' => Some(CloseDelim(Paren)),
 					'[' => Some(OpenDelim(Brack)),
@@ -107,20 +194,7 @@ impl<'a> Lexer<'a> {
 					'.' => Some(Period),
 					':' => Some(Colon),
 					';' => Some(Semicolon),
-					'=' => Some(Assign),
-					'+' => Some(Add),
-					'-' => Some(Sub),
-					'*' => Some(Mul),
-					'/' => Some(Div),
-					'%' => Some(Mod),
-					'<' => Some(Lt),
-					'>' => Some(Gt),
-					'^' => Some(Xor),
 					'?' => Some(Ternary),
-					'!' => Some(Not),
-					'~' => Some(Neg),
-					'&' => Some(And),
-					'|' => Some(Or),
 					'@' => Some(At),
 					_ => None,
 				};

@@ -404,7 +404,7 @@ fn parse_parameter_port_list(p: &mut Parser) -> ReportedResult<Vec<()>> {
 
 			// TODO: Eat the unpacked dimensions.
 
-			if p.try_eat(Assign) {
+			if p.try_eat(Operator(Op::Assign)) {
 				match parse_constant_expr(p) {
 					Ok(_) => (),
 					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
@@ -455,20 +455,7 @@ fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
 	let (tkn, span) = p.peek(0);
 
 	// Try the unary operators.
-	let unary_op = match tkn {
-		Add =>  Some(()),
-		Sub =>  Some(()),
-		Not =>  Some(()),
-		Neg =>  Some(()),
-		And =>  Some(()),
-		Nand => Some(()),
-		Or =>   Some(()),
-		Xor =>  Some(()),
-		Nxor => Some(()),
-		Xnor => Some(()),
-		_ => None,
-	};
-	if let Some(x) = unary_op {
+	if let Some(x) = as_unary_operator(tkn) {
 		p.bump();
 		return parse_constant_expr(p);
 	}
@@ -489,20 +476,7 @@ fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
 
 	// Try the binary operators.
 	let (tkn, span) = p.peek(0);
-	let binary_op = match tkn {
-		Add =>  Some(()),
-		Sub =>  Some(()),
-		Mul =>  Some(()),
-		Div =>  Some(()),
-		Mod =>  Some(()),
-		And =>  Some(()),
-		Or =>  Some(()),
-		Xor =>  Some(()),
-		Xnor =>  Some(()),
-		Nxor =>  Some(()),
-		_ => None,
-	};
-	if let Some(x) = binary_op {
+	if let Some(x) = as_binary_operator(tkn) {
 		p.bump();
 		return parse_constant_expr(p);
 	}
@@ -651,7 +625,7 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 
 		// Parse the optional assignment.
 		match p.peek(0) {
-			(Assign, sp) => {
+			(Operator(Op::Assign), sp) => {
 				p.add_diag(DiagBuilder2::error(format!("Default variable assignments not implemented, for variable `{}`", name)).span(sp));
 				p.recover_balanced(&[Comma, Semicolon], false);
 			}
@@ -725,7 +699,7 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 		// TODO: Eat the unpacked dimensions.
 
 		// Eat the optional assignment.
-		if p.try_eat(Assign) {
+		if p.try_eat(Operator(Op::Assign)) {
 			match parse_constant_expr(p) {
 				Ok(_) => (),
 				Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
@@ -1013,7 +987,7 @@ fn try_dimension(p: &mut Parser) -> ReportedResult<Option<(TypeDim, Span)>> {
 			p.bump();
 			TypeDim::Unsized
 		},
-		Mul => {
+		Operator(Op::Mul) => {
 			p.bump();
 			TypeDim::Associative
 		},
@@ -1068,7 +1042,7 @@ fn parse_list_of_port_connections(p: &mut Parser) -> ReportedResult<Vec<()>> {
 	}
 	loop {
 		if p.try_eat(Period) {
-			if p.try_eat(Mul) {
+			if p.try_eat(Operator(Op::Mul)) {
 				// handle .* case
 				let q = p.last_span();
 				p.add_diag(DiagBuilder2::error("Don't know how to handle .* port connections").span(q));
@@ -1116,34 +1090,11 @@ fn parse_list_of_port_connections(p: &mut Parser) -> ReportedResult<Vec<()>> {
 }
 
 
-fn parse_expr(p: &mut Parser) -> ReportedResult<()> {
+fn parse_expr(p: &mut Parser) -> ReportedResult<Expr> {
 	parse_expr_prec(p, Precedence::Min)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Precedence {
-	Min,
-	Concatenation,
-	Assignment,
-	Implication,
-	Ternary,
-	LogicOr,
-	LogicAnd,
-	BinOr,
-	BinXor,
-	BinAnd,
-	Equality,
-	Relational,
-	Shift,
-	Add,
-	Mul,
-	Pow,
-	Unary,
-	Scope,
-	Max,
-}
-
-fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()> {
+fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<Expr> {
 	let prefix = parse_expr_first(p, precedence)?;
 
 	// Try to parse the index and call expressions.
@@ -1160,7 +1111,10 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()>
 				}
 			}
 			p.require_reported(CloseDelim(Brack))?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		// Call: "(" [list_of_arguments] ")"
@@ -1168,29 +1122,44 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()>
 			p.bump();
 			p.add_diag(DiagBuilder2::error("Don't know how to handle call expressions").span(sp));
 			p.recover_balanced(&[CloseDelim(Paren)], true);
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		Period if precedence <= Precedence::Scope => {
 			p.bump();
 			p.eat_ident("member name")?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		Namespace if precedence <= Precedence::Scope => {
 			p.bump();
 			p.eat_ident("scope name")?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
-		Inc if precedence <= Precedence::Unary => {
+		Operator(Op::Inc) if precedence <= Precedence::Unary => {
 			p.bump();
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
-		Dec if precedence <= Precedence::Unary => {
+		Operator(Op::Dec) if precedence <= Precedence::Unary => {
 			p.bump();
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		_ => ()
@@ -1202,27 +1171,38 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<()>
 		if precedence <= prec {
 			p.bump();
 			parse_expr_prec(p, prec)?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 	}
 
 	Ok(prefix)
 }
 
-fn parse_expr_first(p: &mut Parser, precedence: Precedence) -> ReportedResult<()> {
+fn parse_expr_first(p: &mut Parser, precedence: Precedence) -> ReportedResult<Expr> {
+	let first = p.peek(0).1;
+
 	// Certain expressions are introduced by an operator or keyword. Handle
 	// these cases first, since they are the quickest to decide.
 	match p.peek(0) {
-		(Inc, _) if precedence <= Precedence::Unary => {
+		(Operator(Op::Inc), _) if precedence <= Precedence::Unary => {
 			p.bump();
 			parse_expr_prec(p, Precedence::Unary)?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(first, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
-		(Dec, _) if precedence <= Precedence::Unary => {
+		(Operator(Op::Dec), _) if precedence <= Precedence::Unary => {
 			p.bump();
 			parse_expr_prec(p, Precedence::Unary)?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(first, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		(Keyword(Kw::Tagged), sp) => {
@@ -1237,7 +1217,10 @@ fn parse_expr_first(p: &mut Parser, precedence: Precedence) -> ReportedResult<()
 	if let Some(op) = as_unary_operator(p.peek(0).0) {
 		p.bump();
 		parse_primary_expr(p)?;
-		return Ok(());
+		return Ok(Expr {
+			span: Span::union(first, p.last_span()),
+			data: DummyExpr,
+		});
 	}
 
 	// Since none of the above matched, this must be a primary expression.
@@ -1245,20 +1228,68 @@ fn parse_expr_first(p: &mut Parser, precedence: Precedence) -> ReportedResult<()
 }
 
 
-fn parse_primary_expr(p: &mut Parser) -> ReportedResult<()> {
+fn parse_primary_expr(p: &mut Parser) -> ReportedResult<Expr> {
 	let (tkn, sp) = p.peek(0);
 	match tkn {
 		// Primary Literals
-		UnsignedNumber(_) => { p.bump(); return Ok(()); }
-		Literal(Lit::Str(..)) => { p.bump(); return Ok(()); }
-		Literal(Lit::Decimal(..)) => { p.bump(); return Ok(()); }
-		Literal(Lit::BasedInteger(..)) => { p.bump(); return Ok(()); }
-		Literal(Lit::UnbasedUnsized(..)) => { p.bump(); return Ok(()); }
+		UnsignedNumber(_) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
+		Literal(Lit::Str(..)) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
+		Literal(Lit::Decimal(..)) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
+		Literal(Lit::BasedInteger(..)) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
+		Literal(Lit::UnbasedUnsized(..)) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
 
 		// Identifiers
-		Ident(_) => { p.bump(); return Ok(()); }
-		EscIdent(_) => { p.bump(); return Ok(()); }
-		SysIdent(_) => { p.bump(); return Ok(()); }
+		Ident(_) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
+		EscIdent(_) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
+		SysIdent(_) => {
+			p.bump();
+			return Ok(Expr {
+				span: sp,
+				data: DummyExpr,
+			});
+		}
 
 		// Concatenation and empty queue
 		OpenDelim(Brace) => {
@@ -1266,7 +1297,10 @@ fn parse_primary_expr(p: &mut Parser) -> ReportedResult<()> {
 			if p.try_eat(CloseDelim(Brace)) {
 				// TODO: Handle empty queue.
 				p.add_diag(DiagBuilder2::error("Don't know what to do with an empty queue").span(sp));
-				return Ok(());
+				return Ok(Expr {
+					span: Span::union(sp, p.last_span()),
+					data: DummyExpr,
+				});
 			}
 			match parse_concat_expr(p) {
 				Ok(x) => x,
@@ -1276,13 +1310,16 @@ fn parse_primary_expr(p: &mut Parser) -> ReportedResult<()> {
 				}
 			};
 			p.require_reported(CloseDelim(Brace))?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(sp, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		// Parenthesis
 		OpenDelim(Paren) => {
 			p.bump();
-			match parse_primary_parenthesis(p) {
+			let e = match parse_primary_parenthesis(p) {
 				Ok(x) => x,
 				Err(e) => {
 					p.recover_balanced(&[CloseDelim(Paren)], true);
@@ -1290,7 +1327,10 @@ fn parse_primary_expr(p: &mut Parser) -> ReportedResult<()> {
 				}
 			};
 			p.require_reported(CloseDelim(Paren))?;
-			return Ok(());
+			return Ok(Expr {
+				span: Span::union(sp, p.last_span()),
+				data: DummyExpr,
+			});
 		}
 
 		_ => {
@@ -1309,8 +1349,8 @@ pub enum StreamDir {
 fn parse_concat_expr(p: &mut Parser) -> ReportedResult<()> {
 	/// Streaming concatenations have a "<<" or ">>" following the opening "{".
 	let stream = match p.peek(0).0 {
-		Shl => Some(StreamDir::Out),
-		Shr => Some(StreamDir::In),
+		Operator(Op::LogicShL) => Some(StreamDir::Out),
+		Operator(Op::LogicShR) => Some(StreamDir::In),
 		_ => None
 	};
 
@@ -1353,7 +1393,7 @@ fn parse_concat_expr(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_expr_list(p: &mut Parser) -> ReportedResult<Vec<()>> {
+fn parse_expr_list(p: &mut Parser) -> ReportedResult<Vec<Expr>> {
 	let mut v = Vec::new();
 	loop {
 		v.push(parse_expr_prec(p, Precedence::Max)?);
@@ -1434,78 +1474,100 @@ fn parse_range_expr(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum UnaryOp {
-	Add,
-	Sub,
-	Stuff,
-}
+// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+// pub enum UnaryOp {
+// 	Add,
+// 	Sub,
+// 	Stuff,
+// }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum BinaryOp {
-	Add,
-	Sub,
-	Mul,
-	Div,
-	Mod,
-	Shl,
-	Shr,
-	Pow,
-	Stuff,
-}
+// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+// pub enum BinaryOp {
+// 	Add,
+// 	Sub,
+// 	Mul,
+// 	Div,
+// 	Mod,
+// 	Shl,
+// 	Shr,
+// 	Pow,
+// 	Stuff,
+// }
 
-impl BinaryOp {
-	fn get_precedence(self) -> Precedence {
-		use self::BinaryOp::*;
-		match self {
-			Add | Sub => Precedence::Add,
-			Mul | Div | Mod => Precedence::Mul,
-			Shl | Shr => Precedence::Shift,
-			Pow => Precedence::Pow,
-			Stuff => Precedence::Add,
-		}
-	}
-}
+// impl BinaryOp {
+// 	fn get_precedence(self) -> Precedence {
+// 		use self::BinaryOp::*;
+// 		match self {
+// 			Add | Sub => Precedence::Add,
+// 			Mul | Div | Mod => Precedence::Mul,
+// 			Shl | Shr => Precedence::Shift,
+// 			Pow => Precedence::Pow,
+// 			Stuff => Precedence::Add,
+// 		}
+// 	}
+// }
 
 /// Convert a token to the corresponding UnaryOp. Return `None` if the token
 /// does not map to a unary operator.
-fn as_unary_operator(tkn: Token) -> Option<UnaryOp> {
-	match tkn {
-		Add => Some(UnaryOp::Add),
-		Sub => Some(UnaryOp::Sub),
-		Not => Some(UnaryOp::Stuff),
-		Neg => Some(UnaryOp::Stuff),
-		And => Some(UnaryOp::Stuff),
-		Nand => Some(UnaryOp::Stuff),
-		Or => Some(UnaryOp::Stuff),
-		Nor => Some(UnaryOp::Stuff),
-		Xor => Some(UnaryOp::Stuff),
-		Nxor => Some(UnaryOp::Stuff),
-		Xnor => Some(UnaryOp::Stuff),
-		_ => None,
+fn as_unary_operator(tkn: Token) -> Option<Op> {
+	if let Operator(op) = tkn {
+		match op {
+			Op::Add      |
+			Op::Sub      |
+			Op::LogicNot |
+			Op::BitNot   |
+			Op::BitAnd   |
+			Op::BitNand  |
+			Op::BitOr    |
+			Op::BitNor   |
+			Op::BitXor   |
+			Op::BitNxor  |
+			Op::BitXnor  => Some(op),
+			_ => None,
+		}
+	} else {
+		None
 	}
 }
 
 /// Convert a token to the corresponding BinaryOp. Return `None` if the token
 /// does not map to a binary operator.
-fn as_binary_operator(tkn: Token) -> Option<BinaryOp> {
-	match tkn {
-		Add => Some(BinaryOp::Stuff),
-		Sub => Some(BinaryOp::Stuff),
-		Mul => Some(BinaryOp::Stuff),
-		Div => Some(BinaryOp::Stuff),
-		Mod => Some(BinaryOp::Stuff),
-		Shl => Some(BinaryOp::Stuff),
-		Shr => Some(BinaryOp::Stuff),
-		Pow => Some(BinaryOp::Stuff),
-		Rarrow => Some(BinaryOp::Stuff),
-		Eq => Some(BinaryOp::Stuff),
-		Neq => Some(BinaryOp::Stuff),
-		Leq => Some(BinaryOp::Stuff),
-		Geq => Some(BinaryOp::Stuff),
-		Lt => Some(BinaryOp::Stuff),
-		Gt => Some(BinaryOp::Stuff),
-		_ => None,
+fn as_binary_operator(tkn: Token) -> Option<Op> {
+	if let Operator(op) = tkn {
+		match op {
+			Op::Add         |
+			Op::Sub         |
+			Op::Mul         |
+			Op::Div         |
+			Op::Mod         |
+			Op::LogicEq     |
+			Op::LogicNeq    |
+			Op::CaseEq      |
+			Op::CaseNeq     |
+			Op::WildcardEq  |
+			Op::WildcardNeq |
+			Op::LogicAnd    |
+			Op::LogicOr     |
+			Op::Pow         |
+			Op::Lt          |
+			Op::Leq         |
+			Op::Gt          |
+			Op::Geq         |
+			Op::BitAnd      |
+			Op::BitOr       |
+			Op::BitXor      |
+			Op::BitXnor     |
+			Op::BitNxor     |
+			Op::LogicShL    |
+			Op::LogicShR    |
+			Op::ArithShL    |
+			Op::ArithShR    |
+			Op::LogicImpl   |
+			Op::LogicEquiv  => Some(op),
+			_ => None,
+		}
+	} else {
+		None
 	}
 }
 
@@ -1652,7 +1714,7 @@ fn parse_port(p: &mut Parser, prev: Option<&Port>) -> ReportedResult<Port> {
 	}
 
 	// Parse the optional initial assignment for this port.
-	if p.try_eat(Equal) {
+	if p.try_eat(Operator(Op::Assign)) {
 		let q = p.peek(0).1;
 		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
 	}
@@ -1890,9 +1952,42 @@ fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) 
 fn parse_continuous_assign(p: &mut Parser) -> ReportedResult<()> {
 	p.bump();
 	let mut span = p.last_span();
-	p.add_diag(DiagBuilder2::error("Don't know how to parse continuous assigns").span(span));
-	p.recover_balanced(&[Semicolon], true);
-	Err(())
+
+	// Parse the optional delay control.
+	try_delay_control(p)?;
+
+	// Parse the optional drive strength.
+
+	// Parse the optional delay triple.
+
+	// Parse the list of assignments.
+	loop {
+		match parse_assignment(p) {
+			Ok(x) => (),
+			Err(()) => p.recover_balanced(&[Comma, Semicolon], false),
+		}
+
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if p.peek(0).0 == Semicolon {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				}
+			}
+			(Semicolon, _) => break,
+			(Eof, _) => break,
+			(_, sp) => {
+				p.add_diag(DiagBuilder2::error("Expected , or ; after assignment").span(sp));
+				p.recover_balanced(&[Comma, Semicolon], false);
+				break;
+			}
+		}
+	}
+
+	p.require_reported(Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
 }
 
 
@@ -1936,18 +2031,72 @@ fn parse_if(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResult<StmtDa
 	p.require_reported(CloseDelim(Paren))?;
 
 	// Parse the main statement.
-	let main_stmt = parse_stmt(p)?;
+	let main_stmt = Box::new(parse_stmt(p)?);
 
 	// Parse the optional "else" branch.
 	let else_stmt = if p.peek(0).0 == Keyword(Kw::Else) {
 		p.bump();
-		Some(parse_stmt(p)?)
+		Some(Box::new(parse_stmt(p)?))
 	} else {
 		None
 	};
 
-	Ok(NullStmt)
+	Ok(IfStmt {
+		up: up,
+		cond: cond,
+		main_stmt: main_stmt,
+		else_stmt: else_stmt,
+	})
 }
+
+
+fn try_delay_control(p: &mut Parser) -> ReportedResult<Option<DelayControl>> {
+	// Try to consume the hashtag which introduces the delay control.
+	if !p.try_eat(Hashtag) {
+		return Ok(None);
+	}
+	let mut span = p.last_span();
+
+	// Parse the delay value. This may either be a literal delay value,
+	// or a min-typ-max expression in parenthesis.
+	let (tkn, sp) = p.peek(0);
+	let expr = match tkn {
+		// Expression
+		OpenDelim(Paren) => {
+			p.bump();
+			let e = parse_expr_prec(p, Precedence::MinTypMax)?;
+			p.require_reported(CloseDelim(Paren))?;
+			e
+		}
+
+		// Literals
+		// TODO: Add real and time literals
+		UnsignedNumber(..) |
+		Literal(Real(..)) |
+		Literal(Time(..)) => parse_expr_first(p, Precedence::Max)?,
+
+		// TODO: Parse "1step" keyword
+		_ => {
+			p.add_diag(DiagBuilder2::error("Expected delay value or expression after #").span(sp));
+			return Err(());
+		}
+	};
+	span.expand(p.last_span());
+
+	Ok(Some(DelayControl {
+		span: span,
+		expr: expr,
+	}))
+}
+
+
+fn parse_assignment(p: &mut Parser) -> ReportedResult<(Expr, Expr)> {
+	let lhs = parse_expr_prec(p, Precedence::Assignment)?;
+	p.require_reported(Operator(Op::Assign))?;
+	let rhs = parse_expr_prec(p, Precedence::Assignment)?;
+	Ok((lhs, rhs))
+}
+
 
 
 #[cfg(test)]

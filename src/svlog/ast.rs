@@ -6,6 +6,7 @@ use name::Name;
 pub use self::TypeData::*;
 pub use self::PortKind::*;
 pub use self::StmtData::*;
+pub use self::ExprData::*;
 
 
 #[derive(Debug)]
@@ -152,6 +153,12 @@ pub enum StmtData {
 	NullStmt,
 	SequentialBlock(Vec<Stmt>),
 	ParallelBlock(Vec<Stmt>, JoinKind),
+	IfStmt {
+		up: Option<UniquePriority>,
+		cond: Expr,
+		main_stmt: Box<Stmt>,
+		else_stmt: Option<Box<Stmt>>
+	},
 }
 
 impl Stmt {
@@ -183,4 +190,23 @@ pub enum CaseKind {
 	Normal,
 	DontCareZ,
 	DontCareXZ,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DelayControl {
+	pub span: Span,
+	pub expr: Expr,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Expr {
+	pub span: Span,
+	pub data: ExprData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExprData {
+	DummyExpr
 }
