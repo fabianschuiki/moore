@@ -175,6 +175,13 @@ impl<'a> Parser<'a> {
 		}
 	}
 
+	fn is_ident(&mut self) -> bool {
+		match self.peek(0).0 {
+			Ident(_) | EscIdent(_) => true,
+			_ => false,
+		}
+	}
+
 	fn require(&mut self, expect: Token) -> Result<(), DiagBuilder2> {
 		match self.peek(0) {
 			(actual, _) if actual == expect => { self.bump(); Ok(()) },
@@ -1474,41 +1481,9 @@ fn parse_range_expr(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-// pub enum UnaryOp {
-// 	Add,
-// 	Sub,
-// 	Stuff,
-// }
 
-// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-// pub enum BinaryOp {
-// 	Add,
-// 	Sub,
-// 	Mul,
-// 	Div,
-// 	Mod,
-// 	Shl,
-// 	Shr,
-// 	Pow,
-// 	Stuff,
-// }
-
-// impl BinaryOp {
-// 	fn get_precedence(self) -> Precedence {
-// 		use self::BinaryOp::*;
-// 		match self {
-// 			Add | Sub => Precedence::Add,
-// 			Mul | Div | Mod => Precedence::Mul,
-// 			Shl | Shr => Precedence::Shift,
-// 			Pow => Precedence::Pow,
-// 			Stuff => Precedence::Add,
-// 		}
-// 	}
-// }
-
-/// Convert a token to the corresponding UnaryOp. Return `None` if the token
-/// does not map to a unary operator.
+/// Convert a token to the corresponding unary operator. Return `None` if the
+/// token does not map to a unary operator.
 fn as_unary_operator(tkn: Token) -> Option<Op> {
 	if let Operator(op) = tkn {
 		match op {
@@ -1530,8 +1505,8 @@ fn as_unary_operator(tkn: Token) -> Option<Op> {
 	}
 }
 
-/// Convert a token to the corresponding BinaryOp. Return `None` if the token
-/// does not map to a binary operator.
+/// Convert a token to the corresponding binary operator. Return `None` if the
+/// token does not map to a binary operator.
 fn as_binary_operator(tkn: Token) -> Option<Op> {
 	if let Operator(op) = tkn {
 		match op {
@@ -1568,6 +1543,27 @@ fn as_binary_operator(tkn: Token) -> Option<Op> {
 		}
 	} else {
 		None
+	}
+}
+
+/// Convert a token to the corresponding AssignOp. Return `None` if the token
+/// does not map to an assignment operator.
+fn as_assign_operator(tkn: Token) -> Option<AssignOp> {
+	match tkn {
+		Operator(Op::Assign)         => Some(AssignOp::Identity),
+		Operator(Op::AssignAdd)      => Some(AssignOp::Add),
+		Operator(Op::AssignSub)      => Some(AssignOp::Sub),
+		Operator(Op::AssignMul)      => Some(AssignOp::Mul),
+		Operator(Op::AssignDiv)      => Some(AssignOp::Div),
+		Operator(Op::AssignMod)      => Some(AssignOp::Mod),
+		Operator(Op::AssignBitAnd)   => Some(AssignOp::BitAnd),
+		Operator(Op::AssignBitOr)    => Some(AssignOp::BitOr),
+		Operator(Op::AssignBitXor)   => Some(AssignOp::BitXor),
+		Operator(Op::AssignLogicShL) => Some(AssignOp::LogicShL),
+		Operator(Op::AssignLogicShR) => Some(AssignOp::LogicShR),
+		Operator(Op::AssignArithShL) => Some(AssignOp::ArithShL),
+		Operator(Op::AssignArithShR) => Some(AssignOp::ArithShR),
+		_ => None,
 	}
 }
 
@@ -1836,7 +1832,7 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 	}
 
 	// Consume the optional statement label.
-	let mut label = if p.peek(1).0 == Colon {
+	let mut label = if p.is_ident() && p.peek(1).0 == Colon {
 		let (n,_) = p.eat_ident("statement label")?;
 		p.bump(); // eat the colon
 		Some(n)
@@ -1873,10 +1869,18 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 		Keyword(Kw::Priority) => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Priority))? }
 		Keyword(Kw::If) | Keyword(Kw::Case) | Keyword(Kw::Casex) | Keyword(Kw::Casez) => parse_if_or_case(p, None)?,
 
-		x => {
-			p.add_diag(DiagBuilder2::error(format!("Expected statement, got {:?} instead", x)).span(sp));
-			p.recover_balanced(&[Semicolon], true);
-			return Err(());
+		// Expression-based statements
+		_ => {
+			match parse_expr_stmt(p) {
+				Ok(x) => {
+					p.require_reported(Semicolon)?;
+					x
+				}
+				Err(()) => {
+					p.recover_balanced(&[Semicolon], true);
+					return Err(());
+				}
+			}
 		}
 	};
 	span.expand(p.last_span());
@@ -1916,6 +1920,7 @@ fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) 
 		for term in terminators {
 			if tkn == *term {
 				terminator = *term;
+				p.bump();
 				break 'outer;
 			}
 		}
@@ -1949,6 +1954,7 @@ fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) 
 }
 
 
+/// Parse a continuous assignment as per IEEE 1800-2009 section 10.3.
 fn parse_continuous_assign(p: &mut Parser) -> ReportedResult<()> {
 	p.bump();
 	let mut span = p.last_span();
@@ -2095,6 +2101,47 @@ fn parse_assignment(p: &mut Parser) -> ReportedResult<(Expr, Expr)> {
 	p.require_reported(Operator(Op::Assign))?;
 	let rhs = parse_expr_prec(p, Precedence::Assignment)?;
 	Ok((lhs, rhs))
+}
+
+
+fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
+	// Parse the leading expression.
+	let expr = parse_expr_prec(p, Precedence::Scope)?;
+	let (tkn, sp) = p.peek(0);
+
+	// Handle blocking assignments (IEEE 1800-2009 section 10.4.1), where the
+	// expression is followed by an assignment operator.
+	if let Some(op) = as_assign_operator(tkn) {
+		p.bump();
+		let rhs = parse_expr(p)?;
+		return Ok(BlockingAssignStmt {
+			lhs: expr,
+			rhs: rhs,
+			op: op,
+		});
+	}
+
+	// Handle non-blocking assignments (IEEE 1800-2009 section 10.4.2).
+	if tkn == Operator(Op::Leq) {
+		p.bump();
+
+		// Parse the optional delay and event control.
+		let delay_control = try_delay_control(p)?;
+		let event_control = /*try_event_control(p)?*/ None;
+
+		// Parse the right-hand side of the assignment.
+		let rhs = parse_expr(p)?;
+
+		return Ok(NonblockingAssignStmt {
+			lhs: expr,
+			rhs: rhs,
+			delay: delay_control,
+			event: event_control,
+		});
+	}
+
+	p.add_diag(DiagBuilder2::error(format!("Don't know how to handle {} when used in a statement after an expression", tkn)).span(sp));
+	return Err(());
 }
 
 

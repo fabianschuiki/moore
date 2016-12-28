@@ -93,6 +93,12 @@ impl Token {
 	}
 }
 
+impl Display for Token {
+	fn fmt(&self, f: &mut Formatter) -> Result {
+		write!(f, "{}", self.as_str())
+	}
+}
+
 
 /// A delimiter token such as parentheses or brackets.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

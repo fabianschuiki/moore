@@ -159,6 +159,17 @@ pub enum StmtData {
 		main_stmt: Box<Stmt>,
 		else_stmt: Option<Box<Stmt>>
 	},
+	BlockingAssignStmt {
+		lhs: Expr,
+		rhs: Expr,
+		op: AssignOp,
+	},
+	NonblockingAssignStmt {
+		lhs: Expr,
+		rhs: Expr,
+		delay: Option<DelayControl>,
+		event: Option<()>,
+	},
 }
 
 impl Stmt {
@@ -196,6 +207,23 @@ pub enum CaseKind {
 pub struct DelayControl {
 	pub span: Span,
 	pub expr: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssignOp {
+	Identity,
+	Add,
+	Sub,
+	Mul,
+	Div,
+	Mod,
+	BitAnd,
+	BitOr,
+	BitXor,
+	LogicShL,
+	LogicShR,
+	ArithShL,
+	ArithShR,
 }
 
 
