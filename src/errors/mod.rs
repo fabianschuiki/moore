@@ -99,10 +99,10 @@ impl DiagBuilder2 {
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Severity {
-	Fatal,
-	Error,
-	Warning,
 	Note,
+	Warning,
+	Error,
+	Fatal,
 }
 
 impl Severity {

@@ -2,6 +2,7 @@
 
 //! A parser for the SystemVerilog language. Based on IEEE 1800-2009.
 
+use std;
 use svlog::lexer::{Lexer, TokenAndSpan};
 use svlog::token::*;
 use std::collections::VecDeque;
@@ -32,6 +33,7 @@ struct Parser<'a> {
 	queue: VecDeque<TokenAndSpan>,
 	diagnostics: Vec<DiagBuilder2>,
 	last_span: Span,
+	severity: Severity,
 }
 
 impl<'a> Parser<'a> {
@@ -41,6 +43,7 @@ impl<'a> Parser<'a> {
 			queue: VecDeque::new(),
 			diagnostics: Vec::new(),
 			last_span: INVALID_SPAN,
+			severity: Severity::Note,
 		}
 	}
 
@@ -80,8 +83,13 @@ impl<'a> Parser<'a> {
 	}
 
 	fn add_diag(&mut self, diag: DiagBuilder2) {
-		// println!("*** {:?}", diag);
-		println!("{}: {}", diag.get_severity(), diag.get_message());
+		println!("");
+		let colorcode = match diag.get_severity() {
+			Severity::Fatal | Severity::Error => "\x1B[31;1m",
+			Severity::Warning => "\x1B[33;1m",
+			Severity::Note => "\x1B[35;1m",
+		};
+		println!("{}{}:\x1B[m\x1B[1m {}\x1B[m", colorcode, diag.get_severity(), diag.get_message());
 
 		// Dump the part of the source file that is affected.
 		if let Some(sp) = diag.get_span() {
@@ -110,9 +118,15 @@ impl<'a> Parser<'a> {
 				}
 			}
 
+			// Print the line in question.
 			let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
 			println!("{}:{}:{}-{}:", sp.source.get_path(), line, col, col + sp.extract().len());
-			for c in text.chars() {
+			for (mut i,c) in text.char_indices() {
+				i += line_offset;
+				if sp.begin != sp.end {
+					if i == sp.begin { print!("{}", colorcode); }
+					if i == sp.end { print!("\x1B[m"); }
+				}
 				match c {
 					'\t' => print!("    "),
 					c => print!("{}", c),
@@ -120,6 +134,8 @@ impl<'a> Parser<'a> {
 			}
 			print!("\n");
 
+			// Print the caret markers for the line in question.
+			let mut pd = ' ';
 			for (mut i,c) in text.char_indices() {
 				i += line_offset;
 				let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
@@ -127,17 +143,24 @@ impl<'a> Parser<'a> {
 				} else {
 					' '
 				};
+				if d != pd {
+					print!("{}", if d == ' ' {"\x1B[m"} else {colorcode});
+				}
+				pd = d;
 				match c {
 					'\t' => print!("{}{}{}{}", d, d, d, d),
 					_ => print!("{}", d),
 				}
 			}
-			print!("\n\n");
+			print!("\x1B[m\n");
 		}
 
+		// Keep track of the worst diagnostic severity we've encountered, such
+		// that parsing can be aborted accordingly.
+		if diag.get_severity() > self.severity {
+			self.severity = diag.get_severity();
+		}
 		self.diagnostics.push(diag);
-		// TODO: Keep track of the worst diagnostic encountered, such that fatal
-		// errors can properly abort parsing.
 	}
 
 	fn get_diagnostics(&self) -> &[DiagBuilder2] {
@@ -145,7 +168,11 @@ impl<'a> Parser<'a> {
 	}
 
 	fn is_fatal(&self) -> bool {
-		false
+		self.severity >= Severity::Fatal
+	}
+
+	fn is_error(&self) -> bool {
+		self.severity >= Severity::Error
 	}
 
 	fn try_eat_ident(&mut self) -> Option<(Name, Span)> {
@@ -267,7 +294,9 @@ impl<'a> Parser<'a> {
 pub fn parse(input: Lexer) {
 	let mut p = Parser::new(input);
 	parse_source_text(&mut p);
-	assert!(p.get_diagnostics().is_empty());
+	if p.is_error() {
+		std::process::exit(1);
+	}
 }
 
 fn parse_source_text(p: &mut Parser) {
