@@ -1461,11 +1461,11 @@ fn parse_expr_list(p: &mut Parser) -> ReportedResult<Vec<Expr>> {
 /// "(" expression ":" expression ":" expression ")"
 /// ```
 fn parse_primary_parenthesis(p: &mut Parser) -> ReportedResult<()> {
-	parse_expr_prec(p, Precedence::Scope)?;
+	parse_expr_prec(p, Precedence::Min)?;
 	if p.try_eat(Colon) {
-		parse_expr_prec(p, Precedence::Scope)?;
+		parse_expr_prec(p, Precedence::Min)?;
 		p.require_reported(Colon)?;
-		parse_expr_prec(p, Precedence::Scope)?;
+		parse_expr_prec(p, Precedence::Min)?;
 	}
 	return Ok(());
 }
