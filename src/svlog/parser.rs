@@ -1485,8 +1485,12 @@ fn parse_primary_expr(p: &mut Parser) -> ReportedResult<Expr> {
 		}
 
 		_ => {
-			p.add_diag(DiagBuilder2::error("Expected primary expression").span(sp));
-			return Err(());
+			let ty = Box::new(parse_data_type(p)?);
+			let expr = Expr {
+				span: Span::union(sp, p.last_span()),
+				data: TypeExpr(ty),
+			};
+			return Ok(expr);
 		}
 	}
 }

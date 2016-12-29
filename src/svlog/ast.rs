@@ -301,6 +301,7 @@ pub struct Expr {
 pub enum ExprData {
 	DummyExpr,
 	CallExpr(Box<Expr>, Vec<CallArg>),
+	TypeExpr(Box<Type>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
