@@ -287,7 +287,16 @@ pub struct Expr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprData {
-	DummyExpr
+	DummyExpr,
+	CallExpr(Box<Expr>, Vec<CallArg>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallArg {
+	pub span: Span,
+	pub name_span: Span,
+	pub name: Option<Name>,
+	pub expr: Option<Expr>,
 }
 
 

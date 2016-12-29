@@ -506,38 +506,40 @@ fn parse_parameter_port_list(p: &mut Parser) -> ReportedResult<Vec<()>> {
 
 
 fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
-	let (tkn, span) = p.peek(0);
-
-	// Try the unary operators.
-	if let Some(x) = as_unary_operator(tkn) {
-		p.bump();
-		return parse_constant_expr(p);
-	}
-
-	// Parse the constant primary.
-	let expr = match tkn {
-		// Primary literals.
-		UnsignedNumber(x) => { p.bump(); () },
-		Literal(Str(x)) => { p.bump(); () },
-		Literal(BasedInteger(size, signed, base, value)) => { p.bump(); () },
-		Literal(UnbasedUnsized(x)) => { p.bump(); () },
-		Ident(x) => { p.bump(); () },
-		_ => {
-			p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
-			return Err(());
-		}
-	};
-
-	// Try the binary operators.
-	let (tkn, span) = p.peek(0);
-	if let Some(x) = as_binary_operator(tkn) {
-		p.bump();
-		return parse_constant_expr(p);
-	}
-
-	// TODO: Parse ternary operator.
-
+	parse_expr(p)?;
 	Ok(())
+	// let (tkn, span) = p.peek(0);
+
+	// // Try the unary operators.
+	// if let Some(x) = as_unary_operator(tkn) {
+	// 	p.bump();
+	// 	return parse_constant_expr(p);
+	// }
+
+	// // Parse the constant primary.
+	// let expr = match tkn {
+	// 	// Primary literals.
+	// 	UnsignedNumber(x) => { p.bump(); () },
+	// 	Literal(Str(x)) => { p.bump(); () },
+	// 	Literal(BasedInteger(size, signed, base, value)) => { p.bump(); () },
+	// 	Literal(UnbasedUnsized(x)) => { p.bump(); () },
+	// 	Ident(x) => { p.bump(); () },
+	// 	_ => {
+	// 		p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
+	// 		return Err(());
+	// 	}
+	// };
+
+	// // Try the binary operators.
+	// let (tkn, span) = p.peek(0);
+	// if let Some(x) = as_binary_operator(tkn) {
+	// 	p.bump();
+	// 	return parse_constant_expr(p);
+	// }
+
+	// // TODO: Parse ternary operator.
+
+	// Ok(())
 }
 
 
@@ -775,7 +777,7 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 			},
 			(Semicolon, _) => break,
 			(x, sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after parameter assignment, got `{:?}`", x)).span(sp));
+				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after parameter assignment, got {}", x)).span(sp));
 				return Err(());
 			}
 		}
@@ -1149,7 +1151,10 @@ fn parse_expr(p: &mut Parser) -> ReportedResult<Expr> {
 
 fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<Expr> {
 	let prefix = parse_expr_first(p, precedence)?;
+	parse_expr_suffix(p, prefix, precedence)
+}
 
+fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> ReportedResult<Expr> {
 	// Try to parse the index and call expressions.
 	let (tkn, sp) = p.peek(0);
 	match tkn {
@@ -1164,55 +1169,65 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<Exp
 				}
 			}
 			p.require_reported(CloseDelim(Brack))?;
-			return Ok(Expr {
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, Precedence::Scope);
 		}
 
 		// Call: "(" [list_of_arguments] ")"
 		OpenDelim(Paren) if precedence <= Precedence::Scope => {
-			p.bump();
-			p.add_diag(DiagBuilder2::error("Don't know how to handle call expressions").span(sp));
-			p.recover_balanced(&[CloseDelim(Paren)], true);
-			return Ok(Expr {
+			let args = p.parenthesized(parse_call_args);
+			// p.add_diag(DiagBuilder2::warning("Don't know how to properly parse call expressions").span(sp));
+			// p.recover_balanced(&[CloseDelim(Paren)], true);
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, Precedence::Scope);
 		}
 
+		// expr "." ident
 		Period if precedence <= Precedence::Scope => {
 			p.bump();
 			p.eat_ident("member name")?;
-			return Ok(Expr {
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, Precedence::Scope);
 		}
 
+		// expr "::" ident
 		Namespace if precedence <= Precedence::Scope => {
 			p.bump();
 			p.eat_ident("scope name")?;
-			return Ok(Expr {
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, Precedence::Scope);
 		}
 
+		// expr "++"
 		Operator(Op::Inc) if precedence <= Precedence::Unary => {
 			p.bump();
-			return Ok(Expr {
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, Precedence::Unary);
 		}
 
+		// expr "--"
 		Operator(Op::Dec) if precedence <= Precedence::Unary => {
 			p.bump();
-			return Ok(Expr {
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, Precedence::Unary);
 		}
 
 		_ => ()
@@ -1224,10 +1239,11 @@ fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<Exp
 		if precedence <= prec {
 			p.bump();
 			parse_expr_prec(p, prec)?;
-			return Ok(Expr {
+			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
-			});
+			};
+			return parse_expr_suffix(p, expr, prec);
 		}
 	}
 
@@ -2463,6 +2479,67 @@ fn as_edge_ident(tkn: Token) -> EdgeIdent {
 		Keyword(Kw::Negedge) => EdgeIdent::Negedge,
 		_ => EdgeIdent::Implicit,
 	}
+}
+
+
+fn parse_call_args(p: &mut Parser) -> ReportedResult<Vec<CallArg>> {
+	let mut v = Vec::new();
+	loop {
+		match p.peek(0) {
+			(Comma, sp) => v.push(CallArg {
+				span: sp,
+				name_span: sp,
+				name: None,
+				expr: None,
+			}),
+			(Period, mut sp) => {
+				p.bump();
+				let (name, mut name_sp) = p.eat_ident("argument name")?;
+				name_sp.expand(sp);
+				let expr = p.parenthesized(|p| Ok(
+					if p.peek(0).0 == CloseDelim(Paren) {
+						None
+					} else {
+						Some(parse_expr(p)?)
+					}
+				))?;
+				sp.expand(p.last_span());
+
+				v.push(CallArg {
+					span: sp,
+					name_span: name_sp,
+					name: Some(name),
+					expr: expr,
+				});
+			}
+			(_, mut sp) => {
+				let expr = parse_expr(p)?;
+				sp.expand(p.last_span());
+				v.push(CallArg {
+					span: sp,
+					name_span: sp,
+					name: None,
+					expr: Some(expr),
+				});
+			}
+		}
+
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if p.try_eat(CloseDelim(Paren)) {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+					break;
+				}
+			},
+			(CloseDelim(Paren), _) => break,
+			(_, sp) => {
+				p.add_diag(DiagBuilder2::error("Expected , or ) after call argument").span(sp));
+				return Err(());
+			}
+		}
+	}
+	Ok(v)
 }
 
 
