@@ -212,7 +212,14 @@ pub struct DelayControl {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventControl {
+	pub span: Span,
+	pub data: EventControlData,
+}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventControlData {
+	Implicit,
+	Expr(EventExpr),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,4 +262,43 @@ pub struct Expr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprData {
 	DummyExpr
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventExpr {
+	Edge {
+		span:  Span,
+		edge:  EdgeIdent,
+		value: Expr,
+	},
+	Iff {
+		span: Span,
+		expr: Box<EventExpr>,
+		cond: Expr,
+	},
+	Or {
+		span: Span,
+		lhs: Box<EventExpr>,
+		rhs: Box<EventExpr>,
+	},
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeIdent {
+	Implicit,
+	Edge,
+	Posedge,
+	Negedge,
+}
+
+impl EventExpr {
+	pub fn span(&self) -> Span {
+		match *self {
+			EventExpr::Edge { span: sp, .. } => sp,
+			EventExpr::Iff { span: sp, .. } => sp,
+			EventExpr::Or { span: sp, .. } => sp,
+		}
+	}
 }

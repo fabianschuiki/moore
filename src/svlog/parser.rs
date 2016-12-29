@@ -187,7 +187,7 @@ impl<'a> Parser<'a> {
 		match self.peek(0) {
 			(Ident(name), span) => { self.bump(); Ok((name, span)) },
 			(EscIdent(name), span) => { self.bump(); Ok((name, span)) },
-			(tkn, span) => Err(DiagBuilder2::error(format!("Expected {} before {:?}", msg, tkn)).span(span)),
+			(tkn, span) => Err(DiagBuilder2::error(format!("Expected {} before `{}`", msg, tkn)).span(span)),
 		}
 	}
 
@@ -196,7 +196,7 @@ impl<'a> Parser<'a> {
 			(Ident(name), span) => { self.bump(); Ok((name, span)) }
 			(EscIdent(name), span) => { self.bump(); Ok((name, span)) }
 			(tkn, span) => {
-				self.add_diag(DiagBuilder2::error(format!("Expected {} before {:?}", msg, tkn)).span(span));
+				self.add_diag(DiagBuilder2::error(format!("Expected {} before `{}`", msg, tkn)).span(span));
 				Err(())
 			}
 		}
@@ -212,7 +212,7 @@ impl<'a> Parser<'a> {
 	fn require(&mut self, expect: Token) -> Result<(), DiagBuilder2> {
 		match self.peek(0) {
 			(actual, _) if actual == expect => { self.bump(); Ok(()) },
-			(wrong, span) => Err(DiagBuilder2::error(format!("Expected {:?}, but found {:?} instead", expect, wrong)).span(span))
+			(wrong, span) => Err(DiagBuilder2::error(format!("Expected `{}`, but found `{}` instead", expect, wrong)).span(span))
 		}
 	}
 
@@ -274,11 +274,11 @@ impl<'a> Parser<'a> {
 				CloseDelim(x) => {
 					if let Some(open) = stack.pop() {
 						if open != x {
-							self.add_diag(DiagBuilder2::error(format!("Found closing {:?} which is not the complement to the previous opening {:?}", x, open)).span(sp));
+							self.add_diag(DiagBuilder2::error(format!("Found closing `{}` which is not the complement to the previous opening `{}`", CloseDelim(x), OpenDelim(open))).span(sp));
 							break;
 						}
 					} else {
-						self.add_diag(DiagBuilder2::error(format!("Found closing {:?} without an earlier opening {:?}", x, x)).span(sp));
+						self.add_diag(DiagBuilder2::error(format!("Found closing `{}` without an earlier opening `{}`", CloseDelim(x), OpenDelim(x))).span(sp));
 						break;
 					}
 				}
@@ -2144,14 +2144,40 @@ fn try_delay_control(p: &mut Parser) -> ReportedResult<Option<DelayControl>> {
 	}))
 }
 
+/// Try to parse an event control as described in IEEE 1800-2009 section 9.4.2.
 fn try_event_control(p: &mut Parser) -> ReportedResult<Option<EventControl>> {
 	if !p.try_eat(At) {
 		return Ok(None)
 	}
+	let mut span = p.last_span();
 
-	let q = p.last_span();
-	p.add_diag(DiagBuilder2::error("Don't know how to parse event control").span(q));
-	Err(())
+	// @* and @ (*)
+	if p.peek(0).0 == Operator(Op::Mul) {
+		p.bump();
+		span.expand(p.last_span());
+		return Ok(Some(EventControl {
+			span: span,
+			data: EventControlData::Implicit,
+		}));
+	}
+	if p.peek(0).0 == OpenDelim(Paren) && p.peek(1).0 == Operator(Op::Mul) && p.peek(2).0 == CloseDelim(Paren) {
+		p.bump();
+		p.bump();
+		p.bump();
+		span.expand(p.last_span());
+		return Ok(Some(EventControl {
+			span: span,
+			data: EventControlData::Implicit,
+		}));
+	}
+
+	let expr = parse_event_expr(p, EventPrecedence::Max)?;
+	span.expand(p.last_span());
+
+	Ok(Some(EventControl {
+		span: span,
+		data: EventControlData::Expr(expr),
+	}))
 }
 
 fn try_cycle_delay(p: &mut Parser) -> ReportedResult<Option<CycleDelay>> {
@@ -2211,6 +2237,92 @@ fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
 
 	p.add_diag(DiagBuilder2::error(format!("Don't know how to handle {} when used in a statement after an expression", tkn)).span(sp));
 	return Err(());
+}
+
+
+fn parse_event_expr(p: &mut Parser, precedence: EventPrecedence) -> ReportedResult<EventExpr> {
+	let mut span = p.peek(0).1;
+
+	// Try parsing an event expression in parentheses.
+	if p.try_eat(OpenDelim(Paren)) {
+		return match parse_event_expr(p, EventPrecedence::Min) {
+			Ok(x) => {
+				p.require_reported(CloseDelim(Paren))?;
+				parse_event_expr_suffix(p, x, precedence)
+			}
+			Err(()) => {
+				p.recover_balanced(&[CloseDelim(Paren)], true);
+				Err(())
+			}
+		};
+	}
+
+	// Consume the optional edge identifier.
+	let edge = as_edge_ident(p.peek(0).0);
+	if edge != EdgeIdent::Implicit {
+		p.bump();
+	}
+
+	// Parse the value.
+	let value = parse_expr(p)?;
+	span.expand(p.last_span());
+
+	let expr = EventExpr::Edge {
+		span: span,
+		edge: edge,
+		value: value,
+	};
+	parse_event_expr_suffix(p, expr, precedence)
+
+	// p.add_diag(DiagBuilder2::error("Expected event expression").span(span));
+	// Err(())
+}
+
+
+fn parse_event_expr_suffix(p: &mut Parser, expr: EventExpr, precedence: EventPrecedence) -> ReportedResult<EventExpr> {
+	match p.peek(0).0 {
+		// event_expr "iff" expr
+		Keyword(Kw::Iff) if precedence < EventPrecedence::Iff => {
+			p.bump();
+			let cond = parse_expr(p)?;
+			Ok(EventExpr::Iff {
+				span: Span::union(expr.span(), cond.span),
+				expr: Box::new(expr),
+				cond: cond,
+			})
+		}
+		// event_expr "or" event_expr
+		// event_expr "," event_expr
+		Keyword(Kw::Or) | Comma if precedence <= EventPrecedence::Or => {
+			p.bump();
+			let rhs = parse_event_expr(p, EventPrecedence::Or)?;
+			Ok(EventExpr::Or {
+				span: Span::union(expr.span(), rhs.span()),
+				lhs: Box::new(expr),
+				rhs: Box::new(rhs),
+			})
+		}
+		_ => Ok(expr)
+	}
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum EventPrecedence {
+	Min,
+	Or,
+	Iff,
+	Max,
+}
+
+
+fn as_edge_ident(tkn: Token) -> EdgeIdent {
+	match tkn {
+		Keyword(Kw::Edge)    => EdgeIdent::Edge,
+		Keyword(Kw::Posedge) => EdgeIdent::Posedge,
+		Keyword(Kw::Negedge) => EdgeIdent::Negedge,
+		_ => EdgeIdent::Implicit,
+	}
 }
 
 
