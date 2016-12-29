@@ -178,6 +178,12 @@ pub enum StmtData {
 		mode: CaseMode,
 		items: Vec<CaseItem>,
 	},
+	ForeverStmt(Box<Stmt>),
+	RepeatStmt(Expr, Box<Stmt>),
+	WhileStmt(Expr, Box<Stmt>),
+	DoStmt(Box<Stmt>, Expr),
+	ForStmt(Box<Stmt>, Expr, Expr, Box<Stmt>),
+	ForeachStmt(Expr, Box<Stmt>),
 }
 
 impl Stmt {

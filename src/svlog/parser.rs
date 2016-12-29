@@ -288,6 +288,24 @@ impl<'a> Parser<'a> {
 			self.bump();
 		}
 	}
+
+	/// Parses a leading opening parenthesis, calls the `inner` function, and
+	/// then parses a trailing closing parenthesis. Properly recovers if the
+	/// `inner` function throws an error.
+	fn parenthesized<R,F>(&mut self, mut inner: F) -> ReportedResult<R>
+	where F: FnMut(&mut Parser) -> ReportedResult<R> {
+		self.require_reported(OpenDelim(Paren))?;
+		match inner(self) {
+			Ok(r) => {
+				self.require_reported(CloseDelim(Paren))?;
+				Ok(r)
+			}
+			Err(e) => {
+				self.recover_balanced(&[CloseDelim(Paren)], true);
+				Err(e)
+			}
+		}
+	}
 }
 
 
@@ -886,7 +904,7 @@ fn parse_modport_port_decl(p: &mut Parser) -> ReportedResult<()> {
 				// TODO: Parse expression.
 				p.require_reported(CloseDelim(Paren))?;
 			} else {
-				let (name, span) = p.eat_ident("port_name")?;
+				let (name, span) = p.eat_ident("port name")?;
 			}
 
 			// Decide whether we should continue iterating and thus consuming
@@ -1923,6 +1941,54 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 		Keyword(Kw::Unique0)  => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Unique0))? }
 		Keyword(Kw::Priority) => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Priority))? }
 		Keyword(Kw::If) | Keyword(Kw::Case) | Keyword(Kw::Casex) | Keyword(Kw::Casez) => parse_if_or_case(p, None)?,
+
+		// Loops, as per IEEE 1800-2009 section 12.7.
+		Keyword(Kw::Forever) => {
+			p.bump();
+			let stmt = Box::new(parse_stmt(p)?);
+			ForeverStmt(stmt)
+		}
+		Keyword(Kw::Repeat) => {
+			p.bump();
+			let expr = p.parenthesized(parse_expr)?;
+			let stmt = Box::new(parse_stmt(p)?);
+			RepeatStmt(expr, stmt)
+		}
+		Keyword(Kw::While) => {
+			p.bump();
+			let expr = p.parenthesized(parse_expr)?;
+			let stmt = Box::new(parse_stmt(p)?);
+			WhileStmt(expr, stmt)
+		}
+		Keyword(Kw::Do) => {
+			p.bump();
+			let stmt = Box::new(parse_stmt(p)?);
+			let q = p.last_span();
+			if !p.try_eat(Keyword(Kw::While)) {
+				p.add_diag(DiagBuilder2::error("Do loop requires a while clause").span(q));
+				return Err(());
+			}
+			let expr = p.parenthesized(parse_expr)?;
+			DoStmt(stmt, expr)
+		}
+		Keyword(Kw::For) => {
+			p.bump();
+			let (init, cond, step) = p.parenthesized(|p| {
+				let init = Box::new(parse_stmt(p)?);
+				let cond = parse_expr(p)?;
+				p.require_reported(Semicolon)?;
+				let step = parse_expr(p)?;
+				Ok((init, cond, step))
+			})?;
+			let stmt = Box::new(parse_stmt(p)?);
+			ForStmt(init, cond, step, stmt)
+		}
+		Keyword(Kw::Foreach) => {
+			p.bump();
+			let expr = p.parenthesized(parse_expr)?;
+			let stmt = Box::new(parse_stmt(p)?);
+			ForeachStmt(expr, stmt)
+		}
 
 		// Everything else we treat as an expression-based statement
 		_ => {
