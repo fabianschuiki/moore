@@ -289,22 +289,71 @@ impl<'a> Parser<'a> {
 		}
 	}
 
-	/// Parses a leading opening parenthesis, calls the `inner` function, and
-	/// then parses a trailing closing parenthesis. Properly recovers if the
-	/// `inner` function throws an error.
 	fn parenthesized<R,F>(&mut self, mut inner: F) -> ReportedResult<R>
 	where F: FnMut(&mut Parser) -> ReportedResult<R> {
-		self.require_reported(OpenDelim(Paren))?;
+		self.flanked(Paren, inner)
+	}
+
+	/// Parses the opening delimiter, calls the `inner` function, and parses the
+	/// closing delimiter. Properly recovers to and including the closing
+	/// delimiter if the `inner` function throws an error.
+	fn flanked<R,F>(&mut self, delim: DelimToken, mut inner: F) -> ReportedResult<R>
+	where F: FnMut(&mut Parser) -> ReportedResult<R> {
+		self.require_reported(OpenDelim(delim))?;
 		match inner(self) {
 			Ok(r) => {
-				self.require_reported(CloseDelim(Paren))?;
+				self.require_reported(CloseDelim(delim))?;
 				Ok(r)
 			}
 			Err(e) => {
-				self.recover_balanced(&[CloseDelim(Paren)], true);
+				self.recover_balanced(&[CloseDelim(delim)], true);
 				Err(e)
 			}
 		}
+	}
+
+	/// If the opening delimiter is present, consumes it, calls the `inner`
+	/// function, and parses the closing delimiter. Properly recovers to and
+	/// including the closing delimiter if the `inner` function throws an error.
+	/// If the opening delimiter is not present, returns `None`.
+	fn try_flanked<R,F>(&mut self, delim: DelimToken, mut inner: F) -> ReportedResult<Option<R>>
+	where F: FnMut(&mut Parser) -> ReportedResult<R> {
+		if self.peek(0).0 == OpenDelim(delim) {
+			self.flanked(delim, inner).map(|r| Some(r))
+		} else {
+			Ok(None)
+		}
+	}
+
+	/// Parse a comma-separated list of items, until a terminator token has been
+	/// reached. The terminator is not consumed.
+	fn comma_list<R,F>(&mut self, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
+	where F: FnMut(&mut Parser) -> ReportedResult<R> {
+		let mut v = Vec::new();
+		while self.peek(0).0 != term {
+			// Parse the item.
+			match item(self) {
+				Ok(x) => v.push(x),
+				Err(e) => self.recover_balanced(&[Comma, term], false),
+			}
+
+			// Consume a comma or the terminator.
+			match self.peek(0) {
+				(Comma, sp) => {
+					self.bump();
+					if self.peek(0).0 == term {
+						self.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+						break;
+					}
+				}
+				(x, _) if x == term => break,
+				(_, sp) => {
+					self.add_diag(DiagBuilder2::error(format!("Expected , or {} after {}", term, msg)).span(sp));
+					self.recover_balanced(&[Comma, term], false);
+				}
+			}
+		}
+		Ok(v)
 	}
 }
 
@@ -956,40 +1005,29 @@ fn as_port_direction(tkn: Token) -> Option<PortDir> {
 
 /// Parse a data type.
 fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
-	use svlog::ast::*;
 
 	// Decide what general type this is.
 	let (tkn, mut span) = p.peek(0);
-	let data = {
-		match tkn {
-			Keyword(kw) => {
-				match kw {
-					// Integer Vector Types
-					Kw::Bit => BitType,
-					Kw::Logic => LogicType,
-					Kw::Reg => RegType,
+	let data = match tkn {
+		// Integer Vector Types
+		Keyword(Kw::Bit)   => { p.bump(); BitType },
+		Keyword(Kw::Logic) => { p.bump(); LogicType },
+		Keyword(Kw::Reg)   => { p.bump(); RegType },
 
-					// Integer Atom Types
-					Kw::Byte => ByteType,
-					Kw::Shortint => ShortIntType,
-					Kw::Int => IntType,
-					Kw::Longint => LongIntType,
-					Kw::Integer => IntType,
-					Kw::Time => TimeType,
+		// Integer Atom Types
+		Keyword(Kw::Byte)     => { p.bump(); ByteType },
+		Keyword(Kw::Shortint) => { p.bump(); ShortIntType },
+		Keyword(Kw::Int)      => { p.bump(); IntType },
+		Keyword(Kw::Longint)  => { p.bump(); LongIntType },
+		Keyword(Kw::Integer)  => { p.bump(); IntType },
+		Keyword(Kw::Time)     => { p.bump(); TimeType },
 
-					e => {
-						p.add_diag(DiagBuilder2::error(format!("Expected data type, found keyword {:?}", kw)).span(span));
-						return Err(());
-					}
-				}
-			},
-			Ident(n) | EscIdent(n) => NamedType(n),
-			_ => ImplicitType,
-		}
+		// Enumerations
+		Keyword(Kw::Enum) => parse_enum_type(p)?,
+
+		Ident(n) | EscIdent(n) => { p.bump(); NamedType(n) },
+		_ => ImplicitType,
 	};
-	if data != ImplicitType {
-		p.bump();
-	}
 
 	// Parse the optional sign information.
 	let sign = match p.peek(0) {
@@ -1009,6 +1047,50 @@ fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
 		data: data,
 		sign: sign,
 		dims: dims,
+	})
+}
+
+
+fn parse_enum_type(p: &mut Parser) -> ReportedResult<TypeData> {
+	// Consume the enum keyword.
+	p.bump();
+
+	// Parse the optional enum base type.
+	let base = if p.peek(0).0 != OpenDelim(Brace) {
+		Some(Box::new(parse_data_type(p)?))
+	} else {
+		None
+	};
+
+	// Parse the name declarations.
+	let names = p.flanked(Brace, |p| p.comma_list(CloseDelim(Brace), "enum name", parse_enum_name))?;
+
+	Ok(EnumType(base, names))
+}
+
+
+fn parse_enum_name(p: &mut Parser) -> ReportedResult<EnumName> {
+	// Eat the name.
+	let (name, name_sp) = p.eat_ident("enum name")?;
+	let mut span = name_sp;
+
+	// Parse the optional range.
+	let range = p.try_flanked(Brack, parse_expr)?;
+
+	// Parse the optional value.
+	let value = if p.try_eat(Operator(Op::Assign)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+	span.expand(p.last_span());
+
+	Ok(EnumName {
+		span: span,
+		name: name,
+		name_span: name_sp,
+		range: range,
+		value: value,
 	})
 }
 

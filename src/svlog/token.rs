@@ -378,6 +378,12 @@ macro_rules! declare_keywords {(
 		}
 	}
 
+	impl Display for Kw {
+		fn fmt(&self, f: &mut Formatter) -> Result {
+			write!(f, "{}", self.as_str())
+		}
+	}
+
 	pub fn find_keyword<S: AsRef<str>>(name: S) -> Option<Kw> {
 		use std::collections::HashMap;
 		thread_local!(static TBL: HashMap<String,Kw> = {

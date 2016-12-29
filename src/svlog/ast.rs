@@ -46,7 +46,7 @@ pub struct Type {
 	pub dims: Vec<TypeDim>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeData {
 	ImplicitType,
 	NamedType(Name),
@@ -62,6 +62,9 @@ pub enum TypeData {
 	IntType,
 	LongIntType,
 	TimeType,
+
+	// Enumerations
+	EnumType(Option<Box<Type>>, Vec<EnumName>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +81,15 @@ pub enum TypeDim {
 	Queue,
 	Unsized,
 	Associative,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumName {
+	pub span: Span,
+	pub name: Name,
+	pub name_span: Span,
+	pub range: Option<Expr>,
+	pub value: Option<Expr>,
 }
 
 
