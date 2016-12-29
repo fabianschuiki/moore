@@ -171,6 +171,13 @@ pub enum StmtData {
 		event: Option<()>,
 	},
 	TimedStmt(TimingControl, Box<Stmt>),
+	CaseStmt {
+		up: Option<UniquePriority>,
+		kind: CaseKind,
+		expr: Expr,
+		mode: CaseMode,
+		items: Vec<CaseItem>,
+	},
 }
 
 impl Stmt {
@@ -202,6 +209,19 @@ pub enum CaseKind {
 	Normal,
 	DontCareZ,
 	DontCareXZ,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaseMode {
+	Normal,
+	Inside,
+	Pattern,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaseItem {
+	Default(Box<Stmt>),
+	Expr(Vec<Expr>, Box<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

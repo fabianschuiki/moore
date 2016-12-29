@@ -598,7 +598,6 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 	let (tkn, _) = p.peek(0);
 	let f = |p, func, term| hierarchy_item_wrapper(p, func, term);
 	let map_proc = |result: ReportedResult<Procedure>| result.map(|r| {
-		println!("parsed proc {:?}", r);
 		()
 	});
 	match tkn {
@@ -2065,11 +2064,86 @@ fn parse_if_or_case(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResul
 }
 
 
+/// Parse a case statement as per IEEE 1800-2009 section 12.5.
 fn parse_case(p: &mut Parser, up: Option<UniquePriority>, kind: CaseKind) -> ReportedResult<StmtData> {
 	let q = p.last_span();
-	p.add_diag(DiagBuilder2::error("Don't know how to parse case statements").span(q));
-	p.recover_balanced(&[Keyword(Kw::Endcase)], true);
-	Err(())
+
+	// Parse the case expression.
+	p.require_reported(OpenDelim(Paren))?;
+	let expr = match parse_expr(p) {
+		Ok(x) => x,
+		Err(()) => {
+			p.recover_balanced(&[CloseDelim(Paren)], true);
+			return Err(());
+		}
+	};
+	p.require_reported(CloseDelim(Paren))?;
+
+	// The case expression may be followed by a "matches" or "inside" keyword
+	// which changes the kind of operation the statement performs.
+	let mode = match p.peek(0).0 {
+		Keyword(Kw::Inside) => { p.bump(); CaseMode::Inside },
+		Keyword(Kw::Matches) => { p.bump(); CaseMode::Pattern },
+		_ => CaseMode::Normal,
+	};
+
+	// Parse the case items.
+	let mut items = Vec::new();
+	while p.peek(0).0 != Keyword(Kw::Endcase) && p.peek(0).0 != Eof {
+		let mut span = p.peek(0).1;
+
+		// Handle the default case items.
+		if p.peek(0).0 == Keyword(Kw::Default) {
+			p.bump();
+			p.try_eat(Colon);
+			let stmt = Box::new(parse_stmt(p)?);
+			items.push(CaseItem::Default(stmt));
+		}
+
+		// Handle regular case items.
+		else {
+			let mut exprs = Vec::new();
+			loop {
+				match parse_expr(p) {
+					Ok(x) => exprs.push(x),
+					Err(()) => {
+						p.recover_balanced(&[Colon], false);
+						break;
+					}
+				}
+
+				match p.peek(0) {
+					(Comma, sp) => {
+						p.bump();
+						if p.try_eat(Colon) {
+							p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+							break;
+						}
+					},
+					(Colon, _) => break,
+					(_, sp) => {
+						p.add_diag(DiagBuilder2::error("Expected , or : after case expression").span(sp));
+						break;
+					}
+				}
+			}
+
+			// Parse the statement.
+			p.require_reported(Colon)?;
+			let stmt = Box::new(parse_stmt(p)?);
+			items.push(CaseItem::Expr(exprs, stmt));
+		}
+	}
+
+	p.require_reported(Keyword(Kw::Endcase))?;
+
+	Ok(CaseStmt {
+		up: up,
+		kind: kind,
+		expr: expr,
+		mode: mode,
+		items: items,
+	})
 }
 
 
