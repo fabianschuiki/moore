@@ -367,7 +367,7 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 		match parse_hierarchy_item(p) {
 			Ok(_) => (),
 			Err(()) => {
-				p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
+				// p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
 				p.recover(&[Keyword(Kw::Endinterface)], false);
 				break;
 			}
@@ -539,7 +539,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 		match parse_hierarchy_item(p) {
 			Ok(_) => (),
 			Err(()) => {
-				p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
+				// p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
 				p.recover(&[Keyword(Kw::Endmodule)], false);
 				break;
 			}
@@ -1841,19 +1841,46 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 	};
 
 	// Parse the actual statement item.
+	let data = parse_stmt_data(p, &mut label)?;
+	span.expand(p.last_span());
+
+	Ok(Stmt {
+		span: span,
+		label: label,
+		data: data,
+	})
+}
+
+fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<StmtData> {
 	let (tkn, sp) = p.peek(0);
-	let data = match tkn {
+
+	// See if this is a timing-controlled statement as per IEEE 1800-2009
+	// section 9.4.
+	if let Some(dc) = try_delay_control(p)? {
+		let stmt = Box::new(parse_stmt(p)?);
+		return Ok(TimedStmt(TimingControl::Delay(dc), stmt));
+	}
+	if let Some(ec) = try_event_control(p)? {
+		let stmt = Box::new(parse_stmt(p)?);
+		return Ok(TimedStmt(TimingControl::Event(ec), stmt));
+	}
+	if let Some(cd) = try_cycle_delay(p)? {
+		let stmt = Box::new(parse_stmt(p)?);
+		return Ok(TimedStmt(TimingControl::Cycle(cd), stmt));
+	}
+
+	Ok(match tkn {
 		// Sequential blocks
 		OpenDelim(Bgend) => {
 			p.bump();
-			let (stmts, _) = parse_block(p, &mut label, &[CloseDelim(Bgend)])?;
+			let (stmts, _) = parse_block(p, label, &[CloseDelim(Bgend)])?;
 			SequentialBlock(stmts)
 		}
 
 		// Parallel blocks
 		Keyword(Kw::Fork) => {
 			p.bump();
-			let (stmts, terminator) = parse_block(p, &mut label, &[Keyword(Kw::Join), Keyword(Kw::JoinAny), Keyword(Kw::JoinNone)])?;
+			let (stmts, terminator) = parse_block(p, label, &[Keyword(Kw::Join), Keyword(Kw::JoinAny), Keyword(Kw::JoinNone)])?;
 			let join = match terminator {
 				Keyword(Kw::Join) => JoinKind::All,
 				Keyword(Kw::JoinAny) => JoinKind::Any,
@@ -1869,7 +1896,7 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 		Keyword(Kw::Priority) => { p.bump(); parse_if_or_case(p, Some(UniquePriority::Priority))? }
 		Keyword(Kw::If) | Keyword(Kw::Case) | Keyword(Kw::Casex) | Keyword(Kw::Casez) => parse_if_or_case(p, None)?,
 
-		// Expression-based statements
+		// Everything else we treat as an expression-based statement
 		_ => {
 			match parse_expr_stmt(p) {
 				Ok(x) => {
@@ -1882,13 +1909,6 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 				}
 			}
 		}
-	};
-	span.expand(p.last_span());
-
-	Ok(Stmt {
-		span: span,
-		label: label,
-		data: data,
 	})
 }
 
@@ -2093,6 +2113,26 @@ fn try_delay_control(p: &mut Parser) -> ReportedResult<Option<DelayControl>> {
 		span: span,
 		expr: expr,
 	}))
+}
+
+fn try_event_control(p: &mut Parser) -> ReportedResult<Option<EventControl>> {
+	if !p.try_eat(At) {
+		return Ok(None)
+	}
+
+	let q = p.last_span();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse event control").span(q));
+	Err(())
+}
+
+fn try_cycle_delay(p: &mut Parser) -> ReportedResult<Option<CycleDelay>> {
+	if !p.try_eat(DoubleHashtag) {
+		return Ok(None)
+	}
+
+	let q = p.last_span();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse cycle delay").span(q));
+	Err(())
 }
 
 

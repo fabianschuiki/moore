@@ -146,6 +146,7 @@ impl<'a> Lexer<'a> {
 					(':',':') => Some(Namespace),
 					('+',':') => Some(AddColon),
 					('-',':') => Some(SubColon),
+					('#','#') => Some(DoubleHashtag),
 					_ => None,
 				};
 				if let Some(tkn) = sym {

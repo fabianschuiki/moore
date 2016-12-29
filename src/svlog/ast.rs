@@ -170,6 +170,7 @@ pub enum StmtData {
 		delay: Option<DelayControl>,
 		event: Option<()>,
 	},
+	TimedStmt(TimingControl, Box<Stmt>),
 }
 
 impl Stmt {
@@ -207,6 +208,23 @@ pub enum CaseKind {
 pub struct DelayControl {
 	pub span: Span,
 	pub expr: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventControl {
+
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CycleDelay {
+
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TimingControl {
+	Delay(DelayControl),
+	Event(EventControl),
+	Cycle(CycleDelay),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

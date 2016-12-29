@@ -21,6 +21,7 @@ pub enum Token {
 	Semicolon,
 	At,
 	Hashtag,
+	DoubleHashtag,
 	Namespace,
 	Ternary,
 	AddColon,
@@ -56,16 +57,17 @@ impl Token {
 	pub fn as_str(self) -> &'static str {
 		match self {
 			// Symbols
-			Comma     => ",",
-			Period    => ".",
-			Colon     => ":",
-			Semicolon => ";",
-			At        => "@",
-			Hashtag   => "#",
-			Namespace => "::",
-			Ternary   => "?",
-			AddColon  => "+:",
-			SubColon  => "-:",
+			Comma         => ",",
+			Period        => ".",
+			Colon         => ":",
+			Semicolon     => ";",
+			At            => "@",
+			Hashtag       => "#",
+			DoubleHashtag => "##",
+			Namespace     => "::",
+			Ternary       => "?",
+			AddColon      => "+:",
+			SubColon      => "-:",
 
 			Operator(op) => op.as_str(),
 
