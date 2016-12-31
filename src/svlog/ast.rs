@@ -196,6 +196,11 @@ pub enum StmtData {
 	DoStmt(Box<Stmt>, Expr),
 	ForStmt(Box<Stmt>, Expr, Expr, Box<Stmt>),
 	ForeachStmt(Expr, Box<Stmt>),
+	ExprStmt(Expr),
+	VarDeclStmt {
+		ty: Type,
+		names: Vec<VarDecl>,
+	},
 }
 
 impl Stmt {
@@ -287,6 +292,15 @@ pub enum AssignOp {
 	LogicShR,
 	ArithShL,
 	ArithShR,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VarDecl {
+	pub span: Span,
+	pub name: Name,
+	pub name_span: Span,
+	pub dims: Vec<TypeDim>,
+	pub init: Option<Expr>,
 }
 
 

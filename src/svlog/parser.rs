@@ -87,7 +87,7 @@ impl<'a> Parser<'a> {
 		let colorcode = match diag.get_severity() {
 			Severity::Fatal | Severity::Error => "\x1B[31;1m",
 			Severity::Warning => "\x1B[33;1m",
-			Severity::Note => "\x1B[35;1m",
+			Severity::Note => "\x1B[34;1m",
 		};
 		println!("{}{}:\x1B[m\x1B[1m {}\x1B[m", colorcode, diag.get_severity(), diag.get_message());
 
@@ -1165,7 +1165,8 @@ fn try_dimension(p: &mut Parser) -> ReportedResult<Option<(TypeDim, Span)>> {
 			return Ok(Some((dim, span)));
 		},
 		(tkn, sp) => {
-			p.add_diag(DiagBuilder2::error(format!("Expected closing brackets `]` after dimension, got {:?}", tkn)).span(sp));
+			p.add_diag(DiagBuilder2::error(format!("Expected closing brackets `]` after dimension, got {}", tkn)).span(sp));
+			p.recover_balanced(&[CloseDelim(Brack)], true);
 			return Err(());
 		}
 	}
@@ -1325,7 +1326,7 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, prec);
+			return parse_expr_suffix(p, expr, precedence);
 		}
 	}
 
@@ -2446,6 +2447,23 @@ fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
 	let expr = parse_expr_prec(p, Precedence::Scope)?;
 	let (tkn, sp) = p.peek(0);
 
+	// If the leading expression is directly followed by an identifier, this is
+	// a data declaration.
+	if p.is_ident() {
+		let names = p.comma_list(Semicolon, "variable declaration", parse_variable_decl_assignment)?;
+		// TODO: Convert `expr` to a type.
+		p.add_diag(DiagBuilder2::warning("Variable declaration type not yet represented in the AST").span(expr.span));
+		return Ok(VarDeclStmt {
+			ty: Type {
+				span: expr.span,
+				data: ImplicitType,
+				sign: TypeSign::None,
+				dims: Vec::new(),
+			},
+			names: names,
+		});
+	}
+
 	// Handle blocking assignments (IEEE 1800-2009 section 10.4.1), where the
 	// expression is followed by an assignment operator.
 	if let Some(op) = as_assign_operator(tkn) {
@@ -2475,6 +2493,10 @@ fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
 			delay: delay_control,
 			event: event_control,
 		});
+	}
+
+	if p.peek(0).0 == Semicolon {
+		return Ok(ExprStmt(expr));
 	}
 
 	p.add_diag(DiagBuilder2::error(format!("Don't know how to handle {} when used in a statement after an expression", tkn)).span(sp));
@@ -2626,6 +2648,33 @@ fn parse_call_args(p: &mut Parser) -> ReportedResult<Vec<CallArg>> {
 		}
 	}
 	Ok(v)
+}
+
+
+fn parse_variable_decl_assignment(p: &mut Parser) -> ReportedResult<VarDecl> {
+	let mut span = p.peek(0).1;
+
+	// Parse the variable name.
+	let (name, name_span) = p.eat_ident("variable name")?;
+
+	// Parse the optional dimensions.
+	let (dims, _) = parse_optional_dimensions(p)?;
+
+	// Parse the optional initial expression.
+	let init = if p.try_eat(Operator(Op::Assign)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+	span.expand(p.last_span());
+
+	Ok(VarDecl {
+		span: span,
+		name: name,
+		name_span: name_span,
+		dims: dims,
+		init: init,
+	})
 }
 
 
