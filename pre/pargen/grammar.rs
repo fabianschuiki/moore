@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 use std;
 use std::rc::{Rc, Weak};
 use std::cell::{Cell,RefCell,Ref};

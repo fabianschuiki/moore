@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 
 pub struct Lexer<'a> {
 	line: u32,

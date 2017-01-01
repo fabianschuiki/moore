@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 
 //! A name table that internalizes all names presented to it and allows for them
 //! to be referred to by a lightweight tag. This structure is heavily inspired

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 
 //! Defines all tokens that may result from performing lexical analysis on a
 //! VHDL source file. This module is inspired heavily by the tokens used in the

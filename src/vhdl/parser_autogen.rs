@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 #![allow(dead_code,unused_imports)]
 use std;
 use vhdl::lexer::{Token,Keyword,Symbol};

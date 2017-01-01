@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 extern crate owning_ref;
 extern crate clap;
 pub mod lexer;

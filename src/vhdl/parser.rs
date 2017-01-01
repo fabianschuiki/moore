@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 
 //! A parser for VHDL token streams, based on IEEE 1076-2000.
 

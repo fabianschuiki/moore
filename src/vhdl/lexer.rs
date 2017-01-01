@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 
 //! A lexical analyzer for VHDL files, based on IEEE 1076-2000, section 13.
 

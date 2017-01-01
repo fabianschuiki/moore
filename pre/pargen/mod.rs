@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Fabian Schuiki
+// Copyright (c) 2016-2017 Fabian Schuiki
 // A parser generator for LALR(1) grammars.
 use std::fs::File;
 use std::io::Write;
