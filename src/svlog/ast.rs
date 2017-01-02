@@ -201,6 +201,7 @@ pub enum StmtData {
 		ty: Type,
 		names: Vec<VarDecl>,
 	},
+	GenvarDeclStmt(Vec<GenvarDecl>),
 }
 
 impl Stmt {
@@ -300,6 +301,14 @@ pub struct VarDecl {
 	pub name: Name,
 	pub name_span: Span,
 	pub dims: Vec<TypeDim>,
+	pub init: Option<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenvarDecl {
+	pub span: Span,
+	pub name: Name,
+	pub name_span: Span,
 	pub init: Option<Expr>,
 }
 

@@ -355,6 +355,22 @@ impl<'a> Parser<'a> {
 		}
 		Ok(v)
 	}
+
+	fn repeat_until<R,F>(&mut self, term: Token, mut item: F) -> ReportedResult<Vec<R>>
+	where F: FnMut(&mut Parser) -> ReportedResult<R> {
+		let mut v = Vec::new();
+		while self.peek(0).0 != term && self.peek(0).0 != Eof {
+			match item(self) {
+				Ok(x) => v.push(x),
+				Err(e) => {
+					self.recover_balanced(&[term], false);
+					break;
+				}
+			}
+		}
+		self.require_reported(term)?;
+		Ok(v)
+	}
 }
 
 
@@ -685,7 +701,22 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 		Keyword(Kw::Task)        => return parse_task_decl(p),
 
 		// Continuous assign
-		Keyword(Kw::Assign)      => { parse_continuous_assign(p)?; return Ok(()); },
+		Keyword(Kw::Assign) => { parse_continuous_assign(p)?; return Ok(()); },
+
+		// Genvar declaration
+		Keyword(Kw::Genvar) => {
+			p.bump();
+			p.comma_list(Semicolon, "genvar declaration", parse_genvar_decl)?;
+			p.require_reported(Semicolon)?;
+			return Ok(());
+		}
+
+		// Generate region
+		Keyword(Kw::Generate) => {
+			p.bump();
+			p.repeat_until(Keyword(Kw::Endgenerate), parse_generate_item)?;
+			return Ok(());
+		}
 
 		_ => ()
 	}
@@ -2093,6 +2124,13 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 			ForeachStmt(expr, stmt)
 		}
 
+		// Generate variables
+		Keyword(Kw::Genvar) => {
+			p.bump();
+			let names = p.comma_list(Semicolon, "genvar declaration", parse_genvar_decl)?;
+			GenvarDeclStmt(names)
+		}
+
 		// Everything else we treat as an expression-based statement
 		_ => {
 			match parse_expr_stmt(p) {
@@ -2675,6 +2713,120 @@ fn parse_variable_decl_assignment(p: &mut Parser) -> ReportedResult<VarDecl> {
 		dims: dims,
 		init: init,
 	})
+}
+
+
+fn parse_genvar_decl(p: &mut Parser) -> ReportedResult<GenvarDecl> {
+	let mut span = p.peek(0).1;
+
+	// Parse the genvar name.
+	let (name, name_span) = p.eat_ident("genvar name")?;
+
+	// Parse the optional initial expression.
+	let init = if p.try_eat(Operator(Op::Assign)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+	span.expand(p.last_span());
+
+	Ok(GenvarDecl {
+		span: span,
+		name: name,
+		name_span: name_span,
+		init: init,
+	})
+}
+
+
+fn parse_generate_item(p: &mut Parser) -> ReportedResult<()> {
+	let (tkn,sp) = p.peek(0);
+	match tkn {
+		Keyword(Kw::For) => {
+			p.bump();
+			p.flanked(Paren, |p|{
+				parse_stmt(p)?;
+				parse_expr(p)?;
+				p.require_reported(Semicolon)?;
+				parse_expr(p)?;
+				Ok(())
+			})?;
+			parse_generate_block(p)?;
+			// p.add_diag(DiagBuilder2::error("Don't know how to parse for-generate statements").span(sp));
+			// Err(())
+			Ok(())
+		}
+		Keyword(Kw::If) => {
+			p.add_diag(DiagBuilder2::error("Don't know how to parse if-generate statements").span(sp));
+			Err(())
+		}
+		Keyword(Kw::Case) => {
+			p.add_diag(DiagBuilder2::error("Don't know how to parse case-generate statements").span(sp));
+			Err(())
+		}
+		_ => {
+			parse_hierarchy_item(p)?;
+			Ok(())
+		}
+	}
+}
+
+
+fn parse_generate_block(p: &mut Parser) -> ReportedResult<()> {
+	let mut span = p.peek(0).1;
+
+	// Parse the optional block label.
+	let mut label = if p.is_ident() && p.peek(1).0 == Colon {
+		let (n, _) = p.eat_ident("generate block label")?;
+		p.require_reported(Colon)?;
+		Some(n)
+	} else {
+		None
+	};
+
+	// Consume the opening "begin" keyword if present.
+	if !p.try_eat(OpenDelim(Bgend)) {
+		if label.is_some() {
+			let (t,q) = p.peek(0);
+			p.add_diag(DiagBuilder2::error(format!("Expected `begin` keyword after generate block label, found {} instead", t)).span(q));
+			return Err(());
+		}
+		parse_generate_item(p)?;
+		return Ok(())
+	}
+
+	// Consume the optional label after the "begin" keyword.
+	if p.try_eat(Colon) {
+		let (n, sp) = p.eat_ident("generate block label")?;
+		if let Some(existing) = label {
+			if existing == n {
+				p.add_diag(DiagBuilder2::warning(format!("Generate block {} labelled twice", n)).span(sp));
+			} else {
+				p.add_diag(DiagBuilder2::error(format!("Generate block given conflicting labels {} and {}", existing, n)).span(sp));
+				return Err(());
+			}
+		} else {
+			label = Some(n);
+		}
+	}
+
+	p.repeat_until(CloseDelim(Bgend), parse_generate_item)?;
+
+	// Consume the optional label after the "end" keyword.
+	if p.try_eat(Colon) {
+		let (n, sp) = p.eat_ident("generate block label")?;
+		if let Some(existing) = label {
+			if existing != n {
+				p.add_diag(DiagBuilder2::error(format!("Label {} given after generate block does not match label {} given before the block", n, existing)).span(sp));
+				return Err(());
+			}
+		} else {
+			p.add_diag(DiagBuilder2::warning(format!("Generate block has trailing label {}, but is missing leading label", n)).span(sp));
+		}
+	}
+
+	span.expand(p.last_span());
+	Ok(())
 }
 
 
