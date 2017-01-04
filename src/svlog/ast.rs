@@ -49,6 +49,7 @@ pub struct Type {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeData {
 	ImplicitType,
+	VoidType,
 	NamedType(Name),
 
 	// Integer Vector Types
@@ -65,6 +66,12 @@ pub enum TypeData {
 
 	// Enumerations
 	EnumType(Option<Box<Type>>, Vec<EnumName>),
+	StructType {
+		kind: StructKind,
+		packed: bool,
+		signing: TypeSign,
+		members: Vec<StructMember>,
+	},
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +97,21 @@ pub struct EnumName {
 	pub name_span: Span,
 	pub range: Option<Expr>,
 	pub value: Option<Expr>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructKind {
+	Struct,
+	Union,
+	TaggedUnion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructMember {
+	pub span: Span,
+	pub rand_qualifier: Option<RandomQualifier>,
+	pub ty: Box<Type>,
+	pub names: Vec<VarDecl>,
 }
 
 
@@ -325,6 +347,9 @@ pub enum ExprData {
 	DummyExpr,
 	CallExpr(Box<Expr>, Vec<CallArg>),
 	TypeExpr(Box<Type>),
+	ConstructorCallExpr(Vec<CallArg>),
+	ClassNewExpr(Option<Box<Expr>>),
+	ArrayNewExpr(Box<Expr>, Option<Box<Expr>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -372,4 +397,102 @@ impl EventExpr {
 			EventExpr::Or { span: sp, .. } => sp,
 		}
 	}
+}
+
+
+
+#[derive(Debug)]
+pub struct ClassDecl {
+	pub span: Span,
+	pub virt: bool,
+	pub lifetime: Lifetime, // default static
+	pub name: Name,
+	pub name_span: Span,
+	pub params: Vec<()>,
+	pub extends: Option<(Type, Vec<CallArg>)>,
+	pub items: Vec<ClassItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassItem {
+	pub span: Span,
+	pub qualifiers: Vec<(ClassItemQualifier,Span)>,
+	pub data: ClassItemData,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClassItemQualifier {
+	Static,
+	Protected,
+	Local,
+	Rand,
+	Randc,
+	Pure,
+	Virtual,
+	Const,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClassItemData {
+	Property,
+	TaskDecl,
+	FuncDecl,
+	ExternTask,
+	ExternFunc,
+	Constraint,
+	ClassDecl,
+	CovergroupDecl,
+	LocalParamDecl,
+	ParameterDecl,
+	Null,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RandomQualifier {
+	Rand,
+	Randc,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Typedef {
+	pub span: Span,
+	pub name: Name,
+	pub name_span: Span,
+	pub ty: Type,
+	pub dims: Vec<TypeDim>,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Constraint {
+	pub span: Span,
+	pub kind: ConstraintKind,
+	pub statik: bool,
+	pub name: Name,
+	pub name_span: Span,
+	pub items: Vec<ConstraintItem>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstraintKind {
+	Decl,
+	Proto,
+	ExternProto,
+	PureProto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConstraintItem {
+	pub span: Span,
+	pub data: ConstraintItemData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstraintItemData {
+	If,
+	Foreach,
+	Expr(Expr),
 }

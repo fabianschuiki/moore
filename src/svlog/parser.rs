@@ -3,6 +3,7 @@
 //! A parser for the SystemVerilog language. Based on IEEE 1800-2009.
 
 use std;
+use std::cell::RefCell;
 use svlog::lexer::{Lexer, TokenAndSpan};
 use svlog::token::*;
 use std::collections::VecDeque;
@@ -28,152 +29,12 @@ type ParseResult<T> = Result<T, DiagBuilder2>;
 type ReportedResult<T> = Result<T, ()>;
 
 
-struct Parser<'a> {
-	input: Lexer<'a>,
-	queue: VecDeque<TokenAndSpan>,
-	diagnostics: Vec<DiagBuilder2>,
-	last_span: Span,
-	severity: Severity,
-}
-
-impl<'a> Parser<'a> {
-	fn new(input: Lexer) -> Parser {
-		Parser {
-			input: input,
-			queue: VecDeque::new(),
-			diagnostics: Vec::new(),
-			last_span: INVALID_SPAN,
-			severity: Severity::Note,
-		}
-	}
-
-	fn ensure_queue_filled(&mut self, min_tokens: usize) {
-		if let Some(&(Eof,_)) = self.queue.back() {
-			return;
-		}
-		while self.queue.len() <= min_tokens {
-			match self.input.next_token() {
-				Ok((Eof, sp)) => self.queue.push_back((Eof, sp)),
-				Ok(tkn) => self.queue.push_back(tkn),
-				Err(x) => self.add_diag(x),
-			}
-		}
-	}
-
-	fn peek(&mut self, offset: usize) -> TokenAndSpan {
-		self.ensure_queue_filled(offset);
-		if offset < self.queue.len() {
-			self.queue[offset]
-		} else {
-			*self.queue.back().expect("At least an Eof token should be in the queue")
-		}
-	}
-
-	fn bump(&mut self) {
-		if self.queue.is_empty() {
-			self.ensure_queue_filled(1);
-		}
-		if let Some((_,sp)) = self.queue.pop_front() {
-			self.last_span = sp;
-		}
-	}
-
-	fn last_span(&self) -> Span {
-		self.last_span
-	}
-
-	fn add_diag(&mut self, diag: DiagBuilder2) {
-		println!("");
-		let colorcode = match diag.get_severity() {
-			Severity::Fatal | Severity::Error => "\x1B[31;1m",
-			Severity::Warning => "\x1B[33;1m",
-			Severity::Note => "\x1B[34;1m",
-		};
-		println!("{}{}:\x1B[m\x1B[1m {}\x1B[m", colorcode, diag.get_severity(), diag.get_message());
-
-		// Dump the part of the source file that is affected.
-		if let Some(sp) = diag.get_span() {
-			let c = sp.source.get_content();
-			let mut iter = c.extract_iter(0, sp.begin);
-
-			// Look for the start of the line.
-			let mut col = 1;
-			let mut line = 1;
-			let mut line_offset = 0;
-			while let Some(c) = iter.next_back() {
-				match c.1 {
-					'\n' => { line += 1; break; },
-					'\r' => continue,
-					_ => {
-						col += 1;
-						line_offset = c.0;
-					}
-				}
-			}
-
-			// Count the number of lines.
-			while let Some(c) = iter.next_back() {
-				if c.1 == '\n' {
-					line += 1;
-				}
-			}
-
-			// Print the line in question.
-			let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
-			println!("{}:{}:{}-{}:", sp.source.get_path(), line, col, col + sp.extract().len());
-			for (mut i,c) in text.char_indices() {
-				i += line_offset;
-				if sp.begin != sp.end {
-					if i == sp.begin { print!("{}", colorcode); }
-					if i == sp.end { print!("\x1B[m"); }
-				}
-				match c {
-					'\t' => print!("    "),
-					c => print!("{}", c),
-				}
-			}
-			print!("\n");
-
-			// Print the caret markers for the line in question.
-			let mut pd = ' ';
-			for (mut i,c) in text.char_indices() {
-				i += line_offset;
-				let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
-					'^'
-				} else {
-					' '
-				};
-				if d != pd {
-					print!("{}", if d == ' ' {"\x1B[m"} else {colorcode});
-				}
-				pd = d;
-				match c {
-					'\t' => print!("{}{}{}{}", d, d, d, d),
-					_ => print!("{}", d),
-				}
-			}
-			print!("\x1B[m\n");
-		}
-
-		// Keep track of the worst diagnostic severity we've encountered, such
-		// that parsing can be aborted accordingly.
-		if diag.get_severity() > self.severity {
-			self.severity = diag.get_severity();
-		}
-		self.diagnostics.push(diag);
-	}
-
-	fn get_diagnostics(&self) -> &[DiagBuilder2] {
-		&self.diagnostics
-	}
-
-	fn is_fatal(&self) -> bool {
-		self.severity >= Severity::Fatal
-	}
-
-	fn is_error(&self) -> bool {
-		self.severity >= Severity::Error
-	}
+trait AbstractParser {
+	fn peek(&mut self, offset: usize) -> TokenAndSpan;
+	fn bump(&mut self);
+	fn consumed(&self) -> usize;
+	fn last_span(&self) -> Span;
+	fn add_diag(&mut self, diag: DiagBuilder2);
 
 	fn try_eat_ident(&mut self) -> Option<(Name, Span)> {
 		match self.peek(0) {
@@ -288,88 +149,259 @@ impl<'a> Parser<'a> {
 			self.bump();
 		}
 	}
+}
 
-	fn parenthesized<R,F>(&mut self, mut inner: F) -> ReportedResult<R>
-	where F: FnMut(&mut Parser) -> ReportedResult<R> {
-		self.flanked(Paren, inner)
-	}
+struct Parser<'a> {
+	input: Lexer<'a>,
+	queue: VecDeque<TokenAndSpan>,
+	diagnostics: Vec<DiagBuilder2>,
+	last_span: Span,
+	severity: Severity,
+	num_consumed: usize,
+}
 
-	/// Parses the opening delimiter, calls the `inner` function, and parses the
-	/// closing delimiter. Properly recovers to and including the closing
-	/// delimiter if the `inner` function throws an error.
-	fn flanked<R,F>(&mut self, delim: DelimToken, mut inner: F) -> ReportedResult<R>
-	where F: FnMut(&mut Parser) -> ReportedResult<R> {
-		self.require_reported(OpenDelim(delim))?;
-		match inner(self) {
-			Ok(r) => {
-				self.require_reported(CloseDelim(delim))?;
-				Ok(r)
-			}
-			Err(e) => {
-				self.recover_balanced(&[CloseDelim(delim)], true);
-				Err(e)
-			}
-		}
-	}
-
-	/// If the opening delimiter is present, consumes it, calls the `inner`
-	/// function, and parses the closing delimiter. Properly recovers to and
-	/// including the closing delimiter if the `inner` function throws an error.
-	/// If the opening delimiter is not present, returns `None`.
-	fn try_flanked<R,F>(&mut self, delim: DelimToken, mut inner: F) -> ReportedResult<Option<R>>
-	where F: FnMut(&mut Parser) -> ReportedResult<R> {
-		if self.peek(0).0 == OpenDelim(delim) {
-			self.flanked(delim, inner).map(|r| Some(r))
+impl<'a> AbstractParser for Parser<'a> {
+	fn peek(&mut self, offset: usize) -> TokenAndSpan {
+		self.ensure_queue_filled(offset);
+		if offset < self.queue.len() {
+			self.queue[offset]
 		} else {
-			Ok(None)
+			*self.queue.back().expect("At least an Eof token should be in the queue")
 		}
 	}
 
-	/// Parse a comma-separated list of items, until a terminator token has been
-	/// reached. The terminator is not consumed.
-	fn comma_list<R,F>(&mut self, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
-	where F: FnMut(&mut Parser) -> ReportedResult<R> {
-		let mut v = Vec::new();
-		while self.peek(0).0 != term {
-			// Parse the item.
-			match item(self) {
-				Ok(x) => v.push(x),
-				Err(e) => self.recover_balanced(&[Comma, term], false),
-			}
+	fn bump(&mut self) {
+		if self.queue.is_empty() {
+			self.ensure_queue_filled(1);
+		}
+		if let Some((_,sp)) = self.queue.pop_front() {
+			self.last_span = sp;
+			self.num_consumed += 1;
+		}
+	}
 
-			// Consume a comma or the terminator.
-			match self.peek(0) {
-				(Comma, sp) => {
-					self.bump();
-					if self.peek(0).0 == term {
-						self.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-						break;
+	fn consumed(&self) -> usize {
+		self.num_consumed
+	}
+
+	fn last_span(&self) -> Span {
+		self.last_span
+	}
+
+	fn add_diag(&mut self, diag: DiagBuilder2) {
+		println!("");
+		let colorcode = match diag.get_severity() {
+			Severity::Fatal | Severity::Error => "\x1B[31;1m",
+			Severity::Warning => "\x1B[33;1m",
+			Severity::Note => "\x1B[34;1m",
+		};
+		println!("{}{}:\x1B[m\x1B[1m {}\x1B[m", colorcode, diag.get_severity(), diag.get_message());
+
+		// Dump the part of the source file that is affected.
+		if let Some(sp) = diag.get_span() {
+			let c = sp.source.get_content();
+			let mut iter = c.extract_iter(0, sp.begin);
+
+			// Look for the start of the line.
+			let mut col = 1;
+			let mut line = 1;
+			let mut line_offset = 0;
+			while let Some(c) = iter.next_back() {
+				match c.1 {
+					'\n' => { line += 1; break; },
+					'\r' => continue,
+					_ => {
+						col += 1;
+						line_offset = c.0;
 					}
 				}
-				(x, _) if x == term => break,
-				(_, sp) => {
-					self.add_diag(DiagBuilder2::error(format!("Expected , or {} after {}", term, msg)).span(sp));
-					self.recover_balanced(&[Comma, term], false);
+			}
+
+			// Count the number of lines.
+			while let Some(c) = iter.next_back() {
+				if c.1 == '\n' {
+					line += 1;
 				}
 			}
+
+			// Print the line in question.
+			let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
+			println!("{}:{}:{}-{}:", sp.source.get_path(), line, col, col + sp.extract().len());
+			for (mut i,c) in text.char_indices() {
+				i += line_offset;
+				if sp.begin != sp.end {
+					if i == sp.begin { print!("{}", colorcode); }
+					if i == sp.end { print!("\x1B[m"); }
+				}
+				match c {
+					'\t' => print!("    "),
+					c => print!("{}", c),
+				}
+			}
+			print!("\n");
+
+			// Print the caret markers for the line in question.
+			let mut pd = ' ';
+			for (mut i,c) in text.char_indices() {
+				i += line_offset;
+				let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
+					'^'
+				} else {
+					' '
+				};
+				if d != pd {
+					print!("{}", if d == ' ' {"\x1B[m"} else {colorcode});
+				}
+				pd = d;
+				match c {
+					'\t' => print!("{}{}{}{}", d, d, d, d),
+					_ => print!("{}", d),
+				}
+			}
+			print!("\x1B[m\n");
 		}
-		Ok(v)
+
+		// Keep track of the worst diagnostic severity we've encountered, such
+		// that parsing can be aborted accordingly.
+		if diag.get_severity() > self.severity {
+			self.severity = diag.get_severity();
+		}
+		self.diagnostics.push(diag);
+	}
+}
+
+impl<'a> Parser<'a> {
+	fn new(input: Lexer) -> Parser {
+		Parser {
+			input: input,
+			queue: VecDeque::new(),
+			diagnostics: Vec::new(),
+			last_span: INVALID_SPAN,
+			severity: Severity::Note,
+			num_consumed: 0,
+		}
 	}
 
-	fn repeat_until<R,F>(&mut self, term: Token, mut item: F) -> ReportedResult<Vec<R>>
-	where F: FnMut(&mut Parser) -> ReportedResult<R> {
-		let mut v = Vec::new();
-		while self.peek(0).0 != term && self.peek(0).0 != Eof {
-			match item(self) {
-				Ok(x) => v.push(x),
-				Err(e) => {
-					self.recover_balanced(&[term], false);
+	fn ensure_queue_filled(&mut self, min_tokens: usize) {
+		if let Some(&(Eof,_)) = self.queue.back() {
+			return;
+		}
+		while self.queue.len() <= min_tokens {
+			match self.input.next_token() {
+				Ok((Eof, sp)) => self.queue.push_back((Eof, sp)),
+				Ok(tkn) => self.queue.push_back(tkn),
+				Err(x) => self.add_diag(x),
+			}
+		}
+	}
+
+	fn get_diagnostics(&self) -> &[DiagBuilder2] {
+		&self.diagnostics
+	}
+
+	fn is_fatal(&self) -> bool {
+		self.severity >= Severity::Fatal
+	}
+
+	fn is_error(&self) -> bool {
+		self.severity >= Severity::Error
+	}
+}
+
+
+fn parenthesized<R,F>(p: &mut AbstractParser, mut inner: F) -> ReportedResult<R>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	flanked(p, Paren, inner)
+}
+
+/// Parses the opening delimiter, calls the `inner` function, and parses the
+/// closing delimiter. Properly recovers to and including the closing
+/// delimiter if the `inner` function throws an error.
+fn flanked<R,F>(p: &mut AbstractParser, delim: DelimToken, mut inner: F) -> ReportedResult<R>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	p.require_reported(OpenDelim(delim))?;
+	match inner(p) {
+		Ok(r) => {
+			p.require_reported(CloseDelim(delim))?;
+			Ok(r)
+		}
+		Err(e) => {
+			p.recover_balanced(&[CloseDelim(delim)], true);
+			Err(e)
+		}
+	}
+}
+
+/// If the opening delimiter is present, consumes it, calls the `inner`
+/// function, and parses the closing delimiter. Properly recovers to and
+/// including the closing delimiter if the `inner` function throws an error.
+/// If the opening delimiter is not present, returns `None`.
+fn try_flanked<R,F>(p: &mut AbstractParser, delim: DelimToken, mut inner: F) -> ReportedResult<Option<R>>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	if p.peek(0).0 == OpenDelim(delim) {
+		flanked(p, delim, inner).map(|r| Some(r))
+	} else {
+		Ok(None)
+	}
+}
+
+/// Parse a comma-separated list of items, until a terminator token has been
+/// reached. The terminator is not consumed.
+fn comma_list<R,F>(p: &mut AbstractParser, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	let mut v = Vec::new();
+	while p.peek(0).0 != term && p.peek(0).0 != Eof {
+		// Parse the item.
+		match item(p) {
+			Ok(x) => v.push(x),
+			Err(e) => {
+				p.recover_balanced(&[term], false);
+				return Err(e);
+			},
+		}
+
+		// Consume a comma or the terminator.
+		match p.peek(0) {
+			(Comma, sp) => {
+				p.bump();
+				if p.peek(0).0 == term {
+					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
 					break;
 				}
 			}
+			(x, _) if x == term => break,
+			(_, sp) => {
+				p.add_diag(DiagBuilder2::error(format!("Expected , or {} after {}", term, msg)).span(sp));
+				p.recover_balanced(&[Comma, term], false);
+			}
 		}
-		self.require_reported(term)?;
-		Ok(v)
+	}
+	Ok(v)
+}
+
+fn repeat_until<R,F>(p: &mut AbstractParser, term: Token, mut item: F) -> ReportedResult<Vec<R>>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	let mut v = Vec::new();
+	while p.peek(0).0 != term && p.peek(0).0 != Eof {
+		match item(p) {
+			Ok(x) => v.push(x),
+			Err(e) => {
+				p.recover_balanced(&[term], false);
+				break;
+			}
+		}
+	}
+	Ok(v)
+}
+
+fn recovered<R,F>(p: &mut AbstractParser, term: Token, mut item: F) -> ReportedResult<R>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	match item(p) {
+		Ok(x) => Ok(x),
+		Err(e) => {
+			p.recover_balanced(&[term], false);
+			Err(e)
+		}
 	}
 }
 
@@ -503,7 +535,7 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 }
 
 
-fn parse_parameter_port_list(p: &mut Parser) -> ReportedResult<Vec<()>> {
+fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 	let mut v = Vec::new();
 	p.require_reported(OpenDelim(Paren))?;
 
@@ -570,7 +602,7 @@ fn parse_parameter_port_list(p: &mut Parser) -> ReportedResult<Vec<()>> {
 }
 
 
-fn parse_constant_expr(p: &mut Parser) -> ReportedResult<()> {
+fn parse_constant_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 	parse_expr(p)?;
 	Ok(())
 	// let (tkn, span) = p.peek(0);
@@ -677,7 +709,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 }
 
 
-fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
+fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 	// First attempt the simple cases where a keyword reliably identifies the
 	// following item.
 	let (tkn, _) = p.peek(0);
@@ -689,6 +721,8 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
 		Keyword(Kw::Parameter) => return f(p, parse_parameter_decl, Semicolon),
 		Keyword(Kw::Modport) => return f(p, parse_modport_decl, Semicolon),
+		Keyword(Kw::Class) => return parse_class_decl(p).map(|r|()),
+		Keyword(Kw::Typedef) => return parse_typedef(p).map(|r|()),
 
 		// Structured procedures as per IEEE 1800-2009 section 9.2
 		Keyword(Kw::Initial)     => return map_proc(parse_procedure(p, ProcedureKind::Initial)),
@@ -697,8 +731,8 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 		Keyword(Kw::AlwaysLatch) => return map_proc(parse_procedure(p, ProcedureKind::AlwaysLatch)),
 		Keyword(Kw::AlwaysFf)    => return map_proc(parse_procedure(p, ProcedureKind::AlwaysFf)),
 		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
-		Keyword(Kw::Function)    => return parse_func_decl(p),
-		Keyword(Kw::Task)        => return parse_task_decl(p),
+		Keyword(Kw::Function)    => return parse_func_decl(p).wrap(),
+		Keyword(Kw::Task)        => return parse_task_decl(p).wrap(),
 
 		// Continuous assign
 		Keyword(Kw::Assign) => { parse_continuous_assign(p)?; return Ok(()); },
@@ -706,7 +740,7 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 		// Genvar declaration
 		Keyword(Kw::Genvar) => {
 			p.bump();
-			p.comma_list(Semicolon, "genvar declaration", parse_genvar_decl)?;
+			comma_list(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
 			p.require_reported(Semicolon)?;
 			return Ok(());
 		}
@@ -714,7 +748,8 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 		// Generate region
 		Keyword(Kw::Generate) => {
 			p.bump();
-			p.repeat_until(Keyword(Kw::Endgenerate), parse_generate_item)?;
+			repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
+			p.require_reported(Keyword(Kw::Endgenerate))?;
 			return Ok(());
 		}
 
@@ -799,7 +834,7 @@ fn parse_hierarchy_item(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn hierarchy_item_wrapper(p: &mut Parser, func: fn(&mut Parser) -> ReportedResult<()>, term: Token) -> ReportedResult<()> {
+fn hierarchy_item_wrapper(p: &mut AbstractParser, func: fn(&mut AbstractParser) -> ReportedResult<()>, term: Token) -> ReportedResult<()> {
 	p.bump();
 	match func(p) {
 		Ok(x) => {
@@ -817,7 +852,7 @@ fn hierarchy_item_wrapper(p: &mut Parser, func: fn(&mut Parser) -> ReportedResul
 }
 
 
-fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
+fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 	// TODO: Parse data type or implicit type.
 
 	// Eat the list of parameter assignments.
@@ -835,9 +870,9 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 
 		// Eat the optional assignment.
 		if p.try_eat(Operator(Op::Assign)) {
-			match parse_constant_expr(p) {
+			match parse_expr(p) {
 				Ok(_) => (),
-				Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
+				Err(_) => p.recover_balanced(&[Comma, Semicolon], false)
 			}
 		}
 
@@ -857,7 +892,7 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 			},
 			(Semicolon, _) => break,
 			(x, sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after parameter assignment, got {}", x)).span(sp));
+				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after localparam, found {}", x)).span(sp));
 				return Err(());
 			}
 		}
@@ -867,7 +902,7 @@ fn parse_localparam_decl(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_parameter_decl(p: &mut Parser) -> ReportedResult<()> {
+fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 	let q = p.peek(0).1;
 	p.add_diag(DiagBuilder2::error("Parameter declarations not implemented").span(q));
 	Err(())
@@ -885,7 +920,7 @@ fn parse_parameter_decl(p: &mut Parser) -> ReportedResult<()> {
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_decl(p: &mut Parser) -> ReportedResult<()> {
+fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 	loop {
 		parse_modport_item(p)?;
 		match p.peek(0) {
@@ -910,7 +945,7 @@ fn parse_modport_decl(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_modport_item(p: &mut Parser) -> ReportedResult<()> {
+fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<()> {
 	let (name, span) = match p.eat_ident_or("modport name") {
 		Ok(x) => x,
 		Err(e) => {
@@ -972,7 +1007,7 @@ fn parse_modport_item(p: &mut Parser) -> ReportedResult<()> {
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_port_decl(p: &mut Parser) -> ReportedResult<()> {
+fn parse_modport_port_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 	let (tkn, span) = p.peek(0);
 
 	// Attempt to parse a simple port introduced by one of the port direction
@@ -1035,11 +1070,13 @@ fn as_port_direction(tkn: Token) -> Option<PortDir> {
 
 
 /// Parse a data type.
-fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
+fn parse_data_type(p: &mut AbstractParser) -> ReportedResult<Type> {
 
 	// Decide what general type this is.
 	let (tkn, mut span) = p.peek(0);
-	let data = match tkn {
+	let mut data = match tkn {
+		Keyword(Kw::Void)  => { p.bump(); VoidType },
+
 		// Integer Vector Types
 		Keyword(Kw::Bit)   => { p.bump(); BitType },
 		Keyword(Kw::Logic) => { p.bump(); LogicType },
@@ -1054,11 +1091,19 @@ fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
 		Keyword(Kw::Time)     => { p.bump(); TimeType },
 
 		// Enumerations
-		Keyword(Kw::Enum) => parse_enum_type(p)?,
+		Keyword(Kw::Enum)   => parse_enum_type(p)?,
+		Keyword(Kw::Struct) | Keyword(Kw::Union) => parse_struct_type(p)?,
 
 		Ident(n) | EscIdent(n) => { p.bump(); NamedType(n) },
 		_ => ImplicitType,
 	};
+
+	// Interfaces allow their internal modports and typedefs to be accessed via
+	// the `.` operator.
+	if p.try_eat(Period) {
+		let (name, name_span) = p.eat_ident("member type name")?;
+		p.add_diag(DiagBuilder2::warning("Member types not yet represented in AST").span(name_span));
+	}
 
 	// Parse the optional sign information.
 	let sign = match p.peek(0) {
@@ -1069,9 +1114,7 @@ fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
 
 	// Parse the optional dimensions.
 	let (dims, dims_span) = parse_optional_dimensions(p)?;
-	if !dims.is_empty() {
-		span.expand(dims_span);
-	}
+	span.expand(p.last_span());
 
 	Ok(Type {
 		span: span,
@@ -1082,7 +1125,7 @@ fn parse_data_type(p: &mut Parser) -> ReportedResult<Type> {
 }
 
 
-fn parse_enum_type(p: &mut Parser) -> ReportedResult<TypeData> {
+fn parse_enum_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 	// Consume the enum keyword.
 	p.bump();
 
@@ -1094,19 +1137,19 @@ fn parse_enum_type(p: &mut Parser) -> ReportedResult<TypeData> {
 	};
 
 	// Parse the name declarations.
-	let names = p.flanked(Brace, |p| p.comma_list(CloseDelim(Brace), "enum name", parse_enum_name))?;
+	let names = flanked(p, Brace, |p| comma_list(p, CloseDelim(Brace), "enum name", parse_enum_name))?;
 
 	Ok(EnumType(base, names))
 }
 
 
-fn parse_enum_name(p: &mut Parser) -> ReportedResult<EnumName> {
+fn parse_enum_name(p: &mut AbstractParser) -> ReportedResult<EnumName> {
 	// Eat the name.
 	let (name, name_sp) = p.eat_ident("enum name")?;
 	let mut span = name_sp;
 
 	// Parse the optional range.
-	let range = p.try_flanked(Brack, parse_expr)?;
+	let range = try_flanked(p, Brack, parse_expr)?;
 
 	// Parse the optional value.
 	let value = if p.try_eat(Operator(Op::Assign)) {
@@ -1126,7 +1169,78 @@ fn parse_enum_name(p: &mut Parser) -> ReportedResult<EnumName> {
 }
 
 
-fn parse_optional_dimensions(p: &mut Parser) -> ReportedResult<(Vec<TypeDim>, Span)> {
+fn parse_struct_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
+	let q = p.peek(0).1;
+
+	// Consume the "struct", "union", or "union tagged" keywords.
+	let kind = match (p.peek(0).0, p.peek(1).0) {
+		(Keyword(Kw::Struct), _) => { p.bump(); StructKind::Struct },
+		(Keyword(Kw::Union), Keyword(Kw::Tagged)) => { p.bump(); p.bump(); StructKind::TaggedUnion },
+		(Keyword(Kw::Union), _) => { p.bump(); StructKind::Union },
+		_ => {
+			p.add_diag(DiagBuilder2::error("Expected `struct`, `union`, or `union tagged`").span(q));
+			return Err(());
+		}
+	};
+
+	// Consume the optional "packed" keyword, followed by an optional signing
+	// indication.
+	let (packed, signing) = if p.try_eat(Keyword(Kw::Packed)) {
+		(true, parse_signing(p))
+	} else {
+		(false, TypeSign::None)
+	};
+
+	// Parse the struct members.
+	let members = flanked(p, Brace, |p| repeat_until(p, CloseDelim(Brace), parse_struct_member))?;
+
+	Ok(StructType {
+		kind: kind,
+		packed: packed,
+		signing: signing,
+		members: members,
+	})
+}
+
+
+fn parse_struct_member(p: &mut AbstractParser) -> ReportedResult<StructMember> {
+	let mut span = p.peek(0).1;
+
+	// Parse the optional random qualifier.
+	let rand_qualifier = match p.peek(0).0 {
+		Keyword(Kw::Rand) => { p.bump(); Some(RandomQualifier::Rand) },
+		Keyword(Kw::Randc) => { p.bump(); Some(RandomQualifier::Randc) },
+		_ => None,
+	};
+
+	// Parse the data type of the member.
+	let ty = parse_data_type(p)?;
+
+	// Parse the list of names and assignments.
+	let names = comma_list(p, Semicolon, "member name", parse_variable_decl_assignment)?;
+
+	p.require_reported(Semicolon)?;
+	span.expand(p.last_span());
+
+	Ok(StructMember {
+		span: span,
+		rand_qualifier: rand_qualifier,
+		ty: Box::new(ty),
+		names: names,
+	})
+}
+
+
+fn parse_signing(p: &mut AbstractParser) -> TypeSign {
+	match p.peek(0).0 {
+		Keyword(Kw::Signed) => { p.bump(); TypeSign::Signed },
+		Keyword(Kw::Unsigned) => { p.bump(); TypeSign::Unsigned },
+		_ => TypeSign::None,
+	}
+}
+
+
+fn parse_optional_dimensions(p: &mut AbstractParser) -> ReportedResult<(Vec<TypeDim>, Span)> {
 	let mut v = Vec::new();
 	let mut span;
 	if let Some((d,sp)) = try_dimension(p)? {
@@ -1143,7 +1257,7 @@ fn parse_optional_dimensions(p: &mut Parser) -> ReportedResult<(Vec<TypeDim>, Sp
 }
 
 
-fn try_dimension(p: &mut Parser) -> ReportedResult<Option<(TypeDim, Span)>> {
+fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span)>> {
 	// Eat the leading opening brackets.
 	if !p.try_eat(OpenDelim(Brack)) {
 		return Ok(None);
@@ -1204,7 +1318,7 @@ fn try_dimension(p: &mut Parser) -> ReportedResult<Option<(TypeDim, Span)>> {
 }
 
 
-fn parse_list_of_port_connections(p: &mut Parser) -> ReportedResult<Vec<()>> {
+fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 	let mut v = Vec::new();
 	if p.peek(0).0 == CloseDelim(Paren) {
 		return Ok(v);
@@ -1259,16 +1373,46 @@ fn parse_list_of_port_connections(p: &mut Parser) -> ReportedResult<Vec<()>> {
 }
 
 
-fn parse_expr(p: &mut Parser) -> ReportedResult<Expr> {
+fn parse_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 	parse_expr_prec(p, Precedence::Min)
 }
 
-fn parse_expr_prec(p: &mut Parser, precedence: Precedence) -> ReportedResult<Expr> {
+fn parse_expr_prec(p: &mut AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
+	// Parse class-new and dynamic-array-new expressions, which are used on the
+	// right hand side of assignments.
+	if p.try_eat(Keyword(Kw::New)) {
+		let mut span = p.last_span();
+		if let Some(dim_expr) = try_flanked(p, Brack, parse_expr)? {
+			let expr = try_flanked(p, Paren, parse_expr)?;
+			span.expand(p.last_span());
+			return Ok(Expr {
+				span: span,
+				data: ArrayNewExpr(Box::new(dim_expr), expr.map(|x| Box::new(x))),
+			});
+		} else {
+			if let Some(args) = try_flanked(p, Paren, parse_call_args)? {
+				span.expand(p.last_span());
+				return Ok(Expr {
+					span: span,
+					data: ConstructorCallExpr(args),
+				});
+			} else {
+				let expr = parse_expr(p)?;
+				span.expand(p.last_span());
+				return Ok(Expr {
+					span: span,
+					data: ClassNewExpr(Some(Box::new(expr))),
+				});
+			}
+		}
+	}
+
+	// Otherwise treat this as a normal expression.
 	let prefix = parse_expr_first(p, precedence)?;
 	parse_expr_suffix(p, prefix, precedence)
 }
 
-fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> ReportedResult<Expr> {
+fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedence) -> ReportedResult<Expr> {
 	// Try to parse the index and call expressions.
 	let (tkn, sp) = p.peek(0);
 	match tkn {
@@ -1287,19 +1431,19 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, Precedence::Scope);
+			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// Call: "(" [list_of_arguments] ")"
 		OpenDelim(Paren) if precedence <= Precedence::Scope => {
-			let args = p.parenthesized(parse_call_args);
+			let args = flanked(p, Paren, parse_call_args);
 			// p.add_diag(DiagBuilder2::warning("Don't know how to properly parse call expressions").span(sp));
 			// p.recover_balanced(&[CloseDelim(Paren)], true);
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, Precedence::Scope);
+			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// expr "." ident
@@ -1310,7 +1454,7 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, Precedence::Scope);
+			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// expr "::" ident
@@ -1321,7 +1465,7 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, Precedence::Scope);
+			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// expr "++"
@@ -1331,7 +1475,7 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, Precedence::Unary);
+			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// expr "--"
@@ -1341,7 +1485,20 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 				span: Span::union(prefix.span, p.last_span()),
 				data: DummyExpr,
 			};
-			return parse_expr_suffix(p, expr, Precedence::Unary);
+			return parse_expr_suffix(p, expr, precedence);
+		}
+
+		// expr "?" expr ":" expr
+		Ternary if precedence < Precedence::Ternary => {
+			p.bump();
+			let true_expr = parse_expr_prec(p, Precedence::Ternary)?;
+			p.require_reported(Colon)?;
+			let false_expr = parse_expr_prec(p, Precedence::Ternary)?;
+			let expr = Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			};
+			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		_ => ()
@@ -1364,7 +1521,7 @@ fn parse_expr_suffix(p: &mut Parser, prefix: Expr, precedence: Precedence) -> Re
 	Ok(prefix)
 }
 
-fn parse_expr_first(p: &mut Parser, precedence: Precedence) -> ReportedResult<Expr> {
+fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
 	let first = p.peek(0).1;
 
 	// Certain expressions are introduced by an operator or keyword. Handle
@@ -1411,7 +1568,7 @@ fn parse_expr_first(p: &mut Parser, precedence: Precedence) -> ReportedResult<Ex
 }
 
 
-fn parse_primary_expr(p: &mut Parser) -> ReportedResult<Expr> {
+fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 	let (tkn, sp) = p.peek(0);
 	match tkn {
 		// Primary Literals
@@ -1533,7 +1690,7 @@ pub enum StreamDir {
 	Out,
 }
 
-fn parse_concat_expr(p: &mut Parser) -> ReportedResult<()> {
+fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 	/// Streaming concatenations have a "<<" or ">>" following the opening "{".
 	let stream = match p.peek(0).0 {
 		Operator(Op::LogicShL) => Some(StreamDir::Out),
@@ -1580,7 +1737,7 @@ fn parse_concat_expr(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_expr_list(p: &mut Parser) -> ReportedResult<Vec<Expr>> {
+fn parse_expr_list(p: &mut AbstractParser) -> ReportedResult<Vec<Expr>> {
 	let mut v = Vec::new();
 	loop {
 		v.push(parse_expr_prec(p, Precedence::Max)?);
@@ -1611,7 +1768,7 @@ fn parse_expr_list(p: &mut Parser) -> ReportedResult<Vec<Expr>> {
 /// "(" expression ")"
 /// "(" expression ":" expression ":" expression ")"
 /// ```
-fn parse_primary_parenthesis(p: &mut Parser) -> ReportedResult<()> {
+fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<()> {
 	parse_expr_prec(p, Precedence::Min)?;
 	if p.try_eat(Colon) {
 		parse_expr_prec(p, Precedence::Min)?;
@@ -1631,7 +1788,7 @@ fn parse_primary_parenthesis(p: &mut Parser) -> ReportedResult<()> {
 /// expression "+:" expression
 /// expression "-:" expression
 /// ```
-fn parse_range_expr(p: &mut Parser) -> ReportedResult<()> {
+fn parse_range_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 	let first_expr = parse_expr(p)?;
 
 	match p.peek(0).0 {
@@ -1750,7 +1907,7 @@ fn as_assign_operator(tkn: Token) -> Option<AssignOp> {
 
 /// Parse a comma-separated list of ports, up to a closing parenthesis. Assumes
 /// that the opening parenthesis has already been consumed.
-fn parse_port_list(p: &mut Parser) -> ReportedResult<Vec<Port>> {
+fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
 	let mut v = Vec::new();
 
 	// In case the port list is empty.
@@ -1792,7 +1949,7 @@ fn parse_port_list(p: &mut Parser) -> ReportedResult<Vec<Port>> {
 /// be a reference to the previously parsed port, or `None` if this is the first
 /// port in the list. This is required since ports inherit certain information
 /// from their predecessor if omitted.
-fn parse_port(p: &mut Parser, prev: Option<&Port>) -> ReportedResult<Port> {
+fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Port> {
 	let mut span = p.peek(0).1;
 
 	// Consume the optional port direction.
@@ -1910,7 +2067,7 @@ fn parse_port(p: &mut Parser, prev: Option<&Port>) -> ReportedResult<Port> {
 }
 
 
-fn parse_parameter_assignments(p: &mut Parser) -> ReportedResult<Vec<()>> {
+fn parse_parameter_assignments(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 	let mut v = Vec::new();
 	p.require_reported(OpenDelim(Paren))?;
 
@@ -1948,7 +2105,7 @@ fn parse_parameter_assignments(p: &mut Parser) -> ReportedResult<Vec<()>> {
 }
 
 
-fn parse_parameter_assignment(p: &mut Parser) -> ReportedResult<()> {
+fn parse_parameter_assignment(p: &mut AbstractParser) -> ReportedResult<()> {
 	// If the parameter assignment starts with a ".", this is a named
 	// assignment. Otherwise it's an ordered assignment.
 	if p.try_eat(Period) {
@@ -1972,7 +2129,7 @@ fn parse_parameter_assignment(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_procedure(p: &mut Parser, kind: ProcedureKind) -> ReportedResult<Procedure> {
+fn parse_procedure(p: &mut AbstractParser, kind: ProcedureKind) -> ReportedResult<Procedure> {
 	p.bump();
 	let mut span = p.last_span();
 	let stmt = parse_stmt(p)?;
@@ -1985,25 +2142,25 @@ fn parse_procedure(p: &mut Parser, kind: ProcedureKind) -> ReportedResult<Proced
 }
 
 
-fn parse_func_decl(p: &mut Parser) -> ReportedResult<()> {
+fn parse_func_decl(p: &mut AbstractParser) -> ParallelResult<()> {
 	let q = p.peek(0).1;
-	p.bump();
+	p.require_reported(Keyword(Kw::Function)).or_unmatched()?;
 	p.add_diag(DiagBuilder2::error("Don't know how to parse function declarations").span(q));
 	p.recover_balanced(&[Keyword(Kw::Endfunction)], true);
-	Err(())
+	Err(ParallelError::Matched)
 }
 
 
-fn parse_task_decl(p: &mut Parser) -> ReportedResult<()> {
+fn parse_task_decl(p: &mut AbstractParser) -> ParallelResult<()> {
 	let q = p.peek(0).1;
-	p.bump();
+	p.require_reported(Keyword(Kw::Task)).or_unmatched()?;
 	p.add_diag(DiagBuilder2::error("Don't know how to parse task declarations").span(q));
 	p.recover_balanced(&[Keyword(Kw::Endtask)], true);
-	Err(())
+	Err(ParallelError::Matched)
 }
 
 
-fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
+fn parse_stmt(p: &mut AbstractParser) -> ReportedResult<Stmt> {
 	let mut span = p.peek(0).1;
 
 	// Null statements simply consist of a semicolon.
@@ -2031,7 +2188,7 @@ fn parse_stmt(p: &mut Parser) -> ReportedResult<Stmt> {
 	})
 }
 
-fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<StmtData> {
+fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> ReportedResult<StmtData> {
 	let (tkn, sp) = p.peek(0);
 
 	// See if this is a timing-controlled statement as per IEEE 1800-2009
@@ -2084,13 +2241,13 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 		}
 		Keyword(Kw::Repeat) => {
 			p.bump();
-			let expr = p.parenthesized(parse_expr)?;
+			let expr = flanked(p, Paren, parse_expr)?;
 			let stmt = Box::new(parse_stmt(p)?);
 			RepeatStmt(expr, stmt)
 		}
 		Keyword(Kw::While) => {
 			p.bump();
-			let expr = p.parenthesized(parse_expr)?;
+			let expr = flanked(p, Paren, parse_expr)?;
 			let stmt = Box::new(parse_stmt(p)?);
 			WhileStmt(expr, stmt)
 		}
@@ -2102,12 +2259,12 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 				p.add_diag(DiagBuilder2::error("Do loop requires a while clause").span(q));
 				return Err(());
 			}
-			let expr = p.parenthesized(parse_expr)?;
+			let expr = flanked(p, Paren, parse_expr)?;
 			DoStmt(stmt, expr)
 		}
 		Keyword(Kw::For) => {
 			p.bump();
-			let (init, cond, step) = p.parenthesized(|p| {
+			let (init, cond, step) = flanked(p, Paren, |p| {
 				let init = Box::new(parse_stmt(p)?);
 				let cond = parse_expr(p)?;
 				p.require_reported(Semicolon)?;
@@ -2119,7 +2276,7 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 		}
 		Keyword(Kw::Foreach) => {
 			p.bump();
-			let expr = p.parenthesized(parse_expr)?;
+			let expr = flanked(p, Paren, parse_expr)?;
 			let stmt = Box::new(parse_stmt(p)?);
 			ForeachStmt(expr, stmt)
 		}
@@ -2127,7 +2284,7 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 		// Generate variables
 		Keyword(Kw::Genvar) => {
 			p.bump();
-			let names = p.comma_list(Semicolon, "genvar declaration", parse_genvar_decl)?;
+			let names = comma_list(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
 			GenvarDeclStmt(names)
 		}
 
@@ -2148,7 +2305,7 @@ fn parse_stmt_data(p: &mut Parser, label: &mut Option<Name>) -> ReportedResult<S
 }
 
 
-fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) -> ReportedResult<(Vec<Stmt>, Token)> {
+fn parse_block(p: &mut AbstractParser, label: &mut Option<Name>, terminators: &[Token]) -> ReportedResult<(Vec<Stmt>, Token)> {
 	let span = p.last_span();
 
 	// Consume the optional block label. If the block has already been labelled
@@ -2210,7 +2367,7 @@ fn parse_block(p: &mut Parser, label: &mut Option<Name>, terminators: &[Token]) 
 
 
 /// Parse a continuous assignment as per IEEE 1800-2009 section 10.3.
-fn parse_continuous_assign(p: &mut Parser) -> ReportedResult<()> {
+fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<()> {
 	p.bump();
 	let mut span = p.last_span();
 
@@ -2252,7 +2409,7 @@ fn parse_continuous_assign(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_if_or_case(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
+fn parse_if_or_case(p: &mut AbstractParser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
 	let (tkn, span) = p.peek(0);
 	match tkn {
 		// Case statements
@@ -2272,7 +2429,7 @@ fn parse_if_or_case(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResul
 
 
 /// Parse a case statement as per IEEE 1800-2009 section 12.5.
-fn parse_case(p: &mut Parser, up: Option<UniquePriority>, kind: CaseKind) -> ReportedResult<StmtData> {
+fn parse_case(p: &mut AbstractParser, up: Option<UniquePriority>, kind: CaseKind) -> ReportedResult<StmtData> {
 	let q = p.last_span();
 
 	// Parse the case expression.
@@ -2354,7 +2511,7 @@ fn parse_case(p: &mut Parser, up: Option<UniquePriority>, kind: CaseKind) -> Rep
 }
 
 
-fn parse_if(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
+fn parse_if(p: &mut AbstractParser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
 	// Parse the condition expression surrounded by parenthesis.
 	p.require_reported(OpenDelim(Paren))?;
 	let cond = match parse_expr(p) {
@@ -2386,7 +2543,7 @@ fn parse_if(p: &mut Parser, up: Option<UniquePriority>) -> ReportedResult<StmtDa
 }
 
 
-fn try_delay_control(p: &mut Parser) -> ReportedResult<Option<DelayControl>> {
+fn try_delay_control(p: &mut AbstractParser) -> ReportedResult<Option<DelayControl>> {
 	// Try to consume the hashtag which introduces the delay control.
 	if !p.try_eat(Hashtag) {
 		return Ok(None);
@@ -2426,7 +2583,7 @@ fn try_delay_control(p: &mut Parser) -> ReportedResult<Option<DelayControl>> {
 }
 
 /// Try to parse an event control as described in IEEE 1800-2009 section 9.4.2.
-fn try_event_control(p: &mut Parser) -> ReportedResult<Option<EventControl>> {
+fn try_event_control(p: &mut AbstractParser) -> ReportedResult<Option<EventControl>> {
 	if !p.try_eat(At) {
 		return Ok(None)
 	}
@@ -2461,7 +2618,7 @@ fn try_event_control(p: &mut Parser) -> ReportedResult<Option<EventControl>> {
 	}))
 }
 
-fn try_cycle_delay(p: &mut Parser) -> ReportedResult<Option<CycleDelay>> {
+fn try_cycle_delay(p: &mut AbstractParser) -> ReportedResult<Option<CycleDelay>> {
 	if !p.try_eat(DoubleHashtag) {
 		return Ok(None)
 	}
@@ -2472,7 +2629,7 @@ fn try_cycle_delay(p: &mut Parser) -> ReportedResult<Option<CycleDelay>> {
 }
 
 
-fn parse_assignment(p: &mut Parser) -> ReportedResult<(Expr, Expr)> {
+fn parse_assignment(p: &mut AbstractParser) -> ReportedResult<(Expr, Expr)> {
 	let lhs = parse_expr_prec(p, Precedence::Assignment)?;
 	p.require_reported(Operator(Op::Assign))?;
 	let rhs = parse_expr_prec(p, Precedence::Assignment)?;
@@ -2480,7 +2637,7 @@ fn parse_assignment(p: &mut Parser) -> ReportedResult<(Expr, Expr)> {
 }
 
 
-fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
+fn parse_expr_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
 	// Parse the leading expression.
 	let expr = parse_expr_prec(p, Precedence::Scope)?;
 	let (tkn, sp) = p.peek(0);
@@ -2488,7 +2645,7 @@ fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
 	// If the leading expression is directly followed by an identifier, this is
 	// a data declaration.
 	if p.is_ident() {
-		let names = p.comma_list(Semicolon, "variable declaration", parse_variable_decl_assignment)?;
+		let names = comma_list(p, Semicolon, "variable declaration", parse_variable_decl_assignment)?;
 		// TODO: Convert `expr` to a type.
 		p.add_diag(DiagBuilder2::warning("Variable declaration type not yet represented in the AST").span(expr.span));
 		return Ok(VarDeclStmt {
@@ -2542,7 +2699,7 @@ fn parse_expr_stmt(p: &mut Parser) -> ReportedResult<StmtData> {
 }
 
 
-fn parse_event_expr(p: &mut Parser, precedence: EventPrecedence) -> ReportedResult<EventExpr> {
+fn parse_event_expr(p: &mut AbstractParser, precedence: EventPrecedence) -> ReportedResult<EventExpr> {
 	let mut span = p.peek(0).1;
 
 	// Try parsing an event expression in parentheses.
@@ -2581,7 +2738,7 @@ fn parse_event_expr(p: &mut Parser, precedence: EventPrecedence) -> ReportedResu
 }
 
 
-fn parse_event_expr_suffix(p: &mut Parser, expr: EventExpr, precedence: EventPrecedence) -> ReportedResult<EventExpr> {
+fn parse_event_expr_suffix(p: &mut AbstractParser, expr: EventExpr, precedence: EventPrecedence) -> ReportedResult<EventExpr> {
 	match p.peek(0).0 {
 		// event_expr "iff" expr
 		Keyword(Kw::Iff) if precedence < EventPrecedence::Iff => {
@@ -2628,7 +2785,7 @@ fn as_edge_ident(tkn: Token) -> EdgeIdent {
 }
 
 
-fn parse_call_args(p: &mut Parser) -> ReportedResult<Vec<CallArg>> {
+fn parse_call_args(p: &mut AbstractParser) -> ReportedResult<Vec<CallArg>> {
 	let mut v = Vec::new();
 	loop {
 		match p.peek(0) {
@@ -2642,7 +2799,7 @@ fn parse_call_args(p: &mut Parser) -> ReportedResult<Vec<CallArg>> {
 				p.bump();
 				let (name, mut name_sp) = p.eat_ident("argument name")?;
 				name_sp.expand(sp);
-				let expr = p.parenthesized(|p| Ok(
+				let expr = flanked(p, Paren, |p| Ok(
 					if p.peek(0).0 == CloseDelim(Paren) {
 						None
 					} else {
@@ -2689,7 +2846,7 @@ fn parse_call_args(p: &mut Parser) -> ReportedResult<Vec<CallArg>> {
 }
 
 
-fn parse_variable_decl_assignment(p: &mut Parser) -> ReportedResult<VarDecl> {
+fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarDecl> {
 	let mut span = p.peek(0).1;
 
 	// Parse the variable name.
@@ -2716,7 +2873,7 @@ fn parse_variable_decl_assignment(p: &mut Parser) -> ReportedResult<VarDecl> {
 }
 
 
-fn parse_genvar_decl(p: &mut Parser) -> ReportedResult<GenvarDecl> {
+fn parse_genvar_decl(p: &mut AbstractParser) -> ReportedResult<GenvarDecl> {
 	let mut span = p.peek(0).1;
 
 	// Parse the genvar name.
@@ -2739,12 +2896,12 @@ fn parse_genvar_decl(p: &mut Parser) -> ReportedResult<GenvarDecl> {
 }
 
 
-fn parse_generate_item(p: &mut Parser) -> ReportedResult<()> {
+fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<()> {
 	let (tkn,sp) = p.peek(0);
 	match tkn {
 		Keyword(Kw::For) => {
 			p.bump();
-			p.flanked(Paren, |p|{
+			flanked(p, Paren, |p|{
 				parse_stmt(p)?;
 				parse_expr(p)?;
 				p.require_reported(Semicolon)?;
@@ -2772,7 +2929,7 @@ fn parse_generate_item(p: &mut Parser) -> ReportedResult<()> {
 }
 
 
-fn parse_generate_block(p: &mut Parser) -> ReportedResult<()> {
+fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<()> {
 	let mut span = p.peek(0).1;
 
 	// Parse the optional block label.
@@ -2810,7 +2967,8 @@ fn parse_generate_block(p: &mut Parser) -> ReportedResult<()> {
 		}
 	}
 
-	p.repeat_until(CloseDelim(Bgend), parse_generate_item)?;
+	repeat_until(p, CloseDelim(Bgend), parse_generate_item)?;
+	p.require_reported(CloseDelim(Bgend))?;
 
 	// Consume the optional label after the "end" keyword.
 	if p.try_eat(Colon) {
@@ -2827,6 +2985,437 @@ fn parse_generate_block(p: &mut Parser) -> ReportedResult<()> {
 
 	span.expand(p.last_span());
 	Ok(())
+}
+
+
+fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
+	let mut span = p.peek(0).1;
+	let (
+		virt,
+		lifetime,
+		name,
+		name_span,
+		params,
+		extends,
+		items
+	) = recovered(p, Keyword(Kw::Endclass), |p|{
+
+		// Eat the optional "virtual" keyword.
+		let virt = p.try_eat(Keyword(Kw::Virtual));
+
+		// Eat the "class" keyword.
+		p.require_reported(Keyword(Kw::Class))?;
+
+		// Eat the optional lifetime.
+		let lifetime = match as_lifetime(p.peek(0).0) {
+			Some(l) => { p.bump(); l },
+			None => Lifetime::Static,
+		};
+
+		// Parse the class name.
+		let (name, name_span) = p.eat_ident("class name")?;
+
+		// Parse the optional parameter port list.
+		let params = if p.try_eat(Hashtag) {
+			parse_parameter_port_list(p)?
+		} else {
+			Vec::new()
+		};
+
+		// Parse the optional inheritance clause.
+		let extends = if p.try_eat(Keyword(Kw::Extends)) {
+			let superclass = parse_data_type(p)?;
+			let args = try_flanked(p, Paren, parse_call_args)?.unwrap_or(Vec::new());
+			Some((superclass, args))
+		} else {
+			None
+		};
+		p.require_reported(Semicolon)?;
+
+		// Parse the class items.
+		let items = repeat_until(p, Keyword(Kw::Endclass), parse_class_item)?;
+		Ok((virt, lifetime, name, name_span, params, extends, items))
+	})?;
+	p.require_reported(Keyword(Kw::Endclass))?;
+
+	// Parse the optional class name after "endclass".
+	if p.try_eat(Colon) {
+		let (n, sp) = p.eat_ident("class name")?;
+		if n != name {
+			p.add_diag(DiagBuilder2::error(format!("Class name {} disagrees with name {} given before", n, name)).span(sp));
+			return Err(());
+		}
+	}
+
+	span.expand(p.last_span());
+	Ok(ClassDecl {
+		span: span,
+		virt: virt,
+		lifetime: lifetime,
+		name: name,
+		name_span: name_span,
+		params: params,
+		extends: extends,
+		items: items,
+	})
+}
+
+
+fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
+	let mut span = p.peek(0).1;
+
+	// Easy path for null class items.
+	if p.try_eat(Semicolon) {
+		return Ok(ClassItem {
+			span: span,
+			qualifiers: Vec::new(),
+			data: ClassItemData::Null,
+		});
+	}
+
+	// Parse "extern" task and function prototypes.
+	if p.try_eat(Keyword(Kw::Extern)) {
+		p.add_diag(DiagBuilder2::error("Don't know how to parse external method prototypes").span(span));
+		p.recover_balanced(&[Semicolon], true);
+		// TODO: Match on "function" and "task" keywords and parse the according
+		// prototypes.
+		return Err(());
+	}
+
+	// Parse the optional class item qualifiers.
+	let qualifiers = parse_class_item_qualifiers(p)?;
+
+	let data = {
+		let mut pp = ParallelParser::new(p);
+		pp.add("class property", |p| {
+			let ty = parse_data_type(p).or_unmatched()?;
+			let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment).or_unmatched()?;
+			p.require_reported(Semicolon).or_matched()?;
+			Ok(ClassItemData::Property)
+		});
+		pp.add("class function", |p| parse_func_decl(p).map(|_| ClassItemData::FuncDecl));
+		pp.add("class task", |p| parse_task_decl(p).map(|_| ClassItemData::TaskDecl));
+		pp.add("class constraint", |p| parse_constraint(p).map(|_| ClassItemData::Constraint));
+		pp.finish("class item").wrap()?
+	};
+
+	// // Parse the class item.
+	// let data = match p.peek(0).0 {
+	// 	Keyword(Kw::Function) => {
+	// 		recovered(p, Keyword(Kw::Endfunction), parse_func_decl)?;
+	// 		ClassItemData::FuncDecl
+	// 	}
+	// 	Keyword(Kw::Task) => {
+	// 		recovered(p, Keyword(Kw::Endtask), parse_task_decl)?;
+	// 		ClassItemData::TaskDecl
+	// 	}
+	// 	Keyword(Kw::Constraint) => {
+	// 		parse_constraint_decl()
+	// 	}
+	// 	_ => recovered(p, Semicolon, |p|{
+	// 		let ty = parse_data_type(p)?;
+	// 		let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment)?;
+	// 		p.require_reported(Semicolon)?;
+	// 		Ok(ClassItemData::Property)
+	// 	})?
+	// };
+	span.expand(p.last_span());
+
+	Ok(ClassItem {
+		span: span,
+		qualifiers: qualifiers,
+		data: data,
+	})
+}
+
+
+fn parse_class_item_qualifiers(p: &mut AbstractParser) -> ReportedResult<Vec<(ClassItemQualifier,Span)>> {
+	let mut v = Vec::new();
+	loop {
+		let (tkn,sp) = p.peek(0);
+		match tkn {
+			Keyword(Kw::Static)    => v.push((ClassItemQualifier::Static, sp)),
+			Keyword(Kw::Protected) => v.push((ClassItemQualifier::Protected, sp)),
+			Keyword(Kw::Local)     => v.push((ClassItemQualifier::Local, sp)),
+			Keyword(Kw::Rand)      => v.push((ClassItemQualifier::Rand, sp)),
+			Keyword(Kw::Randc)     => v.push((ClassItemQualifier::Randc, sp)),
+			Keyword(Kw::Pure)      => v.push((ClassItemQualifier::Pure, sp)),
+			Keyword(Kw::Virtual)   => v.push((ClassItemQualifier::Virtual, sp)),
+			Keyword(Kw::Const)     => v.push((ClassItemQualifier::Const, sp)),
+			_ => break,
+		}
+		p.bump();
+	}
+	Ok(v)
+}
+
+
+fn parse_class_method(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
+	println!("Parsing class method");
+	Err(())
+}
+
+
+fn parse_class_property(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
+	println!("Parsing class property");
+	p.try_eat(Keyword(Kw::Rand));
+	Err(())
+}
+
+
+fn parse_constraint(p: &mut AbstractParser) -> ParallelResult<Constraint> {
+	let mut span = p.peek(0).1;
+
+	// Parse the prototype qualifier.
+	let kind = match p.peek(0).0 {
+		Keyword(Kw::Extern) => { p.bump(); ConstraintKind::ExternProto },
+		Keyword(Kw::Pure) => { p.bump(); ConstraintKind::PureProto },
+		_ => ConstraintKind::Decl,
+	};
+	let kind_span = span;
+
+	// Parse the optional "static" keyword.
+	let statik = p.try_eat(Keyword(Kw::Static));
+
+	// Parse the "constraint" keyword.
+	p.require_reported(Keyword(Kw::Constraint)).or_unmatched()?;
+
+	// Parse the constraint name.
+	let (name, name_span) = p.eat_ident("constraint name").or_matched()?;
+
+	let items = if p.try_eat(Semicolon) {
+		let kind = match kind {
+			ConstraintKind::Decl => ConstraintKind::Proto,
+			x => x,
+		};
+		Vec::new()
+	} else {
+		// Make sure that no "extern" or "pure" keyword was used, as these are
+		// only valid for prototypes.
+		if kind == ConstraintKind::ExternProto || kind == ConstraintKind::PureProto {
+			p.add_diag(DiagBuilder2::error("Only constraint prototypes can be extern or pure").span(kind_span));
+			return Err(ParallelError::Matched);
+		}
+		flanked(p, Brace, |p| repeat_until(p, CloseDelim(Brace), parse_constraint_item)).or_matched()?
+	};
+	span.expand(p.last_span());
+	println!("constraint items:");
+	for i in &items {
+		println!("- {:?}", i);
+	}
+
+	Ok(Constraint {
+		span: span,
+		kind: kind,
+		statik: statik,
+		name: name,
+		name_span: name_span,
+		items: items,
+	})
+}
+
+
+fn parse_constraint_item(p: &mut AbstractParser) -> ReportedResult<ConstraintItem> {
+	let mut span = p.peek(0).1;
+	let data = parse_constraint_item_data(p)?;
+	span.expand(p.last_span());
+	Ok(ConstraintItem {
+		span: span,
+		data: data,
+	})
+}
+
+
+fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<ConstraintItemData> {
+	// Handle the trivial cases that start with a keyword first.
+	if p.try_eat(Keyword(Kw::If)) {
+		let q = p.last_span();
+		p.add_diag(DiagBuilder2::error("Don't know how to parse `if` constraint items").span(q));
+		return Err(());
+	}
+
+	if p.try_eat(Keyword(Kw::Foreach)) {
+		let q = p.last_span();
+		p.add_diag(DiagBuilder2::error("Don't know how to parse `foreach` constraint items").span(q));
+		return Err(());
+	}
+
+	// If we arrive here, the item starts with an expression.
+	let expr = parse_expr(p)?;
+	p.require_reported(Semicolon)?;
+	Ok(ConstraintItemData::Expr(expr))
+}
+
+
+struct ParallelParser<'tp, R: Clone> {
+	parser: &'tp mut AbstractParser,
+	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ParallelResult<R>>)>,
+	tokens: Vec<TokenAndSpan>,
+}
+
+type ParallelResult<T> = Result<T, ParallelError>;
+
+enum ParallelError {
+	Unmatched,
+	Matched,
+}
+
+trait ToParallelResult<T> {
+	fn or_unmatched(self) -> ParallelResult<T>;
+	fn or_matched(self) -> ParallelResult<T>;
+}
+
+impl<T> ToParallelResult<T> for ReportedResult<T> {
+	fn or_unmatched(self) -> ParallelResult<T> {
+		self.or(Err(ParallelError::Unmatched))
+	}
+
+	fn or_matched(self) -> ParallelResult<T> {
+		self.or(Err(ParallelError::Matched))
+	}
+}
+
+trait ToReportedResult<T> {
+	fn wrap(self) -> ReportedResult<T>;
+}
+
+impl<T> ToReportedResult<T> for ParallelResult<T> {
+	fn wrap(self) -> ReportedResult<T> {
+		self.or(Err(()))
+	}
+}
+
+impl<'tp, R: Clone> ParallelParser<'tp, R> {
+	pub fn new(p: &'tp mut AbstractParser) -> Self {
+		ParallelParser {
+			parser: p,
+			branches: Vec::new(),
+			tokens: Vec::new(),
+		}
+	}
+
+	pub fn add<F>(&mut self, name: &str, func: F)
+	where F: FnMut(&mut AbstractParser) -> ParallelResult<R> + 'static {
+		self.branches.push((name.to_owned(), Box::new(func)));
+	}
+
+	pub fn finish(self, msg: &str) -> ParallelResult<R> {
+		let q = self.parser.peek(0).1;
+		// self.parser.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
+
+		// Create a separate speculative parser for each branch.
+		let mut results = Vec::new();
+		let mut matched = Vec::new();
+		for (name, mut func) in self.branches {
+			// self.parser.add_diag(DiagBuilder2::note(format!("Trying as {}", name)).span(q));
+			let mut bp = BranchParser::new(self.parser);
+			match func(&mut bp) {
+				Ok(x) => {
+					results.push((name, bp.consumed, bp.diagnostics, x));
+				}
+				Err(ParallelError::Unmatched) => (),
+				Err(ParallelError::Matched) => matched.push(bp.diagnostics),
+			}
+		}
+
+		if results.len() > 1 {
+			let mut names = String::new();
+			names.push_str(&results[0].0);
+			if results.len() == 2 {
+				names.push_str(" or ");
+				names.push_str(&results[1].0);
+			} else {
+				for &(ref name, _, _, _) in &results[..results.len()-1] {
+					names.push_str(", ");
+					names.push_str(&name);
+				}
+				names.push_str(", or ");
+				names.push_str(&results[results.len()-1].0);
+			}
+			self.parser.add_diag(DiagBuilder2::fatal(format!("Ambiguous code, could be {}", names)).span(q));
+			Err(ParallelError::Matched)
+		} else if let Some(&(_, consumed, ref diagnostics, ref res)) = results.last() {
+			for d in diagnostics {
+				self.parser.add_diag(d.clone());
+			}
+			for i in 0..consumed {
+				self.parser.bump();
+			}
+			Ok((*res).clone())
+		} else {
+			self.parser.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
+			if matched.is_empty() {
+				Err(ParallelError::Unmatched)
+			} else {
+				for m in matched {
+					for d in m {
+						self.parser.add_diag(d.clone());
+					}
+				}
+				Err(ParallelError::Matched)
+			}
+		}
+	}
+}
+
+struct BranchParser<'tp> {
+	parser: &'tp mut AbstractParser,
+	consumed: usize,
+	diagnostics: Vec<DiagBuilder2>,
+	last_span: Span,
+}
+
+impl<'tp> BranchParser<'tp> {
+	pub fn new(parser: &'tp mut AbstractParser) -> Self {
+		let last = parser.last_span();
+		BranchParser {
+			parser: parser,
+			consumed: 0,
+			diagnostics: Vec::new(),
+			last_span: last,
+		}
+	}
+}
+
+impl<'tp> AbstractParser for BranchParser<'tp> {
+	fn peek(&mut self, offset: usize) -> TokenAndSpan {
+		self.parser.peek(self.consumed + offset)
+	}
+
+	fn bump(&mut self) {
+		self.consumed += 1;
+		self.last_span = self.parser.peek(self.consumed).1;
+	}
+
+	fn consumed(&self) -> usize {
+		self.consumed
+	}
+
+	fn last_span(&self) -> Span {
+		self.last_span
+	}
+
+	fn add_diag(&mut self, diag: DiagBuilder2) {
+		self.diagnostics.push(diag);
+	}
+}
+
+
+fn parse_typedef(p: &mut AbstractParser) -> ReportedResult<Typedef> {
+	p.bump();
+	let mut span = p.last_span();
+	let ty = parse_data_type(p)?;
+	let (name, name_span) = p.eat_ident("type name")?;
+	let (dims, _) = parse_optional_dimensions(p)?;
+	p.require_reported(Semicolon)?;
+	span.expand(p.last_span());
+	Ok(Typedef {
+		span: span,
+		name: name,
+		name_span: name_span,
+		ty: ty,
+		dims: dims,
+	})
 }
 
 
