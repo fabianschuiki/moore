@@ -347,7 +347,10 @@ impl Span {
 		use std::cmp::{min, max};
 		let sa = a.into();
 		let sb = b.into();
-		assert_eq!(sa.source, sb.source);
+		// assert_eq!(sa.source, sb.source);
+		if sa.source != sb.source {
+			return sa;
+		}
 		Span {
 			source: sa.source,
 			begin: min(sa.begin, sb.begin),
@@ -360,9 +363,11 @@ impl Span {
 	pub fn expand<S: Into<Span>>(&mut self, other: S) -> &mut Self {
 		use std::cmp::{min, max};
 		let o = other.into();
-		assert_eq!(self.source, o.source);
-		self.begin = min(self.begin, o.begin);
-		self.end = max(self.end, o.end);
+		// assert_eq!(self.source, o.source);
+		if self.source == o.source {
+			self.begin = min(self.begin, o.begin);
+			self.end = max(self.end, o.end);
+		}
 		self
 	}
 

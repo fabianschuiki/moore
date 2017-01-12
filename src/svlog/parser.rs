@@ -507,6 +507,11 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 
 	// Eat the items in the interface.
 	while p.peek(0).0 != Keyword(Kw::Endinterface) && p.peek(0).0 != Eof {
+		// Skip empty items.
+		if p.try_eat(Semicolon) {
+			continue;
+		}
+
 		let q = p.peek(0).1;
 		match parse_hierarchy_item(p) {
 			Ok(_) => (),
@@ -681,6 +686,11 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 
 	// Eat the items in the module.
 	while p.peek(0).0 != Keyword(Kw::Endmodule) && p.peek(0).0 != Eof {
+		// Skip empty items.
+		if p.try_eat(Semicolon) {
+			continue;
+		}
+
 		let q = p.peek(0).1;
 		match parse_hierarchy_item(p) {
 			Ok(_) => (),
@@ -758,6 +768,12 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 
 	// TODO: Handle the const and var keywords that may appear in front of a
 	// data declaration, as well as the optional lifetime.
+	let konst = p.try_eat(Keyword(Kw::Const));
+	let var = p.try_eat(Keyword(Kw::Var));
+	let lifetime = as_lifetime(p.peek(0).0);
+	if lifetime.is_some() {
+		p.bump();
+	}
 
 	// Now attempt to parse a data type or implicit type, which could introduce
 	// and instantiation or data declaration. Due to the nature of implicit
@@ -796,13 +812,11 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		// Parse the optional assignment.
 		match p.peek(0) {
 			(Operator(Op::Assign), sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Default variable assignments not implemented, for variable `{}`", name)).span(sp));
-				p.recover_balanced(&[Comma, Semicolon], false);
+				p.bump();
+				parse_expr(p)?;
 			}
 			(OpenDelim(Paren), sp) => {
-				p.bump();
-				parse_list_of_port_connections(p)?;
-				p.require_reported(CloseDelim(Paren))?;
+				flanked(p, Paren, parse_list_of_port_connections)?;
 			}
 			_ => ()
 		}
@@ -1408,11 +1422,15 @@ fn parse_expr_prec(p: &mut AbstractParser, precedence: Precedence) -> ReportedRe
 	}
 
 	// Otherwise treat this as a normal expression.
+	let q = p.peek(0).1;
+	// p.add_diag(DiagBuilder2::note(format!("expr_suffix with precedence {:?}", precedence)).span(q));
 	let prefix = parse_expr_first(p, precedence)?;
 	parse_expr_suffix(p, prefix, precedence)
 }
 
 fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedence) -> ReportedResult<Expr> {
+	// p.add_diag(DiagBuilder2::note(format!("expr_suffix with precedence {:?}", precedence)).span(prefix.span));
+
 	// Try to parse the index and call expressions.
 	let (tkn, sp) = p.peek(0);
 	match tkn {
@@ -1502,6 +1520,19 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 		}
 
 		_ => ()
+	}
+
+	// Try assign operators.
+	if let Some(op) = as_assign_operator(tkn) {
+		if precedence <= Precedence::Assignment {
+			p.bump();
+			parse_expr_prec(p, Precedence::Assignment)?;
+			let expr = Expr {
+				span: Span::union(prefix.span, p.last_span()),
+				data: DummyExpr,
+			};
+			return parse_expr_suffix(p, expr, precedence);
+		}
 	}
 
 	// Try to parse binary operations.
@@ -2288,18 +2319,65 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 			GenvarDeclStmt(names)
 		}
 
-		// Everything else we treat as an expression-based statement
+		// Flow control
+		Keyword(Kw::Continue) => {
+			p.bump();
+			ContinueStmt
+		}
+
+		// Everything else needs special treatment as things such as variable
+		// declarations look very similar to other expressions.
 		_ => {
-			match parse_expr_stmt(p) {
-				Ok(x) => {
-					p.require_reported(Semicolon)?;
-					x
-				}
-				Err(()) => {
+			let result = {
+				let mut pp = ParallelParser::new(p);
+				pp.add("variable declaration", |p|{
+					let mut bp = BranchParser::new(p);
+					let konst = bp.try_eat(Keyword(Kw::Const));
+					let var = bp.try_eat(Keyword(Kw::Var));
+					let lifetime = as_lifetime(bp.peek(0).0);
+					if lifetime.is_some() {
+						bp.bump();
+					}
+
+					let ty = parse_data_type(&mut bp).or_unmatched()?;
+					let decls = comma_list(&mut bp, Semicolon, "variable declaration", parse_variable_decl_assignment).or_unmatched()?;
+					bp.require_reported(Semicolon).or_unmatched()?;
+
+					let p = bp.parser;
+					let consumed = bp.consumed;
+					let diagnostics = bp.diagnostics;
+
+					for d in diagnostics {
+						p.add_diag(d);
+					}
+					for _ in 0..consumed {
+						p.bump();
+					}
+
+					Ok(NullStmt)
+				});
+				pp.add("assign statement", |p| parse_assign_stmt(p).or_unmatched());
+				pp.add("expression statement", |p| parse_expr_stmt(p).or_unmatched());
+				pp.finish("statement")
+			};
+			match result {
+				Ok(x) => x,
+				Err(_) => {
 					p.recover_balanced(&[Semicolon], true);
-					return Err(());
+					return Err(())
 				}
 			}
+
+			// match parse_expr_stmt(p) {
+			// 	Ok(x) => {
+			// 		p.require_reported(Semicolon)?;
+			// 		x
+			// 	}
+			// 	Err(()) => {
+			// 		p.recover_balanced(&[Semicolon], true);
+			// 		return Err(());
+			// 	}
+			// }
 		}
 	})
 }
@@ -2630,40 +2708,24 @@ fn try_cycle_delay(p: &mut AbstractParser) -> ReportedResult<Option<CycleDelay>>
 
 
 fn parse_assignment(p: &mut AbstractParser) -> ReportedResult<(Expr, Expr)> {
-	let lhs = parse_expr_prec(p, Precedence::Assignment)?;
+	let lhs = parse_expr_prec(p, Precedence::Scope)?;
 	p.require_reported(Operator(Op::Assign))?;
 	let rhs = parse_expr_prec(p, Precedence::Assignment)?;
 	Ok((lhs, rhs))
 }
 
 
-fn parse_expr_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
+fn parse_assign_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
 	// Parse the leading expression.
 	let expr = parse_expr_prec(p, Precedence::Scope)?;
 	let (tkn, sp) = p.peek(0);
-
-	// If the leading expression is directly followed by an identifier, this is
-	// a data declaration.
-	if p.is_ident() {
-		let names = comma_list(p, Semicolon, "variable declaration", parse_variable_decl_assignment)?;
-		// TODO: Convert `expr` to a type.
-		p.add_diag(DiagBuilder2::warning("Variable declaration type not yet represented in the AST").span(expr.span));
-		return Ok(VarDeclStmt {
-			ty: Type {
-				span: expr.span,
-				data: ImplicitType,
-				sign: TypeSign::None,
-				dims: Vec::new(),
-			},
-			names: names,
-		});
-	}
 
 	// Handle blocking assignments (IEEE 1800-2009 section 10.4.1), where the
 	// expression is followed by an assignment operator.
 	if let Some(op) = as_assign_operator(tkn) {
 		p.bump();
 		let rhs = parse_expr(p)?;
+		p.require_reported(Semicolon)?;
 		return Ok(BlockingAssignStmt {
 			lhs: expr,
 			rhs: rhs,
@@ -2681,6 +2743,7 @@ fn parse_expr_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
 
 		// Parse the right-hand side of the assignment.
 		let rhs = parse_expr(p)?;
+		p.require_reported(Semicolon)?;
 
 		return Ok(NonblockingAssignStmt {
 			lhs: expr,
@@ -2690,12 +2753,15 @@ fn parse_expr_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
 		});
 	}
 
-	if p.peek(0).0 == Semicolon {
-		return Ok(ExprStmt(expr));
-	}
+	p.add_diag(DiagBuilder2::error("Expected blocking or non-blocking assign statement").span(sp));
+	Err(())
+}
 
-	p.add_diag(DiagBuilder2::error(format!("Don't know how to handle {} when used in a statement after an expression", tkn)).span(sp));
-	return Err(());
+
+fn parse_expr_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
+	let expr = parse_expr_prec(p, Precedence::Unary)?;
+	p.require_reported(Semicolon)?;
+	Ok(ExprStmt(expr))
 }
 
 
@@ -2846,7 +2912,7 @@ fn parse_call_args(p: &mut AbstractParser) -> ReportedResult<Vec<CallArg>> {
 }
 
 
-fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarDecl> {
+fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarDeclName> {
 	let mut span = p.peek(0).1;
 
 	// Parse the variable name.
@@ -2863,7 +2929,7 @@ fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarD
 	};
 	span.expand(p.last_span());
 
-	Ok(VarDecl {
+	Ok(VarDeclName {
 		span: span,
 		name: name,
 		name_span: name_span,
@@ -2909,13 +2975,16 @@ fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<()> {
 				Ok(())
 			})?;
 			parse_generate_block(p)?;
-			// p.add_diag(DiagBuilder2::error("Don't know how to parse for-generate statements").span(sp));
-			// Err(())
 			Ok(())
 		}
 		Keyword(Kw::If) => {
-			p.add_diag(DiagBuilder2::error("Don't know how to parse if-generate statements").span(sp));
-			Err(())
+			p.bump();
+			flanked(p, Paren, parse_expr)?;
+			parse_generate_block(p)?;
+			if p.try_eat(Keyword(Kw::Else)) {
+				parse_generate_block(p)?;
+			}
+			Ok(())
 		}
 		Keyword(Kw::Case) => {
 			p.add_diag(DiagBuilder2::error("Don't know how to parse case-generate statements").span(sp));
@@ -3199,10 +3268,6 @@ fn parse_constraint(p: &mut AbstractParser) -> ParallelResult<Constraint> {
 		flanked(p, Brace, |p| repeat_until(p, CloseDelim(Brace), parse_constraint_item)).or_matched()?
 	};
 	span.expand(p.last_span());
-	println!("constraint items:");
-	for i in &items {
-		println!("- {:?}", i);
-	}
 
 	Ok(Constraint {
 		span: span,
@@ -3311,9 +3376,10 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 			let mut bp = BranchParser::new(self.parser);
 			match func(&mut bp) {
 				Ok(x) => {
-					results.push((name, bp.consumed, bp.diagnostics, x));
+					let sp = bp.last_span();
+					results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
 				}
-				Err(ParallelError::Unmatched) => (),
+				Err(ParallelError::Unmatched) => matched.push(bp.diagnostics),
 				Err(ParallelError::Matched) => matched.push(bp.diagnostics),
 			}
 		}
@@ -3325,7 +3391,7 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 				names.push_str(" or ");
 				names.push_str(&results[1].0);
 			} else {
-				for &(ref name, _, _, _) in &results[..results.len()-1] {
+				for &(ref name, ..) in &results[..results.len()-1] {
 					names.push_str(", ");
 					names.push_str(&name);
 				}
@@ -3333,8 +3399,11 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 				names.push_str(&results[results.len()-1].0);
 			}
 			self.parser.add_diag(DiagBuilder2::fatal(format!("Ambiguous code, could be {}", names)).span(q));
+			for &(ref name, .., span) in &results {
+				self.parser.add_diag(DiagBuilder2::note(format!("{} would be this part", name)).span(span));
+			}
 			Err(ParallelError::Matched)
-		} else if let Some(&(_, consumed, ref diagnostics, ref res)) = results.last() {
+		} else if let Some(&(_, consumed, ref diagnostics, ref res, _)) = results.last() {
 			for d in diagnostics {
 				self.parser.add_diag(d.clone());
 			}

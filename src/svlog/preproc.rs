@@ -412,14 +412,14 @@ impl<'a> Preprocessor<'a> {
 					// then call `self.bump()` once the expansion has been added
 					// to the stack.
 					match self.token {
-						Some(x) => self.macro_stack.push(x),
+						Some((x,sp)) => self.macro_stack.push((x,sp)),
 						None => (),
 					}
 
 					// Push the tokens of the macro onto the stack, potentially
 					// substituting any macro parameters as necessary.
 					if params.is_empty() {
-						self.macro_stack.extend(makro.body.iter().rev());
+						self.macro_stack.extend(makro.body.iter().rev().map(|&(tkn,sp)| (tkn,sp)));
 					} else {
 						let mut replacement = Vec::<TokenAndSpan>::new();
 						// TODO: Make this work for argument names that contain
@@ -437,7 +437,7 @@ impl<'a> Preprocessor<'a> {
 								x => replacement.push(x)
 							}
 						}
-						self.macro_stack.extend(replacement.iter().rev());
+						self.macro_stack.extend(replacement.iter().rev().map(|&(tkn,sp)| (tkn,sp)));
 					}
 
 					self.bump();

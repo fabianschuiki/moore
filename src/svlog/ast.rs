@@ -111,7 +111,7 @@ pub struct StructMember {
 	pub span: Span,
 	pub rand_qualifier: Option<RandomQualifier>,
 	pub ty: Box<Type>,
-	pub names: Vec<VarDecl>,
+	pub names: Vec<VarDeclName>,
 }
 
 
@@ -219,11 +219,9 @@ pub enum StmtData {
 	ForStmt(Box<Stmt>, Expr, Expr, Box<Stmt>),
 	ForeachStmt(Expr, Box<Stmt>),
 	ExprStmt(Expr),
-	VarDeclStmt {
-		ty: Type,
-		names: Vec<VarDecl>,
-	},
+	VarDeclStmt(VarDecl),
 	GenvarDeclStmt(Vec<GenvarDecl>),
+	ContinueStmt,
 }
 
 impl Stmt {
@@ -317,8 +315,16 @@ pub enum AssignOp {
 	ArithShR,
 }
 
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDecl {
+	pub span: Span,
+	pub ty: Type,
+	pub names: Vec<VarDeclName>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VarDeclName {
 	pub span: Span,
 	pub name: Name,
 	pub name_span: Span,
