@@ -734,7 +734,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 	});
 	match tkn {
 		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
-		Keyword(Kw::Parameter) => return f(p, parse_parameter_decl, Semicolon),
+		Keyword(Kw::Parameter) => return parse_parameter_decl(p),
 		Keyword(Kw::Modport) => return f(p, parse_modport_decl, Semicolon),
 		Keyword(Kw::Class) => return parse_class_decl(p).map(|r|()),
 		Keyword(Kw::Typedef) => return parse_typedef(p).map(|r|()),
@@ -922,9 +922,31 @@ fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 
 
 fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
-	let q = p.peek(0).1;
-	p.add_diag(DiagBuilder2::error("Parameter declarations not implemented").span(q));
-	Err(())
+	// TODO: Create a parallel parser that tries to parse with an implicit or
+	// an explicit type.
+	p.require_reported(Keyword(Kw::Parameter))?;
+	let names = parse_parameter_names(p)?;
+	p.require_reported(Semicolon)?;
+	Ok(())
+}
+
+
+fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
+	let v = comma_list(p, Semicolon, "parameter name", |p|{
+		// Consume the parameter name and optional dimensions.
+		let (name, name_sp) = p.eat_ident("parameter name")?;
+		let (dims, _) = parse_optional_dimensions(p)?;
+
+		// Parse the optional assignment.
+		let expr = if p.try_eat(Operator(Op::Assign)) {
+			Some(parse_expr(p)?)
+		} else {
+			None
+		};
+
+		Ok(())
+	})?;
+	Ok(v)
 }
 
 
@@ -2033,11 +2055,14 @@ fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Por
 	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
 		(name, span, parse_optional_dimensions(p)?)
 	} else {
-		// TODO: Extract name and dimensions from data type and change type to
-		// None.
-		let q = p.peek(0).1;
-		p.add_diag(DiagBuilder2::error("Ports with implicit data types not yet supported").span(q));
-		return Err(());
+		if let Some(Type { span: span, data: NamedType(name), dims: dims, .. }) = ty {
+			let r = (name, span, (dims, span));
+			ty = None;
+			r
+		} else {
+			p.add_diag(DiagBuilder2::error("Expected port type or name").span(ty.unwrap().span));
+			return Err(());
+		}
 	};
 
 	// Determine the kind of the port based on the optional kind keywords, the
@@ -3380,7 +3405,7 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 				names.push_str(" or ");
 				names.push_str(&results[1].0);
 			} else {
-				for &(ref name, ..) in &results[..results.len()-1] {
+				for &(ref name, _, _, _, _) in &results[..results.len()-1] {
 					names.push_str(", ");
 					names.push_str(&name);
 				}
@@ -3388,7 +3413,7 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 				names.push_str(&results[results.len()-1].0);
 			}
 			self.parser.add_diag(DiagBuilder2::fatal(format!("Ambiguous code, could be {}", names)).span(q));
-			for &(ref name, .., span) in &results {
+			for &(ref name, _, _, _, span) in &results {
 				self.parser.add_diag(DiagBuilder2::note(format!("{} would be this part", name)).span(span));
 			}
 			Err(ParallelError::Matched)
