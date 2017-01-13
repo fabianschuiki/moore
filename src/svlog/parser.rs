@@ -1586,22 +1586,13 @@ fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedR
 			return Err(());
 		}
 
-		(Operator(Op::LogicNot), _) if precedence <= Precedence::Unary => {
-			p.bump();
-			parse_expr_prec(p, Precedence::Unary)?;
-			return Ok(Expr {
-				span: Span::union(first, p.last_span()),
-				data: DummyExpr,
-			});
-		}
-
 		_ => ()
 	}
 
 	// Try the unary operators next.
 	if let Some(op) = as_unary_operator(p.peek(0).0) {
 		p.bump();
-		parse_primary_expr(p)?;
+		parse_expr_prec(p, Precedence::Unary)?;
 		return Ok(Expr {
 			span: Span::union(first, p.last_span()),
 			data: DummyExpr,
@@ -1681,7 +1672,7 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 			p.bump();
 			if p.try_eat(CloseDelim(Brace)) {
 				// TODO: Handle empty queue.
-				p.add_diag(DiagBuilder2::error("Don't know what to do with an empty queue").span(sp));
+				p.add_diag(DiagBuilder2::error("Don't know how to parse an empty queue").span(sp));
 				return Ok(Expr {
 					span: Span::union(sp, p.last_span()),
 					data: DummyExpr,
@@ -1771,7 +1762,7 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 			p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(q));
 			break;
 		}
-		parse_expr_prec(p, Precedence::Max)?;
+		parse_expr_prec(p, Precedence::Min)?;
 	}
 
 	Ok(())
