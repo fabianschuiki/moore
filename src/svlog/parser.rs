@@ -32,6 +32,7 @@ type ReportedResult<T> = Result<T, ()>;
 trait AbstractParser {
 	fn peek(&mut self, offset: usize) -> TokenAndSpan;
 	fn bump(&mut self);
+	fn skip(&mut self);
 	fn consumed(&self) -> usize;
 	fn last_span(&self) -> Span;
 	fn add_diag(&mut self, diag: DiagBuilder2);
@@ -103,12 +104,12 @@ trait AbstractParser {
 					for t in terminators {
 						if *t == tkn {
 							if eat_terminator {
-								self.bump();
+								self.skip();
 							}
 							return;
 						}
 					}
-					self.bump();
+					self.skip();
 				}
 			}
 		}
@@ -123,7 +124,7 @@ trait AbstractParser {
 				for t in terminators {
 					if *t == tkn {
 						if eat_terminator {
-							self.bump();
+							self.skip();
 						}
 						return;
 					}
@@ -146,7 +147,7 @@ trait AbstractParser {
 				Eof => break,
 				_ => (),
 			}
-			self.bump();
+			self.skip();
 		}
 	}
 }
@@ -157,7 +158,7 @@ struct Parser<'a> {
 	diagnostics: Vec<DiagBuilder2>,
 	last_span: Span,
 	severity: Severity,
-	num_consumed: usize,
+	consumed: usize,
 }
 
 impl<'a> AbstractParser for Parser<'a> {
@@ -176,12 +177,16 @@ impl<'a> AbstractParser for Parser<'a> {
 		}
 		if let Some((_,sp)) = self.queue.pop_front() {
 			self.last_span = sp;
-			self.num_consumed += 1;
+			self.consumed += 1;
 		}
 	}
 
+	fn skip(&mut self) {
+		self.bump()
+	}
+
 	fn consumed(&self) -> usize {
-		self.num_consumed
+		self.consumed
 	}
 
 	fn last_span(&self) -> Span {
@@ -278,7 +283,7 @@ impl<'a> Parser<'a> {
 			diagnostics: Vec::new(),
 			last_span: INVALID_SPAN,
 			severity: Severity::Note,
-			num_consumed: 0,
+			consumed: 0,
 		}
 	}
 
@@ -1121,8 +1126,8 @@ fn parse_data_type(p: &mut AbstractParser) -> ReportedResult<Type> {
 
 	// Parse the optional sign information.
 	let sign = match p.peek(0) {
-		(Keyword(Kw::Signed), q) => { span.expand(q); p.bump(); TypeSign::Signed },
-		(Keyword(Kw::Unsigned), q) => { span.expand(q); p.bump(); TypeSign::Unsigned },
+		(Keyword(Kw::Signed), q) => { p.bump(); TypeSign::Signed },
+		(Keyword(Kw::Unsigned), q) => { p.bump(); TypeSign::Unsigned },
 		_ => TypeSign::None
 	};
 
@@ -1581,6 +1586,15 @@ fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedR
 			return Err(());
 		}
 
+		(Operator(Op::LogicNot), _) if precedence <= Precedence::Unary => {
+			p.bump();
+			parse_expr_prec(p, Precedence::Unary)?;
+			return Ok(Expr {
+				span: Span::union(first, p.last_span()),
+				data: DummyExpr,
+			});
+		}
+
 		_ => ()
 	}
 
@@ -1705,12 +1719,8 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 		}
 
 		_ => {
-			let ty = Box::new(parse_data_type(p)?);
-			let expr = Expr {
-				span: Span::union(sp, p.last_span()),
-				data: TypeExpr(ty),
-			};
-			return Ok(expr);
+			p.add_diag(DiagBuilder2::error("Expected expression").span(sp));
+			return Err(());
 		}
 	}
 }
@@ -2331,29 +2341,15 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 			let result = {
 				let mut pp = ParallelParser::new(p);
 				pp.add("variable declaration", |p|{
-					let mut bp = BranchParser::new(p);
-					let konst = bp.try_eat(Keyword(Kw::Const));
-					let var = bp.try_eat(Keyword(Kw::Var));
-					let lifetime = as_lifetime(bp.peek(0).0);
-					if lifetime.is_some() {
-						bp.bump();
-					}
-
-					let ty = parse_data_type(&mut bp).or_unmatched()?;
-					let decls = comma_list(&mut bp, Semicolon, "variable declaration", parse_variable_decl_assignment).or_unmatched()?;
-					bp.require_reported(Semicolon).or_unmatched()?;
-
-					let p = bp.parser;
-					let consumed = bp.consumed;
-					let diagnostics = bp.diagnostics;
-
-					for d in diagnostics {
-						p.add_diag(d);
-					}
-					for _ in 0..consumed {
-						p.bump();
-					}
-
+					let konst = p.try_eat(Keyword(Kw::Const));
+					let var = p.try_eat(Keyword(Kw::Var));
+					let lifetime = match as_lifetime(p.peek(0).0) {
+						Some(x) => { p.bump(); x },
+						None => Lifetime::Static,
+					};
+					let ty = parse_data_type(p).or_unmatched()?;
+					let decls = comma_list(p, Semicolon, "variable declaration", parse_variable_decl_assignment).or_unmatched()?;
+					p.require_reported(Semicolon).or_unmatched()?;
 					Ok(NullStmt)
 				});
 				pp.add("assign statement", |p| parse_assign_stmt(p).or_unmatched());
@@ -2853,6 +2849,9 @@ fn as_edge_ident(tkn: Token) -> EdgeIdent {
 
 fn parse_call_args(p: &mut AbstractParser) -> ReportedResult<Vec<CallArg>> {
 	let mut v = Vec::new();
+	if p.peek(0).0 == CloseDelim(Paren) {
+		return Ok(v);
+	}
 	loop {
 		match p.peek(0) {
 			(Comma, sp) => v.push(CallArg {
@@ -3379,8 +3378,7 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 					let sp = bp.last_span();
 					results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
 				}
-				Err(ParallelError::Unmatched) => matched.push(bp.diagnostics),
-				Err(ParallelError::Matched) => matched.push(bp.diagnostics),
+				Err(_) => matched.push((name, bp.consumed() - bp.skipped(), bp.diagnostics)),
 			}
 		}
 
@@ -3412,13 +3410,26 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 			}
 			Ok((*res).clone())
 		} else {
-			self.parser.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
-			if matched.is_empty() {
+			// Sort the errors by score and remove all but the highest scoring
+			// ones.
+			matched.sort_by(|a,b| (b.1).cmp(&a.1));
+			let highest_score = matched[0].1;
+			let errors = matched.into_iter().take_while(|e| e.1 == highest_score).collect::<Vec<_>>();
+			let num_errors = errors.len();
+
+			// Print the errors.
+			if num_errors != 1 {
+				self.parser.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
+			}
+			if errors.is_empty() {
 				Err(ParallelError::Unmatched)
 			} else {
-				for m in matched {
+				for (n, score, m) in errors {
+					if num_errors > 1 {
+						self.parser.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
+					}
 					for d in m {
-						self.parser.add_diag(d.clone());
+						self.parser.add_diag(d);
 					}
 				}
 				Err(ParallelError::Matched)
@@ -3430,6 +3441,7 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 struct BranchParser<'tp> {
 	parser: &'tp mut AbstractParser,
 	consumed: usize,
+	skipped: usize,
 	diagnostics: Vec<DiagBuilder2>,
 	last_span: Span,
 }
@@ -3440,9 +3452,14 @@ impl<'tp> BranchParser<'tp> {
 		BranchParser {
 			parser: parser,
 			consumed: 0,
+			skipped: 0,
 			diagnostics: Vec::new(),
 			last_span: last,
 		}
+	}
+
+	pub fn skipped(&self) -> usize {
+		self.skipped
 	}
 }
 
@@ -3452,8 +3469,13 @@ impl<'tp> AbstractParser for BranchParser<'tp> {
 	}
 
 	fn bump(&mut self) {
-		self.consumed += 1;
 		self.last_span = self.parser.peek(self.consumed).1;
+		self.consumed += 1;
+	}
+
+	fn skip(&mut self) {
+		self.bump();
+		self.skipped += 1;
 	}
 
 	fn consumed(&self) -> usize {
