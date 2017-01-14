@@ -515,3 +515,12 @@ pub enum ConstraintItemData {
 	Foreach,
 	Expr(Expr),
 }
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FuncPrototype {
+	pub span: Span,
+	pub name: Name,
+	pub name_span: Span,
+}

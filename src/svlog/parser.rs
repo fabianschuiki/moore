@@ -2285,11 +2285,60 @@ fn parse_procedure(p: &mut AbstractParser, kind: ProcedureKind) -> ReportedResul
 
 
 fn parse_func_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+	let mut span = p.peek(0).1;
+	let prototype = parse_func_prototype(p)?;
 	let q = p.peek(0).1;
-	p.require_reported(Keyword(Kw::Function))?;
-	p.add_diag(DiagBuilder2::error("Don't know how to parse function declarations").span(q));
+	p.add_diag(DiagBuilder2::error("Don't know how to parse function bodies").span(q));
 	p.recover_balanced(&[Keyword(Kw::Endfunction)], true);
 	Err(())
+}
+
+
+fn parse_func_prototype(p: &mut AbstractParser) -> ReportedResult<FuncPrototype> {
+	let mut span = p.peek(0).1;
+
+	// Consume the "function" keyword.
+	p.require_reported(Keyword(Kw::Function))?;
+
+	// Consume the optional lifetime.
+	let lifetime = match as_lifetime(p.peek(0).0) {
+		Some(x) => { p.bump(); x },
+		None => Lifetime::Static,
+	};
+
+	// Parse the return type (implicit or explicit), the function name, and the
+	// optional argument list.
+	let mut pp = ParallelParser::new();
+	pp.add("implicit function return type", |p|{
+		let ty = parse_implicit_type(p)?;
+		let (name, name_span) = p.eat_ident("function name")?;
+		let args = if p.try_eat(OpenDelim(Paren)) {
+			parse_port_list(p)?
+		} else {
+			Vec::new()
+		};
+		p.require_reported(Semicolon)?;
+		Ok((ty, name, name_span, args))
+	});
+	pp.add("explicit function return type", |p|{
+		let ty = parse_explicit_type(p)?;
+		let (name, name_span) = p.eat_ident("function name")?;
+		let args = if p.try_eat(OpenDelim(Paren)) {
+			parse_port_list(p)?
+		} else {
+			Vec::new()
+		};
+		p.require_reported(Semicolon)?;
+		Ok((ty, name, name_span, args))
+	});
+	let (ty, name, name_span, args) = pp.finish(p, "implicit or explicit function return type")?;
+
+	span.expand(p.last_span());
+	Ok(FuncPrototype {
+		span: span,
+		name: name,
+		name_span: name_span,
+	})
 }
 
 
@@ -2440,7 +2489,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		// declarations look very similar to other expressions.
 		_ => {
 			let result = {
-				let mut pp = ParallelParser::new(p);
+				let mut pp = ParallelParser::new();
 				pp.add("variable declaration", |p|{
 					let konst = p.try_eat(Keyword(Kw::Const));
 					let var = p.try_eat(Keyword(Kw::Var));
@@ -2455,7 +2504,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 				});
 				pp.add("assign statement", |p| parse_assign_stmt(p));
 				pp.add("expression statement", |p| parse_expr_stmt(p));
-				pp.finish("statement")
+				pp.finish(p, "statement")
 			};
 			match result {
 				Ok(x) => x,
@@ -3270,7 +3319,7 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 	let qualifiers = parse_class_item_qualifiers(p)?;
 
 	let data = {
-		let mut pp = ParallelParser::new(p);
+		let mut pp = ParallelParser::new();
 		pp.add("class property", |p| {
 			let ty = parse_data_type(p)?;
 			let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment)?;
@@ -3280,7 +3329,7 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 		pp.add("class function", |p| parse_func_decl(p).map(|_| ClassItemData::FuncDecl));
 		pp.add("class task", |p| parse_task_decl(p).map(|_| ClassItemData::TaskDecl));
 		pp.add("class constraint", |p| parse_constraint(p).map(|_| ClassItemData::Constraint));
-		pp.finish("class item")?
+		pp.finish(p, "class item")?
 	};
 	span.expand(p.last_span());
 
@@ -3406,15 +3455,13 @@ fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<Constrai
 }
 
 
-struct ParallelParser<'tp, R: Clone> {
-	parser: &'tp mut AbstractParser,
+struct ParallelParser<R: Clone> {
 	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ReportedResult<R>>)>,
 }
 
-impl<'tp, R: Clone> ParallelParser<'tp, R> {
-	pub fn new(p: &'tp mut AbstractParser) -> Self {
+impl<R: Clone> ParallelParser<R> {
+	pub fn new() -> Self {
 		ParallelParser {
-			parser: p,
 			branches: Vec::new(),
 		}
 	}
@@ -3424,16 +3471,16 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 		self.branches.push((name.to_owned(), Box::new(func)));
 	}
 
-	pub fn finish(self, msg: &str) -> ReportedResult<R> {
-		let q = self.parser.peek(0).1;
-		// self.parser.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
+	pub fn finish(self, p: &mut AbstractParser, msg: &str) -> ReportedResult<R> {
+		let q = p.peek(0).1;
+		// p.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
 
 		// Create a separate speculative parser for each branch.
 		let mut results = Vec::new();
 		let mut matched = Vec::new();
 		for (name, mut func) in self.branches {
-			// self.parser.add_diag(DiagBuilder2::note(format!("Trying as {}", name)).span(q));
-			let mut bp = BranchParser::new(self.parser);
+			// p.add_diag(DiagBuilder2::note(format!("Trying as {}", name)).span(q));
+			let mut bp = BranchParser::new(p);
 			match func(&mut bp) {
 				Ok(x) => {
 					let sp = bp.last_span();
@@ -3457,17 +3504,17 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 				names.push_str(", or ");
 				names.push_str(&results[results.len()-1].0);
 			}
-			self.parser.add_diag(DiagBuilder2::fatal(format!("Ambiguous code, could be {}", names)).span(q));
+			p.add_diag(DiagBuilder2::fatal(format!("Ambiguous code, could be {}", names)).span(q));
 			for &(ref name, _, _, _, span) in &results {
-				self.parser.add_diag(DiagBuilder2::note(format!("{} would be this part", name)).span(span));
+				p.add_diag(DiagBuilder2::note(format!("{} would be this part", name)).span(span));
 			}
 			Err(())
 		} else if let Some(&(_, consumed, ref diagnostics, ref res, _)) = results.last() {
 			for d in diagnostics {
-				self.parser.add_diag(d.clone());
+				p.add_diag(d.clone());
 			}
 			for _ in 0..consumed {
-				self.parser.bump();
+				p.bump();
 			}
 			Ok((*res).clone())
 		} else {
@@ -3480,17 +3527,17 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 
 			// Print the errors.
 			if num_errors != 1 {
-				self.parser.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
+				p.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
 			}
 			if errors.is_empty() {
 				Err(())
 			} else {
 				for (n, _, m) in errors {
 					if num_errors > 1 {
-						self.parser.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
+						p.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
 					}
 					for d in m {
-						self.parser.add_diag(d);
+						p.add_diag(d);
 					}
 				}
 				Err(())
