@@ -52,6 +52,14 @@ pub enum TypeData {
 	VoidType,
 	NamedType(Name),
 
+	// Scoping
+	ScopedType {
+		ty: Box<Type>,
+		member: bool,
+		name: Name,
+		name_span: Span,
+	},
+
 	// Integer Vector Types
 	BitType,
 	LogicType,
@@ -63,6 +71,11 @@ pub enum TypeData {
 	IntType,
 	LongIntType,
 	TimeType,
+
+	// Non-integer Types
+	ShortRealType,
+	RealType,
+	RealtimeType,
 
 	// Enumerations
 	EnumType(Option<Box<Type>>, Vec<EnumName>),
@@ -448,8 +461,8 @@ pub enum ClassItemData {
 	Constraint,
 	ClassDecl,
 	CovergroupDecl,
-	LocalParamDecl,
-	ParameterDecl,
+	LocalParamDecl(()),
+	ParameterDecl(()),
 	Null,
 }
 

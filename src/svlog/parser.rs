@@ -746,8 +746,8 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		Keyword(Kw::AlwaysLatch) => return map_proc(parse_procedure(p, ProcedureKind::AlwaysLatch)),
 		Keyword(Kw::AlwaysFf)    => return map_proc(parse_procedure(p, ProcedureKind::AlwaysFf)),
 		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
-		Keyword(Kw::Function)    => return parse_func_decl(p).wrap(),
-		Keyword(Kw::Task)        => return parse_task_decl(p).wrap(),
+		Keyword(Kw::Function)    => return parse_func_decl(p),
+		Keyword(Kw::Task)        => return parse_task_decl(p),
 
 		// Continuous assign
 		Keyword(Kw::Assign) => { parse_continuous_assign(p)?; return Ok(()); },
@@ -1110,51 +1110,98 @@ fn as_port_direction(tkn: Token) -> Option<PortDir> {
 }
 
 
-/// Parse a data type.
+/// Parse an implicit or explicit type. This is a catch-all function that will
+/// always succeed unless one of the explicit types contains a syntax error. For
+/// all other tokens the function will at least return an ImplicitType if none
+/// could be consumed. You might have to use `parse_explicit_type` and
+/// `parse_implicit_type` separately if the type is to be embedded in a larger
+/// function. For example, a variable declaration with implicit type looks like
+/// an explicit type at first glance. Only after reaching the trailing `[=,;]`
+/// it becomes apparent that the explicit type was rather the name of the
+/// variable. In this case, having to parallel parsers, one with explicit and
+/// one with implicit type, can resolve the issue.
 fn parse_data_type(p: &mut AbstractParser) -> ReportedResult<Type> {
-
-	// Decide what general type this is.
-	let (tkn, mut span) = p.peek(0);
-	let mut data = match tkn {
-		Keyword(Kw::Void)  => { p.bump(); VoidType },
-
-		// Integer Vector Types
-		Keyword(Kw::Bit)   => { p.bump(); BitType },
-		Keyword(Kw::Logic) => { p.bump(); LogicType },
-		Keyword(Kw::Reg)   => { p.bump(); RegType },
-
-		// Integer Atom Types
-		Keyword(Kw::Byte)     => { p.bump(); ByteType },
-		Keyword(Kw::Shortint) => { p.bump(); ShortIntType },
-		Keyword(Kw::Int)      => { p.bump(); IntType },
-		Keyword(Kw::Longint)  => { p.bump(); LongIntType },
-		Keyword(Kw::Integer)  => { p.bump(); IntType },
-		Keyword(Kw::Time)     => { p.bump(); TimeType },
-
-		// Enumerations
-		Keyword(Kw::Enum)   => parse_enum_type(p)?,
-		Keyword(Kw::Struct) | Keyword(Kw::Union) => parse_struct_type(p)?,
-
-		Ident(n) | EscIdent(n) => { p.bump(); NamedType(n) },
-		_ => ImplicitType,
-	};
-
-	// Interfaces allow their internal modports and typedefs to be accessed via
-	// the `.` operator.
-	if p.try_eat(Period) {
-		let (name, name_span) = p.eat_ident("member type name")?;
-		p.add_diag(DiagBuilder2::warning("Member types not yet represented in AST").span(name_span));
+	// Try to parse this as an explicit type.
+	{
+		let mut bp = BranchParser::new(p);
+		match parse_explicit_type(&mut bp) {
+			Ok(x) => {
+				bp.commit();
+				return Ok(x);
+			},
+			Err(_) => ()
+		}
 	}
 
+	// Otherwise simply go with an implicit type, which basically always
+	// succeeds.
+	parse_implicit_type(p)
+}
+
+
+fn parse_explicit_type(p: &mut AbstractParser) -> ReportedResult<Type> {
+	let mut span = p.peek(0).1;
+	let data = parse_type_data(p)?;
+	span.expand(p.last_span());
+	let ty = parse_type_signing_and_dimensions(p, span, data)?;
+	parse_type_suffix(p, ty)
+}
+
+
+fn parse_type_suffix(p: &mut AbstractParser, ty: Type) -> ReportedResult<Type> {
+	let (tkn, sp) = p.peek(0);
+	match tkn {
+		// Interfaces allow their internal modports and typedefs to be accessed
+		// via the `.` operator.
+		Period => {
+			p.bump();
+			let (name, name_span) = p.eat_ident("member type name")?;
+			let subty = parse_type_signing_and_dimensions(p, sp, ScopedType {
+				ty: Box::new(ty),
+				member: true,
+				name: name,
+				name_span: name_span,
+			})?;
+			parse_type_suffix(p, subty)
+		}
+
+		// The `::` operator.
+		Namespace => {
+			p.bump();
+			let (name, name_span) = p.eat_ident("type name")?;
+			let subty = parse_type_signing_and_dimensions(p, sp, ScopedType {
+				ty: Box::new(ty),
+				member: false,
+				name: name,
+				name_span: name_span,
+			})?;
+			parse_type_suffix(p, subty)
+		}
+
+		_ => Ok(ty)
+	}
+}
+
+
+/// Parse an implicit type (`[signing] {dimensions}`).
+fn parse_implicit_type(p: &mut AbstractParser) -> ReportedResult<Type> {
+	let span = p.peek(0).1.begin().into();
+	parse_type_signing_and_dimensions(p, span, ImplicitType)
+}
+
+
+/// Parse the optional signing keyword and packed dimensions that may follow a
+/// data type. Wraps a previously parsed TypeData in a Type struct.
+fn parse_type_signing_and_dimensions(p: &mut AbstractParser, mut span: Span, data: TypeData) -> ReportedResult<Type> {
 	// Parse the optional sign information.
-	let sign = match p.peek(0) {
-		(Keyword(Kw::Signed), q) => { p.bump(); TypeSign::Signed },
-		(Keyword(Kw::Unsigned), q) => { p.bump(); TypeSign::Unsigned },
+	let sign = match p.peek(0).0 {
+		Keyword(Kw::Signed)   => { p.bump(); TypeSign::Signed   },
+		Keyword(Kw::Unsigned) => { p.bump(); TypeSign::Unsigned },
 		_ => TypeSign::None
 	};
 
 	// Parse the optional dimensions.
-	let (dims, dims_span) = parse_optional_dimensions(p)?;
+	let (dims, _) = parse_optional_dimensions(p)?;
 	span.expand(p.last_span());
 
 	Ok(Type {
@@ -1163,6 +1210,44 @@ fn parse_data_type(p: &mut AbstractParser) -> ReportedResult<Type> {
 		sign: sign,
 		dims: dims,
 	})
+}
+
+/// Parse the core type data of a type.
+fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
+	match p.peek(0).0 {
+		Keyword(Kw::Void)  => { p.bump(); Ok(VoidType) },
+
+		// Integer Vector Types
+		Keyword(Kw::Bit)   => { p.bump(); Ok(BitType) },
+		Keyword(Kw::Logic) => { p.bump(); Ok(LogicType) },
+		Keyword(Kw::Reg)   => { p.bump(); Ok(RegType) },
+
+		// Integer Atom Types
+		Keyword(Kw::Byte)     => { p.bump(); Ok(ByteType) },
+		Keyword(Kw::Shortint) => { p.bump(); Ok(ShortIntType) },
+		Keyword(Kw::Int)      => { p.bump(); Ok(IntType) },
+		Keyword(Kw::Longint)  => { p.bump(); Ok(LongIntType) },
+		Keyword(Kw::Integer)  => { p.bump(); Ok(IntType) },
+		Keyword(Kw::Time)     => { p.bump(); Ok(TimeType) },
+
+		// Non-integer Types
+		Keyword(Kw::Shortreal) => { p.bump(); Ok(ShortRealType) },
+		Keyword(Kw::Real)      => { p.bump(); Ok(RealType) },
+		Keyword(Kw::Realtime)  => { p.bump(); Ok(RealtimeType) },
+
+		// Enumerations
+		Keyword(Kw::Enum) => parse_enum_type(p),
+		Keyword(Kw::Struct) | Keyword(Kw::Union) => parse_struct_type(p),
+
+		// Named types
+		Ident(n) | EscIdent(n) => { p.bump(); Ok(NamedType(n)) },
+
+		_ => {
+			let q = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error("Expected type").span(q));
+			return Err(());
+		}
+	}
 }
 
 
@@ -2199,21 +2284,21 @@ fn parse_procedure(p: &mut AbstractParser, kind: ProcedureKind) -> ReportedResul
 }
 
 
-fn parse_func_decl(p: &mut AbstractParser) -> ParallelResult<()> {
+fn parse_func_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 	let q = p.peek(0).1;
-	p.require_reported(Keyword(Kw::Function)).or_unmatched()?;
+	p.require_reported(Keyword(Kw::Function))?;
 	p.add_diag(DiagBuilder2::error("Don't know how to parse function declarations").span(q));
 	p.recover_balanced(&[Keyword(Kw::Endfunction)], true);
-	Err(ParallelError::Matched)
+	Err(())
 }
 
 
-fn parse_task_decl(p: &mut AbstractParser) -> ParallelResult<()> {
+fn parse_task_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 	let q = p.peek(0).1;
-	p.require_reported(Keyword(Kw::Task)).or_unmatched()?;
+	p.require_reported(Keyword(Kw::Task))?;
 	p.add_diag(DiagBuilder2::error("Don't know how to parse task declarations").span(q));
 	p.recover_balanced(&[Keyword(Kw::Endtask)], true);
-	Err(ParallelError::Matched)
+	Err(())
 }
 
 
@@ -2363,13 +2448,13 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 						Some(x) => { p.bump(); x },
 						None => Lifetime::Static,
 					};
-					let ty = parse_data_type(p).or_unmatched()?;
-					let decls = comma_list(p, Semicolon, "variable declaration", parse_variable_decl_assignment).or_unmatched()?;
-					p.require_reported(Semicolon).or_unmatched()?;
+					let ty = parse_data_type(p)?;
+					let decls = comma_list(p, Semicolon, "variable declaration", parse_variable_decl_assignment)?;
+					p.require_reported(Semicolon)?;
 					Ok(NullStmt)
 				});
-				pp.add("assign statement", |p| parse_assign_stmt(p).or_unmatched());
-				pp.add("expression statement", |p| parse_expr_stmt(p).or_unmatched());
+				pp.add("assign statement", |p| parse_assign_stmt(p));
+				pp.add("expression statement", |p| parse_expr_stmt(p));
 				pp.finish("statement")
 			};
 			match result {
@@ -3157,6 +3242,21 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 		});
 	}
 
+	// Parse localparam and parameter declarations.
+	match p.peek(0).0 {
+		Keyword(Kw::Localparam) => return Ok(ClassItem {
+			span: span,
+			qualifiers: Vec::new(),
+			data: ClassItemData::LocalParamDecl(parse_localparam_decl(p)?),
+		}),
+		Keyword(Kw::Parameter) => return Ok(ClassItem {
+			span: span,
+			qualifiers: Vec::new(),
+			data: ClassItemData::ParameterDecl(parse_parameter_decl(p)?),
+		}),
+		_ => ()
+	}
+
 	// Parse "extern" task and function prototypes.
 	if p.try_eat(Keyword(Kw::Extern)) {
 		p.add_diag(DiagBuilder2::error("Don't know how to parse external method prototypes").span(span));
@@ -3172,37 +3272,16 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 	let data = {
 		let mut pp = ParallelParser::new(p);
 		pp.add("class property", |p| {
-			let ty = parse_data_type(p).or_unmatched()?;
-			let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment).or_unmatched()?;
-			p.require_reported(Semicolon).or_matched()?;
+			let ty = parse_data_type(p)?;
+			let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment)?;
+			p.require_reported(Semicolon)?;
 			Ok(ClassItemData::Property)
 		});
 		pp.add("class function", |p| parse_func_decl(p).map(|_| ClassItemData::FuncDecl));
 		pp.add("class task", |p| parse_task_decl(p).map(|_| ClassItemData::TaskDecl));
 		pp.add("class constraint", |p| parse_constraint(p).map(|_| ClassItemData::Constraint));
-		pp.finish("class item").wrap()?
+		pp.finish("class item")?
 	};
-
-	// // Parse the class item.
-	// let data = match p.peek(0).0 {
-	// 	Keyword(Kw::Function) => {
-	// 		recovered(p, Keyword(Kw::Endfunction), parse_func_decl)?;
-	// 		ClassItemData::FuncDecl
-	// 	}
-	// 	Keyword(Kw::Task) => {
-	// 		recovered(p, Keyword(Kw::Endtask), parse_task_decl)?;
-	// 		ClassItemData::TaskDecl
-	// 	}
-	// 	Keyword(Kw::Constraint) => {
-	// 		parse_constraint_decl()
-	// 	}
-	// 	_ => recovered(p, Semicolon, |p|{
-	// 		let ty = parse_data_type(p)?;
-	// 		let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment)?;
-	// 		p.require_reported(Semicolon)?;
-	// 		Ok(ClassItemData::Property)
-	// 	})?
-	// };
 	span.expand(p.last_span());
 
 	Ok(ClassItem {
@@ -3247,7 +3326,7 @@ fn parse_class_property(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 }
 
 
-fn parse_constraint(p: &mut AbstractParser) -> ParallelResult<Constraint> {
+fn parse_constraint(p: &mut AbstractParser) -> ReportedResult<Constraint> {
 	let mut span = p.peek(0).1;
 
 	// Parse the prototype qualifier.
@@ -3262,10 +3341,10 @@ fn parse_constraint(p: &mut AbstractParser) -> ParallelResult<Constraint> {
 	let statik = p.try_eat(Keyword(Kw::Static));
 
 	// Parse the "constraint" keyword.
-	p.require_reported(Keyword(Kw::Constraint)).or_unmatched()?;
+	p.require_reported(Keyword(Kw::Constraint))?;
 
 	// Parse the constraint name.
-	let (name, name_span) = p.eat_ident("constraint name").or_matched()?;
+	let (name, name_span) = p.eat_ident("constraint name")?;
 
 	let items = if p.try_eat(Semicolon) {
 		let kind = match kind {
@@ -3278,9 +3357,9 @@ fn parse_constraint(p: &mut AbstractParser) -> ParallelResult<Constraint> {
 		// only valid for prototypes.
 		if kind == ConstraintKind::ExternProto || kind == ConstraintKind::PureProto {
 			p.add_diag(DiagBuilder2::error("Only constraint prototypes can be extern or pure").span(kind_span));
-			return Err(ParallelError::Matched);
+			return Err(());
 		}
-		flanked(p, Brace, |p| repeat_until(p, CloseDelim(Brace), parse_constraint_item)).or_matched()?
+		flanked(p, Brace, |p| repeat_until(p, CloseDelim(Brace), parse_constraint_item))?
 	};
 	span.expand(p.last_span());
 
@@ -3329,40 +3408,7 @@ fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<Constrai
 
 struct ParallelParser<'tp, R: Clone> {
 	parser: &'tp mut AbstractParser,
-	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ParallelResult<R>>)>,
-	tokens: Vec<TokenAndSpan>,
-}
-
-type ParallelResult<T> = Result<T, ParallelError>;
-
-enum ParallelError {
-	Unmatched,
-	Matched,
-}
-
-trait ToParallelResult<T> {
-	fn or_unmatched(self) -> ParallelResult<T>;
-	fn or_matched(self) -> ParallelResult<T>;
-}
-
-impl<T> ToParallelResult<T> for ReportedResult<T> {
-	fn or_unmatched(self) -> ParallelResult<T> {
-		self.or(Err(ParallelError::Unmatched))
-	}
-
-	fn or_matched(self) -> ParallelResult<T> {
-		self.or(Err(ParallelError::Matched))
-	}
-}
-
-trait ToReportedResult<T> {
-	fn wrap(self) -> ReportedResult<T>;
-}
-
-impl<T> ToReportedResult<T> for ParallelResult<T> {
-	fn wrap(self) -> ReportedResult<T> {
-		self.or(Err(()))
-	}
+	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ReportedResult<R>>)>,
 }
 
 impl<'tp, R: Clone> ParallelParser<'tp, R> {
@@ -3370,16 +3416,15 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 		ParallelParser {
 			parser: p,
 			branches: Vec::new(),
-			tokens: Vec::new(),
 		}
 	}
 
 	pub fn add<F>(&mut self, name: &str, func: F)
-	where F: FnMut(&mut AbstractParser) -> ParallelResult<R> + 'static {
+	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'static {
 		self.branches.push((name.to_owned(), Box::new(func)));
 	}
 
-	pub fn finish(self, msg: &str) -> ParallelResult<R> {
+	pub fn finish(self, msg: &str) -> ReportedResult<R> {
 		let q = self.parser.peek(0).1;
 		// self.parser.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
 
@@ -3416,12 +3461,12 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 			for &(ref name, _, _, _, span) in &results {
 				self.parser.add_diag(DiagBuilder2::note(format!("{} would be this part", name)).span(span));
 			}
-			Err(ParallelError::Matched)
+			Err(())
 		} else if let Some(&(_, consumed, ref diagnostics, ref res, _)) = results.last() {
 			for d in diagnostics {
 				self.parser.add_diag(d.clone());
 			}
-			for i in 0..consumed {
+			for _ in 0..consumed {
 				self.parser.bump();
 			}
 			Ok((*res).clone())
@@ -3438,9 +3483,9 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 				self.parser.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
 			}
 			if errors.is_empty() {
-				Err(ParallelError::Unmatched)
+				Err(())
 			} else {
-				for (n, score, m) in errors {
+				for (n, _, m) in errors {
 					if num_errors > 1 {
 						self.parser.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
 					}
@@ -3448,7 +3493,7 @@ impl<'tp, R: Clone> ParallelParser<'tp, R> {
 						self.parser.add_diag(d);
 					}
 				}
-				Err(ParallelError::Matched)
+				Err(())
 			}
 		}
 	}
@@ -3476,6 +3521,15 @@ impl<'tp> BranchParser<'tp> {
 
 	pub fn skipped(&self) -> usize {
 		self.skipped
+	}
+
+	pub fn commit(self) {
+		for _ in 0..self.consumed {
+			self.parser.bump();
+		}
+		for d in self.diagnostics {
+			self.parser.add_diag(d);
+		}
 	}
 }
 
