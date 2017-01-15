@@ -261,6 +261,8 @@ pub enum StmtData {
 	VarDeclStmt(VarDecl),
 	GenvarDeclStmt(Vec<GenvarDecl>),
 	ContinueStmt,
+	BreakStmt,
+	ReturnStmt(Option<Expr>),
 }
 
 impl Stmt {
@@ -613,6 +615,7 @@ pub struct NetDecl {
 	pub net_type: NetType,
 	pub strength: Option<NetStrength>,
 	pub kind: NetKind,
+	pub ty: Type,
 	pub delay: Option<Expr>,
 	pub names: Vec<VarDeclName>,
 }

@@ -36,6 +36,7 @@ trait AbstractParser {
 	fn consumed(&self) -> usize;
 	fn last_span(&self) -> Span;
 	fn add_diag(&mut self, diag: DiagBuilder2);
+	fn severity(&self) -> Severity;
 
 	fn try_eat_ident(&mut self) -> Option<(Name, Span)> {
 		match self.peek(0) {
@@ -149,6 +150,14 @@ trait AbstractParser {
 			}
 			self.skip();
 		}
+	}
+
+	fn is_fatal(&self) -> bool {
+		self.severity() >= Severity::Fatal
+	}
+
+	fn is_error(&self) -> bool {
+		self.severity() >= Severity::Error
 	}
 }
 
@@ -273,6 +282,10 @@ impl<'a> AbstractParser for Parser<'a> {
 		}
 		self.diagnostics.push(diag);
 	}
+
+	fn severity(&self) -> Severity {
+		self.severity
+	}
 }
 
 impl<'a> Parser<'a> {
@@ -302,14 +315,6 @@ impl<'a> Parser<'a> {
 
 	fn get_diagnostics(&self) -> &[DiagBuilder2] {
 		&self.diagnostics
-	}
-
-	fn is_fatal(&self) -> bool {
-		self.severity >= Severity::Fatal
-	}
-
-	fn is_error(&self) -> bool {
-		self.severity >= Severity::Error
 	}
 }
 
@@ -355,7 +360,7 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 fn comma_list<R,F>(p: &mut AbstractParser, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
 where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 	let mut v = Vec::new();
-	while p.peek(0).0 != term && p.peek(0).0 != Eof {
+	while !p.is_fatal() && p.peek(0).0 != term && p.peek(0).0 != Eof {
 		// Parse the item.
 		match item(p) {
 			Ok(x) => v.push(x),
@@ -2655,10 +2660,18 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		}
 
 		// Flow control
-		Keyword(Kw::Continue) => {
+		Keyword(Kw::Return) => {
 			p.bump();
-			ContinueStmt
+			ReturnStmt(
+				if p.peek(0).0 != Semicolon {
+					Some(parse_expr(p)?)
+				} else {
+					None
+				}
+			)
 		}
+		Keyword(Kw::Break) => { p.bump(); BreakStmt }
+		Keyword(Kw::Continue) => { p.bump(); ContinueStmt }
 
 		// Everything else needs special treatment as things such as variable
 		// declarations look very similar to other expressions.
@@ -3704,20 +3717,26 @@ impl<R: Clone> ParallelParser<R> {
 			// Print the errors.
 			if num_errors != 1 {
 				p.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
-			}
-			if errors.is_empty() {
-				Err(())
 			} else {
-				for (n, _, m) in errors {
-					if num_errors > 1 {
-						p.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
-					}
-					for d in m {
-						p.add_diag(d);
-					}
+				for d in errors.into_iter().next().unwrap().2 {
+					p.add_diag(d);
 				}
-				Err(())
 			}
+			Err(())
+
+			// if errors.is_empty() {
+			// 	Err(())
+			// } else {
+			// 	for (n, _, m) in errors {
+			// 		if num_errors > 1 {
+			// 			p.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
+			// 		}
+			// 		for d in m {
+			// 			p.add_diag(d);
+			// 		}
+			// 	}
+			// 	Err(())
+			// }
 		}
 	}
 }
@@ -3728,6 +3747,7 @@ struct BranchParser<'tp> {
 	skipped: usize,
 	diagnostics: Vec<DiagBuilder2>,
 	last_span: Span,
+	severity: Severity,
 }
 
 impl<'tp> BranchParser<'tp> {
@@ -3739,6 +3759,7 @@ impl<'tp> BranchParser<'tp> {
 			skipped: 0,
 			diagnostics: Vec::new(),
 			last_span: last,
+			severity: Severity::Note,
 		}
 	}
 
@@ -3780,7 +3801,14 @@ impl<'tp> AbstractParser for BranchParser<'tp> {
 	}
 
 	fn add_diag(&mut self, diag: DiagBuilder2) {
+		if diag.severity > self.severity {
+			self.severity = diag.severity;
+		}
 		self.diagnostics.push(diag);
+	}
+
+	fn severity(&self) -> Severity {
+		self.severity
 	}
 }
 
@@ -3932,6 +3960,7 @@ fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
 		net_type: net_type,
 		strength: strength,
 		kind: kind,
+		ty: ty,
 		delay: delay,
 		names: names,
 	})
