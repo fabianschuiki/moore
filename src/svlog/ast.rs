@@ -653,3 +653,20 @@ pub enum ChargeStrength {
 	Medium,
 	Large,
 }
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatternField {
+	pub span: Span,
+	pub data: PatternFieldData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatternFieldData {
+	Default(Box<Expr>),
+	Member(Box<Expr>, Box<Expr>),
+	Type(Type, Box<Expr>),
+	Expr(Box<Expr>),
+	Repeat(Box<Expr>, Vec<Expr>),
+}

@@ -159,6 +159,17 @@ trait AbstractParser {
 	fn is_error(&self) -> bool {
 		self.severity() >= Severity::Error
 	}
+
+	fn anticipate(&mut self, tokens: &[Token]) -> ReportedResult<()> {
+		let (tkn,sp) = self.peek(0);
+		for t in tokens {
+			if *t == tkn {
+				return Ok(());
+			}
+		}
+		self.add_diag(DiagBuilder2::error(format!("Expected {:?}, but found {:?} instead", tokens, tkn)).span(sp));
+		Err(())
+	}
 }
 
 struct Parser<'a> {
@@ -1861,11 +1872,89 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 			});
 		}
 
-		_ => {
-			p.add_diag(DiagBuilder2::error("Expected expression").span(sp));
+		// Patterns
+		Apostrophe => {
+			p.bump();
+			flanked(p, Brace, |p| comma_list_nonempty(p, CloseDelim(Brace), "pattern field", parse_pattern_field))?;
+			return Ok(Expr {
+				span: Span::union(sp, p.last_span()),
+				data: DummyExpr,
+			});
+		}
+
+		tkn => {
+			p.add_diag(DiagBuilder2::error(format!("Expected expression, found {} instead", tkn)).span(sp));
 			return Err(());
 		}
 	}
+}
+
+
+fn parse_pattern_field(p: &mut AbstractParser) -> ReportedResult<PatternField> {
+	let mut span = p.peek(0).1;
+
+	// Handle the trivial case of the "default" pattern.
+	if p.try_eat(Keyword(Kw::Default)) {
+		p.require_reported(Colon)?;
+		let value = Box::new(parse_expr(p)?);
+		span.expand(p.last_span());
+		return Ok(PatternField {
+			span: span,
+			data: PatternFieldData::Default(value),
+		});
+	}
+
+	// Otherwise handle the non-trivial cases.
+	let mut pp = ParallelParser::new();
+
+	// Try to parse expression patterns, which are of the form `expr ":" ...`.
+	pp.add_greedy("expression pattern", |p|{
+		let expr = Box::new(parse_expr(p)?);
+		p.require_reported(Colon)?;
+		let value = Box::new(parse_expr(p)?);
+		Ok(PatternFieldData::Member(expr, value))
+	});
+
+	// Try to parse type patterns, which are of the form `type ":" ...`.
+	pp.add_greedy("type pattern", |p|{
+		let ty = parse_explicit_type(p)?;
+		p.require_reported(Colon)?;
+		let value = Box::new(parse_expr(p)?);
+		Ok(PatternFieldData::Type(ty, value))
+	});
+
+	// ident ":"
+	// expression ":"
+	// type ":"
+	// "default" ":"
+
+	// expr
+	// expr "{" expr {"," expr} "}"
+
+	// Try to parse pattern fields that start with an expression, which may
+	// either be a simple expression pattern or a repeat pattern.
+	pp.add("expression or repeat pattern", |p|{
+		let expr = Box::new(parse_expr(p)?);
+
+		// If the expression is followed by an opening brace this is a repeat
+		// pattern.
+		let data = if let Some(inner_exprs) = try_flanked(p, Brace, |p| comma_list(p, CloseDelim(Brace), "expression", parse_expr))? {
+			PatternFieldData::Repeat(expr, inner_exprs)
+		} else {
+			PatternFieldData::Expr(expr)
+		};
+
+		// Make sure this covers the whole pattern field.
+		p.anticipate(&[Comma, CloseDelim(Brace)])?;
+		Ok(data)
+	});
+
+	let data = pp.finish(p, "expression pattern")?;
+	span.expand(p.last_span());
+	Ok(PatternField {
+		span: span,
+		data: data,
+	})
 }
 
 
@@ -3645,7 +3734,7 @@ fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<Constrai
 
 
 struct ParallelParser<R: Clone> {
-	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ReportedResult<R>>)>,
+	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ReportedResult<R>>, bool)>,
 }
 
 impl<R: Clone> ParallelParser<R> {
@@ -3657,23 +3746,32 @@ impl<R: Clone> ParallelParser<R> {
 
 	pub fn add<F>(&mut self, name: &str, func: F)
 	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'static {
-		self.branches.push((name.to_owned(), Box::new(func)));
+		self.branches.push((name.to_owned(), Box::new(func), false));
+	}
+
+	pub fn add_greedy<F>(&mut self, name: &str, func: F)
+	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'static {
+		self.branches.push((name.to_owned(), Box::new(func), true));
 	}
 
 	pub fn finish(self, p: &mut AbstractParser, msg: &str) -> ReportedResult<R> {
-		let q = p.peek(0).1;
+		let (tkn, q) = p.peek(0);
 		// p.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
 
 		// Create a separate speculative parser for each branch.
 		let mut results = Vec::new();
 		let mut matched = Vec::new();
-		for (name, mut func) in self.branches {
+		for (name, mut func, greedy) in self.branches {
 			// p.add_diag(DiagBuilder2::note(format!("Trying as {}", name)).span(q));
 			let mut bp = BranchParser::new(p);
 			match func(&mut bp) {
 				Ok(x) => {
-					let sp = bp.last_span();
-					results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
+					if greedy {
+						return Ok(x);
+					} else {
+						let sp = bp.last_span();
+						results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
+					}
 				}
 				Err(_) => matched.push((name, bp.consumed() - bp.skipped(), bp.diagnostics)),
 			}
@@ -3716,7 +3814,7 @@ impl<R: Clone> ParallelParser<R> {
 
 			// Print the errors.
 			if num_errors != 1 {
-				p.add_diag(DiagBuilder2::error(format!("Expected {}", msg)).span(q));
+				p.add_diag(DiagBuilder2::error(format!("Expected {}, found {} instead", msg, tkn)).span(q));
 			} else {
 				for d in errors.into_iter().next().unwrap().2 {
 					p.add_diag(d);

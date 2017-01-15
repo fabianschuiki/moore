@@ -442,7 +442,8 @@ impl<'a> Lexer<'a> {
 				return Ok((Literal(UnbasedUnsized('z')), span));
 			}
 
-			(_, sp) => return Err(DiagBuilder2::fatal("Invalid number base").span(sp))
+			// (_, sp) => return Err(DiagBuilder2::fatal("Invalid number base").span(sp))
+			_ => return Ok((Apostrophe, span))
 		}
 	}
 

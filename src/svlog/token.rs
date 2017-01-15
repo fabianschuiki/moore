@@ -26,6 +26,7 @@ pub enum Token {
 	Ternary,
 	AddColon,
 	SubColon,
+	Apostrophe,
 
 	Operator(Op),
 
@@ -68,6 +69,7 @@ impl Token {
 			Ternary       => "?",
 			AddColon      => "+:",
 			SubColon      => "-:",
+			Apostrophe    => "'",
 
 			Operator(op) => op.as_str(),
 
