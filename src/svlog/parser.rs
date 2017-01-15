@@ -1626,13 +1626,13 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 		// Index: "[" range_expression "]"
 		OpenDelim(Brack) if precedence <= Precedence::Scope => {
 			p.bump();
-			match parse_range_expr(p) {
+			let expr = match parse_range_expr(p) {
 				Ok(x) => x,
 				Err(e) => {
 					p.recover_balanced(&[CloseDelim(Brack)], true);
 					return Err(e);
 				}
-			}
+			};
 			p.require_reported(CloseDelim(Brack))?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
@@ -1993,9 +1993,50 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 	};
 
 	if let Some(dir) = stream {
-		let q = p.peek(0).1;
-		p.add_diag(DiagBuilder2::error("Don't know how to handle streaming concatenation").span(q));
-		return Err(());
+		p.bump();
+
+		// Parse the optional slice size. This can either be an expression or a
+		// type. We prefer to parse things as expressions, and only if that does
+		// not succeed do we switch to a type.
+		let slice_size = if p.peek(0).0 != OpenDelim(Brace) {
+			let mut pp = ParallelParser::new();
+			pp.add_greedy("slice size expression", |p|{
+				let s = parse_expr(p).map(|e| StreamConcatSlice::Expr(Box::new(e)))?;
+				p.anticipate(&[OpenDelim(Brace)])?;
+				Ok(s)
+			});
+			pp.add_greedy("slice size type", |p|{
+				let s = parse_explicit_type(p).map(|t| StreamConcatSlice::Type(t))?;
+				p.anticipate(&[OpenDelim(Brace)])?;
+				Ok(s)
+			});
+			Some(pp.finish(p, "slice size expression or type")?)
+		} else {
+			None
+		};
+
+		// Parse the stream expressions.
+		let exprs = flanked(p, Brace, |p| comma_list_nonempty(p, CloseDelim(Brace), "stream expression", |p|{
+			// Consume the expression.
+			let expr = Box::new(parse_expr(p)?);
+
+			// Consume the optional range.
+			let range = if p.try_eat(Keyword(Kw::With)) {
+				Some(Box::new(flanked(p, Brack, parse_range_expr)?))
+			} else {
+				None
+			};
+
+			Ok(StreamExpr {
+				expr: expr,
+				range: range,
+			})
+		}))?;
+
+		return Ok(());
+		// let q = p.peek(0).1;
+		// p.add_diag(DiagBuilder2::error("Don't know how to handle streaming concatenation").span(q));
+		// return Err(());
 	}
 
 	// Parse the expression that follows the opening "{". Depending on whether
@@ -2082,33 +2123,38 @@ fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<()> {
 /// expression "+:" expression
 /// expression "-:" expression
 /// ```
-fn parse_range_expr(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_range_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
+	let mut span = p.peek(0).1;
 	let first_expr = parse_expr(p)?;
-
-	match p.peek(0).0 {
+	let data = match p.peek(0).0 {
 		Colon => {
 			p.bump();
 			parse_expr(p)?;
-			return Ok(());
+			DummyExpr
 		}
 
 		AddColon => {
 			p.bump();
 			parse_expr(p)?;
-			return Ok(());
+			DummyExpr
 		}
 
 		SubColon => {
 			p.bump();
 			parse_expr(p)?;
-			return Ok(());
+			DummyExpr
 		}
 
 		// Otherwise the index expression consists only of one expression.
 		_ => {
-			return Ok(());
+			DummyExpr
 		}
-	}
+	};
+	span.expand(p.last_span());
+	Ok(Expr {
+		span: span,
+		data: data,
+	})
 }
 
 

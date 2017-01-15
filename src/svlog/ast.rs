@@ -426,6 +426,18 @@ pub struct CallArg {
 	pub expr: Option<Expr>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamConcatSlice {
+	Expr(Box<Expr>),
+	Type(Type),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamExpr {
+	pub expr: Box<Expr>,
+	pub range: Option<Box<Expr>>,
+}
+
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
