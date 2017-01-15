@@ -520,7 +520,7 @@ pub enum ConstraintItemData {
 pub struct SubroutineDecl {
 	pub span: Span,
 	pub prototype: SubroutinePrototype,
-	pub stmts: Vec<Stmt>,
+	pub items: Vec<SubroutineItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -529,11 +529,52 @@ pub struct SubroutinePrototype {
 	pub kind: SubroutineKind,
 	pub name: Name,
 	pub name_span: Span,
-	pub args: Vec<Port>,
+	pub args: Vec<SubroutinePort>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SubroutineKind {
 	Func,
 	Task,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubroutinePort {
+	pub span: Span,
+	pub dir: Option<SubroutinePortDir>,
+	pub var: bool,
+	pub ty: Type,
+	pub name: Option<SubroutinePortName>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubroutinePortName {
+	pub name: Name,
+	pub name_span: Span,
+	pub dims: Vec<TypeDim>,
+	pub expr: Option<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubroutineItem {
+	PortDecl(SubroutinePortDecl),
+	Stmt(Stmt),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubroutinePortDecl {
+	pub span: Span,
+	pub dir: SubroutinePortDir,
+	pub var: bool,
+	pub ty: Type,
+	pub names: Vec<VarDeclName>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubroutinePortDir {
+	Input,
+	Output,
+	Inout,
+	Ref,
+	ConstRef,
 }

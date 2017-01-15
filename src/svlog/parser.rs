@@ -2295,7 +2295,7 @@ fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDec
 		SubroutineKind::Func => Keyword(Kw::Endfunction),
 		SubroutineKind::Task => Keyword(Kw::Endtask),
 	};
-	let stmts = repeat_until(p, term, parse_stmt)?;
+	let items = repeat_until(p, term, parse_subroutine_item)?;
 
 	// Consume the "endfunction" or "endtask" keywords.
 	p.require_reported(term)?;
@@ -2304,7 +2304,7 @@ fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDec
 	Ok(SubroutineDecl {
 		span: span,
 		prototype: prototype,
-		stmts: stmts,
+		items: items,
 	})
 }
 
@@ -2350,15 +2350,138 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
 	})
 }
 
-fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Name, Span, Vec<Port>)> {
+
+fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Name, Span, Vec<SubroutinePort>)> {
+	// Consume the subroutine name.
+	// TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
 	let (name, name_span) = p.eat_ident("function or task name")?;
-	let args = if p.try_eat(OpenDelim(Paren)) {
-		parse_port_list(p)?
-	} else {
-		Vec::new()
-	};
+
+	// Consume the port list.
+	let args = try_flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "subroutine port", |p|{
+		let mut span = p.peek(0).1;
+
+		// Consume the optional port direction.
+		let dir = try_subroutine_port_dir(p);
+
+		// Consume the optional "var" keyword.
+		let var = p.try_eat(Keyword(Kw::Var));
+
+		// Branch to parse ports with explicit and implicit type.
+		let mut pp = ParallelParser::new();
+		pp.add("explicit type", |p|{
+			let ty = parse_explicit_type(p)?;
+			Ok((ty, tail(p)?))
+		});
+		pp.add("implicit type", |p|{
+			let ty = parse_implicit_type(p)?;
+			Ok((ty, tail(p)?))
+		});
+		let (ty, name) = pp.finish(p, "explicit or implicit type")?;
+
+		// The `tail` function handles everything that follows the data type. To
+		// ensure that the ports are parsed correctly, the function must fail if
+		// the port is not immediately followed by a "," or ")". Otherwise
+		// implicit and explicit types cannot be distinguished.
+		fn tail(p: &mut AbstractParser) -> ReportedResult<Option<SubroutinePortName>> {
+			// Parse the optional port identifier.
+			let data = if let Some((name, name_span)) = p.try_eat_ident() {
+				// Parse the optional dimensions.
+				let (dims, _) = parse_optional_dimensions(p)?;
+
+				// Parse the optional initial assignment.
+				let expr = if p.try_eat(Operator(Op::Assign)) {
+					Some(parse_expr(p)?)
+				} else {
+					None
+				};
+
+				Some(SubroutinePortName {
+					name: name,
+					name_span: name_span,
+					dims: dims,
+					expr: expr,
+				})
+			} else {
+				None
+			};
+
+			// Ensure that we have consumed all tokens for this port.
+			match p.peek(0) {
+				(Comma,_) | (CloseDelim(Paren),_) => Ok(data),
+				(_, sp) => {
+					p.add_diag(DiagBuilder2::error("Expected , or ) after subroutine port").span(sp));
+					Err(())
+				}
+			}
+		}
+
+		span.expand(p.last_span());
+		Ok(SubroutinePort {
+			span: span,
+			dir: dir,
+			var: var,
+			ty: ty,
+			name: name,
+		})
+	}))?.unwrap_or(Vec::new());
+
+	// Wrap things up.
 	p.require_reported(Semicolon)?;
 	Ok((name, name_span, args))
+}
+
+
+fn try_subroutine_port_dir(p: &mut AbstractParser) -> Option<SubroutinePortDir> {
+	match (p.peek(0).0, p.peek(1).0) {
+		(Keyword(Kw::Input),  _) => { p.bump(); Some(SubroutinePortDir::Input) },
+		(Keyword(Kw::Output), _) => { p.bump(); Some(SubroutinePortDir::Output) },
+		(Keyword(Kw::Inout),  _) => { p.bump(); Some(SubroutinePortDir::Inout) },
+		(Keyword(Kw::Ref),    _) => { p.bump(); Some(SubroutinePortDir::Ref) },
+		(Keyword(Kw::Const), Keyword(Kw::Ref)) => { p.bump(); p.bump(); Some(SubroutinePortDir::ConstRef) },
+		_ => None,
+	}
+}
+
+
+fn parse_subroutine_item(p: &mut AbstractParser) -> ReportedResult<SubroutineItem> {
+	let mut span = p.peek(0).1;
+
+	// Try to parse a port declaration of the form:
+	// direction ["var"] type_or_implicit [name_assignment {"," name_assignment}]
+	if let Some(dir) = try_subroutine_port_dir(p) {
+
+		// Consume the optional "var" keyword.
+		let var = p.try_eat(Keyword(Kw::Var));
+
+		// Branch to handle the cases of implicit and explicit data type.
+		let mut pp = ParallelParser::new();
+		pp.add("explicit type", |p|{
+			let ty = parse_explicit_type(p)?;
+			let names = comma_list(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
+			p.require_reported(Semicolon)?;
+			Ok((ty, names))
+		});
+		pp.add("implicit type", |p|{
+			let ty = parse_implicit_type(p)?;
+			let names = comma_list(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
+			p.require_reported(Semicolon)?;
+			Ok((ty, names))
+		});
+		let (ty, names) = pp.finish(p, "explicit or implicit type")?;
+
+		// Wrap things up.
+		span.expand(p.last_span());
+		return Ok(SubroutineItem::PortDecl(SubroutinePortDecl {
+			span: span,
+			dir: dir,
+			var: var,
+			ty: ty,
+			names: names,
+		}));
+	}
+
+	// Otherwise simply treat this as a statement.
+	Ok(SubroutineItem::Stmt(parse_stmt(p)?))
 }
 
 
