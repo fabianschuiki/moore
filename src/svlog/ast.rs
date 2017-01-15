@@ -141,6 +141,16 @@ pub struct Port {
 	pub dims: Vec<TypeDim>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortDecl {
+	pub span: Span,
+	pub dir: PortDir,
+	pub net_type: Option<NetType>,
+	pub var: bool,
+	pub ty: Type,
+	pub names: Vec<VarDeclName>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortKind {
 	NetPort,
@@ -153,6 +163,22 @@ pub enum PortDir {
 	Output,
 	Inout,
 	Ref,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetType {
+	Supply0,
+	Supply1,
+	Tri,
+	TriAnd,
+	TriOr,
+	TriReg,
+	Tri0,
+	Tri1,
+	Uwire,
+	Wire,
+	WireAnd,
+	WireOr,
 }
 
 
@@ -577,4 +603,50 @@ pub enum SubroutinePortDir {
 	Inout,
 	Ref,
 	ConstRef,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetDecl {
+	pub span: Span,
+	pub net_type: NetType,
+	pub strength: Option<NetStrength>,
+	pub kind: NetKind,
+	pub delay: Option<Expr>,
+	pub names: Vec<VarDeclName>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetKind {
+	Vectored,
+	Scalared,
+	None,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetStrength {
+	Drive(DriveStrength, DriveStrength),
+	Charge(ChargeStrength),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriveStrength {
+	Supply0,
+	Strong0,
+	Pull0,
+	Weak0,
+	HighZ0,
+	Supply1,
+	Strong1,
+	Pull1,
+	Weak1,
+	HighZ1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChargeStrength {
+	Small,
+	Medium,
+	Large,
 }

@@ -377,11 +377,26 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 			(x, _) if x == term => break,
 			(_, sp) => {
 				p.add_diag(DiagBuilder2::error(format!("Expected , or {} after {}", term, msg)).span(sp));
-				p.recover_balanced(&[Comma, term], false);
+				p.recover_balanced(&[term], false);
+				return Err(());
 			}
 		}
 	}
 	Ok(v)
+}
+
+
+/// Same as `comma_list`, but at least one item is required.
+fn comma_list_nonempty<R,F>(p: &mut AbstractParser, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	let q = p.peek(0).1;
+	let v = comma_list(p, term, msg, item)?;
+	if v.is_empty() {
+		p.add_diag(DiagBuilder2::error(format!("Expected at least one {}", msg)).span(q));
+		Err(())
+	} else {
+		Ok(v)
+	}
 }
 
 fn repeat_until<R,F>(p: &mut AbstractParser, term: Token, mut item: F) -> ReportedResult<Vec<R>>
@@ -407,6 +422,21 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 			p.recover_balanced(&[term], false);
 			Err(e)
 		}
+	}
+}
+
+/// Speculatively apply a parse function. If it fails, the parser `p` is left
+/// untouched. If it succeeds, `p` is in the same state as if `parse` was called
+/// on it directly. Use a ParallelParser for better error reporting.
+fn try<R,F>(p: &mut AbstractParser, mut parse: F) -> Option<R>
+where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+	let mut bp = BranchParser::new(p);
+	match parse(&mut bp) {
+		Ok(r) => {
+			bp.commit();
+			Some(r)
+		}
+		Err(_) => None
 	}
 }
 
@@ -748,13 +778,19 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
 		Keyword(Kw::Function) | Keyword(Kw::Task) => return parse_subroutine_decl(p).map(|_|()),
 
+		// Port declarations
+		Keyword(Kw::Inout) |
+		Keyword(Kw::Input) |
+		Keyword(Kw::Output) |
+		Keyword(Kw::Ref) => return parse_port_decl(p).map(|_|()),
+
 		// Continuous assign
 		Keyword(Kw::Assign) => { parse_continuous_assign(p)?; return Ok(()); },
 
 		// Genvar declaration
 		Keyword(Kw::Genvar) => {
 			p.bump();
-			comma_list(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
+			comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
 			p.require_reported(Semicolon)?;
 			return Ok(());
 		}
@@ -768,6 +804,11 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		}
 
 		_ => ()
+	}
+
+	// Handle net declarations.
+	if as_net_type(p.peek(0).0).is_some() {
+		return parse_net_decl(p).map(|_|());
 	}
 
 	// TODO: Handle the const and var keywords that may appear in front of a
@@ -931,7 +972,7 @@ fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 
 
 fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
-	let v = comma_list(p, Semicolon, "parameter name", |p|{
+	let v = comma_list_nonempty(p, Semicolon, "parameter name", |p|{
 		// Consume the parameter name and optional dimensions.
 		let (name, name_sp) = p.eat_ident("parameter name")?;
 		let (dims, _) = parse_optional_dimensions(p)?;
@@ -1342,7 +1383,7 @@ fn parse_struct_member(p: &mut AbstractParser) -> ReportedResult<StructMember> {
 	let ty = parse_data_type(p)?;
 
 	// Parse the list of names and assignments.
-	let names = comma_list(p, Semicolon, "member name", parse_variable_decl_assignment)?;
+	let names = comma_list_nonempty(p, Semicolon, "member name", parse_variable_decl_assignment)?;
 
 	p.require_reported(Semicolon)?;
 	span.expand(p.last_span());
@@ -2457,13 +2498,13 @@ fn parse_subroutine_item(p: &mut AbstractParser) -> ReportedResult<SubroutineIte
 		let mut pp = ParallelParser::new();
 		pp.add("explicit type", |p|{
 			let ty = parse_explicit_type(p)?;
-			let names = comma_list(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
+			let names = comma_list_nonempty(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
 			p.require_reported(Semicolon)?;
 			Ok((ty, names))
 		});
 		pp.add("implicit type", |p|{
 			let ty = parse_implicit_type(p)?;
-			let names = comma_list(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
+			let names = comma_list_nonempty(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
 			p.require_reported(Semicolon)?;
 			Ok((ty, names))
 		});
@@ -2609,7 +2650,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		// Generate variables
 		Keyword(Kw::Genvar) => {
 			p.bump();
-			let names = comma_list(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
+			let names = comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
 			GenvarDeclStmt(names)
 		}
 
@@ -2632,7 +2673,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 						None => Lifetime::Static,
 					};
 					let ty = parse_data_type(p)?;
-					let decls = comma_list(p, Semicolon, "variable declaration", parse_variable_decl_assignment)?;
+					let decls = comma_list_nonempty(p, Semicolon, "variable declaration", parse_variable_decl_assignment)?;
 					p.require_reported(Semicolon)?;
 					Ok(NullStmt)
 				});
@@ -3458,7 +3499,7 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 		let mut pp = ParallelParser::new();
 		pp.add("class property", |p| {
 			let ty = parse_data_type(p)?;
-			let names = comma_list(p, Semicolon, "data declaration", parse_variable_decl_assignment)?;
+			let names = comma_list_nonempty(p, Semicolon, "data declaration", parse_variable_decl_assignment)?;
 			p.require_reported(Semicolon)?;
 			Ok(ClassItemData::Property)
 		});
@@ -3759,6 +3800,190 @@ fn parse_typedef(p: &mut AbstractParser) -> ReportedResult<Typedef> {
 		ty: ty,
 		dims: dims,
 	})
+}
+
+
+fn parse_port_decl(p: &mut AbstractParser) -> ReportedResult<PortDecl> {
+	let mut span = p.peek(0).1;
+
+	// Consume the port direction.
+	let dir = match as_port_direction(p.peek(0).0) {
+		Some(x) => { p.bump(); x },
+		None => {
+			p.add_diag(DiagBuilder2::error("Expected port direction (inout, input, output, or ref)").span(span));
+			return Err(());
+		}
+	};
+
+	// Consume the optional net type or "var" keyword.
+	let net_type = as_net_type(p.peek(0).0);
+	let var = if net_type.is_some() {
+		p.bump();
+		false
+	} else {
+		p.try_eat(Keyword(Kw::Var))
+	};
+
+	// Branch to handle explicit and implicit types.
+	let mut pp = ParallelParser::new();
+	pp.add("explicit type", |p|{
+		let ty = parse_explicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	pp.add("implicit type", |p|{
+		let ty = parse_implicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	let (ty, names) = pp.finish(p, "explicit or implicit type")?;
+
+	fn tail(p: &mut AbstractParser) -> ReportedResult<Vec<VarDeclName>> {
+		let names = comma_list_nonempty(p, Semicolon, "port declaration", parse_variable_decl_assignment)?;
+		p.require_reported(Semicolon)?;
+		Ok(names)
+	}
+
+	// Wrap things up.
+	span.expand(p.last_span());
+	Ok(PortDecl {
+		span: span,
+		dir: dir,
+		net_type: net_type,
+		var: var,
+		ty: ty,
+		names: names,
+	})
+}
+
+
+fn as_net_type(tkn: Token) -> Option<NetType> {
+	match tkn {
+		Keyword(Kw::Supply0) => Some(NetType::Supply0),
+		Keyword(Kw::Supply1) => Some(NetType::Supply1),
+		Keyword(Kw::Tri)     => Some(NetType::Tri),
+		Keyword(Kw::Triand)  => Some(NetType::TriAnd),
+		Keyword(Kw::Trior)   => Some(NetType::TriOr),
+		Keyword(Kw::Trireg)  => Some(NetType::TriReg),
+		Keyword(Kw::Tri0)    => Some(NetType::Tri0),
+		Keyword(Kw::Tri1)    => Some(NetType::Tri1),
+		Keyword(Kw::Uwire)   => Some(NetType::Uwire),
+		Keyword(Kw::Wire)    => Some(NetType::Wire),
+		Keyword(Kw::Wand)    => Some(NetType::WireAnd),
+		Keyword(Kw::Wor)     => Some(NetType::WireOr),
+		_ => None
+	}
+}
+
+
+fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
+	let mut span = p.peek(0).1;
+
+	// Consume the net type.
+	let net_type = match as_net_type(p.peek(0).0) {
+		Some(x) => { p.bump(); x },
+		None => {
+			let q = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error("Expected net type").span(q));
+			return Err(());
+		}
+	};
+
+	// Consume the optional drive strength or charge strength.
+	let strength = try_flanked(p, Paren, parse_net_strength)?;
+
+	// Consume the optional "vectored" or "scalared" keywords.
+	let kind = match p.peek(0).0 {
+		Keyword(Kw::Vectored) => { p.bump(); NetKind::Vectored },
+		Keyword(Kw::Scalared) => { p.bump(); NetKind::Scalared },
+		_ => NetKind::None
+	};
+
+	// Branch to handle explicit and implicit types separately.
+	let mut pp = ParallelParser::new();
+	pp.add("explicit type", |p|{
+		let ty = parse_explicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	pp.add("implicit type", |p|{
+		let ty = parse_implicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	let (ty, (delay, names)) = pp.finish(p, "explicit or implicit type")?;
+
+	// This function handles parsing of everything after the type.
+	fn tail(p: &mut AbstractParser) -> ReportedResult<(Option<Expr>, Vec<VarDeclName>)> {
+		// Parse the optional delay.
+		let delay = if p.try_eat(Hashtag) {
+			let q = p.last_span();
+			p.add_diag(DiagBuilder2::error("Don't know how to parse delays on net declarations").span(q));
+			return Err(());
+		} else {
+			None
+		};
+
+		// Parse the names and assignments.
+		let names = comma_list_nonempty(p, Semicolon, "net declaration", parse_variable_decl_assignment)?;
+		p.require_reported(Semicolon)?;
+		Ok((delay, names))
+	}
+
+	span.expand(p.last_span());
+	Ok(NetDecl {
+		span: span,
+		net_type: net_type,
+		strength: strength,
+		kind: kind,
+		delay: delay,
+		names: names,
+	})
+}
+
+
+fn parse_net_strength(p: &mut AbstractParser) -> ReportedResult<NetStrength> {
+	if let Some(a) = as_drive_strength(p.peek(0).0) {
+		p.bump();
+		p.require_reported(Comma)?;
+		if let Some(b) = as_drive_strength(p.peek(0).0) {
+			Ok(NetStrength::Drive(a,b))
+		} else {
+			let q = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error("Expected second drive strength").span(q));
+			Err(())
+		}
+	} else if let Some(s) = as_charge_strength(p.peek(0).0) {
+		p.bump();
+		Ok(NetStrength::Charge(s))
+	} else {
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::error("Expected drive or charge strength").span(q));
+		Err(())
+	}
+}
+
+
+fn as_drive_strength(tkn: Token) -> Option<DriveStrength> {
+	match tkn {
+		Keyword(Kw::Supply0) => Some(DriveStrength::Supply0),
+		Keyword(Kw::Strong0) => Some(DriveStrength::Strong0),
+		Keyword(Kw::Pull0)   => Some(DriveStrength::Pull0),
+		Keyword(Kw::Weak0)   => Some(DriveStrength::Weak0),
+		Keyword(Kw::Highz0)  => Some(DriveStrength::HighZ0),
+		Keyword(Kw::Supply1) => Some(DriveStrength::Supply1),
+		Keyword(Kw::Strong1) => Some(DriveStrength::Strong1),
+		Keyword(Kw::Pull1)   => Some(DriveStrength::Pull1),
+		Keyword(Kw::Weak1)   => Some(DriveStrength::Weak1),
+		Keyword(Kw::Highz1)  => Some(DriveStrength::HighZ1),
+		_ => None
+	}
+}
+
+
+fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
+	match tkn {
+		Keyword(Kw::Small)  => Some(ChargeStrength::Small),
+		Keyword(Kw::Medium) => Some(ChargeStrength::Medium),
+		Keyword(Kw::Large)  => Some(ChargeStrength::Large),
+		_ => None
+	}
 }
 
 
