@@ -230,7 +230,7 @@ impl<'a> AbstractParser for Parser<'a> {
 			// Look for the start of the line.
 			let mut col = 1;
 			let mut line = 1;
-			let mut line_offset = 0;
+			let mut line_offset = sp.begin;
 			while let Some(c) = iter.next_back() {
 				match c.1 {
 					'\n' => { line += 1; break; },
@@ -488,7 +488,7 @@ fn parse_source_text(p: &mut Parser) {
 			}
 			(Eof,_) => break,
 			(tkn,sp) => {
-				p.add_diag(DiagBuilder2::fatal(format!("Expected top-level description, instead got `{:?}`", tkn)).span(sp));
+				p.add_diag(DiagBuilder2::fatal(format!("Expected top-level description, instead got `{}`", tkn)).span(sp));
 				false
 			}
 		};
