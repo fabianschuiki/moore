@@ -282,6 +282,7 @@ pub enum StmtData {
 	BreakStmt,
 	ReturnStmt(Option<Expr>),
 	ImportStmt(ImportDecl),
+	AssertionStmt(Box<Assertion>),
 }
 
 impl Stmt {
@@ -717,3 +718,46 @@ pub struct ImportItem {
 	pub name: Option<Name>, // None means `import pkg::*`
 	pub name_span: Span,
 }
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Assertion {
+	pub span: Span,
+	pub label: Option<(Name, Span)>,
+	pub data: AssertionData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssertionData {
+	Immediate(BlockingAssertion),
+	Deferred(BlockingAssertion),
+	Concurrent(ConcurrentAssertion),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlockingAssertion {
+	Assert(Expr, AssertionActionBlock),
+	Assume(Expr, AssertionActionBlock),
+	Cover(Expr, Stmt),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConcurrentAssertion {
+	AssertProperty(PropertySpec, AssertionActionBlock),
+	AssumeProperty(PropertySpec, AssertionActionBlock),
+	CoverProperty(PropertySpec, Stmt),
+	CoverSequence,
+	ExpectProperty(PropertySpec, AssertionActionBlock),
+	RestrictProperty(PropertySpec),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssertionActionBlock {
+	Positive(Stmt),
+	Negative(Stmt),
+	Both(Stmt, Stmt),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropertySpec;

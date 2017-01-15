@@ -856,6 +856,13 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 			return Ok(HierarchyItem);
 		}
 
+		// Assertions
+		Keyword(Kw::Assert) |
+		Keyword(Kw::Assume) |
+		Keyword(Kw::Cover) |
+		Keyword(Kw::Expect) |
+		Keyword(Kw::Restrict) => return parse_assertion(p).map(|_| HierarchyItem),
+
 		_ => ()
 	}
 
@@ -2812,6 +2819,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		Keyword(Kw::Genvar) => {
 			p.bump();
 			let names = comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
+			p.require_reported(Semicolon)?;
 			GenvarDeclStmt(names)
 		}
 
@@ -2819,18 +2827,27 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		Keyword(Kw::Return) => {
 			p.bump();
 			ReturnStmt(
-				if p.peek(0).0 != Semicolon {
-					Some(parse_expr(p)?)
-				} else {
+				if p.try_eat(Semicolon) {
 					None
+				} else {
+					let expr = parse_expr(p)?;
+					p.require_reported(Semicolon)?;
+					Some(expr)
 				}
 			)
 		}
-		Keyword(Kw::Break) => { p.bump(); BreakStmt }
-		Keyword(Kw::Continue) => { p.bump(); ContinueStmt }
+		Keyword(Kw::Break) => { p.bump(); p.require_reported(Semicolon); BreakStmt }
+		Keyword(Kw::Continue) => { p.bump(); p.require_reported(Semicolon); ContinueStmt }
 
 		// Import statements
 		Keyword(Kw::Import) => ImportStmt(parse_import_decl(p)?),
+
+		// Assertion statements
+		Keyword(Kw::Assert) |
+		Keyword(Kw::Assume) |
+		Keyword(Kw::Cover) |
+		Keyword(Kw::Expect) |
+		Keyword(Kw::Restrict) => AssertionStmt(Box::new(parse_assertion(p)?)),
 
 		// Everything else needs special treatment as things such as variable
 		// declarations look very similar to other expressions.
@@ -4233,6 +4250,166 @@ fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
 		span: span,
 		items: items,
 	})
+}
+
+
+fn parse_assertion(p: &mut AbstractParser) -> ReportedResult<Assertion> {
+	let mut span = p.peek(0).1;
+
+	// Peek ahead after the current token to see if a "property", "sequence", or
+	// "#0" follows. This decides what kind of assertion we're parsing.
+	let null = get_name_table().intern("0", false);
+	let is_property = p.peek(1).0 == Keyword(Kw::Property);
+	let is_sequence = p.peek(1).0 == Keyword(Kw::Sequence);
+	let is_deferred = p.peek(1).0 == Hashtag && p.peek(2).0 == UnsignedNumber(null);
+
+	// Handle the different combinations of keywords and lookaheads from above.
+
+	let data = match p.peek(0).0 {
+
+		// Concurrent Assertions
+		// ---------------------
+
+		// `assert property`
+		Keyword(Kw::Assert) if is_property => {
+			p.bump();
+			p.bump();
+			let prop = flanked(p, Paren, parse_property_spec)?;
+			let action = parse_assertion_action_block(p)?;
+			AssertionData::Concurrent(ConcurrentAssertion::AssertProperty(prop, action))
+		}
+
+		// `assume property`
+		Keyword(Kw::Assume) if is_property => {
+			p.bump();
+			p.bump();
+			let prop = flanked(p, Paren, parse_property_spec)?;
+			let action = parse_assertion_action_block(p)?;
+			AssertionData::Concurrent(ConcurrentAssertion::AssumeProperty(prop, action))
+		}
+
+		// `cover property`
+		Keyword(Kw::Cover) if is_property => {
+			p.bump();
+			p.bump();
+			let prop = flanked(p, Paren, parse_property_spec)?;
+			let stmt = parse_stmt(p)?;
+			AssertionData::Concurrent(ConcurrentAssertion::CoverProperty(prop, stmt))
+		}
+
+		// `cover sequence`
+		Keyword(Kw::Cover) if is_sequence => {
+			p.bump();
+			p.bump();
+			p.add_diag(DiagBuilder2::error("Don't know how to parse cover sequences").span(span));
+			return Err(());
+			// AssertionData::Concurrent(ConcurrentAssertion::CoverSequence)
+		}
+
+		// `expect`
+		Keyword(Kw::Expect) => {
+			p.bump();
+			let prop = flanked(p, Paren, parse_property_spec)?;
+			let action = parse_assertion_action_block(p)?;
+			AssertionData::Concurrent(ConcurrentAssertion::ExpectProperty(prop, action))
+		}
+
+		// `restrict property`
+		Keyword(Kw::Restrict) if is_property => {
+			p.bump();
+			p.bump();
+			let prop = flanked(p, Paren, parse_property_spec)?;
+			AssertionData::Concurrent(ConcurrentAssertion::RestrictProperty(prop))
+		}
+
+		// Immediate and Deferred Assertions
+		// ---------------------------------
+
+		// `assert` and `assert #0`
+		Keyword(Kw::Assert) => {
+			p.bump();
+			if is_deferred {
+				p.bump();
+				p.bump();
+			}
+			let expr = flanked(p, Paren, parse_expr)?;
+			let action = parse_assertion_action_block(p)?;
+			let a = BlockingAssertion::Assert(expr, action);
+			if is_deferred {
+				AssertionData::Deferred(a)
+			} else {
+				AssertionData::Immediate(a)
+			}
+		}
+
+		// `assume` and `assume #0`
+		Keyword(Kw::Assume) => {
+			p.bump();
+			if is_deferred {
+				p.bump();
+				p.bump();
+			}
+			let expr = flanked(p, Paren, parse_expr)?;
+			let action = parse_assertion_action_block(p)?;
+			let a = BlockingAssertion::Assume(expr, action);
+			if is_deferred {
+				AssertionData::Deferred(a)
+			} else {
+				AssertionData::Immediate(a)
+			}
+		}
+
+		// `cover` and `cover #0`
+		Keyword(Kw::Cover) => {
+			p.bump();
+			if is_deferred {
+				p.bump();
+				p.bump();
+			}
+			let expr = flanked(p, Paren, parse_expr)?;
+			let stmt = parse_stmt(p)?;
+			let a = BlockingAssertion::Cover(expr, stmt);
+			if is_deferred {
+				AssertionData::Deferred(a)
+			} else {
+				AssertionData::Immediate(a)
+			}
+		}
+
+		_ => {
+			p.add_diag(DiagBuilder2::error("Expected assert, assume, cover, expect, or restrict").span(span));
+			return Err(());
+		}
+	};
+
+	span.expand(p.last_span());
+	Ok(Assertion {
+		span: span,
+		label: None,
+		data: data,
+	})
+}
+
+
+fn parse_assertion_action_block(p: &mut AbstractParser) -> ReportedResult<AssertionActionBlock> {
+	if p.try_eat(Keyword(Kw::Else)) {
+		Ok(AssertionActionBlock::Negative(parse_stmt(p)?))
+	} else {
+		let stmt = parse_stmt(p)?;
+		if p.try_eat(Keyword(Kw::Else)) {
+			// TODO: Ensure that `stmt` is not a NullStmt.
+			Ok(AssertionActionBlock::Both(stmt, parse_stmt(p)?))
+		} else {
+			Ok(AssertionActionBlock::Positive(stmt))
+		}
+	}
+}
+
+
+fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropertySpec> {
+	let q = p.peek(0).1;
+	p.add_diag(DiagBuilder2::error("Don't know how to parse property specs").span(q));
+	return Err(());
 }
 
 
