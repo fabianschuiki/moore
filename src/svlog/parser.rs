@@ -2034,7 +2034,7 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 fn parse_expr_list(p: &mut AbstractParser) -> ReportedResult<Vec<Expr>> {
 	let mut v = Vec::new();
 	loop {
-		v.push(parse_expr_prec(p, Precedence::Max)?);
+		v.push(parse_expr_prec(p, Precedence::Min)?);
 
 		match p.peek(0) {
 			(Comma, sp) => {
