@@ -471,39 +471,23 @@ fn parse_source_text(p: &mut Parser) {
 
 	// Parse the descriptions in the source text.
 	loop {
-		let good = match p.peek(0) {
-			(Keyword(Kw::Module), _) => {
-				p.bump();
-				match parse_module_decl(p) {
-					Ok(_) => true,
-					Err(_) => false,
-				}
-			}
-			(Keyword(Kw::Interface),_) => {
-				p.bump();
-				match parse_interface_decl(p) {
-					Ok(_) => true,
-					Err(_) => false,
-				}
-			}
-			(Eof,_) => break,
-			(tkn,sp) => {
-				p.add_diag(DiagBuilder2::fatal(format!("Expected top-level description, instead got `{}`", tkn)).span(sp));
-				false
+		let (tkn,sp) = p.peek(0);
+		match tkn {
+			Keyword(Kw::Module) => { p.bump(); parse_module_decl(p); },
+			Keyword(Kw::Interface) => { p.bump(); parse_interface_decl(p); },
+			Keyword(Kw::Package) => { parse_package_decl(p); },
+			Keyword(Kw::Program) => { parse_program_decl(p); },
+			Eof => break,
+			tkn => {
+				p.add_diag(DiagBuilder2::fatal(format!("Expected module, interface, package, or program, instead got `{}`", tkn)).span(sp));
+				p.recover_balanced(&[
+					Keyword(Kw::Endmodule),
+					Keyword(Kw::Endinterface),
+					Keyword(Kw::Endpackage),
+					Keyword(Kw::Endprogram)
+				], true);
 			}
 		};
-
-		// Recover by scanning forward to the next endmodule or endinterface.
-		if !good {
-			loop {
-				match p.peek(0) {
-					(Keyword(Kw::Endmodule), _) |
-					(Keyword(Kw::Endinterface), _) => { p.bump(); break; },
-					(Eof, _) => break,
-					_ => p.bump(),
-				}
-			}
-		}
 	}
 }
 
@@ -770,20 +754,71 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 }
 
 
-fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
+	let mut span = p.peek(0).1;
+	p.require_reported(Keyword(Kw::Package))?;
+	let result = recovered(p, Keyword(Kw::Endpackage), |p|{
+
+		// Parse the optional lifetime.
+		let lifetime = match as_lifetime(p.peek(0).0) {
+			Some(x) => { p.bump(); x },
+			None => Lifetime::Static,
+		};
+
+		// Parse the package name.
+		let (name, name_span) = p.eat_ident("package name")?;
+		p.require_reported(Semicolon)?;
+
+		// TODO: Parse the optional timeunits declaration.
+		let timeunits = Timeunit;
+
+		// Parse the package items.
+		let mut items = Vec::new();
+		while !p.is_fatal() && p.peek(0).0 != Keyword(Kw::Endpackage) && p.peek(0).0 != Eof {
+			if p.try_eat(Semicolon) {
+				continue;
+			}
+			items.push(parse_hierarchy_item(p)?);
+		}
+
+		span.expand(p.last_span());
+		Ok(PackageDecl {
+			span: span,
+			lifetime: lifetime,
+			name: name,
+			name_span: name_span,
+			timeunits: timeunits,
+			items: items,
+		})
+	});
+	p.require_reported(Keyword(Kw::Endpackage))?;
+	result
+}
+
+
+fn parse_program_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+	p.require_reported(Keyword(Kw::Program))?;
+	let result = recovered(p, Keyword(Kw::Endprogram), |p|{
+		let q = p.peek(0).1;
+		p.add_diag(DiagBuilder2::error("Don't know how to parse program declarations").span(q));
+		Err(())
+	});
+	p.require_reported(Keyword(Kw::Endprogram))?;
+	result
+}
+
+
+fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> {
 	// First attempt the simple cases where a keyword reliably identifies the
 	// following item.
 	let (tkn, _) = p.peek(0);
-	let f = |p, func, term| hierarchy_item_wrapper(p, func, term);
-	let map_proc = |result: ReportedResult<Procedure>| result.map(|r| {
-		()
-	});
+	let map_proc = |result: ReportedResult<Procedure>| result.map(|_| HierarchyItem);
 	match tkn {
-		Keyword(Kw::Localparam) => return f(p, parse_localparam_decl, Semicolon),
-		Keyword(Kw::Parameter) => return parse_parameter_decl(p),
-		Keyword(Kw::Modport) => return f(p, parse_modport_decl, Semicolon),
-		Keyword(Kw::Class) => return parse_class_decl(p).map(|r|()),
-		Keyword(Kw::Typedef) => return parse_typedef(p).map(|r|()),
+		Keyword(Kw::Localparam) => return parse_localparam_decl(p).map(|_| HierarchyItem),
+		Keyword(Kw::Parameter) => return parse_parameter_decl(p).map(|_| HierarchyItem),
+		Keyword(Kw::Modport) => return parse_modport_decl(p).map(|_| HierarchyItem),
+		Keyword(Kw::Class) => return parse_class_decl(p).map(|_| HierarchyItem),
+		Keyword(Kw::Typedef) => return parse_typedef(p).map(|_| HierarchyItem),
 
 		// Structured procedures as per IEEE 1800-2009 section 9.2
 		Keyword(Kw::Initial)     => return map_proc(parse_procedure(p, ProcedureKind::Initial)),
@@ -792,23 +827,23 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		Keyword(Kw::AlwaysLatch) => return map_proc(parse_procedure(p, ProcedureKind::AlwaysLatch)),
 		Keyword(Kw::AlwaysFf)    => return map_proc(parse_procedure(p, ProcedureKind::AlwaysFf)),
 		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
-		Keyword(Kw::Function) | Keyword(Kw::Task) => return parse_subroutine_decl(p).map(|_|()),
+		Keyword(Kw::Function) | Keyword(Kw::Task) => return parse_subroutine_decl(p).map(|_| HierarchyItem),
 
 		// Port declarations
 		Keyword(Kw::Inout) |
 		Keyword(Kw::Input) |
 		Keyword(Kw::Output) |
-		Keyword(Kw::Ref) => return parse_port_decl(p).map(|_|()),
+		Keyword(Kw::Ref) => return parse_port_decl(p).map(|_| HierarchyItem),
 
 		// Continuous assign
-		Keyword(Kw::Assign) => { parse_continuous_assign(p)?; return Ok(()); },
+		Keyword(Kw::Assign) => return parse_continuous_assign(p).map(|_| HierarchyItem),
 
 		// Genvar declaration
 		Keyword(Kw::Genvar) => {
 			p.bump();
 			comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
 			p.require_reported(Semicolon)?;
-			return Ok(());
+			return Ok(HierarchyItem);
 		}
 
 		// Generate region
@@ -816,7 +851,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 			p.bump();
 			repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
 			p.require_reported(Keyword(Kw::Endgenerate))?;
-			return Ok(());
+			return Ok(HierarchyItem);
 		}
 
 		_ => ()
@@ -824,7 +859,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 
 	// Handle net declarations.
 	if as_net_type(p.peek(0).0).is_some() {
-		return parse_net_decl(p).map(|_|());
+		return parse_net_decl(p).map(|_| HierarchyItem);
 	}
 
 	// TODO: Handle the const and var keywords that may appear in front of a
@@ -905,29 +940,12 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		}
 	}
 
-	Ok(())
-}
-
-
-fn hierarchy_item_wrapper(p: &mut AbstractParser, func: fn(&mut AbstractParser) -> ReportedResult<()>, term: Token) -> ReportedResult<()> {
-	p.bump();
-	match func(p) {
-		Ok(x) => {
-			match p.require(Semicolon) {
-				Err(d) => p.add_diag(d),
-				_ => ()
-			}
-			Ok(x)
-		}
-		Err(e) => {
-			p.recover(&[term], true);
-			Err(e)
-		}
-	}
+	Ok(HierarchyItem)
 }
 
 
 fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+	p.require_reported(Keyword(Kw::Localparam))?;
 	// TODO: Parse data type or implicit type.
 
 	// Eat the list of parameter assignments.
@@ -972,7 +990,7 @@ fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 			}
 		}
 	}
-
+	p.require_reported(Semicolon)?;
 	Ok(())
 }
 
@@ -1018,6 +1036,7 @@ fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
 fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+	p.require_reported(Keyword(Kw::Modport))?;
 	loop {
 		parse_modport_item(p)?;
 		match p.peek(0) {

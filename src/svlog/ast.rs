@@ -27,6 +27,16 @@ pub struct IntfDecl {
 	pub ports: Vec<Port>,
 }
 
+#[derive(Debug)]
+pub struct PackageDecl {
+	pub span: Span,
+	pub lifetime: Lifetime,
+	pub name: Name,
+	pub name_span: Span,
+	pub timeunits: Timeunit,
+	pub items: Vec<HierarchyItem>,
+}
+
 
 
 /// Lifetime specifier for variables, tasks, and functions. Defaults to static.
@@ -35,6 +45,14 @@ pub enum Lifetime {
 	Static,
 	Automatic,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Timeunit;
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HierarchyItem;
 
 
 
