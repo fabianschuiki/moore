@@ -746,8 +746,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<()> {
 		Keyword(Kw::AlwaysLatch) => return map_proc(parse_procedure(p, ProcedureKind::AlwaysLatch)),
 		Keyword(Kw::AlwaysFf)    => return map_proc(parse_procedure(p, ProcedureKind::AlwaysFf)),
 		Keyword(Kw::Final)       => return map_proc(parse_procedure(p, ProcedureKind::Final)),
-		Keyword(Kw::Function)    => return parse_func_decl(p),
-		Keyword(Kw::Task)        => return parse_task_decl(p),
+		Keyword(Kw::Function) | Keyword(Kw::Task) => return parse_subroutine_decl(p).map(|_|()),
 
 		// Continuous assign
 		Keyword(Kw::Assign) => { parse_continuous_assign(p)?; return Ok(()); },
@@ -2284,70 +2283,82 @@ fn parse_procedure(p: &mut AbstractParser, kind: ProcedureKind) -> ReportedResul
 }
 
 
-fn parse_func_decl(p: &mut AbstractParser) -> ReportedResult<()> {
-	let mut span = p.peek(0).1;
-	let prototype = parse_func_prototype(p)?;
-	let q = p.peek(0).1;
-	p.add_diag(DiagBuilder2::error("Don't know how to parse function bodies").span(q));
-	p.recover_balanced(&[Keyword(Kw::Endfunction)], true);
-	Err(())
-}
-
-
-fn parse_func_prototype(p: &mut AbstractParser) -> ReportedResult<FuncPrototype> {
+fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDecl> {
 	let mut span = p.peek(0).1;
 
-	// Consume the "function" keyword.
-	p.require_reported(Keyword(Kw::Function))?;
+	// Consume the subroutine prototype, which covers everything up to the ";"
+	// after the argument list.
+	let prototype = parse_subroutine_prototype(p)?;
 
-	// Consume the optional lifetime.
-	let lifetime = match as_lifetime(p.peek(0).0) {
-		Some(x) => { p.bump(); x },
-		None => Lifetime::Static,
+	// Consume the subroutine body, which basically is a list of statements.
+	let term = match prototype.kind {
+		SubroutineKind::Func => Keyword(Kw::Endfunction),
+		SubroutineKind::Task => Keyword(Kw::Endtask),
 	};
+	let stmts = repeat_until(p, term, parse_stmt)?;
 
-	// Parse the return type (implicit or explicit), the function name, and the
-	// optional argument list.
-	let mut pp = ParallelParser::new();
-	pp.add("implicit function return type", |p|{
-		let ty = parse_implicit_type(p)?;
-		let (name, name_span) = p.eat_ident("function name")?;
-		let args = if p.try_eat(OpenDelim(Paren)) {
-			parse_port_list(p)?
-		} else {
-			Vec::new()
-		};
-		p.require_reported(Semicolon)?;
-		Ok((ty, name, name_span, args))
-	});
-	pp.add("explicit function return type", |p|{
-		let ty = parse_explicit_type(p)?;
-		let (name, name_span) = p.eat_ident("function name")?;
-		let args = if p.try_eat(OpenDelim(Paren)) {
-			parse_port_list(p)?
-		} else {
-			Vec::new()
-		};
-		p.require_reported(Semicolon)?;
-		Ok((ty, name, name_span, args))
-	});
-	let (ty, name, name_span, args) = pp.finish(p, "implicit or explicit function return type")?;
+	// Consume the "endfunction" or "endtask" keywords.
+	p.require_reported(term)?;
 
 	span.expand(p.last_span());
-	Ok(FuncPrototype {
+	Ok(SubroutineDecl {
 		span: span,
-		name: name,
-		name_span: name_span,
+		prototype: prototype,
+		stmts: stmts,
 	})
 }
 
 
-fn parse_task_decl(p: &mut AbstractParser) -> ReportedResult<()> {
-	let q = p.peek(0).1;
-	p.require_reported(Keyword(Kw::Task))?;
-	p.add_diag(DiagBuilder2::error("Don't know how to parse task declarations").span(q));
-	p.recover_balanced(&[Keyword(Kw::Endtask)], true);
-	Err(())
+fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<SubroutinePrototype> {
+	let mut span = p.peek(0).1;
+
+	// Consume the "function" or "task" keyword, which then also decides what
+	// kind of subroutine we're parsing.
+	let kind = match p.peek(0).0 {
+		Keyword(Kw::Function) => { p.bump(); SubroutineKind::Func },
+		Keyword(Kw::Task)     => { p.bump(); SubroutineKind::Task },
+		_ => {
+			p.add_diag(DiagBuilder2::error("Expected function or task prototype").span(span));
+			return Err(());
+		}
+	};
+
+	// Parse the return type (if this is a function), the subroutine name, and
+	// the optional argument list.
+	let (retty, (name, name_span, args)) = if kind == SubroutineKind::Func {
+		let mut pp = ParallelParser::new();
+		pp.add("implicit function return type", |p|{
+			let ty = parse_implicit_type(p)?;
+			Ok((Some(ty), parse_subroutine_prototype_tail(p)?))
+		});
+		pp.add("explicit function return type", |p|{
+			let ty = parse_explicit_type(p)?;
+			Ok((Some(ty), parse_subroutine_prototype_tail(p)?))
+		});
+		pp.finish(p, "implicit or explicit function return type")?
+	} else {
+		(None, parse_subroutine_prototype_tail(p)?)
+	};
+
+	span.expand(p.last_span());
+	Ok(SubroutinePrototype {
+		span: span,
+		kind: kind,
+		name: name,
+		name_span: name_span,
+		args: args,
+	})
+}
+
+fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Name, Span, Vec<Port>)> {
+	let (name, name_span) = p.eat_ident("function or task name")?;
+	let args = if p.try_eat(OpenDelim(Paren)) {
+		parse_port_list(p)?
+	} else {
+		Vec::new()
+	};
+	p.require_reported(Semicolon)?;
+	Ok((name, name_span, args))
 }
 
 
@@ -3308,11 +3319,13 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 
 	// Parse "extern" task and function prototypes.
 	if p.try_eat(Keyword(Kw::Extern)) {
-		p.add_diag(DiagBuilder2::error("Don't know how to parse external method prototypes").span(span));
-		p.recover_balanced(&[Semicolon], true);
-		// TODO: Match on "function" and "task" keywords and parse the according
-		// prototypes.
-		return Err(());
+		let proto = parse_subroutine_prototype(p)?;
+		span.expand(p.last_span());
+		return Ok(ClassItem {
+			span: span,
+			qualifiers: Vec::new(),
+			data: ClassItemData::ExternSubroutine(proto),
+		})
 	}
 
 	// Parse the optional class item qualifiers.
@@ -3326,9 +3339,8 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 			p.require_reported(Semicolon)?;
 			Ok(ClassItemData::Property)
 		});
-		pp.add("class function", |p| parse_func_decl(p).map(|_| ClassItemData::FuncDecl));
-		pp.add("class task", |p| parse_task_decl(p).map(|_| ClassItemData::TaskDecl));
-		pp.add("class constraint", |p| parse_constraint(p).map(|_| ClassItemData::Constraint));
+		pp.add("class function or task", |p| parse_subroutine_decl(p).map(|d| ClassItemData::SubroutineDecl(d)));
+		pp.add("class constraint", |p| parse_constraint(p).map(|c| ClassItemData::Constraint(c)));
 		pp.finish(p, "class item")?
 	};
 	span.expand(p.last_span());

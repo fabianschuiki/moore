@@ -454,11 +454,9 @@ pub enum ClassItemQualifier {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassItemData {
 	Property,
-	TaskDecl,
-	FuncDecl,
-	ExternTask,
-	ExternFunc,
-	Constraint,
+	SubroutineDecl(SubroutineDecl),
+	ExternSubroutine(SubroutinePrototype),
+	Constraint(Constraint),
 	ClassDecl,
 	CovergroupDecl,
 	LocalParamDecl(()),
@@ -519,8 +517,23 @@ pub enum ConstraintItemData {
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FuncPrototype {
+pub struct SubroutineDecl {
 	pub span: Span,
+	pub prototype: SubroutinePrototype,
+	pub stmts: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubroutinePrototype {
+	pub span: Span,
+	pub kind: SubroutineKind,
 	pub name: Name,
 	pub name_span: Span,
+	pub args: Vec<Port>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SubroutineKind {
+	Func,
+	Task,
 }
