@@ -477,9 +477,10 @@ fn parse_source_text(p: &mut Parser) {
 			Keyword(Kw::Interface) => { p.bump(); parse_interface_decl(p); },
 			Keyword(Kw::Package) => { parse_package_decl(p); },
 			Keyword(Kw::Program) => { parse_program_decl(p); },
+			Keyword(Kw::Import) => { parse_import_decl(p); }
 			Eof => break,
 			tkn => {
-				p.add_diag(DiagBuilder2::fatal(format!("Expected module, interface, package, or program, instead got `{}`", tkn)).span(sp));
+				p.add_diag(DiagBuilder2::fatal(format!("Expected module, interface, package, program, or import, instead got `{}`", tkn)).span(sp));
 				p.recover_balanced(&[
 					Keyword(Kw::Endmodule),
 					Keyword(Kw::Endinterface),
@@ -819,6 +820,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 		Keyword(Kw::Modport) => return parse_modport_decl(p).map(|_| HierarchyItem),
 		Keyword(Kw::Class) => return parse_class_decl(p).map(|_| HierarchyItem),
 		Keyword(Kw::Typedef) => return parse_typedef(p).map(|_| HierarchyItem),
+		Keyword(Kw::Import) => return parse_import_decl(p).map(|_| HierarchyItem),
 
 		// Structured procedures as per IEEE 1800-2009 section 9.2
 		Keyword(Kw::Initial)     => return map_proc(parse_procedure(p, ProcedureKind::Initial)),
@@ -2781,6 +2783,9 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		Keyword(Kw::Break) => { p.bump(); BreakStmt }
 		Keyword(Kw::Continue) => { p.bump(); ContinueStmt }
 
+		// Import statements
+		Keyword(Kw::Import) => ImportStmt(parse_import_decl(p)?),
+
 		// Everything else needs special treatment as things such as variable
 		// declarations look very similar to other expressions.
 		_ => {
@@ -4130,6 +4135,58 @@ fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
 		Keyword(Kw::Large)  => Some(ChargeStrength::Large),
 		_ => None
 	}
+}
+
+
+/// Parse a import declaration.
+/// ```
+/// "import" package_ident "::" "*" ";"
+/// "import" package_ident "::" ident ";"
+/// ```
+fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
+	let mut span = p.peek(0).1;
+	p.require_reported(Keyword(Kw::Import))?;
+	let items = comma_list_nonempty(p, Semicolon, "import item", |p|{
+		// package_ident "::" ident
+		// package_ident "::" "*"
+		let (pkg, pkg_span) = p.eat_ident("package name")?;
+		p.require_reported(Namespace)?;
+		let (tkn, sp) = p.peek(0);
+		match tkn {
+			// package_ident "::" "*"
+			Operator(Op::Mul) => {
+				p.bump();
+				Ok(ImportItem {
+					pkg: pkg,
+					pkg_span: pkg_span,
+					name: None,
+					name_span: sp,
+				})
+			}
+
+			// package_ident "::" ident
+			Ident(n) | EscIdent(n) => {
+				p.bump();
+				Ok(ImportItem {
+					pkg: pkg,
+					pkg_span: pkg_span,
+					name: Some(n),
+					name_span: sp,
+				})
+			}
+
+			_ => {
+				p.add_diag(DiagBuilder2::error("Expected identifier or * after :: in import declaration").span(sp));
+				Err(())
+			}
+		}
+	})?;
+	p.require_reported(Semicolon)?;
+	span.expand(p.last_span());
+	Ok(ImportDecl {
+		span: span,
+		items: items,
+	})
 }
 
 

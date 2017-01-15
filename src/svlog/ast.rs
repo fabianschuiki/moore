@@ -281,6 +281,7 @@ pub enum StmtData {
 	ContinueStmt,
 	BreakStmt,
 	ReturnStmt(Option<Expr>),
+	ImportStmt(ImportDecl),
 }
 
 impl Stmt {
@@ -687,4 +688,20 @@ pub enum PatternFieldData {
 	Type(Type, Box<Expr>),
 	Expr(Box<Expr>),
 	Repeat(Box<Expr>, Vec<Expr>),
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportDecl {
+	pub span: Span,
+	pub items: Vec<ImportItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportItem {
+	pub pkg: Name,
+	pub pkg_span: Span,
+	pub name: Option<Name>, // None means `import pkg::*`
+	pub name_span: Span,
 }
