@@ -1302,7 +1302,10 @@ fn parse_type_signing_and_dimensions(p: &mut AbstractParser, mut span: Span, dat
 /// Parse the core type data of a type.
 fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 	match p.peek(0).0 {
-		Keyword(Kw::Void)  => { p.bump(); Ok(VoidType) },
+		Keyword(Kw::Void)    => { p.bump(); Ok(VoidType) },
+		Keyword(Kw::String)  => { p.bump(); Ok(StringType) },
+		Keyword(Kw::Chandle) => { p.bump(); Ok(ChandleType) },
+		Keyword(Kw::Event)   => { p.bump(); Ok(EventType) },
 
 		// Integer Vector Types
 		Keyword(Kw::Bit)   => { p.bump(); Ok(BitType) },
@@ -1328,6 +1331,14 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 
 		// Named types
 		Ident(n) | EscIdent(n) => { p.bump(); Ok(NamedType(n)) },
+
+		// Virtual Interface Type
+		Keyword(Kw::Virtual) => {
+			p.bump();
+			p.try_eat(Keyword(Kw::Interface));
+			let (name, _) = p.eat_ident("virtual interface name")?;
+			Ok(VirtIntfType(name))
+		},
 
 		_ => {
 			let q = p.peek(0).1;

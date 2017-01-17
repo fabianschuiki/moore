@@ -237,8 +237,16 @@ impl<'a> Lexer<'a> {
 				// IEEE 1800-2009 5.6.3 System tasks and system functions
 				(CatTokenKind::Symbol('$'), sp) => {
 					self.bump()?;
-					let (m, msp) = self.match_ident()?;
-					return Ok((SysIdent(name_table.intern(&m, true)), Span::union(sp,msp)));
+					return match self.peek[0].0 {
+						CatTokenKind::Text |
+						CatTokenKind::Digits |
+						CatTokenKind::Symbol('_') |
+						CatTokenKind::Symbol('$') => {
+							let (m, msp) = self.match_ident()?;
+							Ok((SysIdent(name_table.intern(&m, true)), Span::union(sp,msp)))
+						}
+						_ => Ok((Dollar, sp))
+					};
 				},
 
 				// Escaped identifiers are introduced with a backslash and last
@@ -370,6 +378,9 @@ impl<'a> Lexer<'a> {
 				},
 				_ => break,
 			}
+		}
+		if s.is_empty() {
+			return Err(DiagBuilder2::fatal("Could not match an identifier here").span(sp));
 		}
 		assert!(!s.is_empty());
 		Ok((s, sp))

@@ -27,6 +27,7 @@ pub enum Token {
 	AddColon,
 	SubColon,
 	Apostrophe,
+	Dollar,
 
 	Operator(Op),
 
@@ -70,6 +71,7 @@ impl Token {
 			AddColon      => "+:",
 			SubColon      => "-:",
 			Apostrophe    => "'",
+			Dollar        => "$",
 
 			Operator(op) => op.as_str(),
 

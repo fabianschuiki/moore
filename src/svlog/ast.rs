@@ -69,6 +69,10 @@ pub enum TypeData {
 	ImplicitType,
 	VoidType,
 	NamedType(Name),
+	StringType,
+	ChandleType,
+	VirtIntfType(Name),
+	EventType,
 
 	// Scoping
 	ScopedType {
