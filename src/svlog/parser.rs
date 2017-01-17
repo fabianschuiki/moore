@@ -848,13 +848,16 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 			return Ok(HierarchyItem);
 		}
 
-		// Generate region
+		// Generate region and constructs
 		Keyword(Kw::Generate) => {
 			p.bump();
 			repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
 			p.require_reported(Keyword(Kw::Endgenerate))?;
 			return Ok(HierarchyItem);
 		}
+		Keyword(Kw::For)  => return parse_generate_for(p).map(|_| HierarchyItem),
+		Keyword(Kw::If)   => return parse_generate_if(p).map(|_| HierarchyItem),
+		Keyword(Kw::Case) => return parse_generate_case(p).map(|_| HierarchyItem),
 
 		// Assertions
 		Keyword(Kw::Assert) |
@@ -3476,38 +3479,45 @@ fn parse_genvar_decl(p: &mut AbstractParser) -> ReportedResult<GenvarDecl> {
 
 
 fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<()> {
-	let (tkn,sp) = p.peek(0);
-	match tkn {
-		Keyword(Kw::For) => {
-			p.bump();
-			flanked(p, Paren, |p|{
-				parse_stmt(p)?;
-				parse_expr(p)?;
-				p.require_reported(Semicolon)?;
-				parse_expr(p)?;
-				Ok(())
-			})?;
-			parse_generate_block(p)?;
-			Ok(())
-		}
-		Keyword(Kw::If) => {
-			p.bump();
-			flanked(p, Paren, parse_expr)?;
-			parse_generate_block(p)?;
-			if p.try_eat(Keyword(Kw::Else)) {
-				parse_generate_block(p)?;
-			}
-			Ok(())
-		}
-		Keyword(Kw::Case) => {
-			p.add_diag(DiagBuilder2::error("Don't know how to parse case-generate statements").span(sp));
-			Err(())
-		}
-		_ => {
-			parse_hierarchy_item(p)?;
-			Ok(())
-		}
+	match p.peek(0).0 {
+		Keyword(Kw::For)  => parse_generate_for(p),
+		Keyword(Kw::If)   => parse_generate_if(p),
+		Keyword(Kw::Case) => parse_generate_case(p),
+		_ => parse_hierarchy_item(p).map(|_| ()),
 	}
+}
+
+
+fn parse_generate_for(p: &mut AbstractParser) -> ReportedResult<()> {
+	p.require_reported(Keyword(Kw::For))?;
+	flanked(p, Paren, |p|{
+		parse_stmt(p)?;
+		parse_expr(p)?;
+		p.require_reported(Semicolon)?;
+		parse_expr(p)?;
+		Ok(())
+	})?;
+	parse_generate_block(p)?;
+	Ok(())
+}
+
+
+fn parse_generate_if(p: &mut AbstractParser) -> ReportedResult<()> {
+	p.require_reported(Keyword(Kw::If))?;
+	flanked(p, Paren, parse_expr)?;
+	parse_generate_block(p)?;
+	if p.try_eat(Keyword(Kw::Else)) {
+		parse_generate_block(p)?;
+	}
+	Ok(())
+}
+
+
+fn parse_generate_case(p: &mut AbstractParser) -> ReportedResult<()> {
+	p.require_reported(Keyword(Kw::Case))?;
+	let q = p.last_span();
+	p.add_diag(DiagBuilder2::error("Don't know how to parse case-generate statements").span(q));
+	Err(())
 }
 
 
