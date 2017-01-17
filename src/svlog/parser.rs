@@ -1492,12 +1492,20 @@ fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span
 		CloseDelim(Brack) => {
 			p.bump();
 			TypeDim::Unsized
-		},
+		}
 		Operator(Op::Mul) => {
 			p.bump();
 			TypeDim::Associative
-		},
-		// TODO: Handle the queue case [$] and [$:<const_expr>]
+		}
+		Dollar => {
+			p.bump();
+			if p.try_eat(Colon) {
+				Some(parse_expr(p)?)
+			} else {
+				None
+			};
+			TypeDim::Queue
+		}
 		_ => {
 			// What's left must either be a single constant expression, or a range
 			// consisting of two constant expressions.
@@ -1877,7 +1885,6 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 			p.bump();
 			if p.try_eat(CloseDelim(Brace)) {
 				// TODO: Handle empty queue.
-				p.add_diag(DiagBuilder2::error("Don't know how to parse an empty queue").span(sp));
 				return Ok(Expr {
 					span: Span::union(sp, p.last_span()),
 					data: DummyExpr,
@@ -2549,16 +2556,20 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
 	// Parse the return type (if this is a function), the subroutine name, and
 	// the optional argument list.
 	let (retty, (name, name_span, args)) = if kind == SubroutineKind::Func {
-		let mut pp = ParallelParser::new();
-		pp.add("implicit function return type", |p|{
-			let ty = parse_implicit_type(p)?;
-			Ok((Some(ty), parse_subroutine_prototype_tail(p)?))
-		});
-		pp.add("explicit function return type", |p|{
-			let ty = parse_explicit_type(p)?;
-			Ok((Some(ty), parse_subroutine_prototype_tail(p)?))
-		});
-		pp.finish(p, "implicit or explicit function return type")?
+		if p.peek(0).0 == Keyword(Kw::New) {
+			(None, parse_subroutine_prototype_tail(p)?)
+		} else {
+			let mut pp = ParallelParser::new();
+			pp.add("implicit function return type", |p|{
+				let ty = parse_implicit_type(p)?;
+				Ok((Some(ty), parse_subroutine_prototype_tail(p)?))
+			});
+			pp.add("explicit function return type", |p|{
+				let ty = parse_explicit_type(p)?;
+				Ok((Some(ty), parse_subroutine_prototype_tail(p)?))
+			});
+			pp.finish(p, "implicit or explicit function return type")?
+		}
 	} else {
 		(None, parse_subroutine_prototype_tail(p)?)
 	};
@@ -2575,9 +2586,13 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
 
 
 fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Name, Span, Vec<SubroutinePort>)> {
-	// Consume the subroutine name.
+	// Consume the subroutine name, or "new".
 	// TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
-	let (name, name_span) = p.eat_ident("function or task name")?;
+	let (name, name_span) = if p.try_eat(Keyword(Kw::New)) {
+		(get_name_table().intern("new", true), p.last_span())
+	} else {
+		p.eat_ident("function or task name")?
+	};
 
 	// Consume the port list.
 	let args = try_flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "subroutine port", |p|{
