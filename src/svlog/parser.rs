@@ -3854,6 +3854,7 @@ impl<R: Clone> ParallelParser<R> {
 			match func(&mut bp) {
 				Ok(x) => {
 					if greedy {
+						bp.commit();
 						return Ok(x);
 					} else {
 						let sp = bp.last_span();
@@ -4406,7 +4407,7 @@ fn parse_assertion_action_block(p: &mut AbstractParser) -> ReportedResult<Assert
 }
 
 
-fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropertySpec> {
+fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropSpec> {
 	let mut span = p.peek(0).1;
 
 	// Parse the optional event expression.
@@ -4425,27 +4426,255 @@ fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropertySpec> {
 	};
 
 	// Parse the property expression.
-	let prop = parse_property_expr(p)?;
-	Ok(PropertySpec)
+	let prop = parse_propexpr(p)?;
+	Ok(PropSpec)
 }
 
-
-fn parse_property_expr(p: &mut AbstractParser) -> ReportedResult<PropertyExpr> {
-	parse_property_expr_prec(p, PropertyPrecedence::Min)
-}
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum PropertyPrecedence {
+enum PropSeqPrecedence {
 	Min,
+	AlEvIfAccRejSyn,
+	ImplFollow, // right-associative
+	Until,      // right-associative
+	Iff,        // right-associative
+	Or,         // left-associative
+	And,        // left-associative
+	NotNexttime,
+	Intersect,  // left-associative
+	Within,     // left-associative
+	Throughout, // right-associative
+	CycleDelay, // left-associative
+	Brack,
 	Max,
 }
 
 
-fn parse_property_expr_prec(p: &mut AbstractParser, precedence: PropertyPrecedence) -> ReportedResult<PropertyExpr> {
+fn parse_propexpr(p: &mut AbstractParser) -> ReportedResult<PropExpr> {
+	parse_propexpr_prec(p, PropSeqPrecedence::Min)
+}
+
+
+fn parse_propexpr_prec(p: &mut AbstractParser, precedence: PropSeqPrecedence) -> ReportedResult<PropExpr> {
+	let mut span = p.peek(0).1;
+
+	// To parse property expressions we need a parallel parser. For certain
+	// cases it is unclear if a parenthesized expression is a sequence or a
+	// property expression, e.g.:
+	//
+	// (foo) |=> bar
+	// ^^^^^ sequence or property?
+	//
+	// Both sequences and property expressions support parenthesis. However the
+	// |=> operator is only defined for sequences on the left hand side. If the
+	// parenthesis are parsed as a property and foo as a sequence, the above
+	// code fails to parse since the sequence on the left has effectively become
+	// a property. If the parenthesis are parsed as a sequence, all is well. To
+	// resolve these kinds of issues, we need a parallel parser.
+	let mut pp = ParallelParser::new();
+	pp.add_greedy("sequence expression", move |p| parse_propexpr_seq(p, precedence));
+	pp.add_greedy("property expression", move |p| parse_propexpr_nonseq(p, precedence));
+	let data = pp.finish(p, "sequence or primary property expression")?;
+
+	span.expand(p.last_span());
+	let expr = PropExpr {
+		span: span,
+		data: data,
+	};
+	parse_propexpr_suffix(p, expr, precedence)
+}
+
+
+fn parse_propexpr_nonseq(p: &mut AbstractParser, precedence: PropSeqPrecedence) -> ReportedResult<PropExprData> {
+	// Handle the trivial case of expressions introduced by a symbol or keyword.
+	match p.peek(0).0 {
+		// Parenthesized property expression.
+		OpenDelim(Paren) => return flanked(p, Paren, parse_propexpr).map(|pe| pe.data),
+
+		// "not" operator
+		Keyword(Kw::Not) => {
+			p.bump();
+			let expr = parse_propexpr_prec(p, PropSeqPrecedence::NotNexttime)?;
+			return Ok(PropExprData::Not(Box::new(expr)));
+		}
+
+		// Clocking event
+		At => {
+			p.bump();
+			let ev = parse_event_expr(p, EventPrecedence::Min)?;
+			let expr = parse_propexpr(p)?;
+			return Ok(PropExprData::Clocked(ev, Box::new(expr)));
+		}
+
+		_ => {
+			let q = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error("Expected primary property expression").span(q));
+			return Err(());
+		}
+	}
+}
+
+
+fn parse_propexpr_seq(p: &mut AbstractParser, precedence: PropSeqPrecedence) -> ReportedResult<PropExprData> {
+	// Consume a strong, weak, or regular sequence operator.
+	let (seqop, seqexpr) = match p.peek(0).0 {
+		Keyword(Kw::Strong) => {
+			p.bump();
+			(PropSeqOp::Strong, flanked(p, Paren, parse_seqexpr)?)
+		}
+		Keyword(Kw::Weak) => {
+			p.bump();
+			(PropSeqOp::Weak, flanked(p, Paren, parse_seqexpr)?)
+		}
+		_ => (PropSeqOp::None, parse_seqexpr_prec(p, precedence)?)
+	};
+
+	// Handle the operators that have a sequence expression on their left hand
+	// side.
+	if precedence <= PropSeqPrecedence::ImplFollow {
+		if let Some(op) = match p.peek(0).0 {
+			Operator(Op::SeqImplOl)    => Some(PropSeqBinOp::ImplOverlap),
+			Operator(Op::SeqImplNol)   => Some(PropSeqBinOp::ImplNonoverlap),
+			Operator(Op::SeqFollowOl)  => Some(PropSeqBinOp::FollowOverlap),
+			Operator(Op::SeqFollowNol) => Some(PropSeqBinOp::FollowNonoverlap),
+			_ => None
+		}{
+			p.bump();
+			let expr = parse_propexpr_prec(p, PropSeqPrecedence::ImplFollow)?;
+			return Ok(PropExprData::SeqBinOp(op, seqop, seqexpr, Box::new(expr)));
+		}
+	}
+
+	// Otherwise this is just a simple sequence operator.
+	Ok(PropExprData::SeqOp(seqop, seqexpr))
+}
+
+
+fn parse_propexpr_suffix(p: &mut AbstractParser, prefix: PropExpr, precedence: PropSeqPrecedence) -> ReportedResult<PropExpr> {
+
+	// Handle the binary operators that have a property expression on both their
+	// left and right hand side.
+	if let Some((op, prec, rassoc)) = match p.peek(0).0 {
+		Keyword(Kw::Or)         => Some((PropBinOp::Or,         PropSeqPrecedence::Or,    false)),
+		Keyword(Kw::And)        => Some((PropBinOp::And,        PropSeqPrecedence::And,   false)),
+		Keyword(Kw::Until)      => Some((PropBinOp::Until,      PropSeqPrecedence::Until, true)),
+		Keyword(Kw::SUntil)     => Some((PropBinOp::SUntil,     PropSeqPrecedence::Until, true)),
+		Keyword(Kw::UntilWith)  => Some((PropBinOp::UntilWith,  PropSeqPrecedence::Until, true)),
+		Keyword(Kw::SUntilWith) => Some((PropBinOp::SUntilWith, PropSeqPrecedence::Until, true)),
+		Keyword(Kw::Implies)    => Some((PropBinOp::Impl,       PropSeqPrecedence::Until, true)),
+		Keyword(Kw::Iff)        => Some((PropBinOp::Iff,        PropSeqPrecedence::Iff,   true)),
+		_ => None
+	}{
+		if precedence < prec || (rassoc && precedence == prec) {
+			p.bump();
+			let rhs = parse_propexpr_prec(p, prec)?;
+			return Ok(PropExpr {
+				span: Span::union(prefix.span, rhs.span),
+				data: PropExprData::BinOp(op, Box::new(prefix), Box::new(rhs))
+			});
+		}
+	}
+
+	Ok(prefix)
+}
+
+
+fn parse_seqexpr(p: &mut AbstractParser) -> ReportedResult<SeqExpr> {
+	parse_seqexpr_prec(p, PropSeqPrecedence::Min)
+}
+
+
+fn parse_seqexpr_prec(p: &mut AbstractParser, precedence: PropSeqPrecedence) -> ReportedResult<SeqExpr> {
+	let mut span = p.peek(0).1;
+
+	// See parse_propexpr_prec for an explanation of why we need a parallel
+	// parser here.
+	let mut pp = ParallelParser::new();
+	pp.add_greedy("expression", move |p| parse_seqexpr_expr(p, precedence));
+	pp.add_greedy("sequence", move |p| parse_seqexpr_nonexpr(p, precedence));
+	let data = pp.finish(p, "sequence or primary property expression")?;
+
+	span.expand(p.last_span());
+	let expr = SeqExpr {
+		span: span,
+		data: data,
+	};
+	parse_seqexpr_suffix(p, expr, precedence)
+}
+
+
+fn parse_seqexpr_expr(p: &mut AbstractParser, precedence: PropSeqPrecedence) -> ReportedResult<SeqExprData> {
+	// TODO: Handle all the non-trivial cases.
 	let q = p.peek(0).1;
-	p.add_diag(DiagBuilder2::error("Don't know how to parse property expressions").span(q));
+	p.add_diag(DiagBuilder2::error("Don't know how to parse sequence expression that don't start with an expression").span(q));
 	Err(())
+}
+
+
+fn parse_seqexpr_nonexpr(p: &mut AbstractParser, precedence: PropSeqPrecedence) -> ReportedResult<SeqExprData> {
+
+	// If we arrive here, the only possibility left is that this sequence starts
+	// with and expression or distribution.
+	let expr = parse_expr(p)?;
+
+	// Handle the case of the "throughout" operator that has an expression on
+	// its left hand side.
+	if precedence <= PropSeqPrecedence::Throughout && p.try_eat(Keyword(Kw::Throughout)) {
+		let rhs = parse_seqexpr_prec(p, PropSeqPrecedence::Throughout)?;
+		return Ok(SeqExprData::Throughout(expr, Box::new(rhs)));
+	}
+
+	// Parse the optional repetition.
+	let rep = try_flanked(p, Brack, parse_seqrep)?;
+
+	Ok(SeqExprData::Expr(expr, rep))
+}
+
+
+fn parse_seqexpr_suffix(p: &mut AbstractParser, prefix: SeqExpr, precedence: PropSeqPrecedence) -> ReportedResult<SeqExpr> {
+	// TODO: Handle all the binary operators.
+	Ok(prefix)
+}
+
+
+fn parse_seqrep(p: &mut AbstractParser) -> ReportedResult<SeqRep> {
+	match p.peek(0).0 {
+		// [*]
+		// [* expr]
+		Operator(Op::Mul) => {
+			p.bump();
+			if p.peek(0).0 == CloseDelim(Brack) {
+				Ok(SeqRep::ConsecStar)
+			} else {
+				Ok(SeqRep::Consec(parse_expr(p)?))
+			}
+		}
+
+		// [+]
+		Operator(Op::Add) => {
+			p.bump();
+			Ok(SeqRep::ConsecPlus)
+		}
+
+		// [= expr]
+		Operator(Op::Assign) => {
+			p.bump();
+			Ok(SeqRep::Nonconsec(parse_expr(p)?))
+		}
+
+		// [-> expr]
+		Operator(Op::LogicImpl) => {
+			p.bump();
+			Ok(SeqRep::Goto(parse_expr(p)?))
+		}
+
+		_ => {
+			let q = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error("Expected sequence repetition [+], [*], [* <expr>], [= <expr>], or [-> <expr>]").span(q));
+			Err(())
+		}
+	}
 }
 
 

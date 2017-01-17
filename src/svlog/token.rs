@@ -194,6 +194,12 @@ pub enum Op {
 	LogicShR,
 	ArithShL,
 	ArithShR,
+
+	// Sequence
+	SeqImplOl,
+	SeqImplNol,
+	SeqFollowOl,
+	SeqFollowNol,
 }
 
 impl Op {
@@ -260,6 +266,12 @@ impl Op {
 			Op::LogicShR    => ">>",
 			Op::ArithShL    => "<<<",
 			Op::ArithShR    => ">>>",
+
+			// Sequence
+			Op::SeqImplOl    => "|->",
+			Op::SeqImplNol   => "|=>",
+			Op::SeqFollowOl  => "#-#",
+			Op::SeqFollowNol => "#=#",
 		}
 	}
 
@@ -326,6 +338,12 @@ impl Op {
 			Op::LogicShR    |
 			Op::ArithShL    |
 			Op::ArithShR    => Precedence::Shift,
+
+			// Sequence
+			Op::SeqImplOl    |
+			Op::SeqImplNol   |
+			Op::SeqFollowOl  |
+			Op::SeqFollowNol => Precedence::Max,
 		}
 	}
 }

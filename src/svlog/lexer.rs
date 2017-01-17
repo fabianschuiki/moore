@@ -94,6 +94,12 @@ impl<'a> Lexer<'a> {
 					// Shift
 					('<','<','<') => Some(Operator(Op::ArithShL)),
 					('>','>','>') => Some(Operator(Op::ArithShR)),
+
+					// Sequence
+					('|','-','>') => Some(Operator(Op::SeqImplOl)),
+					('|','=','>') => Some(Operator(Op::SeqImplNol)),
+					('#','-','#') => Some(Operator(Op::SeqFollowOl)),
+					('#','=','#') => Some(Operator(Op::SeqFollowNol)),
 					_ => None,
 				};
 				if let Some(tkn) = sym {

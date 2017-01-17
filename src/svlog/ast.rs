@@ -744,12 +744,12 @@ pub enum BlockingAssertion {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConcurrentAssertion {
-	AssertProperty(PropertySpec, AssertionActionBlock),
-	AssumeProperty(PropertySpec, AssertionActionBlock),
-	CoverProperty(PropertySpec, Stmt),
+	AssertProperty(PropSpec, AssertionActionBlock),
+	AssumeProperty(PropSpec, AssertionActionBlock),
+	CoverProperty(PropSpec, Stmt),
 	CoverSequence,
-	ExpectProperty(PropertySpec, AssertionActionBlock),
-	RestrictProperty(PropertySpec),
+	ExpectProperty(PropSpec, AssertionActionBlock),
+	RestrictProperty(PropSpec),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -759,8 +759,86 @@ pub enum AssertionActionBlock {
 	Both(Stmt, Stmt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PropertySpec;
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PropertyExpr;
+pub struct SeqExpr {
+	pub span: Span,
+	pub data: SeqExprData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SeqExprData {
+	Expr(Expr, Option<SeqRep>),
+	BinOp(SeqBinOp, Box<SeqExpr>, Box<SeqExpr>),
+	Throughout(Expr, Box<SeqExpr>),
+	Clocked(EventExpr, Box<SeqExpr>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SeqRep {
+	Consec(Expr),    // [* expr]
+	ConsecStar,      // [*]
+	ConsecPlus,      // [+]
+	Nonconsec(Expr), // [= expr]
+	Goto(Expr),      // [-> expr]
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeqBinOp {
+	Or,
+	And,
+	Intersect,
+	Within,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropSpec;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropExpr {
+	pub span: Span,
+	pub data: PropExprData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PropExprData {
+	SeqOp(PropSeqOp, SeqExpr),
+	SeqBinOp(PropSeqBinOp, PropSeqOp, SeqExpr, Box<PropExpr>),
+	Not(Box<PropExpr>),
+	BinOp(PropBinOp, Box<PropExpr>, Box<PropExpr>),
+	Clocked(EventExpr, Box<PropExpr>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropSeqOp {
+	None,
+	Weak,
+	Strong,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropSeqBinOp {
+	ImplOverlap,
+	ImplNonoverlap,
+	FollowOverlap,
+	FollowNonoverlap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropBinOp {
+	Or,
+	And,
+	Until,
+	SUntil,
+	UntilWith,
+	SUntilWith,
+	Impl,
+	Iff,
+	SeqImplOl,
+	SeqImplNol,
+	SeqFollowOl,
+	SeqFollowNol,
+}
