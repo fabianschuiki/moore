@@ -761,3 +761,6 @@ pub enum AssertionActionBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropertySpec;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropertyExpr;

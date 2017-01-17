@@ -4407,9 +4407,45 @@ fn parse_assertion_action_block(p: &mut AbstractParser) -> ReportedResult<Assert
 
 
 fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropertySpec> {
+	let mut span = p.peek(0).1;
+
+	// Parse the optional event expression.
+	let event = if p.try_eat(At) {
+		Some(parse_event_expr(p, EventPrecedence::Min)?)
+	} else {
+		None
+	};
+
+	// Parse the optional "disable iff" clause.
+	let disable = if p.try_eat(Keyword(Kw::Disable)) {
+		p.require_reported(Keyword(Kw::Iff))?;
+		Some(flanked(p, Paren, parse_expr)?)
+	} else {
+		None
+	};
+
+	// Parse the property expression.
+	let prop = parse_property_expr(p)?;
+	Ok(PropertySpec)
+}
+
+
+fn parse_property_expr(p: &mut AbstractParser) -> ReportedResult<PropertyExpr> {
+	parse_property_expr_prec(p, PropertyPrecedence::Min)
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum PropertyPrecedence {
+	Min,
+	Max,
+}
+
+
+fn parse_property_expr_prec(p: &mut AbstractParser, precedence: PropertyPrecedence) -> ReportedResult<PropertyExpr> {
 	let q = p.peek(0).1;
-	p.add_diag(DiagBuilder2::error("Don't know how to parse property specs").span(q));
-	return Err(());
+	p.add_diag(DiagBuilder2::error("Don't know how to parse property expressions").span(q));
+	Err(())
 }
 
 
