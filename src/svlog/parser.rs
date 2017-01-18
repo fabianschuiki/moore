@@ -1009,12 +1009,27 @@ fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 
 
 fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
-	// TODO: Create a parallel parser that tries to parse with an implicit or
-	// an explicit type.
 	p.require_reported(Keyword(Kw::Parameter))?;
-	let names = parse_parameter_names(p)?;
-	p.require_reported(Semicolon)?;
-	Ok(())
+
+	// Branch to try the explicit and implicit type version.
+	let mut pp = ParallelParser::new();
+	pp.add("explicit type", |p|{
+		let ty = parse_explicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	pp.add("implicit type", |p|{
+		let ty = parse_implicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	let (ty, ()) = pp.finish(p, "explicit or implicit type")?;
+
+	fn tail(p: &mut AbstractParser) -> ReportedResult<()> {
+		let names = parse_parameter_names(p)?;
+		p.require_reported(Semicolon)?;
+		Ok(())
+	}
+
+	return Ok(())
 }
 
 
