@@ -445,7 +445,21 @@ impl<'a> Preprocessor<'a> {
 				}
 			}
 
-			x => panic!("Preprocessor directive {:?} not implemented", x)
+			// Ignore the "`timescale" directive for now.
+			Directive::Timescale => {
+				while let Some((tkn, _)) = self.token {
+					if tkn == Newline {
+						break;
+					}
+					self.bump();
+				}
+				return Ok(());
+			}
+
+			x => return Err(
+				DiagBuilder2::fatal(format!("Preprocessor directive {:?} not implemented", x))
+				.span(span)
+			)
 		}
 
 		return Err(
@@ -581,6 +595,7 @@ enum Directive {
 	Else,
 	Elsif,
 	Endif,
+	Timescale,
 	Unknown,
 }
 
@@ -596,6 +611,7 @@ thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
 	table.insert("else", Else);
 	table.insert("elsif", Elsif);
 	table.insert("endif", Endif);
+	table.insert("timescale", Timescale);
 	table
 });
 
