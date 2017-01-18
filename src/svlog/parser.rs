@@ -486,7 +486,8 @@ fn parse_source_text(p: &mut Parser) {
 					Keyword(Kw::Endinterface),
 					Keyword(Kw::Endpackage),
 					Keyword(Kw::Endprogram)
-				], true);
+				], false);
+				p.bump();
 			}
 		};
 	}
@@ -2878,6 +2879,44 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		Keyword(Kw::Expect) |
 		Keyword(Kw::Restrict) => AssertionStmt(Box::new(parse_assertion(p)?)),
 
+		// Wait statements
+		Keyword(Kw::Wait) => {
+			p.bump();
+			match p.peek(0) {
+				(OpenDelim(Paren), _) => {
+					let expr = flanked(p, Paren, parse_expr)?;
+					let stmt = Box::new(parse_stmt(p)?);
+					WaitExprStmt(expr, stmt)
+				}
+				(Keyword(Kw::Fork), _) => {
+					p.bump();
+					p.require_reported(Semicolon)?;
+					WaitForkStmt
+				}
+				(tkn, sp) => {
+					p.add_diag(DiagBuilder2::error(format!("Expected (<expr>) or fork after wait, found {} instead", tkn)).span(sp));
+					return Err(());
+				}
+			}
+		}
+		Keyword(Kw::WaitOrder) => {
+			p.add_diag(DiagBuilder2::error("Don't know how to parse wait_order statements").span(sp));
+			return Err(());
+		}
+
+		// Disable statements
+		Keyword(Kw::Disable) => {
+			p.bump();
+			if p.try_eat(Keyword(Kw::Fork)) {
+				p.require_reported(Semicolon)?;
+				DisableForkStmt
+			} else {
+				let (name, _) = p.eat_ident("task or block name")?;
+				p.require_reported(Semicolon)?;
+				DisableStmt(name)
+			}
+		}
+
 		// Everything else needs special treatment as things such as variable
 		// declarations look very similar to other expressions.
 		_ => {
@@ -2906,17 +2945,6 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 					return Err(())
 				}
 			}
-
-			// match parse_expr_stmt(p) {
-			// 	Ok(x) => {
-			// 		p.require_reported(Semicolon)?;
-			// 		x
-			// 	}
-			// 	Err(()) => {
-			// 		p.recover_balanced(&[Semicolon], true);
-			// 		return Err(());
-			// 	}
-			// }
 		}
 	})
 }

@@ -287,6 +287,10 @@ pub enum StmtData {
 	ReturnStmt(Option<Expr>),
 	ImportStmt(ImportDecl),
 	AssertionStmt(Box<Assertion>),
+	WaitExprStmt(Expr, Box<Stmt>),
+	WaitForkStmt,
+	DisableForkStmt,
+	DisableStmt(Name),
 }
 
 impl Stmt {
