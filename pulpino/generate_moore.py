@@ -6,6 +6,7 @@
 # All rights reserved.
 
 import sys, os, subprocess, ipstools, stat
+from ipstools.IPDatabase import is_vhdl
 
 ipdb = ipstools.IPDatabase(ips_dir="./ips", rtl_dir="./rtl", vsim_dir="./vsim")
 
@@ -24,11 +25,14 @@ def export_subip(ip, path):
 	for i in ip.incdirs:
 		flags.append("-I %s/%s" % (path,i))
 	for f in files:
-		cmd = list()
-		cmd.append("${MOORE} ${MOORE_FLAGS}")
-		cmd += flags
-		cmd.append("%s/%s" % (path, f))
-		cmds.append(" ".join(cmd))
+		if not is_vhdl(f):
+			cmd = list()
+			cmd.append("${MOORE} ${MOORE_FLAGS}")
+			cmd += flags
+			cmd.append("%s/%s" % (path, f))
+			cmds.append(" ".join(cmd))
+		else:
+			cmds.append("# skipped %s/%s" % (path, f))
 	return "\n".join(cmds)
 
 with open("compile_moore.sh", "wb") as f:
