@@ -2,13 +2,17 @@
 # This script compiles the pulpino platform as a means to test the capabilities
 # of the moore compiler.
 
-# MOORE="cargo run --"
-MOORE="target/debug/moore"
+MOORE="target/debug/moore compile"
 MOORE_FLAGS=""
 SRC=pulpino
 RTL_SRC=${SRC}/rtl
 RTL_FLAGS="-I ${RTL_SRC}/includes"
+LIBFILE=".moore"
 set -e
+
+if [ -e "$LIBFILE" ]; then
+	rm "$LIBFILE"
+fi
 
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/cluster_clock_gating.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/cluster_clock_inverter.sv

@@ -2,9 +2,10 @@
 
 //! The SystemVerilog module of the moore compiler.
 
-pub mod lexer;
-pub mod token;
-pub mod preproc;
-pub mod cat;
-pub mod parser;
 pub mod ast;
+pub mod cat;
+pub mod lexer;
+pub mod parser;
+pub mod preproc;
+pub mod store;
+pub mod token;

@@ -1,13 +1,16 @@
 // Copyright (c) 2016-2017 Fabian Schuiki
 extern crate owning_ref;
 extern crate clap;
+extern crate sha1;
+extern crate bincode;
+extern crate rustc_serialize;
 pub mod lexer;
 pub mod svlog;
 pub mod vhdl;
 pub mod errors;
 pub mod name;
 pub mod source;
-use clap::{Arg, App};
+use clap::{Arg, App, SubCommand, ArgMatches};
 use std::path::Path;
 
 
@@ -21,22 +24,37 @@ enum Language {
 
 fn main() {
 	let matches = App::new("moore")
-		.arg(Arg::with_name("inc")
-			.short("I")
-			.value_name("DIR")
-			.help("Adds a search path for SystemVerilog includes")
-			.multiple(true)
-			.takes_value(true)
-			.number_of_values(1))
-		.arg(Arg::with_name("preproc")
-			.short("E")
-			.help("Only preprocess input files"))
-		.arg(Arg::with_name("INPUT")
-			.help("The input file to use")
-			.required(true)
-			.index(1))
+		.subcommand(SubCommand::with_name("compile")
+			.arg(Arg::with_name("inc")
+				.short("I")
+				.value_name("DIR")
+				.help("Adds a search path for SystemVerilog includes")
+				.multiple(true)
+				.takes_value(true)
+				.number_of_values(1))
+			.arg(Arg::with_name("preproc")
+				.short("E")
+				.help("Only preprocess input files"))
+			.arg(Arg::with_name("INPUT")
+				.help("The input file to use")
+				.required(true)
+				.index(1)))
+		.subcommand(SubCommand::with_name("elaborate")
+			.arg(Arg::with_name("NAME")
+				.help("Entity or module to elaborate")
+				.required(true)
+				.index(1)))
 		.get_matches();
 
+	if let Some(m) = matches.subcommand_matches("compile") {
+		compile(m);
+	} else if let Some(m) = matches.subcommand_matches("elaborate") {
+		elaborate(m);
+	}
+}
+
+
+fn compile(matches: &ArgMatches) {
 	// Prepare a list of include paths.
 	let include_paths: Vec<_> = match matches.values_of("inc") {
 		Some(args) => args.map(|x| std::path::Path::new(x)).collect(),
@@ -49,8 +67,8 @@ fn main() {
 		Some("sv") | Some("svh") => Language::SystemVerilog,
 		Some("v") => Language::Verilog,
 		Some("vhd") | Some("vhdl") => Language::Vhdl,
-		Some(ext) => panic!("Unrecognized extension of file {}", filename),
-		None => panic!("Unabel to determine language of file {}", filename),
+		Some(_) => panic!("Unrecognized extension of file '{}'", filename),
+		None => panic!("Unable to determine language of file '{}'", filename),
 	};
 
 	let sm = source::get_source_manager();
@@ -70,12 +88,34 @@ fn main() {
 				}
 			} else {
 				let lexer = svlog::lexer::Lexer::new(preproc);
-				svlog::parser::parse(lexer);
-				// for (token, sp) in lexer.map(|x| x.unwrap()) {
-				// 	println!("{} [{:?}, {:?}]", sp.extract(), token, sp);
-				// }
+				let ast = match svlog::parser::parse(lexer) {
+					Ok(x) => x,
+					Err(()) => std::process::exit(1),
+				};
+
+				// TODO: Serialize the parsed AST to disk. If a file is parsed
+				// multiple times, the tree of the previous iteration needs to
+				// be removed. Upon elaboration, it must be possible to
+				// efficiently query the AST for identifiers and check in which
+				// subtree the node lives.
+
+				let key = {
+					let mut s = sha1::Sha1::new();
+					s.update(filename.as_bytes());
+					s.digest().to_string()
+				};
+				svlog::store::store_items(".moore", &key, ast).unwrap();
 			}
 		}
 		x => panic!("{}: Language {:?} not yet supported", filename, x),
+	}
+}
+
+
+fn elaborate(matches: &ArgMatches) {
+	let ast = svlog::store::load_items(".moore").unwrap();
+	for a in ast {
+		println!("");
+		println!("loaded AST: {:?}", a);
 	}
 }

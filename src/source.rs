@@ -14,6 +14,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::path::Path;
 use std::rc::Rc;
+use rustc_serialize::{Encodable, Encoder, Decodable, Decoder};
 
 
 
@@ -57,6 +58,31 @@ impl fmt::Debug for Source {
 impl fmt::Display for Source {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		fmt::Display::fmt(&self.get_path(), f)
+	}
+}
+
+impl Encodable for Source {
+	fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+		s.emit_bool(self.0 == 0)?;
+		if self.0 > 0 {
+			s.emit_str(self.get_path().borrow())?
+		}
+		Ok(())
+	}
+}
+
+impl Decodable for Source {
+	fn decode<S: Decoder>(s: &mut S) -> Result<Source, S::Error> {
+		let invalid = s.read_bool()?;
+		if !invalid {
+			let path = s.read_str()?;
+			match get_source_manager().open(&path) {
+				Some(x) => Ok(x),
+				None => panic!("trying to decode invalid source `{}`", path),
+			}
+		} else {
+			Ok(INVALID_SOURCE)
+		}
 	}
 }
 
@@ -294,7 +320,7 @@ pub type CharIter<'a> = DoubleEndedIterator<Item = (usize, char)> + 'a;
 
 
 /// A single location within a source file, expressed as a byte offset.
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Location {
 	pub source: Source,
 	pub offset: usize,
@@ -328,7 +354,7 @@ impl Into<Span> for Location {
 
 /// A span of locations within a source file, expressed as a half-open interval
 /// of bytes `[begin,end)`.
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Span {
 	pub source: Source,
 	pub begin: usize,

@@ -12,6 +12,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::rc::Rc;
+use rustc_serialize::{Encodable, Encoder, Decodable, Decoder};
 
 
 /// A name is a lightweight 32 bit tag that refers to a string in a name table.
@@ -43,6 +44,22 @@ impl fmt::Debug for Name {
 impl fmt::Display for Name {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		fmt::Display::fmt(&self.as_str(), f)
+	}
+}
+
+impl Encodable for Name {
+	fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+		s.emit_bool(self.is_case_sensitive())?;
+		s.emit_str(self.as_str().borrow())?;
+		Ok(())
+	}
+}
+
+impl Decodable for Name {
+	fn decode<S: Decoder>(s: &mut S) -> Result<Name, S::Error> {
+		let case = s.read_bool()?;
+		let name = s.read_str()?;
+		Ok(get_name_table().intern(&name, case))
 	}
 }
 
