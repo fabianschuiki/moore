@@ -113,9 +113,11 @@ fn compile(matches: &ArgMatches) {
 
 
 fn elaborate(matches: &ArgMatches) {
+	// Load the syntax trees previously parsed and stored into the library.
 	let ast = svlog::store::load_items(".moore").unwrap();
-	for a in ast {
-		println!("");
-		println!("loaded AST: {:?}", a);
-	}
+
+	// TODO: Renumber the AST.
+
+	// Build a symbol table from the loaded syntax trees.
+	let symtbl = svlog::resolve::build_symtbl(&ast);
 }

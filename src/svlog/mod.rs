@@ -9,3 +9,4 @@ pub mod parser;
 pub mod preproc;
 pub mod store;
 pub mod token;
+pub mod resolve;

@@ -47,3 +47,5 @@ if [ ! -e ${SRC}/compile_moore.sh ]; then
 	popd
 fi
 source ${SRC}/compile_moore.sh
+
+target/debug/moore elaborate pulpino_top

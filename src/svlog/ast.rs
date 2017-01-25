@@ -12,14 +12,14 @@ pub use self::StmtData::*;
 pub use self::ExprData::*;
 
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Root {
 	pub timeunits: Option<Timeunit>,
 	pub items: Vec<Item>,
 }
 
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Item {
 	Module(ModDecl),
 	Interface(IntfDecl),
@@ -31,7 +31,7 @@ pub enum Item {
 }
 
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ModDecl {
 	pub span: Span,
 	pub lifetime: Lifetime, // default static
@@ -40,7 +40,7 @@ pub struct ModDecl {
 	pub ports: Vec<Port>,
 }
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct IntfDecl {
 	pub span: Span,
 	pub lifetime: Lifetime, // default static
@@ -49,7 +49,7 @@ pub struct IntfDecl {
 	pub ports: Vec<Port>,
 }
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct PackageDecl {
 	pub span: Span,
 	pub lifetime: Lifetime,
@@ -62,18 +62,18 @@ pub struct PackageDecl {
 
 
 /// Lifetime specifier for variables, tasks, and functions. Defaults to static.
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub enum Lifetime {
 	Static,
 	Automatic,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub struct Timeunit;
 
 
 
-#[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub enum HierarchyItem {
 	Dummy,
 	ImportDecl(ImportDecl),
@@ -98,7 +98,7 @@ pub enum HierarchyItem {
 
 
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub struct Type {
 	pub span: Span,
 	pub data: TypeData,
@@ -151,7 +151,7 @@ pub enum TypeData {
 	},
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum TypeSign {
 	None,
 	Signed,
@@ -176,7 +176,7 @@ pub struct EnumName {
 	pub value: Option<Expr>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum StructKind {
 	Struct,
 	Union,
@@ -215,13 +215,13 @@ pub struct PortDecl {
 	pub names: Vec<VarDeclName>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum PortKind {
 	NetPort,
 	VarPort,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum PortDir {
 	Input,
 	Output,
@@ -229,7 +229,7 @@ pub enum PortDir {
 	Ref,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum NetType {
 	Supply0,
 	Supply1,
@@ -266,7 +266,7 @@ pub struct Procedure {
 	pub stmt: Stmt,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum ProcedureKind {
 	Initial,
 	Always,
@@ -345,28 +345,28 @@ impl Stmt {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum JoinKind {
 	All,
 	Any,
 	None,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum UniquePriority {
 	Unique,
 	Unique0,
 	Priority,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum CaseKind {
 	Normal,
 	DontCareZ,
 	DontCareXZ,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum CaseMode {
 	Normal,
 	Inside,
@@ -530,7 +530,7 @@ impl EventExpr {
 
 
 
-#[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ClassDecl {
 	pub span: Span,
 	pub virt: bool,

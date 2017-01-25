@@ -215,76 +215,7 @@ impl<'a> AbstractParser for Parser<'a> {
 
 	fn add_diag(&mut self, diag: DiagBuilder2) {
 		println!("");
-		let colorcode = match diag.get_severity() {
-			Severity::Fatal | Severity::Error => "\x1B[31;1m",
-			Severity::Warning => "\x1B[33;1m",
-			Severity::Note => "\x1B[34;1m",
-		};
-		println!("{}{}:\x1B[m\x1B[1m {}\x1B[m", colorcode, diag.get_severity(), diag.get_message());
-
-		// Dump the part of the source file that is affected.
-		if let Some(sp) = diag.get_span() {
-			let c = sp.source.get_content();
-			let mut iter = c.extract_iter(0, sp.begin);
-
-			// Look for the start of the line.
-			let mut col = 1;
-			let mut line = 1;
-			let mut line_offset = sp.begin;
-			while let Some(c) = iter.next_back() {
-				match c.1 {
-					'\n' => { line += 1; break; },
-					'\r' => continue,
-					_ => {
-						col += 1;
-						line_offset = c.0;
-					}
-				}
-			}
-
-			// Count the number of lines.
-			while let Some(c) = iter.next_back() {
-				if c.1 == '\n' {
-					line += 1;
-				}
-			}
-
-			// Print the line in question.
-			let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
-			println!("{}:{}:{}-{}:", sp.source.get_path(), line, col, col + sp.extract().len());
-			for (mut i,c) in text.char_indices() {
-				i += line_offset;
-				if sp.begin != sp.end {
-					if i == sp.begin { print!("{}", colorcode); }
-					if i == sp.end { print!("\x1B[m"); }
-				}
-				match c {
-					'\t' => print!("    "),
-					c => print!("{}", c),
-				}
-			}
-			print!("\n");
-
-			// Print the caret markers for the line in question.
-			let mut pd = ' ';
-			for (mut i,c) in text.char_indices() {
-				i += line_offset;
-				let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
-					'^'
-				} else {
-					' '
-				};
-				if d != pd {
-					print!("{}", if d == ' ' {"\x1B[m"} else {colorcode});
-				}
-				pd = d;
-				match c {
-					'\t' => print!("{}{}{}{}", d, d, d, d),
-					_ => print!("{}", d),
-				}
-			}
-			print!("\x1B[m\n");
-		}
+		println!("{}", diag);
 
 		// Keep track of the worst diagnostic severity we've encountered, such
 		// that parsing can be aborted accordingly.
