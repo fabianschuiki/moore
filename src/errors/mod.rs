@@ -35,7 +35,13 @@ pub type DiagResult<'a, T> = Result<T, DiagnosticBuilder<'a>>;
 pub struct DiagBuilder2 {
 	pub severity: Severity,
 	pub message: String,
-	pub span: Option<Span>,
+	pub segments: Vec<DiagSegment>,
+}
+
+#[derive(Clone, Debug)]
+pub enum DiagSegment {
+	Span(Span),
+	Note(String),
 }
 
 /// A diagnostic result type. Either carries the result `T` in the Ok variant,
@@ -43,43 +49,45 @@ pub struct DiagBuilder2 {
 pub type DiagResult2<T> = Result<T, DiagBuilder2>;
 
 impl DiagBuilder2 {
-	pub fn fatal<S: Into<String>>(message: S) -> DiagBuilder2 {
+	pub fn new<S: Into<String>>(severity: Severity, message: S) -> DiagBuilder2 {
 		DiagBuilder2 {
-			severity: Severity::Fatal,
+			severity: severity,
 			message: message.into(),
-			span: None,
+			segments: Vec::new(),
 		}
+	}
+
+	pub fn fatal<S: Into<String>>(message: S) -> DiagBuilder2 {
+		DiagBuilder2::new(Severity::Fatal, message)
 	}
 
 	pub fn error<S: Into<String>>(message: S) -> DiagBuilder2 {
-		DiagBuilder2 {
-			severity: Severity::Error,
-			message: message.into(),
-			span: None,
-		}
+		DiagBuilder2::new(Severity::Error, message)
 	}
 
 	pub fn warning<S: Into<String>>(message: S) -> DiagBuilder2 {
-		DiagBuilder2 {
-			severity: Severity::Warning,
-			message: message.into(),
-			span: None,
-		}
+		DiagBuilder2::new(Severity::Warning, message)
 	}
 
 	pub fn note<S: Into<String>>(message: S) -> DiagBuilder2 {
+		DiagBuilder2::new(Severity::Note, message)
+	}
+
+	pub fn segment(self, segment: DiagSegment) -> DiagBuilder2 {
+		let mut segments = self.segments;
+		segments.push(segment);
 		DiagBuilder2 {
-			severity: Severity::Note,
-			message: message.into(),
-			span: None,
+			segments: segments,
+			..self
 		}
 	}
 
 	pub fn span<S: Into<Span>>(self, span: S) -> DiagBuilder2 {
-		DiagBuilder2 {
-			span: Some(span.into()),
-			..self
-		}
+		self.segment(DiagSegment::Span(span.into()))
+	}
+
+	pub fn add_note<S: Into<String>>(self, message: S) -> DiagBuilder2 {
+		self.segment(DiagSegment::Note(message.into()))
 	}
 
 	pub fn get_severity(&self) -> Severity {
@@ -90,8 +98,8 @@ impl DiagBuilder2 {
 		&self.message
 	}
 
-	pub fn get_span(&self) -> Option<Span> {
-		self.span
+	pub fn get_segments(&self) -> &[DiagSegment] {
+		&self.segments
 	}
 }
 
@@ -124,75 +132,83 @@ impl fmt::Display for Severity {
 
 impl fmt::Display for DiagBuilder2 {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let colorcode = match self.get_severity() {
+		let mut colorcode = match self.get_severity() {
 			Severity::Fatal | Severity::Error => "\x1B[31;1m",
 			Severity::Warning => "\x1B[33;1m",
-			Severity::Note => "\x1B[34;1m",
+			Severity::Note => "\x1B[36;1m",
 		};
 		write!(f, "{}{}:\x1B[m\x1B[1m {}\x1B[m\n", colorcode, self.get_severity(), self.get_message())?;
 
-		// Dump the part of the source file that is affected.
-		if let Some(sp) = self.get_span() {
-			let c = sp.source.get_content();
-			let mut iter = c.extract_iter(0, sp.begin);
+		for segment in &self.segments {
+			match *segment {
+				DiagSegment::Span(sp) => {
+					let c = sp.source.get_content();
+					let mut iter = c.extract_iter(0, sp.begin);
 
-			// Look for the start of the line.
-			let mut col = 1;
-			let mut line = 1;
-			let mut line_offset = sp.begin;
-			while let Some(c) = iter.next_back() {
-				match c.1 {
-					'\n' => { line += 1; break; },
-					'\r' => continue,
-					_ => {
-						col += 1;
-						line_offset = c.0;
+					// Look for the start of the line.
+					let mut col = 1;
+					let mut line = 1;
+					let mut line_offset = sp.begin;
+					while let Some(c) = iter.next_back() {
+						match c.1 {
+							'\n' => { line += 1; break; },
+							'\r' => continue,
+							_ => {
+								col += 1;
+								line_offset = c.0;
+							}
+						}
 					}
-				}
-			}
 
-			// Count the number of lines.
-			while let Some(c) = iter.next_back() {
-				if c.1 == '\n' {
-					line += 1;
-				}
-			}
+					// Count the number of lines.
+					while let Some(c) = iter.next_back() {
+						if c.1 == '\n' {
+							line += 1;
+						}
+					}
 
-			// Print the line in question.
-			let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
-			write!(f, "{}:{}:{}-{}:\n", sp.source.get_path(), line, col, col + sp.extract().len())?;
-			for (mut i,c) in text.char_indices() {
-				i += line_offset;
-				if sp.begin != sp.end {
-					if i == sp.begin { write!(f, "{}", colorcode)?; }
-					if i == sp.end { write!(f, "\x1B[m")?; }
-				}
-				match c {
-					'\t' => write!(f, "    ")?,
-					c => write!(f, "{}", c)?,
-				}
-			}
-			write!(f, "\n")?;
+					// Print the line in question.
+					let text: String = c.iter_from(line_offset).map(|x| x.1).take_while(|c| *c != '\n' && *c != '\r').collect();
+					write!(f, "  --> {}:{}:{}-{}:\n", sp.source.get_path(), line, col, col + sp.extract().len())?;
+					write!(f, "   | \n")?;
+					write!(f, "   | ")?;
+					for (mut i,c) in text.char_indices() {
+						i += line_offset;
+						if sp.begin != sp.end {
+							if i == sp.begin { write!(f, "{}", colorcode)?; }
+							if i == sp.end { write!(f, "\x1B[m")?; }
+						}
+						match c {
+							'\t' => write!(f, "    ")?,
+							c => write!(f, "{}", c)?,
+						}
+					}
+					write!(f, "\x1B[m\n")?;
+					write!(f, "   | ")?;
 
-			// Print the caret markers for the line in question.
-			let mut pd = ' ';
-			for (mut i,c) in text.char_indices() {
-				i += line_offset;
-				let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
-					'^'
-				} else {
-					' '
-				};
-				if d != pd {
-					write!(f, "{}", if d == ' ' {"\x1B[m"} else {colorcode})?;
+					// Print the caret markers for the line in question.
+					let mut pd = ' ';
+					for (mut i,c) in text.char_indices() {
+						i += line_offset;
+						let d = if (i >= sp.begin && i < sp.end) || (i == sp.begin && sp.begin == sp.end) {
+							'^'
+						} else {
+							' '
+						};
+						if d != pd {
+							write!(f, "{}", if d == ' ' {"\x1B[m"} else {colorcode})?;
+						}
+						pd = d;
+						match c {
+							'\t' => write!(f, "{}{}{}{}", d, d, d, d)?,
+							_ => write!(f, "{}", d)?,
+						}
+					}
+					write!(f, "\x1B[m\n")?;
+					colorcode = "\x1B[1m";
 				}
-				pd = d;
-				match c {
-					'\t' => write!(f, "{}{}{}{}", d, d, d, d)?,
-					_ => write!(f, "{}", d)?,
-				}
+				DiagSegment::Note(ref message) => write!(f, "note: {}\n", message)?,
 			}
-			write!(f, "\x1B[m\n")?;
 		}
 		Ok(())
 	}

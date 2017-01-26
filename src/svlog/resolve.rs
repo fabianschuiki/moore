@@ -5,9 +5,10 @@ use name::*;
 use source::*;
 use errors::*;
 use std::collections::HashMap;
+use Session;
 
 
-pub fn build_symtbl(asts: &[ast::Root]) -> SymTbl {
+pub fn build_symtbl(asts: &[ast::Root], session: &Session) -> SymTbl {
 	let mut tbl = HashMap::new();
 	let mut diags = Vec::new();
 
@@ -22,9 +23,12 @@ pub fn build_symtbl(asts: &[ast::Root]) -> SymTbl {
 			};
 
 			if let Some(ex) = tbl.insert(name, (span, i, id)) {
-				if ex.0 != span {
-					diags.push(DiagBuilder2::error(format!("name `{}` has already been declared", name)).span(span));
-					diags.push(DiagBuilder2::note("previous declaration was here").span(ex.0));
+				if ex.0 != span && !session.opts.ignore_duplicate_defs {
+					diags.push(DiagBuilder2::error(format!("name `{}` has already been declared", name))
+						.span(span)
+						.add_note("pass --ignore-duplicate-defs to use the last definition and suppress this error")
+						.add_note("previous declaration was here")
+						.span(ex.0));
 				}
 			}
 		}

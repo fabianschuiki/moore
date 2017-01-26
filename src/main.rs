@@ -22,6 +22,17 @@ enum Language {
 }
 
 
+pub struct Session {
+	pub opts: SessionOptions,
+}
+
+
+#[derive(Debug)]
+pub struct SessionOptions {
+	pub ignore_duplicate_defs: bool,
+}
+
+
 fn main() {
 	let matches = App::new("moore")
 		.subcommand(SubCommand::with_name("compile")
@@ -43,13 +54,23 @@ fn main() {
 			.arg(Arg::with_name("NAME")
 				.help("Entity or module to elaborate")
 				.required(true)
-				.index(1)))
+				.index(1))
+			.arg(Arg::with_name("ignore_duplicate_defs")
+				.long("ignore-duplicate-defs")
+				.help("Ignore multiple module/entity definitions")))
 		.get_matches();
+
+	let mut session = Session {
+		opts: SessionOptions {
+			ignore_duplicate_defs: false,
+		}
+	};
 
 	if let Some(m) = matches.subcommand_matches("compile") {
 		compile(m);
 	} else if let Some(m) = matches.subcommand_matches("elaborate") {
-		elaborate(m);
+		session.opts.ignore_duplicate_defs = m.is_present("ignore_duplicate_defs");
+		elaborate(m, &session);
 	}
 }
 
@@ -112,12 +133,12 @@ fn compile(matches: &ArgMatches) {
 }
 
 
-fn elaborate(matches: &ArgMatches) {
+fn elaborate(matches: &ArgMatches, session: &Session) {
 	// Load the syntax trees previously parsed and stored into the library.
 	let ast = svlog::store::load_items(".moore").unwrap();
 
 	// TODO: Renumber the AST.
 
 	// Build a symbol table from the loaded syntax trees.
-	let symtbl = svlog::resolve::build_symtbl(&ast);
+	let symtbl = svlog::resolve::build_symtbl(&ast, session);
 }
