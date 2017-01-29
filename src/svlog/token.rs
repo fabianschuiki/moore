@@ -47,7 +47,7 @@ pub enum Token {
 	/// An escaped identifier
 	EscIdent(Name),
 	/// An unsigned number
-	UnsignedNumber(Name),
+	// UnsignedNumber(Name),
 	/// A keyword
 	Keyword(Kw),
 
@@ -92,7 +92,6 @@ impl Token {
 			CompDir(_)        => "compiler directive",
 			Ident(_)          => "identifier",
 			EscIdent(_)       => "escaped identifier",
-			UnsignedNumber(_) => "unsigned number",
 
 			Eof       => "end of file",
 		}
@@ -121,10 +120,12 @@ pub enum DelimToken {
 
 
 /// Abstract literals such as strings.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
 pub enum Lit {
 	Str(Name),
 	Decimal(Name),
+	/// An unsigned number.
+	UnsignedInteger(Name),
 	BasedInteger(Option<Name>, bool, char, Name),
 	UnbasedUnsized(char),
 	Real(Name),
@@ -133,7 +134,7 @@ pub enum Lit {
 
 
 /// Operator symbols.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
 pub enum Op {
 	// Assignment
 	Assign,

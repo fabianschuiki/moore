@@ -8,9 +8,13 @@ use svlog::lexer::{Lexer, TokenAndSpan};
 use svlog::token::*;
 use std::collections::VecDeque;
 use errors::*;
+use svlog::ast;
 use svlog::ast::*;
 use name::*;
 use source::*;
+
+const Unrecovered: () = ();
+const Recovered: () = ();
 
 // The problem with data_declaration and data_type_or_implicit:
 //
@@ -299,34 +303,37 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 
 /// Parse a comma-separated list of items, until a terminator token has been
 /// reached. The terminator is not consumed.
-fn comma_list<R,F>(p: &mut AbstractParser, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
-where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+fn comma_list<R,F,T>(p: &mut AbstractParser, mut term: T, msg: &str, mut item: F) -> ReportedResult<Vec<R>> where
+	F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+	T: Predicate {
+
 	let mut v = Vec::new();
-	while !p.is_fatal() && p.peek(0).0 != term && p.peek(0).0 != Eof {
+	while !p.is_fatal() && p.peek(0).0 != Eof && !term.matches(p) {
 		// Parse the item.
 		match item(p) {
 			Ok(x) => v.push(x),
 			Err(e) => {
-				p.recover_balanced(&[term], false);
+				term.recover(p, false);
 				return Err(e);
 			},
 		}
 
-		// Consume a comma or the terminator.
-		match p.peek(0) {
-			(Comma, sp) => {
-				p.bump();
-				if p.peek(0).0 == term {
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					break;
-				}
+		// Try to match the terminator. If it does not, consume a comma and
+		// catch the case where the comma is immediately followed by the
+		// terminator (superfluous terminator).
+		if term.matches(p) {
+			break;
+		} else if p.try_eat(Comma) {
+			if term.matches(p) {
+				let q = p.last_span();
+				p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(q));
+				break;
 			}
-			(x, _) if x == term => break,
-			(_, sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Expected , or {} after {}", term, msg)).span(sp));
-				p.recover_balanced(&[term], false);
-				return Err(());
-			}
+		} else {
+			let sp = p.peek(0).1;
+			p.add_diag(DiagBuilder2::error(format!("Expected , or {} after {}", term.describe(), msg)).span(sp));
+			term.recover(p, false);
+			return Err(());
 		}
 	}
 	Ok(v)
@@ -334,8 +341,10 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 
 
 /// Same as `comma_list`, but at least one item is required.
-fn comma_list_nonempty<R,F>(p: &mut AbstractParser, term: Token, msg: &str, mut item: F) -> ReportedResult<Vec<R>>
-where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
+fn comma_list_nonempty<R,F,T>(p: &mut AbstractParser, mut term: T, msg: &str, mut item: F) -> ReportedResult<Vec<R>> where
+	F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+	T: Predicate {
+
 	let q = p.peek(0).1;
 	let v = comma_list(p, term, msg, item)?;
 	if v.is_empty() {
@@ -384,6 +393,68 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 			Some(r)
 		}
 		Err(_) => None
+	}
+}
+
+
+/// Consumes a Ident or EscIdent token, wrapping it in a ast::Identifier with a
+/// dumy ID assigned.
+fn parse_identifier<M: std::fmt::Display>(p: &mut AbstractParser, msg: M) -> ReportedResult<ast::Identifier> {
+	let (tkn, span) = p.peek(0);
+	match tkn {
+		Ident(n) | EscIdent(n) => {
+			p.bump();
+			Ok(ast::Identifier {
+				id: DUMMY_NODE_ID,
+				span: span,
+				name: n,
+			})
+		}
+		x => {
+			p.add_diag(DiagBuilder2::error(format!("expected {}, but found {} instead", msg, x)).span(span));
+			Err(())
+		}
+	}
+}
+
+
+trait Predicate {
+	fn matches(&mut self, &mut AbstractParser) -> bool;
+	fn recover(&mut self, &mut AbstractParser, consume: bool);
+	fn describe(&self) -> String;
+}
+
+impl Predicate for Token {
+	fn matches(&mut self, p: &mut AbstractParser) -> bool {
+		p.peek(0).0 == *self
+	}
+
+	fn recover(&mut self, p: &mut AbstractParser, consume: bool) {
+		p.recover_balanced(&[*self], consume)
+	}
+
+	fn describe(&self) -> String {
+		self.as_str().into()
+	}
+}
+
+struct FuncPredicate<M: FnMut(&mut AbstractParser) -> bool, R: FnMut(&mut AbstractParser, bool)> {
+	match_func: M,
+	recover_func: R,
+	desc: &'static str,
+}
+
+impl<M: FnMut(&mut AbstractParser) -> bool, R: FnMut(&mut AbstractParser, bool)> Predicate for FuncPredicate<M,R> {
+	fn matches(&mut self, p: &mut AbstractParser) -> bool {
+		(self.match_func)(p)
+	}
+
+	fn recover(&mut self, p: &mut AbstractParser, consume: bool) {
+		(self.recover_func)(p, consume)
+	}
+
+	fn describe(&self) -> String {
+		self.desc.into()
 	}
 }
 
@@ -457,78 +528,69 @@ fn as_lifetime(tkn: Token) -> Option<Lifetime> {
 fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 	let mut span = p.peek(0).1;
 	p.require_reported(Keyword(Kw::Interface));
+	let result = recovered(p, Keyword(Kw::Endinterface), |p|{
 
-	// Eat the optional lifetime.
-	let lifetime = match as_lifetime(p.peek(0).0) {
-		Some(l) => { p.bump(); l },
-		None => Lifetime::Static,
-	};
+		// Eat the optional lifetime.
+		let lifetime = match as_lifetime(p.peek(0).0) {
+			Some(l) => { p.bump(); l },
+			None => Lifetime::Static,
+		};
 
-	// Eat the interface name.
-	let (name, name_sp) = p.eat_ident("interface name")?;
+		// Eat the interface name.
+		let (name, name_sp) = p.eat_ident("interface name")?;
 
-	// TODO: Parse package import declarations.
+		// TODO: Parse package import declarations.
 
-	// Eat the parameter port list.
-	let param_ports = if p.try_eat(Hashtag) {
-		parse_parameter_port_list(p)?
-	} else {
-		Vec::new()
-	};
+		// Eat the parameter port list.
+		let param_ports = if p.try_eat(Hashtag) {
+			parse_parameter_port_list(p)?
+		} else {
+			Vec::new()
+		};
 
-	// Eat the optional list of ports.
-	let ports = if p.try_eat(OpenDelim(Paren)) {
-		parse_port_list(p)?
-	} else {
-		Vec::new()
-	};
+		// Eat the optional list of ports.
+		let ports = if p.try_eat(OpenDelim(Paren)) {
+			parse_port_list(p)?
+		} else {
+			Vec::new()
+		};
 
-	// Eat the semicolon at the end of the header.
-	if !p.try_eat(Semicolon) {
-		let q = p.peek(0).1.end();
-		p.add_diag(DiagBuilder2::error(format!("Missing semicolon \";\" after header of interface \"{}\"", name)).span(q));
-	}
-
-	// Eat the items in the interface.
-	while p.peek(0).0 != Keyword(Kw::Endinterface) && p.peek(0).0 != Eof {
-		// Skip empty items.
-		if p.try_eat(Semicolon) {
-			continue;
+		// Eat the semicolon at the end of the header.
+		if !p.try_eat(Semicolon) {
+			let q = p.peek(0).1.end();
+			p.add_diag(DiagBuilder2::error(format!("Missing semicolon \";\" after header of interface \"{}\"", name)).span(q));
 		}
 
-		let q = p.peek(0).1;
-		match parse_hierarchy_item(p) {
-			Ok(_) => (),
-			Err(()) => {
-				// p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
-				p.recover(&[Keyword(Kw::Endinterface)], false);
-				break;
+		// Eat the items in the interface.
+		let mut items = Vec::new();
+		while !p.is_fatal() && p.peek(0).0 != Keyword(Kw::Endinterface) && p.peek(0).0 != Eof {
+			if p.try_eat(Semicolon) {
+				continue;
 			}
+			items.push(parse_hierarchy_item(p)?);
 		}
-	}
 
-	// Eat the endinterface keyword.
-	if !p.try_eat(Keyword(Kw::Endinterface)) {
-		let q = p.peek(0).1.end();
-		p.add_diag(DiagBuilder2::error(format!("Missing \"endinterface\" at the end of \"{}\"", name)).span(q));
-	}
-
-	span.expand(p.last_span());
-	Ok(IntfDecl {
-		span: span,
-		lifetime: lifetime,
-		name: name,
-		name_span: name_sp,
-		ports: ports,
-	})
+		span.expand(p.last_span());
+		Ok(IntfDecl {
+			id: DUMMY_NODE_ID,
+			span: span,
+			lifetime: lifetime,
+			name: name,
+			name_span: name_sp,
+			ports: ports,
+			items: items,
+		})
+	});
+	p.require_reported(Keyword(Kw::Endinterface))?;
+	result
 }
 
 
-fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
+fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<ParamPort>> {
 	let mut v = Vec::new();
 	p.require_reported(OpenDelim(Paren))?;
 
-	while p.try_eat(Keyword(Kw::Parameter)) {
+	while p.peek(0).0 != Eof && p.try_eat(Keyword(Kw::Parameter)) {
 		// TODO: Parse data type or implicit type.
 
 		// Eat the list of parameter assignments.
@@ -541,17 +603,34 @@ fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<()>> 
 					break;
 				}
 			};
+			let mut span = name_sp;
 
 			// TODO: Eat the unpacked dimensions.
+			let (dims, _) = parse_optional_dimensions(p)?;
 
-			if p.try_eat(Operator(Op::Assign)) {
-				match parse_constant_expr(p) {
-					Ok(_) => (),
-					Err(_) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
+			let expr = if p.try_eat(Operator(Op::Assign)) {
+				match parse_expr(p) {
+					Ok(e) => Some(e),
+					Err(_) => {
+						p.recover_balanced(&[Comma, CloseDelim(Paren)], false);
+						break;
+					}
 				}
-			}
+			} else {
+				None
+			};
 
-			v.push(());
+			span.expand(p.last_span());
+			v.push(ParamPort {
+				span: span,
+				name: Identifier {
+					id: DUMMY_NODE_ID,
+					span: name_sp,
+					name: name,
+				},
+				dims: dims,
+				expr: expr,
+			});
 
 			// Eat the trailing comma or closing parenthesis.
 			match p.peek(0) {
@@ -634,71 +713,63 @@ fn parse_constant_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 	let mut span = p.peek(0).1;
 	p.require_reported(Keyword(Kw::Module));
+	let result = recovered(p, Keyword(Kw::Endmodule), |p|{
 
-	// Eat the optional lifetime.
-	let lifetime = match as_lifetime(p.peek(0).0) {
-		Some(l) => { p.bump(); l },
-		None => Lifetime::Static,
-	};
+		// Eat the optional lifetime.
+		let lifetime = match as_lifetime(p.peek(0).0) {
+			Some(l) => { p.bump(); l },
+			None => Lifetime::Static,
+		};
 
-	// Eat the module name.
-	let (name, name_sp) = p.eat_ident("module name")?;
+		// Eat the module name.
+		let (name, name_sp) = p.eat_ident("module name")?;
 
-	// TODO: Parse package import declarations.
+		// TODO: Parse package import declarations.
 
-	// Eat the optional parameter port list.
-	let param_ports = if p.try_eat(Hashtag) {
-		parse_parameter_port_list(p)?
-	} else {
-		Vec::new()
-	};
+		// Eat the optional parameter port list.
+		let params = if p.try_eat(Hashtag) {
+			parse_parameter_port_list(p)?
+		} else {
+			Vec::new()
+		};
 
-	// Eat the optional list of ports. Not having such a list requires the ports
-	// to be defined further down in the body of the module.
-	let ports = if p.try_eat(OpenDelim(Paren)) {
-		parse_port_list(p)?
-	} else {
-		Vec::new()
-	};
+		// Eat the optional list of ports. Not having such a list requires the ports
+		// to be defined further down in the body of the module.
+		let ports = if p.try_eat(OpenDelim(Paren)) {
+			parse_port_list(p)?
+		} else {
+			Vec::new()
+		};
 
-	// Eat the semicolon after the header.
-	if !p.try_eat(Semicolon) {
-		let q = p.peek(0).1.end();
-		p.add_diag(DiagBuilder2::error(format!("Missing ; after header of module \"{}\"", name)).span(q));
-	}
-
-	// Eat the items in the module.
-	while p.peek(0).0 != Keyword(Kw::Endmodule) && p.peek(0).0 != Eof {
-		// Skip empty items.
-		if p.try_eat(Semicolon) {
-			continue;
+		// Eat the semicolon after the header.
+		if !p.try_eat(Semicolon) {
+			let q = p.peek(0).1.end();
+			p.add_diag(DiagBuilder2::error(format!("Missing ; after header of module \"{}\"", name)).span(q));
 		}
 
-		let q = p.peek(0).1;
-		match parse_hierarchy_item(p) {
-			Ok(_) => (),
-			Err(()) => {
-				// p.add_diag(DiagBuilder2::error("Expected hierarchy item").span(q));
-				p.recover(&[Keyword(Kw::Endmodule)], false);
-				break;
+		// Parse the module items.
+		let mut items = Vec::new();
+		while !p.is_fatal() && p.peek(0).0 != Keyword(Kw::Endmodule) && p.peek(0).0 != Eof {
+			if p.try_eat(Semicolon) {
+				continue;
 			}
+			items.push(parse_hierarchy_item(p)?);
 		}
-	}
 
-	// Eat the endmodule keyword.
-	if !p.try_eat(Keyword(Kw::Endmodule)) {
-		let q = p.peek(0).1.end();
-		p.add_diag(DiagBuilder2::error(format!("Missing \"endmodule\" at the end of \"{}\"", name)).span(q));
-	}
-
-	span.expand(p.last_span());
-	Ok(ModDecl {
-		span: span,
-		lifetime: lifetime,
-		name: name,
-		name_span: name_sp,
-		ports: ports,
-	})
+		span.expand(p.last_span());
+		Ok(ModDecl {
+			id: DUMMY_NODE_ID,
+			span: span,
+			lifetime: lifetime,
+			name: name,
+			name_span: name_sp,
+			params: params,
+			ports: ports,
+			items: items,
+		})
+	});
+	p.require_reported(Keyword(Kw::Endmodule))?;
+	result
 }
 
 
@@ -731,6 +802,7 @@ fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
 
 		span.expand(p.last_span());
 		Ok(PackageDecl {
+			id: DUMMY_NODE_ID,
 			span: span,
 			lifetime: lifetime,
 			name: name,
@@ -760,8 +832,13 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 	// First attempt the simple cases where a keyword reliably identifies the
 	// following item.
 	match p.peek(0).0 {
-		Keyword(Kw::Localparam) => return parse_localparam_decl(p).map(|x| HierarchyItem::LocalparamDecl(x)),
-		Keyword(Kw::Parameter)  => return parse_parameter_decl(p).map(|x| HierarchyItem::ParameterDecl(x)),
+		// Keyword(Kw::Localparam) => return parse_localparam_decl(p).map(|x| HierarchyItem::LocalparamDecl(x)),
+		// Keyword(Kw::Parameter)  => return parse_parameter_decl(p).map(|x| HierarchyItem::ParameterDecl(x)),
+		Keyword(Kw::Localparam) | Keyword(Kw::Parameter) => {
+			let decl = parse_param_decl(p, false)?;
+			p.require_reported(Semicolon)?;
+			return Ok(HierarchyItem::ParamDecl(decl));
+		}
 		Keyword(Kw::Modport)    => return parse_modport_decl(p).map(|x| HierarchyItem::ModportDecl(x)),
 		Keyword(Kw::Class)      => return parse_class_decl(p).map(|x| HierarchyItem::ClassDecl(x)),
 		Keyword(Kw::Typedef)    => return parse_typedef(p).map(|x| HierarchyItem::Typedef(x)),
@@ -813,6 +890,13 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 
 		_ => ()
 	}
+
+	// Handle the possibly ambiguous cases.
+	let mut pp = ParallelParser::new();
+	pp.add_greedy("net declaration", |p| parse_net_decl(p).map(|d| HierarchyItem::NetDecl(d)));
+	pp.add("instantiation", |p| parse_inst(p).map(|i| HierarchyItem::Inst(i)));
+	pp.add("variable declaration", |p| parse_var_decl(p).map(|d| HierarchyItem::VarDecl(d)));
+	return pp.finish(p, "hierarchy item");
 
 	// Handle net declarations.
 	if as_net_type(p.peek(0).0).is_some() {
@@ -897,7 +981,8 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 		}
 	}
 
-	Ok(HierarchyItem::DataDecl)
+	// Ok(HierarchyItem::DataDecl)
+	Err(())
 }
 
 
@@ -1007,83 +1092,110 @@ fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportDecl> {
+	let mut span = p.peek(0).1;
 	p.require_reported(Keyword(Kw::Modport))?;
-	loop {
-		parse_modport_item(p)?;
-		match p.peek(0) {
-			(Comma, sp) => {
-				p.bump();
-				if let (Semicolon, _) = p.peek(0) {
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					break;
-				} else {
-					continue;
-				}
-			},
-			(Semicolon, _) => break,
-			(x, sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
-				return Err(());
-			}
-		}
-	}
+	let items = comma_list_nonempty(p, Semicolon, "modport item", parse_modport_item)?;
+	p.require_reported(Semicolon)?;
+	span.expand(p.last_span());
 
-	Ok(())
+	Ok(ast::ModportDecl {
+		span: span,
+		items: items,
+	})
+
+	// loop {
+	// 	parse_modport_item(p)?;
+	// 	match p.peek(0) {
+	// 		(Comma, sp) => {
+	// 			p.bump();
+	// 			if let (Semicolon, _) = p.peek(0) {
+	// 				p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+	// 				break;
+	// 			} else {
+	// 				continue;
+	// 			}
+	// 		},
+	// 		(Semicolon, _) => break,
+	// 		(x, sp) => {
+	// 			p.add_diag(DiagBuilder2::error(format!("Expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
+	// 			return Err(());
+	// 		}
+	// 	}
+	// }
+
+	// Ok(())
 }
 
 
-fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<()> {
-	let (name, span) = match p.eat_ident_or("modport name") {
-		Ok(x) => x,
-		Err(e) => {
-			p.add_diag(e);
-			return Err(());
-		}
-	};
+/// Parse a modport item.
+///
+/// ```
+/// modport_item: ident "(" modport_ports_decl {"," modport_ports_decl} ")"
+/// modport_ports_decl:
+///   port_direction modport_simple_port {"," modport_simple_port} |
+///   ("import"|"export") modport_tf_port {"," modport_tf_port} |
+///   "clocking" ident
+/// modport_simple_port: ident | "." ident "(" [expr] ")"
+/// ```
+fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<ast::ModportItem> {
+	let mut span = p.peek(0).1;
 
-	// Eat the opening parenthesis.
-	if !p.try_eat(OpenDelim(Paren)) {
-		let (tkn, q) = p.peek(0);
-		p.add_diag(DiagBuilder2::error(format!("Expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
-		return Err(());
-	}
+	// Eat the modport item name.
+	let name = parse_identifier(p, "modport name")?;
 
-	// Parse the port declarations.
-	loop {
-		match parse_modport_port_decl(p) {
-			Ok(x) => x,
-			Err(_) => {
-				p.recover(&[CloseDelim(Paren)], true);
-				return Err(());
-			}
-		}
-		match p.peek(0) {
-			(Comma, sp) => {
-				p.bump();
-				if let (CloseDelim(Paren), _) = p.peek(0) {
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					break;
-				} else {
-					continue;
-				}
-			}
-			(CloseDelim(Paren), _) => break,
-			(x, sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Expected , or ) after port declaration, got `{:?}`", x)).span(sp));
-				return Err(());
-			}
-		}
-	}
+	// Eat the port declarations.
+	let ports = flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "port declaration", parse_modport_port_decl))?;
 
-	// Eat the closing parenthesis.
-	if !p.try_eat(CloseDelim(Paren)) {
-		let (tkn, q) = p.peek(0);
-		p.add_diag(DiagBuilder2::error(format!("Expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
-		return Err(());
-	}
+	// // Eat the opening parenthesis.
+	// if !p.try_eat(OpenDelim(Paren)) {
+	// 	let (tkn, q) = p.peek(0);
+	// 	p.add_diag(DiagBuilder2::error(format!("Expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
+	// 	return Err(());
+	// }
 
-	Ok(())
+	span.expand(p.last_span());
+	Ok(ast::ModportItem {
+		span: span,
+		name: name,
+		ports: ports,
+	})
+
+	// // Parse the port declarations.
+	// loop {
+	// 	match parse_modport_port_decl(p) {
+	// 		Ok(x) => x,
+	// 		Err(_) => {
+	// 			p.recover(&[CloseDelim(Paren)], true);
+	// 			return Err(());
+	// 		}
+	// 	}
+	// 	match p.peek(0) {
+	// 		(Comma, sp) => {
+	// 			p.bump();
+	// 			if let (CloseDelim(Paren), _) = p.peek(0) {
+	// 				p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+	// 				break;
+	// 			} else {
+	// 				continue;
+	// 			}
+	// 		}
+	// 		(CloseDelim(Paren), _) => break,
+	// 		(x, sp) => {
+	// 			p.add_diag(DiagBuilder2::error(format!("Expected , or ) after port declaration, got `{:?}`", x)).span(sp));
+	// 			return Err(());
+	// 		}
+	// 	}
+	// }
+
+	// // Eat the closing parenthesis.
+	// if !p.try_eat(CloseDelim(Paren)) {
+	// 	let (tkn, q) = p.peek(0);
+	// 	p.add_diag(DiagBuilder2::error(format!("Expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
+	// 	return Err(());
+	// }
+
+	// Ok(())
 }
 
 
@@ -1094,7 +1206,7 @@ fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<()> {
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_port_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_modport_port_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportPort> {
 	let (tkn, span) = p.peek(0);
 
 	// Attempt to parse a simple port introduced by one of the port direction
@@ -1103,12 +1215,12 @@ fn parse_modport_port_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 		p.bump();
 		loop {
 			if p.try_eat(Period) {
-				let (name, span) = p.eat_ident("port name")?;
+				let name = parse_identifier(p, "port name")?;
 				p.require_reported(OpenDelim(Paren))?;
-				// TODO: Parse expression.
+				let expr = parse_expr(p)?;
 				p.require_reported(CloseDelim(Paren))?;
 			} else {
-				let (name, span) = p.eat_ident("port name")?;
+				let name = parse_identifier(p, "port name")?;
 			}
 
 			// Decide whether we should continue iterating and thus consuming
@@ -1126,7 +1238,7 @@ fn parse_modport_port_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 				_ => break,
 			}
 		}
-		return Ok(());
+		return Ok(ast::ModportPort::Port);
 	}
 
 	// TODO: Parse modport_tf_port.
@@ -1201,12 +1313,11 @@ fn parse_type_suffix(p: &mut AbstractParser, ty: Type) -> ReportedResult<Type> {
 		// via the `.` operator.
 		Period => {
 			p.bump();
-			let (name, name_span) = p.eat_ident("member type name")?;
+			let name = parse_identifier(p, "member type name")?;
 			let subty = parse_type_signing_and_dimensions(p, sp, ScopedType {
 				ty: Box::new(ty),
 				member: true,
 				name: name,
-				name_span: name_span,
 			})?;
 			parse_type_suffix(p, subty)
 		}
@@ -1214,14 +1325,26 @@ fn parse_type_suffix(p: &mut AbstractParser, ty: Type) -> ReportedResult<Type> {
 		// The `::` operator.
 		Namespace => {
 			p.bump();
-			let (name, name_span) = p.eat_ident("type name")?;
+			let name = parse_identifier(p, "type name")?;
 			let subty = parse_type_signing_and_dimensions(p, sp, ScopedType {
 				ty: Box::new(ty),
 				member: false,
 				name: name,
-				name_span: name_span,
 			})?;
 			parse_type_suffix(p, subty)
+		}
+
+		// Classes can be specialized with a parameter list.
+		Hashtag => {
+			p.bump();
+			let params = parse_parameter_assignments(p)?;
+			let span = Span::union(sp, p.last_span());
+			parse_type_suffix(p, ast::Type {
+				span: span,
+				data: ast::SpecializedType(Box::new(ty), params),
+				sign: ast::TypeSign::None,
+				dims: Vec::new(),
+			})
 		}
 
 		_ => Ok(ty)
@@ -1260,7 +1383,8 @@ fn parse_type_signing_and_dimensions(p: &mut AbstractParser, mut span: Span, dat
 
 /// Parse the core type data of a type.
 fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
-	match p.peek(0).0 {
+	let (tkn,sp) = p.peek(0);
+	match tkn {
 		Keyword(Kw::Void)    => { p.bump(); Ok(VoidType) },
 		Keyword(Kw::String)  => { p.bump(); Ok(StringType) },
 		Keyword(Kw::Chandle) => { p.bump(); Ok(ChandleType) },
@@ -1289,7 +1413,14 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 		Keyword(Kw::Struct) | Keyword(Kw::Union) => parse_struct_type(p),
 
 		// Named types
-		Ident(n) | EscIdent(n) => { p.bump(); Ok(NamedType(n)) },
+		Ident(n) | EscIdent(n) => {
+			p.bump();
+			Ok(ast::NamedType(ast::Identifier {
+				id: DUMMY_NODE_ID,
+				span: sp,
+				name: n,
+			}))
+		}
 
 		// Virtual Interface Type
 		Keyword(Kw::Virtual) => {
@@ -1328,8 +1459,8 @@ fn parse_enum_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 
 fn parse_enum_name(p: &mut AbstractParser) -> ReportedResult<EnumName> {
 	// Eat the name.
-	let (name, name_sp) = p.eat_ident("enum name")?;
-	let mut span = name_sp;
+	let name = parse_identifier(p, "enum name")?;
+	let mut span = name.span;
 
 	// Parse the optional range.
 	let range = try_flanked(p, Brack, parse_expr)?;
@@ -1345,7 +1476,6 @@ fn parse_enum_name(p: &mut AbstractParser) -> ReportedResult<EnumName> {
 	Ok(EnumName {
 		span: span,
 		name: name,
-		name_span: name_sp,
 		range: range,
 		value: value,
 	})
@@ -1624,19 +1754,20 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 			p.require_reported(CloseDelim(Brack))?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: IndexExpr {
+					indexee: Box::new(prefix),
+					index: Box::new(expr),
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// Call: "(" [list_of_arguments] ")"
 		OpenDelim(Paren) if precedence <= Precedence::Scope => {
-			let args = flanked(p, Paren, parse_call_args);
-			// p.add_diag(DiagBuilder2::warning("Don't know how to properly parse call expressions").span(sp));
-			// p.recover_balanced(&[CloseDelim(Paren)], true);
+			let args = flanked(p, Paren, parse_call_args)?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: CallExpr(Box::new(prefix), args),
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
@@ -1644,23 +1775,32 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 		// expr "." ident
 		Period if precedence <= Precedence::Scope => {
 			p.bump();
-			p.eat_ident("member name")?;
+			let (name, name_span) = p.eat_ident("member name")?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: MemberExpr {
+					expr: Box::new(prefix),
+					name: Identifier{
+						id: DUMMY_NODE_ID,
+						span: name_span,
+						name: name,
+					},
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// expr "::" ident
 		Namespace if precedence <= Precedence::Scope => {
-			p.bump();
-			p.eat_ident("scope name")?;
-			let expr = Expr {
-				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
-			};
-			return parse_expr_suffix(p, expr, precedence);
+			p.add_diag(DiagBuilder2::fatal("Don't know how to handle the scope operator").span(sp));
+			return Err(());
+			// p.bump();
+			// p.eat_ident("scope name")?;
+			// let expr = Expr {
+			// 	span: Span::union(prefix.span, p.last_span()),
+			// 	data: DummyExpr,
+			// };
+			// return parse_expr_suffix(p, expr, precedence);
 		}
 
 		// expr "++"
@@ -1668,7 +1808,11 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 			p.bump();
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: UnaryExpr {
+					op: Op::Inc,
+					expr: Box::new(prefix),
+					postfix: true,
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
@@ -1678,7 +1822,11 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 			p.bump();
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: UnaryExpr {
+					op: Op::Dec,
+					expr: Box::new(prefix),
+					postfix: true,
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
@@ -1691,7 +1839,11 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 			let false_expr = parse_expr_prec(p, Precedence::Ternary)?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: TernaryExpr {
+					cond: Box::new(prefix),
+					true_expr: Box::new(true_expr),
+					false_expr: Box::new(false_expr),
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
@@ -1703,10 +1855,14 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 	if let Some(op) = as_assign_operator(tkn) {
 		if precedence <= Precedence::Assignment {
 			p.bump();
-			parse_expr_prec(p, Precedence::Assignment)?;
+			let rhs = parse_expr_prec(p, Precedence::Assignment)?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: AssignExpr {
+					op: op,
+					lhs: Box::new(prefix),
+					rhs: Box::new(rhs),
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
@@ -1717,10 +1873,14 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 		let prec = op.get_precedence();
 		if precedence <= prec {
 			p.bump();
-			parse_expr_prec(p, prec)?;
+			let rhs = parse_expr_prec(p, prec)?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
-				data: DummyExpr,
+				data: BinaryExpr {
+					op: op,
+					lhs: Box::new(prefix),
+					rhs: Box::new(rhs),
+				},
 			};
 			return parse_expr_suffix(p, expr, precedence);
 		}
@@ -1737,19 +1897,27 @@ fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedR
 	match p.peek(0) {
 		(Operator(Op::Inc), _) if precedence <= Precedence::Unary => {
 			p.bump();
-			parse_expr_prec(p, Precedence::Unary)?;
+			let expr = parse_expr_prec(p, Precedence::Unary)?;
 			return Ok(Expr {
 				span: Span::union(first, p.last_span()),
-				data: DummyExpr,
+				data: UnaryExpr {
+					op: Op::Inc,
+					expr: Box::new(expr),
+					postfix: false,
+				},
 			});
 		}
 
 		(Operator(Op::Dec), _) if precedence <= Precedence::Unary => {
 			p.bump();
-			parse_expr_prec(p, Precedence::Unary)?;
+			let expr = parse_expr_prec(p, Precedence::Unary)?;
 			return Ok(Expr {
 				span: Span::union(first, p.last_span()),
-				data: DummyExpr,
+				data: UnaryExpr {
+					op: Op::Dec,
+					expr: Box::new(expr),
+					postfix: false,
+				},
 			});
 		}
 
@@ -1764,10 +1932,14 @@ fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedR
 	// Try the unary operators next.
 	if let Some(op) = as_unary_operator(p.peek(0).0) {
 		p.bump();
-		parse_expr_prec(p, Precedence::Unary)?;
+		let expr = parse_expr_prec(p, Precedence::Unary)?;
 		return Ok(Expr {
 			span: Span::union(first, p.last_span()),
-			data: DummyExpr,
+			data: UnaryExpr {
+				op: op,
+				expr: Box::new(expr),
+				postfix: false,
+			},
 		});
 	}
 
@@ -1780,62 +1952,35 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 	let (tkn, sp) = p.peek(0);
 	match tkn {
 		// Primary Literals
-		UnsignedNumber(_) => {
+		Literal(lit) => {
 			p.bump();
 			return Ok(Expr {
 				span: sp,
-				data: DummyExpr,
-			});
-		}
-		Literal(Lit::Str(..)) => {
-			p.bump();
-			return Ok(Expr {
-				span: sp,
-				data: DummyExpr,
-			});
-		}
-		Literal(Lit::Decimal(..)) => {
-			p.bump();
-			return Ok(Expr {
-				span: sp,
-				data: DummyExpr,
-			});
-		}
-		Literal(Lit::BasedInteger(..)) => {
-			p.bump();
-			return Ok(Expr {
-				span: sp,
-				data: DummyExpr,
-			});
-		}
-		Literal(Lit::UnbasedUnsized(..)) => {
-			p.bump();
-			return Ok(Expr {
-				span: sp,
-				data: DummyExpr,
+				data: LiteralExpr(lit),
 			});
 		}
 
 		// Identifiers
-		Ident(_) => {
+		Ident(n) | EscIdent(n) => {
 			p.bump();
 			return Ok(Expr {
 				span: sp,
-				data: DummyExpr,
+				data: IdentExpr(Identifier {
+					id: DUMMY_NODE_ID,
+					span: sp,
+					name: n,
+				}),
 			});
 		}
-		EscIdent(_) => {
+		SysIdent(n) => {
 			p.bump();
 			return Ok(Expr {
 				span: sp,
-				data: DummyExpr,
-			});
-		}
-		SysIdent(_) => {
-			p.bump();
-			return Ok(Expr {
-				span: sp,
-				data: DummyExpr,
+				data: SysIdentExpr(Identifier {
+					id: DUMMY_NODE_ID,
+					span: sp,
+					name: n,
+				}),
 			});
 		}
 
@@ -1843,13 +1988,12 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 		OpenDelim(Brace) => {
 			p.bump();
 			if p.try_eat(CloseDelim(Brace)) {
-				// TODO: Handle empty queue.
 				return Ok(Expr {
 					span: Span::union(sp, p.last_span()),
-					data: DummyExpr,
+					data: EmptyQueueExpr,
 				});
 			}
-			match parse_concat_expr(p) {
+			let data = match parse_concat_expr(p) {
 				Ok(x) => x,
 				Err(e) => {
 					p.recover_balanced(&[CloseDelim(Brace)], true);
@@ -1859,14 +2003,14 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 			p.require_reported(CloseDelim(Brace))?;
 			return Ok(Expr {
 				span: Span::union(sp, p.last_span()),
-				data: DummyExpr,
+				data: data,
 			});
 		}
 
 		// Parenthesis
 		OpenDelim(Paren) => {
 			p.bump();
-			let e = match parse_primary_parenthesis(p) {
+			let expr = match parse_primary_parenthesis(p) {
 				Ok(x) => x,
 				Err(e) => {
 					p.recover_balanced(&[CloseDelim(Paren)], true);
@@ -1874,19 +2018,16 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 				}
 			};
 			p.require_reported(CloseDelim(Paren))?;
-			return Ok(Expr {
-				span: Span::union(sp, p.last_span()),
-				data: DummyExpr,
-			});
+			return Ok(expr);
 		}
 
 		// Patterns
 		Apostrophe => {
 			p.bump();
-			flanked(p, Brace, |p| comma_list_nonempty(p, CloseDelim(Brace), "pattern field", parse_pattern_field))?;
+			let fields = flanked(p, Brace, |p| comma_list_nonempty(p, CloseDelim(Brace), "pattern field", parse_pattern_field))?;
 			return Ok(Expr {
 				span: Span::union(sp, p.last_span()),
-				data: DummyExpr,
+				data: PatternExpr(fields),
 			});
 		}
 
@@ -1971,7 +2112,7 @@ pub enum StreamDir {
 	Out,
 }
 
-fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<ExprData> {
 	/// Streaming concatenations have a "<<" or ">>" following the opening "{".
 	let stream = match p.peek(0).0 {
 		Operator(Op::LogicShL) => Some(StreamDir::Out),
@@ -2020,10 +2161,10 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 			})
 		}))?;
 
-		return Ok(());
-		// let q = p.peek(0).1;
-		// p.add_diag(DiagBuilder2::error("Don't know how to handle streaming concatenation").span(q));
-		// return Err(());
+		return Ok(StreamConcatExpr {
+			slice: slice_size,
+			exprs: exprs,
+		});
 	}
 
 	// Parse the expression that follows the opening "{". Depending on whether
@@ -2033,7 +2174,7 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 
 	// If the expression is followed by a "{", this is a multiple concatenation.
 	if p.try_eat(OpenDelim(Brace)) {
-		match parse_expr_list(p) {
+		let exprs = match parse_expr_list(p) {
 			Ok(x) => x,
 			Err(e) => {
 				p.recover_balanced(&[CloseDelim(Brace)], true);
@@ -2041,21 +2182,29 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 			}
 		};
 		p.require_reported(CloseDelim(Brace))?;
-		return Ok(());
+		return Ok(ConcatExpr {
+			repeat: Some(Box::new(first_expr)),
+			exprs: exprs,
+		});
 	}
 
 	// Otherwise this is just a regular concatenation, so the first expression
 	// may be followed by "," and another expression multiple times.
+	let mut exprs = Vec::new();
+	exprs.push(first_expr);
 	while p.try_eat(Comma) {
 		if p.peek(0).0 == CloseDelim(Brace) {
 			let q = p.peek(0).1;
 			p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(q));
 			break;
 		}
-		parse_expr_prec(p, Precedence::Min)?;
+		exprs.push(parse_expr_prec(p, Precedence::Min)?);
 	}
 
-	Ok(())
+	Ok(ConcatExpr {
+		repeat: None,
+		exprs: exprs,
+	})
 }
 
 
@@ -2090,14 +2239,23 @@ fn parse_expr_list(p: &mut AbstractParser) -> ReportedResult<Vec<Expr>> {
 /// "(" expression ")"
 /// "(" expression ":" expression ":" expression ")"
 /// ```
-fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<()> {
-	parse_expr_prec(p, Precedence::Min)?;
+fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<Expr> {
+	let first = parse_expr_prec(p, Precedence::Min)?;
 	if p.try_eat(Colon) {
-		parse_expr_prec(p, Precedence::Min)?;
+		let typ = parse_expr_prec(p, Precedence::Min)?;
 		p.require_reported(Colon)?;
-		parse_expr_prec(p, Precedence::Min)?;
+		let max = parse_expr_prec(p, Precedence::Min)?;
+		Ok(Expr {
+			span: Span::union(first.span, max.span),
+			data: MinTypMaxExpr {
+				min: Box::new(first),
+				typ: Box::new(typ),
+				max: Box::new(max),
+			},
+		})
+	} else {
+		Ok(first)
 	}
-	return Ok(());
 }
 
 
@@ -2113,34 +2271,24 @@ fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<()> {
 fn parse_range_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 	let mut span = p.peek(0).1;
 	let first_expr = parse_expr(p)?;
-	let data = match p.peek(0).0 {
-		Colon => {
-			p.bump();
-			parse_expr(p)?;
-			DummyExpr
-		}
-
-		AddColon => {
-			p.bump();
-			parse_expr(p)?;
-			DummyExpr
-		}
-
-		SubColon => {
-			p.bump();
-			parse_expr(p)?;
-			DummyExpr
-		}
+	let mode = match p.peek(0).0 {
+		Colon => RangeMode::Absolute,
+		AddColon => RangeMode::RelativeUp,
+		SubColon => RangeMode::RelativeDown,
 
 		// Otherwise the index expression consists only of one expression.
-		_ => {
-			DummyExpr
-		}
+		_ => return Ok(first_expr)
 	};
+	p.bump(); // skip the operator
+	let second_expr = parse_expr(p)?;
 	span.expand(p.last_span());
 	Ok(Expr {
 		span: span,
-		data: data,
+		data: RangeExpr {
+			mode: mode,
+			lhs: Box::new(first_expr),
+			rhs: Box::new(second_expr),
+		},
 	})
 }
 
@@ -2328,7 +2476,7 @@ fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Por
 	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
 		(name, span, parse_optional_dimensions(p)?)
 	} else {
-		if let Some(Type { span: span, data: NamedType(name), dims: dims, .. }) = ty {
+		if let Some(Type { span: span, data: NamedType(ast::Identifier{name,..}), dims: dims, .. }) = ty {
 			let r = (name, span, (dims, span));
 			ty = None;
 			r
@@ -2386,6 +2534,7 @@ fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Por
 	span.expand(p.last_span());
 
 	Ok(Port {
+		id: DUMMY_NODE_ID,
 		span: span,
 		name: name,
 		name_span: name_span,
@@ -2880,18 +3029,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		_ => {
 			let result = {
 				let mut pp = ParallelParser::new();
-				pp.add("variable declaration", |p|{
-					let konst = p.try_eat(Keyword(Kw::Const));
-					let var = p.try_eat(Keyword(Kw::Var));
-					let lifetime = match as_lifetime(p.peek(0).0) {
-						Some(x) => { p.bump(); x },
-						None => Lifetime::Static,
-					};
-					let ty = parse_data_type(p)?;
-					let decls = comma_list_nonempty(p, Semicolon, "variable declaration", parse_variable_decl_assignment)?;
-					p.require_reported(Semicolon)?;
-					Ok(NullStmt)
-				});
+				pp.add("variable declaration", |p| parse_var_decl(p).map(|d| ast::VarDeclStmt(d)));
 				pp.add("assign statement", |p| parse_assign_stmt(p));
 				pp.add("expression statement", |p| parse_expr_stmt(p));
 				pp.finish(p, "statement")
@@ -3166,8 +3304,7 @@ fn try_delay_control(p: &mut AbstractParser) -> ReportedResult<Option<DelayContr
 		}
 
 		// Literals
-		// TODO: Add real and time literals
-		UnsignedNumber(..) |
+		Literal(UnsignedInteger(..)) |
 		Literal(Real(..)) |
 		Literal(Time(..)) => parse_expr_first(p, Precedence::Max)?,
 
@@ -3458,6 +3595,7 @@ fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarD
 	span.expand(p.last_span());
 
 	Ok(VarDeclName {
+		id: DUMMY_NODE_ID,
 		span: span,
 		name: name,
 		name_span: name_span,
@@ -3482,6 +3620,7 @@ fn parse_genvar_decl(p: &mut AbstractParser) -> ReportedResult<GenvarDecl> {
 	span.expand(p.last_span());
 
 	Ok(GenvarDecl {
+		id: DUMMY_NODE_ID,
 		span: span,
 		name: name,
 		name_span: name_span,
@@ -4235,7 +4374,7 @@ fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
 	let items = comma_list_nonempty(p, Semicolon, "import item", |p|{
 		// package_ident "::" ident
 		// package_ident "::" "*"
-		let (pkg, pkg_span) = p.eat_ident("package name")?;
+		let pkg = parse_identifier(p, "package name")?;
 		p.require_reported(Namespace)?;
 		let (tkn, sp) = p.peek(0);
 		match tkn {
@@ -4244,9 +4383,7 @@ fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
 				p.bump();
 				Ok(ImportItem {
 					pkg: pkg,
-					pkg_span: pkg_span,
 					name: None,
-					name_span: sp,
 				})
 			}
 
@@ -4255,9 +4392,11 @@ fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
 				p.bump();
 				Ok(ImportItem {
 					pkg: pkg,
-					pkg_span: pkg_span,
-					name: Some(n),
-					name_span: sp,
+					name: Some(ast::Identifier {
+						id: DUMMY_NODE_ID,
+						span: sp,
+						name: n,
+					}),
 				})
 			}
 
@@ -4284,7 +4423,7 @@ fn parse_assertion(p: &mut AbstractParser) -> ReportedResult<Assertion> {
 	let null = get_name_table().intern("0", false);
 	let is_property = p.peek(1).0 == Keyword(Kw::Property);
 	let is_sequence = p.peek(1).0 == Keyword(Kw::Sequence);
-	let is_deferred = p.peek(1).0 == Hashtag && p.peek(2).0 == UnsignedNumber(null);
+	let is_deferred = p.peek(1).0 == Hashtag && p.peek(2).0 == Literal(UnsignedInteger(null));
 
 	// Handle the different combinations of keywords and lookaheads from above.
 
@@ -4697,6 +4836,200 @@ fn parse_seqrep(p: &mut AbstractParser) -> ReportedResult<SeqRep> {
 			Err(())
 		}
 	}
+}
+
+
+fn parse_inst(p: &mut AbstractParser) -> ReportedResult<ast::Inst> {
+	let mut span = p.peek(0).1;
+
+	// Consume the module identifier.
+	let name = parse_identifier(p, "module name")?;
+	// TODO: Add support for interface instantiations.
+
+	// Consume the optional parameter value assignment.
+	let params = if p.try_eat(Hashtag) {
+		parse_parameter_assignments(p)?
+	} else {
+		Vec::new()
+	};
+
+	// Consume the instantiations.
+	let names = comma_list_nonempty(p, Semicolon, "hierarchical instance", |p|{
+		let mut span = p.peek(0).1;
+		let name = parse_identifier(p, "instance name")?;
+		let (dims, _) = parse_optional_dimensions(p)?;
+		let conns = flanked(p, Paren, parse_list_of_port_connections)?;
+		span.expand(p.last_span());
+		Ok(ast::InstName {
+			span: span,
+			name: name,
+			dims: dims,
+			conns: conns,
+		})
+	})?;
+
+	p.require_reported(Semicolon)?;
+	span.expand(p.last_span());
+	Ok(ast::Inst {
+		span: span,
+		params: params,
+		names: names,
+	})
+}
+
+
+fn parse_var_decl(p: &mut AbstractParser) -> ReportedResult<ast::VarDecl> {
+	let mut span = p.peek(0).1;
+
+	// Parse the optional `const` keyword.
+	let konst = p.try_eat(Keyword(Kw::Const));
+
+	// Parse the optional `var` keyword.
+	let var = p.try_eat(Keyword(Kw::Var));
+
+	// Parse the optional lifetime specifier.
+	let lifetime = as_lifetime(p.peek(0).0);
+	if lifetime.is_some() {
+		p.bump();
+	}
+
+	// Branch to try the explicit and implicit type version. Note that the
+	// implicit version is only allowed if the `var` keyword is present. This
+	// avoids ambiguity with assign statements.
+	let mut pp = ParallelParser::new();
+	pp.add("explicit type", |p|{
+		let ty = parse_explicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	if var {
+		pp.add("implicit type", |p|{
+			let ty = parse_implicit_type(p)?;
+			Ok((ty, tail(p)?))
+		});
+	}
+	let (ty, names) = pp.finish(p, "explicit or implicit type")?;
+
+	fn tail(p: &mut AbstractParser) -> ReportedResult<Vec<VarDeclName>> {
+		let names = comma_list_nonempty(p, Semicolon, "variable name", parse_variable_decl_assignment)?;
+		p.require_reported(Semicolon)?;
+		Ok(names)
+	}
+
+	span.expand(p.last_span());
+	Ok(ast::VarDecl {
+		span: span,
+		konst: konst,
+		var: var,
+		lifetime: lifetime,
+		ty: ty,
+		names: names,
+	})
+}
+
+
+fn parse_param_decl(p: &mut AbstractParser, keyword_optional: bool) -> ReportedResult<ast::ParamDecl> {
+	let mut span = p.peek(0).1;
+
+	// Eat the possibly optional `parameter` or `localparam` keyword. This
+	// determines whether the parameter is considered local. Omitting the
+	// keyword makes it non-local.
+	let local = match p.peek(0) {
+		(Keyword(Kw::Localparam), _) => { p.bump(); true },
+		(Keyword(Kw::Parameter), _) => { p.bump(); false },
+		(_,_) if keyword_optional => false,
+		(tkn,sp) => {
+			p.add_diag(DiagBuilder2::error(format!("expected `parameter` or `localparam`, but found {} instead", tkn)).span(sp));
+			return Err(Unrecovered);
+		}
+	};
+
+	// Define a predicate that checks whether the end of a parameter list has
+	// been reached. This is somewhat tricky due to the fact that the parameter
+	// declaration may appear in two contexts: As a standalone statement, or
+	// inside a parameter port list of a module or interface. The former is
+	// trivial since it is terminated by a ";". The latter, however, is more
+	// involved, since it is terminated by a "," or ")". The comma complicates
+	// things, as it requires us to check beyond the next token to check if the
+	// end of the list has been reached. The list terminates if after the "," a
+	// "parameter", "localparam", "type", or explicit type follows.
+	let predicate = FuncPredicate {
+		match_func: |p| match p.peek(0).0 {
+			Semicolon | CloseDelim(Paren) => true,
+			Comma => match p.peek(1).0 {
+				Keyword(Kw::Parameter) | Keyword(Kw::Localparam) => true,
+				_ => false,
+			},
+			_ => false,
+		},
+		recover_func: |p, consume| p.recover_balanced(&[CloseDelim(Paren), Semicolon], consume),
+		desc: ") or ;",
+	};
+
+	// If the next token is the `type` keyword, this is a type parameter.
+	// Otherwise this is a value parameter.
+	let kind = if p.try_eat(Keyword(Kw::Type)) {
+		let decls = comma_list_nonempty(p, predicate, "parameter name", |p|{
+			let mut span = p.peek(0).1;
+			let name = parse_identifier(p, "parameter name")?;
+			let ty = if p.try_eat(Operator(Op::Assign)) {
+				Some(parse_explicit_type(p)?)
+			} else {
+				None
+			};
+			span.expand(p.last_span());
+			Ok(ast::ParamTypeDecl {
+				span: span,
+				name: name,
+				ty: ty,
+			})
+		})?;
+		p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
+		ast::ParamKind::Type(decls)
+	} else {
+		let decls = comma_list_nonempty(p, predicate, "parameter name", |p|{
+			// Use a parallel parser to distinguish between the explicit and
+			// implicit type versions of the declaration.
+			let mut pp = ParallelParser::new();
+			pp.add("explicit type", |p|{
+				let ty = parse_explicit_type(p)?;
+				tail(p, ty)
+			});
+			pp.add("implicit type", |p|{
+				let ty = parse_implicit_type(p)?;
+				tail(p, ty)
+			});
+
+			fn tail(p: &mut AbstractParser, ty: Type) -> ReportedResult<ast::ParamValueDecl> {
+				let mut span = p.peek(0).1;
+				let name = parse_identifier(p, "parameter name")?;
+				let (dims, _) = parse_optional_dimensions(p)?;
+				let expr = if p.try_eat(Operator(Op::Assign)) {
+					Some(parse_expr(p)?)
+				} else {
+					None
+				};
+				span.expand(p.last_span());
+				Ok(ast::ParamValueDecl {
+					span: span,
+					ty: ty,
+					name: name,
+					dims: dims,
+					expr: expr,
+				})
+			}
+
+			pp.finish(p, "explicit or implicit type")
+		})?;
+		p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
+		ast::ParamKind::Value(decls)
+	};
+
+	span.expand(p.last_span());
+	Ok(ParamDecl {
+		span: span,
+		local: local,
+		kind: kind,
+	})
 }
 
 

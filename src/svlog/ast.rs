@@ -1,9 +1,47 @@
 // Copyright (c) 2016-2017 Fabian Schuiki
 use source::Span;
 use name::Name;
-// use super::serialize::{Encodable, Encoder, Decodable, Decoder};
-// use super::serialize::{Encodable};
-use rustc_serialize::{Encodable, Encoder, Decodable, Decoder};
+use std::fmt;
+use super::token::{Op, Lit};
+
+
+/// A positive, small ID assigned to each node in the AST. Used as a lightweight
+/// way to refer to individual nodes, e.g. during symbol table construction and
+/// name resolution.
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, RustcEncodable, RustcDecodable)]
+pub struct NodeId(u32);
+
+impl NodeId {
+    pub fn new(x: usize) -> NodeId {
+		use std::u32;
+        assert!(x < (u32::MAX as usize));
+        NodeId(x as u32)
+    }
+
+    pub fn from_u32(x: u32) -> NodeId {
+        NodeId(x)
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        self.0
+    }
+}
+
+impl fmt::Display for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+/// During parsing and syntax tree construction, we assign each node this ID.
+/// Only later, during the renumbering pass do we assign actual IDs to each
+/// node.
+pub const DUMMY_NODE_ID: NodeId = NodeId(0);
+
 
 
 pub use self::TypeData::*;
@@ -33,24 +71,30 @@ pub enum Item {
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ModDecl {
+	pub id: NodeId,
 	pub span: Span,
 	pub lifetime: Lifetime, // default static
 	pub name: Name,
 	pub name_span: Span,
+	pub params: Vec<ParamPort>,
 	pub ports: Vec<Port>,
+	pub items: Vec<HierarchyItem>,
 }
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct IntfDecl {
+	pub id: NodeId,
 	pub span: Span,
 	pub lifetime: Lifetime, // default static
 	pub name: Name,
 	pub name_span: Span,
 	pub ports: Vec<Port>,
+	pub items: Vec<HierarchyItem>,
 }
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct PackageDecl {
+	pub id: NodeId,
 	pub span: Span,
 	pub lifetime: Lifetime,
 	pub name: Name,
@@ -79,7 +123,8 @@ pub enum HierarchyItem {
 	ImportDecl(ImportDecl),
 	LocalparamDecl(()),
 	ParameterDecl(()),
-	ModportDecl(()),
+	ParamDecl(ParamDecl),
+	ModportDecl(ModportDecl),
 	ClassDecl(ClassDecl),
 	Typedef(Typedef),
 	PortDecl(PortDecl),
@@ -93,7 +138,8 @@ pub enum HierarchyItem {
 	GenerateCase,
 	Assertion(Assertion),
 	NetDecl(NetDecl),
-	DataDecl,
+	VarDecl(VarDecl),
+	Inst(Inst),
 }
 
 
@@ -110,7 +156,7 @@ pub struct Type {
 pub enum TypeData {
 	ImplicitType,
 	VoidType,
-	NamedType(Name),
+	NamedType(Identifier),
 	StringType,
 	ChandleType,
 	VirtIntfType(Name),
@@ -120,8 +166,7 @@ pub enum TypeData {
 	ScopedType {
 		ty: Box<Type>,
 		member: bool,
-		name: Name,
-		name_span: Span,
+		name: Identifier,
 	},
 
 	// Integer Vector Types
@@ -149,6 +194,9 @@ pub enum TypeData {
 		signing: TypeSign,
 		members: Vec<StructMember>,
 	},
+
+	// Specialization
+	SpecializedType(Box<Type>, Vec<()>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
@@ -170,8 +218,7 @@ pub enum TypeDim {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct EnumName {
 	pub span: Span,
-	pub name: Name,
-	pub name_span: Span,
+	pub name: Identifier,
 	pub range: Option<Expr>,
 	pub value: Option<Expr>,
 }
@@ -195,6 +242,7 @@ pub struct StructMember {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Port {
+	pub id: NodeId,
 	pub span: Span,
 	pub name: Name,
 	pub name_span: Span,
@@ -229,6 +277,14 @@ pub enum PortDir {
 	Ref,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ParamPort {
+	pub span: Span,
+	pub name: Identifier,
+	pub dims: Vec<TypeDim>,
+	pub expr: Option<Expr>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum NetType {
 	Supply0,
@@ -243,18 +299,6 @@ pub enum NetType {
 	Wire,
 	WireAnd,
 	WireOr,
-}
-
-
-
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
-pub struct ParamPort {
-	pub span: Span,
-	pub name: Name,
-	pub name_span: Span,
-	pub ty: Type,
-	pub dims: Vec<TypeDim>,
-	pub init: (),
 }
 
 
@@ -430,12 +474,16 @@ pub enum AssignOp {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct VarDecl {
 	pub span: Span,
+	pub konst: bool,
+	pub var: bool,
+	pub lifetime: Option<Lifetime>,
 	pub ty: Type,
 	pub names: Vec<VarDeclName>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct VarDeclName {
+	pub id: NodeId,
 	pub span: Span,
 	pub name: Name,
 	pub name_span: Span,
@@ -445,6 +493,7 @@ pub struct VarDeclName {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenvarDecl {
+	pub id: NodeId,
 	pub span: Span,
 	pub name: Name,
 	pub name_span: Span,
@@ -462,11 +511,77 @@ pub struct Expr {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ExprData {
 	DummyExpr,
+	LiteralExpr(Lit),
+	IdentExpr(Identifier),
+	SysIdentExpr(Identifier),
+	IndexExpr {
+		indexee: Box<Expr>,
+		index: Box<Expr>,
+	},
+	UnaryExpr {
+		op: Op,
+		expr: Box<Expr>,
+		postfix: bool,
+	},
+	BinaryExpr {
+		op: Op,
+		lhs: Box<Expr>,
+		rhs: Box<Expr>,
+	},
+	TernaryExpr {
+		cond: Box<Expr>,
+		true_expr: Box<Expr>,
+		false_expr: Box<Expr>,
+	},
+	AssignExpr {
+		op: AssignOp,
+		lhs: Box<Expr>,
+		rhs: Box<Expr>,
+	},
 	CallExpr(Box<Expr>, Vec<CallArg>),
 	TypeExpr(Box<Type>),
 	ConstructorCallExpr(Vec<CallArg>),
 	ClassNewExpr(Option<Box<Expr>>),
 	ArrayNewExpr(Box<Expr>, Option<Box<Expr>>),
+	EmptyQueueExpr,
+	StreamConcatExpr {
+		slice: Option<StreamConcatSlice>,
+		exprs: Vec<StreamExpr>,
+	},
+	ConcatExpr {
+		repeat: Option<Box<Expr>>,
+		exprs: Vec<Expr>,
+	},
+	MinTypMaxExpr {
+		min: Box<Expr>,
+		typ: Box<Expr>,
+		max: Box<Expr>,
+	},
+	RangeExpr {
+		mode: RangeMode,
+		lhs: Box<Expr>,
+		rhs: Box<Expr>,
+	},
+	MemberExpr {
+		expr: Box<Expr>,
+		name: Identifier,
+	},
+	PatternExpr(Vec<PatternField>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum RangeMode {
+	Absolute,
+	RelativeDown,
+	RelativeUp,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct Identifier {
+	pub id: NodeId,
+	pub span: Span,
+	pub name: Name,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -537,7 +652,7 @@ pub struct ClassDecl {
 	pub lifetime: Lifetime, // default static
 	pub name: Name,
 	pub name_span: Span,
-	pub params: Vec<()>,
+	pub params: Vec<ParamPort>,
 	pub extends: Option<(Type, Vec<CallArg>)>,
 	pub items: Vec<ClassItem>,
 }
@@ -763,10 +878,8 @@ pub struct ImportDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ImportItem {
-	pub pkg: Name,
-	pub pkg_span: Span,
-	pub name: Option<Name>, // None means `import pkg::*`
-	pub name_span: Span,
+	pub pkg: Identifier,
+	pub name: Option<Identifier>, // None means `import pkg::*`
 }
 
 
@@ -891,4 +1004,90 @@ pub enum PropBinOp {
 	SeqImplNol,
 	SeqFollowOl,
 	SeqFollowNol,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct Inst {
+	pub span: Span,
+	pub params: Vec<()>,
+	pub names: Vec<InstName>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct InstName {
+	pub span: Span,
+	pub name: Identifier,
+	pub dims: Vec<TypeDim>,
+	pub conns: Vec<()>,
+}
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ModportDecl {
+	pub span: Span,
+	pub items: Vec<ModportItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ModportItem {
+	pub span: Span,
+	pub name: Identifier,
+	pub ports: Vec<ModportPort>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum ModportPort {
+	Port,
+}
+
+
+
+/// A parameter or localparam declaration.
+///
+/// ```
+/// "localparam" data_type_or_implicit list_of_param_assignments
+/// "localparam" "type" list_of_type_assignments
+/// "parameter" data_type_or_implicit list_of_param_assignments
+/// "parameter" "type" list_of_type_assignments
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ParamDecl {
+	pub span: Span,
+	pub local: bool,
+	pub kind: ParamKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum ParamKind {
+	Type(Vec<ParamTypeDecl>),
+	Value(Vec<ParamValueDecl>),
+}
+
+/// A single type assignment within a parameter or localparam declaration.
+///
+/// ```
+/// ident ["=" type]
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ParamTypeDecl {
+	pub span: Span,
+	pub name: Identifier,
+	pub ty: Option<Type>,
+}
+
+/// A single value assignment within a parameter or loclparam declaration.
+///
+/// ```
+/// [type_or_implicit] ident {dimension} ["=" expr]
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ParamValueDecl {
+	pub span: Span,
+	pub ty: Type,
+	pub name: Identifier,
+	pub dims: Vec<TypeDim>,
+	pub expr: Option<Expr>,
 }

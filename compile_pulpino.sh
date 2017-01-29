@@ -14,6 +14,7 @@ if [ -e "$LIBFILE" ]; then
 	rm "$LIBFILE"
 fi
 
+echo "$(tput bold)compiling components...$(tput sgr0)"
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/cluster_clock_gating.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/cluster_clock_inverter.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/cluster_clock_mux2.sv
@@ -23,6 +24,7 @@ ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/generic_fifo.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/rstgen.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_SRC}/components/sp_ram.sv
 
+echo "$(tput bold)compiling rtl...$(tput sgr0)"
 ${MOORE} ${MOORE_FLAGS} ${RTL_FLAGS} ${RTL_SRC}/core_region.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_FLAGS} ${RTL_SRC}/random_stalls.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_FLAGS} ${RTL_SRC}/boot_rom_wrap.sv
@@ -41,6 +43,7 @@ ${MOORE} ${MOORE_FLAGS} ${RTL_FLAGS} ${RTL_SRC}/clk_rst_gen.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_FLAGS} ${RTL_SRC}/axi_slice_wrap.sv
 ${MOORE} ${MOORE_FLAGS} ${RTL_FLAGS} ${RTL_SRC}/core2axi_wrap.sv
 
+echo "$(tput bold)compiling ips...$(tput sgr0)"
 if [ ! -e ${SRC}/compile_moore.sh ]; then
 	pushd ${SRC}
 	./generate_moore.py
@@ -48,4 +51,5 @@ if [ ! -e ${SRC}/compile_moore.sh ]; then
 fi
 source ${SRC}/compile_moore.sh
 
-target/debug/moore elaborate pulpino_top
+echo "$(tput bold)elaborating...$(tput sgr0)"
+target/debug/moore elaborate --ignore-duplicate-defs pulpino_top

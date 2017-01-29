@@ -293,7 +293,7 @@ impl<'a> Lexer<'a> {
 							self.bump()?; // eat the apostrophe
 							return self.match_based_number(Some(value), sp)
 						},
-						_ => return Ok((UnsignedNumber(value), sp))
+						_ => return Ok((Literal(UnsignedInteger(value)), sp))
 					}
 				}
 

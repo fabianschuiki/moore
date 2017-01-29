@@ -135,10 +135,17 @@ fn compile(matches: &ArgMatches) {
 
 fn elaborate(matches: &ArgMatches, session: &Session) {
 	// Load the syntax trees previously parsed and stored into the library.
-	let ast = svlog::store::load_items(".moore").unwrap();
+	let mut ast = svlog::store::load_items(".moore").unwrap();
 
-	// TODO: Renumber the AST.
+	// Renumber the AST nodes.
+	svlog::renumber::renumber(&mut ast);
 
 	// Build a symbol table from the loaded syntax trees.
 	let symtbl = svlog::resolve::build_symtbl(&ast, session);
+
+	// Perform name resolution.
+	let nameres = match svlog::resolve::resolve(session, &symtbl, &ast) {
+		Ok(x) => x,
+		Err(_) => std::process::exit(1),
+	};
 }
