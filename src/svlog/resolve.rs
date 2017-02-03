@@ -67,6 +67,7 @@ pub enum DefId {
 	Var(NodeId),
 	Param(NodeId),
 	Modport(NodeId),
+	Subroutine(NodeId),
 }
 
 impl DefId {
@@ -385,6 +386,7 @@ impl<'a> Resolver<'a> {
 			ast::HierarchyItem::VarDecl(ref decl) => self.resolve_var_decl(decl, false),
 			ast::HierarchyItem::ParamDecl(ref decl) => self.resolve_param_decl(decl),
 			ast::HierarchyItem::ImportDecl(ref decl) => self.resolve_import_decl(decl),
+			ast::HierarchyItem::SubroutineDecl(ref decl) => self.resolve_subroutine_decl(decl),
 			_ => ()
 		}
 	}
@@ -454,7 +456,6 @@ impl<'a> Resolver<'a> {
 			ast::ForeverStmt(ref stmt) => self.resolve_stmt(stmt),
 			ast::RepeatStmt(ref expr, ref stmt) |
 			ast::WhileStmt(ref expr, ref stmt) |
-			ast::ForeachStmt(ref expr, ref stmt) |
 			ast::WaitExprStmt(ref expr, ref stmt) => {
 				self.scopes.push(Scope::new_local());
 				self.resolve_expr(expr);
@@ -473,6 +474,16 @@ impl<'a> Resolver<'a> {
 				self.resolve_expr(cond);
 				self.resolve_expr(step);
 				self.resolve_stmt(stmt);
+				self.scopes.pop().unwrap();
+			}
+			ast::ForeachStmt(ref expr, ref vars, ref stmt) => {
+				self.scopes.push(Scope::new_local());
+				self.resolve_expr(expr);
+				for var in vars {
+					if let Some(ref ident) = *var {
+						self.define(ident.name, ident.span, DefId::Var(ident.id));
+					}
+				}
 				self.scopes.pop().unwrap();
 			}
 			ast::ExprStmt(ref expr) => self.resolve_expr(expr),
@@ -747,6 +758,19 @@ impl<'a> Resolver<'a> {
 		}
 	}
 
+	pub fn resolve_subroutine_decl(&mut self, decl: &ast::SubroutineDecl) {
+		for arg in &decl.prototype.args {
+			self.resolve_type(&arg.ty);
+			if let Some(ref name) = arg.name {
+				self.resolve_dims(&name.dims);
+				if let Some(ref expr) = name.expr {
+					self.resolve_expr(expr);
+				}
+			}
+		}
+		// TODO: Resolve items.
+	}
+
 	pub fn resolve_ident(&mut self, ident: &ast::Identifier) -> Option<Def> {
 		if let Some(def) = self.find_def(ident.name) {
 			self.bind(ident, def);
@@ -885,6 +909,14 @@ fn search_hierarchy_item(item: &ast::HierarchyItem, name: Name) -> Option<Def> {
 				}
 			},
 		},
+		ast::HierarchyItem::SubroutineDecl(ref decl) => {
+			if decl.prototype.name.name == name {
+				return Some(Def {
+					span: decl.prototype.name.span,
+					id: DefId::Subroutine(decl.prototype.name.id),
+				});
+			}
+		}
 		_ => ()
 	}
 	None

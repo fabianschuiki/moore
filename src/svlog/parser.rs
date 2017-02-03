@@ -417,6 +417,21 @@ fn parse_identifier<M: std::fmt::Display>(p: &mut AbstractParser, msg: M) -> Rep
 	}
 }
 
+fn try_identifier(p: &mut AbstractParser) -> ReportedResult<Option<ast::Identifier>> {
+	let (tkn, span) = p.peek(0);
+	match tkn {
+		Ident(n) | EscIdent(n) => {
+			p.bump();
+			Ok(Some(ast::Identifier {
+				id: DUMMY_NODE_ID,
+				span: span,
+				name: n,
+			}))
+		}
+		_ => Ok(None)
+	}
+}
+
 
 trait Predicate {
 	fn matches(&mut self, &mut AbstractParser) -> bool;
@@ -1742,7 +1757,7 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 	let (tkn, sp) = p.peek(0);
 	match tkn {
 		// Index: "[" range_expression "]"
-		OpenDelim(Brack) if precedence <= Precedence::Scope => {
+		OpenDelim(Brack) if precedence <= Precedence::Postfix => {
 			p.bump();
 			let expr = match parse_range_expr(p) {
 				Ok(x) => x,
@@ -1763,7 +1778,7 @@ fn parse_expr_suffix(p: &mut AbstractParser, prefix: Expr, precedence: Precedenc
 		}
 
 		// Call: "(" [list_of_arguments] ")"
-		OpenDelim(Paren) if precedence <= Precedence::Scope => {
+		OpenDelim(Paren) if precedence <= Precedence::Postfix => {
 			let args = flanked(p, Paren, parse_call_args)?;
 			let expr = Expr {
 				span: Span::union(prefix.span, p.last_span()),
@@ -2663,7 +2678,7 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
 
 	// Parse the return type (if this is a function), the subroutine name, and
 	// the optional argument list.
-	let (retty, (name, name_span, args)) = if kind == SubroutineKind::Func {
+	let (retty, (name, args)) = if kind == SubroutineKind::Func {
 		if p.peek(0).0 == Keyword(Kw::New) {
 			(None, parse_subroutine_prototype_tail(p)?)
 		} else {
@@ -2687,19 +2702,22 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
 		span: span,
 		kind: kind,
 		name: name,
-		name_span: name_span,
 		args: args,
 	})
 }
 
 
-fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Name, Span, Vec<SubroutinePort>)> {
+fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(ast::Identifier, Vec<SubroutinePort>)> {
 	// Consume the subroutine name, or "new".
 	// TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
-	let (name, name_span) = if p.try_eat(Keyword(Kw::New)) {
-		(get_name_table().intern("new", true), p.last_span())
+	let name = if p.try_eat(Keyword(Kw::New)) {
+		ast::Identifier {
+			id: DUMMY_NODE_ID,
+			span: p.last_span(),
+			name: get_name_table().intern("new", true),
+		}
 	} else {
-		p.eat_ident("function or task name")?
+		parse_identifier(p, "function or task name")?
 	};
 
 	// Consume the port list.
@@ -2730,7 +2748,7 @@ fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Na
 		// implicit and explicit types cannot be distinguished.
 		fn tail(p: &mut AbstractParser) -> ReportedResult<Option<SubroutinePortName>> {
 			// Parse the optional port identifier.
-			let data = if let Some((name, name_span)) = p.try_eat_ident() {
+			let data = if let Some(name) = try_identifier(p)? {
 				// Parse the optional dimensions.
 				let (dims, _) = parse_optional_dimensions(p)?;
 
@@ -2743,7 +2761,6 @@ fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Na
 
 				Some(SubroutinePortName {
 					name: name,
-					name_span: name_span,
 					dims: dims,
 					expr: expr,
 				})
@@ -2773,7 +2790,7 @@ fn parse_subroutine_prototype_tail(p: &mut AbstractParser) -> ReportedResult<(Na
 
 	// Wrap things up.
 	p.require_reported(Semicolon)?;
-	Ok((name, name_span, args))
+	Ok((name, args))
 }
 
 
@@ -2947,9 +2964,31 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 		}
 		Keyword(Kw::Foreach) => {
 			p.bump();
-			let expr = flanked(p, Paren, parse_expr)?;
+			let (expr, vars) = flanked(p, Paren, |p|{
+				let expr = parse_expr_prec(p, Precedence::Scope)?;
+				let vars = flanked(p, Brack, |p|{
+					let mut v = Vec::new();
+					while p.peek(0).0 != Eof && p.peek(0).0 != CloseDelim(Brack) {
+						if p.peek(0).0 != Comma {
+							v.push(Some(parse_identifier(p, "loop variable name")?));
+						} else {
+							v.push(None)
+						}
+						match p.peek(0) {
+							(Comma, _) => p.bump(),
+							(CloseDelim(Brack), _) => (),
+							(tkn, sp) => {
+								p.add_diag(DiagBuilder2::error(format!("expected , or ] after loop variable; found {} instead", tkn)).span(sp));
+								return Err(());
+							}
+						}
+					}
+					Ok(v)
+				})?;
+				Ok((expr, vars))
+			})?;
 			let stmt = Box::new(parse_stmt(p)?);
-			ForeachStmt(expr, stmt)
+			ForeachStmt(expr, vars, stmt)
 		}
 
 		// Generate variables
@@ -3370,7 +3409,7 @@ fn try_cycle_delay(p: &mut AbstractParser) -> ReportedResult<Option<CycleDelay>>
 
 
 fn parse_assignment(p: &mut AbstractParser) -> ReportedResult<(Expr, Expr)> {
-	let lhs = parse_expr_prec(p, Precedence::Scope)?;
+	let lhs = parse_expr_prec(p, Precedence::Postfix)?;
 	p.require_reported(Operator(Op::Assign))?;
 	let rhs = parse_expr_prec(p, Precedence::Assignment)?;
 	Ok((lhs, rhs))
@@ -3379,7 +3418,7 @@ fn parse_assignment(p: &mut AbstractParser) -> ReportedResult<(Expr, Expr)> {
 
 fn parse_assign_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
 	// Parse the leading expression.
-	let expr = parse_expr_prec(p, Precedence::Scope)?;
+	let expr = parse_expr_prec(p, Precedence::Postfix)?;
 	let (tkn, sp) = p.peek(0);
 
 	// Handle blocking assignments (IEEE 1800-2009 section 10.4.1), where the
@@ -5030,6 +5069,10 @@ fn parse_param_decl(p: &mut AbstractParser, keyword_optional: bool) -> ReportedR
 		local: local,
 		kind: kind,
 	})
+}
+
+fn parse_hname(p: &mut AbstractParser, msg: &str) -> ReportedResult<ast::Identifier> {
+	parse_identifier(p, msg)
 }
 
 

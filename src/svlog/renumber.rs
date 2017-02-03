@@ -174,7 +174,6 @@ impl RenumberPass {
 			ast::ForeverStmt(ref mut stmt) => self.renumber_stmt(stmt),
 			ast::RepeatStmt(ref mut expr, ref mut stmt) |
 			ast::WhileStmt(ref mut expr, ref mut stmt) |
-			ast::ForeachStmt(ref mut expr, ref mut stmt) |
 			ast::WaitExprStmt(ref mut expr, ref mut stmt) => {
 				self.renumber_expr(expr);
 				self.renumber_stmt(stmt);
@@ -188,6 +187,14 @@ impl RenumberPass {
 				self.renumber_expr(cond);
 				self.renumber_expr(step);
 				self.renumber_stmt(stmt);
+			}
+			ast::ForeachStmt(ref mut expr, ref mut vars, ref mut stmt) => {
+				self.renumber_expr(expr);
+				for var in vars {
+					if let Some(ref mut ident) = *var {
+						ident.id = self.alloc_id();
+					}
+				}
 			}
 			ast::ExprStmt(ref mut expr) => self.renumber_expr(expr),
 			ast::VarDeclStmt(ref mut decl) => self.renumber_var_decl(decl),

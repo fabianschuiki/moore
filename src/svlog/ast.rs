@@ -364,7 +364,7 @@ pub enum StmtData {
 	WhileStmt(Expr, Box<Stmt>),
 	DoStmt(Box<Stmt>, Expr),
 	ForStmt(Box<Stmt>, Expr, Expr, Box<Stmt>),
-	ForeachStmt(Expr, Box<Stmt>),
+	ForeachStmt(Expr, Vec<Option<Identifier>>, Box<Stmt>),
 	ExprStmt(Expr),
 	VarDeclStmt(VarDecl),
 	GenvarDeclStmt(Vec<GenvarDecl>),
@@ -752,8 +752,7 @@ pub struct SubroutineDecl {
 pub struct SubroutinePrototype {
 	pub span: Span,
 	pub kind: SubroutineKind,
-	pub name: Name,
-	pub name_span: Span,
+	pub name: Identifier,
 	pub args: Vec<SubroutinePort>,
 }
 
@@ -774,8 +773,7 @@ pub struct SubroutinePort {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct SubroutinePortName {
-	pub name: Name,
-	pub name_span: Span,
+	pub name: Identifier,
 	pub dims: Vec<TypeDim>,
 	pub expr: Option<Expr>,
 }

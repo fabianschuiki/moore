@@ -380,6 +380,7 @@ pub enum Precedence {
 	Mul,
 	Pow,
 	Unary,
+	Postfix,
 	Scope,
 	Max,
 }
