@@ -1,5 +1,5 @@
 [root]
-name = "moore-svlog"
+name = "moore-svlog-syntax"
 version = "0.1.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -103,6 +103,25 @@ version = "0.1.0"
 dependencies = [
  "memmap 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "moore-svlog"
+version = "0.1.0"
+dependencies = [
+ "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moore-common 0.1.0",
+ "moore-svlog-hir 0.1.0",
+ "moore-svlog-syntax 0.1.0",
+ "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "moore-svlog-hir"
+version = "0.1.0"
+dependencies = [
+ "moore-common 0.1.0",
+ "moore-svlog-syntax 0.1.0",
 ]
 
 [[package]]

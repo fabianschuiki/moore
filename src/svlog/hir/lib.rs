@@ -5,6 +5,9 @@
 //! of the syntactic sugar represented in the AST, and resolving default and
 //! implicit values.
 
+extern crate moore_common;
+extern crate moore_svlog_syntax;
+
 mod nodes;
 mod lower;
 

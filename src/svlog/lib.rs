@@ -3,16 +3,10 @@
 //! This crate implements SystemVerilog for the moore compiler.
 
 extern crate moore_common;
+pub extern crate moore_svlog_syntax;
+pub extern crate moore_svlog_hir;
 extern crate bincode;
 extern crate rustc_serialize;
 
-pub mod ast;
-pub mod cat;
-pub mod lexer;
-pub mod parser;
-pub mod preproc;
-pub mod store;
-pub mod token;
-pub mod resolve;
-pub mod renumber;
-pub mod hir;
+pub use moore_svlog_syntax::*;
+pub use moore_svlog_hir as hir;

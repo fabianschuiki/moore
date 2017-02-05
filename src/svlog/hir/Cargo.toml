@@ -1,0 +1,11 @@
+[package]
+name = "moore-svlog-hir"
+version = "0.1.0"
+authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+moore-common = { path = "../../common" }
+moore-svlog-syntax = { path = "../syntax" }

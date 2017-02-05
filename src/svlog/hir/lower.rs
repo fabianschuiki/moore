@@ -5,9 +5,9 @@
 use std;
 use moore_common::errors::*;
 use moore_common::Session;
-use ast;
-use hir::*;
-use resolve::NameResolution;
+use moore_svlog_syntax::ast;
+use moore_svlog_syntax::resolve::NameResolution;
+use nodes::*;
 use std::collections::HashMap;
 
 /// General result of lowering a node.
