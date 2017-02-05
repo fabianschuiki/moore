@@ -11,3 +11,4 @@ pub mod store;
 pub mod token;
 pub mod resolve;
 pub mod renumber;
+pub mod hir;

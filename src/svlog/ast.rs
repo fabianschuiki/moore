@@ -68,6 +68,26 @@ pub enum Item {
 	// Config(ConfigDecl),
 }
 
+impl Item {
+	pub fn span(&self) -> Span {
+		match *self {
+			Item::Module(ref decl) => decl.span,
+			Item::Interface(ref decl) => decl.span,
+			Item::Package(ref decl) => decl.span,
+			Item::Item(ref item) => item.span(),
+		}
+	}
+
+	pub fn as_str(&self) -> &'static str {
+		match *self {
+			Item::Module(ref decl) => "module declaration",
+			Item::Interface(ref decl) => "interface declaration",
+			Item::Package(ref decl) => "package declaration",
+			Item::Item(ref item) => item.as_str(),
+		}
+	}
+}
+
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ModDecl {
@@ -140,6 +160,42 @@ pub enum HierarchyItem {
 	NetDecl(NetDecl),
 	VarDecl(VarDecl),
 	Inst(Inst),
+}
+
+impl HierarchyItem {
+	pub fn span(&self) -> Span {
+		match *self {
+			HierarchyItem::ImportDecl(ref decl) => decl.span,
+			HierarchyItem::ParamDecl(ref decl) => decl.span,
+			HierarchyItem::ModportDecl(ref decl) => decl.span,
+			HierarchyItem::ClassDecl(ref decl) => decl.span,
+			HierarchyItem::PortDecl(ref decl) => decl.span,
+			HierarchyItem::Procedure(ref prc) => prc.span,
+			HierarchyItem::SubroutineDecl(ref decl) => decl.span,
+			HierarchyItem::Assertion(ref assertion) => assertion.span,
+			HierarchyItem::NetDecl(ref decl) => decl.span,
+			HierarchyItem::VarDecl(ref decl) => decl.span,
+			HierarchyItem::Inst(ref inst) => inst.span,
+			_ => unimplemented!(),
+		}
+	}
+
+	pub fn as_str(&self) -> &'static str {
+		match *self {
+			HierarchyItem::ImportDecl(ref decl) => "import declaration",
+			HierarchyItem::ParamDecl(ref decl) => "parameter declaration",
+			HierarchyItem::ModportDecl(ref decl) => "modport declaration",
+			HierarchyItem::ClassDecl(ref decl) => "class declaration",
+			HierarchyItem::PortDecl(ref decl) => "port declaration",
+			HierarchyItem::Procedure(ref prc) => "procedure declaration",
+			HierarchyItem::SubroutineDecl(ref decl) => "subroutine declaration",
+			HierarchyItem::Assertion(ref assertion) => "assertion",
+			HierarchyItem::NetDecl(ref decl) => "net declaration",
+			HierarchyItem::VarDecl(ref decl) => "variable declaration",
+			HierarchyItem::Inst(ref inst) => "instantiation",
+			_ => unimplemented!(),
+		}
+	}
 }
 
 

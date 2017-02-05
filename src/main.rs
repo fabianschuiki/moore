@@ -148,4 +148,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 		Ok(x) => x,
 		Err(_) => std::process::exit(1),
 	};
+
+	// Lower to HIR.
+	svlog::hir::lower(session, ast);
 }
