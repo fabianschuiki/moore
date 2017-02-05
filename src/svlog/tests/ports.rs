@@ -1,44 +1,8 @@
 // Copyright (c) 2017 Fabian Schuiki
-extern crate moore_common;
-extern crate moore_svlog;
-use moore_svlog::*;
-use moore_common::source::get_source_manager;
-use moore_common::Session;
+#![allow(unused_variables)]
 
-fn parse(input: &str) -> Vec<ast::Root> {
-	use std::cell::Cell;
-	thread_local!(static INDEX: Cell<usize> = Cell::new(0));
-	let sm = get_source_manager();
-	let idx = INDEX.with(|i| {
-		let v = i.get();
-		i.set(v+1);
-		v
-	});
-	let source = sm.add(&format!("test_{}.sv", idx), input);
-	let pp = preproc::Preprocessor::new(source, &[]);
-	let lexer = lexer::Lexer::new(pp);
-	match parser::parse(lexer) {
-		Ok(x) => vec![x],
-		Err(_) => panic!("parsing failed"),
-	}
-}
-
-fn compile_to_hir(mut asts: Vec<ast::Root>) -> hir::Root {
-	let session = Session::new();
-	renumber::renumber(&mut asts);
-	let nameres = resolve::resolve(&session, &asts).expect("name resolution failed");
-	let top = (||{
-		for ast in &asts {
-			for item in &ast.items {
-				if let ast::Item::Module(ref decl) = *item {
-					return decl.id;
-				}
-			}
-		}
-		panic!("no module found");
-	})();
-	hir::lower(&session, &nameres, top, asts).expect("lowering to hir failed")
-}
+mod common;
+use common::*;
 
 
 #[test]
@@ -48,15 +12,16 @@ fn empty() {
 
 #[test]
 fn implicit_port() {
-	compile_to_hir(parse("
+	let hir = compile_to_hir(parse("
 		module foo (a,b,c);
 		endmodule
 	"));
+	let m = unwrap_single_module(&hir);
 }
 
 #[test]
 fn impl_ex1() {
-	compile_to_hir(parse("
+	let hir = compile_to_hir(parse("
 		module test (a,b,c,d,e,f,g,h);
 			input [7:0] a;
 			input [7:0] b;
@@ -73,6 +38,7 @@ fn impl_ex1() {
 			logic [7:0] g;
 		endmodule
 	"));
+	let m = unwrap_single_module(&hir);
 
 	// TODO: Verify that net `a` is unsigned.
 	// TODO: Verify that net port `b` inherits signed attribute from net decl.
@@ -86,7 +52,7 @@ fn impl_ex1() {
 
 #[test]
 fn expl_ex1() {
-	compile_to_hir(parse("
+	let hir = compile_to_hir(parse("
 		module test (
 			input [7:0] a,
 			input signed [7:0] b, c, d,
@@ -96,6 +62,7 @@ fn expl_ex1() {
 		);
 		endmodule
 	"));
+	let m = unwrap_single_module(&hir);
 
 	// TODO: Verify that the ports are of the correct size, direction, and type.
 	// TODO: Verify that inside the module the appropriate variables and nets
@@ -105,11 +72,12 @@ fn expl_ex1() {
 #[test]
 #[should_panic]
 fn mixed_ansi_and_nonansi() {
-	compile_to_hir(parse("
+	let hir = compile_to_hir(parse("
 		module test (input clk);
 			output [7:0] data;
 		endmodule
 	"));
+	let m = unwrap_single_module(&hir);
 
 	// TODO: Verify that this fails for the right reason. Maybe look at the
 	// diagnostics generated.

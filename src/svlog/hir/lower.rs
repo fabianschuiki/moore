@@ -18,6 +18,7 @@ pub fn lower(session: &Session, nameres: &NameResolution, top: NodeId, asts: Vec
 		session: session,
 		severity: Severity::Note,
 		top: top,
+		mods: HashMap::new(),
 	};
 	l.map_asts(asts);
 	l.finish()
@@ -27,6 +28,7 @@ struct Lowerer<'a> {
 	session: &'a Session,
 	severity: Severity,
 	top: NodeId,
+	mods: HashMap<NodeId, Module>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -39,7 +41,7 @@ impl<'a> Lowerer<'a> {
 	fn finish(self) -> Result<Root> {
 		Ok(Root {
 			top: self.top,
-			mods: HashMap::new(),
+			mods: self.mods,
 			intfs: HashMap::new(),
 			pkgs: HashMap::new(),
 		})
@@ -75,6 +77,16 @@ impl<'a> Lowerer<'a> {
 		// TODO: Digest name, lifetime, timeunits
 		// TODO: Digest parameters
 		// TODO: Digest ports (ANSI and non-ANSI)
+		let m = Module {
+			name: node.name,
+			span: node.name_span,
+		};
+
+		// Stash the module away in the modules map, associated with its node
+		// ID.
+		if let Some(e) = self.mods.insert(node.id, m) {
+			panic!("Modules `{}` and `{}` both have ID {}", e.name, node.name, node.id);
+		}
 	}
 
 	/// Lower an interface.

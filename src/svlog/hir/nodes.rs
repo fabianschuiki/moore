@@ -3,6 +3,8 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use std::collections::HashMap;
+pub use moore_common::name::Name;
+pub use moore_common::source::Span;
 pub use moore_svlog_syntax::ast::NodeId;
 
 
@@ -15,8 +17,8 @@ pub struct Root {
 }
 
 pub struct Module {
-
-
+	pub name: Name,
+	pub span: Span,
 }
 
 pub struct Interface {
