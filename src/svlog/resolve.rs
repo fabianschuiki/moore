@@ -11,11 +11,11 @@
 
 use std;
 use super::ast::{self, NodeId};
-use name::*;
-use source::*;
-use errors::*;
+use moore_common::name::*;
+use moore_common::source::*;
+use moore_common::errors::*;
+use moore_common::Session;
 use std::collections::{HashMap, HashSet};
-use Session;
 
 
 pub fn build_symtbl(asts: &[ast::Root], session: &Session) -> SymTbl {

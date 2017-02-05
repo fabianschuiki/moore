@@ -1,6 +1,6 @@
 // Copyright (c) 2016-2017 Fabian Schuiki
-use source::Span;
-use name::Name;
+use moore_common::source::Span;
+use moore_common::name::Name;
 use std::fmt;
 use super::token::{Op, Lit};
 

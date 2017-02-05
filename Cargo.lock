@@ -1,13 +1,10 @@
 [root]
-name = "moore"
+name = "moore-svlog"
 version = "0.1.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "clap 2.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "memmap 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "owning_ref 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moore-common 0.1.0",
  "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
- "sha1 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -84,6 +81,28 @@ dependencies = [
  "kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "moore"
+version = "0.1.0"
+dependencies = [
+ "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "memmap 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moore-common 0.1.0",
+ "moore-svlog 0.1.0",
+ "owning_ref 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sha1 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "moore-common"
+version = "0.1.0"
+dependencies = [
+ "memmap 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

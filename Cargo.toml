@@ -1,10 +1,13 @@
 [package]
 name = "moore"
 version = "0.1.0"
-authors = ["Fabian Schuiki <fschuiki@student.ethz.ch>"]
-build = "pre/build.rs"
+authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
+
+[workspace]
 
 [dependencies]
+moore-common = { path = "src/common" }
+moore-svlog = { path = "src/svlog" }
 memmap = "0.5.0"
 owning_ref = "0.2.2"
 clap = "2"

@@ -4,14 +4,14 @@
 
 use std;
 use std::cell::RefCell;
-use svlog::lexer::{Lexer, TokenAndSpan};
-use svlog::token::*;
+use lexer::{Lexer, TokenAndSpan};
+use token::*;
 use std::collections::VecDeque;
-use errors::*;
-use svlog::ast;
-use svlog::ast::*;
-use name::*;
-use source::*;
+use ast;
+use ast::*;
+use moore_common::errors::*;
+use moore_common::name::*;
+use moore_common::source::*;
 
 const Unrecovered: () = ();
 const Recovered: () = ();
@@ -5081,8 +5081,8 @@ fn parse_hname(p: &mut AbstractParser, msg: &str) -> ReportedResult<ast::Identif
 mod tests {
 	use source::*;
 	use name::*;
-	use svlog::preproc::*;
-	use svlog::lexer::*;
+	use preproc::*;
+	use lexer::*;
 
 	fn parse(input: &str) {
 		use std::cell::Cell;

@@ -1,6 +1,10 @@
 // Copyright (c) 2016-2017 Fabian Schuiki
 
-//! The SystemVerilog module of the moore compiler.
+//! This crate implements SystemVerilog for the moore compiler.
+
+extern crate moore_common;
+extern crate bincode;
+extern crate rustc_serialize;
 
 pub mod ast;
 pub mod cat;

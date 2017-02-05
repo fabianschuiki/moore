@@ -3,10 +3,10 @@
 //! This module implements the process of lowering AST to HIR.
 
 use std;
-use errors::*;
-use svlog::ast;
-use svlog::hir::*;
-use Session;
+use moore_common::errors::*;
+use moore_common::Session;
+use ast;
+use hir::*;
 
 /// General result of lowering a node.
 type Result<T> = std::result::Result<T, ()>;

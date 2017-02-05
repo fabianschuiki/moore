@@ -7,7 +7,7 @@
 pub use self::DelimToken::*;
 pub use self::Token::*;
 pub use self::Lit::*;
-use name::Name;
+use moore_common::name::Name;
 use std::fmt::{Display, Formatter, Result};
 
 

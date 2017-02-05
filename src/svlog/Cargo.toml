@@ -1,0 +1,12 @@
+[package]
+name = "moore-svlog"
+version = "0.1.0"
+authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+moore-common = { path = "../common" }
+bincode = "0.6.1"
+rustc-serialize = "0.3.22"

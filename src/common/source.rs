@@ -4,9 +4,8 @@
 //! source file. This helps keeping the source location lean and allow for
 //! simple querying of information.
 
-extern crate memmap;
 use name::RcStr;
-use self::memmap::Mmap;
+use memmap::Mmap;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -275,7 +274,7 @@ impl SourceFile for DiskSourceFile {
 	}
 
 	fn get_content(&self) -> Rc<SourceContent> {
-		use self::memmap::Protection;
+		use memmap::Protection;
 		let is_none = self.content.borrow().is_none();
 		if is_none {
 			let c = Rc::new(DiskSourceContent(

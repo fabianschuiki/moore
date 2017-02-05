@@ -4,12 +4,10 @@ extern crate clap;
 extern crate sha1;
 extern crate bincode;
 extern crate rustc_serialize;
-pub mod lexer;
-pub mod svlog;
-pub mod vhdl;
-pub mod errors;
-pub mod name;
-pub mod source;
+extern crate moore_common;
+extern crate moore_svlog;
+use moore_common::*;
+use moore_svlog as svlog;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use std::path::Path;
 
@@ -19,17 +17,6 @@ enum Language {
 	Verilog,
 	SystemVerilog,
 	Vhdl,
-}
-
-
-pub struct Session {
-	pub opts: SessionOptions,
-}
-
-
-#[derive(Debug)]
-pub struct SessionOptions {
-	pub ignore_duplicate_defs: bool,
 }
 
 
@@ -150,5 +137,8 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 	};
 
 	// Lower to HIR.
-	svlog::hir::lower(session, ast);
+	match svlog::hir::lower(session, ast) {
+		Ok(x) => x,
+		Err(_) => std::process::exit(1),
+	};
 }

@@ -3,12 +3,12 @@
 //! A lexical analyzer for SystemVerilog files, based on IEEE 1800-2009, section
 //! 5.
 
-pub use svlog::token::*;
-use errors::*;
-use source::*;
-use name::*;
-use svlog::cat::CatTokenKind;
-use svlog::preproc::*;
+pub use token::*;
+use moore_common::errors::*;
+use moore_common::source::*;
+use moore_common::name::*;
+use cat::CatTokenKind;
+use preproc::*;
 
 
 type CatTokenAndSpan = (CatTokenKind, Span);
@@ -508,7 +508,7 @@ mod tests {
 	use super::*;
 	use source::*;
 	use name::*;
-	use svlog::preproc::*;
+	use preproc::*;
 
 	fn check(input: &str, expected: &[Token]) {
 		use std::cell::Cell;

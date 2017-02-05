@@ -3,7 +3,7 @@
 //! This module implements AST node renumbering.
 
 use super::ast::{self, NodeId};
-use errors::*;
+use moore_common::errors::*;
 
 pub fn renumber(asts: &mut [ast::Root]) {
 	let mut rn = RenumberPass::new();

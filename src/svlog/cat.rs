@@ -10,7 +10,7 @@
 //! let tokens: Vec<_> = cat.collect();
 //! ```
 
-use source::*;
+use moore_common::source::*;
 pub use self::CatTokenKind::*;
 
 

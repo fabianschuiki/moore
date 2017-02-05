@@ -3,7 +3,7 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use std::collections::HashMap;
-pub use svlog::ast::NodeId;
+pub use ast::NodeId;
 
 
 /// The root of the HIR tree. This represents one elaborated design.
@@ -15,6 +15,7 @@ pub struct Root {
 }
 
 pub struct Module {
+
 
 }
 

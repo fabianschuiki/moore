@@ -5,10 +5,10 @@
 //! resolution.
 
 use std::path::Path;
-use errors::{DiagResult2, DiagBuilder2};
+use moore_common::errors::{DiagResult2, DiagBuilder2};
 use std::collections::HashMap;
-use svlog::cat::*;
-use source::*;
+use cat::*;
+use moore_common::source::*;
 use std::rc::Rc;
 
 
@@ -663,8 +663,8 @@ enum Defcond {
 mod tests {
 	use super::*;
 	use source::*;
-	use svlog::cat::CatTokenKind;
-	use svlog::cat::CatTokenKind::*;
+	use cat::CatTokenKind;
+	use cat::CatTokenKind::*;
 
 	fn preproc(input: &str) -> Preprocessor {
 		use std::cell::Cell;
