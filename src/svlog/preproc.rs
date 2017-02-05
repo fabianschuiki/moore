@@ -662,7 +662,7 @@ enum Defcond {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use source::*;
+	use moore_common::source::*;
 	use cat::CatTokenKind;
 	use cat::CatTokenKind::*;
 

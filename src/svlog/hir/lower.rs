@@ -7,22 +7,26 @@ use moore_common::errors::*;
 use moore_common::Session;
 use ast;
 use hir::*;
+use resolve::NameResolution;
+use std::collections::HashMap;
 
 /// General result of lowering a node.
 type Result<T> = std::result::Result<T, ()>;
 
-pub fn lower(session: &Session, asts: Vec<ast::Root>) -> Result<()> {
+pub fn lower(session: &Session, nameres: &NameResolution, top: NodeId, asts: Vec<ast::Root>) -> Result<Root> {
 	let mut l = Lowerer {
 		session: session,
 		severity: Severity::Note,
+		top: top,
 	};
-	l.map_asts(asts)?;
-	Err(())
+	l.map_asts(asts);
+	l.finish()
 }
 
 struct Lowerer<'a> {
 	session: &'a Session,
 	severity: Severity,
+	top: NodeId,
 }
 
 impl<'a> Lowerer<'a> {
@@ -31,12 +35,21 @@ impl<'a> Lowerer<'a> {
 		println!("{}", diag);
 	}
 
+	/// Consume the lowerer and wrap the lowered nodes up in a Root node.
+	fn finish(self) -> Result<Root> {
+		Ok(Root {
+			top: self.top,
+			mods: HashMap::new(),
+			intfs: HashMap::new(),
+			pkgs: HashMap::new(),
+		})
+	}
+
 	/// Lower multiple root nodes.
-	fn map_asts(&mut self, asts: Vec<ast::Root>) -> Result<()> {
+	fn map_asts(&mut self, asts: Vec<ast::Root>) {
 		for ast in asts {
 			self.map_ast(ast);
 		}
-		Err(())
 	}
 
 	/// Lower a root node.

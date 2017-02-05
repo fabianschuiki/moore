@@ -1101,7 +1101,7 @@ pub enum ModportPort {
 
 /// A parameter or localparam declaration.
 ///
-/// ```
+/// ```text
 /// "localparam" data_type_or_implicit list_of_param_assignments
 /// "localparam" "type" list_of_type_assignments
 /// "parameter" data_type_or_implicit list_of_param_assignments
@@ -1122,7 +1122,7 @@ pub enum ParamKind {
 
 /// A single type assignment within a parameter or localparam declaration.
 ///
-/// ```
+/// ```text
 /// ident ["=" type]
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -1134,7 +1134,7 @@ pub struct ParamTypeDecl {
 
 /// A single value assignment within a parameter or loclparam declaration.
 ///
-/// ```
+/// ```text
 /// [type_or_implicit] ident {dimension} ["=" expr]
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

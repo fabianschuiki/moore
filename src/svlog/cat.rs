@@ -5,6 +5,7 @@
 //!
 //! # Example
 //! ```
+//! use moore_svlog::cat::Cat;
 //! let input = "Löwe 老虎 Léopard\n";
 //! let mut cat = Cat::new(Box::new(input.char_indices()));
 //! let tokens: Vec<_> = cat.collect();

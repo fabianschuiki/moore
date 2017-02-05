@@ -18,45 +18,6 @@ use moore_common::Session;
 use std::collections::{HashMap, HashSet};
 
 
-pub fn build_symtbl(asts: &[ast::Root], session: &Session) -> SymTbl {
-	let mut tbl = HashMap::new();
-	let mut diags = Vec::new();
-
-	for i in 0..asts.len() {
-		let ast = &asts[i];
-		for item in &ast.items {
-			let (name, span, defid) = match *item {
-				ast::Item::Module(ref decl) => (decl.name, decl.name_span, DefId::Module(decl.id)),
-				ast::Item::Interface(ref decl) => (decl.name, decl.name_span, DefId::Interface(decl.id)),
-				ast::Item::Package(ref decl) => (decl.name, decl.name_span, DefId::Package(decl.id)),
-				_ => continue
-			};
-
-			if let Some(ex) = tbl.insert(name, Def { span: span, id: defid }) {
-				if ex.span != span && !session.opts.ignore_duplicate_defs {
-					diags.push(DiagBuilder2::error(format!("name `{}` has already been declared", name))
-						.span(span)
-						.add_note("pass --ignore-duplicate-defs to use the last definition and suppress this error")
-						.add_note("previous declaration was here")
-						.span(ex.span));
-				}
-			}
-		}
-	}
-
-	for d in diags {
-		println!("{}", d);
-	}
-
-	SymTbl {
-		tbl: tbl,
-	}
-}
-
-pub struct SymTbl {
-	tbl: HashMap<Name, Def>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DefId {
 	Error,
@@ -85,16 +46,9 @@ pub struct Def {
 	pub id: DefId,
 }
 
-impl SymTbl {
-	pub fn find(&self, name: Name) -> Option<Def> {
-		self.tbl.get(&name).map(|x| x.clone())
-	}
-}
 
-
-
-pub fn resolve(session: &Session, symtbl: &SymTbl, asts: &[ast::Root]) -> Result<NameResolution, ()> {
-	let mut r = Resolver::new(session, symtbl);
+pub fn resolve(session: &Session, asts: &[ast::Root]) -> Result<NameResolution, ()> {
+	let mut r = Resolver::new(session);
 	r.register_globals(asts);
 	if r.is_error() {
 		return Err(());
@@ -159,7 +113,7 @@ macro_rules! assert_renumbered {
 }
 
 impl<'a> Resolver<'a> {
-	pub fn new(session: &'a Session, symtbl: &'a SymTbl) -> Resolver<'a> {
+	pub fn new(session: &'a Session) -> Resolver<'a> {
 		Resolver {
 			session: session,
 			severity: Severity::Note,

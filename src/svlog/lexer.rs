@@ -506,8 +506,8 @@ impl<'a> Iterator for Lexer<'a> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use source::*;
-	use name::*;
+	use moore_common::source::*;
+	use moore_common::name::*;
 	use preproc::*;
 
 	fn check(input: &str, expected: &[Token]) {
@@ -595,7 +595,7 @@ mod tests {
 	fn unsized_literal_constant_numbers() {
 		check(
 			"659; 'h 837FF; 'o7460", &[
-			UnsignedNumber(name("659")), Semicolon,
+			Literal(UnsignedInteger(name("659"))), Semicolon,
 			Literal(BasedInteger(None, false, 'h', name("837FF"))), Semicolon,
 			Literal(BasedInteger(None, false, 'o', name("7460"))),
 		]);
@@ -632,7 +632,7 @@ mod tests {
 	fn underscores_in_literal_constant_numbers() {
 		check(
 			"27_195_000; 16'b0011_0101_0001_1111; 32 'h 12ab_f001", &[
-			UnsignedNumber(name("27195000")), Semicolon,
+			Literal(UnsignedInteger(name("27195000"))), Semicolon,
 			Literal(BasedInteger(Some(name("16")), false, 'b', name("0011010100011111"))), Semicolon,
 			Literal(BasedInteger(Some(name("32")), false, 'h', name("12abf001"))),
 		]);

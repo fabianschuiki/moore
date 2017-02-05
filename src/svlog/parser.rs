@@ -1098,7 +1098,7 @@ fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 
 /// Parse a modport declaration.
 ///
-/// ```
+/// ```text
 /// modport_decl: "modport" modport_item {"," modport_item} ";"
 /// modport_item: ident "(" modport_ports_decl {"," modport_ports_decl} ")"
 /// modport_ports_decl:
@@ -1145,7 +1145,7 @@ fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportDecl
 
 /// Parse a modport item.
 ///
-/// ```
+/// ```text
 /// modport_item: ident "(" modport_ports_decl {"," modport_ports_decl} ")"
 /// modport_ports_decl:
 ///   port_direction modport_simple_port {"," modport_simple_port} |
@@ -1214,7 +1214,7 @@ fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<ast::ModportItem
 }
 
 
-/// ```
+/// ```text
 /// modport_ports_decl:
 ///   port_direction modport_simple_port {"," modport_simple_port} |
 ///   ("import"|"export") modport_tf_port {"," modport_tf_port} |
@@ -2250,7 +2250,7 @@ fn parse_expr_list(p: &mut AbstractParser) -> ReportedResult<Vec<Expr>> {
 /// Parse the tail of a primary expression that started with a parenthesis.
 ///
 /// ## Syntax
-/// ```
+/// ```text
 /// "(" expression ")"
 /// "(" expression ":" expression ":" expression ")"
 /// ```
@@ -2277,7 +2277,7 @@ fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<Expr> {
 /// Parse a range expression.
 ///
 /// ## Syntax
-/// ```
+/// ```text
 /// expression
 /// expression ":" expression
 /// expression "+:" expression
@@ -4403,7 +4403,7 @@ fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
 
 
 /// Parse a import declaration.
-/// ```
+/// ```text
 /// "import" package_ident "::" "*" ";"
 /// "import" package_ident "::" ident ";"
 /// ```
@@ -5079,8 +5079,8 @@ fn parse_hname(p: &mut AbstractParser, msg: &str) -> ReportedResult<ast::Identif
 
 #[cfg(test)]
 mod tests {
-	use source::*;
-	use name::*;
+	use moore_common::source::*;
+	use moore_common::name::*;
 	use preproc::*;
 	use lexer::*;
 

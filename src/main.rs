@@ -121,24 +121,50 @@ fn compile(matches: &ArgMatches) {
 
 
 fn elaborate(matches: &ArgMatches, session: &Session) {
+	use moore_common::errors::DiagBuilder2;
+
 	// Load the syntax trees previously parsed and stored into the library.
-	let mut ast = svlog::store::load_items(".moore").unwrap();
+	let mut asts = svlog::store::load_items(".moore").unwrap();
 
 	// Renumber the AST nodes.
-	svlog::renumber::renumber(&mut ast);
-
-	// Build a symbol table from the loaded syntax trees.
-	let symtbl = svlog::resolve::build_symtbl(&ast, session);
+	svlog::renumber::renumber(&mut asts);
 
 	// Perform name resolution.
-	let nameres = match svlog::resolve::resolve(session, &symtbl, &ast) {
+	let nameres = match svlog::resolve::resolve(session, &asts) {
 		Ok(x) => x,
-		Err(_) => std::process::exit(1),
+		Err(_) => {
+			println!("{}", DiagBuilder2::fatal("name resolution failed"));
+			std::process::exit(1);
+		}
+	};
+
+	// Find the ID of the module we are supposed to be elaborating.
+	let top_name = matches.value_of("NAME").unwrap();
+	let top = match (||{
+		for ast in &asts {
+			for item in &ast.items {
+				if let svlog::ast::Item::Module(ref decl) = *item {
+					if &*decl.name.as_str() == top_name {
+						return Some(decl.id);
+					}
+				}
+			}
+		}
+		None
+	})() {
+		Some(id) => id,
+		None => {
+			println!("{}", DiagBuilder2::fatal(format!("unable to find top module `{}`", top_name)));
+			std::process::exit(1);
+		}
 	};
 
 	// Lower to HIR.
-	match svlog::hir::lower(session, ast) {
+	match svlog::hir::lower(session, &nameres, top, asts) {
 		Ok(x) => x,
-		Err(_) => std::process::exit(1),
+		Err(_) => {
+			println!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
+			std::process::exit(1);
+		},
 	};
 }

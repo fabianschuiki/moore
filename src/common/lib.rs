@@ -16,6 +16,16 @@ pub struct Session {
 	pub opts: SessionOptions,
 }
 
+impl Session {
+	pub fn new() -> Session {
+		Session {
+			opts: SessionOptions {
+				ignore_duplicate_defs: false,
+			}
+		}
+	}
+}
+
 #[derive(Debug)]
 pub struct SessionOptions {
 	pub ignore_duplicate_defs: bool,
