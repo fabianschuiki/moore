@@ -2407,7 +2407,7 @@ fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
 
 	loop {
 		// Parse a port.
-		match parse_port(p, v.last()) {
+		match parse_port(p) {
 			Ok(x) => v.push(x),
 			Err(()) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
 		}
@@ -2439,125 +2439,305 @@ fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
 /// be a reference to the previously parsed port, or `None` if this is the first
 /// port in the list. This is required since ports inherit certain information
 /// from their predecessor if omitted.
-fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Port> {
+// fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Port> {
+// 	let mut span = p.peek(0).1;
+
+// 	// TODO: Rewrite this function to leverage the branch parser for the
+// 	// different kinds of port declarations.
+
+// 	// Consume the optional port direction.
+// 	let mut dir = as_port_direction(p.peek(0).0);
+// 	if dir.is_some() {
+// 		p.bump();
+// 	}
+
+// 	// Consume the optional net type or var keyword, which determines the port
+// 	// kind.
+// 	let mut kind = match p.peek(0).0 {
+// 		// Net Types
+// 		Keyword(Kw::Supply0) => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Supply1) => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Tri)     => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Triand)  => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Trior)   => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Trireg)  => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Tri0)    => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Tri1)    => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Uwire)   => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Wire)    => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Wand)    => Some(PortKind::Net(NetType::Wire)),
+// 		Keyword(Kw::Wor)     => Some(PortKind::Net(NetType::Wire)),
+
+// 		// Var Kind
+// 		Keyword(Kw::Var)     => Some(PortKind::Var),
+// 		_ => None
+// 	};
+// 	if kind.is_some() {
+// 		p.bump();
+// 	}
+
+// 	// Try to parse ports of the form:
+// 	// "." port_identifier "(" [expression] ")"
+// 	if p.try_eat(Period) {
+// 		let q = p.peek(0).1;
+// 		p.add_diag(DiagBuilder2::error("Ports starting with a . not yet supported").span(q));
+// 		return Err(())
+// 	}
+
+// 	// Otherwise parse the port data type, which may be a whole host of
+// 	// different things.
+// 	let mut ty = parse_data_type(p)?;
+
+// 	// Here goes the tricky part: If the data type not followed by the name (and
+// 	// optional dimensions) of the port, the data type actually was the port
+// 	// name. These are indistinguishable.
+// 	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
+// 		(name, span, parse_optional_dimensions(p)?)
+// 	} else {
+// 		if let Type { span: span, data: NamedType(ast::Identifier{name,..}), dims: dims, .. } = ty {
+// 			let r = (name, span, (dims, span));
+// 			ty = Type {
+// 				span: span.begin().into(),
+// 				data: ast::ImplicitType,
+// 				dims: Vec::new(),
+// 				sign: ast::TypeSign::None,
+// 			};
+// 			r
+// 		} else {
+// 			p.add_diag(DiagBuilder2::error("Expected port type or name").span(ty.span));
+// 			return Err(());
+// 		}
+// 	};
+
+// 	// TODO: The following goes into the lowering to HIR phase. Just keep track
+// 	// of what was unspecified here.
+
+// 	// // Determine the kind of the port based on the optional kind keywords, the
+// 	// // direction, and the type.
+// 	// if dir.is_none() && kind.is_none() && ty.is_none() && prev.is_some() {
+// 	// 	dir = Some(prev.unwrap().dir.clone());
+// 	// 	kind = Some(prev.unwrap().kind.clone());
+// 	// 	ty = Some(prev.unwrap().ty.clone());
+// 	// } else {
+// 	// 	// The direction defaults to inout.
+// 	// 	if dir.is_none() {
+// 	// 		dir = Some(PortDir::Inout);
+// 	// 	}
+
+// 	// 	// The type defaults to logic.
+// 	// 	if ty.is_none() {
+// 	// 		ty = Some(Type {
+// 	// 			span: INVALID_SPAN,
+// 	// 			data: LogicType,
+// 	// 			sign: TypeSign::None,
+// 	// 			dims: Vec::new(),
+// 	// 		});
+// 	// 	}
+
+// 	// 	// The kind defaults to different things based on the direction and
+// 	// 	// type:
+// 	// 	// - input,inout: default net
+// 	// 	// - ref: var
+// 	// 	// - output (implicit type): net
+// 	// 	// - output (explicit type): var
+// 	// 	if kind.is_none() {
+// 	// 		kind = Some(match dir.unwrap() {
+// 	// 			PortDir::Input | PortDir::Inout => NetPort,
+// 	// 			PortDir::Ref => VarPort,
+// 	// 			PortDir::Output if ty.clone().unwrap().data == ImplicitType => NetPort,
+// 	// 			PortDir::Output => VarPort,
+// 	// 		});
+// 	// 	}
+// 	// }
+
+// 	// Parse the optional initial assignment for this port.
+// 	if p.try_eat(Operator(Op::Assign)) {
+// 		let q = p.peek(0).1;
+// 		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
+// 	}
+
+// 	// Update the port's span to cover all of the tokens consumed.
+// 	span.expand(p.last_span());
+
+// 	Ok(Port {
+// 		id: DUMMY_NODE_ID,
+// 		span: span,
+// 		name: name,
+// 		name_span: name_span,
+// 		kind: kind,
+// 		ty: ty,
+// 		dir: dir,
+// 		dims: dims,
+// 	})
+// }
+
+
+/// Parse a single port declaration. These can take a few different forms.
+fn parse_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+	let mut pp = ParallelParser::new();
+	pp.add_greedy("interface port", parse_interface_port);
+	pp.add_greedy("explicit port",  parse_explicit_port);
+	pp.add_greedy("named port",     parse_named_port);
+	pp.add_greedy("implicit port",  parse_implicit_port);
+	pp.finish(p, "port")
+}
+
+
+/// Parse a interface port declaration.
+/// ```text
+/// "interface" ["." ident] ident {dimension} ["=" expr]
+/// ```
+fn parse_interface_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+	let mut span = p.peek(0).1;
+
+	// Consume the interface keyword.
+	p.require_reported(Keyword(Kw::Interface))?;
+
+	// Consume the optional modport name.
+	let modport = if p.try_eat(Period) {
+		Some(parse_identifier(p, "modport name")?)
+	} else {
+		None
+	};
+
+	// Consume the port name.
+	let name = parse_identifier(p, "port name")?;
+
+	// Consume the optional dimensions.
+	let (dims, _) = parse_optional_dimensions(p)?;
+
+	// Consume the optional initial expression.
+	let expr = if p.try_eat(Operator(Op::Assign)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
+	p.anticipate(&[CloseDelim(Paren), Comma])?;
+	span.expand(p.last_span());
+	Ok(ast::Port::Intf {
+		span: span,
+		modport: modport,
+		name: name,
+		dims: dims,
+		expr: expr,
+	})
+}
+
+/// Parse an explicit port declaration.
+/// ```text
+/// [direction] "." ident "(" [expr] ")"
+/// ```
+fn parse_explicit_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
 	let mut span = p.peek(0).1;
 
 	// Consume the optional port direction.
-	let mut dir = as_port_direction(p.peek(0).0);
+	let dir = as_port_direction(p.peek(0).0);
 	if dir.is_some() {
 		p.bump();
 	}
 
-	// Consume the optional net type or var keyword, which determines the port
-	// kind.
-	let mut kind = match p.peek(0).0 {
-		// Net Types
-		Keyword(Kw::Supply0) => Some(NetPort),
-		Keyword(Kw::Supply1) => Some(NetPort),
-		Keyword(Kw::Tri)     => Some(NetPort),
-		Keyword(Kw::Triand)  => Some(NetPort),
-		Keyword(Kw::Trior)   => Some(NetPort),
-		Keyword(Kw::Trireg)  => Some(NetPort),
-		Keyword(Kw::Tri0)    => Some(NetPort),
-		Keyword(Kw::Tri1)    => Some(NetPort),
-		Keyword(Kw::Uwire)   => Some(NetPort),
-		Keyword(Kw::Wire)    => Some(NetPort),
-		Keyword(Kw::Wand)    => Some(NetPort),
-		Keyword(Kw::Wor)     => Some(NetPort),
+	// Consume the period and port name.
+	p.require_reported(Period)?;
+	let name = parse_identifier(p, "port name")?;
 
-		// Var Kind
-		Keyword(Kw::Var)     => Some(VarPort),
-		_ => None
-	};
-	if kind.is_some() {
+	// Consume the port expression in parenthesis.
+	let expr = flanked(p, Paren, |p|
+		if p.peek(0).0 == CloseDelim(Paren) {
+			Ok(None)
+		} else {
+			Ok(Some(parse_expr(p)?))
+		}
+	)?;
+
+	p.anticipate(&[CloseDelim(Paren), Comma])?;
+	span.expand(p.last_span());
+	Ok(ast::Port::Explicit {
+		span: span,
+		dir: dir,
+		name: name,
+		expr: expr,
+	})
+}
+
+
+/// Parse a named port declaration.
+/// ```text
+/// [direction] [net_type|"var"] type_or_implicit ident {dimension} ["=" expr]
+/// ```
+fn parse_named_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+	let mut span = p.peek(0).1;
+
+	// Consume the optional port direction.
+	let dir = as_port_direction(p.peek(0).0);
+	if dir.is_some() {
 		p.bump();
 	}
 
-	// Try to parse ports of the form:
-	// "." port_identifier "(" [expression] ")"
-	if p.try_eat(Period) {
-		let q = p.peek(0).1;
-		p.add_diag(DiagBuilder2::error("Ports starting with a . not yet supported").span(q));
-		return Err(())
-	}
-
-	// Otherwise parse the port data type, which may be a whole host of
-	// different things.
-	let mut ty = Some(parse_data_type(p)?);
-
-	// Here goes the tricky part: If the data type not followed by the name (and
-	// optional dimensions) of the port, the data type actually was the port
-	// name. These are indistinguishable.
-	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
-		(name, span, parse_optional_dimensions(p)?)
-	} else {
-		if let Some(Type { span: span, data: NamedType(ast::Identifier{name,..}), dims: dims, .. }) = ty {
-			let r = (name, span, (dims, span));
-			ty = None;
-			r
+	// Consume the optional port kind, which is either a specific net type, a
+	// "var" keyword, or nothing at all.
+	let kind = {
+		let tkn = p.peek(0).0;
+		if let Some(net) = as_net_type(tkn) {
+			p.bump();
+			Some(ast::PortKind::Net(net))
+		} else if tkn == Keyword(Kw::Var) {
+			p.bump();
+			Some(ast::PortKind::Var)
 		} else {
-			p.add_diag(DiagBuilder2::error("Expected port type or name").span(ty.unwrap().span));
-			return Err(());
+			None
 		}
 	};
 
-	// Determine the kind of the port based on the optional kind keywords, the
-	// direction, and the type.
-	if dir.is_none() && kind.is_none() && ty.is_none() && prev.is_some() {
-		dir = Some(prev.unwrap().dir.clone());
-		kind = Some(prev.unwrap().kind.clone());
-		ty = Some(prev.unwrap().ty.clone());
-	} else {
-		// The direction defaults to inout.
-		if dir.is_none() {
-			dir = Some(PortDir::Inout);
-		}
+	// Branch to parse ports with explicit and implicit type.
+	let mut pp = ParallelParser::new();
+	pp.add("explicit type", |p|{
+		let ty = parse_explicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	pp.add("implicit type", |p|{
+		let ty = parse_implicit_type(p)?;
+		Ok((ty, tail(p)?))
+	});
+	let (ty, (name, dims, expr)) = pp.finish(p, "explicit or implicit type")?;
 
-		// The type defaults to logic.
-		if ty.is_none() {
-			ty = Some(Type {
-				span: INVALID_SPAN,
-				data: LogicType,
-				sign: TypeSign::None,
-				dims: Vec::new(),
-			});
-		}
+	fn tail(p: &mut AbstractParser) -> ReportedResult<(ast::Identifier, Vec<ast::TypeDim>, Option<ast::Expr>)> {
+		// Consume the port name.
+		let name = parse_identifier(p, "port name")?;
 
-		// The kind defaults to different things based on the direction and
-		// type:
-		// - input,inout: default net
-		// - ref: var
-		// - output (implicit type): net
-		// - output (explicit type): var
-		if kind.is_none() {
-			kind = Some(match dir.unwrap() {
-				PortDir::Input | PortDir::Inout => NetPort,
-				PortDir::Ref => VarPort,
-				PortDir::Output if ty.clone().unwrap().data == ImplicitType => NetPort,
-				PortDir::Output => VarPort,
-			});
-		}
+		// Consume the optional dimensions.
+		let (dims, _) = parse_optional_dimensions(p)?;
+
+		// Consume the optional initial expression.
+		let expr = if p.try_eat(Operator(Op::Assign)) {
+			Some(parse_expr(p)?)
+		} else {
+			None
+		};
+
+		p.anticipate(&[CloseDelim(Paren), Comma])?;
+		Ok((name, dims, expr))
 	}
 
-	// Parse the optional initial assignment for this port.
-	if p.try_eat(Operator(Op::Assign)) {
-		let q = p.peek(0).1;
-		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
-	}
-
-	// Update the port's span to cover all of the tokens consumed.
 	span.expand(p.last_span());
-
-	Ok(Port {
-		id: DUMMY_NODE_ID,
+	Ok(ast::Port::Named {
 		span: span,
+		dir: dir,
+		kind: kind,
+		ty: ty,
 		name: name,
-		name_span: name_span,
-		kind: kind.unwrap(),
-		ty: ty.unwrap(),
-		dir: dir.unwrap(),
 		dims: dims,
+		expr: expr,
 	})
+}
+
+
+/// Parse an implicit port declaration.
+/// ```text
+/// expr
+/// ```
+fn parse_implicit_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+	parse_expr(p).map(|e| ast::Port::Implicit(e))
 }
 
 

@@ -45,7 +45,6 @@ pub const DUMMY_NODE_ID: NodeId = NodeId(0);
 
 
 pub use self::TypeData::*;
-pub use self::PortKind::*;
 pub use self::StmtData::*;
 pub use self::ExprData::*;
 
@@ -297,16 +296,41 @@ pub struct StructMember {
 
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
-pub struct Port {
-	pub id: NodeId,
-	pub span: Span,
-	pub name: Name,
-	pub name_span: Span,
-	// If kind, type, direction all omitted, inherit from previous port.
-	pub kind: PortKind, // input,inout => net, output w. impl. type => net, output w. expl. type => var, ref => var
-	pub ty: Type, // default logic
-	pub dir: PortDir, // inherit or default inout if first
-	pub dims: Vec<TypeDim>,
+pub enum Port {
+	Intf {
+		span: Span,
+		modport: Option<Identifier>,
+		name: Identifier,
+		dims: Vec<TypeDim>,
+		expr: Option<Expr>,
+	},
+	Explicit {
+		span: Span,
+		dir: Option<PortDir>,
+		name: Identifier,
+		expr: Option<Expr>,
+	},
+	Named {
+		span: Span,
+		dir: Option<PortDir>,
+		kind: Option<PortKind>,
+		ty: Type,
+		name: Identifier,
+		dims: Vec<TypeDim>,
+		expr: Option<Expr>,
+	},
+	Implicit(Expr),
+}
+
+impl Port {
+	pub fn span(&self) -> Span {
+		match *self {
+			Port::Intf{ span, .. } => span,
+			Port::Explicit{ span, .. } => span,
+			Port::Named{ span, .. } => span,
+			Port::Implicit(ref expr) => expr.span,
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -321,8 +345,8 @@ pub struct PortDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum PortKind {
-	NetPort,
-	VarPort,
+	Net(NetType),
+	Var,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]

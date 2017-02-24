@@ -229,8 +229,30 @@ impl<'a> Resolver<'a> {
 	}
 
 	pub fn resolve_port(&mut self, port: &ast::Port) {
-		self.resolve_type(&port.ty);
-		self.resolve_dims(&port.dims);
+		match *port {
+			ast::Port::Intf { ref dims, ref expr, .. } => {
+				self.resolve_dims(dims);
+				if let Some(ref expr) = *expr {
+					self.resolve_expr(expr);
+				}
+			}
+
+			ast::Port::Explicit { ref expr, .. } => {
+				if let Some(ref expr) = *expr {
+					self.resolve_expr(expr);
+				}
+			}
+
+			ast::Port::Named { ref ty, ref dims, ref expr, .. } => {
+				self.resolve_type(ty);
+				self.resolve_dims(dims);
+				if let Some(ref expr) = *expr {
+					self.resolve_expr(expr);
+				}
+			}
+
+			ast::Port::Implicit(ref expr) => self.resolve_expr(expr),
+		}
 	}
 
 	pub fn resolve_type(&mut self, ty: &ast::Type) {
@@ -804,14 +826,21 @@ fn search_param_ports(params: &[ast::ParamPort], name: Name) -> Option<Def> {
 	None
 }
 
-fn search_ports(ports: &[ast::Port], name: Name) -> Option<Def> {
+fn search_ports(ports: &[ast::Port], query: Name) -> Option<Def> {
 	for port in ports {
-		if port.name == name {
-			assert_renumbered!(port.name_span, port.id);
-			return Some(Def {
-				span: port.name_span,
-				id: DefId::Port(port.id),
-			});
+		match *port {
+			ast::Port::Intf{ ref name, .. } |
+			ast::Port::Explicit{ ref name, .. } |
+			ast::Port::Named{ ref name, .. } => {
+				if name.name == query {
+					assert_renumbered!(name.span, name.id);
+					return Some(Def {
+						span: name.span,
+						id: DefId::Port(name.id),
+					});
+				}
+			}
+			_ => ()
 		}
 	}
 	None
@@ -871,6 +900,14 @@ fn search_hierarchy_item(item: &ast::HierarchyItem, name: Name) -> Option<Def> {
 				});
 			}
 		}
+		ast::HierarchyItem::PortDecl(ref decl) => for decl_name in &decl.names {
+			if decl_name.name == name {
+				return Some(Def {
+					span: decl_name.name_span,
+					id: DefId::Port(decl_name.id),
+				});
+			}
+		},
 		_ => ()
 	}
 	None

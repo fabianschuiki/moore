@@ -77,9 +77,36 @@ impl RenumberPass {
 	}
 
 	pub fn renumber_port(&mut self, port: &mut ast::Port) {
-		port.id = self.alloc_id();
-		self.renumber_type(&mut port.ty);
-		self.renumber_dims(&mut port.dims);
+		match *port {
+			ast::Port::Intf { ref mut modport, ref mut name, ref mut dims, ref mut expr, .. } => {
+				if let Some(ref mut modport) = *modport {
+					modport.id = self.alloc_id();
+				}
+				name.id = self.alloc_id();
+				self.renumber_dims(dims);
+				if let Some(ref mut expr) = *expr {
+					self.renumber_expr(expr);
+				}
+			}
+
+			ast::Port::Explicit { ref mut name, ref mut expr, .. } => {
+				name.id = self.alloc_id();
+				if let Some(ref mut expr) = *expr {
+					self.renumber_expr(expr);
+				}
+			}
+
+			ast::Port::Named { ref mut ty, ref mut name, ref mut dims, ref mut expr, .. } => {
+				self.renumber_type(ty);
+				name.id = self.alloc_id();
+				self.renumber_dims(dims);
+				if let Some(ref mut expr) = *expr {
+					self.renumber_expr(expr);
+				}
+			}
+
+			ast::Port::Implicit(ref mut expr) => self.renumber_expr(expr),
+		}
 	}
 
 	pub fn renumber_hierarchy_items(&mut self, items: &mut [ast::HierarchyItem]) {
