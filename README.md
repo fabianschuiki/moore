@@ -25,6 +25,7 @@ Elaboration
     - apply default values
     - merge ANSI and non-ANSI ports
     - `always_{ff,latch,comb}` -> `always`
+- typecheck and evaluate const exprs
 - specialize generic instances
 - assign and check types (can be one step)
 - lower to LLHD
