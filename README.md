@@ -25,9 +25,14 @@ Elaboration
     - apply default values
     - merge ANSI and non-ANSI ports
     - `always_{ff,latch,comb}` -> `always`
-- typecheck and evaluate const exprs
-- specialize generic instances
+    - flatten nested design elements and sort hierarchy items
 - assign and check types (can be one step)
+- evaluate const exprs
+- specialize generic instances
+- lower to MIR
+    - evaluate generate constructs
+    - determine scheduling
+- perform static analyses (future work)
 - lower to LLHD
 - link and emit output file
 
