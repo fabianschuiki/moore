@@ -149,12 +149,12 @@ pub enum HierarchyItem {
 	PortDecl(PortDecl),
 	Procedure(Procedure),
 	SubroutineDecl(SubroutineDecl),
-	ContAssign,
-	GenvarDecl,
-	GenerateRegion,
-	GenerateFor,
-	GenerateIf,
-	GenerateCase,
+	ContAssign(ContAssign),
+	GenvarDecl(Vec<GenvarDecl>),
+	GenerateRegion(Span, Vec<HierarchyItem>),
+	GenerateFor(GenerateFor),
+	GenerateIf(GenerateIf),
+	GenerateCase(GenerateCase),
 	Assertion(Assertion),
 	NetDecl(NetDecl),
 	VarDecl(VarDecl),
@@ -175,7 +175,7 @@ impl HierarchyItem {
 			HierarchyItem::NetDecl(ref decl) => decl.span,
 			HierarchyItem::VarDecl(ref decl) => decl.span,
 			HierarchyItem::Inst(ref inst) => inst.span,
-			_ => unimplemented!(),
+			_ => unimplemented!(), // TODO remove this and have the compiler complain
 		}
 	}
 
@@ -192,7 +192,7 @@ impl HierarchyItem {
 			HierarchyItem::NetDecl(ref decl) => "net declaration",
 			HierarchyItem::VarDecl(ref decl) => "variable declaration",
 			HierarchyItem::Inst(ref inst) => "instantiation",
-			_ => unimplemented!(),
+			_ => unimplemented!(), // TODO remove this and have the compiler complain
 		}
 	}
 }
@@ -1168,4 +1168,53 @@ pub struct ParamValueDecl {
 	pub name: Identifier,
 	pub dims: Vec<TypeDim>,
 	pub expr: Option<Expr>,
+}
+
+
+
+/// A continuous assignment statement.
+///
+/// ```text
+/// "assign" [drive_strength] [delay3] list_of_assignments ";"
+/// "assign" [delay_control] list_of_assignments ";"
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ContAssign {
+	pub span: Span,
+	pub strength: Option<(DriveStrength, DriveStrength)>,
+	pub delay: Option<Expr>,
+	pub delay_control: Option<DelayControl>,
+	pub assignments: Vec<(Expr, Expr)>,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct GenerateFor {
+	pub span: Span,
+	pub init: Stmt,
+	pub cond: Expr,
+	pub step: Expr,
+	pub block: GenerateBlock,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct GenerateIf {
+	pub span: Span,
+	pub cond: Expr,
+	pub main_block: GenerateBlock,
+	pub else_block: Option<GenerateBlock>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct GenerateCase {
+	// TODO
+}
+
+/// A body of a generate construct. May contains hierarchy items or more
+/// generate constructs.
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct GenerateBlock {
+	pub span: Span,
+	pub label: Option<Name>,
+	pub items: Vec<HierarchyItem>,
 }

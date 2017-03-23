@@ -129,6 +129,28 @@ impl RenumberPass {
 				}
 			}
 			ast::HierarchyItem::ParamDecl(ref mut decl) => self.renumber_param_decl(decl),
+			ast::HierarchyItem::ContAssign(ref mut assign) => self.renumber_continuous_assignment(assign),
+			ast::HierarchyItem::GenvarDecl(ref mut decls) => for decl in decls {
+				decl.id = self.alloc_id();
+				if let Some(ref mut e) = decl.init {
+					self.renumber_expr(e);
+				}
+			},
+			ast::HierarchyItem::GenerateRegion(_, ref mut items) => self.renumber_hierarchy_items(items),
+			ast::HierarchyItem::GenerateFor(ref mut gf) => {
+				self.renumber_stmt(&mut gf.init);
+				self.renumber_expr(&mut gf.cond);
+				self.renumber_expr(&mut gf.step);
+				self.renumber_generate_block(&mut gf.block);
+			}
+			ast::HierarchyItem::GenerateIf(ref mut gi) => {
+				self.renumber_expr(&mut gi.cond);
+				self.renumber_generate_block(&mut gi.main_block);
+				if let Some(ref mut b) = gi.else_block {
+					self.renumber_generate_block(b);
+				}
+			}
+			ast::HierarchyItem::GenerateCase(ref mut gc) => (),
 
 			// Unimplemented cases.
 			ast::HierarchyItem::Dummy |
@@ -138,14 +160,12 @@ impl RenumberPass {
 			ast::HierarchyItem::Typedef(_) |
 			ast::HierarchyItem::PortDecl(_) |
 			ast::HierarchyItem::SubroutineDecl(_) |
-			ast::HierarchyItem::ContAssign |
-			ast::HierarchyItem::GenvarDecl |
-			ast::HierarchyItem::GenerateRegion |
-			ast::HierarchyItem::GenerateFor |
-			ast::HierarchyItem::GenerateIf |
-			ast::HierarchyItem::GenerateCase |
 			ast::HierarchyItem::Inst(_) => ()
 		}
+	}
+
+	pub fn renumber_generate_block(&mut self, block: &mut ast::GenerateBlock) {
+		self.renumber_hierarchy_items(&mut block.items);
 	}
 
 	pub fn renumber_stmts(&mut self, stmts: &mut [ast::Stmt]) {
@@ -537,6 +557,16 @@ impl RenumberPass {
 			self.renumber_expr(d);
 		}
 		self.renumber_var_decl_names(&mut decl.names);
+	}
+
+	pub fn renumber_continuous_assignment(&mut self, assign: &mut ast::ContAssign) {
+		if let Some(ref mut e) = assign.delay {
+			self.renumber_expr(e);
+		}
+		for &mut (ref mut lhs, ref mut rhs) in &mut assign.assignments {
+			self.renumber_expr(lhs);
+			self.renumber_expr(rhs);
+		}
 	}
 
 	pub fn renumber_param_decl(&mut self, param: &mut ast::ParamDecl) {

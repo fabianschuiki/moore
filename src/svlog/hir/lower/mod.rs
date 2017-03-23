@@ -1,6 +1,6 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-//! This module implements the process of lowering AST to HIR.
+//! This module implements the process of lowering the AST to HIR.
 
 mod port;
 
@@ -97,18 +97,92 @@ impl<'a> Lowerer<'a> {
 			Err(()) => return,
 		};
 
-		// TODO: Digest name, lifetime, timeunits
+		// Map the items in the module.
+		let body = self.map_hierarchy_body(node.items);
+
+		// TODO: Digest timeunits
 		// TODO: Digest parameters
-		let m = Module {
+		let mut m = Module {
 			name: node.name,
 			span: node.name_span,
+			lifetime: node.lifetime,
 			ports: ports,
+			body: body,
 		};
 
 		// Stash the module away in the modules map, associated with its node
 		// ID.
 		if let Some(e) = self.mods.insert(node.id, m) {
 			panic!("modules `{}` and `{}` both have ID {}", e.name, node.name, node.id);
+		}
+	}
+
+	fn map_hierarchy_body(&mut self, items: Vec<ast::HierarchyItem>) -> HierarchyBody {
+		let mut b = HierarchyBody {
+			procs: vec![],
+			nets: vec![],
+			vars: vec![],
+			assigns: vec![],
+			params: vec![],
+			insts: vec![],
+			genreg: vec![],
+			genvars: vec![],
+			genfors: vec![],
+			genifs: vec![],
+			gencases: vec![],
+			classes: vec![],
+			subroutines: vec![],
+			asserts: vec![],
+			typedefs: vec![],
+		};
+		for item in items {
+			match item {
+				// The following items have already been handled.
+				ast::HierarchyItem::ImportDecl(_) |
+				ast::HierarchyItem::PortDecl(_) => (),
+
+				ast::HierarchyItem::Procedure(p) => b.procs.push(p),
+				ast::HierarchyItem::NetDecl(d) => b.nets.push(d),
+				ast::HierarchyItem::VarDecl(d) => b.vars.push(d),
+				ast::HierarchyItem::ParamDecl(d) => b.params.push(d),
+				ast::HierarchyItem::ContAssign(a) => b.assigns.push(a),
+				ast::HierarchyItem::Inst(i) => b.insts.push(i),
+				ast::HierarchyItem::GenvarDecl(d) => b.genvars.extend(d),
+				ast::HierarchyItem::GenerateRegion(_, items) => b.genreg.push(self.map_hierarchy_body(items)),
+				ast::HierarchyItem::GenerateFor(gf) => {
+					b.genfors.push(GenerateFor {
+						span: gf.span,
+						init: gf.init,
+						cond: gf.cond,
+						step: gf.step,
+						block: self.map_generate_block(gf.block),
+					});
+				}
+				ast::HierarchyItem::GenerateIf(gi) => {
+					b.genifs.push(GenerateIf {
+						span: gi.span,
+						cond: gi.cond,
+						main_block: self.map_generate_block(gi.main_block),
+						else_block: gi.else_block.map(|b| self.map_generate_block(b)),
+					});
+				}
+				ast::HierarchyItem::ClassDecl(d) => b.classes.push(d),
+				ast::HierarchyItem::SubroutineDecl(sd) => b.subroutines.push(sd),
+				ast::HierarchyItem::Assertion(a) => b.asserts.push(a),
+				ast::HierarchyItem::Typedef(td) => b.typedefs.push(td),
+
+				// TODO: Remove this once the AST has stabilized.
+				x => panic!("hierarchy item lowering not implemented for {:#?}", x)
+			}
+		}
+		b
+	}
+
+	fn map_generate_block(&mut self, block: ast::GenerateBlock) -> GenerateBlock {
+		GenerateBlock {
+			span: block.span,
+			label: block.label,
+			body: self.map_hierarchy_body(block.items),
 		}
 	}
 

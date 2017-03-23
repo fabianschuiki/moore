@@ -160,11 +160,12 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 	};
 
 	// Lower to HIR.
-	match svlog::hir::lower(session, &nameres, top, asts) {
+	let hir = match svlog::hir::lower(session, &nameres, top, asts) {
 		Ok(x) => x,
 		Err(_) => {
 			println!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
 			std::process::exit(1);
 		},
 	};
+	println!("lowered {} modules", hir.mods.len());
 }

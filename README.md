@@ -24,6 +24,8 @@ Elaboration
 - lower to HIR
     - apply default values
     - merge ANSI and non-ANSI ports
+    - split ports into port decl and var/net decl
+    - split net decl assignments into net decl and continuous assignment
     - `always_{ff,latch,comb}` -> `always`
     - flatten nested design elements and sort hierarchy items
 - assign and check types (can be one step)
@@ -35,6 +37,14 @@ Elaboration
 - perform static analyses (future work)
 - lower to LLHD
 - link and emit output file
+
+### Lowering to HIR
+
+Lowering to HIR resolves syntactic sugar and applies default values. Additionally, the following steps are performed:
+
+- determine port kind, direction, and type of ANSI ports
+- pair non-ANSI ports with port and var/net decls in the module body
+- merge ANSI and non-ANSI ports into one common port structure
 
 
 [1]: https://github.com/pulp-platform/pulpino

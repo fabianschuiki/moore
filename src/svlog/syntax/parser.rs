@@ -875,26 +875,28 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 		Keyword(Kw::Ref) => return parse_port_decl(p).map(|x| HierarchyItem::PortDecl(x)),
 
 		// Continuous assign
-		Keyword(Kw::Assign) => return parse_continuous_assign(p).map(|_| HierarchyItem::ContAssign),
+		Keyword(Kw::Assign) => return parse_continuous_assign(p).map(|x| HierarchyItem::ContAssign(x)),
 
 		// Genvar declaration
 		Keyword(Kw::Genvar) => {
 			p.bump();
-			comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
+			let decl = comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
 			p.require_reported(Semicolon)?;
-			return Ok(HierarchyItem::GenvarDecl);
+			return Ok(HierarchyItem::GenvarDecl(decl));
 		}
 
 		// Generate region and constructs
 		Keyword(Kw::Generate) => {
+			let mut span = p.peek(0).1;
 			p.bump();
-			repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
+			let items = repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
 			p.require_reported(Keyword(Kw::Endgenerate))?;
-			return Ok(HierarchyItem::GenerateRegion);
+			span.expand(p.last_span());
+			return Ok(HierarchyItem::GenerateRegion(span, items));
 		}
-		Keyword(Kw::For)  => return parse_generate_for(p).map(|_| HierarchyItem::GenerateFor),
-		Keyword(Kw::If)   => return parse_generate_if(p).map(|_| HierarchyItem::GenerateIf),
-		Keyword(Kw::Case) => return parse_generate_case(p).map(|_| HierarchyItem::GenerateCase),
+		Keyword(Kw::For)  => return parse_generate_for(p).map(|x| HierarchyItem::GenerateFor(x)),
+		Keyword(Kw::If)   => return parse_generate_if(p).map(|x| HierarchyItem::GenerateIf(x)),
+		Keyword(Kw::Case) => return parse_generate_case(p).map(|x| HierarchyItem::GenerateCase(x)),
 
 		// Assertions
 		Keyword(Kw::Assert) |
@@ -3326,46 +3328,51 @@ fn parse_block(p: &mut AbstractParser, label: &mut Option<Name>, terminators: &[
 }
 
 
-/// Parse a continuous assignment as per IEEE 1800-2009 section 10.3.
-fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<()> {
-	p.bump();
-	let mut span = p.last_span();
+/// Parse a continuous assignment.
+/// ```text
+/// "assign" [drive_strength] [delay3] list_of_assignments ";"
+/// "assign" [delay_control] list_of_assignments ";"
+/// ```
+fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign> {
+	let mut span = p.peek(0).1;
+	p.require_reported(Keyword(Kw::Assign))?;
+
+	// Consume the optional drive strength.
+	let strength = try_flanked(p, Paren, |p|{
+		let span = p.peek(0).1;
+		match try_drive_strength(p)? {
+			Some(x) => Ok(x),
+			None => {
+				p.add_diag(DiagBuilder2::error("Expected drive strength").span(span));
+				Err(())
+			}
+		}
+	})?;
+
+	// Parse the optional delay.
+	let delay = if p.try_eat(Hashtag) {
+		let q = p.last_span();
+		p.add_diag(DiagBuilder2::error("Don't know how to parse delays on continuous assignments").span(q));
+		return Err(());
+	} else {
+		None
+	};
 
 	// Parse the optional delay control.
-	try_delay_control(p)?;
+	let delay_control = try_delay_control(p)?;
 
-	// Parse the optional drive strength.
-
-	// Parse the optional delay triple.
-
-	// Parse the list of assignments.
-	loop {
-		match parse_assignment(p) {
-			Ok(x) => (),
-			Err(()) => p.recover_balanced(&[Comma, Semicolon], false),
-		}
-
-		match p.peek(0) {
-			(Comma, sp) => {
-				p.bump();
-				if p.peek(0).0 == Semicolon {
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					break;
-				}
-			}
-			(Semicolon, _) => break,
-			(Eof, _) => break,
-			(_, sp) => {
-				p.add_diag(DiagBuilder2::error("Expected , or ; after assignment").span(sp));
-				p.recover_balanced(&[Comma, Semicolon], false);
-				break;
-			}
-		}
-	}
-
+	// Parse the names and assignments.
+	let assignments = comma_list_nonempty(p, Semicolon, "continuous assignment", parse_assignment)?;
 	p.require_reported(Semicolon)?;
+
 	span.expand(p.last_span());
-	Ok(())
+	Ok(ContAssign {
+		span: span,
+		strength: strength,
+		delay: delay,
+		delay_control: delay_control,
+		assignments: assignments,
+	})
 }
 
 
@@ -3848,42 +3855,64 @@ fn parse_genvar_decl(p: &mut AbstractParser) -> ReportedResult<GenvarDecl> {
 }
 
 
-fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> {
 	match p.peek(0).0 {
-		Keyword(Kw::For)  => parse_generate_for(p),
-		Keyword(Kw::If)   => parse_generate_if(p),
-		Keyword(Kw::Case) => parse_generate_case(p),
-		_ => parse_hierarchy_item(p).map(|_| ()),
+		Keyword(Kw::For)  => parse_generate_for(p).map(|x| HierarchyItem::GenerateFor(x)),
+		Keyword(Kw::If)   => parse_generate_if(p).map(|x| HierarchyItem::GenerateIf(x)),
+		Keyword(Kw::Case) => parse_generate_case(p).map(|x| HierarchyItem::GenerateCase(x)),
+		_ => parse_hierarchy_item(p),
 	}
 }
 
 
-fn parse_generate_for(p: &mut AbstractParser) -> ReportedResult<()> {
+/// Parse a generate-for construct.
+/// ```text
+/// "for" "(" stmt expr ";" expr ")" generate_block
+/// ```
+fn parse_generate_for(p: &mut AbstractParser) -> ReportedResult<GenerateFor> {
+	let mut span = p.peek(0).1;
 	p.require_reported(Keyword(Kw::For))?;
-	flanked(p, Paren, |p|{
-		parse_stmt(p)?;
-		parse_expr(p)?;
+	let (init, cond, step) = flanked(p, Paren, |p|{
+		let init = parse_stmt(p)?;
+		let cond = parse_expr(p)?;
 		p.require_reported(Semicolon)?;
-		parse_expr(p)?;
-		Ok(())
+		let step = parse_expr(p)?;
+		Ok((init, cond, step))
 	})?;
-	parse_generate_block(p)?;
-	Ok(())
+	let block = parse_generate_block(p)?;
+	span.expand(p.last_span());
+	Ok(GenerateFor {
+		span: span,
+		init: init,
+		cond: cond,
+		step: step,
+		block: block,
+	})
 }
 
 
-fn parse_generate_if(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_generate_if(p: &mut AbstractParser) -> ReportedResult<GenerateIf> {
+	let mut span = p.peek(0).1;
 	p.require_reported(Keyword(Kw::If))?;
-	flanked(p, Paren, parse_expr)?;
-	parse_generate_block(p)?;
-	if p.try_eat(Keyword(Kw::Else)) {
-		parse_generate_block(p)?;
-	}
-	Ok(())
+	let cond = flanked(p, Paren, parse_expr)?;
+	let main_block = parse_generate_block(p)?;
+	let else_block = if p.try_eat(Keyword(Kw::Else)) {
+		Some(parse_generate_block(p)?)
+	} else {
+		None
+	};
+	span.expand(p.last_span());
+	Ok(GenerateIf {
+		span: span,
+		cond: cond,
+		main_block: main_block,
+		else_block: else_block,
+	})
 }
 
 
-fn parse_generate_case(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_generate_case(p: &mut AbstractParser) -> ReportedResult<GenerateCase> {
+	let mut span = p.peek(0).1;
 	p.require_reported(Keyword(Kw::Case))?;
 	let q = p.last_span();
 	p.add_diag(DiagBuilder2::error("Don't know how to parse case-generate statements").span(q));
@@ -3891,7 +3920,7 @@ fn parse_generate_case(p: &mut AbstractParser) -> ReportedResult<()> {
 }
 
 
-fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<GenerateBlock> {
 	let mut span = p.peek(0).1;
 
 	// Parse the optional block label.
@@ -3903,15 +3932,21 @@ fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<()> {
 		None
 	};
 
-	// Consume the opening "begin" keyword if present.
+	// Consume the opening "begin" keyword if present. Otherwise simply parse
+	// a single generate item.
 	if !p.try_eat(OpenDelim(Bgend)) {
 		if label.is_some() {
 			let (t,q) = p.peek(0);
 			p.add_diag(DiagBuilder2::error(format!("Expected `begin` keyword after generate block label, found {} instead", t)).span(q));
 			return Err(());
 		}
-		parse_generate_item(p)?;
-		return Ok(())
+		let item = parse_generate_item(p)?;
+		span.expand(p.last_span());
+		return Ok(GenerateBlock {
+			span: span,
+			label: label,
+			items: vec![item],
+		});
 	}
 
 	// Consume the optional label after the "begin" keyword.
@@ -3929,7 +3964,7 @@ fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<()> {
 		}
 	}
 
-	repeat_until(p, CloseDelim(Bgend), parse_generate_item)?;
+	let items = repeat_until(p, CloseDelim(Bgend), parse_generate_item)?;
 	p.require_reported(CloseDelim(Bgend))?;
 
 	// Consume the optional label after the "end" keyword.
@@ -3946,7 +3981,11 @@ fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<()> {
 	}
 
 	span.expand(p.last_span());
-	Ok(())
+	Ok(GenerateBlock {
+		span: span,
+		label: label,
+		items: items,
+	})
 }
 
 
@@ -4533,17 +4572,25 @@ fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
 }
 
 
-fn parse_net_strength(p: &mut AbstractParser) -> ReportedResult<NetStrength> {
+fn try_drive_strength(p: &mut AbstractParser) -> ReportedResult<Option<(DriveStrength, DriveStrength)>> {
 	if let Some(a) = as_drive_strength(p.peek(0).0) {
 		p.bump();
 		p.require_reported(Comma)?;
 		if let Some(b) = as_drive_strength(p.peek(0).0) {
-			Ok(NetStrength::Drive(a,b))
+			Ok(Some((a,b)))
 		} else {
 			let q = p.peek(0).1;
 			p.add_diag(DiagBuilder2::error("Expected second drive strength").span(q));
 			Err(())
 		}
+	} else {
+		Ok(None)
+	}
+}
+
+fn parse_net_strength(p: &mut AbstractParser) -> ReportedResult<NetStrength> {
+	if let Some((a,b)) = try_drive_strength(p)? {
+		Ok(NetStrength::Drive(a,b))
 	} else if let Some(s) = as_charge_strength(p.peek(0).0) {
 		p.bump();
 		Ok(NetStrength::Charge(s))

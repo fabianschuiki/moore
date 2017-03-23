@@ -20,15 +20,40 @@ pub struct Root {
 pub struct Module {
 	pub name: Name,
 	pub span: Span,
+	pub lifetime: ast::Lifetime,
 	pub ports: Vec<Port>,
+	pub body: HierarchyBody,
 }
 
 pub struct Interface {
-
+	pub body: HierarchyBody,
 }
 
 pub struct Package {
+	pub body: HierarchyBody,
+}
 
+/// A hierarchy body represents the contents of a module, interface, or package.
+/// Generate regions and nested modules introduce additional bodies. The point
+/// of hierarchy bodies is to take a level of the design hierarchy and group all
+/// declarations by type, rather than having them in a single array in
+/// declaration order.
+pub struct HierarchyBody {
+	pub procs: Vec<ast::Procedure>,
+	pub nets: Vec<ast::NetDecl>,
+	pub vars: Vec<ast::VarDecl>,
+	pub assigns: Vec<ast::ContAssign>,
+	pub params: Vec<ast::ParamDecl>,
+	pub insts: Vec<ast::Inst>,
+	pub genreg: Vec<HierarchyBody>,
+	pub genvars: Vec<ast::GenvarDecl>,
+	pub genfors: Vec<GenerateFor>,
+	pub genifs: Vec<GenerateIf>,
+	pub gencases: Vec<ast::GenerateCase>,
+	pub classes: Vec<ast::ClassDecl>, // TODO: Make this an HIR node, since it contains hierarchy items
+	pub subroutines: Vec<ast::SubroutineDecl>, // TODO: Make this an HIR node
+	pub asserts: Vec<ast::Assertion>,
+	pub typedefs: Vec<ast::Typedef>,
 }
 
 #[derive(Debug)]
@@ -69,3 +94,24 @@ pub struct PortDecl {
 
 #[derive(Debug)]
 pub struct Expr;
+
+pub struct GenerateBlock {
+	pub span: Span,
+	pub label: Option<Name>,
+	pub body: HierarchyBody,
+}
+
+pub struct GenerateFor {
+	pub span: Span,
+	pub init: ast::Stmt,
+	pub cond: ast::Expr,
+	pub step: ast::Expr,
+	pub block: GenerateBlock,
+}
+
+pub struct GenerateIf {
+	pub span: Span,
+	pub cond: ast::Expr,
+	pub main_block: GenerateBlock,
+	pub else_block: Option<GenerateBlock>,
+}
