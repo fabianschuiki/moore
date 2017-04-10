@@ -1402,28 +1402,28 @@ fn parse_type_signing_and_dimensions(p: &mut AbstractParser, mut span: Span, dat
 fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 	let (tkn,sp) = p.peek(0);
 	match tkn {
-		Keyword(Kw::Void)    => { p.bump(); Ok(VoidType) },
-		Keyword(Kw::String)  => { p.bump(); Ok(StringType) },
-		Keyword(Kw::Chandle) => { p.bump(); Ok(ChandleType) },
-		Keyword(Kw::Event)   => { p.bump(); Ok(EventType) },
+		Keyword(Kw::Void)    => { p.bump(); Ok(ast::VoidType) },
+		Keyword(Kw::String)  => { p.bump(); Ok(ast::StringType) },
+		Keyword(Kw::Chandle) => { p.bump(); Ok(ast::ChandleType) },
+		Keyword(Kw::Event)   => { p.bump(); Ok(ast::EventType) },
 
 		// Integer Vector Types
-		Keyword(Kw::Bit)   => { p.bump(); Ok(BitType) },
-		Keyword(Kw::Logic) => { p.bump(); Ok(LogicType) },
-		Keyword(Kw::Reg)   => { p.bump(); Ok(RegType) },
+		Keyword(Kw::Bit)   => { p.bump(); Ok(ast::BitType) },
+		Keyword(Kw::Logic) => { p.bump(); Ok(ast::LogicType) },
+		Keyword(Kw::Reg)   => { p.bump(); Ok(ast::RegType) },
 
 		// Integer Atom Types
-		Keyword(Kw::Byte)     => { p.bump(); Ok(ByteType) },
-		Keyword(Kw::Shortint) => { p.bump(); Ok(ShortIntType) },
-		Keyword(Kw::Int)      => { p.bump(); Ok(IntType) },
-		Keyword(Kw::Longint)  => { p.bump(); Ok(LongIntType) },
-		Keyword(Kw::Integer)  => { p.bump(); Ok(IntType) },
-		Keyword(Kw::Time)     => { p.bump(); Ok(TimeType) },
+		Keyword(Kw::Byte)     => { p.bump(); Ok(ast::ByteType) },
+		Keyword(Kw::Shortint) => { p.bump(); Ok(ast::ShortIntType) },
+		Keyword(Kw::Int)      => { p.bump(); Ok(ast::IntType) },
+		Keyword(Kw::Longint)  => { p.bump(); Ok(ast::LongIntType) },
+		Keyword(Kw::Integer)  => { p.bump(); Ok(ast::IntType) },
+		Keyword(Kw::Time)     => { p.bump(); Ok(ast::TimeType) },
 
 		// Non-integer Types
-		Keyword(Kw::Shortreal) => { p.bump(); Ok(ShortRealType) },
-		Keyword(Kw::Real)      => { p.bump(); Ok(RealType) },
-		Keyword(Kw::Realtime)  => { p.bump(); Ok(RealtimeType) },
+		Keyword(Kw::Shortreal) => { p.bump(); Ok(ast::ShortRealType) },
+		Keyword(Kw::Real)      => { p.bump(); Ok(ast::RealType) },
+		Keyword(Kw::Realtime)  => { p.bump(); Ok(ast::RealtimeType) },
 
 		// Enumerations
 		Keyword(Kw::Enum) => parse_enum_type(p),
@@ -1447,7 +1447,7 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 			p.bump();
 			p.try_eat(Keyword(Kw::Interface));
 			let (name, _) = p.eat_ident("virtual interface name")?;
-			Ok(VirtIntfType(name))
+			Ok(ast::VirtIntfType(name))
 		},
 
 		_ => {
