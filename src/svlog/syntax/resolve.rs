@@ -325,6 +325,7 @@ impl<'a> Resolver<'a> {
 			ast::ChandleType |
 			ast::VirtIntfType(_) |
 			ast::EventType |
+			ast::MailboxType |
 			ast::BitType |
 			ast::LogicType |
 			ast::RegType |

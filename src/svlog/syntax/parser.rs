@@ -1429,6 +1429,9 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
 		Keyword(Kw::Enum) => parse_enum_type(p),
 		Keyword(Kw::Struct) | Keyword(Kw::Union) => parse_struct_type(p),
 
+		// Built-in types
+		Ident(n) if &*n.as_str() == "mailbox" => { p.bump(); Ok(ast::MailboxType) }
+
 		// Named types
 		Ident(n) | EscIdent(n) => {
 			p.bump();

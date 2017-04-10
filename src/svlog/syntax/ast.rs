@@ -216,6 +216,7 @@ pub enum TypeData {
 	ChandleType,
 	VirtIntfType(Name),
 	EventType,
+	MailboxType,
 
 	// Scoping
 	ScopedType {
