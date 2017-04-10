@@ -765,7 +765,7 @@ pub enum ClassItemData {
 	Constraint(Constraint),
 	ClassDecl,
 	CovergroupDecl,
-	LocalParamDecl(()),
+	LocalparamDecl(()),
 	ParameterDecl(()),
 	Null,
 }

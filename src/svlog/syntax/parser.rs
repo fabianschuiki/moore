@@ -4082,7 +4082,7 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 		Keyword(Kw::Localparam) => return Ok(ClassItem {
 			span: span,
 			qualifiers: Vec::new(),
-			data: ClassItemData::LocalParamDecl(parse_localparam_decl(p)?),
+			data: ClassItemData::LocalparamDecl(parse_localparam_decl(p)?),
 		}),
 		Keyword(Kw::Parameter) => return Ok(ClassItem {
 			span: span,
