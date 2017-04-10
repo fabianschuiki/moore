@@ -731,8 +731,7 @@ pub struct ClassDecl {
 	pub span: Span,
 	pub virt: bool,
 	pub lifetime: Lifetime, // default static
-	pub name: Name,
-	pub name_span: Span,
+	pub name: Identifier,
 	pub params: Vec<ParamPort>,
 	pub extends: Option<(Type, Vec<CallArg>)>,
 	pub items: Vec<ClassItem>,
@@ -781,8 +780,7 @@ pub enum RandomQualifier {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Typedef {
 	pub span: Span,
-	pub name: Name,
-	pub name_span: Span,
+	pub name: Identifier,
 	pub ty: Type,
 	pub dims: Vec<TypeDim>,
 }

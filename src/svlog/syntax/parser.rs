@@ -3998,7 +3998,6 @@ fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
 		virt,
 		lifetime,
 		name,
-		name_span,
 		params,
 		extends,
 		items
@@ -4017,7 +4016,7 @@ fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
 		};
 
 		// Parse the class name.
-		let (name, name_span) = p.eat_ident("class name")?;
+		let name = parse_identifier(p, "class name")?;
 
 		// Parse the optional parameter port list.
 		let params = if p.try_eat(Hashtag) {
@@ -4038,15 +4037,15 @@ fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
 
 		// Parse the class items.
 		let items = repeat_until(p, Keyword(Kw::Endclass), parse_class_item)?;
-		Ok((virt, lifetime, name, name_span, params, extends, items))
+		Ok((virt, lifetime, name, params, extends, items))
 	})?;
 	p.require_reported(Keyword(Kw::Endclass))?;
 
 	// Parse the optional class name after "endclass".
 	if p.try_eat(Colon) {
 		let (n, sp) = p.eat_ident("class name")?;
-		if n != name {
-			p.add_diag(DiagBuilder2::error(format!("Class name {} disagrees with name {} given before", n, name)).span(sp));
+		if n != name.name {
+			p.add_diag(DiagBuilder2::error(format!("Class name {} disagrees with name {} given before", n, name.name)).span(sp));
 			return Err(());
 		}
 	}
@@ -4057,7 +4056,6 @@ fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
 		virt: virt,
 		lifetime: lifetime,
 		name: name,
-		name_span: name_span,
 		params: params,
 		extends: extends,
 		items: items,
@@ -4425,14 +4423,13 @@ fn parse_typedef(p: &mut AbstractParser) -> ReportedResult<Typedef> {
 	p.bump();
 	let mut span = p.last_span();
 	let ty = parse_data_type(p)?;
-	let (name, name_span) = p.eat_ident("type name")?;
+	let name = parse_identifier(p, "type name")?;
 	let (dims, _) = parse_optional_dimensions(p)?;
 	p.require_reported(Semicolon)?;
 	span.expand(p.last_span());
 	Ok(Typedef {
 		span: span,
 		name: name,
-		name_span: name_span,
 		ty: ty,
 		dims: dims,
 	})

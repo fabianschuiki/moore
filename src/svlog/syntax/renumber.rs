@@ -151,13 +151,13 @@ impl RenumberPass {
 				}
 			}
 			ast::HierarchyItem::GenerateCase(ref mut gc) => (),
+			ast::HierarchyItem::Typedef(ref mut td) => self.renumber_typedef(td),
+			ast::HierarchyItem::ClassDecl(ref mut decl) => self.renumber_class_decl(decl),
 
 			// Unimplemented cases.
 			ast::HierarchyItem::Dummy |
 			ast::HierarchyItem::LocalparamDecl(_) |
 			ast::HierarchyItem::ParameterDecl(_) |
-			ast::HierarchyItem::ClassDecl(_) |
-			ast::HierarchyItem::Typedef(_) |
 			ast::HierarchyItem::PortDecl(_) |
 			ast::HierarchyItem::SubroutineDecl(_) |
 			ast::HierarchyItem::Inst(_) => ()
@@ -586,6 +586,45 @@ impl RenumberPass {
 					self.renumber_expr(expr);
 				}
 			},
+		}
+	}
+
+	pub fn renumber_typedef(&mut self, td: &mut ast::Typedef) {
+		td.name.id = self.alloc_id();
+		self.renumber_type(&mut td.ty);
+		self.renumber_dims(&mut td.dims);
+	}
+
+	pub fn renumber_class_decl(&mut self, decl: &mut ast::ClassDecl) {
+		decl.name.id = self.alloc_id();
+		self.renumber_param_ports(&mut decl.params);
+		if let Some((ref mut ty, ref mut args)) = decl.extends {
+			self.renumber_type(ty);
+			self.renumber_call_args(args);
+		}
+		self.renumber_class_items(&mut decl.items)
+	}
+
+	pub fn renumber_class_items(&mut self, items: &mut [ast::ClassItem]) {
+		for item in items {
+			self.renumber_class_item(item);
+		}
+	}
+
+	pub fn renumber_class_item(&mut self, item: &mut ast::ClassItem) {
+		match item.data {
+			ast::ClassItemData::Null => (),
+
+			// Not yet implemented. This will show itself later when we try to
+			// bind any of these.
+			ast::ClassItemData::SubroutineDecl(_) |
+			ast::ClassItemData::ExternSubroutine(_) |
+			ast::ClassItemData::Constraint(_) |
+			ast::ClassItemData::Property |
+			ast::ClassItemData::ClassDecl |
+			ast::ClassItemData::CovergroupDecl |
+			ast::ClassItemData::LocalparamDecl(_) |
+			ast::ClassItemData::ParameterDecl(_) => (),
 		}
 	}
 }

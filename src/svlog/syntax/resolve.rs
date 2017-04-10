@@ -29,6 +29,8 @@ pub enum DefId {
 	Param(NodeId),
 	Modport(NodeId),
 	Subroutine(NodeId),
+	Typedef(NodeId),
+	Class(NodeId),
 }
 
 impl DefId {
@@ -36,6 +38,22 @@ impl DefId {
 		match *self {
 			DefId::Error => true,
 			_ => false,
+		}
+	}
+
+	pub fn node_id(&self) -> NodeId {
+		match *self {
+			DefId::Error => panic!("trying to access a node id on a DefId::Error"),
+			DefId::Module(id) |
+			DefId::Interface(id) |
+			DefId::Package(id) |
+			DefId::Port(id) |
+			DefId::Var(id) |
+			DefId::Param(id) |
+			DefId::Modport(id) |
+			DefId::Subroutine(id) |
+			DefId::Typedef(id) |
+			DefId::Class(id) => id
 		}
 	}
 }
@@ -909,6 +927,22 @@ fn search_hierarchy_item(item: &ast::HierarchyItem, name: Name) -> Option<Def> {
 				});
 			}
 		},
+		ast::HierarchyItem::Typedef(ref td) => {
+			if td.name.name == name {
+				return Some(Def {
+					span: td.name.span,
+					id: DefId::Typedef(td.name.id),
+				});
+			}
+		}
+		ast::HierarchyItem::ClassDecl(ref decl) => {
+			if decl.name.name == name {
+				return Some(Def {
+					span: decl.name.span,
+					id: DefId::Class(decl.name.id),
+				});
+			}
+		}
 		_ => ()
 	}
 	None
