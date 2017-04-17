@@ -9,34 +9,22 @@ matrix:
   allow_failures:
     - rust: nightly
 
-# necessary for `travis-cargo coveralls --no-sudo`
-addons:
-  apt:
-    packages:
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - binutils-dev # optional: only required for the --verify flag of coveralls
-
 before_script:
-  - |
-    pip install "travis-cargo<0.2" --user &&
-    export PATH=$HOME/.local/bin:$PATH
   # - git clone --depth 1 https://github.com/pulp-platform/pulpino.git pulpino
 
 script:
+  - cargo build
+  - cargo test --all
+  - cargo bench
   - |
-    travis-cargo build &&
-    travis-cargo test -- --all &&
-    travis-cargo bench &&
-    travis-cargo --only stable doc
+    [ $TRAVIS_BRANCH = master ] &&
+    cargo doc
   # - ./compile_pulpino.sh
 
 after_success:
   - |
-    [ $TRAVIS_BRANCH = master ] && ci/doc-upload.sh
-  # - travis-cargo --only stable doc-upload --branch travis
-  # - travis-cargo --only stable coveralls --no-sudo --verify
+    [ $TRAVIS_BRANCH = master ] &&
+    ci/doc-upload.sh
 
 env:
   global:
