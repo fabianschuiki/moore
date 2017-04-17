@@ -1482,58 +1482,38 @@ fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span
 }
 
 
-fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
-	let mut v = Vec::new();
-	if p.peek(0).0 == CloseDelim(Paren) {
-		return Ok(v);
-	}
-	loop {
-		if p.try_eat(Period) {
+fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<PortCon>> {
+	comma_list(p, CloseDelim(Paren), "list of port connections", |p|{
+		let mut span = p.peek(0).1;
+
+		// A period introduces a named port connection. Otherwise this is an
+		// unnamed connection.
+		let kind = if p.try_eat(Period) {
 			if p.try_eat(Operator(Op::Mul)) {
 				// handle .* case
-				let q = p.last_span();
-				p.add_diag(DiagBuilder2::error("Don't know how to handle .* port connections").span(q));
+				ast::PortConKind::Auto
 			} else {
-				let (name, name_sp) = p.eat_ident("port name")?;
+				let name = parse_identifier(p, "port name")?;
 				// handle .name, .name(), and .name(expr) cases
-				if p.try_eat(OpenDelim(Paren)) {
-					if !p.try_eat(CloseDelim(Paren)) {
-						match parse_expr(p) {
-							Ok(_) => (),
-							Err(x) => {
-								p.recover_balanced(&[CloseDelim(Paren)], false);
-							},
-						}
-						p.require_reported(CloseDelim(Paren))?;
-					}
-				}
+				let mode = try_flanked(p, Paren, |p| {
+					Ok(if p.peek(0).0 != CloseDelim(Paren) {
+						ast::PortConMode::Connected(parse_expr(p)?)
+					} else {
+						ast::PortConMode::Unconnected
+					})
+				})?.unwrap_or(ast::PortConMode::Auto);
+				ast::PortConKind::Named(name, mode)
 			}
 		} else {
-			// handle expr
-			parse_expr(p)?;
-		}
+			ast::PortConKind::Positional(parse_expr(p)?)
+		};
 
-		// Depending on the next character, continue with the next port
-		// connection or close the loop.
-		match p.peek(0) {
-			(Comma, sp) => {
-				p.bump();
-				if let (CloseDelim(Paren), _) = p.peek(0) {
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					break;
-				} else {
-					continue;
-				}
-			}
-			(CloseDelim(Paren), _) => break,
-			(x, sp) => {
-				p.add_diag(DiagBuilder2::error(format!("Expected , or ) after list of port connections, got `{:?}`", x)).span(sp));
-				return Err(());
-			}
-		}
-	}
-
-	Ok(v)
+		span.expand(p.last_span());
+		Ok(ast::PortCon {
+			span: span,
+			kind: kind,
+		})
+	})
 }
 
 
@@ -2580,65 +2560,28 @@ fn parse_implicit_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
 }
 
 
-fn parse_parameter_assignments(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
-	let mut v = Vec::new();
-	p.require_reported(OpenDelim(Paren))?;
-
-	// In case there are no parameter assignments, the opening parenthesis is
-	// directly followed by a closing one.
-	if p.try_eat(CloseDelim(Paren)) {
-		return Ok(v);
-	}
-
-	loop {
-		match parse_parameter_assignment(p) {
-			Ok(x) => v.push(x),
-			Err(()) => p.recover_balanced(&[Comma, CloseDelim(Paren)], false)
-		}
-
-		match p.peek(0) {
-			(Comma, sp) => {
-				p.bump();
-				if p.peek(0).0 == CloseDelim(Paren) {
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					break;
-				}
-			},
-			(CloseDelim(Paren), _) => break,
-			(_, sp) => {
-				p.add_diag(DiagBuilder2::error("Expected , or ) after parameter assignment, found").span(sp));
-				p.recover_balanced(&[CloseDelim(Paren)], false);
-				break;
-			}
-		}
-	}
-
-	p.require_reported(CloseDelim(Paren))?;
-	Ok(v)
+fn parse_parameter_assignments(p: &mut AbstractParser) -> ReportedResult<Vec<ast::ParamAssignment>> {
+	flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "parameter assignment", parse_parameter_assignment))
 }
 
 
-fn parse_parameter_assignment(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_parameter_assignment(p: &mut AbstractParser) -> ReportedResult<ast::ParamAssignment> {
+	let mut span = p.peek(0).1;
 	// If the parameter assignment starts with a ".", this is a named
 	// assignment. Otherwise it's an ordered assignment.
-	if p.try_eat(Period) {
-		let (name, name_span) = p.eat_ident("parameter name")?;
-		p.require_reported(OpenDelim(Paren))?;
-		let expr = match parse_expr(p) {
-			Ok(x) => x,
-			Err(()) => {
-				p.recover_balanced(&[CloseDelim(Paren)], true);
-				return Err(());
-			}
-		};
-		p.require_reported(CloseDelim(Paren))?;
-		// println!("named param assignment: {} = {:?}", name, expr);
-		Ok(())
+	let (name, expr) = if p.try_eat(Period) {
+		let name = parse_identifier(p, "parameter name")?;
+		let expr = flanked(p, Paren, parse_expr)?;
+		(Some(name), expr)
 	} else {
-		let expr = parse_expr(p)?;
-		// println!("ordered param assignment: {:?}", expr);
-		Ok(())
-	}
+		(None, parse_expr(p)?)
+	};
+	span.expand(p.last_span());
+	Ok(ast::ParamAssignment {
+		span: span,
+		name: name,
+		expr: expr,
+	})
 }
 
 

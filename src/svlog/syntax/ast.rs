@@ -252,7 +252,7 @@ pub enum TypeData {
 	},
 
 	// Specialization
-	SpecializedType(Box<Type>, Vec<()>),
+	SpecializedType(Box<Type>, Vec<ParamAssignment>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
@@ -1091,7 +1091,7 @@ pub enum PropBinOp {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Inst {
 	pub span: Span,
-	pub params: Vec<()>,
+	pub params: Vec<ParamAssignment>,
 	pub names: Vec<InstName>,
 }
 
@@ -1100,7 +1100,7 @@ pub struct InstName {
 	pub span: Span,
 	pub name: Identifier,
 	pub dims: Vec<TypeDim>,
-	pub conns: Vec<()>,
+	pub conns: Vec<PortCon>,
 }
 
 
@@ -1219,4 +1219,33 @@ pub struct GenerateBlock {
 	pub span: Span,
 	pub label: Option<Name>,
 	pub items: Vec<HierarchyItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ParamAssignment {
+	pub span: Span,
+	pub name: Option<Identifier>,
+	pub expr: Expr,
+}
+
+/// A port connection as given in an instantiation.
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct PortCon {
+	pub span: Span,
+	pub kind: PortConKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum PortConKind {
+	Auto, // `.*` case
+	Named(Identifier, PortConMode), // `.name`, `.name()`, `.name(expr)` cases
+	Positional(Expr), // `expr` case
+}
+
+/// Represents how a named port connection is made.
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum PortConMode {
+	Auto, // `.name` case
+	Unconnected, // `.name()` case
+	Connected(Expr), // `.name(expr)` case
 }
