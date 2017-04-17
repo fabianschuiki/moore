@@ -9,21 +9,24 @@ matrix:
   allow_failures:
     - rust: nightly
 
+addons:
+  apt:
+    packages:
+      - python-yaml
+
 before_script:
-  # - git clone --depth 1 https://github.com/pulp-platform/pulpino.git pulpino
+  - ci/clone-pulpino.sh
 
 script:
   - cargo build
   - cargo test --all
-  - cargo bench
-  - |
-    [ $TRAVIS_BRANCH = master ] &&
-    cargo doc
-  # - ./compile_pulpino.sh
+  - cargo doc
+  - ./compile_pulpino.sh
 
 after_success:
   - |
-    [ $TRAVIS_BRANCH = master ] &&
+    [ ! $TRAVIS_BRANCH = master ] ||
+    [ ! $TRAVIS_RUST_VERSION = stable ] ||
     ci/doc-upload.sh
 
 env:
