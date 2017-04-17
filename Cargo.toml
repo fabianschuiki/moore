@@ -14,3 +14,6 @@ clap = "2"
 sha1 = "0.2.0"
 bincode = "0.6.1"
 rustc-serialize = "0.3.22"
+
+[features]
+unstable = []

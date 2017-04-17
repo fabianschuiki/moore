@@ -154,7 +154,6 @@ fn nonansi_complex_ports() {
 	let m = unwrap_single_module(&hir);
 	// TODO: Verify that port[0] is unnamed and has two slices.
 	// TODO: Verify that port[1] is named and has one slice.
-	panic!("mlamlamla");
 }
 
 #[test]
@@ -202,7 +201,6 @@ fn nonansi_partselect_port() {
 		endmodule
 	"));
 	let m = unwrap_single_module(&hir);
-	panic!("blah");
 }
 
 #[test]

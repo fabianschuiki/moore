@@ -5,9 +5,9 @@
 //!
 //! # Example
 //! ```
-//! use moore_svlog::cat::Cat;
+//! extern crate moore_svlog_syntax;
 //! let input = "Löwe 老虎 Léopard\n";
-//! let mut cat = Cat::new(Box::new(input.char_indices()));
+//! let mut cat = moore_svlog_syntax::cat::Cat::new(Box::new(input.char_indices()));
 //! let tokens: Vec<_> = cat.collect();
 //! ```
 

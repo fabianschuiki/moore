@@ -1,5 +1,6 @@
 .*
 *~
 !.git*
+!.travis.yml
 /target
 /pulpino

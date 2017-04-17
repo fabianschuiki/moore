@@ -1,5 +1,7 @@
 # moore
 
+[![Build Status](https://travis-ci.org/fabianschuiki/moore.svg?branch=master)](https://travis-ci.org/fabianschuiki/moore)
+
 Moore is a compiler for hardware description languages that outputs [LLHD][2], with a focus on usability, clear error reporting, and completeness.
 
 
