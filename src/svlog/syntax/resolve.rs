@@ -8,6 +8,17 @@
 //! 2. Perform a second pass where names are resolved against the ones collected
 //!    in step 1. This should then allow for proper resolution of imports,
 //!    hierarchical names, and paths (`pkg::name` and `intf.modport`).
+//!
+//! # Todo
+//!
+//! Implement a more efficient way of resolving names. In a first pass, iterate
+//! over all globally visible items, and items that are accessible through
+//! hierarchical names, and store them in a lookup table. Then perform a second
+//! pass where we go through each and every item in the AST and resolve names.
+//! In this second pass we keep a stack of local scopes that we use to resolve
+//! variable names and other local declarations. Whenever we cannot find
+//! something, we resolve to checking the lookup table discussed above. Be wary
+//! of the precedence between the lookup table and the individual local scopes.
 
 use std;
 use super::ast::{self, NodeId};
@@ -225,19 +236,20 @@ impl<'a> Resolver<'a> {
 		}
 	}
 
-	pub fn resolve_param_ports(&mut self, params: &[ast::ParamPort]) {
+	pub fn resolve_param_ports(&mut self, params: &[ast::ParamDecl]) {
 		for param in params {
 			self.resolve_param_port(param);
 		}
 	}
 
-	pub fn resolve_param_port(&mut self, param: &ast::ParamPort) {
+	pub fn resolve_param_port(&mut self, param: &ast::ParamDecl) {
 		// TODO: Maybe register the parameter here in a local scope, such that
 		// other parameters in the parameter port list can refer to it?
-		self.resolve_dims(&param.dims);
-		if let Some(ref e) = param.expr {
-			self.resolve_expr(e);
-		}
+		self.resolve_param_decl(param);
+		// self.resolve_dims(&param.dims);
+		// if let Some(ref e) = param.expr {
+		// 	self.resolve_expr(e);
+		// }
 	}
 
 	pub fn resolve_ports(&mut self, ports: &[ast::Port]) {
@@ -832,14 +844,25 @@ impl<'a> Scope<'a> {
 	}
 }
 
-fn search_param_ports(params: &[ast::ParamPort], name: Name) -> Option<Def> {
+fn search_param_ports(params: &[ast::ParamDecl], name: Name) -> Option<Def> {
 	for param in params {
-		if param.name.name == name {
-			assert_renumbered!(param.name.span, param.name.id);
-			return Some(Def {
-				span: param.name.span,
-				id: DefId::Param(param.name.id),
-			});
+		match param.kind {
+			ast::ParamKind::Type(ref decls) => for decl in decls {
+				if decl.name.name == name {
+					return Some(Def {
+						span: decl.name.span,
+						id: DefId::Param(decl.name.id),
+					});
+				}
+			},
+			ast::ParamKind::Value(ref decls) => for decl in decls {
+				if decl.name.name == name {
+					return Some(Def {
+						span: decl.name.span,
+						id: DefId::Param(decl.name.id),
+					});
+				}
+			},
 		}
 	}
 	None

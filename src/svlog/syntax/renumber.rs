@@ -56,18 +56,21 @@ impl RenumberPass {
 		}
 	}
 
-	pub fn renumber_param_ports(&mut self, params: &mut [ast::ParamPort]) {
+	// TODO: Rename this function to renumber_param_decls.
+	pub fn renumber_param_ports(&mut self, params: &mut [ast::ParamDecl]) {
 		for param in params {
 			self.renumber_param_port(param);
 		}
 	}
 
-	pub fn renumber_param_port(&mut self, param: &mut ast::ParamPort) {
-		param.name.id = self.alloc_id();
-		self.renumber_dims(&mut param.dims);
-		if let Some(ref mut e) = param.expr {
-			self.renumber_expr(e);
-		}
+	// TODO: Replace this function with calls to renumber_param_decl.
+	pub fn renumber_param_port(&mut self, param: &mut ast::ParamDecl) {
+		self.renumber_param_decl(param);
+		// param.name.id = self.alloc_id();
+		// self.renumber_dims(&mut param.dims);
+		// if let Some(ref mut e) = param.expr {
+		// 	self.renumber_expr(e);
+		// }
 	}
 
 	pub fn renumber_ports(&mut self, ports: &mut [ast::Port]) {

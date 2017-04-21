@@ -601,87 +601,8 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 }
 
 
-fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<ParamPort>> {
-	let mut v = Vec::new();
-	p.require_reported(OpenDelim(Paren))?;
-
-	while p.peek(0).0 != Eof && p.try_eat(Keyword(Kw::Parameter)) {
-		// TODO: Parse data type or implicit type.
-
-		// Eat the list of parameter assignments.
-		loop {
-			// parameter_identifier { unpacked_dimension } [ = constant_param_expression ]
-			let (name, name_sp) = match p.eat_ident("parameter name") {
-				Ok(x) => x,
-				Err(()) => {
-					p.recover_balanced(&[Comma, CloseDelim(Paren)], false);
-					break;
-				}
-			};
-			let mut span = name_sp;
-
-			// TODO: Eat the unpacked dimensions.
-			let (dims, _) = parse_optional_dimensions(p)?;
-
-			let expr = if p.try_eat(Operator(Op::Assign)) {
-				match parse_expr(p) {
-					Ok(e) => Some(e),
-					Err(_) => {
-						p.recover_balanced(&[Comma, CloseDelim(Paren)], false);
-						break;
-					}
-				}
-			} else {
-				None
-			};
-
-			span.expand(p.last_span());
-			v.push(ParamPort {
-				span: span,
-				name: Identifier {
-					id: DUMMY_NODE_ID,
-					span: name_sp,
-					name: name,
-				},
-				dims: dims,
-				expr: expr,
-			});
-
-			// Eat the trailing comma or closing parenthesis.
-			match p.peek(0) {
-				(Comma, sp) => {
-					p.bump();
-					match p.peek(0) {
-						// The `parameter` keyword terminates this list of
-						// assignments and introduces the next parameter.
-						(Keyword(Kw::Parameter), _) => break,
-
-						// A closing parenthesis indicates that the previous
-						// comma was superfluous. Report the issue but continue
-						// gracefully.
-						(CloseDelim(Paren), _) => {
-							// TODO: This should be an error in pedantic mode.
-							p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-							break;
-						}
-
-						// All other tokens indicate the next assignment in the
-						// list, so we just continue with the next iteration.
-						_ => continue,
-					}
-				},
-				(CloseDelim(Paren), _) => break,
-				(_, sp) => {
-					p.add_diag(DiagBuilder2::error("Expected , or ) after parameter assignment").span(sp));
-					p.recover_balanced(&[CloseDelim(Paren)], false);
-					break;
-				}
-			}
-		}
-	}
-
-	p.require_reported(CloseDelim(Paren))?;
-	Ok(v)
+fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<ParamDecl>> {
+	flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "parameter port", |p| parse_param_decl(p, true)))
 }
 
 
@@ -5242,6 +5163,7 @@ fn parse_param_decl(p: &mut AbstractParser, keyword_optional: bool) -> ReportedR
 			} else {
 				None
 			};
+			p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
 			span.expand(p.last_span());
 			Ok(ast::ParamTypeDecl {
 				span: span,
@@ -5274,6 +5196,7 @@ fn parse_param_decl(p: &mut AbstractParser, keyword_optional: bool) -> ReportedR
 				} else {
 					None
 				};
+				p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
 				span.expand(p.last_span());
 				Ok(ast::ParamValueDecl {
 					span: span,

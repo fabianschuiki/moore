@@ -95,7 +95,7 @@ pub struct ModDecl {
 	pub lifetime: Lifetime, // default static
 	pub name: Name,
 	pub name_span: Span,
-	pub params: Vec<ParamPort>,
+	pub params: Vec<ParamDecl>,
 	pub ports: Vec<Port>,
 	pub items: Vec<HierarchyItem>,
 }
@@ -732,7 +732,7 @@ pub struct ClassDecl {
 	pub virt: bool,
 	pub lifetime: Lifetime, // default static
 	pub name: Identifier,
-	pub params: Vec<ParamPort>,
+	pub params: Vec<ParamDecl>,
 	pub extends: Option<(Type, Vec<CallArg>)>,
 	pub items: Vec<ClassItem>,
 }
