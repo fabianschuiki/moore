@@ -1,8 +1,5 @@
 #!/bin/bash
 set -e
+git clone --depth 1 https://github.com/pulp-platform/pulpino.git
 cd pulpino
-git init
-git remote add origin https://github.com/pulp-platform/pulpino.git
-git fetch --depth=1 origin
-git checkout origin/master
 ./update-ips.py
