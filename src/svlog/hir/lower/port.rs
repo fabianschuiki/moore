@@ -39,7 +39,7 @@ impl<'a> Lowerer<'a> {
 		let (nonansi, first_span) = {
 			let first = match ports.first() {
 				Some(p) => p,
-				None => return Err(()),
+				None => return Ok(vec![]),
 			};
 			let nonansi = match *first {
 				ast::Port::Explicit { ref dir, .. } if dir.is_none() => true,

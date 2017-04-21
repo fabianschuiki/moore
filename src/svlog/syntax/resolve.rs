@@ -231,7 +231,15 @@ impl<'a> Resolver<'a> {
 				self.scopes.pop().unwrap();
 				self.scopes.pop().unwrap();
 			}
-			ast::Item::Interface(ref decl) => self.resolve_ports(&decl.ports),
+			ast::Item::Interface(ref decl) => {
+				self.scopes.push(Scope::Interface(decl));
+				self.scopes.push(Scope::new_local());
+				self.resolve_param_ports(&decl.params);
+				self.resolve_ports(&decl.ports);
+				self.resolve_hierarchy_items(&decl.items);
+				self.scopes.pop().unwrap();
+				self.scopes.pop().unwrap();
+			}
 			ast::Item::Package(ref decl) => self.resolve_hierarchy_items(&decl.items),
 			ast::Item::Item(ref item) => self.resolve_hierarchy_item(item),
 		}
@@ -416,9 +424,37 @@ impl<'a> Resolver<'a> {
 					self.resolve_expr(rhs);
 				}
 			}
+			ast::HierarchyItem::Inst(ref node) => {
+				self.resolve_ident(&node.target);
+				for p in &node.params {
+					self.resolve_param_assignment(p);
+				}
+				for n in &node.names {
+					self.resolve_dims(&n.dims);
+					for c in &n.conns {
+						self.resolve_port_conn(c);
+					}
+				}
+			}
 
 			// TODO: Implement the missing items.
 			_ => ()
+		}
+	}
+
+	pub fn resolve_param_assignment(&mut self, node: &ast::ParamAssignment) {
+		self.resolve_expr(&node.expr);
+	}
+
+	pub fn resolve_port_conn(&mut self, node: &ast::PortConn) {
+		match node.kind {
+			ast::PortConnKind::Auto => (),
+			ast::PortConnKind::Named(_, ref mode) => match *mode {
+				ast::PortConnMode::Connected(ref expr) => self.resolve_expr(expr),
+				ast::PortConnMode::Auto |
+				ast::PortConnMode::Unconnected => (),
+			},
+			ast::PortConnKind::Positional(ref expr) => self.resolve_expr(expr),
 		}
 	}
 
@@ -861,7 +897,8 @@ impl<'a> Scope<'a> {
 			Scope::Module(decl) => search_param_ports(&decl.params, name)
 				.or_else(|| search_ports(&decl.ports, name))
 				.or_else(|| search_hierarchy_items(&decl.items, name)),
-			Scope::Interface(decl) => search_ports(&decl.ports, name)
+			Scope::Interface(decl) => search_param_ports(&decl.params, name)
+				.or_else(|| search_ports(&decl.ports, name))
 				.or_else(|| search_hierarchy_items(&decl.items, name)),
 			Scope::Package(decl) => search_hierarchy_items(&decl.items, name),
 			Scope::Global(ref defs) => defs.get(&name).map(|x| x.clone()),

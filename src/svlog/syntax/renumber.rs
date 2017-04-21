@@ -45,6 +45,7 @@ impl RenumberPass {
 			}
 			ast::Item::Interface(ref mut decl) => {
 				decl.id = self.alloc_id();
+				self.renumber_param_ports(&mut decl.params);
 				self.renumber_ports(&mut decl.ports);
 				self.renumber_hierarchy_items(&mut decl.items);
 			}
@@ -156,14 +157,42 @@ impl RenumberPass {
 			ast::HierarchyItem::GenerateCase(ref mut gc) => (),
 			ast::HierarchyItem::Typedef(ref mut td) => self.renumber_typedef(td),
 			ast::HierarchyItem::ClassDecl(ref mut decl) => self.renumber_class_decl(decl),
+			ast::HierarchyItem::Inst(ref mut stmt) => {
+				stmt.target.id = self.alloc_id();
+				self.renumber_param_assignments(&mut stmt.params);
+				for inst in &mut stmt.names {
+					inst.name.id = self.alloc_id();
+					self.renumber_dims(&mut inst.dims);
+					self.renumber_port_conns(&mut inst.conns);
+				}
+			}
 
 			// Unimplemented cases.
 			ast::HierarchyItem::Dummy |
 			ast::HierarchyItem::LocalparamDecl(_) |
 			ast::HierarchyItem::ParameterDecl(_) |
 			ast::HierarchyItem::PortDecl(_) |
-			ast::HierarchyItem::SubroutineDecl(_) |
-			ast::HierarchyItem::Inst(_) => ()
+			ast::HierarchyItem::SubroutineDecl(_)  => ()
+		}
+	}
+
+	pub fn renumber_param_assignments(&mut self, nodes: &mut [ast::ParamAssignment]) {
+		for node in nodes {
+			self.renumber_expr(&mut node.expr);
+		}
+	}
+
+	pub fn renumber_port_conns(&mut self, nodes: &mut [ast::PortConn]) {
+		for node in nodes {
+			match node.kind {
+				ast::PortConnKind::Auto => (),
+				ast::PortConnKind::Named(_, ref mut mode) => match *mode {
+					ast::PortConnMode::Connected(ref mut expr) => self.renumber_expr(expr),
+					ast::PortConnMode::Auto |
+					ast::PortConnMode::Unconnected => (),
+				},
+				ast::PortConnKind::Positional(ref mut expr) => self.renumber_expr(expr),
+			}
 		}
 	}
 

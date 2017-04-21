@@ -30,11 +30,12 @@ pub struct NodeIndex<'hir> {
 #[derive(Copy, Clone)]
 pub enum Node<'hir> {
 	Module(&'hir Module),
+	Interface(&'hir Interface),
+	Package(&'hir Package),
 	Port(&'hir Port),
 	PortSlice(&'hir PortSlice),
 	TypeParam(&'hir ast::ParamTypeDecl),
 	ValueParam(&'hir ast::ParamValueDecl),
-	ParamPort(&'hir ast::ParamPort),
 	VarDecl(&'hir ast::VarDecl, &'hir ast::VarDeclName),
 }
 
@@ -45,12 +46,18 @@ pub struct Module {
 	pub span: Span,
 	pub lifetime: ast::Lifetime,
 	pub ports: Vec<Port>,
-	pub params: Vec<ast::ParamPort>,
+	pub params: Vec<ast::ParamDecl>,
 	pub body: HierarchyBody,
 }
 
 /// An interface.
 pub struct Interface {
+	pub id: NodeId,
+	pub name: Name,
+	pub span: Span,
+	pub lifetime: ast::Lifetime,
+	pub ports: Vec<Port>,
+	pub params: Vec<ast::ParamDecl>,
 	pub body: HierarchyBody,
 }
 

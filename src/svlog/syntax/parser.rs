@@ -580,6 +580,7 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 			lifetime: lifetime,
 			name: name,
 			name_span: name_sp,
+			params: param_ports,
 			ports: ports,
 			items: items,
 		})
@@ -1482,7 +1483,7 @@ fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span
 }
 
 
-fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<PortCon>> {
+fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<PortConn>> {
 	comma_list(p, CloseDelim(Paren), "list of port connections", |p|{
 		let mut span = p.peek(0).1;
 
@@ -1491,25 +1492,25 @@ fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<
 		let kind = if p.try_eat(Period) {
 			if p.try_eat(Operator(Op::Mul)) {
 				// handle .* case
-				ast::PortConKind::Auto
+				ast::PortConnKind::Auto
 			} else {
 				let name = parse_identifier(p, "port name")?;
 				// handle .name, .name(), and .name(expr) cases
 				let mode = try_flanked(p, Paren, |p| {
 					Ok(if p.peek(0).0 != CloseDelim(Paren) {
-						ast::PortConMode::Connected(parse_expr(p)?)
+						ast::PortConnMode::Connected(parse_expr(p)?)
 					} else {
-						ast::PortConMode::Unconnected
+						ast::PortConnMode::Unconnected
 					})
-				})?.unwrap_or(ast::PortConMode::Auto);
-				ast::PortConKind::Named(name, mode)
+				})?.unwrap_or(ast::PortConnMode::Auto);
+				ast::PortConnKind::Named(name, mode)
 			}
 		} else {
-			ast::PortConKind::Positional(parse_expr(p)?)
+			ast::PortConnKind::Positional(parse_expr(p)?)
 		};
 
 		span.expand(p.last_span());
-		Ok(ast::PortCon {
+		Ok(ast::PortConn {
 			span: span,
 			kind: kind,
 		})
@@ -4888,7 +4889,7 @@ fn parse_inst(p: &mut AbstractParser) -> ReportedResult<ast::Inst> {
 	let mut span = p.peek(0).1;
 
 	// Consume the module identifier.
-	let name = parse_identifier(p, "module name")?;
+	let target = parse_identifier(p, "module name")?;
 	// TODO: Add support for interface instantiations.
 
 	// Consume the optional parameter value assignment.
@@ -4917,6 +4918,7 @@ fn parse_inst(p: &mut AbstractParser) -> ReportedResult<ast::Inst> {
 	span.expand(p.last_span());
 	Ok(ast::Inst {
 		span: span,
+		target: target,
 		params: params,
 		names: names,
 	})

@@ -22,6 +22,7 @@ pub fn lower(session: &Session, nameres: &NameResolution, top: NodeId, asts: Vec
 		severity: Severity::Note,
 		top: top,
 		mods: HashMap::new(),
+		intfs: HashMap::new(),
 		pkgs: HashMap::new(),
 	};
 	l.map_asts(asts);
@@ -35,6 +36,7 @@ struct Lowerer<'a> {
 	severity: Severity,
 	top: NodeId,
 	mods: HashMap<NodeId, Module>,
+	intfs: HashMap<NodeId, Interface>,
 	pkgs: HashMap<NodeId, Package>,
 }
 
@@ -56,7 +58,7 @@ impl<'a> Lowerer<'a> {
 			Ok(Root {
 				top: self.top,
 				mods: self.mods,
-				intfs: HashMap::new(),
+				intfs: self.intfs,
 				pkgs: self.pkgs,
 			})
 		}
@@ -186,8 +188,11 @@ impl<'a> Lowerer<'a> {
 				ast::HierarchyItem::Assertion(a) => b.asserts.push(a),
 				ast::HierarchyItem::Typedef(td) => b.typedefs.push(td),
 
+				// Unimplemented for now
+				ast::HierarchyItem::ModportDecl(mp) => (),
+
 				// TODO: Remove this once the AST has stabilized.
-				x => panic!("hierarchy item lowering not implemented for {:#?}", x)
+				x => self.add_diag(DiagBuilder2::fatal(format!("lowering to HIR not implemented for this hierarchy item")).span(x.span()))
 			}
 		}
 		b
@@ -203,14 +208,35 @@ impl<'a> Lowerer<'a> {
 
 	/// Lower an interface.
 	fn map_interface(&mut self, node: ast::IntfDecl) {
-		self.add_diag(DiagBuilder2::warning("lowering of interfaces to HIR not implemented").span(node.span));
+		let ports = match self.map_ports(node.ports, &node.items) {
+			Ok(x) => x,
+			Err(()) => return,
+		};
+
+		// Map the items in the interface.
+		let body = self.map_hierarchy_body(node.items);
+
+		let mut i = Interface {
+			id: node.id,
+			name: node.name,
+			span: node.name_span,
+			lifetime: node.lifetime,
+			ports: ports,
+			params: node.params,
+			body: body,
+		};
+
+		// Stash the interface away in the interfaces map, associated with its
+		// node ID.
+		if let Some(e) = self.intfs.insert(node.id, i) {
+			panic!("item `{}` and interface `{}` both have ID {}", e.name, node.name, node.id);
+		}
 	}
 
 	/// Lower a package.
 	fn map_package(&mut self, node: ast::PackageDecl) {
-		println!("mapping package {}", node.name);
 
-		// Map the items in the module.
+		// Map the items in the package.
 		let body = self.map_hierarchy_body(node.items);
 
 		// TODO: Digest timeunits
