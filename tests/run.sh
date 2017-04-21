@@ -40,12 +40,11 @@ while read -d $'\0' SRCFILE; do
 	done < <(grep -o -E '@elab\s+.*' $SRCFILE | cut -f 2 -d " ")
 done < <(find $TESTS_DIR -name "*.sv" -print0)
 
+echo
 if [[ NUM_FAIL > 0 ]]; then
-	echo
 	echo "  ${CNAME}result: ${CFAIL}$NUM_FAIL/$((NUM_FAIL+NUM_PASS)) failed${CRST}"
-	echo
 else
-	echo
 	echo "  ${CNAME}result: ${CPASS}$NUM_PASS passed${CRST}"
-	echo
 fi
+echo
+[[ NUM_FAIL == 0 ]] # return non-zero exit code if anything failed
