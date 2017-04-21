@@ -42,6 +42,7 @@ pub enum DefId {
 	Subroutine(NodeId),
 	Typedef(NodeId),
 	Class(NodeId),
+	Inst(NodeId),
 }
 
 impl DefId {
@@ -64,7 +65,8 @@ impl DefId {
 			DefId::Modport(id) |
 			DefId::Subroutine(id) |
 			DefId::Typedef(id) |
-			DefId::Class(id) => id
+			DefId::Class(id) |
+			DefId::Inst(id) => id
 		}
 	}
 }
@@ -92,8 +94,7 @@ pub fn resolve(session: &Session, asts: &[ast::Root]) -> Result<NameResolution, 
 
 /// The result of name resolution: An association between every identifier in
 /// the AST and a definition it points to.
-pub struct NameResolution {
-}
+pub type NameResolution = HashMap<NodeId, NodeId>;
 
 /// The struct used to resolve names. This is a temporary construct that is only
 /// used to contain the session, symbol table, and the resulting name table.
@@ -170,7 +171,7 @@ impl<'a> Resolver<'a> {
 		if self.severity >= Severity::Error {
 			Err(())
 		} else {
-			Ok(NameResolution {})
+			Ok(self.defs.iter().map(|(k, def)| (*k, def.node_id())).collect())
 		}
 	}
 
@@ -317,7 +318,7 @@ impl<'a> Resolver<'a> {
 			}
 
 			ast::EnumType(ref inner, ref names) => {
-				self.add_diag(DiagBuilder2::note("resolving enum type").span(ty.span));
+				// self.add_diag(DiagBuilder2::note("resolving enum type").span(ty.span));
 				if let Some(ref i) = *inner {
 					self.resolve_type(i);
 				}
@@ -378,7 +379,16 @@ impl<'a> Resolver<'a> {
 	}
 
 	pub fn resolve_dim(&mut self, dim: &ast::TypeDim) {
-		// TODO: Resolve idents in dim exprs.
+		match *dim {
+			ast::TypeDim::Expr(ref e) => self.resolve_expr(e),
+			ast::TypeDim::Range(ref a, ref b) => {
+				self.resolve_expr(a);
+				self.resolve_expr(b);
+			}
+			ast::TypeDim::Queue |
+			ast::TypeDim::Unsized |
+			ast::TypeDim::Associative => unimplemented!(),
+		}
 	}
 
 	pub fn resolve_hierarchy_items(&mut self, items: &[ast::HierarchyItem]) {
@@ -394,6 +404,20 @@ impl<'a> Resolver<'a> {
 			ast::HierarchyItem::ParamDecl(ref decl) => self.resolve_param_decl(decl),
 			ast::HierarchyItem::ImportDecl(ref decl) => self.resolve_import_decl(decl),
 			ast::HierarchyItem::SubroutineDecl(ref decl) => self.resolve_subroutine_decl(decl),
+			ast::HierarchyItem::ContAssign(ref assign) => {
+				if let Some(ref delay) = assign.delay {
+					self.resolve_expr(delay);
+				}
+				if let Some(ref dc) = assign.delay_control {
+					self.resolve_expr(&dc.expr);
+				}
+				for &(ref lhs, ref rhs) in &assign.assignments {
+					self.resolve_expr(lhs);
+					self.resolve_expr(rhs);
+				}
+			}
+
+			// TODO: Implement the missing items.
 			_ => ()
 		}
 	}
@@ -736,6 +760,7 @@ impl<'a> Resolver<'a> {
 	}
 
 	pub fn resolve_var_decl(&mut self, decl: &ast::VarDecl, define: bool) {
+		self.resolve_type(&decl.ty);
 		for name in &decl.names {
 			assert_renumbered!(name.span, name.id);
 			if define {
@@ -966,6 +991,14 @@ fn search_hierarchy_item(item: &ast::HierarchyItem, name: Name) -> Option<Def> {
 				});
 			}
 		}
+		ast::HierarchyItem::Inst(ref insts) => for inst in &insts.names {
+			if inst.name.name == name {
+				return Some(Def {
+					span: inst.name.span,
+					id: DefId::Inst(inst.name.id),
+				});
+			}
+		},
 		_ => ()
 	}
 	None

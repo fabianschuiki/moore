@@ -137,6 +137,8 @@ impl<'a> Lexer<'a> {
 					('=','=') => Some(Operator(Op::LogicEq)),
 					('!','=') => Some(Operator(Op::LogicNeq)),
 					('-','>') => Some(Operator(Op::LogicImpl)),
+					('|','|') => Some(Operator(Op::LogicOr)),
+					('&','&') => Some(Operator(Op::LogicAnd)),
 
 					// Bitwise
 					('~','&') => Some(Operator(Op::BitNand)),

@@ -17,6 +17,7 @@ struct PartialPort {
 
 #[derive(Debug)]
 struct PartialPortSlice {
+	pub id: NodeId,
 	pub name: Name,
 	pub span: Span,
 	pub selects: Vec<PortSelect>,
@@ -24,7 +25,6 @@ struct PartialPortSlice {
 	pub kind: Option<ast::PortKind>,
 	pub ty: Option<ast::Type>,
 	pub dims: Vec<ast::TypeDim>,
-
 }
 
 
@@ -101,7 +101,9 @@ impl<'a> Lowerer<'a> {
 					}
 				}
 
+				assert!(slice.id.as_usize() > 0);
 				slices.push(PortSlice {
+					id: slice.id,
 					name: slice.name,
 					span: slice.span,
 					selects: slice.selects,
@@ -217,6 +219,7 @@ impl<'a> Lowerer<'a> {
 						span: name.span,
 						slices: vec![
 							PartialPortSlice {
+								id: name.id,
 								name: name.name,
 								span: name.span,
 								selects: Vec::new(),
@@ -258,6 +261,7 @@ impl<'a> Lowerer<'a> {
 						span: name.span,
 						slices: vec![
 							PartialPortSlice {
+								id: name.id,
 								name: name.name,
 								span: name.span,
 								selects: Vec::new(),
@@ -360,7 +364,7 @@ impl<'a> Lowerer<'a> {
 					let mut expr = ast::Expr {
 						span: span,
 						data: ast::IdentExpr(ast::Identifier {
-							id: ast::DUMMY_NODE_ID,
+							id: name.id,
 							name: name.name,
 							span: name.span,
 						}),
@@ -602,6 +606,7 @@ impl<'a> Lowerer<'a> {
 				ast::IdentExpr(ident) => {
 					selects.reverse();
 					return Ok(PartialPortSlice {
+						id: ident.id,
 						name: ident.name,
 						span: ident.span,
 						selects: selects,

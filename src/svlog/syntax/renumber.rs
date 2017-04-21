@@ -492,7 +492,16 @@ impl RenumberPass {
 	}
 
 	pub fn renumber_dim(&mut self, dim: &mut ast::TypeDim) {
-		// TODO: Implement once type dim contains expressions.
+		match *dim {
+			ast::TypeDim::Expr(ref mut expr) => self.renumber_expr(expr),
+			ast::TypeDim::Range(ref mut msb, ref mut lsb) => {
+				self.renumber_expr(msb);
+				self.renumber_expr(lsb);
+			},
+			ast::TypeDim::Queue |
+			ast::TypeDim::Unsized |
+			ast::TypeDim::Associative => ()
+		}
 	}
 
 	pub fn renumber_type(&mut self, ty: &mut ast::Type) {
@@ -553,6 +562,8 @@ impl RenumberPass {
 			ast::RealType |
 			ast::RealtimeType => ()
 		}
+
+		self.renumber_dims(&mut ty.dims);
 	}
 
 	pub fn renumber_net_decl(&mut self, decl: &mut ast::NetDecl) {

@@ -9,6 +9,10 @@ pub use moore_svlog_syntax::ast::NodeId;
 use moore_svlog_syntax::ast;
 
 
+// TODO: Take the AST expressions and split them into lvalue and rvalue
+// expressions. This should make a few things easier.
+
+
 /// The root of the HIR tree. This represents one elaborated design.
 pub struct Root {
 	pub top: NodeId,
@@ -17,19 +21,44 @@ pub struct Root {
 	pub pkgs: HashMap<NodeId, Package>,
 }
 
+/// An search index of all nodes in a HIR tree.
+pub struct NodeIndex<'hir> {
+	pub hir: &'hir Root,
+	pub nodes: HashMap<NodeId, Node<'hir>>,
+}
+
+#[derive(Copy, Clone)]
+pub enum Node<'hir> {
+	Module(&'hir Module),
+	Port(&'hir Port),
+	PortSlice(&'hir PortSlice),
+	TypeParam(&'hir ast::ParamTypeDecl),
+	ValueParam(&'hir ast::ParamValueDecl),
+	ParamPort(&'hir ast::ParamPort),
+	VarDecl(&'hir ast::VarDecl, &'hir ast::VarDeclName),
+}
+
+/// A module.
 pub struct Module {
+	pub id: NodeId,
 	pub name: Name,
 	pub span: Span,
 	pub lifetime: ast::Lifetime,
 	pub ports: Vec<Port>,
+	pub params: Vec<ast::ParamPort>,
 	pub body: HierarchyBody,
 }
 
+/// An interface.
 pub struct Interface {
 	pub body: HierarchyBody,
 }
 
+/// A package.
 pub struct Package {
+	pub name: Name,
+	pub span: Span,
+	pub lifetime: ast::Lifetime,
 	pub body: HierarchyBody,
 }
 
@@ -68,6 +97,7 @@ pub struct Port {
 /// that select individual parts of the declaration.
 #[derive(Debug)]
 pub struct PortSlice {
+	pub id: NodeId,
 	pub name: Name,
 	pub span: Span,
 	pub selects: Vec<PortSelect>,
@@ -75,7 +105,6 @@ pub struct PortSlice {
 	pub kind: ast::PortKind,
 	pub ty: Option<ast::Type>,
 	pub dims: Vec<ast::TypeDim>,
-
 }
 
 #[derive(Debug)]

@@ -1441,7 +1441,7 @@ fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span
 		_ => {
 			// What's left must either be a single constant expression, or a range
 			// consisting of two constant expressions.
-			let expr = match parse_constant_expr(p) {
+			let expr = match parse_expr(p) {
 				Ok(x) => x,
 				Err(_) => {
 					p.recover_balanced(&[CloseDelim(Brack)], true);
@@ -1452,16 +1452,16 @@ fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span
 			// If the expression is followed by a colon `:`, this is a constant range
 			// rather than a constant expression.
 			if p.try_eat(Colon) {
-				let other = match parse_constant_expr(p) {
+				let other = match parse_expr(p) {
 					Ok(x) => x,
 					Err(_) => {
 						p.recover_balanced(&[CloseDelim(Brack)], true);
 						return Err(());
 					}
 				};
-				TypeDim::Range
+				TypeDim::Range(expr, other)
 			} else {
-				TypeDim::Expr
+				TypeDim::Expr(expr)
 			}
 		}
 	};
@@ -1542,6 +1542,17 @@ fn parse_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 }
 
 fn parse_expr_prec(p: &mut AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
+	// TODO: Keep track of the location here and pass that to the
+	// parse_expr_first and parse_expr_suffix calls further down. This will
+	// allow the spans of those expressions to properly reflect the full span of
+	// the expression, mitigating the following issue:
+	//
+	// assign foo = (operator_i = ALU_ABS) ? operand_a_neg : operand_a_i;
+	//               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	//
+	// Note the opening parenthesis `(` is not included in the expression's
+	// span.
+
 	// Parse class-new and dynamic-array-new expressions, which are used on the
 	// right hand side of assignments.
 	if p.try_eat(Keyword(Kw::New)) {

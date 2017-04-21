@@ -264,8 +264,8 @@ pub enum TypeSign {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum TypeDim {
-	Expr,
-	Range,
+	Expr(Expr),
+	Range(Expr,Expr),
 	Queue,
 	Unsized,
 	Associative,
@@ -583,6 +583,9 @@ pub struct GenvarDecl {
 
 
 
+// TODO: Assign a id to each and every expression. This will later allow the
+// types of each expression to be recorded properly, and simplifies the act of
+// assigning IDs. Maybe expression IDs should be distinct from node IDs?
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Expr {
 	pub span: Span,
@@ -620,7 +623,7 @@ pub enum ExprData {
 		rhs: Box<Expr>,
 	},
 	CallExpr(Box<Expr>, Vec<CallArg>),
-	TypeExpr(Box<Type>),
+	TypeExpr(Box<Type>), // TODO: Check if this is still needed, otherwise remove
 	ConstructorCallExpr(Vec<CallArg>),
 	ClassNewExpr(Option<Box<Expr>>),
 	ArrayNewExpr(Box<Expr>, Option<Box<Expr>>),

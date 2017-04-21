@@ -22,6 +22,7 @@ pub fn lower(session: &Session, nameres: &NameResolution, top: NodeId, asts: Vec
 		severity: Severity::Note,
 		top: top,
 		mods: HashMap::new(),
+		pkgs: HashMap::new(),
 	};
 	l.map_asts(asts);
 	l.finish()
@@ -34,6 +35,7 @@ struct Lowerer<'a> {
 	severity: Severity,
 	top: NodeId,
 	mods: HashMap<NodeId, Module>,
+	pkgs: HashMap<NodeId, Package>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -55,7 +57,7 @@ impl<'a> Lowerer<'a> {
 				top: self.top,
 				mods: self.mods,
 				intfs: HashMap::new(),
-				pkgs: HashMap::new(),
+				pkgs: self.pkgs,
 			})
 		}
 	}
@@ -87,7 +89,7 @@ impl<'a> Lowerer<'a> {
 
 	/// Lower a module.
 	fn map_module(&mut self, node: ast::ModDecl) {
-		println!("mapping module {}", node.name);
+		// println!("mapping module {}", node.name);
 
 		// If the first port has neither direction, port kind, nor type
 		// specified, non-ANSI style shall be assumed. Otherwise, the ports are
@@ -103,17 +105,19 @@ impl<'a> Lowerer<'a> {
 		// TODO: Digest timeunits
 		// TODO: Digest parameters
 		let mut m = Module {
+			id: node.id,
 			name: node.name,
 			span: node.name_span,
 			lifetime: node.lifetime,
 			ports: ports,
+			params: node.params,
 			body: body,
 		};
 
 		// Stash the module away in the modules map, associated with its node
 		// ID.
 		if let Some(e) = self.mods.insert(node.id, m) {
-			panic!("modules `{}` and `{}` both have ID {}", e.name, node.name, node.id);
+			panic!("item `{}` and module `{}` both have ID {}", e.name, node.name, node.id);
 		}
 	}
 
@@ -143,7 +147,18 @@ impl<'a> Lowerer<'a> {
 
 				ast::HierarchyItem::Procedure(p) => b.procs.push(p),
 				ast::HierarchyItem::NetDecl(d) => b.nets.push(d),
-				ast::HierarchyItem::VarDecl(d) => b.vars.push(d),
+				ast::HierarchyItem::VarDecl(mut d) => {
+					// TODO: Maybe variables should be unrolled, such that each
+					// name of the variable gets a copy of the type definition.
+					// This would give us the chance to apply these default
+					// signs as well.
+					if d.ty.sign == ast::TypeSign::None {
+						// TODO: This is only valid for logics. Integers should
+						// be signed by default.
+						d.ty.sign = ast::TypeSign::Unsigned;
+					}
+					b.vars.push(d)
+				},
 				ast::HierarchyItem::ParamDecl(d) => b.params.push(d),
 				ast::HierarchyItem::ContAssign(a) => b.assigns.push(a),
 				ast::HierarchyItem::Inst(i) => b.insts.push(i),
@@ -188,18 +203,35 @@ impl<'a> Lowerer<'a> {
 
 	/// Lower an interface.
 	fn map_interface(&mut self, node: ast::IntfDecl) {
-
+		self.add_diag(DiagBuilder2::warning("lowering of interfaces to HIR not implemented").span(node.span));
 	}
 
 	/// Lower a package.
 	fn map_package(&mut self, node: ast::PackageDecl) {
+		println!("mapping package {}", node.name);
 
+		// Map the items in the module.
+		let body = self.map_hierarchy_body(node.items);
+
+		// TODO: Digest timeunits
+		let mut m = Package {
+			name: node.name,
+			span: node.name_span,
+			lifetime: node.lifetime,
+			body: body,
+		};
+
+		// Stash the package away in the packages map, associated with its node
+		// ID.
+		if let Some(e) = self.pkgs.insert(node.id, m) {
+			panic!("item `{}` and package `{}` both have ID {}", e.name, node.name, node.id);
+		}
 	}
 }
 
 
 /// Check if a type is empty, i.e. it is an implicit type with no sign or packed
 /// dimensions specified.
-fn is_type_empty(ty: &ast::Type) -> bool {
+pub fn is_type_empty(ty: &ast::Type) -> bool {
 	ty.data == ast::ImplicitType && ty.sign == ast::TypeSign::None && ty.dims.is_empty()
 }
