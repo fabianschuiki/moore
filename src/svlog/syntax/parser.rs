@@ -3,7 +3,6 @@
 //! A parser for the SystemVerilog language. Based on IEEE 1800-2009.
 
 use std;
-use std::cell::RefCell;
 use lexer::{Lexer, TokenAndSpan};
 use token::*;
 use std::collections::VecDeque;
@@ -12,9 +11,6 @@ use ast::*;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
-
-const Unrecovered: () = ();
-const Recovered: () = ();
 
 // The problem with data_declaration and data_type_or_implicit:
 //
@@ -258,17 +254,8 @@ impl<'a> Parser<'a> {
 			}
 		}
 	}
-
-	fn get_diagnostics(&self) -> &[DiagBuilder2] {
-		&self.diagnostics
-	}
 }
 
-
-fn parenthesized<R,F>(p: &mut AbstractParser, mut inner: F) -> ReportedResult<R>
-where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
-	flanked(p, Paren, inner)
-}
 
 /// Parses the opening delimiter, calls the `inner` function, and parses the
 /// closing delimiter. Properly recovers to and including the closing
@@ -292,7 +279,7 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 /// function, and parses the closing delimiter. Properly recovers to and
 /// including the closing delimiter if the `inner` function throws an error.
 /// If the opening delimiter is not present, returns `None`.
-fn try_flanked<R,F>(p: &mut AbstractParser, delim: DelimToken, mut inner: F) -> ReportedResult<Option<R>>
+fn try_flanked<R,F>(p: &mut AbstractParser, delim: DelimToken, inner: F) -> ReportedResult<Option<R>>
 where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 	if p.peek(0).0 == OpenDelim(delim) {
 		flanked(p, delim, inner).map(|r| Some(r))
@@ -341,7 +328,7 @@ fn comma_list<R,F,T>(p: &mut AbstractParser, mut term: T, msg: &str, mut item: F
 
 
 /// Same as `comma_list`, but at least one item is required.
-fn comma_list_nonempty<R,F,T>(p: &mut AbstractParser, mut term: T, msg: &str, mut item: F) -> ReportedResult<Vec<R>> where
+fn comma_list_nonempty<R,F,T>(p: &mut AbstractParser, term: T, msg: &str, item: F) -> ReportedResult<Vec<R>> where
 	F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
 	T: Predicate {
 
@@ -361,7 +348,7 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 	while p.peek(0).0 != term && p.peek(0).0 != Eof {
 		match item(p) {
 			Ok(x) => v.push(x),
-			Err(e) => {
+			Err(_) => {
 				p.recover_balanced(&[term], false);
 				break;
 			}
@@ -384,6 +371,7 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 /// Speculatively apply a parse function. If it fails, the parser `p` is left
 /// untouched. If it succeeds, `p` is in the same state as if `parse` was called
 /// on it directly. Use a ParallelParser for better error reporting.
+#[allow(dead_code)]
 fn try<R,F>(p: &mut AbstractParser, mut parse: F) -> Option<R>
 where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 	let mut bp = BranchParser::new(p);
@@ -542,7 +530,7 @@ fn as_lifetime(tkn: Token) -> Option<Lifetime> {
 
 fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 	let mut span = p.peek(0).1;
-	p.require_reported(Keyword(Kw::Interface));
+	p.require_reported(Keyword(Kw::Interface))?;
 	let result = recovered(p, Keyword(Kw::Endinterface), |p|{
 
 		// Eat the optional lifetime.
@@ -648,7 +636,7 @@ fn parse_constant_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 /// already been consumed.
 fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 	let mut span = p.peek(0).1;
-	p.require_reported(Keyword(Kw::Module));
+	p.require_reported(Keyword(Kw::Module))?;
 	let result = recovered(p, Keyword(Kw::Endmodule), |p|{
 
 		// Eat the optional lifetime.
@@ -834,93 +822,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 	pp.add_greedy("net declaration", |p| parse_net_decl(p).map(|d| HierarchyItem::NetDecl(d)));
 	pp.add("instantiation", |p| parse_inst(p).map(|i| HierarchyItem::Inst(i)));
 	pp.add("variable declaration", |p| parse_var_decl(p).map(|d| HierarchyItem::VarDecl(d)));
-	return pp.finish(p, "hierarchy item");
-
-	// Handle net declarations.
-	if as_net_type(p.peek(0).0).is_some() {
-		return parse_net_decl(p).map(|x| HierarchyItem::NetDecl(x));
-	}
-
-	// TODO: Handle the const and var keywords that may appear in front of a
-	// data declaration, as well as the optional lifetime.
-	let konst = p.try_eat(Keyword(Kw::Const));
-	let var = p.try_eat(Keyword(Kw::Var));
-	let lifetime = as_lifetime(p.peek(0).0);
-	if lifetime.is_some() {
-		p.bump();
-	}
-
-	// Now attempt to parse a data type or implicit type, which could introduce
-	// and instantiation or data declaration. Due to the nature of implicit
-	// types, a data declaration such as `foo[7:0];` would initially parse as an
-	// explicit type `foo[7:0]`, and can only be identified as having an
-	// implicit type when the semicolon is parsed. I.e. declarations that appear
-	// to consist only of a type are actually declarations with an implicit
-	// type.
-	let ty = match parse_data_type(p) {
-		Ok(x) => x,
-		Err(_) => {
-			p.recover_balanced(&[Semicolon], true);
-			return Err(());
-		}
-	};
-
-	// TODO: Handle the special case where the token following the parsed data
-	// type is a [,;=], which indicates that the parsed type is actually a
-	// variable declaration with implicit type (they look the same).
-
-	// In case this is an instantiation, some parameter assignments may follow.
-	if p.try_eat(Hashtag) {
-		parse_parameter_assignments(p)?;
-	}
-
-	// Parse the list of variable declaration assignments.
-	loop {
-		let (name, span) = p.eat_ident("variable or instance name")?;
-
-		// Parse the optional variable dimensions.
-		let dims = match parse_optional_dimensions(p) {
-			Ok(x) => x,
-			Err(_) => return Err(()),
-		};
-
-		// Parse the optional assignment.
-		match p.peek(0) {
-			(Operator(Op::Assign), sp) => {
-				p.bump();
-				parse_expr(p)?;
-			}
-			(OpenDelim(Paren), sp) => {
-				flanked(p, Paren, parse_list_of_port_connections)?;
-			}
-			_ => ()
-		}
-
-		// Either parse the next variable declaration or break out of the loop
-		// if we have encountered the semicolon that terminates the statement.
-		match p.peek(0) {
-			(Semicolon, _) => { p.bump(); break; },
-			(Comma, sp) => {
-				p.bump();
-				if p.peek(0).0 == Semicolon {
-					// TODO: Make this an error in pedantic mode.
-					p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-					p.bump();
-					break;
-				} else {
-					continue;
-				}
-			}
-			(_, sp) => {
-				p.add_diag(DiagBuilder2::error("Expected , or ; after variable declaration").span(sp));
-				p.recover(&[Semicolon], true);
-				return Err(());
-			}
-		}
-	}
-
-	// Ok(HierarchyItem::DataDecl)
-	Err(())
+	pp.finish(p, "hierarchy item")
 }
 
 
@@ -3118,8 +3020,8 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 				}
 			)
 		}
-		Keyword(Kw::Break) => { p.bump(); p.require_reported(Semicolon); BreakStmt }
-		Keyword(Kw::Continue) => { p.bump(); p.require_reported(Semicolon); ContinueStmt }
+		Keyword(Kw::Break) => { p.bump(); p.require_reported(Semicolon)?; BreakStmt }
+		Keyword(Kw::Continue) => { p.bump(); p.require_reported(Semicolon)?; ContinueStmt }
 
 		// Import statements
 		Keyword(Kw::Import) => ImportStmt(parse_import_decl(p)?),
@@ -3997,6 +3899,7 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 	}
 
 	// Parse localparam and parameter declarations.
+	// TODO: Replace these by calls to parse_param_decl.
 	match p.peek(0).0 {
 		Keyword(Kw::Localparam) => return Ok(ClassItem {
 			span: span,
@@ -4781,6 +4684,7 @@ fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropSpec> {
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(dead_code)]
 enum PropSeqPrecedence {
 	Min,
 	AlEvIfAccRejSyn,
@@ -5126,7 +5030,7 @@ fn parse_param_decl(p: &mut AbstractParser, keyword_optional: bool) -> ReportedR
 		(_,_) if keyword_optional => false,
 		(tkn,sp) => {
 			p.add_diag(DiagBuilder2::error(format!("expected `parameter` or `localparam`, but found {} instead", tkn)).span(sp));
-			return Err(Unrecovered);
+			return Err(());
 		}
 	};
 
