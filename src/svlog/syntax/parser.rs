@@ -96,25 +96,25 @@ trait AbstractParser {
 		}
 	}
 
-	fn recover(&mut self, terminators: &[Token], eat_terminator: bool) {
-		// println!("recovering to {:?}", terminators);
-		loop {
-			match self.peek(0) {
-				(Eof, _) => return,
-				(tkn, _) => {
-					for t in terminators {
-						if *t == tkn {
-							if eat_terminator {
-								self.skip();
-							}
-							return;
-						}
-					}
-					self.skip();
-				}
-			}
-		}
-	}
+	// fn recover(&mut self, terminators: &[Token], eat_terminator: bool) {
+	// 	// println!("recovering to {:?}", terminators);
+	// 	loop {
+	// 		match self.peek(0) {
+	// 			(Eof, _) => return,
+	// 			(tkn, _) => {
+	// 				for t in terminators {
+	// 					if *t == tkn {
+	// 						if eat_terminator {
+	// 							self.skip();
+	// 						}
+	// 						return;
+	// 					}
+	// 				}
+	// 				self.skip();
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	fn recover_balanced(&mut self, terminators: &[Token], eat_terminator: bool) {
 		// println!("recovering (balanced) to {:?}", terminators);
@@ -137,11 +137,11 @@ trait AbstractParser {
 				CloseDelim(x) => {
 					if let Some(open) = stack.pop() {
 						if open != x {
-							self.add_diag(DiagBuilder2::error(format!("Found closing `{}` which is not the complement to the previous opening `{}`", CloseDelim(x), OpenDelim(open))).span(sp));
+							self.add_diag(DiagBuilder2::fatal(format!("Found closing `{}` which is not the complement to the previous opening `{}`", CloseDelim(x), OpenDelim(open))).span(sp));
 							break;
 						}
 					} else {
-						self.add_diag(DiagBuilder2::error(format!("Found closing `{}` without an earlier opening `{}`", CloseDelim(x), OpenDelim(x))).span(sp));
+						self.add_diag(DiagBuilder2::fatal(format!("Found closing `{}` without an earlier opening `{}`", CloseDelim(x), OpenDelim(x))).span(sp));
 						break;
 					}
 				}
@@ -265,8 +265,13 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 	p.require_reported(OpenDelim(delim))?;
 	match inner(p) {
 		Ok(r) => {
-			p.require_reported(CloseDelim(delim))?;
-			Ok(r)
+			match p.require_reported(CloseDelim(delim)) {
+				Ok(_) => Ok(r),
+				Err(e) => {
+					p.recover_balanced(&[CloseDelim(delim)], true);
+					Err(e)
+				}
+			}
 		}
 		Err(e) => {
 			p.recover_balanced(&[CloseDelim(delim)], true);
