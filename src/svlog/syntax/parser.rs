@@ -487,7 +487,7 @@ fn parse_source_text(p: &mut Parser) -> Root {
 	// TODO
 
 	// Parse the descriptions in the source text.
-	while p.peek(0).0 != Eof {
+	while !p.is_fatal() && p.peek(0).0 != Eof {
 		match parse_item(p) {
 			Ok(item) => root.items.push(item),
 			Err(()) => () // parse_item handles recovery, so no need to do anything here
@@ -508,14 +508,14 @@ fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
 		Keyword(Kw::Class) => parse_class_decl(p).map(|d| ast::Item::Class(d)),
 		Keyword(Kw::Import) => parse_import_decl(p).map(|i| ast::Item::Item(HierarchyItem::ImportDecl(i))),
 		tkn => {
-			p.add_diag(DiagBuilder2::fatal(format!("Expected module, interface, package, program, class, or import, instead got `{}`", tkn)).span(sp));
+			p.add_diag(DiagBuilder2::error(format!("Expected module, interface, package, program, class, or import, instead got `{}`", tkn)).span(sp));
 			p.recover_balanced(&[
-				Keyword(Kw::Endmodule),
-				Keyword(Kw::Endinterface),
-				Keyword(Kw::Endpackage),
-				Keyword(Kw::Endprogram),
-				Keyword(Kw::Endclass)
-			], true);
+				Keyword(Kw::Module),
+				Keyword(Kw::Interface),
+				Keyword(Kw::Package),
+				Keyword(Kw::Program),
+				Keyword(Kw::Class)
+			], false);
 			Err(())
 		}
 	}
@@ -3779,14 +3779,7 @@ fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<GenerateBlock>
 
 fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
 	let mut span = p.peek(0).1;
-	let (
-		virt,
-		lifetime,
-		name,
-		params,
-		extends,
-		items
-	) = recovered(p, Keyword(Kw::Endclass), |p|{
+	let result = recovered(p, Keyword(Kw::Endclass), |p|{
 
 		// Eat the optional "virtual" keyword.
 		let virt = p.try_eat(Keyword(Kw::Virtual));
@@ -3823,8 +3816,17 @@ fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
 		// Parse the class items.
 		let items = repeat_until(p, Keyword(Kw::Endclass), parse_class_item)?;
 		Ok((virt, lifetime, name, params, extends, items))
-	})?;
+	});
 	p.require_reported(Keyword(Kw::Endclass))?;
+
+	let (
+		virt,
+		lifetime,
+		name,
+		params,
+		extends,
+		items
+	) = result?;
 
 	// Parse the optional class name after "endclass".
 	if p.try_eat(Colon) {
