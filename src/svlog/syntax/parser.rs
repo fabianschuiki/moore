@@ -597,7 +597,78 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
 
 
 fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<ParamDecl>> {
-	flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "parameter port", |p| parse_param_decl(p, true)))
+	let mut local = false;
+
+	flanked(p, Paren, |p| comma_list(p, CloseDelim(Paren), "parameter port", |p|{
+		// Parse the optional `parameter` or `localparam` keyword. If none is
+		// provided, the previous scope is assumed.
+		let mut outer_span = p.peek(0).1;
+		match p.peek(0).0 {
+			Keyword(Kw::Parameter) => { p.bump(); local = false; }
+			Keyword(Kw::Localparam) => { p.bump(); local = true; }
+			_ => ()
+		};
+
+		// If the next token is the `type` keyword, this is a type parameter.
+		// Otherwise this is a value parameter.
+		let kind = if p.try_eat(Keyword(Kw::Type)) {
+			let mut span = p.peek(0).1;
+			let name = parse_identifier(p, "parameter name")?;
+			let ty = if p.try_eat(Operator(Op::Assign)) {
+				Some(parse_explicit_type(p)?)
+			} else {
+				None
+			};
+			p.anticipate(&[Comma, CloseDelim(Paren)])?;
+			span.expand(p.last_span());
+			ast::ParamKind::Type(vec![ast::ParamTypeDecl {
+				span: span,
+				name: name,
+				ty: ty,
+			}])
+		} else {
+			// Use a parallel parser to distinguish between the explicit and
+			// implicit type versions of the declaration.
+			let mut pp = ParallelParser::new();
+			pp.add("explicit type", |p|{
+				let ty = parse_explicit_type(p)?;
+				tail(p, ty)
+			});
+			pp.add("implicit type", |p|{
+				let ty = parse_implicit_type(p)?;
+				tail(p, ty)
+			});
+
+			fn tail(p: &mut AbstractParser, ty: Type) -> ReportedResult<ast::ParamValueDecl> {
+				let mut span = p.peek(0).1;
+				let name = parse_identifier(p, "parameter name")?;
+				let (dims, _) = parse_optional_dimensions(p)?;
+				let expr = if p.try_eat(Operator(Op::Assign)) {
+					Some(parse_expr(p)?)
+				} else {
+					None
+				};
+				p.anticipate(&[Comma, CloseDelim(Paren)])?;
+				span.expand(p.last_span());
+				Ok(ast::ParamValueDecl {
+					span: span,
+					ty: ty,
+					name: name,
+					dims: dims,
+					expr: expr,
+				})
+			}
+
+			ast::ParamKind::Value(vec![pp.finish(p, "explicit or implicit type")?])
+		};
+
+		outer_span.expand(p.last_span());
+		Ok(ast::ParamDecl {
+			span: outer_span,
+			local: local,
+			kind: kind,
+		})
+	}))
 }
 
 
