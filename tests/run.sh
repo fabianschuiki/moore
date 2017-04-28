@@ -41,10 +41,10 @@ while read -d $'\0' SRCFILE; do
 done < <(find $TESTS_DIR -name "*.sv" -print0)
 
 echo
-if [[ NUM_FAIL > 0 ]]; then
+if [ $NUM_FAIL -gt 0 ]; then
 	echo "  ${CNAME}result: ${CFAIL}$NUM_FAIL/$((NUM_FAIL+NUM_PASS)) failed${CRST}"
 else
 	echo "  ${CNAME}result: ${CPASS}$NUM_PASS passed${CRST}"
 fi
 echo
-[[ NUM_FAIL == 0 ]] # return non-zero exit code if anything failed
+[ $NUM_FAIL = 0 ] # return non-zero exit code if anything failed
