@@ -61,6 +61,7 @@ pub enum Item {
 	Module(ModDecl),
 	Interface(IntfDecl),
 	Package(PackageDecl),
+	Class(ClassDecl),
 	Item(HierarchyItem),
 	// Program(ProgramDecl),
 	// Bind(BindDirective),
@@ -73,6 +74,7 @@ impl Item {
 			Item::Module(ref decl) => decl.span,
 			Item::Interface(ref decl) => decl.span,
 			Item::Package(ref decl) => decl.span,
+			Item::Class(ref decl) => decl.span,
 			Item::Item(ref item) => item.span(),
 		}
 	}
@@ -82,6 +84,7 @@ impl Item {
 			Item::Module(ref decl) => "module declaration",
 			Item::Interface(ref decl) => "interface declaration",
 			Item::Package(ref decl) => "package declaration",
+			Item::Class(ref decl) => "class declaration",
 			Item::Item(ref item) => item.as_str(),
 		}
 	}

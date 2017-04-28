@@ -242,6 +242,34 @@ impl<'a> Resolver<'a> {
 			}
 			ast::Item::Package(ref decl) => self.resolve_hierarchy_items(&decl.items),
 			ast::Item::Item(ref item) => self.resolve_hierarchy_item(item),
+			ast::Item::Class(ref decl) => self.resolve_class_decl(decl),
+		}
+	}
+
+	pub fn resolve_class_decl(&mut self, node: &ast::ClassDecl) {
+		self.resolve_param_ports(&node.params);
+		if let Some((ref ty, ref args)) = node.extends {
+			self.resolve_type(ty);
+			self.resolve_call_args(args);
+		}
+		for i in &node.items {
+			self.resolve_class_item(i);
+		}
+	}
+
+	pub fn resolve_class_item(&mut self, node: &ast::ClassItem) {
+		match node.data {
+			ast::ClassItemData::Null => (),
+
+			// Unimplemented as of now
+			ast::ClassItemData::Property |
+			ast::ClassItemData::SubroutineDecl(_) |
+			ast::ClassItemData::ExternSubroutine(_) |
+			ast::ClassItemData::Constraint(_) |
+			ast::ClassItemData::ClassDecl |
+			ast::ClassItemData::CovergroupDecl |
+			ast::ClassItemData::LocalparamDecl(()) |
+			ast::ClassItemData::ParameterDecl(()) => unimplemented!(),
 		}
 	}
 

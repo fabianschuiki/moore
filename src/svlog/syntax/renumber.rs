@@ -53,6 +53,7 @@ impl RenumberPass {
 				decl.id = self.alloc_id();
 				self.renumber_hierarchy_items(&mut decl.items);
 			}
+			ast::Item::Class(ref mut decl) => self.renumber_class_decl(decl),
 			ast::Item::Item(ref mut item) => self.renumber_hierarchy_item(item),
 		}
 	}

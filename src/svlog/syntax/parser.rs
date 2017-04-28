@@ -485,14 +485,7 @@ fn parse_source_text(p: &mut Parser) -> Root {
 	while p.peek(0).0 != Eof {
 		match parse_item(p) {
 			Ok(item) => root.items.push(item),
-			Err(()) => {
-				p.recover_balanced(&[
-					Keyword(Kw::Endmodule),
-					Keyword(Kw::Endinterface),
-					Keyword(Kw::Endpackage),
-					Keyword(Kw::Endprogram)
-				], true);
-			}
+			Err(()) => () // parse_item handles recovery, so no need to do anything here
 		}
 	}
 
@@ -500,16 +493,24 @@ fn parse_source_text(p: &mut Parser) -> Root {
 }
 
 
-fn parse_item(p: &mut Parser) -> ReportedResult<Item> {
+fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
 	let (tkn,sp) = p.peek(0);
 	match tkn {
-		Keyword(Kw::Module) => parse_module_decl(p).map(|d| Item::Module(d)),
-		Keyword(Kw::Interface) => parse_interface_decl(p).map(|d| Item::Interface(d)),
-		Keyword(Kw::Package) => parse_package_decl(p).map(|d| Item::Package(d)),
-		// Keyword(Kw::Program) => parse_program_decl(p).map(|d| Item::Module(d)),
-		Keyword(Kw::Import) => parse_import_decl(p).map(|i| Item::Item(HierarchyItem::ImportDecl(i))),
+		Keyword(Kw::Module) => parse_module_decl(p).map(|d| ast::Item::Module(d)),
+		Keyword(Kw::Interface) => parse_interface_decl(p).map(|d| ast::Item::Interface(d)),
+		Keyword(Kw::Package) => parse_package_decl(p).map(|d| ast::Item::Package(d)),
+		// Keyword(Kw::Program) => parse_program_decl(p).map(|d| ast::Item::Module(d)),
+		Keyword(Kw::Class) => parse_class_decl(p).map(|d| ast::Item::Class(d)),
+		Keyword(Kw::Import) => parse_import_decl(p).map(|i| ast::Item::Item(HierarchyItem::ImportDecl(i))),
 		tkn => {
-			p.add_diag(DiagBuilder2::fatal(format!("Expected module, interface, package, program, or import, instead got `{}`", tkn)).span(sp));
+			p.add_diag(DiagBuilder2::fatal(format!("Expected module, interface, package, program, class, or import, instead got `{}`", tkn)).span(sp));
+			p.recover_balanced(&[
+				Keyword(Kw::Endmodule),
+				Keyword(Kw::Endinterface),
+				Keyword(Kw::Endpackage),
+				Keyword(Kw::Endprogram),
+				Keyword(Kw::Endclass)
+			], true);
 			Err(())
 		}
 	}
@@ -693,6 +694,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
 			items: items,
 		})
 	});
+	let sp = p.peek(0).1;
 	p.require_reported(Keyword(Kw::Endmodule))?;
 	result
 }
