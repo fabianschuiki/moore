@@ -15,3 +15,20 @@ class Mem #(type T, int size);
 endclass
 
 typedef Mem#(byte, 1024) Kbyte;
+
+module A1 #(int a = 5, localparam logic b = 1, type c = int, parameter n);
+	// TODO: Check that parameter port is
+	// - parameter int a = 5,
+	// - localparam logic b = 1,
+	// - localparam type c = int,
+	// - parameter n
+endmodule
+
+module A2;
+	A1 #(.n(2)) a;
+	// TODO: Check that
+	// - a.a = non-local (int) 5
+	// - a.b = local (logic) 1
+	// - a.c = local type int
+	// - a.n = non-local (int) 2
+endmodule
