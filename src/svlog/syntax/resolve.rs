@@ -192,7 +192,11 @@ impl<'a> Resolver<'a> {
 						self.pkg_map.insert(decl.id, decl);
 						(decl.name, decl.name_span, DefId::Package(decl.id))
 					},
-					_ => continue
+					ast::Item::Class(ref decl) => (decl.name.name, decl.name.span, DefId::Class(decl.name.id)),
+					ast::Item::Item(ref item) => match self.register_global_item(item) {
+						Some(x) => x,
+						None => continue
+					}
 				};
 
 				// Wrap the DefId together with a span up in a Def struct and
@@ -212,6 +216,13 @@ impl<'a> Resolver<'a> {
 
 		// Move the declarations we found into the global scope.
 		self.scopes.push(Scope::Global(tbl));
+	}
+
+	fn register_global_item(&mut self, item: &ast::HierarchyItem) -> Option<(Name, Span, DefId)> {
+		match *item {
+			ast::HierarchyItem::Typedef(ref td) => Some((td.name.name, td.name.span, DefId::Typedef(td.name.id))),
+			_ => None
+		}
 	}
 
 	pub fn resolve_ast(&mut self, ast: &'a ast::Root) {

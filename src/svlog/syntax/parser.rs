@@ -504,17 +504,24 @@ fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
 		Keyword(Kw::Module) => parse_module_decl(p).map(|d| ast::Item::Module(d)),
 		Keyword(Kw::Interface) => parse_interface_decl(p).map(|d| ast::Item::Interface(d)),
 		Keyword(Kw::Package) => parse_package_decl(p).map(|d| ast::Item::Package(d)),
-		// Keyword(Kw::Program) => parse_program_decl(p).map(|d| ast::Item::Module(d)),
+		// Keyword(Kw::Program) => parse_program_decl(p).map(|d| ast::Item::Program(d)),
 		Keyword(Kw::Class) => parse_class_decl(p).map(|d| ast::Item::Class(d)),
 		Keyword(Kw::Import) => parse_import_decl(p).map(|i| ast::Item::Item(HierarchyItem::ImportDecl(i))),
+		Keyword(Kw::Typedef) => parse_typedef(p).map(|d| ast::Item::Item(HierarchyItem::Typedef(d))),
+		// TODO: Actually according to the standard, any package_item can appear
+		// at this level of the source text. No clue how wires or variables
+		// would behave if they are declared at such a high level,. Maybe we
+		// should just accept these items here, and complain about what we do
+		// not support during lowering to HIR.
 		tkn => {
-			p.add_diag(DiagBuilder2::error(format!("Expected module, interface, package, program, class, or import, instead got `{}`", tkn)).span(sp));
+			p.add_diag(DiagBuilder2::error(format!("Expected module, interface, package, program, class, import, or typedef, instead got `{}`", tkn)).span(sp));
 			p.recover_balanced(&[
 				Keyword(Kw::Module),
 				Keyword(Kw::Interface),
 				Keyword(Kw::Package),
 				Keyword(Kw::Program),
-				Keyword(Kw::Class)
+				Keyword(Kw::Class),
+				Keyword(Kw::Typedef)
 			], false);
 			Err(())
 		}
@@ -4298,9 +4305,9 @@ impl<'tp> AbstractParser for BranchParser<'tp> {
 
 
 fn parse_typedef(p: &mut AbstractParser) -> ReportedResult<Typedef> {
-	p.bump();
-	let mut span = p.last_span();
-	let ty = parse_data_type(p)?;
+	let mut span = p.peek(0).1;
+	p.require_reported(Keyword(Kw::Typedef))?;
+	let ty = parse_explicit_type(p)?;
 	let name = parse_identifier(p, "type name")?;
 	let (dims, _) = parse_optional_dimensions(p)?;
 	p.require_reported(Semicolon)?;

@@ -84,6 +84,7 @@ impl<'a> Lowerer<'a> {
 			ast::Item::Module(d) => self.map_module(d),
 			ast::Item::Interface(d) => self.map_interface(d),
 			ast::Item::Package(d) => self.map_package(d),
+			ast::Item::Class(d) => self.map_class(d),
 			ast::Item::Item(ast::HierarchyItem::ImportDecl(_)) => (), // import decls irrelevant after name resolution
 			x => self.add_diag(DiagBuilder2::error(format!("{} cannot appear here", x.as_str())).span(x.span())),
 		}
@@ -252,6 +253,11 @@ impl<'a> Lowerer<'a> {
 		if let Some(e) = self.pkgs.insert(node.id, m) {
 			panic!("item `{}` and package `{}` both have ID {}", e.name, node.name, node.id);
 		}
+	}
+
+	/// Lower a class declaration.
+	fn map_class(&mut self, node: ast::ClassDecl) {
+		// TODO: Implement this.
 	}
 }
 
