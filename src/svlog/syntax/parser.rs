@@ -1596,6 +1596,24 @@ fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<
 }
 
 
+/// Parse either an expression or a type. Prefers expressions over types.
+fn parse_type_or_expr(p: &mut AbstractParser, terminators: &[Token]) -> ReportedResult<ast::TypeOrExpr> {
+	let terminators = Vec::from(terminators);
+	let mut pp = ParallelParser::new();
+	pp.add_greedy("expression", |p| {
+		let expr = parse_expr(p)?;
+		p.anticipate(&terminators)?;
+		Ok(ast::TypeOrExpr::Expr(expr))
+	});
+	pp.add("type", |p| {
+		let ty = parse_explicit_type(p)?;
+		p.anticipate(&terminators)?;
+		Ok(ast::TypeOrExpr::Type(ty))
+	});
+	pp.finish(p, "type or expression")
+}
+
+
 fn parse_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
 	parse_expr_prec(p, Precedence::Min)
 }
@@ -2646,14 +2664,15 @@ fn parse_parameter_assignments(p: &mut AbstractParser) -> ReportedResult<Vec<ast
 
 fn parse_parameter_assignment(p: &mut AbstractParser) -> ReportedResult<ast::ParamAssignment> {
 	let mut span = p.peek(0).1;
+	let terms = [Comma, CloseDelim(Paren)];
 	// If the parameter assignment starts with a ".", this is a named
 	// assignment. Otherwise it's an ordered assignment.
 	let (name, expr) = if p.try_eat(Period) {
 		let name = parse_identifier(p, "parameter name")?;
-		let expr = flanked(p, Paren, parse_expr)?;
+		let expr = flanked(p, Paren, |p| parse_type_or_expr(p, &terms))?;
 		(Some(name), expr)
 	} else {
-		(None, parse_expr(p)?)
+		(None, parse_type_or_expr(p, &terms)?)
 	};
 	span.expand(p.last_span());
 	Ok(ast::ParamAssignment {

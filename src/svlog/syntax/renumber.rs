@@ -179,7 +179,10 @@ impl RenumberPass {
 
 	pub fn renumber_param_assignments(&mut self, nodes: &mut [ast::ParamAssignment]) {
 		for node in nodes {
-			self.renumber_expr(&mut node.expr);
+			match node.expr {
+				ast::TypeOrExpr::Type(ref mut n) => self.renumber_type(n),
+				ast::TypeOrExpr::Expr(ref mut n) => self.renumber_expr(n),
+			}
 		}
 	}
 

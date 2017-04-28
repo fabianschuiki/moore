@@ -579,7 +579,7 @@ pub struct GenvarDecl {
 
 
 
-// TODO: Assign a id to each and every expression. This will later allow the
+// TODO: Assign an id to each and every expression. This will later allow the
 // types of each expression to be recorded properly, and simplifies the act of
 // assigning IDs. Maybe expression IDs should be distinct from node IDs?
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -647,6 +647,12 @@ pub enum ExprData {
 		name: Identifier,
 	},
 	PatternExpr(Vec<PatternField>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum TypeOrExpr {
+	Type(Type),
+	Expr(Expr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -1225,7 +1231,7 @@ pub struct GenerateBlock {
 pub struct ParamAssignment {
 	pub span: Span,
 	pub name: Option<Identifier>,
-	pub expr: Expr,
+	pub expr: TypeOrExpr,
 }
 
 /// A port connection as given in an instantiation.

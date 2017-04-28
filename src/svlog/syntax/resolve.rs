@@ -471,7 +471,10 @@ impl<'a> Resolver<'a> {
 	}
 
 	pub fn resolve_param_assignment(&mut self, node: &ast::ParamAssignment) {
-		self.resolve_expr(&node.expr);
+		match node.expr {
+			ast::TypeOrExpr::Type(ref n) => self.resolve_type(n),
+			ast::TypeOrExpr::Expr(ref n) => self.resolve_expr(n),
+		}
 	}
 
 	pub fn resolve_port_conn(&mut self, node: &ast::PortConn) {
