@@ -4099,11 +4099,11 @@ fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<Constrai
 }
 
 
-struct ParallelParser<R: Clone> {
-	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ReportedResult<R>>, bool)>,
+struct ParallelParser<'a, R: Clone> {
+	branches: Vec<(String, Box<FnMut(&mut AbstractParser) -> ReportedResult<R> + 'a>, bool)>,
 }
 
-impl<R: Clone> ParallelParser<R> {
+impl<'a, R: Clone> ParallelParser<'a, R> {
 	pub fn new() -> Self {
 		ParallelParser {
 			branches: Vec::new(),
@@ -4111,12 +4111,12 @@ impl<R: Clone> ParallelParser<R> {
 	}
 
 	pub fn add<F>(&mut self, name: &str, func: F)
-	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'static {
+	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'a {
 		self.branches.push((name.to_owned(), Box::new(func), false));
 	}
 
 	pub fn add_greedy<F>(&mut self, name: &str, func: F)
-	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'static {
+	where F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'a {
 		self.branches.push((name.to_owned(), Box::new(func), true));
 	}
 
