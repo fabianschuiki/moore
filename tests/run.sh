@@ -19,11 +19,13 @@ while read -d $'\0' SRCFILE; do
 	[ ! -e .moore ] || rm .moore
 
 	if ! $MOORE compile $SRCFILE &> $TMP; then
-		echo " ${CFAIL}compilation failed${CRST}"
+		NUM_FAIL=$((NUM_FAIL+1))
+		echo " ${CFAIL}failed${CRST}"
 		cat $TMP
 		COMPILE_RESULT=false
 	else
-		echo
+		NUM_PASS=$((NUM_PASS+1))
+		echo " ${CPASS}passed${CRST}"
 		COMPILE_RESULT=true
 	fi
 
