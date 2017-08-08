@@ -4,6 +4,7 @@
 //! source file. This helps keeping the source location lean and allow for
 //! simple querying of information.
 
+use std;
 use name::RcStr;
 use memmap::Mmap;
 use std::borrow::Borrow;
@@ -123,6 +124,11 @@ pub trait SourceContent {
 	/// Obtain an iterator over an extract of the source content. This might be
 	/// more efficient than copying the extract into a String.
 	fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter>;
+
+	/// Obtain a slice voer all bytes within the source file. This is the
+	/// fastest way of getting at the file's contents, since no parsing or
+	/// character encoding is performed or assumed.
+	fn bytes(&self) -> &[u8];
 }
 
 
@@ -250,6 +256,10 @@ impl SourceContent for VirtualSourceContent {
 	fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter> {
 		Box::new(self.0[begin..end].char_indices())
 	}
+
+	fn bytes(&self) -> &[u8] {
+		self.0.as_bytes()
+	}
 }
 
 
@@ -307,6 +317,10 @@ impl SourceContent for DiskSourceContent {
 	fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter> {
 		use std::str;
 		Box::new(str::from_utf8(unsafe { &self.0.as_slice()[begin..end] }).unwrap().char_indices())
+	}
+
+	fn bytes(&self) -> &[u8] {
+		unsafe { self.0.as_slice() }
 	}
 }
 
@@ -421,6 +435,27 @@ impl Span {
 impl fmt::Debug for Span {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}:{}-{}", self.source, self.begin, self.end)
+	}
+}
+
+
+
+/// A wrapper that associates a span with a value.
+pub struct Spanned<T> {
+	pub value: T,
+	pub span: Span,
+}
+
+impl<T> Spanned<T> {
+	/// Wrap a given value together with the span it covers.
+	pub fn new(value: T, span: Span) -> Spanned<T> {
+		Spanned{ value: value, span: span }
+	}
+}
+
+impl<T> std::fmt::Debug for Spanned<T> where T: std::fmt::Debug {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		self.value.fmt(f)
 	}
 }
 

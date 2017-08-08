@@ -1,0 +1,258 @@
+// Copyright (c) 2017 Fabian Schuiki
+
+use std;
+use moore_common::name::*;
+pub use self::Token::*;
+pub use self::Delim::*;
+
+
+/// A primary token as emitted by the lexer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Token {
+	/// A basic or extended identifier.
+	Ident(Name),
+	/// A literal.
+	Lit(Literal),
+	/// An opening delimiter.
+	OpenDelim(Delim),
+	/// A closing delimiter.
+	CloseDelim(Delim),
+	/// A keyword.
+	Keyword(Kw),
+
+	Period,
+	Comma,
+	Colon,
+	Semicolon,
+	Apostrophe,
+	Ampersand,
+	Arrow,
+	Condition,
+	LtGt,
+	VarAssign,
+	Lshift,
+	Rshift,
+	Eq,
+	Neq,
+	Lt,
+	Leq,
+	Gt,
+	Geq,
+	MatchEq,
+	MatchNeq,
+	MatchLt,
+	MatchLeq,
+	MatchGt,
+	MatchGeq,
+	Add,
+	Sub,
+	Mul,
+	Div,
+	Pow,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Literal {
+	Abstract(
+		/// Base
+		Option<Name>,
+		/// Integer part
+		Name,
+		/// Fractional part
+		Option<Name>,
+		/// Exponent
+		Option<Exponent>,
+	),
+	BitString(
+		/// Size
+		Option<Name>,
+		/// Base
+		BitStringBase,
+		/// Value
+		Name,
+	),
+	Char(char),
+	String(Name),
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Delim {
+	Paren,
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Exponent(
+	/// Sign
+	pub ExponentSign,
+	/// Value
+	pub Name,
+);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ExponentSign {
+	Positive,
+	Negative,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum BitStringBase {
+	B, O, X, D,
+	UB, UO, UX,
+	SB, SO, SX,
+}
+
+
+/// Generates a `Kw` enum from a list of keywords.
+macro_rules! declare_keywords {(
+	$( ($konst: ident, $string: expr) )*
+) => {
+	#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Hash)]
+	pub enum Kw {
+		$($konst,)*
+	}
+
+	impl Kw {
+		pub fn as_str(self) -> &'static str {
+			match self {
+				$(Kw::$konst => $string,)*
+			}
+		}
+	}
+
+	impl std::fmt::Display for Kw {
+		fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+			write!(f, "{}", self.as_str())
+		}
+	}
+
+	pub fn find_keyword<S: AsRef<str>>(name: S) -> Option<Kw> {
+		use std::collections::HashMap;
+		thread_local!(static TBL: HashMap<String,Kw> = {
+			let mut tbl = HashMap::new();
+			$(tbl.insert($string.to_lowercase(), Kw::$konst);)*
+			tbl
+		});
+		TBL.with(|tbl| tbl.get(&name.as_ref().to_lowercase()).map(|kw| *kw))
+	}
+}}
+
+declare_keywords! {
+	// Keywords as per IEEE 1076-2008 section 15.10
+	(Abs,                "abs")
+	(Access,             "access")
+	(After,              "after")
+	(Alias,              "alias")
+	(All,                "all")
+	(And,                "and")
+	(Architecture,       "architecture")
+	(Array,              "array")
+	(Assert,             "assert")
+	(Assume,             "assume")
+	(AssumeGuarantee,    "assume_guarantee")
+	(Attribute,          "attribute")
+	(Begin,              "begin")
+	(Block,              "block")
+	(Body,               "body")
+	(Buffer,             "buffer")
+	(Bus,                "bus")
+	(Case,               "case")
+	(Component,          "component")
+	(Configuration,      "configuration")
+	(Constant,           "constant")
+	(Context,            "context")
+	(Cover,              "cover")
+	(Default,            "default")
+	(Disconnect,         "disconnect")
+	(Downto,             "downto")
+	(Else,               "else")
+	(Elsif,              "elsif")
+	(End,                "end")
+	(Entity,             "entity")
+	(Exit,               "exit")
+	(Fairness,           "fairness")
+	(File,               "file")
+	(For,                "for")
+	(Force,              "force")
+	(Function,           "function")
+	(Generate,           "generate")
+	(Generic,            "generic")
+	(Group,              "group")
+	(Guarded,            "guarded")
+	(If,                 "if")
+	(Impure,             "impure")
+	(In,                 "in")
+	(Inertial,           "inertial")
+	(Inout,              "inout")
+	(Is,                 "is")
+	(Label,              "label")
+	(Library,            "library")
+	(Linkage,            "linkage")
+	(Literal,            "literal")
+	(Loop,               "loop")
+	(Map,                "map")
+	(Mod,                "mod")
+	(Nand,               "nand")
+	(New,                "new")
+	(Next,               "next")
+	(Nor,                "nor")
+	(Not,                "not")
+	(Null,               "null")
+	(Of,                 "of")
+	(On,                 "on")
+	(Open,               "open")
+	(Or,                 "or")
+	(Others,             "others")
+	(Out,                "out")
+	(Package,            "package")
+	(Parameter,          "parameter")
+	(Port,               "port")
+	(Postponed,          "postponed")
+	(Procedure,          "procedure")
+	(Process,            "process")
+	(Property,           "property")
+	(Protected,          "protected")
+	(Pure,               "pure")
+	(Range,              "range")
+	(Record,             "record")
+	(Register,           "register")
+	(Reject,             "reject")
+	(Release,            "release")
+	(Rem,                "rem")
+	(Report,             "report")
+	(Restrict,           "restrict")
+	(RestrictGuarantee,  "restrict_guarantee")
+	(Return,             "return")
+	(Rol,                "rol")
+	(Ror,                "ror")
+	(Select,             "select")
+	(Sequence,           "sequence")
+	(Severity,           "severity")
+	(Shared,             "shared")
+	(Signal,             "signal")
+	(Sla,                "sla")
+	(Sll,                "sll")
+	(Sra,                "sra")
+	(Srl,                "srl")
+	(Strong,             "strong")
+	(Subtype,            "subtype")
+	(Then,               "then")
+	(To,                 "to")
+	(Transport,          "transport")
+	(Type,               "type")
+	(Unaffected,         "unaffected")
+	(Units,              "units")
+	(Until,              "until")
+	(Use,                "use")
+	(Variable,           "variable")
+	(Vmode,              "vmode")
+	(Vprop,              "vprop")
+	(Vunit,              "vunit")
+	(Wait,               "wait")
+	(When,               "when")
+	(While,              "while")
+	(With,               "with")
+	(Xnor,               "xnor")
+	(Xor,                "xor")
+}

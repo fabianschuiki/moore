@@ -8,12 +8,14 @@ authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 [dependencies]
 moore-common = { path = "src/common" }
 moore-svlog = { path = "src/svlog" }
+moore-vhdl = { path = "src/vhdl" }
 memmap = "0.5.0"
 owning_ref = "0.2.2"
 clap = "2"
 sha1 = "0.2.0"
 bincode = "0.6.1"
 rustc-serialize = "0.3.22"
+num = "0.1"
 
 [features]
 unstable = []

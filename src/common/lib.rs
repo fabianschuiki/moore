@@ -10,6 +10,7 @@ pub mod errors;
 pub mod lexer;
 pub mod name;
 pub mod source;
+pub mod grind;
 
 
 pub struct Session {

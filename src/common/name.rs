@@ -26,7 +26,7 @@ pub struct Name(pub u32);
 impl Name {
 	/// Check if the name is case sensitive.
 	pub fn is_case_sensitive(&self) -> bool {
-		self.0 >> 31 == 1
+		self.0 & 1 == 1
 	}
 
 	/// Return the string representation of this name.
@@ -149,13 +149,13 @@ impl NameTable {
 		// original form as well as its lowercase form into the lookup table.
 		let mut vect = self.vect.borrow_mut();
 		if case_sensitive {
-			let new_idx = Name(vect.len() as u32 | 1 << 31);
+			let new_idx = Name((vect.len() as u32) << 1 | 1);
 			let v = RcStr::new(value);
 			map.insert(v.clone(), new_idx);
 			vect.push(v);
 			new_idx
 		} else {
-			let new_idx = Name(vect.len() as u32);
+			let new_idx = Name((vect.len() as u32) << 1 | 0);
 			let lower = value.to_lowercase();
 			if let Some(&idx) = map.get(lower.as_str()) {
 				return idx;
@@ -170,7 +170,7 @@ impl NameTable {
 
 	/// Retrieve the string given a name tag.
 	pub fn get(&self, idx: Name) -> RcStr {
-		(*self.vect.borrow())[(idx.0 & !(1 << 31)) as usize].clone()
+		(*self.vect.borrow())[(idx.0 >> 1) as usize].clone()
 	}
 
 	/// Try to find a string.

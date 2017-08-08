@@ -6,8 +6,10 @@ extern crate bincode;
 extern crate rustc_serialize;
 extern crate moore_common;
 extern crate moore_svlog;
+extern crate moore_vhdl;
 use moore_common::*;
 use moore_svlog as svlog;
+use moore_vhdl as vhdl;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use std::path::Path;
 
@@ -115,7 +117,9 @@ fn compile(matches: &ArgMatches) {
 				svlog::store::store_items(".moore", &key, ast).unwrap();
 			}
 		}
-		x => panic!("{}: Language {:?} not yet supported", filename, x),
+		Language::Vhdl => {
+			vhdl::parser::parse(source);
+		}
 	}
 }
 
