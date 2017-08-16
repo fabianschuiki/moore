@@ -202,6 +202,21 @@ impl SourceManager {
 		}));
 		new_id
 	}
+
+	/// Create a virtual file from the contents of a string and add it to the
+	/// source manager. The file can only be used with the returned `Source`,
+	/// since there is no name associated with it by which it could be referred
+	/// to.
+	pub fn add_anonymous<S>(&self, content: S) -> Source where S: Into<String> {
+		let mut vect = self.vect.borrow_mut();
+		let new_id = Source(vect.len() as u32 + 1);
+		vect.push(Box::new(VirtualSourceFile {
+			id: new_id,
+			filename: RcStr::new("<anonymous>"),
+			content: Rc::new(VirtualSourceContent(content.into())),
+		}));
+		new_id
+	}
 }
 
 
@@ -456,6 +471,17 @@ impl<T> Spanned<T> {
 impl<T> std::fmt::Debug for Spanned<T> where T: std::fmt::Debug {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		self.value.fmt(f)
+	}
+}
+
+impl<T> Copy for Spanned<T> where T: Copy {}
+
+impl<T> Clone for Spanned<T> where T: Clone {
+	fn clone(&self) -> Self {
+		Spanned {
+			value: self.value.clone(),
+			span: self.span,
+		}
 	}
 }
 

@@ -6,10 +6,10 @@
 pub mod lexer;
 pub mod parser;
 
+use moore_common::grind::{self, Grinder};
+use moore_common::source::*;
+use moore_common::errors::*;
 
-use moore_common::grind::{self, Grinder, Chisel};
-use moore_common::source::Source;
-use moore_common::errors::DiagBuilder2;
 
 pub fn parse(src: Source) {
 	println!("parsing VHDL source {:?}", src);
@@ -20,18 +20,22 @@ pub fn parse(src: Source) {
 		.vent(|err: DiagBuilder2| println!("{}", err));
 
 	// Perform lexical analysis on the bytes.
-	let mut tokens = lexer::Lexer::new(bytes, src);
+	let tokens = lexer::Lexer::new(bytes, src);
+
+	// Parse the file.
+	let mut parser = parser::basic::BasicParser::new(tokens);
+	parser::rules::parse_design_file(&mut parser);
 
 	// Parse the file.
 	// let mut i = 0;
-	loop {
-		let c = tokens.next();
-		println!("{:?}", c);
-		// i += c.span.begin;
-		if c.is_end() {
-			break;
-		}
-	}
+	// loop {
+	// 	let c = tokens.next();
+	// 	println!("{:?}", c);
+	// 	// i += c.span.begin;
+	// 	if c.is_end() {
+	// 		break;
+	// 	}
+	// }
 
 	println!("done");
 	// println!("done ({})", i);

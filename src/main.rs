@@ -118,7 +118,7 @@ fn compile(matches: &ArgMatches) {
 			}
 		}
 		Language::Vhdl => {
-			vhdl::parser::parse(source);
+			vhdl::syntax::parse(source);
 		}
 	}
 }
