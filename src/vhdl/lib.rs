@@ -4,4 +4,6 @@
 
 extern crate moore_common;
 extern crate num;
-pub mod parser;
+
+pub mod syntax;
+// pub mod ast;

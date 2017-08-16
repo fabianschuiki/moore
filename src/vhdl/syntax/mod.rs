@@ -1,12 +1,11 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-//! A VHDL parser.
+//! A lexical analyzer and parser for VHDL source files as per
+//! IEEE 1076-2008.
 
 pub mod lexer;
-pub mod categorizer;
-pub mod bundler;
-pub mod tokenizer;
-pub mod token;
+pub mod parser;
+
 
 use moore_common::grind::{self, Grinder, Chisel};
 use moore_common::source::Source;
