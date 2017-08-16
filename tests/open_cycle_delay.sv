@@ -1,3 +1,4 @@
+// @exclude
 // Test for an endless cycle delay
 module A1 (input logic clk_i, input logic data_gnt_i, input logic data_rvalid_i);
 

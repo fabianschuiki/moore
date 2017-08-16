@@ -12,9 +12,19 @@ TMP=`mktemp`
 TESTS_DIR="$(dirname "${BASH_SOURCE[0]}")"
 MOORE="$TESTS_DIR/../target/debug/moore"
 
+ALL=false
+if [ "$1" = "--all" ] || [ "$1" = "-a" ]; then
+	ALL=true
+fi
+
 NUM_PASS=0
 NUM_FAIL=0
 while read -d $'\0' SRCFILE; do
+	if ! $ALL && grep -E '@exclude' $SRCFILE >/dev/null; then
+		echo "exclude ${CNAME}$SRCFILE${CRST}"
+		continue
+	fi
+
 	echo -n "testing ${CNAME}$SRCFILE${CRST} ..."
 	[ ! -e .moore ] || rm .moore
 

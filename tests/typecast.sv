@@ -1,3 +1,4 @@
+// @exclude
 module A1 (input logic [63:0] a);
 
     typedef struct packed {
