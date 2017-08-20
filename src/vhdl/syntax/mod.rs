@@ -5,6 +5,7 @@
 
 pub mod lexer;
 pub mod parser;
+pub mod ast;
 
 use moore_common::grind::{self, Grinder};
 use moore_common::source::*;

@@ -456,6 +456,7 @@ impl fmt::Debug for Span {
 
 
 /// A wrapper that associates a span with a value.
+#[derive(PartialOrd, Ord, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Spanned<T> {
 	pub value: T,
 	pub span: Span,

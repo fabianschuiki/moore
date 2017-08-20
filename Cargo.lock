@@ -2,8 +2,10 @@
 name = "moore-vhdl"
 version = "0.1.0"
 dependencies = [
+ "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.1.0",
  "num 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

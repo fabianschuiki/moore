@@ -1,6 +1,6 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-//! This file implements a recursive descent parser for VHDL.
+//! This module implements a recursive descent parser for VHDL.
 
 use moore_common::errors::*;
 use moore_common::name::*;
@@ -8,6 +8,7 @@ use moore_common::source::*;
 use syntax::lexer::token::*;
 use syntax::parser::TokenStream;
 use syntax::parser::core::*;
+use syntax::ast;
 
 pub trait Parser: TokenStream<Token> {}
 impl<T> Parser for T where T: TokenStream<Token> {}
@@ -38,6 +39,11 @@ macro_rules! unimp {
 }
 
 
+/// Parse an entire design file. IEEE 1076-2008 section 13.1.
+///
+/// ```text
+/// design_file := {design_unit}+
+/// ```
 pub fn parse_design_file<P: Parser>(p: &mut P) {
 	let mut units = Vec::new();
 	while !p.is_fatal() && p.peek(0).value != Eof {
@@ -49,6 +55,19 @@ pub fn parse_design_file<P: Parser>(p: &mut P) {
 }
 
 
+/// Parse a single design unit. IEEE 1076-2008 section 13.1.
+///
+/// ```text
+/// design_unit := context_clause library_unit
+/// library_unit
+///   := entity_decl
+///   := config_decl
+///   := package_decl
+///   := package_inst_decl
+///   := context_decl
+///   := arch_body
+///   := package_body
+/// ```
 pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 	let context = repeat(p, parse_context_item)?;
 	let Spanned{ value: tkn, span: sp } = p.peek(0);
@@ -73,7 +92,7 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 }
 
 
-/// Parse a context item.
+/// Parse a context item. IEEE 1076-2008 section 13.4.
 ///
 /// ```text
 /// context_item := library_clause | use_clause | context_ref
@@ -97,10 +116,10 @@ pub fn parse_context_item<P: Parser>(p: &mut P) -> RecoveredResult<Option<()>> {
 }
 
 
-/// Parse a library clause.
+/// Parse a library clause. IEEE 1076-2008 section 13.2.
 ///
 /// ```text
-/// library_clause := "library" ident {"," ident}
+/// library_clause := "library" {ident}","+
 /// ```
 pub fn parse_library_clause<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
@@ -112,10 +131,10 @@ pub fn parse_library_clause<P: Parser>(p: &mut P) -> ReportedResult<()> {
 }
 
 
-/// Parse a use clause.
+/// Parse a use clause. IEEE 1076-2008 section 12.4.
 ///
 /// ```text
-/// use_clause := "use" {name ","}+
+/// use_clause := "use" {name}","+
 /// ```
 pub fn parse_use_clause<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
@@ -128,12 +147,17 @@ pub fn parse_use_clause<P: Parser>(p: &mut P) -> ReportedResult<()> {
 
 
 pub fn parse_context_ref<P: Parser>(p: &mut P) -> ReportedResult<()> {
-	unimp!(p, "Context references");
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Context))?;
+	let names = separated_nonempty(p, Comma, Semicolon, "selected name", parse_name)?;
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
 }
 
 
-/// Parse a name.
-pub fn parse_name<P: Parser>(p: &mut P) -> ReportedResult<()> {
+/// Parse a name. IEEE 1076-2008 section 8.
+pub fn parse_name<P: Parser>(p: &mut P) -> ReportedResult<ast::CompoundName> {
 	let q = p.peek(0).span;
 	match try_name(p)? {
 		Some(n) => Ok(n),
@@ -148,28 +172,50 @@ pub fn parse_name<P: Parser>(p: &mut P) -> ReportedResult<()> {
 }
 
 
-/// Try to parse a name.
+/// Try to parse a name. IEEE 1076-2008 section 8.
+pub fn try_name<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::CompoundName>> {
+	// Parse a primary name.
+	let primary = match try_primary_name(p) {
+		Some(pn) => pn,
+		None => return Ok(None)
+	};
+
+	// Wrap it up in a compound name, to be extended with suffices.
+	let name = ast::CompoundName{
+		id: Default::default(),
+		span: primary.span,
+		primary: primary,
+		parts: Vec::new(),
+	};
+
+	// Parse a potential name suffix.
+	parse_name_suffix(p, name).map(|x| Some(x))
+}
+
+
+/// Try to parse a primary name. IEEE 1076-2008 section 8.
 ///
 /// ```text
 /// primary_name := ident | char_lit | string_lit
 /// ```
-pub fn try_name<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
-	let Spanned{ value: tkn, mut span } = p.peek(0);
-
-	// Parse a primary name.
-	let primary = match tkn {
-		Ident(n) => { p.bump(); () },
-		Lit(Literal::Char(c)) => { p.bump(); () },
-		Lit(Literal::String(s)) => { p.bump(); () },
-		_ => return Ok(None)
+pub fn try_primary_name<P: Parser>(p: &mut P) -> Option<ast::PrimaryName> {
+	let Spanned{ value: tkn, span } = p.peek(0);
+	let kind = match tkn {
+		Ident(n) => ast::PrimaryNameKind::Ident(n),
+		Lit(Literal::Char(c)) => ast::PrimaryNameKind::Char(c),
+		Lit(Literal::String(s)) => ast::PrimaryNameKind::String(s),
+		_ => return None
 	};
-
-	// Parse a potential name suffix.
-	parse_name_suffix(p, primary).map(|x| Some(x))
+	p.bump();
+	return Some(ast::PrimaryName{
+		id: Default::default(),
+		span: span,
+		kind: kind,
+	});
 }
 
 
-/// Parse the suffix to a name.
+/// Parse the suffix to a name. IEEE 1076-2008 section 8.
 ///
 /// ```text
 /// name
@@ -178,24 +224,29 @@ pub fn try_name<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 ///   := name [signature] "'" ident
 ///   := name "(" assoc_list ")"
 /// ```
-pub fn parse_name_suffix<P: Parser>(p: &mut P, prefix: ()) -> ReportedResult<()> {
+pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> ReportedResult<ast::CompoundName> {
 	// Try to parse a selected name.
 	if accept(p, Period) {
-		let Spanned{ value: tkn, mut span } = p.peek(0);
-		let name = match tkn {
-			Ident(n) => { p.bump(); () },
-			Lit(Literal::Char(c)) => { p.bump(); () },
-			Lit(Literal::String(s)) => { p.bump(); () },
-			Keyword(Kw::All) => { p.bump(); () }
-			wrong => {
+		// Parse the suffix, which is a primary name or the keyword `all`.
+		let suffix = {
+			if let Some(pn) = try_primary_name(p) {
+				ast::NamePart::Select(pn)
+			} else if accept(p, Keyword(Kw::All)) {
+				ast::NamePart::SelectAll(p.last_span())
+			} else {
+				let Spanned{ value: wrong, span } = p.peek(0);
 				p.emit(
-					DiagBuilder2::error("Expected identifier, character literal, or operator symbol after `.`")
+					DiagBuilder2::error("Expected identifier, character literal, operator symbol, or `all` after `.`")
 					.span(span)
 					.add_note("see IEEE 1076-2008 section 8.3")
 				);
 				return Err(Reported);
 			}
 		};
+
+		// Extend the name
+		name.span.expand(p.last_span());
+		name.parts.push(suffix);
 		return parse_name_suffix(p, name);
 	}
 
@@ -213,25 +264,32 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, prefix: ()) -> ReportedResult<()>
 
 		// Consume the apostrophe and attribute name.
 		require(p, Apostrophe)?;
-		let name = parse_ident(p, "attribute name")?;
-		return parse_name_suffix(p, ());
+		let attr = parse_ident(p, "attribute name")?;
+
+		// Extend the name.
+		name.span.expand(p.last_span());
+		name.parts.push(ast::NamePart::Attribute(attr, None));
+		return parse_name_suffix(p, name);
 	}
 
 	// Try to parse a function call, slice name, or indexed name.
 	if let Some(al) = try_flanked(p, Paren, parse_assoc_list)? {
-		return parse_name_suffix(p, ());
+		name.span.expand(p.last_span());
+		name.parts.push(ast::NamePart::Call(ast::AssocList));
+		return parse_name_suffix(p, name);
 	}
 
 	// If we arrive here, none of the suffices matched, and we simply return the
 	// prefix that we have received.
-	Ok(prefix)
+	Ok(name)
 }
 
 
-/// Parse an association list as they are found in function calls.
+/// Parse an association list as they are found in function calls. IEEE
+/// 1076-2008 section 6.5.7.
 ///
 /// ```text
-/// assoc_list  := {assoc_elem ","}+
+/// assoc_list  := {assoc_elem}","+
 /// assoc_elem  := [name "=>"] actual_part
 /// actual_part
 ///   := expr

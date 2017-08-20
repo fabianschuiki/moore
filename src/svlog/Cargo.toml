@@ -10,5 +10,5 @@ path = "lib.rs"
 moore-common = { path = "../common" }
 moore-svlog-syntax = { path = "syntax" }
 moore-svlog-hir = { path = "hir" }
-bincode = "0.6.1"
-rustc-serialize = "0.3.22"
+bincode = "0.6"
+rustc-serialize = "0.3"

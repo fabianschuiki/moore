@@ -3,8 +3,9 @@
 use std;
 use std::fmt::Display;
 use std::marker::PhantomData;
-use moore_common::source::*;
 use moore_common::errors::*;
+use moore_common::name::*;
+use moore_common::source::*;
 use syntax::lexer::token::*;
 use syntax::parser::rules::{Parser, Reported, Recovered, ReportedResult, RecoveredResult};
 
@@ -278,12 +279,12 @@ where F: FnMut(&mut P) -> ReportedResult<R> {
 
 
 /// Parse an identifier.
-pub fn parse_ident<P: Parser, M: Display>(p: &mut P, msg: M) -> ReportedResult<()> {
+pub fn parse_ident<P: Parser, M: Display>(p: &mut P, msg: M) -> ReportedResult<Spanned<Name>> {
 	let Spanned{ value, span } = p.peek(0);
 	match value {
-		Ident(_) => {
+		Ident(n) => {
 			p.bump();
-			Ok(())
+			Ok(Spanned::new(n, span))
 		}
 		wrong => {
 			p.emit(

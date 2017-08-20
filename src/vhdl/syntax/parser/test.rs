@@ -2,6 +2,7 @@
 
 use std::fmt::Debug;
 use moore_common::errors::*;
+use moore_common::name::*;
 use moore_common::source::*;
 use moore_common::grind::{self, Grinder};
 use syntax::lexer::Lexer;
@@ -9,9 +10,10 @@ use syntax::lexer::token;
 use syntax::parser::rules::*;
 use syntax::parser::core::*;
 use syntax::parser::basic::BasicParser;
+use syntax::ast;
 
-macro_rules! check {
-    ($content:expr, $parse_fn:expr, $expect:expr) => {{
+macro_rules! parse {
+    ($content:expr, $parse_fn:expr) => {{
 		// Create an anonymous source file with the given content.
 		let src = get_source_manager().add_anonymous($content);
 
@@ -23,11 +25,11 @@ macro_rules! check {
 		let mut parser = BasicParser::new(tokens);
 
 		// Check the result.
-		check_impl(&mut parser, $parse_fn, $expect);
+		parse_impl(&mut parser, $parse_fn)
     }}
 }
 
-fn check_impl<P,F,R,E>(p: &mut P, mut parse_fn: F, expect: R) where
+fn parse_impl<P,F,R,E>(p: &mut P, mut parse_fn: F) -> R where
 	P: Parser,
 	F: FnMut(&mut P) -> Result<R,E>,
 	E: Debug {
@@ -43,14 +45,13 @@ fn check_impl<P,F,R,E>(p: &mut P, mut parse_fn: F, expect: R) where
 		}
 	}
 
-	// Check the result.
-	// TODO
+	result
 }
 
 
 #[test]
 fn name() {
-	check!("
+	let ast = parse!("
 		simple
 		'x'
 		\"add\"
@@ -64,19 +65,24 @@ fn name() {
 		-- simple(1,2)
 		-- simple(1 to 2)
 		-- simple(2 downto 1)
-	", |p| repeat(p, try_name), vec![()]);
+	", |p| repeat(p, try_name));
 }
 
 #[test]
 fn library_clause() {
-	check!("library ieee;", parse_library_clause, ());
+	parse!("library ieee;", parse_context_item);
 }
 
 #[test]
 fn use_clause() {
-	check!("
-		use ieee;
-		use ieee, ieee.std_logic_1164.all;
-		use work.'X', work.\"+\";
-	", |p| repeat(p, parse_context_item), vec![()]);
+	parse!("use ieee;", parse_context_item);
+	parse!("use ieee, ieee.std_logic_1164.all;", parse_context_item);
+	parse!("use work.'X', work.\"+\";", parse_context_item);
+}
+
+#[test]
+fn context_ref() {
+	parse!("context ctx;", parse_context_item);
+	parse!("context ctx, work, stuff;", parse_context_item);
+	parse!("context work.'X', work'blah.text;", parse_context_item);
 }
