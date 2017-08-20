@@ -58,7 +58,7 @@ pub fn parse_design_file<P: Parser>(p: &mut P) {
 /// Parse a single design unit. IEEE 1076-2008 section 13.1.
 ///
 /// ```text
-/// design_unit := context_clause library_unit
+/// design_unit := {context_item} library_unit
 /// library_unit
 ///   := entity_decl
 ///   := config_decl
@@ -71,11 +71,17 @@ pub fn parse_design_file<P: Parser>(p: &mut P) {
 pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 	let context = repeat(p, parse_context_item)?;
 	let Spanned{ value: tkn, span: sp } = p.peek(0);
-	match tkn {
+	match match tkn {
 		Keyword(Kw::Entity) => unimplemented!(),
 		Keyword(Kw::Configuration) => unimplemented!(),
-		Keyword(Kw::Package) => unimplemented!(),
-		Keyword(Kw::Context) => unimplemented!(),
+		Keyword(Kw::Package) => {
+			if p.peek(1).value == Keyword(Kw::Body) {
+				unimplemented!()
+			} else {
+				unimplemented!()
+			}
+		}
+		Keyword(Kw::Context) => parse_context_decl(p),
 		Keyword(Kw::Architecture) => unimplemented!(),
 		tkn => {
 			p.emit(
@@ -84,9 +90,14 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 				.add_note("`entity`, `configuration`, `package`, and `context` are primary units")
 				.add_note("`architecture` and `package body` are secondary units")
 			);
+			Err(Reported)
+		}
+	} {
+		Ok(x) => Ok(x),
+		Err(Reported) => {
 			recover(p, &[Keyword(Kw::End)], true);
 			recover(p, &[Semicolon], true);
-			return Err(Recovered);
+			Err(Recovered)
 		}
 	}
 }
@@ -231,16 +242,18 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 		let suffix = {
 			if let Some(pn) = try_primary_name(p) {
 				ast::NamePart::Select(pn)
-			} else if accept(p, Keyword(Kw::All)) {
-				ast::NamePart::SelectAll(p.last_span())
-			} else {
-				let Spanned{ value: wrong, span } = p.peek(0);
-				p.emit(
-					DiagBuilder2::error("Expected identifier, character literal, operator symbol, or `all` after `.`")
-					.span(span)
-					.add_note("see IEEE 1076-2008 section 8.3")
-				);
-				return Err(Reported);
+			} else { // `else if accept(...)` breaks on rust 1.15: p borrowed mutably in pattern guard
+				if accept(p, Keyword(Kw::All)) {
+					ast::NamePart::SelectAll(p.last_span())
+				} else {
+					let Spanned{ value: wrong, span } = p.peek(0);
+					p.emit(
+						DiagBuilder2::error("Expected identifier, character literal, operator symbol, or `all` after `.`")
+						.span(span)
+						.add_note("see IEEE 1076-2008 section 8.3")
+					);
+					return Err(Reported);
+				}
 			}
 		};
 
@@ -299,4 +312,35 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 /// ```
 pub fn parse_assoc_list<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	unimp!(p, "Association lists");
+}
+
+
+/// Parse a context declaration. IEEE 1076-2008 section 13.3.
+///
+/// ```text
+/// context_decl :=
+///   "context" ident "is"
+///     {context_item}
+///   "end" ["context"] [ident] ";"
+/// ```
+pub fn parse_context_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Context))?;
+	let name = parse_ident(p, "context name")?;
+	require(p, Keyword(Kw::Is))?;
+	let clauses = repeat(p, parse_context_item)?;
+	require(p, Keyword(Kw::End))?;
+	accept(p, Keyword(Kw::Context));
+	match try_ident(p) {
+		Some(n) if n.value != name.value => {
+			p.emit(
+				DiagBuilder2::warning(format!("`{}` does not match the context's name `{}`", n.value, name.value))
+				.span(n.span)
+				.add_note("see IEEE 1076-2008 section 13.3")
+			);
+		}
+		_ => ()
+	}
+	require(p, Semicolon);
+	Ok(())
 }

@@ -86,3 +86,27 @@ fn context_ref() {
 	parse!("context ctx, work, stuff;", parse_context_item);
 	parse!("context work.'X', work'blah.text;", parse_context_item);
 }
+
+#[test]
+fn design_unit() {
+	// parse!("entity foo is end;", parse_design_unit);
+	// parse!("configuration foo is begin end;", parse_design_unit);
+	// parse!("package foo is begin end;", parse_design_unit);
+	parse!("context foo is end;", parse_design_unit);
+}
+
+#[test]
+fn context_decl() {
+	parse!("context foo is end;", parse_context_decl);
+	parse!("context foo is end context;", parse_context_decl);
+	parse!("context foo is end context foo;", parse_context_decl);
+	// parse!("context foo is end context bar;", parse_context_decl); // check if this emits a warning
+	parse!("
+		context project_context is
+			library project_lib;
+			use project_lib.project_defs.all;
+			library IP_lib;
+			context IP_lib.IP_context;
+		end context project_context;
+	", parse_context_decl);
+}

@@ -295,3 +295,16 @@ pub fn parse_ident<P: Parser, M: Display>(p: &mut P, msg: M) -> ReportedResult<S
 		}
 	}
 }
+
+
+/// Try to parse an identifier.
+pub fn try_ident<P: Parser>(p: &mut P) -> Option<Spanned<Name>> {
+	let Spanned{ value, span } = p.peek(0);
+	match value {
+		Ident(n) => {
+			p.bump();
+			Some(Spanned::new(n, span))
+		}
+		_ => None
+	}
+}
