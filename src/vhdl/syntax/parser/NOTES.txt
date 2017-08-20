@@ -6,45 +6,75 @@ primary_name:
 	char_lit
 	string_lit
 
-prefix:
+name:
 	primary_name
-	prefix "." ident               # selected_name
-	prefix "." char_lit            # selected_name
-	prefix "." string_lit          # selected_name
-	prefix "." "all"               # selected_name
-	prefix [signature] "'" ident   # attribute_name
-	prefix "(" assoc_list ")"      # func_call, slice_name, indexed_name
+	name "." ident               # selected_name
+	name "." char_lit            # selected_name
+	name "." string_lit          # selected_name
+	name "." "all"               # selected_name
+	name [signature] "'" ident   # attribute_name, range
+	name paren_expr              # func_call, slice_name, indexed_name, array_constraint, record_constraint, elem_constraint, elem_resol, assoc_list
+	name "range" expr            # range_constraint
 
 
 Expressions
 -----------
 
 primary_expr:
-	name                  # name, func_call, type_conv, physical_lit, enum_lit
-	name "'" paren_expr   # qualified_expr
+	name                           # name, func_call, type_conv, physical_lit, enum_lit, subtype_ind, resol_ind
+	name name                      # subtype_ind/resol_ind, elem_resol
+	name "'" paren_expr            # qualified_expr
 	abstract_lit
-	abstract_lit name     # physical_lit
+	abstract_lit name              # physical_lit
 	bit_string_lit
 	"null"
-	paren_expr            # aggregate, (expr)
-	"new" name [constraint]                              # alloc/subtype_ind
-	"new" name name [constraint]                         # alloc/subtype_ind
-	"new" "(" element_resolution ")" name [constraint]   # alloc/subtype_ind
-	"new" name "'" paren_expr                            # alloc/qualified_expr
+	"open"                         # array_constraint
+	"others"                       # assoc_list
+	paren_expr                     # aggregate, (expr), resol_ind
+	paren_expr name                # subtype_ind/resol_ind
+	"new" name                     # alloc/subtype_ind
+	"new" name name                # alloc/subtype_ind
+	"new" paren_expr name          # alloc/subtype_ind
+	"new" name "'" paren_expr      # alloc/qualified_expr
 
 paren_expr:
-	"(" {[{(expr|"others") "|"}+ "=>"] expr ","}+ ")"   # aggregate
+	"(" { [ { expr }"|"+ "=>" ] expr }","+ ")"  # aggregate, elem_resol, assoc_list, assoc_elem, formal_part, actual_part, formal_desig, array_constraint, record_constraint, name, subtype_ind, range, slice_name
 
 expr:
-	[0] primary_expr
-	[1] "abs" expr[0]
-	[1] "not" expr[0]
-	[1] logical_op expr[0]
-	[1] expr[0] "**" expr[0]       # enforce non-associativity later
-	[2] expr[2] mult_op expr[1]
-	[3] sign expr[2]
-	[4] expr[4] add_op expr[3]     # enforce sign/term stuff later
-	[5] expr[5] shift_op expr[4]   # enforce non-associativity later
-	[6] expr[6] rel_op expr[5]     # enforce non-associativity later
-	[7] expr[7] logical_op expr[6] # enforce non-associativity for nand/nor later
-	[8] "??" expr[0]
+	[ 0] primary_expr
+	[ 1] "abs" expr[0]
+	[ 1] "not" expr[0]
+	[ 1] logical_op expr[0]
+	[ 1] expr[0] "**" expr[0]       # enforce non-associativity later
+	[ 2] expr[2] mult_op expr[1]
+	[ 3] sign expr[2]
+	[ 4] expr[4] add_op expr[3]     # enforce sign/term stuff later
+	[ 5] expr[4] dir expr[4]        # range
+	[ 6] expr[6] shift_op expr[5]   # enforce non-associativity later
+	[ 7] expr[7] rel_op expr[6]     # enforce non-associativity later
+	[ 8] expr[8] logical_op expr[7] # enforce non-associativity for nand/nor later
+	[ 9] "??" expr[0]
+	[10] "inertial" expr[9]        # actual_part
+
+
+Resolution Indication
+---------------------
+
+resol_ind:
+	name
+	paren_expr
+
+elem_resol:
+	resol_ind
+	{ simple_name name }","+
+	{ simple_name paren_expr }","+
+
+
+Subtypes
+--------
+
+subtype_ind:
+	name                      # array_constraint, record_constraint, elem_constraint, range_constraint
+	name name                 # array_constraint, record_constraint, elem_constraint, range_constraint
+	paren_expr name           # array_constraint, record_constraint, elem_constraint, range_constraint
+	-> ";" "," ")" ":=" "register" "bus" "open" "is" ">>" mult_op add_op shift_op rel_op logical_op "**"

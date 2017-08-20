@@ -100,9 +100,84 @@ pub enum NamePart {
 }
 
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum UnaryOp {
+	Not,
+	Abs,
+	Sign(Sign),
+	Logical(LogicalOp),
+	Inertial,
+	Condition,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum BinaryOp {
+	Dir(Dir),
+	Logical(LogicalOp),
+	Rel(RelationalOp),
+	Match(RelationalOp),
+	Shift(ShiftOp),
+	Add,
+	Sub,
+	Concat,
+	Mul,
+	Div,
+	Mod,
+	Rem,
+	Pow,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum Dir {
+	To,
+	Downto,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum Sign {
+	Pos,
+	Neg,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum LogicalOp {
+	And,
+	Or,
+	Nand,
+	Nor,
+	Xor,
+	Xnor,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum RelationalOp {
+	Eq,
+	Neq,
+	Lt,
+	Leq,
+	Gt,
+	Geq,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum ShiftOp {
+	Sll,
+	Srl,
+	Sla,
+	Sra,
+	Rol,
+	Ror,
+}
+
 
 // TODO
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct AssocList;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Signature;
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct Expr {
+	pub span: Span,
+}
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct ExprData;

@@ -241,6 +241,7 @@ impl<T: Grinder> Tokenizer<T> where T: Grinder<Item=Option<Spanned<Bundle>>, Err
 			'-'  => Some(Sub),
 			'*'  => Some(Mul),
 			'/'  => Some(Div),
+			'|'  => Some(Pipe),
 			_ => None
 		} {
 			return Some(Spanned::new(tkn, span));

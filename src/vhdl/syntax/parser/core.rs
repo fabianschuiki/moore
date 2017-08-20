@@ -57,6 +57,43 @@ where P: Parser, M: FnMut(&mut P) -> bool, R: FnMut(&mut P, bool) {
 }
 
 
+pub struct TokenPredicate<P: Parser, T: Predicate<P>> {
+	inner: T,
+	token: Token,
+	_marker: PhantomData<P>,
+}
+
+impl<P,T> TokenPredicate<P,T> where P: Parser, T: Predicate<P> {
+	/// Create a new token predicate.
+	pub fn new(inner: T, token: Token) -> TokenPredicate<P,T> {
+		TokenPredicate{ inner: inner, token: token, _marker: PhantomData }
+	}
+}
+
+impl<P,T> Predicate<P> for TokenPredicate<P,T> where P: Parser, T: Predicate<P> {
+	fn matches(&mut self, p: &mut P) -> bool {
+		self.inner.matches(p) || p.peek(0).value == self.token
+	}
+
+	fn recover(&mut self, p: &mut P, consume: bool) {
+		self.inner.recover(p, consume)
+	}
+}
+
+impl<P,T> Display for TokenPredicate<P,T> where P: Parser, T: Predicate<P> {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "{}, {}", self.inner, self.token)
+	}
+}
+
+macro_rules! token_predicate {
+    ($token:expr) => ($token);
+    ($token1:expr, $token2:expr $(, $tokens:expr)*) => (
+    	TokenPredicate::new(token_predicate!($token2 $(, $tokens)*), $token1)
+    );
+}
+
+
 // TODO: Document this!
 pub fn recover<P: Parser>(p: &mut P, term: &[Token], eat_term: bool) {
 	let mut stack = Vec::new();
@@ -201,10 +238,10 @@ pub fn separated<P: Parser, M, R, F, T>(
 				break;
 			}
 		} else {
-			let sp = p.peek(0).span;
+			let Spanned{ value: tkn, span } = p.peek(0);
 			p.emit(
-				DiagBuilder2::error(format!("Expected {} or {} after {}", sep, term, msg))
-				.span(sp)
+				DiagBuilder2::error(format!("Expected {} or {} after {}, but found {} instead", term, sep, msg, tkn))
+				.span(span)
 			);
 			term.recover(p, false);
 			return Err(Recovered);

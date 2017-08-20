@@ -51,21 +51,21 @@ fn parse_impl<P,F,R,E>(p: &mut P, mut parse_fn: F) -> R where
 
 #[test]
 fn name() {
-	let ast = parse!("
-		simple
-		'x'
-		\"add\"
-		simple.simple
-		simple.'x'
-		simple.\"add\"
-		simple.all
-		simple'attr
-		-- simple[ signature goes here ]'attr
-		-- simple(1)
-		-- simple(1,2)
-		-- simple(1 to 2)
-		-- simple(2 downto 1)
-	", |p| repeat(p, try_name));
+	parse!("simple", parse_name);
+	parse!("'x'", parse_name);
+	parse!("\"add\"", parse_name);
+	parse!("simple.simple", parse_name);
+	parse!("simple.'x'", parse_name);
+	parse!("simple.\"add\"", parse_name);
+	parse!("simple.all", parse_name);
+	parse!("simple'attr", parse_name);
+	// parse!("simple[ signature goes here ]'attr", parse_name);
+	parse!("simple(1)", parse_name);
+	parse!("simple(1,2)", parse_name);
+	parse!("simple(1 to 2)", parse_name);
+	parse!("simple(2 downto 1)", parse_name);
+	parse!("simple range 2 downto 1", parse_name);
+	parse!("simple range 1 to 42", parse_name);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn context_ref() {
 
 #[test]
 fn design_unit() {
-	// parse!("entity foo is end;", parse_design_unit);
+	parse!("entity foo is end;", parse_design_unit);
 	// parse!("configuration foo is begin end;", parse_design_unit);
 	// parse!("package foo is begin end;", parse_design_unit);
 	parse!("context foo is end;", parse_design_unit);
@@ -109,4 +109,151 @@ fn context_decl() {
 			context IP_lib.IP_context;
 		end context project_context;
 	", parse_context_decl);
+}
+
+#[test]
+fn entity_decl() {
+	parse!("entity foo is end;", parse_entity_decl);
+	parse!("entity foo is end entity;", parse_entity_decl);
+	parse!("entity foo is end entity foo;", parse_entity_decl);
+	// parse!("entity foo is end entity bar;", parse_entity_decl); // check if this emits a warning
+	parse!("entity foo is begin end;", parse_entity_decl);
+}
+
+#[test]
+fn entity_header() {
+	parse!("
+		entity Full_Adder is
+			port (X, Y, Cin: in Bit; Cout, Sum: out Bit);
+		end Full_Adder;
+	", parse_entity_decl);
+	parse!("
+		entity AndGate is
+			generic (N: Natural := 2);
+			port (Inputs: in Bit_Vector (1 to N); Result: out Bit);
+		end entity AndGate;
+	", parse_entity_decl);
+	parse!("
+		entity TestBench is
+		end TestBench;
+	", parse_entity_decl);
+}
+
+#[test]
+#[ignore]
+fn entity_decl_part() {
+	parse!("
+		entity ROM is
+			port (
+				Addr: in Word;
+				Data: out Word;
+				Sel: in Bit);
+			type Instruction is array (1 to 5) of Natural;
+			type Program is array (Natural range <>) of Instruction;
+			use Work.OpCodes.all, Work.RegisterNames.all;
+			constant ROM_Code: Program := (
+				(STM, R14, R12, 12, R13),
+				(LD,  R7,  32,  0,  R1 ),
+				(BAL, R14, 0,   0,  R7 )
+			);
+		end ROM;
+	", parse_entity_decl);
+}
+
+#[test]
+#[ignore]
+fn entity_stmt_part() {
+	parse!("
+		entity Latch is
+			port (
+				Din: in Word;
+				Dout: out Word;
+				Load: in Bit;
+				Clk: in Bit);
+			constant Setup: Time := 12 ns;
+			constant PulseWidth: Time := 50 ns;
+			use Work.TimingMonitors.all;
+		begin
+			assert Clk='1' or Clk'Delayed'Stable (PulseWidth);
+			CheckTiming (Setup, Din, Load, Clk);
+		end;
+	", parse_entity_decl);
+}
+
+#[test]
+#[ignore]
+fn intf_decl() {
+	parse!("
+		constant a : std_logic;
+		constant a, b, c : in std_logic;
+		constant a, b, c : in std_logic := '0';
+
+		signal a : std_logic;
+		signal a, b, c : in std_logic;
+		signal a, b, c : out std_logic;
+		signal a, b, c : inout std_logic;
+		signal a, b, c : buffer std_logic;
+		signal a, b, c : linkage std_logic;
+		signal a, b, c : in std_logic bus;
+		signal a, b, c : in std_logic bus := '0';
+
+		variable a : std_logic;
+		variable a, b, c : in std_logic;
+		variable a, b, c : out std_logic;
+		variable a, b, c : inout std_logic;
+		variable a, b, c : buffer std_logic;
+		variable a, b, c : linkage std_logic;
+		variable a, b, c : in std_logic := '0';
+
+		file i : integer;
+		type foo;
+
+		procedure foo;
+		procedure \"+\";
+		procedure foo is bar;
+		procedure foo is <>;
+		procedure foo ();
+		procedure foo parameter ();
+
+		function foo return integer;
+		function \"+\" return integer;
+		function foo return integer is bar;
+		function foo return integer is <>;
+		function foo () return integer;
+		function foo parameter () return integer;
+		pure function foo return integer;
+		impure function foo return integer;
+
+		package foo is new bar generic map (a => b, c => d);
+		package foo is new bar generic map (<>);
+		package foo is new bar generic map (default).
+	", |p| separated_nonempty(p,
+		token::Semicolon,
+		token::Period,
+		"interface declaration",
+		|p| parse_intf_decl(p, None)
+	));
+
+	// Default objects.
+	parse!("a, b, c : in integer", |p| parse_intf_decl(p, Some(IntfObjectKind::Constant)));
+	parse!("a, b, c : inout integer bus", |p| parse_intf_decl(p, Some(IntfObjectKind::Signal)));
+	parse!("a, b, c : inout integer", |p| parse_intf_decl(p, Some(IntfObjectKind::Variable)));
+}
+
+#[test]
+fn subtype_ind() {
+	parse!("integer", parse_subtype_ind);
+	parse!("resfunc integer", parse_subtype_ind);
+	parse!("(elemresfunc) integer", parse_subtype_ind);
+	parse!("(a resfunc, b resfunc, c (elemresfunc)) integer", parse_subtype_ind);
+	parse!("integer range foo", parse_subtype_ind);
+	parse!("integer range 1 to 8", parse_subtype_ind);
+}
+
+#[test]
+fn elem_resolution() {
+	parse!("(func)", |p| flanked(p, token::Paren, parse_paren_expr));
+	parse!("((elemfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
+	parse!("((elemfunc) stuff (1 to 4))", |p| flanked(p, token::Paren, parse_paren_expr));
+	parse!("(a func, b func, c (elemfunc), d (x elemfunc, y elemenfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
 }

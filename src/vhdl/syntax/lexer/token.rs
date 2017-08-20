@@ -50,6 +50,7 @@ pub enum Token {
 	Mul,
 	Div,
 	Pow,
+	Pipe,
 
 	/// The end of the input file.
 	Eof
@@ -95,8 +96,17 @@ impl Token {
 			Mul        => "*",
 			Div        => "/",
 			Pow        => "**",
+			Pipe       => "|",
 
 			Eof => "end of file",
+		}
+	}
+
+	/// Checks if this token is a identifier.
+	pub fn is_ident(self) -> bool {
+		match self {
+			Ident(_) => true,
+			_ => false
 		}
 	}
 }
