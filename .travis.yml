@@ -22,7 +22,7 @@ script:
   - cargo test --all
   - tests/run.sh
   - cargo doc
-  - ./compile_pulpino.sh
+  # - ./compile_pulpino.sh
 
 after_success:
   - |
