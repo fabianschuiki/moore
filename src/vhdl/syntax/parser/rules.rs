@@ -754,7 +754,7 @@ pub fn parse_expr_prec<P: Parser>(p: &mut P, prec: ExprPrec) -> ReportedResult<a
 			p.bump();
 			let rhs = parse_expr_prec(p, op_prec)?;
 			span.expand(p.last_span());
-			return Ok(ast::Expr{ span: span });
+			return parse_expr_suffix(p, ast::Expr{ span: span }, prec);
 		}
 	}
 
@@ -776,7 +776,7 @@ pub fn parse_expr_suffix<P: Parser>(p: &mut P, prefix: ast::Expr, prec: ExprPrec
 			p.bump();
 			let expr = parse_expr_prec(p, op_prec)?;
 			span.expand(p.last_span());
-			return Ok(ast::Expr{ span: span });
+			return parse_expr_suffix(p, ast::Expr{ span: span }, prec);
 		}
 	}
 
