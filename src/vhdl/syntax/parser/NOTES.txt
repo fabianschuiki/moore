@@ -78,3 +78,29 @@ subtype_ind:
 	name name                 # array_constraint, record_constraint, elem_constraint, range_constraint
 	paren_expr name           # array_constraint, record_constraint, elem_constraint, range_constraint
 	-> ";" "," ")" ":=" "register" "bus" "open" "is" ">>" mult_op add_op shift_op rel_op logical_op "**"
+
+
+Declarative Items
+-----------------
+
+subprogram_declaration                "procedure" "pure" "impure" "function"
+subprogram_body                       "procedure" "pure" "impure" "function"
+subprogram_instantiation_declaration  "procedure" "function"
+package_declaration                   "package"
+package_body                          "package body"
+package_instantiation_declaration     "package"
+type_declaration                      "type"
+subtype_declaration                   "subtype"
+constant_declaration                  "constant"
+variable_declaration                  "shared" "variable"
+signal_declaration                    "signal"
+file_declaration                      "file"
+alias_declaration                     "alias"
+component_declaration                 "component"
+attribute_declaration                 "attribute"
+attribute_specification               "attribute"
+configuration_specification           "for"
+disconnection_specification           "disconnect"
+use_clause                            "use"
+group_template_declaration            "group"
+group_declaration                     "group"

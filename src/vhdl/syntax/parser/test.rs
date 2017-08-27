@@ -91,7 +91,7 @@ fn context_ref() {
 fn design_unit() {
 	parse!("entity foo is end;", parse_design_unit);
 	// parse!("configuration foo is begin end;", parse_design_unit);
-	// parse!("package foo is begin end;", parse_design_unit);
+	parse!("package foo is end;", parse_design_unit);
 	parse!("context foo is end;", parse_design_unit);
 }
 
@@ -256,4 +256,47 @@ fn elem_resolution() {
 	parse!("((elemfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
 	parse!("((elemfunc) stuff (1 to 4))", |p| flanked(p, token::Paren, parse_paren_expr));
 	parse!("(a func, b func, c (elemfunc), d (x elemfunc, y elemenfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
+}
+
+#[test]
+#[ignore]
+fn package_decl() {
+	parse!("package foo is end;", parse_package_decl);
+	parse!("package foo is end package;", parse_package_decl);
+	parse!("package foo is end package foo;", parse_package_decl);
+	// parse!("package foo is end package bar;", parse_package_decl); // check if this emits a warning
+
+	parse!("
+		package foo is
+			generic (stuff : INTEGER := 0);
+		end
+	", parse_package_decl);
+
+	parse!("
+		package foo is
+			generic (stuff : INTEGER := 0);
+			generic map (stuff => 0);
+		end
+	", parse_package_decl);
+
+	parse!("
+		package TimeConstants is
+			constant tPLH: Time := 10 ns;
+			constant tPHL: Time := 12 ns;
+			constant tPLZ: Time := 7 ns;
+			constant tPZL: Time := 8 ns;
+			constant tPHZ: Time := 8 ns;
+			constant tPZH: Time := 9 ns;
+		end TimeConstants;
+	", parse_package_decl);
+
+	parse!("
+		package TriState is
+			type Tri is ('0', '1', 'Z', 'E');
+			function BitVal (Value: Tri) return Bit;
+			function TriVal (Value: Bit) return Tri;
+			type TriVector is array (Natural range <>) of Tri;
+			function Resolve (Sources: TriVector) return Tri;
+		end package TriState;
+	", parse_package_decl)
 }

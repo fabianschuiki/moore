@@ -101,9 +101,9 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 		Keyword(Kw::Configuration) => unimplemented!(),
 		Keyword(Kw::Package) => {
 			if p.peek(1).value == Keyword(Kw::Body) {
-				unimplemented!()
+				parse_package_body(p)
 			} else {
-				unimplemented!()
+				parse_package_decl(p)
 			}
 		}
 		Keyword(Kw::Context) => parse_context_decl(p),
@@ -423,7 +423,7 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	};
 
 	// Parse the declarative part.
-	// TODO
+	repeat(p, parse_decl_item)?;
 
 	// Parse the optional statement part.
 	if accept(p, Keyword(Kw::Begin)) {
@@ -503,6 +503,27 @@ pub enum IntfObjectKind {
 	Constant,
 	Signal,
 	Variable,
+}
+
+
+/// Parse a declarative item. See IEEE 1076-2008 section 3.2.3.
+pub fn parse_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
+	let Spanned{ value: tkn, span } = p.peek(0);
+	Ok(match tkn {
+		// package_decl := "package" ident "is" ...
+		// package_body := "package" "body" ident "is" ...
+		// package_inst := "package" ident "is" "new" ...
+		Keyword(Kw::Package) => {
+			if p.peek(1).value == Keyword(Kw::Body) {
+				Some(parse_package_body(p)?)
+			} else if p.peek(2).value == Keyword(Kw::Is) && p.peek(3).value == Keyword(Kw::New) {
+				Some(parse_package_inst(p)?)
+			} else {
+				Some(parse_package_decl(p)?)
+			}
+		}
+		_ => None
+	})
 }
 
 
@@ -880,4 +901,53 @@ fn binary_prec(op: ast::BinaryOp) -> ExprPrec {
 		ast::BinaryOp::Rem        => ExprPrec::Mul,
 		ast::BinaryOp::Pow        => ExprPrec::Pow,
 	}
+}
+
+
+pub fn parse_package_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+
+	// Parse the head of the declaration.
+	require(p, Keyword(Kw::Package))?;
+	let name = parse_ident(p, "package name")?;
+	require(p, Keyword(Kw::Is))?;
+
+	// Parse the optional generic clause and generic map aspect.
+	let gc = if accept(p, Keyword(Kw::Generic)) {
+		let gc = flanked(p, Paren, parse_paren_expr)?;
+		require(p, Semicolon)?;
+		Some(gc)
+	} else {
+		None
+	};
+
+	let gm = if accept(p, Keyword(Kw::Generic)) {
+		require(p, Keyword(Kw::Map))?;
+		let gm = flanked(p, Paren, parse_paren_expr)?;
+		require(p, Semicolon)?;
+		Some(gm)
+	} else {
+		None
+	};
+
+	// Parse the declarative part.
+	repeat(p, parse_decl_item)?;
+
+	// Parse the tail of the declaration.
+	require(p, Keyword(Kw::End))?;
+	accept(p, Keyword(Kw::Package));
+	parse_optional_matching_ident(p, name, "package", "section 4.7");
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+pub fn parse_package_body<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	unimp!(p, "Package bodies")
+}
+
+
+pub fn parse_package_inst<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	unimp!(p, "Package instance declarations")
 }
