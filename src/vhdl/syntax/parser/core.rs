@@ -198,6 +198,23 @@ where F: FnMut(&mut P) -> Result<Option<R>, E> {
 }
 
 
+/// Repeatedly apply a parser until a certain predicate matches.
+pub fn repeat_until<P: Parser, R, F, T>(p: &mut P, mut term: T, mut parse: F) -> Result<Vec<R>, Recovered>
+where F: FnMut(&mut P) -> Result<R, Reported>, T: Predicate<P> {
+	let mut v = Vec::new();
+	while p.peek(0).value != Eof && !term.matches(p) {
+		match parse(p) {
+			Ok(x) => v.push(x),
+			Err(_) => {
+				term.recover(p, false);
+				return Err(Recovered);
+			}
+		}
+	}
+	Ok(v)
+}
+
+
 /// Parse a list of items separated with a specific token, until a terminator
 /// oktne has been reached. The terminator is not consumed.
 pub fn separated<P: Parser, M, R, F, T>(

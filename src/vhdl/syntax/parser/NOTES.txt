@@ -15,6 +15,7 @@ name:
 	name [signature] "'" ident   # attribute_name, range
 	name paren_expr              # func_call, slice_name, indexed_name, array_constraint, record_constraint, elem_constraint, elem_resol, assoc_list
 	name "range" expr            # range_constraint
+	name "range" "<>"            # index_subtype_definition
 
 
 Expressions
@@ -89,8 +90,8 @@ Declarative Items
 - [x] package_declaration                   "package"
 - [x] package_body                          "package body"
 - [x] package_instantiation_declaration     "package"
-- [ ] type_declaration                      "type"
-- [ ] subtype_declaration                   "subtype"
+- [x] type_declaration                      "type"
+- [x] subtype_declaration                   "subtype"
 - [ ] constant_declaration                  "constant"
 - [ ] variable_declaration                  "shared" "variable"
 - [ ] signal_declaration                    "signal"
@@ -101,6 +102,45 @@ Declarative Items
 - [ ] attribute_specification               "attribute"
 - [ ] configuration_specification           "for"
 - [ ] disconnection_specification           "disconnect"
-- [ ] use_clause                            "use"
+- [x] use_clause                            "use"
 - [ ] group_template_declaration            "group"
 - [ ] group_declaration                     "group"
+
+
+Type Definitions
+----------------
+
+type_def
+	- scalar_type_def
+		- enum_type_def
+		- integer_type_def
+		- floating_type_def
+		- physical_type_def
+	- composite_type_def
+		- array_type_def
+		- record_type_def
+	- access_type_def
+	- file_type_def
+	- protected_type_def
+		- protected_type_decl
+		- protected_type_body
+
+paren_expr                                                            # enum_type_def
+"range" range                                                         # integer_type_def/floating_type_def
+"range" range units_decl                                              # physical_type_def
+"array" paren_expr "of" subtype_ind                                   # array_type_def
+"record" { {ident}","+ ":" subtype_ind ";" }+ "end" "record" [ident]  # record_type_def
+"access" subtype_ind                                                  # access_type_def
+"file" "of" name                                                      # file_type_def
+protected_type_decl                                                   # protected_type_def
+protected_type_body                                                   # protected_type_def
+
+units_decl := "units" {ident ["=" [abstract_lit] name] ";"}+ "end" "units" [ident]
+protected_type_decl :=
+	"protected"
+		{decl_item}
+	"end" "protected" [ident]
+protected_type_body :=
+	"protected" "body"
+		{decl_item}
+	"end" "protected" "body" [ident]

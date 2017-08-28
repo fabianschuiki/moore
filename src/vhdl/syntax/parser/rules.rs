@@ -6,29 +6,31 @@
 //! the VHDL standard are collapsed into more general rules as outlined in the
 //! following table.
 //!
-//! | VHDL Standard          | Generalized to       |
-//! |------------------------|----------------------|
-//! | name                   | name                 |
-//! | name/simple_name       | primary_name         |
-//! | name/operator_symbol   | primary_name         |
-//! | name/character_literal | primary_name         |
-//! | selected_name          | name                 |
-//! | indexed_name           | name                 |
-//! | slice_name             | name                 |
-//! | attribute_name         | name                 |
-//! | external_name          | *ignored*            |
-//! | function_call          | name                 |
-//! | type_mark              | name                 |
-//! | subtype_indication     | name, primary_expr   |
-//! | resolution_indication  | primary_expr         |
-//! | constraint             | primary_expr         |
-//! | range_constraint       | name                 |
-//! | array_constraint       | name                 |
-//! | record_constraint      | name, paren_expr     |
-//! | port_clause            | port_clause          |
-//! | generic_clause         | generic_clause       |
-//! | generic_map_aspect     | map_aspect           |
-//! | port_map_aspect        | map_aspect           |
+//! | VHDL Standard               | Generalized to       |
+//! |-----------------------------|----------------------|
+//! | name                        | name                 |
+//! | name/simple_name            | primary_name         |
+//! | name/operator_symbol        | primary_name         |
+//! | name/character_literal      | primary_name         |
+//! | selected_name               | name                 |
+//! | indexed_name                | name                 |
+//! | slice_name                  | name                 |
+//! | attribute_name              | name                 |
+//! | external_name               | *ignored*            |
+//! | function_call               | name                 |
+//! | type_mark                   | name                 |
+//! | subtype_indication          | name, primary_expr   |
+//! | resolution_indication       | primary_expr         |
+//! | constraint                  | primary_expr         |
+//! | range_constraint            | name                 |
+//! | array_constraint            | name                 |
+//! | record_constraint           | name, paren_expr     |
+//! | port_clause                 | port_clause          |
+//! | generic_clause              | generic_clause       |
+//! | generic_map_aspect          | map_aspect           |
+//! | port_map_aspect             | map_aspect           |
+//! | enumeration_type_definition | paren_expr           |
+//! |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -323,9 +325,13 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 
 	// Try to parse a range constraint.
 	if accept(p, Keyword(Kw::Range)) {
-		let expr = parse_expr_prec(p, ExprPrec::Range)?;
+		if accept(p, LtGt) {
+			// name.part.push(ast::NamePart::UnboundRange);
+		} else {
+			let expr = parse_expr_prec(p, ExprPrec::Range)?;
+			// name.part.push(ast::NamePart::Range);
+		}
 		name.span.expand(p.last_span());
-		// name.part.push(ast::NamePart::Range);
 		return parse_name_suffix(p, name);
 	}
 
@@ -398,7 +404,7 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let port = try_port_clause(p)?;
 
 	// Parse the declarative part.
-	repeat(p, parse_decl_item)?;
+	repeat(p, try_decl_item)?;
 
 	// Parse the optional statement part.
 	if accept(p, Keyword(Kw::Begin)) {
@@ -529,8 +535,8 @@ pub enum IntfObjectKind {
 }
 
 
-/// Parse a declarative item. See IEEE 1076-2008 section 3.2.3.
-pub fn parse_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
+/// Try to parse a declarative item. See IEEE 1076-2008 section 3.2.3.
+pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 	let Spanned{ value: tkn, span } = p.peek(0);
 	Ok(match tkn {
 		// package_decl := "package" ident "is" ...
@@ -545,6 +551,12 @@ pub fn parse_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 				Some(parse_package_decl(p)?)
 			}
 		}
+		// type_decl := "type" ...
+		Keyword(Kw::Type) => Some(parse_type_decl(p)?),
+		// subtype_decl := "subtype" ...
+		Keyword(Kw::Subtype) => Some(parse_subtype_decl(p)?),
+		// use_clause := "use" ...
+		Keyword(Kw::Use) => Some(parse_use_clause(p)?),
 		_ => None
 	})
 }
@@ -949,7 +961,7 @@ pub fn parse_package_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	}
 
 	// Parse the declarative part.
-	repeat(p, parse_decl_item)?;
+	repeat(p, try_decl_item)?;
 
 	// Parse the tail of the declaration.
 	require(p, Keyword(Kw::End))?;
@@ -975,7 +987,7 @@ pub fn parse_package_body<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Keyword(Kw::Body))?;
 	let name = parse_ident(p, "package name")?;
 	require(p, Keyword(Kw::Is))?;
-	repeat(p, parse_decl_item)?;
+	repeat(p, try_decl_item)?;
 	require(p, Keyword(Kw::End))?;
 	accept(p, Keyword(Kw::Package)); // TODO: add proper warnings if these are missing
 	accept(p, Keyword(Kw::Body)); // TODO: add proper warnings if these are missing
@@ -1020,4 +1032,156 @@ pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<()>
 	} else {
 		Ok(None)
 	}
+}
+
+
+/// Parse a type declaration. See IEEE 1076-2008 section 6.2.
+///
+/// ```text
+/// type_decl := "type" ident ["is" type_def] ";"
+/// type_def
+///   := paren_expr
+///   := "range" range
+///   := "range" range units_decl
+///   := "array" paren_expr "of" subtype_ind
+///   := "record" {{ident}","+ ":" subtype_ind ";"}+ "end" "record" [ident]
+///   := "access" subtype_ind
+///   := "file" "of" name
+///   := protected_type_decl
+///   := protected_type_body
+/// ```
+pub fn parse_type_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Type))?;
+	let name = parse_ident(p, "type name")?;
+
+	// Parse the optional type definition. If present, this is a full type
+	// declaration. Otherwise it is an incomplete type declaration.
+	if accept(p, Keyword(Kw::Is)) {
+		let Spanned{ value: tkn, span: sp } = p.peek(0);
+		match tkn {
+			// Enumeration type definition
+			OpenDelim(Paren) => { flanked(p, Paren, parse_paren_expr)?; },
+
+			// Integer, float, physical type definition
+			Keyword(Kw::Range) => {
+				p.bump();
+				let range = parse_expr(p)?;
+				let units = if accept(p, Keyword(Kw::Units)) {
+					let u = repeat_until(p, Keyword(Kw::End), |p|{
+						let name = parse_ident(p, "unit name")?;
+						let rel = if accept(p, Eq) {
+							Some(parse_expr(p)?)
+						} else {
+							None
+						};
+						require(p, Semicolon)?;
+						Ok((name, rel))
+					})?;
+					require(p, Keyword(Kw::End))?;
+					require(p, Keyword(Kw::Units))?;
+					parse_optional_matching_ident(p, name, "type", "section 5.2.4");
+					Some(u)
+				} else {
+					None
+				};
+			}
+
+			// Array type definition
+			Keyword(Kw::Array) => {
+				p.bump();
+				let indices = flanked(p, Paren, parse_paren_expr)?;
+				require(p, Keyword(Kw::Of))?;
+				let subtype = parse_subtype_ind(p)?;
+			}
+
+			// Record type definition
+			Keyword(Kw::Record) => {
+				p.bump();
+				let fields = repeat_until(p, Keyword(Kw::End), |p|{
+					let names = separated_nonempty(p,
+						Comma,
+						Colon,
+						"field name",
+						|p| parse_ident(p, "field name")
+					)?;
+					require(p, Colon)?;
+					let subtype = parse_subtype_ind(p)?;
+					require(p, Semicolon)?;
+					Ok((names, subtype))
+				})?;
+				require(p, Keyword(Kw::End))?;
+				require(p, Keyword(Kw::Record))?;
+				parse_optional_matching_ident(p, name, "type", "section 5.3.3");
+			}
+
+			// Access type definition
+			Keyword(Kw::Access) => {
+				p.bump();
+				let subtype = parse_subtype_ind(p)?;
+			}
+
+			// File type definition
+			Keyword(Kw::File) => {
+				p.bump();
+				require(p, Keyword(Kw::Of))?;
+				let ty = parse_name(p)?;
+			}
+
+			// Protected type declaration and body
+			Keyword(Kw::Protected) => { parse_protected_type_def(p, name)?; }
+
+			// Emit an error for anything else.
+			wrong => {
+				p.emit(
+					DiagBuilder2::error(format!("Expected type definition after keyword `is`, found {} instead", tkn))
+					.span(sp)
+				);
+				return Err(Reported);
+			}
+		}
+	}
+
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse protected type declaration or body. See IEEE 1076-2008 section 5.6.
+///
+/// ```text
+/// protected_type_decl := "protected" {decl_item} "end" "protected" [ident]
+/// protected_type_body := "protected" "body" {decl_item} "end" "protected" "body" [ident]
+/// ```
+pub fn parse_protected_type_def<P: Parser>(p: &mut P, name: Spanned<Name>) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Protected))?;
+	let body = accept(p, Keyword(Kw::Body));
+	let decl_items = repeat(p, try_decl_item)?;
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Protected))?;
+	if body {
+		require(p, Keyword(Kw::Body))?;
+	}
+	parse_optional_matching_ident(p, name, "type", "section 5.6");
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a subtype declaration. See IEEE 1076-2008 section 6.3.
+///
+/// ```text
+/// subtype_decl := "subtype" ident "is" subtype_ind ";"
+/// ```
+pub fn parse_subtype_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Type))?;
+	let name = parse_ident(p, "type name")?;
+	require(p, Keyword(Kw::Is))?;
+	let subtype = parse_subtype_ind(p)?;
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
 }
