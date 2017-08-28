@@ -25,6 +25,10 @@
 //! | range_constraint       | name                 |
 //! | array_constraint       | name                 |
 //! | record_constraint      | name, paren_expr     |
+//! | port_clause            | port_clause          |
+//! | generic_clause         | generic_clause       |
+//! | generic_map_aspect     | map_aspect           |
+//! | port_map_aspect        | map_aspect           |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -389,38 +393,9 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let name = parse_ident(p, "entity name")?;
 	require(p, Keyword(Kw::Is))?;
 
-	// Parse the generic part of the entity header. IEEE 1076-2008 section
-	// 6.5.6.2.
-	let generic = if accept(p, Keyword(Kw::Generic)) {
-		let i = flanked(p, Paren, |p|{
-			Ok(separated_nonempty(p,
-				Semicolon,
-				CloseDelim(Paren),
-				"generic interface declaration",
-				|p| parse_intf_decl(p, Some(IntfObjectKind::Constant))
-			)?)
-		})?;
-		require(p, Semicolon)?;
-		i
-	} else {
-		Vec::new()
-	};
-
-	// Parse the port part of the entity header. IEEE 1076-2008 section 6.5.6.3.
-	let port = if accept(p, Keyword(Kw::Port)) {
-		let i = flanked(p, Paren, |p|{
-			Ok(separated_nonempty(p,
-				Semicolon,
-				CloseDelim(Paren),
-				"port interface declaration",
-				|p| parse_intf_decl(p, Some(IntfObjectKind::Signal))
-			)?)
-		})?;
-		require(p, Semicolon)?;
-		i
-	} else {
-		Vec::new()
-	};
+	// Parse the entity header.
+	let generic = try_generic_clause(p)?;
+	let port = try_port_clause(p)?;
 
 	// Parse the declarative part.
 	repeat(p, parse_decl_item)?;
@@ -437,6 +412,54 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(())
+}
+
+
+/// Try to parse a generic clause. See IEEE 1076-2008 section 6.5.6.2.
+///
+/// ```text
+/// generic_clause := "generic" "clause" "(" {intf_decl}";"+ ")" ";"
+/// ```
+pub fn try_generic_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
+	if p.peek(0).value == Keyword(Kw::Generic) && p.peek(1).value != Keyword(Kw::Map) {
+		p.bump();
+		let i = flanked(p, Paren, |p|{
+			Ok(separated_nonempty(p,
+				Semicolon,
+				CloseDelim(Paren),
+				"generic interface declaration",
+				|p| parse_intf_decl(p, Some(IntfObjectKind::Constant))
+			)?)
+		})?;
+		require(p, Semicolon)?;
+		Ok(i)
+	} else {
+		Ok(Vec::new())
+	}
+}
+
+
+/// Try to parse a port clause. See IEEE 1076-2008 section 6.5.6.3.
+///
+/// ```text
+/// port_clause := "port" "clause" "(" {intf_decl}";"+ ")" ";"
+/// ```
+pub fn try_port_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
+	if p.peek(0).value == Keyword(Kw::Port) && p.peek(1).value != Keyword(Kw::Map) {
+		p.bump();
+		let i = flanked(p, Paren, |p|{
+			Ok(separated_nonempty(p,
+				Semicolon,
+				CloseDelim(Paren),
+				"port interface declaration",
+				|p| parse_intf_decl(p, Some(IntfObjectKind::Signal))
+			)?)
+		})?;
+		require(p, Semicolon)?;
+		Ok(i)
+	} else {
+		Ok(Vec::new())
+	}
 }
 
 
@@ -580,11 +603,8 @@ pub fn parse_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<Vec<Spanned<()>>
 		// in the list.
 		if accept(p, Arrow) {
 			let q = p.last_span();
-			p.emit(
-				DiagBuilder2::error("Association lists not yet supported")
-				.span(q)
-			);
-			Err(Reported)
+			let actual = parse_expr(p)?;
+			Ok(Spanned::new((), Span::union(choices[0].span, actual.span)))
 		} else {
 			let mut it = choices.drain(..);
 			let first = it.next().unwrap();
@@ -904,6 +924,15 @@ fn binary_prec(op: ast::BinaryOp) -> ExprPrec {
 }
 
 
+/// Parse a package declaration. See IEEE 1076-2008 section 4.7.
+///
+/// ```text
+/// package_decl :=
+///   "package" ident "is"
+///     [generic_clause [generic_map_aspect ";"]]
+///     {decl_item}
+///   "end" ["package"] [ident] ";"
+/// ```
 pub fn parse_package_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
 
@@ -913,22 +942,11 @@ pub fn parse_package_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Keyword(Kw::Is))?;
 
 	// Parse the optional generic clause and generic map aspect.
-	let gc = if accept(p, Keyword(Kw::Generic)) {
-		let gc = flanked(p, Paren, parse_paren_expr)?;
+	let gc = try_generic_clause(p)?;
+	let gm = try_map_aspect(p, Kw::Generic)?;
+	if gm.is_some() {
 		require(p, Semicolon)?;
-		Some(gc)
-	} else {
-		None
-	};
-
-	let gm = if accept(p, Keyword(Kw::Generic)) {
-		require(p, Keyword(Kw::Map))?;
-		let gm = flanked(p, Paren, parse_paren_expr)?;
-		require(p, Semicolon)?;
-		Some(gm)
-	} else {
-		None
-	};
+	}
 
 	// Parse the declarative part.
 	repeat(p, parse_decl_item)?;
@@ -943,11 +961,63 @@ pub fn parse_package_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 }
 
 
+/// Parse a package body. See IEEE 1076-2008 section 4.8.
+///
+/// ```text
+/// package_decl :=
+///   "package" "body" ident "is"
+///     {decl_item}
+///   "end" ["package" "body"] [ident] ";"
+/// ```
 pub fn parse_package_body<P: Parser>(p: &mut P) -> ReportedResult<()> {
-	unimp!(p, "Package bodies")
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Package))?;
+	require(p, Keyword(Kw::Body))?;
+	let name = parse_ident(p, "package name")?;
+	require(p, Keyword(Kw::Is))?;
+	repeat(p, parse_decl_item)?;
+	require(p, Keyword(Kw::End))?;
+	accept(p, Keyword(Kw::Package)); // TODO: add proper warnings if these are missing
+	accept(p, Keyword(Kw::Body)); // TODO: add proper warnings if these are missing
+	parse_optional_matching_ident(p, name, "package body", "section 4.8");
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
 }
 
 
+/// Parse a package instantiation declaration. See IEEE 1076-2008 section 4.9.
+///
+/// ```text
+/// package_inst := "package" ident "is" "new" name [generic_map] ";"
+/// ```
 pub fn parse_package_inst<P: Parser>(p: &mut P) -> ReportedResult<()> {
-	unimp!(p, "Package instance declarations")
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Package))?;
+	let name = parse_ident(p, "package name")?;
+	require(p, Keyword(Kw::Is))?;
+	require(p, Keyword(Kw::New))?;
+	let pkg = parse_name(p)?;
+	let gm = try_map_aspect(p, Kw::Generic)?;
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Try to parse a generic or port map aspect. See IEEE 1076-2008 sections
+/// 6.5.7.2 and 6.5.7.3.
+///
+/// ```text
+/// map_aspect := ["generic"|"port"] "map" paren_expr
+/// ```
+pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<()>> {
+	if p.peek(0).value == Keyword(kw) && p.peek(1).value == Keyword(Kw::Map) {
+		p.bump();
+		p.bump();
+		let v = flanked(p, Paren, parse_paren_expr)?;
+		Ok(Some(()))
+	} else {
+		Ok(None)
+	}
 }
