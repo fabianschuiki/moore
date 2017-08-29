@@ -208,15 +208,15 @@ fn intf_decl() {
 		procedure \"+\";
 		procedure foo is bar;
 		procedure foo is <>;
-		procedure foo ();
-		procedure foo parameter ();
+		procedure foo (hello : INTEGER);
+		procedure foo parameter (hello: INTEGER);
 
 		function foo return integer;
 		function \"+\" return integer;
 		function foo return integer is bar;
 		function foo return integer is <>;
-		function foo () return integer;
-		function foo parameter () return integer;
+		function foo (hello : INTEGER) return integer;
+		function foo parameter (hello : INTEGER) return integer;
 		pure function foo return integer;
 		impure function foo return integer;
 
@@ -336,8 +336,8 @@ fn package_body() {
 
 #[test]
 fn package_inst() {
-	parse!("package foo is new bar;", parse_package_inst);
-	parse!("package foo is new bar generic map (STUFF => 8);", parse_package_inst);
+	parse!("package foo is new bar;", |p| parse_package_inst(p, true));
+	parse!("package foo is new bar generic map (STUFF => 8);", |p| parse_package_inst(p, true));
 }
 
 #[test]
@@ -445,21 +445,21 @@ fn protected_type_decl() {
 			procedure decrement (N: Integer := 1);
 			impure function value return Integer;
 		end protected SharedCounter;
-	", parse_type_decl);
+	", |p| parse_type_decl(p, true));
 
 	parse!("
 		type ComplexNumber is protected
 			procedure extract (variable r, i: out Real);
 			procedure add (variable a, b: inout ComplexNumber);
 		end protected ComplexNumber;
-	", parse_type_decl);
+	", |p| parse_type_decl(p, true));
 
 	parse!("
 		type VariableSizeBitArray is protected
 			procedure add_bit (index: Positive; value: Bit);
 			impure function size return Natural;
 		end protected VariableSizeBitArray;
-	", parse_type_decl);
+	", |p| parse_type_decl(p, true));
 }
 
 #[test]
@@ -483,7 +483,7 @@ fn protected_type_body() {
 			-- 	return counter;
 			end function value;
 		end protected body SharedCounter;
-	", parse_type_decl);
+	", |p| parse_type_decl(p, true));
 
 	parse!("
 		type ComplexNumber is protected body
@@ -505,7 +505,7 @@ fn protected_type_body() {
 			-- 	im := a_imag + b_imag;
 			end procedure add;
 		end protected body ComplexNumber;
-	", parse_type_decl);
+	", |p| parse_type_decl(p, true));
 
 	parse!("
 		type VariableSizeBitArray is protected body
@@ -534,7 +534,7 @@ fn protected_type_body() {
 			-- 	return bit_array_length;
 			end function size;
 		end protected body VariableSizeBitArray;
-	", parse_type_decl);
+	", |p| parse_type_decl(p, true));
 }
 
 #[test]
@@ -583,4 +583,49 @@ fn expr() {
 #[test]
 fn subtype_decl() {
 	parse!("subtype foo is integer;", parse_subtype_decl);
+}
+
+#[test]
+fn arch_body() {
+	parse!("
+		architecture DataFlow of Full_Adder is
+			signal A,B: Bit;
+		begin
+			-- A <= X xor Y;
+			-- B <= A and Cin;
+			-- Sum <= A xor Cin;
+			-- Cout <= B or (X and Y);
+		end architecture DataFlow;
+	", parse_arch_body);
+
+	parse!("
+		architecture Structure of TestBench is
+			-- component Full_Adder
+			-- 	port (X, Y, Cin: Bit; Cout, Sum: out Bit);
+			-- end component;
+			signal A,B,C,D,E,F,G: Bit;
+			signal OK: Boolean;
+		begin
+			-- UUT:        Full_Adder port map (A,B,C,D,E);
+			-- Generator:  AdderTest  port map (A,B,C,F,G);
+			-- Comparator: AdderCheck port map (D,E,F,G,OK);
+		end Structure;
+	", parse_arch_body);
+
+	parse!("
+		architecture Behavior of AndGate is begin
+			-- process (Inputs)
+			-- 	variable Temp: Bit;
+			-- begin
+			-- 	Temp := '1';
+			-- 	for i in Inputs'Range loop
+			-- 		if Inputs(i) = '0' then
+			-- 			Temp := '0';
+			-- 			exit;
+			-- 		end if;
+			-- 	end loop;
+			-- 	Result <= Temp after 10 ns;
+			-- end process;
+		end Behavior;
+	", parse_arch_body);
 }

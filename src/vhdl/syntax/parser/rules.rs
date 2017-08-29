@@ -107,7 +107,7 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 	let Spanned{ value: tkn, span: sp } = p.peek(0);
 	match match tkn {
 		Keyword(Kw::Entity) => parse_entity_decl(p),
-		Keyword(Kw::Configuration) => unimplemented!(),
+		Keyword(Kw::Configuration) => parse_config_decl(p),
 		Keyword(Kw::Package) => {
 			if p.peek(1).value == Keyword(Kw::Body) {
 				parse_package_body(p)
@@ -116,7 +116,7 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 			}
 		}
 		Keyword(Kw::Context) => parse_context_decl(p),
-		Keyword(Kw::Architecture) => unimplemented!(),
+		Keyword(Kw::Architecture) => parse_arch_body(p),
 		tkn => {
 			p.emit(
 				DiagBuilder2::error(format!("Expected a primary or secondary unit, instead found {}", tkn))
@@ -417,6 +417,47 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 }
 
 
+/// Parse a configuration declaration. See IEEE 1076-2008 section 3.4.
+pub fn parse_config_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	unimp!(p, "Configuration declarations");
+}
+
+
+/// Parse an architecture body. See IEEE 1076-2008 section 3.3.
+///
+/// ```text
+/// arch_body :=
+///   "architecture" ident "of" name "is"
+///     {decl_item}
+///   "begin"
+///     {stmt}
+///   "end" ["architecture"] [ident] ";"
+/// ```
+pub fn parse_arch_body<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+
+	// Parse the head of the body.
+	require(p, Keyword(Kw::Architecture))?;
+	let name = parse_ident(p, "architecture name")?;
+	require(p, Keyword(Kw::Of))?;
+	let entity = parse_name(p)?;
+	require(p, Keyword(Kw::Is))?;
+
+	// Parse the declarative and statement parts.
+	let decl_items = repeat(p, try_decl_item)?;
+	require(p, Keyword(Kw::Begin))?;
+	repeat_until(p, Keyword(Kw::End), parse_stmt)?;
+
+	// Parse the tail of the body.
+	require(p, Keyword(Kw::End))?;
+	accept(p, Keyword(Kw::Architecture));
+	parse_optional_matching_ident(p, name, "architecture", "section 3.3");
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
 /// Try to parse a generic clause. See IEEE 1076-2008 section 6.5.6.2.
 ///
 /// ```text
@@ -470,12 +511,53 @@ pub fn try_port_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
 /// declarations. See IEEE 1076-2008 section 6.5.1.
 pub fn parse_intf_decl<P: Parser>(p: &mut P, default: Option<IntfObjectKind>) -> ReportedResult<()> {
 	let Spanned{ value: tkn, mut span } = p.peek(0);
-
-	// Try to parse one of the (non-file) object declarations.
 	let kind = match tkn {
-		Keyword(Kw::Constant) => { p.bump(); IntfObjectKind::Constant },
-		Keyword(Kw::Signal) => { p.bump(); IntfObjectKind::Signal },
-		Keyword(Kw::Variable) => { p.bump(); IntfObjectKind::Variable },
+		// Try to short-circuit a type interface declarations.
+		Keyword(Kw::Type) => {
+			parse_type_decl(p, false)?;
+			return Ok(());
+		}
+
+		// Try to short-circuit a subprogram interface declaration.
+		Keyword(Kw::Pure) |
+		Keyword(Kw::Impure) |
+		Keyword(Kw::Procedure) |
+		Keyword(Kw::Function) => {
+			let spec = parse_subprog_spec(p)?;
+			let default = if accept(p, Keyword(Kw::Is)) {
+				if accept(p, LtGt) {
+					// subprog_spec "is" "<>"
+					Some(())
+				} else if let Some(name) = try_name(p)? {
+					// subprog_spec "is" name
+					Some(())
+				} else {
+					p.emit(
+						DiagBuilder2::error(format!("Expected default subprogram name or `<>` after `is`, found {} instead", tkn))
+						.span(span)
+						.add_note("see IEEE 1076-2008 section 6.5.4")
+					);
+					return Err(Reported);
+				}
+			} else {
+				None
+			};
+			span.expand(p.last_span());
+			return Ok(());
+		}
+
+		// Try to short-circuit a package interface declaration.
+		Keyword(Kw::Package) => {
+			let inst = parse_package_inst(p, false)?;
+			span.expand(p.last_span());
+			return Ok(());
+		}
+
+		// Try to parse one of the object declarations.
+		Keyword(Kw::Constant) => { p.bump(); IntfObjectKind::Constant }
+		Keyword(Kw::Signal)   => { p.bump(); IntfObjectKind::Signal }
+		Keyword(Kw::Variable) => { p.bump(); IntfObjectKind::Variable }
+		Keyword(Kw::File)     => { p.bump(); IntfObjectKind::File }
 		_ => {
 			if let Some(k) = default {
 				k
@@ -528,6 +610,7 @@ pub enum IntfObjectKind {
 	Constant,
 	Signal,
 	Variable,
+	File,
 }
 
 
@@ -541,13 +624,13 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 			if p.peek(1).value == Keyword(Kw::Body) {
 				Some(parse_package_body(p)?)
 			} else if p.peek(2).value == Keyword(Kw::Is) && p.peek(3).value == Keyword(Kw::New) {
-				Some(parse_package_inst(p)?)
+				Some(parse_package_inst(p, true)?)
 			} else {
 				Some(parse_package_decl(p)?)
 			}
 		}
 		// type_decl := "type" ...
-		Keyword(Kw::Type) => Some(parse_type_decl(p)?),
+		Keyword(Kw::Type) => Some(parse_type_decl(p, true)?),
 		// subtype_decl := "subtype" ...
 		Keyword(Kw::Subtype) => Some(parse_subtype_decl(p)?),
 		// constant_decl := "constant" ...
@@ -1069,7 +1152,7 @@ pub fn parse_package_body<P: Parser>(p: &mut P) -> ReportedResult<()> {
 /// ```text
 /// package_inst := "package" ident "is" "new" name [generic_map] ";"
 /// ```
-pub fn parse_package_inst<P: Parser>(p: &mut P) -> ReportedResult<()> {
+pub fn parse_package_inst<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
 	require(p, Keyword(Kw::Package))?;
 	let name = parse_ident(p, "package name")?;
@@ -1077,7 +1160,9 @@ pub fn parse_package_inst<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Keyword(Kw::New))?;
 	let pkg = parse_name(p)?;
 	let gm = try_map_aspect(p, Kw::Generic)?;
-	require(p, Semicolon)?;
+	if with_semicolon {
+		require(p, Semicolon)?;
+	}
 	span.expand(p.last_span());
 	Ok(())
 }
@@ -1116,7 +1201,7 @@ pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<()>
 ///   := protected_type_decl
 ///   := protected_type_body
 /// ```
-pub fn parse_type_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
 	require(p, Keyword(Kw::Type))?;
 	let name = parse_ident(p, "type name")?;
@@ -1208,7 +1293,9 @@ pub fn parse_type_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 		}
 	}
 
-	require(p, Semicolon)?;
+	if with_semicolon {
+		require(p, Semicolon)?;
+	}
 	span.expand(p.last_span());
 	Ok(())
 }
