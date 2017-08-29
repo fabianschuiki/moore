@@ -285,15 +285,15 @@ fn package_decl() {
 		end TimeConstants;
 	", parse_package_decl);
 
-	// parse!("
-	// 	package TriState is
-	// 		type Tri is ('0', '1', 'Z', 'E');
-	// 		function BitVal (Value: Tri) return Bit;
-	// 		function TriVal (Value: Bit) return Tri;
-	// 		type TriVector is array (Natural range <>) of Tri;
-	// 		function Resolve (Sources: TriVector) return Tri;
-	// 	end package TriState;
-	// ", parse_package_decl);
+	parse!("
+		package TriState is
+			type Tri is ('0', '1', 'Z', 'E');
+			function BitVal (Value: Tri) return Bit;
+			function TriVal (Value: Bit) return Tri;
+			type TriVector is array (Natural range <>) of Tri;
+			function Resolve (Sources: TriVector) return Tri;
+		end package TriState;
+	", parse_package_decl);
 }
 
 #[test]
@@ -303,35 +303,35 @@ fn package_body() {
 	parse!("package body foo is end package body foo;", parse_package_body);
 	// parse!("package body foo is end package body bar;", parse_package_body); // check if this emits a warning
 
-	// parse!("
-	// 	package body TriState is
-	// 		function BitVal (Value: Tri) return Bit is
-	// 			constant Bits : Bit_Vector := \"0100\";
-	// 		begin
-	// 			return Bits(Tri'Pos(Value));
-	// 		end;
+	parse!("
+		package body TriState is
+			function BitVal (Value: Tri) return Bit is
+				constant Bits : Bit_Vector := \"0100\";
+			begin
+			--	return Bits(Tri'Pos(Value));
+			end;
 
-	// 		function TriVal (Value: Bit) return Tri is
-	// 		begin
-	// 			return Tri'Val(Bit'Pos(Value));
-	// 		end;
+			function TriVal (Value: Bit) return Tri is
+			begin
+			--	return Tri'Val(Bit'Pos(Value));
+			end;
 
-	// 		function Resolve (Sources: TriVector) return Tri is
-	// 			variable V: Tri := 'Z';
-	// 		begin
-	// 			for i in Sources'Range loop
-	// 				if Sources(i) /= 'Z' then
-	// 					if V = 'Z' then
-	// 						V := Sources(i);
-	// 					else
-	// 						return 'E';
-	// 					end if;
-	// 				end if;
-	// 			end loop;
-	// 			return V;
-	// 		end;
-	// 	end package body TriState;
-	// ", parse_package_body);
+			function Resolve (Sources: TriVector) return Tri is
+				variable V: Tri := 'Z';
+			begin
+			--	for i in Sources'Range loop
+			--		if Sources(i) /= 'Z' then
+			--			if V = 'Z' then
+			--				V := Sources(i);
+			--			else
+			--				return 'E';
+			--			end if;
+			--		end if;
+			--	end loop;
+			--	return V;
+			end;
+		end package body TriState;
+	", parse_package_body);
 }
 
 #[test]
@@ -441,23 +441,23 @@ fn type_decl() {
 fn protected_type_decl() {
 	parse!("
 		type SharedCounter is protected
-			-- procedure increment (N: Integer := 1);
-			-- procedure decrement (N: Integer := 1);
-			-- impure function value return Integer;
+			procedure increment (N: Integer := 1);
+			procedure decrement (N: Integer := 1);
+			impure function value return Integer;
 		end protected SharedCounter;
 	", parse_type_decl);
 
 	parse!("
 		type ComplexNumber is protected
-			-- procedure extract (variable r, i: out Real);
-			-- procedure add (variable a, b: inout ComplexNumber);
+			procedure extract (variable r, i: out Real);
+			procedure add (variable a, b: inout ComplexNumber);
 		end protected ComplexNumber;
 	", parse_type_decl);
 
 	parse!("
 		type VariableSizeBitArray is protected
-			-- procedure add_bit (index: Positive; value: Bit);
-			-- impure function size return Natural;
+			procedure add_bit (index: Positive; value: Bit);
+			impure function size return Natural;
 		end protected VariableSizeBitArray;
 	", parse_type_decl);
 }
@@ -468,20 +468,20 @@ fn protected_type_body() {
 		type SharedCounter is protected body
 			variable counter: Integer := 0;
 
-			-- procedure increment (N: Integer := 1) is
-			-- begin
+			procedure increment (N: Integer := 1) is
+			begin
 			-- 	counter := counter + N;
-			-- end procedure increment;
+			end procedure increment;
 
-			-- procedure decrement (N: Integer := 1) is
-			-- begin
+			procedure decrement (N: Integer := 1) is
+			begin
 			-- 	counter := counter - N;
-			-- end procedure decrement;
+			end procedure decrement;
 
-			-- impure function value return Integer is
-			-- begin
+			impure function value return Integer is
+			begin
 			-- 	return counter;
-			-- end function value;
+			end function value;
 		end protected body SharedCounter;
 	", parse_type_decl);
 
@@ -489,21 +489,21 @@ fn protected_type_body() {
 		type ComplexNumber is protected body
 			variable re, im: Real;
 
-			-- procedure extract (r, i: out Real) is
-			-- begin
+			procedure extract (r, i: out Real) is
+			begin
 			-- 	r := re;
 			-- 	i := im;
-			-- end procedure extract;
+			end procedure extract;
 
-			-- procedure add (variable a, b: inout ComplexNumber) is
-			-- 	variable a_real, b_real: Real;
-			-- 	variable a_imag, b_imag: Real;
-			-- begin
+			procedure add (variable a, b: inout ComplexNumber) is
+				variable a_real, b_real: Real;
+				variable a_imag, b_imag: Real;
+			begin
 			-- 	a.extract (a_real, a_imag);
 			-- 	b.extract (b_real, b_imag);
 			-- 	re := a_real + b_real;
 			-- 	im := a_imag + b_imag;
-			-- end procedure add;
+			end procedure add;
 		end protected body ComplexNumber;
 	", parse_type_decl);
 
@@ -514,9 +514,9 @@ fn protected_type_body() {
 			variable bit_array: bit_vector_access := null;
 			variable bit_array_length: Natural := 0;
 
-			-- procedure add_bit (index: Positive; value: Bit) is
-			-- 	variable tmp: bit_vector_access;
-			-- begin
+			procedure add_bit (index: Positive; value: Bit) is
+				variable tmp: bit_vector_access;
+			begin
 			-- 	if index > bit_array_length then
 			-- 		tmp := bit_array;
 			-- 		bit_array := new bit_vector (1 to index);
@@ -527,12 +527,12 @@ fn protected_type_body() {
 			-- 		bit_array_length := index;
 			-- 	end if;
 			-- 	bit_array (index) := value;
-			-- end procedure add_bit;
+			end procedure add_bit;
 
-			-- impure function size return Natural is
-			-- begin
+			impure function size return Natural is
+			begin
 			-- 	return bit_array_length;
-			-- end function size;
+			end function size;
 		end protected body VariableSizeBitArray;
 	", parse_type_decl);
 }

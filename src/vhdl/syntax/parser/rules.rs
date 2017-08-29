@@ -6,31 +6,34 @@
 //! the VHDL standard are collapsed into more general rules as outlined in the
 //! following table.
 //!
-//! | VHDL Standard               | Generalized to       |
-//! |-----------------------------|----------------------|
-//! | name                        | name                 |
-//! | name/simple_name            | primary_name         |
-//! | name/operator_symbol        | primary_name         |
-//! | name/character_literal      | primary_name         |
-//! | selected_name               | name                 |
-//! | indexed_name                | name                 |
-//! | slice_name                  | name                 |
-//! | attribute_name              | name                 |
-//! | external_name               | *ignored*            |
-//! | function_call               | name                 |
-//! | type_mark                   | name                 |
-//! | subtype_indication          | name, primary_expr   |
-//! | resolution_indication       | primary_expr         |
-//! | constraint                  | primary_expr         |
-//! | range_constraint            | name                 |
-//! | array_constraint            | name                 |
-//! | record_constraint           | name, paren_expr     |
-//! | port_clause                 | port_clause          |
-//! | generic_clause              | generic_clause       |
-//! | generic_map_aspect          | map_aspect           |
-//! | port_map_aspect             | map_aspect           |
-//! | enumeration_type_definition | paren_expr           |
-//! |
+//! | VHDL Standard                        | Generalized to       |
+//! |--------------------------------------|----------------------|
+//! | name                                 | name                 |
+//! | name/simple_name                     | primary_name         |
+//! | name/operator_symbol                 | primary_name         |
+//! | name/character_literal               | primary_name         |
+//! | selected_name                        | name                 |
+//! | indexed_name                         | name                 |
+//! | slice_name                           | name                 |
+//! | attribute_name                       | name                 |
+//! | external_name                        | *ignored*            |
+//! | function_call                        | name                 |
+//! | type_mark                            | name                 |
+//! | subtype_indication                   | name, primary_expr   |
+//! | resolution_indication                | primary_expr         |
+//! | constraint                           | primary_expr         |
+//! | range_constraint                     | name                 |
+//! | array_constraint                     | name                 |
+//! | record_constraint                    | name, paren_expr     |
+//! | port_clause                          | port_clause          |
+//! | generic_clause                       | generic_clause       |
+//! | generic_map_aspect                   | map_aspect           |
+//! | port_map_aspect                      | map_aspect           |
+//! | enumeration_type_definition          | paren_expr           |
+//! | subprogram_declaration               | subprog_spec         |
+//! | subprogram_body                      | subprog_spec         |
+//! | subprogram_instantiation_declaration | subprog_spec         |
+//! | interface_subprogram_declaration     | subprog_spec         |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -530,8 +533,7 @@ pub enum IntfObjectKind {
 
 /// Try to parse a declarative item. See IEEE 1076-2008 section 3.2.3.
 pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
-	let Spanned{ value: tkn, span } = p.peek(0);
-	Ok(match tkn {
+	Ok(match p.peek(0).value {
 		// package_decl := "package" ident "is" ...
 		// package_body := "package" "body" ident "is" ...
 		// package_inst := "package" ident "is" "new" ...
@@ -561,8 +563,68 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Alias) => Some(parse_alias_decl(p)?),
 		// use_clause := "use" ...
 		Keyword(Kw::Use) => Some(parse_use_clause(p)?),
+		// subprog_spec := "pure"|"impure"|"procedure"|"function" ...
+		Keyword(Kw::Pure) |
+		Keyword(Kw::Impure) |
+		Keyword(Kw::Procedure) |
+		Keyword(Kw::Function) => Some(parse_subprog_decl_item(p)?),
 		_ => None
 	})
+}
+
+
+/// Parse a subprogram declarative item, which is either a subprogram
+/// declaration, body, or instantiation. See IEEE 1076-2008 section 4.2.
+///
+/// ```text
+/// subprog_decl := subprog_spec ";"
+/// subprog_body := subprog_spec "is" ...
+/// subprog_inst := subprog_spec "is" "new" name [signature] [generic_map_aspect] ";"
+/// ```
+pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	let spec = parse_subprog_spec(p)?;
+
+	// Try to parse a subprogram declaration.
+	if accept(p, Semicolon) {
+		span.expand(p.last_span());
+		return Ok(());
+	}
+
+	// Try to parse a subprogram body or instantiation.
+	if accept(p, Keyword(Kw::Is)) {
+		// Try to parse a subprogram instantiation. Otherwise fall back to a
+		// subprogram body.
+		if accept(p, Keyword(Kw::New)) {
+			let name = parse_name(p)?;
+			let sig = try_flanked(p, Brack, parse_signature)?;
+			let gm = try_map_aspect(p, Kw::Generic)?;
+			require(p, Semicolon)?;
+			return Ok(());
+		} else {
+			let decl_items = repeat(p, try_decl_item)?;
+			require(p, Keyword(Kw::Begin))?;
+			let stmts = repeat_until(p, Keyword(Kw::End), parse_stmt)?;
+			require(p, Keyword(Kw::End))?;
+			// TODO: Check if things match once the subprog_spec returns
+			// something useful.
+			accept(p, Keyword(Kw::Function));
+			accept(p, Keyword(Kw::Procedure));
+			try_primary_name(p);
+			require(p, Semicolon)?;
+			return Ok(());
+		}
+	}
+
+	// If we arrive here, none of the above matched. Emit an error that
+	// describes what we expected.
+	let pk = p.peek(0);
+	p.emit(
+		DiagBuilder2::error(format!("Expected `;` or keyword `is` after subprogram specification, found {} instead", pk.value))
+		.span(pk.span)
+		.add_note("see IEEE 1076-2008 section 4.2")
+	);
+	Err(Reported)
 }
 
 
@@ -1305,4 +1367,107 @@ pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(())
+}
+
+
+/// Parse a subprogram specification. This covers the initial part of a
+/// subprogram declaration, body, instantiation, or interface declaration. See
+/// IEEE 1076-2008 sections 4.2 and 6.5.4. Note that not all combinations of
+/// keywords and qualifiers that this parser accepts are actually valid.
+///
+/// ```text
+/// subprog_spec :=
+///   ["pure"|"impure"] "procedure"|"function" primary_name
+///   ["generic" paren_expr]
+///   ["generic" "map" paren_expr]
+///   [["parameter"] paren_expr]
+///   ["return" name]
+/// ```
+pub fn parse_subprog_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+
+	// Parse the optional purity qualifier.
+	let purity = match p.peek(0).value {
+		Keyword(Kw::Pure) => { p.bump(); Some(()) },
+		Keyword(Kw::Impure) => { p.bump(); Some(()) },
+		_ => None
+	};
+
+	// Parse the subprogram kind.
+	let pk = p.peek(0);
+	let kind = match pk.value {
+		Keyword(Kw::Procedure) => { p.bump(); () },
+		Keyword(Kw::Function) => { p.bump(); () },
+		wrong => {
+			p.emit(
+				DiagBuilder2::error(format!("Expected `procedure` or `function`, found {} instead", wrong))
+				.span(span)
+				.add_note("see IEEE 1076-2008 section 4.2")
+			);
+			return Err(Reported);
+		}
+	};
+
+	// Parse the name.
+	let name = match try_primary_name(p) {
+		Some(n) => n,
+		None => {
+			let pk = p.peek(0);
+			p.emit(
+				DiagBuilder2::error(format!("Expected subprogram name, found {} instead", pk.value))
+				.span(pk.span)
+				.add_note("A subprogram name is either an identifier or an operator symbol")
+				.add_note("see IEEE 1076-2008 section 4.2")
+			);
+			return Err(Reported);
+		}
+	};
+
+	// Parse the optional generic clause.
+	let gc = if p.peek(0).value == Keyword(Kw::Generic) && p.peek(1).value != Keyword(Kw::Map) {
+		p.bump();
+		Some(flanked(p, Paren, |p|{
+			Ok(separated_nonempty(p,
+				Semicolon,
+				CloseDelim(Paren),
+				"generic interface declaration",
+				|p| parse_intf_decl(p, Some(IntfObjectKind::Constant))
+			)?)
+		})?)
+	} else {
+		None
+	};
+
+	// Parse the optional generic map aspect.
+	let gm = try_map_aspect(p, Kw::Generic)?;
+
+	// Parse the optional parameter keyword and list.
+	let params = if accept(p, Keyword(Kw::Parameter)) || p.peek(0).value == OpenDelim(Paren) {
+		Some(flanked(p, Paren, |p|{
+			Ok(separated_nonempty(p,
+				Semicolon,
+				CloseDelim(Paren),
+				"parameter interface declaration",
+				|p| parse_intf_decl(p, Some(IntfObjectKind::Variable))
+			)?)
+		})?)
+	} else {
+		None
+	};
+
+	// Parse the optional return type.
+	let retty = if accept(p, Keyword(Kw::Return)) {
+		Some(parse_name(p)?)
+	} else {
+		None
+	};
+
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a sequential statement.
+pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	unimp!(p, "Statements");
 }

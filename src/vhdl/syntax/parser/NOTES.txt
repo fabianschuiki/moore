@@ -84,9 +84,9 @@ subtype_ind:
 Declarative Items
 -----------------
 
-- [ ] subprogram_declaration                "procedure" "pure" "impure" "function"
-- [ ] subprogram_body                       "procedure" "pure" "impure" "function"
-- [ ] subprogram_instantiation_declaration  "procedure" "function"
+- [x] subprogram_declaration                "procedure" "pure" "impure" "function"
+- [x] subprogram_body                       "procedure" "pure" "impure" "function"
+- [x] subprogram_instantiation_declaration  "procedure" "function"
 - [x] package_declaration                   "package"
 - [x] package_body                          "package body"
 - [x] package_instantiation_declaration     "package"
@@ -144,3 +144,22 @@ protected_type_body :=
 	"protected" "body"
 		{decl_item}
 	"end" "protected" "body" [ident]
+
+
+Subprograms
+-----------
+
+subprog_decl := subprog_spec ";"
+subprog_body := subprog_spec "is" {decl_item} "begin" {stmt} "end" ["procedure"|"function"] [name] ";"
+subprog_inst := subprog_spec "is" "new" name [signature] [generic_map_aspect] ";"
+intf_subprog_decl
+	:= subprog_spec
+	:= subprog_spec "is" name|"<>"
+
+subprog_spec :=
+	["pure"|"impure"] "procedure"|"function"
+	primary_name
+	["generic" paren_expr]
+	["generic" "map" paren_expr]
+	[["parameter"] paren_expr]
+	["return" name]
