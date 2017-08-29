@@ -579,3 +579,8 @@ fn expr() {
 	parse!("open", parse_expr);
 	parse!("others", parse_expr);
 }
+
+#[test]
+fn subtype_decl() {
+	parse!("subtype foo is integer;", parse_subtype_decl);
+}

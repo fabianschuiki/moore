@@ -1181,8 +1181,8 @@ pub fn parse_protected_type_def<P: Parser>(p: &mut P, name: Spanned<Name>) -> Re
 /// ```
 pub fn parse_subtype_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
-	require(p, Keyword(Kw::Type))?;
-	let name = parse_ident(p, "type name")?;
+	require(p, Keyword(Kw::Subtype))?;
+	let name = parse_ident(p, "subtype name")?;
 	require(p, Keyword(Kw::Is))?;
 	let subtype = parse_subtype_ind(p)?;
 	require(p, Semicolon)?;
