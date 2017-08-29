@@ -148,17 +148,16 @@ fn entity_decl_part() {
 			type Instruction is array (1 to 5) of Natural;
 			type Program is array (Natural range <>) of Instruction;
 			use Work.OpCodes.all, Work.RegisterNames.all;
-			-- constant ROM_Code: Program := (
-			-- 	(STM, R14, R12, 12, R13),
-			-- 	(LD,  R7,  32,  0,  R1 ),
-			-- 	(BAL, R14, 0,   0,  R7 )
-			-- );
+			constant ROM_Code: Program := (
+				(STM, R14, R12, 12, R13),
+				(LD,  R7,  32,  0,  R1 ),
+				(BAL, R14, 0,   0,  R7 )
+			);
 		end ROM;
 	", parse_entity_decl);
 }
 
 #[test]
-#[ignore]
 fn entity_stmt_part() {
 	parse!("
 		entity Latch is
@@ -171,8 +170,8 @@ fn entity_stmt_part() {
 			constant PulseWidth: Time := 50 ns;
 			use Work.TimingMonitors.all;
 		begin
-			assert Clk='1' or Clk'Delayed'Stable (PulseWidth);
-			CheckTiming (Setup, Din, Load, Clk);
+			-- assert Clk='1' or Clk'Delayed'Stable (PulseWidth);
+			-- CheckTiming (Setup, Din, Load, Clk);
 		end;
 	", parse_entity_decl);
 }
@@ -275,16 +274,16 @@ fn package_decl() {
 		end;
 	", parse_package_decl);
 
-	// parse!("
-	// 	package TimeConstants is
-	// 		constant tPLH: Time := 10 ns;
-	// 		constant tPHL: Time := 12 ns;
-	// 		constant tPLZ: Time := 7 ns;
-	// 		constant tPZL: Time := 8 ns;
-	// 		constant tPHZ: Time := 8 ns;
-	// 		constant tPZH: Time := 9 ns;
-	// 	end TimeConstants;
-	// ", parse_package_decl);
+	parse!("
+		package TimeConstants is
+			constant tPLH: Time := 10 ns;
+			constant tPHL: Time := 12 ns;
+			constant tPLZ: Time := 7 ns;
+			constant tPZL: Time := 8 ns;
+			constant tPHZ: Time := 8 ns;
+			constant tPZH: Time := 9 ns;
+		end TimeConstants;
+	", parse_package_decl);
 
 	// parse!("
 	// 	package TriState is
@@ -467,7 +466,7 @@ fn protected_type_decl() {
 fn protected_type_body() {
 	parse!("
 		type SharedCounter is protected body
-			-- variable counter: Integer := 0;
+			variable counter: Integer := 0;
 
 			-- procedure increment (N: Integer := 1) is
 			-- begin
@@ -488,7 +487,7 @@ fn protected_type_body() {
 
 	parse!("
 		type ComplexNumber is protected body
-			-- variable re, im: Real;
+			variable re, im: Real;
 
 			-- procedure extract (r, i: out Real) is
 			-- begin
@@ -512,8 +511,8 @@ fn protected_type_body() {
 		type VariableSizeBitArray is protected body
 			type bit_vector_access is access Bit_Vector;
 
-			-- variable bit_array: bit_vector_access := null;
-			-- variable bit_array_length: Natural := 0;
+			variable bit_array: bit_vector_access := null;
+			variable bit_array_length: Natural := 0;
 
 			-- procedure add_bit (index: Positive; value: Bit) is
 			-- 	variable tmp: bit_vector_access;
@@ -536,4 +535,47 @@ fn protected_type_body() {
 			-- end function size;
 		end protected body VariableSizeBitArray;
 	", parse_type_decl);
+}
+
+#[test]
+fn alias_decl() {
+	parse!("alias SIGN: BIT is REAL_NUMBER (0);", parse_alias_decl);
+	parse!("alias MANTISSA: BIT_VECTOR (23 downto 0) is REAL_NUMBER (8 to 31);", parse_alias_decl);
+	parse!("alias EXPONENT: BIT_VECTOR (1 to 7) is REAL_NUMBER (1 to 7);", parse_alias_decl);
+	parse!("alias STD_BIT is STD.STANDARD.BIT;", parse_alias_decl);
+	// parse!("alias '0' is STD.STANDARD.'0' [return STD.STANDARD.BIT];", parse_alias_decl);
+	// parse!("alias '1' is STD.STANDARD.'1' [return STD.STANDARD.BIT];", parse_alias_decl);
+}
+
+#[test]
+fn object_decl() {
+	parse!("constant TOLER: DISTANCE := 1.5 nm;", parse_object_decl);
+	parse!("constant PI: REAL := 3.141592;", parse_object_decl);
+	parse!("constant CYCLE_TIME: TIME := 100 ns;", parse_object_decl);
+	parse!("constant Propagation_Delay: DELAY_LENGTH;", parse_object_decl);
+
+	parse!("signal S: STANDARD.BIT_VECTOR (1 to 10);", parse_object_decl);
+	parse!("signal CLK1, CLK2: TIME;", parse_object_decl);
+	parse!("signal OUTPUT: WIRED_OR MULTI_VALUED_LOGIC;", parse_object_decl);
+	parse!("signal CLK1, CLK2: TIME register;", parse_object_decl);
+	parse!("signal CLK1, CLK2: TIME bus;", parse_object_decl);
+	parse!("signal CLK1, CLK2: TIME := 5 ps;", parse_object_decl);
+
+	parse!("variable INDEX: INTEGER range 0 to 99 := 0;", parse_object_decl);
+	parse!("variable COUNT: POSITIVE;", parse_object_decl);
+	parse!("variable MEMORY: BIT_MATRIX (0 to 7, 0 to 1023);", parse_object_decl);
+	parse!("shared variable Counter: SharedCounter;", parse_object_decl);
+	parse!("shared variable addend, augend, result: ComplexNumber;", parse_object_decl);
+	parse!("variable bit_stack: VariableSizeBitArray;", parse_object_decl);
+
+	parse!("file F1: IntegerFile;", parse_object_decl);
+	parse!("file F2: IntegerFile is \"test.dat\";", parse_object_decl);
+	parse!("file F3: IntegerFile open WRITE_MODE is \"test.dat\";", parse_object_decl);
+}
+
+#[test]
+fn expr() {
+	parse!("null", parse_expr);
+	parse!("open", parse_expr);
+	parse!("others", parse_expr);
 }

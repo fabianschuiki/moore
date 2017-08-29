@@ -297,14 +297,7 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 	// Try to parse an attribute name.
 	if p.peek(0).value == OpenDelim(Brack) || (p.peek(0).value == Apostrophe && p.peek(1).value.is_ident()) {
 		// Parse the optional signature.
-		let sig = try_flanked(p, Brack, |p| -> ReportedResult<()> {
-			let q = p.peek(0).span;
-			p.emit(
-				DiagBuilder2::error("Signatures for attribute names not yet implemented")
-				.span(q)
-			);
-			Err(Reported)
-		})?;
+		let sig = try_flanked(p, Brack, parse_signature)?;
 
 		// Consume the apostrophe and attribute name.
 		require(p, Apostrophe)?;
@@ -555,6 +548,17 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Type) => Some(parse_type_decl(p)?),
 		// subtype_decl := "subtype" ...
 		Keyword(Kw::Subtype) => Some(parse_subtype_decl(p)?),
+		// constant_decl := "constant" ...
+		// signal_decl   := "signal" ...
+		// variable_decl := ("variable"|"shared") ...
+		// file_decl     := "file" ...
+		Keyword(Kw::Constant) |
+		Keyword(Kw::Signal) |
+		Keyword(Kw::Variable) |
+		Keyword(Kw::Shared) |
+		Keyword(Kw::File) => Some(parse_object_decl(p)?),
+		// alias_decl := "alias" ...
+		Keyword(Kw::Alias) => Some(parse_alias_decl(p)?),
 		// use_clause := "use" ...
 		Keyword(Kw::Use) => Some(parse_use_clause(p)?),
 		_ => None
@@ -650,9 +654,9 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 	// Try to handle the easy cases where the next token clearly identifies the
 	// kind of primary expression that follows.
 	match tkn {
-		Keyword(Kw::Null) => unimp!(p, "Null expressions"),
-		Keyword(Kw::Open) => unimp!(p, "Open expressions"),
-		Keyword(Kw::Others) => unimp!(p, "Others expressions"),
+		Keyword(Kw::Null) => { p.bump(); return Ok(ast::Expr{ span: span }); },
+		Keyword(Kw::Open) => { p.bump(); return Ok(ast::Expr{ span: span }); },
+		Keyword(Kw::Others) => { p.bump(); return Ok(ast::Expr{ span: span }); },
 
 		Keyword(Kw::New) => {
 			p.bump();
@@ -1181,6 +1185,123 @@ pub fn parse_subtype_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let name = parse_ident(p, "type name")?;
 	require(p, Keyword(Kw::Is))?;
 	let subtype = parse_subtype_ind(p)?;
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse an alias declaration. See IEEE 1076-2008 section 6.6.
+///
+/// ```text
+/// alias_decl := "alias" alias_desig [":" subtype_ind] "is" name [signature] ";"
+/// alias_desig := ident | char_lit | string_lit
+/// ```
+pub fn parse_alias_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Alias))?;
+	let name = match try_primary_name(p) {
+		Some(n) => n,
+		None => {
+			let pk = p.peek(0);
+			p.emit(
+				DiagBuilder2::error(format!("Expected alias designator after keyword `alias`, found {} instead", pk.value))
+				.span(pk.span)
+				.add_note("An alias designator is either an identifier, a character literal, or an operator symbol")
+				.add_note("see IEEE 1076-2008 section 6.6")
+			);
+			return Err(Reported);
+		}
+	};
+	let subtype = if accept(p, Colon) {
+		Some(parse_subtype_ind(p)?)
+	} else {
+		None
+	};
+	require(p, Keyword(Kw::Is))?;
+	let target = parse_name(p)?;
+	let sig = try_flanked(p, Brack, parse_signature)?;
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+pub fn parse_signature<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	unimp!(p, "Signatures");
+}
+
+
+/// Parse a constant, signal, variable, or file declaration. See IEEE 1076-2008
+/// section 6.4.2.
+///
+/// ```text
+/// object_decl := object_kind {ident}","+ ":" subtype_ind [object_details] [":=" expr] ";"
+/// object_kind
+///   := "constant"
+///   := "signal"
+///   := "variable"
+///   := "shared" "variable"
+///   := "file"
+/// object_details
+///   := "register"
+///   := "bus"
+///   := ["open" expr] "is" expr
+/// ```
+pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+
+	// Parse the object kind.
+	let kind = match p.peek(0).value {
+		Keyword(Kw::Constant) => { p.bump(); () },
+		Keyword(Kw::Signal)   => { p.bump(); () },
+		Keyword(Kw::File)     => { p.bump(); () },
+		Keyword(Kw::Variable) => { p.bump(); () },
+		Keyword(Kw::Shared)   => {
+			p.bump();
+			require(p, Keyword(Kw::Variable))?;
+			()
+		}
+		wrong => {
+			p.emit(
+				DiagBuilder2::error(format!("Expected a constant, signal, variable, or file declaration, found {} instead", wrong))
+				.span(span)
+				.add_note("see IEEE 1076-2008 section 6.4.2")
+			);
+			return Err(Reported);
+		}
+	};
+
+	// Parse the name list and subtype indication.
+	let names = separated_nonempty(p, Comma, Colon, "object name", |p| parse_ident(p, "object name"))?;
+	require(p, Colon)?;
+	let subtype = parse_subtype_ind(p)?;
+
+	// Parse the additional object details.
+	let pk = p.peek(0);
+	let detail = match pk.value {
+		Keyword(Kw::Register) => { p.bump(); Some(()) },
+		Keyword(Kw::Bus) => { p.bump(); Some(()) },
+		Keyword(Kw::Open) | Keyword(Kw::Is) => {
+			let open = if accept(p, Keyword(Kw::Open)) {
+				Some(parse_expr(p)?)
+			} else {
+				None
+			};
+			require(p, Keyword(Kw::Is))?;
+			let path = parse_expr(p)?;
+			Some(())
+		}
+		_ => None
+	};
+
+	// Parse the optional initial expression.
+	let init = if accept(p, VarAssign) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
 	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(())
