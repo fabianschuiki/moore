@@ -321,12 +321,8 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 
 	// Try to parse a range constraint.
 	if accept(p, Keyword(Kw::Range)) {
-		if accept(p, LtGt) {
-			// name.part.push(ast::NamePart::UnboundRange);
-		} else {
-			let expr = parse_expr_prec(p, ExprPrec::Range)?;
-			// name.part.push(ast::NamePart::Range);
-		}
+		let expr = parse_expr_prec(p, ExprPrec::Range)?;
+		// name.part.push(ast::NamePart::Range);
 		name.span.expand(p.last_span());
 		return parse_name_suffix(p, name);
 	}
@@ -651,6 +647,8 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Impure) |
 		Keyword(Kw::Procedure) |
 		Keyword(Kw::Function) => Some(parse_subprog_decl_item(p)?),
+		// component_decl := "component" ...
+		Keyword(Kw::Component) => Some(parse_component_decl(p)?),
 		_ => None
 	})
 }
@@ -802,6 +800,8 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 		Keyword(Kw::Null) => { p.bump(); return Ok(ast::Expr{ span: span }); },
 		Keyword(Kw::Open) => { p.bump(); return Ok(ast::Expr{ span: span }); },
 		Keyword(Kw::Others) => { p.bump(); return Ok(ast::Expr{ span: span }); },
+		Keyword(Kw::Default) => { p.bump(); return Ok(ast::Expr{ span: span }); },
+		LtGt => { p.bump(); return Ok(ast::Expr{ span: span }); },
 
 		Keyword(Kw::New) => {
 			p.bump();
@@ -1549,6 +1549,31 @@ pub fn parse_subprog_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
 		None
 	};
 
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a component declaration. See IEEE 1076-2008 section 6.8.
+///
+/// ```text
+/// component_decl :=
+///   "component" ident ["is"]
+///     [generic_clause]
+///     [port_clause]
+///   "end" ["component"] [ident] ";"
+/// ```
+pub fn parse_component_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Component))?;
+	let name = parse_ident(p, "component name")?;
+	accept(p, Keyword(Kw::Is));
+	let gc = try_generic_clause(p)?;
+	let pc = try_port_clause(p)?;
+	require(p, Keyword(Kw::End))?;
+	accept(p, Keyword(Kw::Component));
+	parse_optional_matching_ident(p, name, "component", "section 6.8");
+	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(())
 }

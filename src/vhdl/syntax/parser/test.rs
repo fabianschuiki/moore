@@ -177,7 +177,6 @@ fn entity_stmt_part() {
 }
 
 #[test]
-#[ignore]
 fn intf_decl() {
 	parse!("
 		constant a : std_logic;
@@ -222,7 +221,7 @@ fn intf_decl() {
 
 		package foo is new bar generic map (a => b, c => d);
 		package foo is new bar generic map (<>);
-		package foo is new bar generic map (default).
+		package foo is new bar generic map (default);
 	", |p| separated_nonempty(p,
 		token::Semicolon,
 		token::Period,
@@ -600,9 +599,10 @@ fn arch_body() {
 
 	parse!("
 		architecture Structure of TestBench is
-			-- component Full_Adder
-			-- 	port (X, Y, Cin: Bit; Cout, Sum: out Bit);
-			-- end component;
+			component C is end component C;
+			component Full_Adder
+				port (X, Y, Cin: Bit; Cout, Sum: out Bit);
+			end component;
 			signal A,B,C,D,E,F,G: Bit;
 			signal OK: Boolean;
 		begin

@@ -14,8 +14,7 @@ name:
 	name "." "all"               # selected_name
 	name [signature] "'" ident   # attribute_name, range
 	name paren_expr              # func_call, slice_name, indexed_name, array_constraint, record_constraint, elem_constraint, elem_resol, assoc_list
-	name "range" expr            # range_constraint
-	name "range" "<>"            # index_subtype_definition
+	name "range" expr            # range_constraint, index_subtype_definition
 
 
 Expressions
@@ -31,6 +30,8 @@ primary_expr:
 	"null"
 	"open"                         # array_constraint
 	"others"                       # assoc_list
+	"<>"                           # index_subtype_definition, intf_pkg_generic_map_aspect
+	"default"                      # intf_pkg_generic_map_aspect
 	paren_expr                     # aggregate, (expr), resol_ind
 	paren_expr name                # subtype_ind/resol_ind
 	"new" name                     # alloc/subtype_ind
@@ -97,7 +98,7 @@ Declarative Items
 - [x] signal_declaration                    "signal"
 - [x] file_declaration                      "file"
 - [x] alias_declaration                     "alias"
-- [ ] component_declaration                 "component"
+- [x] component_declaration                 "component"
 - [ ] attribute_declaration                 "attribute"
 - [ ] attribute_specification               "attribute"
 - [ ] configuration_specification           "for"
