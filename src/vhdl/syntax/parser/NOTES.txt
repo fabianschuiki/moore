@@ -102,7 +102,7 @@ Declarative Items
 - [ ] attribute_declaration                 "attribute"
 - [ ] attribute_specification               "attribute"
 - [ ] configuration_specification           "for"
-- [ ] disconnection_specification           "disconnect"
+- [x] disconnection_specification           "disconnect"
 - [x] use_clause                            "use"
 - [ ] group_template_declaration            "group"
 - [ ] group_declaration                     "group"

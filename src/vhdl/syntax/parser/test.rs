@@ -629,3 +629,11 @@ fn arch_body() {
 		end Behavior;
 	", parse_arch_body);
 }
+
+#[test]
+fn discon_spec() {
+	parse!("disconnect A : T after 0 ns;", parse_discon_spec);
+	parse!("disconnect A,B,C : T after 800 ns;", parse_discon_spec);
+	parse!("disconnect others : T after 20 ps;", parse_discon_spec);
+	parse!("disconnect all : T after 0 ns;", parse_discon_spec);
+}

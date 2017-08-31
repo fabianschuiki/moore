@@ -8,32 +8,33 @@
 //!
 //! | VHDL Standard                        | Generalized to       |
 //! |--------------------------------------|----------------------|
-//! | name                                 | name                 |
-//! | name/simple_name                     | primary_name         |
-//! | name/operator_symbol                 | primary_name         |
-//! | name/character_literal               | primary_name         |
-//! | selected_name                        | name                 |
-//! | indexed_name                         | name                 |
-//! | slice_name                           | name                 |
+//! | array_constraint                     | name                 |
 //! | attribute_name                       | name                 |
+//! | constraint                           | primary_expr         |
+//! | enumeration_type_definition          | paren_expr           |
 //! | external_name                        | *ignored*            |
 //! | function_call                        | name                 |
-//! | type_mark                            | name                 |
-//! | subtype_indication                   | name, primary_expr   |
-//! | resolution_indication                | primary_expr         |
-//! | constraint                           | primary_expr         |
-//! | range_constraint                     | name                 |
-//! | array_constraint                     | name                 |
-//! | record_constraint                    | name, paren_expr     |
-//! | port_clause                          | port_clause          |
 //! | generic_clause                       | generic_clause       |
 //! | generic_map_aspect                   | map_aspect           |
-//! | port_map_aspect                      | map_aspect           |
-//! | enumeration_type_definition          | paren_expr           |
-//! | subprogram_declaration               | subprog_spec         |
-//! | subprogram_body                      | subprog_spec         |
-//! | subprogram_instantiation_declaration | subprog_spec         |
+//! | indexed_name                         | name                 |
 //! | interface_subprogram_declaration     | subprog_spec         |
+//! | name                                 | name                 |
+//! | name/character_literal               | primary_name         |
+//! | name/operator_symbol                 | primary_name         |
+//! | name/simple_name                     | primary_name         |
+//! | port_clause                          | port_clause          |
+//! | port_map_aspect                      | map_aspect           |
+//! | range_constraint                     | name                 |
+//! | record_constraint                    | name, paren_expr     |
+//! | resolution_indication                | primary_expr         |
+//! | selected_name                        | name                 |
+//! | slice_name                           | name                 |
+//! | subprogram_body                      | subprog_spec         |
+//! | subprogram_declaration               | subprog_spec         |
+//! | subprogram_instantiation_declaration | subprog_spec         |
+//! | subtype_indication                   | name, primary_expr   |
+//! | time_expression                      | expr                 |
+//! | type_mark                            | name                 |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -649,6 +650,8 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Function) => Some(parse_subprog_decl_item(p)?),
 		// component_decl := "component" ...
 		Keyword(Kw::Component) => Some(parse_component_decl(p)?),
+		// discon_spec := "disconnect" ...
+		Keyword(Kw::Disconnect) => Some(parse_discon_spec(p)?),
 		_ => None
 	})
 }
@@ -1573,6 +1576,33 @@ pub fn parse_component_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Keyword(Kw::End))?;
 	accept(p, Keyword(Kw::Component));
 	parse_optional_matching_ident(p, name, "component", "section 6.8");
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a disconnection specification. See IEEE 1076-2008 section 7.4.
+///
+/// ```text
+/// discon_spec := "disconnect" signal_list ":" name "after" expr ";"
+/// signal_list := {name}","+ | "others" | "all"
+/// ```
+pub fn parse_discon_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Disconnect))?;
+	let signals = match p.peek(0).value {
+		Keyword(Kw::Others) => { p.bump(); () },
+		Keyword(Kw::All) => { p.bump(); () },
+		_ => {
+			separated_nonempty(p, Comma, Colon, "signal name", parse_name)?;
+			()
+		}
+	};
+	require(p, Colon)?;
+	let ty = parse_name(p)?;
+	require(p, Keyword(Kw::After))?;
+	let after = parse_expr(p)?;
 	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(())
