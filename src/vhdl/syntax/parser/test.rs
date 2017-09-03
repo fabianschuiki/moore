@@ -637,3 +637,34 @@ fn discon_spec() {
 	parse!("disconnect others : T after 20 ps;", parse_discon_spec);
 	parse!("disconnect all : T after 0 ns;", parse_discon_spec);
 }
+
+#[test]
+fn config_decl() {
+	parse!("
+		architecture Structure of Half_Adder is
+			for L1: XOR_GATE use
+				entity WORK.XOR_GATE(Behavior)
+					generic map (3 ns, 3 ns)
+					port map (I1 => I1, I2 => I2, O => O);
+			for L2: AND_GATE use
+				entity WORK.AND_GATE(Behavior)
+					generic map (3 ns, 4 ns)
+					port map (I1, open, O);
+		begin
+		end architecture Structure;
+	", parse_arch_body);
+
+	parse!("
+		configuration Different of Half_Adder is
+			for Structure
+				for L1: XOR_GATE
+					generic map (2.9 ns, 3.6 ns);
+				end for;
+				for L2: AND_GATE
+					generic map (2.8 ns, 3.25 ns)
+					port map (I2 => Tied_High);
+				end for;
+			end for;
+		end configuration Different;
+	", parse_config_decl);
+}

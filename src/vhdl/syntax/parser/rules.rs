@@ -35,6 +35,9 @@
 //! | subtype_indication                   | name, primary_expr   |
 //! | time_expression                      | expr                 |
 //! | type_mark                            | name                 |
+//! | block_specification                  | name                 |
+//! | generate_specification               | expr                 |
+//! | configuration_item                   | decl_item            |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -415,8 +418,33 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 
 
 /// Parse a configuration declaration. See IEEE 1076-2008 section 3.4.
+///
+/// ```text
+/// config_decl :=
+///   "configuration" ident "of" name "is"
+///     {config_decl_item}
+///   "end" ["configuration"] [ident] ";"
+/// ```
 pub fn parse_config_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
-	unimp!(p, "Configuration declarations");
+	let mut span = p.peek(0).span;
+
+	// Parse the head of the declaration.
+	require(p, Keyword(Kw::Configuration))?;
+	let name = parse_ident(p, "configuration name")?;
+	require(p, Keyword(Kw::Of))?;
+	let target = parse_name(p)?;
+	require(p, Keyword(Kw::Is))?;
+
+	// Parse the configuration declarative items.
+	let decl_items = repeat_until(p, Keyword(Kw::End), parse_block_comp_decl_item)?;
+
+	// Parse the tail of the declaration.
+	require(p, Keyword(Kw::End))?;
+	accept(p, Keyword(Kw::Configuration));
+	parse_optional_matching_ident(p, name, "configuration", "section 3.4");
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
 }
 
 
@@ -652,6 +680,8 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Component) => Some(parse_component_decl(p)?),
 		// discon_spec := "disconnect" ...
 		Keyword(Kw::Disconnect) => Some(parse_discon_spec(p)?),
+		// config_spec := "for" ...
+		Keyword(Kw::For) => Some(parse_config_spec(p)?),
 		_ => None
 	})
 }
@@ -1604,6 +1634,211 @@ pub fn parse_discon_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Keyword(Kw::After))?;
 	let after = parse_expr(p)?;
 	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+pub fn parse_vunit_binding_ind<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	unimp!(p, "Verification unit binding indications")
+}
+
+
+/// Parse a block or component configuration declarative item.
+///
+/// ```text
+/// block_decl_item
+///   := use_clause
+///   := attr_spec
+///   := group_decl
+///   := vunit_binding_ind
+///   := block_comp_config
+/// ```
+pub fn parse_block_comp_decl_item<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	match (p.peek(0).value, p.peek(1).value) {
+		// "use" "vunit" ...
+		(Keyword(Kw::Use), Keyword(Kw::Vunit)) => parse_vunit_binding_ind(p),
+		// "use" ...
+		(Keyword(Kw::Use), _) => parse_use_clause(p),
+		// "for" ...
+		(Keyword(Kw::For), _) => parse_block_comp_config(p),
+
+		(wrong, _) => {
+			let sp = p.peek(0).span;
+			p.emit(
+				DiagBuilder2::error(format!("Expected configuration item, found {} instead", wrong))
+				.span(sp)
+			);
+			Err(Reported)
+		}
+	}
+}
+
+
+/// Parse a block or component configuration. See IEEE 1076-2008 sections 3.4.2
+/// and 3.4.3.
+///
+/// ```text
+/// block_comp_config := "for" block_comp_spec [binding_ind] {block_config_item} "end" "for" ";"
+/// block_comp_spec := name | {ident}","+ ":" name | "others" ":" name | "all" ":" name
+/// ```
+pub fn parse_block_comp_config<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::For))?;
+	let spec = parse_block_comp_spec(p)?;
+	let bind = parse_binding_ind(p)?;
+	let decl_items = repeat_until(p, Keyword(Kw::End), parse_block_comp_decl_item)?;
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::For))?;
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a binding indication. See IEEE 1076-2008 section 7.3.2.1. The trailing
+/// semicolon is required only if at least one of the aspect has been parsed.
+///
+/// ```text
+/// binding_ind := ["use" entity_aspect] [generic_map_aspect] [port_map_aspect] [";"]
+/// entity_aspect
+///   := "entity" name
+///   := "configuration" name
+///   := "open"
+/// ```
+pub fn parse_binding_ind<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+
+	/// Parse the entity aspect.
+	let entity = if accept(p, Keyword(Kw::Use)) {
+		let pk = p.peek(0);
+		Some(match pk.value {
+			Keyword(Kw::Entity) => {
+				p.bump();
+				parse_name(p)?;
+				()
+			}
+			Keyword(Kw::Configuration) => {
+				p.bump();
+				parse_name(p)?;
+				()
+			}
+			Keyword(Kw::Open) => {
+				p.bump();
+				()
+			}
+			_ => {
+				p.emit(
+					DiagBuilder2::error(format!("Expected entity aspect after `use`, found {} instead", pk.value))
+					.span(pk.span)
+					.add_note("An entity aspect is one of the following:")
+					.add_note("`entity <name>(<architecture>)`")
+					.add_note("`configuration <name>`")
+					.add_note("`open`")
+					.add_note("see IEEE 1076-2008 section 7.3.2.2")
+				);
+				return Err(Reported);
+			}
+		})
+	} else {
+		None
+	};
+
+	/// Parse the generic map aspect.
+	let gm = try_map_aspect(p, Kw::Generic)?;
+
+	/// Parse the port map aspect.
+	let pm = try_map_aspect(p, Kw::Port)?;
+
+	if entity.is_some() || gm.is_some() || pm.is_some() {
+		require(p, Semicolon)?;
+	}
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a block or component specification. See IEEE 1067-2008 section 7.3.1.
+///
+/// ```text
+/// block_comp_spec
+///   := name
+///   := {ident}","+ ":" name
+///   := "others" ":" name
+///   := "all" ":" name
+/// ```
+pub fn parse_block_comp_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+
+	// Try to detect if this is a block or component specification.
+	let spec = match (p.peek(0).value, p.peek(1).value) {
+		(Keyword(Kw::Others), _) => {
+			p.bump();
+			require(p, Colon)?;
+			let name = parse_name(p)?;
+			()
+		},
+
+		(Keyword(Kw::All), _) => {
+			p.bump();
+			require(p, Colon)?;
+			let name = parse_name(p)?;
+			()
+		}
+
+		(Ident(_), Comma) | (Ident(_), Colon) => {
+			let names = separated_nonempty(
+				p,
+				Comma,
+				Colon,
+				"label",
+				|p| parse_ident(p, "label")
+			);
+			require(p, Colon)?;
+			let name = parse_name(p)?;
+			()
+		}
+
+		(wrong, _) => {
+			if let Some(name) = try_name(p)? {
+				()
+			} else {
+				let sp = p.peek(0).span;
+				p.emit(
+					DiagBuilder2::error(format!("Expected block name, component label, `all`, or `others`, foudn {} instead", wrong))
+					.span(sp)
+				);
+				return Err(Reported);
+			}
+		}
+	};
+
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse a configuration specification. See IEEE 1076-2008 section 7.3.1.
+///
+/// ```text
+/// config_spec := "for" block_comp_spec binding_ind {vunit_binding_ind} ["end" "for" ";"]
+/// ```
+pub fn parse_config_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::For))?;
+	let spec = parse_block_comp_spec(p)?;
+	let bind = parse_binding_ind(p)?;
+	let vunits = repeat(p, |p| -> ReportedResult<Option<()>> {
+		if p.peek(0).value == Keyword(Kw::Use) && p.peek(1).value == Keyword(Kw::Vunit) {
+			Ok(Some(parse_vunit_binding_ind(p)?))
+		} else {
+			Ok(None)
+		}
+	})?;
+	if accept(p, Keyword(Kw::End)) {
+		require(p, Keyword(Kw::For))?;
+		require(p, Semicolon)?;
+	}
 	span.expand(p.last_span());
 	Ok(())
 }

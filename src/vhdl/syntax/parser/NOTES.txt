@@ -164,3 +164,34 @@ subprog_spec :=
 	["generic" "map" paren_expr]
 	[["parameter"] paren_expr]
 	["return" name]
+
+
+Configuration Declarations/Specifications
+-----------------------------------------
+
+config_decl := "configuration" ident "of" name "is" {config_decl_item} "end" ["configuration"] [ident] ";"
+config_decl_item
+	:= use_clause
+	:= attribute_specification
+	:= group_declaration
+	:= vunit_binding_ind ";"
+	:= block_comp_config
+block_comp_config := "for" block_comp_spec [binding_ind ";"] {block_config_item} "end" "for" ";"
+block_config_item
+	:= use_clause
+	:= vunit_binding_ind ";"
+	:= block_comp_config
+
+config_spec  := "for" block_comp_spec binding_ind ";" {vunit_binding_ind ";"} ["end" "for" ";"]
+block_comp_spec
+	:= name                   # block_config
+	:= {ident}","+ ":" name   # comp_config
+	:= "others" ":" name      # comp_config
+	:= "all" ":" name         # comp_config
+binding_ind := ["use" entity_aspect] [generic_map_aspect] [port_map_aspect]
+entity_aspect
+	:= "entity" name
+	:= "configuration" name
+	:= "open"
+
+vunit_binding_ind := "use" "vunit" {name}","+
