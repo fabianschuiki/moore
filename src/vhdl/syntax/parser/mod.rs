@@ -4,7 +4,7 @@
 
 //! A VHDL parser.
 
-mod token_stream;
+pub mod token_stream;
 #[macro_use]
 mod core;
 pub mod rules;

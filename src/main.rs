@@ -118,7 +118,10 @@ fn compile(matches: &ArgMatches) {
 			}
 		}
 		Language::Vhdl => {
-			vhdl::syntax::parse(source);
+			match vhdl::syntax::parse(source) {
+				Ok(x) => x,
+				Err(()) => std::process::exit(1),
+			};
 		}
 	}
 }

@@ -50,7 +50,7 @@ while read -d $'\0' SRCFILE; do
 			echo " ${CPASS}passed${CRST}"
 		fi
 	done < <(grep -o -E '@elab\s+.*' $SRCFILE | cut -f 2 -d " ")
-done < <(find $TESTS_DIR -name "*.sv" -print0)
+done < <(find $TESTS_DIR -name "*.sv" -print0 -or -name "*.vhd" -print0)
 
 echo
 if [ $NUM_FAIL -gt 0 ]; then

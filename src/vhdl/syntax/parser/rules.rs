@@ -38,6 +38,9 @@
 //! | block_specification                  | name                 |
 //! | generate_specification               | expr                 |
 //! | configuration_item                   | decl_item            |
+//! | target                               | primary_expr         |
+//! | attribute_specification              | attr_spec_decl       |
+//! | attribute_declaration                | attr_spec_decl       |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -682,6 +685,8 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Disconnect) => Some(parse_discon_spec(p)?),
 		// config_spec := "for" ...
 		Keyword(Kw::For) => Some(parse_config_spec(p)?),
+		// attr_spec_decl := "attribute" ...
+		Keyword(Kw::Attribute) => Some(parse_attr_spec_decl(p)?),
 		_ => None
 	})
 }
@@ -1662,6 +1667,8 @@ pub fn parse_block_comp_decl_item<P: Parser>(p: &mut P) -> ReportedResult<()> {
 		(Keyword(Kw::Use), _) => parse_use_clause(p),
 		// "for" ...
 		(Keyword(Kw::For), _) => parse_block_comp_config(p),
+		// "attribute" ...
+		(Keyword(Kw::Attribute), _) => parse_attr_spec_decl(p),
 
 		(wrong, _) => {
 			let sp = p.peek(0).span;
@@ -1841,6 +1848,91 @@ pub fn parse_config_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	}
 	span.expand(p.last_span());
 	Ok(())
+}
+
+
+/// Parse an attribute declaration or specification. See IEEE 1076-2008 sections
+/// 6.7 and 7.2.
+///
+/// ```text
+/// attribute_decl := "attribute" ident ":" name ";"
+/// attribute_spec := "attribute" ident "of" ({name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
+/// ```
+pub fn parse_attr_spec_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Attribute))?;
+	let name = parse_ident(p, "attribute name")?;
+
+	// Depending on the next token, parse either a declaration or a
+	// specification.
+	if accept(p, Colon) {
+		let ty = parse_name(p)?;
+		require(p, Semicolon)?;
+		span.expand(p.last_span());
+		Ok(())
+	} else if accept(p, Keyword(Kw::Of)) {
+		// Parse the entity specification.
+		let list = match p.peek(0).value {
+			Keyword(Kw::Others) => { p.bump(); () }
+			Keyword(Kw::All) => { p.bump(); () }
+			_ => {
+				let l = separated_nonempty(p, Comma, Colon, "name", |p|{
+					let name = parse_name(p)?;
+					let sig = try_flanked(p, Brack, parse_signature)?;
+					Ok(())
+				})?;
+				()
+			}
+		};
+
+		// Parse the entity class.
+		require(p, Colon)?;
+		let pk = p.peek(0);
+		let cls = match pk.value {
+			Keyword(Kw::Architecture) => (),
+			Keyword(Kw::Component) => (),
+			Keyword(Kw::Configuration) => (),
+			Keyword(Kw::Constant) => (),
+			Keyword(Kw::Entity) => (),
+			Keyword(Kw::File) => (),
+			Keyword(Kw::Function) => (),
+			Keyword(Kw::Group) => (),
+			Keyword(Kw::Label) => (),
+			Keyword(Kw::Literal) => (),
+			Keyword(Kw::Package) => (),
+			Keyword(Kw::Procedure) => (),
+			Keyword(Kw::Property) => (),
+			Keyword(Kw::Sequence) => (),
+			Keyword(Kw::Signal) => (),
+			Keyword(Kw::Subtype) => (),
+			Keyword(Kw::Type) => (),
+			Keyword(Kw::Units) => (),
+			Keyword(Kw::Variable) => (),
+			wrong => {
+				p.emit(
+					DiagBuilder2::error(format!("Expected entity class, found {} instead", wrong))
+					.span(pk.span)
+					.add_note("An entity class is any of the keywords `architecture`, `component`, `configuration`, `constant`, `entity`, `file`, `function`, `group`, `label`, `literal`, `package`, `procedure`, `property`, `sequence`, `signal`, `subtype`, `type`, `units`, or `variable`")
+				);
+				return Err(Reported);
+			}
+		};
+		p.bump();
+
+		// Parse the rest.
+		require(p, Keyword(Kw::Is))?;
+		let expr = parse_expr(p)?;
+		require(p, Semicolon)?;
+		span.expand(p.last_span());
+		Ok(())
+	} else {
+		let pk = p.peek(0);
+		p.emit(
+			DiagBuilder2::error(format!("Expected `:` or `of` after attribute name, found {} instead", pk.value))
+			.span(pk.span)
+		);
+		Err(Reported)
+	}
 }
 
 

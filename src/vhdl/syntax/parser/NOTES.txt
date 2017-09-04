@@ -99,13 +99,17 @@ Declarative Items
 - [x] file_declaration                      "file"
 - [x] alias_declaration                     "alias"
 - [x] component_declaration                 "component"
-- [ ] attribute_declaration                 "attribute"
-- [ ] attribute_specification               "attribute"
-- [ ] configuration_specification           "for"
+- [x] attribute_declaration                 "attribute"
+- [x] attribute_specification               "attribute"
+- [x] configuration_specification           "for"
 - [x] disconnection_specification           "disconnect"
 - [x] use_clause                            "use"
 - [ ] group_template_declaration            "group"
 - [ ] group_declaration                     "group"
+- [ ] generic_clause                        "generic"
+- [ ] generic_map_aspect                    "generic map"
+- [ ] port_clause                           "port"
+- [ ] port_map_aspect                       "port map"
 
 
 Type Definitions
@@ -195,3 +199,81 @@ entity_aspect
 	:= "open"
 
 vunit_binding_ind := "use" "vunit" {name}","+
+
+
+Statements
+----------
+
+stmt := [ident ":"] ["postponed"] ...
+
+[ ] wait_stmt          := "wait" ["on" {name}","+] ["until" expr] ["for" expr] ";"
+[ ] assert_stmt        := "assert" expr ["report" expr] ["severity" expr] ";"
+[ ] report_stmt        := "report" expr ["severity" expr] ";"
+[ ] assign_stmt
+[ ] call_stmt          := name ";"
+[ ] if_stmt            := "if" expr "then" {stmt} {"elsif" expr "then" {stmt}} ["else" {stmt}] "end" "if" [ident] ";"
+[ ] case_stmt          := "case" ["?"] expr "is" {"when" {expr}"|"+ "=>" {stmt}} "end" "case" ["?"] [ident] ";"
+[ ] loop_stmt          := ("while" expr | "for" ident "in" expr) "loop" {stmt} "end" "loop" [ident] ";"
+[ ] nexit_stmt         := ("next"|"exit") [ident] ["when" expr] ";"
+[ ] return_stmt        := "return" [expr] ";"
+[ ] null_stmt          := "null" ";"
+[ ] block_stmt         := "block" ["(" expr ")"] ["is"] {decl_item} "begin" {stmt} "end" "block" [ident] ";"
+[ ] process_stmt       := "process" ["(" ("all"|{name}",") ")"] ["is"] {decl_item} "begin" {stmt} "end" ["postponed"] "process" [ident] ";"
+[ ] inst_stmt          := ["component"|"entity"|"configuration"] name [generic_map_aspect] [port_map_aspect] ";"
+[ ] generate_for_stmt  := "for" ident "in" expr "generate" generate_body "end" "generate" [ident] ";"
+[ ] generate_if_stmt   := "if" generate_if_branch {"elsif" generate_if_branch} ["else" generate_if_branch] "end" "generate" [ident] ";"
+[ ] generate_case_stmt := "case" expr "generate" {"when" [ident ":"] {expr}"|"+ "=>" generate_body}+ "end" "generate" [ident] ";"
+
+generate_body := [{decl_item}+ "begin"] {stmt} ["end" [ident] ";"]
+generate_if_branch := [ident ":"] expr "generate" generate_body
+
+# Care needs to be taken in order to differentiate assignments and instantiations:
+#   primary_expr "<=" ...
+#   name ...
+# Maybe parse a primary_expr for both, then decide based on whether it is followed by "<="|":=" or "generic"|"port"|";".
+
+
+Assignments
+-----------
+
+assign_stmt
+	:= assign_dst "release" [force_mode] ";"
+	:= assign_dst assign_mode cond_waves ";"
+	:= "with" expr "select" ["?"] assign_dst assign_mode selected_waves ";"
+assign_dst := primary_expr ("<=" | ":=") ["guarded"]
+assign_mode := [delay_mech] | "force" [force_mode]
+
+force_mode := "in" | "out"
+delay_mech := "transport" | ["reject" expr] "inertial"
+
+wave := {expr ["after" expr]}","+ | "unaffected"
+cond_waves := wave ["when" expr {"else" wave "when" expr} ["else" wave]]
+selected_waves := { wave "when" {expr}"|"+ }","+
+
+
+Attributes
+----------
+
+attribute_decl := "attribute" ident ":" name ";"
+attribute_spec := "attribute" ident "of" ({primary_name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
+
+entity_class
+	:= "entity"
+	:= "architecture"
+	:= "configuration"
+	:= "procedure"
+	:= "function"
+	:= "package"
+	:= "type"
+	:= "subtype"
+	:= "constant"
+	:= "signal"
+	:= "variable"
+	:= "component"
+	:= "label"
+	:= "literal"
+	:= "units"
+	:= "group"
+	:= "file"
+	:= "property"
+	:= "sequence"

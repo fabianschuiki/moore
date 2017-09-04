@@ -12,7 +12,8 @@ use moore_common::source::*;
 use moore_common::errors::*;
 
 
-pub fn parse(src: Source) {
+pub fn parse(src: Source) -> Result<(),()> {
+	use self::parser::token_stream::TokenStream;
 	println!("parsing VHDL source {:?}", src);
 
 	// Get a grinder on the bytes of the source file.
@@ -25,7 +26,7 @@ pub fn parse(src: Source) {
 
 	// Parse the file.
 	let mut parser = parser::basic::BasicParser::new(tokens);
-	parser::rules::parse_design_file(&mut parser);
+	/*let ast =*/ parser::rules::parse_design_file(&mut parser);
 
 	// Parse the file.
 	// let mut i = 0;
@@ -38,6 +39,12 @@ pub fn parse(src: Source) {
 	// 	}
 	// }
 
-	println!("done");
+	// println!("done");
 	// println!("done ({})", i);
+
+	if parser.is_error() {
+		Err(())
+	} else {
+		Ok(())
+	}
 }
