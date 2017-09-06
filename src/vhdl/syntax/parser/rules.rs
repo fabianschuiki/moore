@@ -9,13 +9,20 @@
 //! | VHDL Standard                        | Generalized to       |
 //! |--------------------------------------|----------------------|
 //! | array_constraint                     | name                 |
+//! | attribute_declaration                | attr_decl            |
 //! | attribute_name                       | name                 |
+//! | attribute_specification              | attr_decl            |
+//! | block_specification                  | name                 |
+//! | configuration_item                   | decl_item            |
 //! | constraint                           | primary_expr         |
 //! | enumeration_type_definition          | paren_expr           |
 //! | external_name                        | *ignored*            |
 //! | function_call                        | name                 |
+//! | generate_specification               | expr                 |
 //! | generic_clause                       | generic_clause       |
 //! | generic_map_aspect                   | map_aspect           |
+//! | group_declaration                    | group_decl           |
+//! | group_template_declaration           | group_decl           |
 //! | indexed_name                         | name                 |
 //! | interface_subprogram_declaration     | subprog_spec         |
 //! | name                                 | name                 |
@@ -33,14 +40,9 @@
 //! | subprogram_declaration               | subprog_spec         |
 //! | subprogram_instantiation_declaration | subprog_spec         |
 //! | subtype_indication                   | name, primary_expr   |
+//! | target                               | primary_expr         |
 //! | time_expression                      | expr                 |
 //! | type_mark                            | name                 |
-//! | block_specification                  | name                 |
-//! | generate_specification               | expr                 |
-//! | configuration_item                   | decl_item            |
-//! | target                               | primary_expr         |
-//! | attribute_specification              | attr_spec_decl       |
-//! | attribute_declaration                | attr_spec_decl       |
 
 use std::fmt::Display;
 use moore_common::errors::*;
@@ -398,10 +400,6 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let name = parse_ident(p, "entity name")?;
 	require(p, Keyword(Kw::Is))?;
 
-	// Parse the entity header.
-	let generic = try_generic_clause(p)?;
-	let port = try_port_clause(p)?;
-
 	// Parse the declarative part.
 	repeat(p, try_decl_item)?;
 
@@ -491,7 +489,7 @@ pub fn parse_arch_body<P: Parser>(p: &mut P) -> ReportedResult<()> {
 /// ```text
 /// generic_clause := "generic" "clause" "(" {intf_decl}";"+ ")" ";"
 /// ```
-pub fn try_generic_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
+pub fn try_generic_clause<P: Parser>(p: &mut P) -> ReportedResult<Option<Vec<()>>> {
 	if p.peek(0).value == Keyword(Kw::Generic) && p.peek(1).value != Keyword(Kw::Map) {
 		p.bump();
 		let i = flanked(p, Paren, |p|{
@@ -503,9 +501,9 @@ pub fn try_generic_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
 			)?)
 		})?;
 		require(p, Semicolon)?;
-		Ok(i)
+		Ok(Some(i))
 	} else {
-		Ok(Vec::new())
+		Ok(None)
 	}
 }
 
@@ -515,7 +513,7 @@ pub fn try_generic_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
 /// ```text
 /// port_clause := "port" "clause" "(" {intf_decl}";"+ ")" ";"
 /// ```
-pub fn try_port_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
+pub fn try_port_clause<P: Parser>(p: &mut P) -> ReportedResult<Option<Vec<()>>> {
 	if p.peek(0).value == Keyword(Kw::Port) && p.peek(1).value != Keyword(Kw::Map) {
 		p.bump();
 		let i = flanked(p, Paren, |p|{
@@ -527,9 +525,9 @@ pub fn try_port_clause<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
 			)?)
 		})?;
 		require(p, Semicolon)?;
-		Ok(i)
+		Ok(Some(i))
 	} else {
-		Ok(Vec::new())
+		Ok(None)
 	}
 }
 
@@ -685,8 +683,28 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		Keyword(Kw::Disconnect) => Some(parse_discon_spec(p)?),
 		// config_spec := "for" ...
 		Keyword(Kw::For) => Some(parse_config_spec(p)?),
-		// attr_spec_decl := "attribute" ...
-		Keyword(Kw::Attribute) => Some(parse_attr_spec_decl(p)?),
+		// attr_decl := "attribute" ...
+		Keyword(Kw::Attribute) => Some(parse_attr_decl(p)?),
+		// generic_clause     := "generic" ...
+		// generic_map_aspect := "generic" "map" ...
+		Keyword(Kw::Generic) => {
+			if p.peek(1).value == Keyword(Kw::Map) {
+				Some(try_map_aspect(p, Kw::Generic)?.unwrap())
+			} else {
+				Some({ try_generic_clause(p)?.unwrap(); () })
+			}
+		}
+		// port_clause     := "port" ...
+		// port_map_aspect := "port" "map" ...
+		Keyword(Kw::Port) => {
+			if p.peek(1).value == Keyword(Kw::Map) {
+				Some(try_map_aspect(p, Kw::Port)?.unwrap())
+			} else {
+				Some({ try_port_clause(p)?.unwrap(); () })
+			}
+		}
+		// group_decl := "group" ...
+		Keyword(Kw::Group) => Some(parse_group_decl(p)?),
 		_ => None
 	})
 }
@@ -1139,13 +1157,6 @@ pub fn parse_package_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	require(p, Keyword(Kw::Package))?;
 	let name = parse_ident(p, "package name")?;
 	require(p, Keyword(Kw::Is))?;
-
-	// Parse the optional generic clause and generic map aspect.
-	let gc = try_generic_clause(p)?;
-	let gm = try_map_aspect(p, Kw::Generic)?;
-	if gm.is_some() {
-		require(p, Semicolon)?;
-	}
 
 	// Parse the declarative part.
 	repeat(p, try_decl_item)?;
@@ -1661,14 +1672,16 @@ pub fn parse_vunit_binding_ind<P: Parser>(p: &mut P) -> ReportedResult<()> {
 /// ```
 pub fn parse_block_comp_decl_item<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	match (p.peek(0).value, p.peek(1).value) {
-		// "use" "vunit" ...
+		// vunit_binding_ind := "use" "vunit" ...
 		(Keyword(Kw::Use), Keyword(Kw::Vunit)) => parse_vunit_binding_ind(p),
-		// "use" ...
+		// use_clause := "use" ...
 		(Keyword(Kw::Use), _) => parse_use_clause(p),
-		// "for" ...
+		// block_comp_config := "for" ...
 		(Keyword(Kw::For), _) => parse_block_comp_config(p),
-		// "attribute" ...
-		(Keyword(Kw::Attribute), _) => parse_attr_spec_decl(p),
+		// attr_spec := "attribute" ...
+		(Keyword(Kw::Attribute), _) => parse_attr_decl(p),
+		// group_decl := "group" ...
+		(Keyword(Kw::Group), _) => parse_group_decl(p),
 
 		(wrong, _) => {
 			let sp = p.peek(0).span;
@@ -1855,10 +1868,11 @@ pub fn parse_config_spec<P: Parser>(p: &mut P) -> ReportedResult<()> {
 /// 6.7 and 7.2.
 ///
 /// ```text
-/// attribute_decl := "attribute" ident ":" name ";"
-/// attribute_spec := "attribute" ident "of" ({name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
+/// attribute_decl
+///   := "attribute" ident ":" name ";"
+///   := "attribute" ident "of" ({name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
 /// ```
-pub fn parse_attr_spec_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+pub fn parse_attr_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	let mut span = p.peek(0).span;
 	require(p, Keyword(Kw::Attribute))?;
 	let name = parse_ident(p, "attribute name")?;
@@ -1887,37 +1901,7 @@ pub fn parse_attr_spec_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 
 		// Parse the entity class.
 		require(p, Colon)?;
-		let pk = p.peek(0);
-		let cls = match pk.value {
-			Keyword(Kw::Architecture) => (),
-			Keyword(Kw::Component) => (),
-			Keyword(Kw::Configuration) => (),
-			Keyword(Kw::Constant) => (),
-			Keyword(Kw::Entity) => (),
-			Keyword(Kw::File) => (),
-			Keyword(Kw::Function) => (),
-			Keyword(Kw::Group) => (),
-			Keyword(Kw::Label) => (),
-			Keyword(Kw::Literal) => (),
-			Keyword(Kw::Package) => (),
-			Keyword(Kw::Procedure) => (),
-			Keyword(Kw::Property) => (),
-			Keyword(Kw::Sequence) => (),
-			Keyword(Kw::Signal) => (),
-			Keyword(Kw::Subtype) => (),
-			Keyword(Kw::Type) => (),
-			Keyword(Kw::Units) => (),
-			Keyword(Kw::Variable) => (),
-			wrong => {
-				p.emit(
-					DiagBuilder2::error(format!("Expected entity class, found {} instead", wrong))
-					.span(pk.span)
-					.add_note("An entity class is any of the keywords `architecture`, `component`, `configuration`, `constant`, `entity`, `file`, `function`, `group`, `label`, `literal`, `package`, `procedure`, `property`, `sequence`, `signal`, `subtype`, `type`, `units`, or `variable`")
-				);
-				return Err(Reported);
-			}
-		};
-		p.bump();
+		let cls = parse_entity_class(p)?;
 
 		// Parse the rest.
 		require(p, Keyword(Kw::Is))?;
@@ -1930,9 +1914,114 @@ pub fn parse_attr_spec_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 		p.emit(
 			DiagBuilder2::error(format!("Expected `:` or `of` after attribute name, found {} instead", pk.value))
 			.span(pk.span)
+			.add_note("see IEEE 1076-2008 sections 6.7 and 7.2")
 		);
 		Err(Reported)
 	}
+}
+
+
+/// Parse an entity class. See IEEE 1076-2008 section 7.2.
+///
+/// ```text
+/// entity_class
+///   := "entity"
+///   := "architecture"
+///   := "configuration"
+///   := "procedure"
+///   := "function"
+///   := "package"
+///   := "type"
+///   := "subtype"
+///   := "constant"
+///   := "signal"
+///   := "variable"
+///   := "component"
+///   := "label"
+///   := "literal"
+///   := "units"
+///   := "group"
+///   := "file"
+///   := "property"
+///   := "sequence"
+/// ```
+pub fn parse_entity_class<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let pk = p.peek(0);
+	let cls = match pk.value {
+		Keyword(Kw::Architecture) => (),
+		Keyword(Kw::Component) => (),
+		Keyword(Kw::Configuration) => (),
+		Keyword(Kw::Constant) => (),
+		Keyword(Kw::Entity) => (),
+		Keyword(Kw::File) => (),
+		Keyword(Kw::Function) => (),
+		Keyword(Kw::Group) => (),
+		Keyword(Kw::Label) => (),
+		Keyword(Kw::Literal) => (),
+		Keyword(Kw::Package) => (),
+		Keyword(Kw::Procedure) => (),
+		Keyword(Kw::Property) => (),
+		Keyword(Kw::Sequence) => (),
+		Keyword(Kw::Signal) => (),
+		Keyword(Kw::Subtype) => (),
+		Keyword(Kw::Type) => (),
+		Keyword(Kw::Units) => (),
+		Keyword(Kw::Variable) => (),
+		wrong => {
+			p.emit(
+				DiagBuilder2::error(format!("Expected entity class, found {} instead", wrong))
+				.span(pk.span)
+				.add_note("An entity class is any of the keywords `architecture`, `component`, `configuration`, `constant`, `entity`, `file`, `function`, `group`, `label`, `literal`, `package`, `procedure`, `property`, `sequence`, `signal`, `subtype`, `type`, `units`, or `variable`")
+				.add_note("see IEEE 1076-2008 section 7.2")
+			);
+			return Err(Reported);
+		}
+	};
+	p.bump();
+	Ok(cls)
+}
+
+
+/// Parse a group declaration or group template declaration. See IEEE 1076-2008
+/// sections 6.9 and 6.10.
+///
+/// ```text
+/// group_decl
+///   := "group" ident "is" "(" {entity_class ["<>"]}","+ ")" ";"
+///   := "group" ident ":" name ";"
+/// ```
+pub fn parse_group_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	require(p, Keyword(Kw::Group))?;
+	let name = parse_ident(p, "group name")?;
+
+	// Parse either a declaration or template declaration, depending on the next
+	// token.
+	if accept(p, Colon) {
+		let ty = parse_name(p)?;
+	} else if accept(p, Keyword(Kw::Is)) {
+		let elems = flanked(p, Paren, |p| separated_nonempty(
+			p, Comma, CloseDelim(Paren), "group element", |p|{
+				let cls = parse_entity_class(p)?;
+				let open = accept(p, LtGt);
+				Ok(())
+			}
+		).map_err(|e| e.into()));
+	} else {
+		let pk = p.peek(0);
+		p.emit(
+			DiagBuilder2::error(format!("Expected `:` or `is` after group name, found {} instead", pk.value))
+			.span(pk.span)
+			.add_note("`group <name> is ...` declares a group template")
+			.add_note("`group <name> : ...` declares group")
+			.add_note("see IEEE 1076-2008 sections 6.9 and 6.10")
+		);
+		return Err(Reported);
+	}
+
+	require(p, Semicolon)?;
+	span.expand(p.last_span());
+	Ok(())
 }
 
 

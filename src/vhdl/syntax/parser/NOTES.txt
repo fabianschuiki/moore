@@ -104,12 +104,12 @@ Declarative Items
 - [x] configuration_specification           "for"
 - [x] disconnection_specification           "disconnect"
 - [x] use_clause                            "use"
-- [ ] group_template_declaration            "group"
-- [ ] group_declaration                     "group"
-- [ ] generic_clause                        "generic"
-- [ ] generic_map_aspect                    "generic map"
-- [ ] port_clause                           "port"
-- [ ] port_map_aspect                       "port map"
+- [x] group_template_declaration            "group"
+- [x] group_declaration                     "group"
+- [x] generic_clause                        "generic"
+- [x] generic_map_aspect                    "generic map"
+- [x] port_clause                           "port"
+- [x] port_map_aspect                       "port map"
 
 
 Type Definitions
@@ -251,11 +251,16 @@ cond_waves := wave ["when" expr {"else" wave "when" expr} ["else" wave]]
 selected_waves := { wave "when" {expr}"|"+ }","+
 
 
-Attributes
-----------
+Attributes and Groups
+---------------------
 
-attribute_decl := "attribute" ident ":" name ";"
-attribute_spec := "attribute" ident "of" ({primary_name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
+attribute_decl
+	:= "attribute" ident ":" name ";"
+	:= "attribute" ident "of" ({primary_name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
+
+group_decl
+	:= "group" ident "is" "(" {entity_class ["<>"]}","+ ")" ";"
+	:= "group" ident ":" name ";"
 
 entity_class
 	:= "entity"
