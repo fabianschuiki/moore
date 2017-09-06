@@ -58,6 +58,88 @@ elsif CLK'event and CLK = '1' then
 end if;
 
 
+-- Case Statement
+case SEL is
+	when "01" =>   -- Z <= A;
+	when "10" =>   -- Z <= B;
+	when others => -- Z <= 'X';
+end case;
+
+case INT_A is
+	when 0      => -- Z <= A;
+	when 1 to 3 => -- Z <= B;
+	when 4|6|8  => -- Z <= C;
+	when others => -- Z <= 'X';
+end case;
+
+
+-- Loop Statement
+for I in o to 3 loop
+	if (A = I) then
+		--Z(I) <= '1';
+	end if;
+end loop;
+
+--TMP := '0';
+for I in A'low to A'high loop
+	--TMP := TMP xor A(I);
+end loop;
+--ODD <= TMP;
+
+for SEL in PRIMARY loop
+	--V_BUS <= VIDEO(SEL);
+	wait for 10 ns;
+end loop;
+
+--Z <= "0000";
+--I := 0;
+while (I <= 3) loop
+	if (A = I) then
+		--Z(I) <= '1';
+	end if;
+	--I := I + 1;
+end loop;
+
+while NOW < MAX_SIM_TIME loop
+	--CLK <= not CLK;
+	wait for PERIOD/2;
+end loop;
+wait;
+
+--Z <= "0000";
+--I := 0;
+L1: loop
+	if (A = I) then
+		--Z(I) <= '1';
+	end if;
+	--I := I + 1;
+end loop;
+
+
+-- Next Statement
+next;
+next foo;
+next when I = 4;
+next bar when I = 4;
+
+
+-- Exit Statement
+exit;
+exit foo;
+exit when I = 4;
+exit L1 when I = 4;
+
+
+-- Return Statement
+return;
+return 123;
+return 102 downto 9;
+
+
+-- Null Statement
+null;
+
+
 -- Generate Statement
 --L1: CELL port map (Top, Bottom, A(0), B(0));
 L2: for I in 1 to 3 generate

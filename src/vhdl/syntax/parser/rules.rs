@@ -140,6 +140,7 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<()> {
 		Err(Reported) => {
 			recover(p, &[Keyword(Kw::End)], true);
 			recover(p, &[Semicolon], true);
+			recover(p, &[Keyword(Kw::Entity), Keyword(Kw::Configuration), Keyword(Kw::Package), Keyword(Kw::Context), Keyword(Kw::Architecture)], false);
 			Err(Recovered)
 		}
 	}
@@ -2074,7 +2075,11 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
 			Keyword(Kw::Generate) => parse_for_generate_stmt(p, label)?,
 			_ => parse_loop_stmt(p, label)?,
 		},
-		Keyword(Kw::While) => parse_loop_stmt(p, label)?,
+		Keyword(Kw::While) | Keyword(Kw::Loop) => parse_loop_stmt(p, label)?,
+
+		Keyword(Kw::Next) | Keyword(Kw::Exit) => parse_nexit_stmt(p)?,
+		Keyword(Kw::Return) => parse_return_stmt(p)?,
+		Keyword(Kw::Null) => parse_null_stmt(p)?,
 
 		wrong => {
 			let q = p.peek(0).span;
@@ -2296,14 +2301,7 @@ pub fn parse_loop_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 			let range = parse_expr(p)?;
 			()
 		}
-		_ => {
-			p.emit(
-				DiagBuilder2::error(format!("Expected `for` or `while`, found {} instead", pk.value))
-				.span(pk.span)
-				.add_note("see IEEE 1076-2008 section 10.10")
-			);
-			return Err(Reported);
-		}
+		_ => ()
 	};
 
 	// Parse the rest.
@@ -2312,6 +2310,66 @@ pub fn parse_loop_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 	require(p, Keyword(Kw::End))?;
 	require(p, Keyword(Kw::Loop))?;
 	parse_optional_matching_ident(p, label, "loop statement", "section 10.10");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a next or exit statement. See IEEE 1076-2008 sections 10.11 and 10.12.
+///
+/// ```text
+/// nexit_stmt := ("next"|"exit") [ident] ["when" expr] ";"
+/// ```
+pub fn parse_nexit_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let pk = p.peek(0);
+	let mode = match pk.value {
+		Keyword(Kw::Next) => { p.bump(); () }
+		Keyword(Kw::Exit) => { p.bump(); () }
+		_ => {
+			p.emit(
+				DiagBuilder2::error(format!("Expected `next` or `exit`, found {} instead", pk.value))
+				.span(pk.span)
+				.add_note("see IEEE 1076-2008 sections 10.11 and 10.12")
+			);
+			return Err(Reported);
+		}
+	};
+	let label = try_ident(p);
+	let cond = if accept(p, Keyword(Kw::When)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a return statement. See IEEE 1076-2008 section 10.13.
+///
+/// ```text
+/// return_stmt := "return" [expr] ";"
+/// ```
+pub fn parse_return_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Return))?;
+	let expr = if !accept(p, Semicolon) {
+		let e = parse_expr(p)?;
+		require(p, Semicolon)?;
+		Some(e)
+	} else {
+		None
+	};
+	Ok(())
+}
+
+
+/// Parse a null statement. See IEEE 1076-2008 section 10.14.
+///
+/// ```text
+/// null_stmt := "null" ";"
+/// ```
+pub fn parse_null_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Null))?;
 	require(p, Semicolon)?;
 	Ok(())
 }
