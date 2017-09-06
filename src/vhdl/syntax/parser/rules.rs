@@ -689,7 +689,9 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		// generic_map_aspect := "generic" "map" ...
 		Keyword(Kw::Generic) => {
 			if p.peek(1).value == Keyword(Kw::Map) {
-				Some(try_map_aspect(p, Kw::Generic)?.unwrap())
+				let a = try_map_aspect(p, Kw::Generic)?.unwrap();
+				require(p, Semicolon)?;
+				Some(a)
 			} else {
 				Some({ try_generic_clause(p)?.unwrap(); () })
 			}
@@ -698,7 +700,9 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<()>> {
 		// port_map_aspect := "port" "map" ...
 		Keyword(Kw::Port) => {
 			if p.peek(1).value == Keyword(Kw::Map) {
-				Some(try_map_aspect(p, Kw::Port)?.unwrap())
+				let a = try_map_aspect(p, Kw::Port)?.unwrap();
+				require(p, Semicolon)?;
+				Some(a)
 			} else {
 				Some({ try_port_clause(p)?.unwrap(); () })
 			}
