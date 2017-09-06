@@ -362,3 +362,21 @@ pub fn try_ident<P: Parser>(p: &mut P) -> Option<Spanned<Name>> {
 		_ => None
 	}
 }
+
+
+/// Determine the earliest occurring token from a set. Useful to determine which
+/// of two or more tokens appears first in a stream.
+pub fn earliest<P: Parser>(p: &mut P, tokens: &[Token]) -> Spanned<Token> {
+	for i in 0.. {
+		let pk = p.peek(i);
+		if pk.value == Eof {
+			return pk;
+		}
+		for t in tokens {
+			if *t == pk.value {
+				return pk;
+			}
+		}
+	}
+	unreachable!();
+}

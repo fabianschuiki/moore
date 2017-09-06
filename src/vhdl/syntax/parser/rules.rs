@@ -344,17 +344,24 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 
 /// Parse the optional trailing name after an entity, configuration, etc., which
 /// must match the name at the beginning of the declaration.
-fn parse_optional_matching_ident<P,M1,M2>(p: &mut P, name: Spanned<Name>, msg: M1, sec: M2)
-where P: Parser, M1: Display, M2: Display {
-	match try_ident(p) {
-		Some(n) if n.value != name.value => {
+fn parse_optional_matching_ident<P,M1,M2,T>(p: &mut P, name: T, msg: M1, sec: M2)
+where P: Parser, M1: Display, M2: Display, T: Into<Option<Spanned<Name>>> {
+	if let Some(n) = try_ident(p) {
+		if let Some(name) = name.into() {
+			if n.value != name.value {
+				p.emit(
+					DiagBuilder2::warning(format!("`{}` does not match {} name `{}`", n.value, msg, name.value))
+					.span(n.span)
+					.add_note(format!("see IEEE 1076-2008 {}", sec))
+				);
+			}
+		} else {
 			p.emit(
-				DiagBuilder2::warning(format!("`{}` does not match the {}'s name `{}`", n.value, msg, name.value))
+				DiagBuilder2::warning(format!("Label `{}` is given at the end of {}, but not at the beginning", n.value, msg))
 				.span(n.span)
 				.add_note(format!("see IEEE 1076-2008 {}", sec))
 			);
 		}
-		_ => ()
 	}
 }
 
@@ -2029,7 +2036,444 @@ pub fn parse_group_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 }
 
 
-/// Parse a sequential statement.
+/// Parse a sequential or concurrent statement.
 pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
-	unimp!(p, "Statements");
+	let mut span = p.peek(0).span;
+
+	// Parse the leading statement label, if any.
+	let label = try_label(p);
+
+	// Handle the simple cases where the statement is clearly identified and
+	// introduced by a keyword. Otherwise try the more complex cases introduced
+	// by a name or parenthesized expression (aggregate).
+	match p.peek(0).value {
+		Keyword(Kw::Wait) => parse_wait_stmt(p)?,
+		Keyword(Kw::Assert) => parse_assert_stmt(p)?,
+		Keyword(Kw::Report) => parse_report_stmt(p)?,
+
+		// For the if statement, check if the `generate` or the `then` keyword
+		// occurs earlier. This allows us to determine whether we should parse a
+		// generate or regular statement.
+		Keyword(Kw::If) => match earliest(p, &[Keyword(Kw::Generate), Keyword(Kw::Then), Keyword(Kw::End)]).value {
+			Keyword(Kw::Generate) => parse_if_generate_stmt(p, label)?,
+			_ => parse_if_stmt(p, label)?,
+		},
+
+		// For the case statement, check if the `generate` or the `is` keyword
+		// occurs earlier. This allows us to determine whether we should parse a
+		// generate or regular statement.
+		Keyword(Kw::Case) => match earliest(p, &[Keyword(Kw::Generate), Keyword(Kw::Is), Keyword(Kw::End)]).value {
+			Keyword(Kw::Generate) => parse_case_generate_stmt(p, label)?,
+			_ => parse_case_stmt(p, label)?,
+		},
+
+		// For the loop statements, check if the `generate` or the `loop`
+		// keyword occurs earlier. This allows us to determine whether we should
+		// parse a generate or a regular statement.
+		Keyword(Kw::For) => match earliest(p, &[Keyword(Kw::Generate), Keyword(Kw::Loop), Keyword(Kw::End)]).value {
+			Keyword(Kw::Generate) => parse_for_generate_stmt(p, label)?,
+			_ => parse_loop_stmt(p, label)?,
+		},
+		Keyword(Kw::While) => parse_loop_stmt(p, label)?,
+
+		wrong => {
+			let q = p.peek(0).span;
+			p.emit(
+				DiagBuilder2::error(format!("Expected statement, found {} instead", wrong))
+				.span(q)
+				.add_note("see IEEE 1076-2008 section 10")
+			);
+			return Err(Reported);
+		}
+	}
+
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse an optional label, which basically is just an identifier followed by
+/// a colon. This is interesting for statement parsing. See IEEE 1076-2008
+/// section 10.
+pub fn try_label<P: Parser>(p: &mut P) -> Option<Spanned<Name>> {
+	if let (Spanned{ value: Ident(n), span }, Colon) = (p.peek(0), p.peek(1).value) {
+		p.bump();
+		p.bump();
+		Some(Spanned::new(n, span))
+	} else {
+		None
+	}
+}
+
+
+/// Parse a wait statement. See IEEE 1076-2008 section 10.2.
+///
+/// ```text
+/// wait_stmt := "wait" ["on" {name}","+] ["until" expr] ["for" expr] ";"
+/// ```
+pub fn parse_wait_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Wait))?;
+
+	// Parse the optional "on" part.
+	if accept(p, Keyword(Kw::On)) {
+		let names = separated_nonempty(
+			p,
+			Comma,
+			token_predicate!(Keyword(Kw::Until), Keyword(Kw::For), Semicolon),
+			"signal name",
+			parse_name
+		)?;
+		Some(names)
+	} else {
+		None
+	};
+
+	// Parse the optional "until" part.
+	if accept(p, Keyword(Kw::Until)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
+	// Parse the optional "for" part.
+	if accept(p, Keyword(Kw::For)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse an assertion statement. See IEEE 1076-2008 section 10.3.
+///
+/// ```text
+/// assert_stmt := "assert" expr ["report" expr] ["severity" expr] ";"
+/// ```
+pub fn parse_assert_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Assert))?;
+	let cond = parse_expr(p)?;
+
+	// Parse the optional "report" part.
+	if accept(p, Keyword(Kw::Report)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
+	// Parse the optional "severity" part.
+	if accept(p, Keyword(Kw::Severity)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a report statement. See IEEE 1076-2008 section 10.4.
+///
+/// ```text
+/// report_stmt := "report" expr ["severity" expr] ";"
+/// ```
+pub fn parse_report_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Report))?;
+	let msg = parse_expr(p)?;
+
+	// Parse the optional "severity" part.
+	if accept(p, Keyword(Kw::Severity)) {
+		Some(parse_expr(p)?)
+	} else {
+		None
+	};
+
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse an if statement. See IEEE 1076-2008 section 10.8.
+///
+/// ```text
+/// if_stmt :=
+///   "if" expr "then" {stmt}
+///   {"elsif" expr "then" {stmt}}
+///   ["else" {stmt}]
+///   "end" "if" [ident] ";"
+/// ```
+pub fn parse_if_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::If))?;
+
+	// Parse the first `if` and subsequent `elsif` branches.
+	let conds = separated_nonempty(
+		p,
+		Keyword(Kw::Elsif),
+		token_predicate!(Keyword(Kw::Else), Keyword(Kw::End)),
+		"if branch",
+		|p|{
+			let cond = parse_expr(p)?;
+			require(p, Keyword(Kw::Then))?;
+			let stmts = repeat_until(
+				p,
+				token_predicate!(Keyword(Kw::Elsif), Keyword(Kw::Else), Keyword(Kw::End)),
+				parse_stmt
+			)?;
+			Ok(())
+		}
+	)?;
+
+	// Parse the optional `else` branch.
+	let alt = if accept(p, Keyword(Kw::Else)) {
+		Some(repeat_until(p, Keyword(Kw::End), parse_stmt)?)
+	} else {
+		None
+	};
+
+	// Parse the rest.
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::If))?;
+	parse_optional_matching_ident(p, label, "if statement", "section 10.8");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a case statement. See IEEE 1076-2008 section 10.9.
+///
+/// ```text
+/// case_stmt:= "case" ["?"] expr "is" {"when" {expr}"|"+ "=>" {stmt}} "end" "case" ["?"] [ident] ";"
+/// ```
+pub fn parse_case_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Case))?;
+	let has_qm = accept(p, Qmark);
+	let switch = parse_expr(p)?;
+	require(p, Keyword(Kw::Is))?;
+
+	// Parse the cases.
+	let cases = repeat(p, |p| -> ReportedResult<Option<()>> {
+		if accept(p, Keyword(Kw::When)) {
+			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
+			require(p, Arrow)?;
+			let stmts = repeat_until(p, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)), parse_stmt)?;
+			Ok(Some(()))
+		} else {
+			Ok(None)
+		}
+	})?;
+
+	// Parse the rest.
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Case))?;
+	let trail_qm = accept(p, Qmark); // TODO: Check if this matches.
+	parse_optional_matching_ident(p, label, "case statement", "section 10.9");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a loop statement. See IEEE 1076-2008 section 10.10.
+///
+/// ```text
+/// loop_stmt := ("while" expr | "for" ident "in" expr) "loop" {stmt} "end" "loop" [ident] ";"
+/// ```
+pub fn parse_loop_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	// Determine the looping scheme.
+	let pk = p.peek(0);
+	let scheme = match pk.value {
+		Keyword(Kw::While) => {
+			p.bump();
+			let cond = parse_expr(p)?;
+			()
+		}
+		Keyword(Kw::For) => {
+			p.bump();
+			let param = parse_ident(p, "loop parameter name")?;
+			require(p, Keyword(Kw::In))?;
+			let range = parse_expr(p)?;
+			()
+		}
+		_ => {
+			p.emit(
+				DiagBuilder2::error(format!("Expected `for` or `while`, found {} instead", pk.value))
+				.span(pk.span)
+				.add_note("see IEEE 1076-2008 section 10.10")
+			);
+			return Err(Reported);
+		}
+	};
+
+	// Parse the rest.
+	require(p, Keyword(Kw::Loop))?;
+	let stmts = repeat_until(p, Keyword(Kw::End), parse_stmt)?;
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Loop))?;
+	parse_optional_matching_ident(p, label, "loop statement", "section 10.10");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a generate if statement. See IEEE 1076-2008 section 11.8.
+///
+/// ```text
+/// generate_if_stmt :=
+///   "if" [ident ":"] expr "generate" generate_body
+///   {"elsif" [ident ":"] expr "generate" generate_body}
+///   ["else" [ident ":"] "generate" generate_body]
+///   "end" "generate" [ident] ";"
+/// ```
+pub fn parse_if_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::If))?;
+
+	// Parse the first `if` and subsequent `elsif` branches.
+	let conds = separated_nonempty(
+		p,
+		Keyword(Kw::Elsif),
+		token_predicate!(Keyword(Kw::Else), Keyword(Kw::End)),
+		"if generate branch",
+		|p|{
+			let label = try_label(p);
+			let cond = parse_expr(p)?;
+			require(p, Keyword(Kw::Generate))?;
+			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::Elsif), Keyword(Kw::Else), Keyword(Kw::End)))?;
+			Ok(())
+		}
+	)?;
+
+	// Parse the optional `else` branch.
+	let alt = if accept(p, Keyword(Kw::Else)) {
+		let label = try_label(p);
+		require(p, Keyword(Kw::Generate))?;
+		let body = parse_generate_body(p, label, Keyword(Kw::End))?;
+		Some(())
+	} else {
+		None
+	};
+
+	// Parse the rest.
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Generate))?;
+	parse_optional_matching_ident(p, label, "generate statement", "section 11.8");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a generate case statement. See IEEE 1076-2008 section 11.8.
+///
+/// ```text
+/// generate_case_stmt := "case" expr "generate" {"when" [ident ":"] {expr}"|"+ "=>" generate_body}+ "end" "generate" [ident] ";"
+/// ```
+pub fn parse_case_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Case))?;
+	let switch = parse_expr(p)?;
+	require(p, Keyword(Kw::Generate))?;
+
+	// Parse the cases.
+	let cases = repeat(p, |p| -> ReportedResult<Option<()>> {
+		if accept(p, Keyword(Kw::When)) {
+			let label = try_label(p);
+			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
+			require(p, Arrow)?;
+			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)))?;
+			Ok(Some(()))
+		} else {
+			Ok(None)
+		}
+	})?;
+
+	// Parse the rest.
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Generate))?;
+	parse_optional_matching_ident(p, label, "generate statement", "section 11.8");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a generate for statement. See IEEE 1076-2008 section 11.8.
+///
+/// ```text
+/// generate_for_stmt := "for" ident "in" expr "generate" generate_body "end" "generate" [ident] ";"
+/// ```
+pub fn parse_for_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::For))?;
+	let param = parse_ident(p, "loop parameter name")?;
+	require(p, Keyword(Kw::In))?;
+	let range = parse_expr(p)?;
+	require(p, Keyword(Kw::Generate))?;
+	let body = parse_generate_body(p, label, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Generate))?;
+	parse_optional_matching_ident(p, label, "generate statement", "section 11.8");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a generate body. See IEEE 1076-2008 section 11.8.
+///
+/// ```text
+/// [{decl_item}+ "begin"] {stmt} ["end" [ident] ";"]
+/// ```
+pub fn parse_generate_body<P: Parser, T>(p: &mut P, label: Option<Spanned<Name>>, term: T) -> ReportedResult<()>
+where T: Predicate<P> {
+	// Parse the optional declarative part. Care must be taken when parsing the
+	// declarative items, since the `for` and `component` may introduce both a
+	// regular statement or a declarative item.
+	let decl_items = repeat(p, |p|{
+		// Statement introduced by label `ident ":"`.
+		if p.peek(0).value.is_ident() && p.peek(1).value == Colon {
+			return Ok(None);
+		}
+		// Component instantiation.
+		if p.peek(0).value == Keyword(Kw::Component) && p.peek(2).value != Keyword(Kw::Is) {
+			return Ok(None);
+		}
+		// Configuration specification starting with `for`. Hard to distinguish
+		// from a for statement or for generate statement. We use a cue from the
+		// structure of the three variants: Statements have a `loop` or
+		// `generate` keyword very shortly after `for`, whereas a configuration
+		// specification has at least one semicolon before any of these
+		// keywords.
+		if p.peek(0).value == Keyword(Kw::For) && earliest(p, &[Keyword(Kw::Loop), Keyword(Kw::Generate), Semicolon]).value == Semicolon {
+			return Ok(None);
+		}
+
+		try_decl_item(p)
+	})?;
+
+	// Parse the `begin` that introduces the body. Optional if no declarative
+	// items were given.
+	let has_begin = accept(p, Keyword(Kw::Begin));
+	if !decl_items.is_empty() && !has_begin {
+		let pk = p.peek(0);
+		p.emit(
+			DiagBuilder2::error(format!("`begin` is required before {}, to separate it from the preceding declarative items", pk.value))
+			.span(pk.span)
+		);
+		return Err(Reported);
+	}
+
+	// Parse the statements in the body.
+	let stmts = repeat_until(
+		p,
+		term,
+		parse_stmt
+	)?;
+
+	// Parse the `end` and optional trailing label.
+	let has_end = if p.peek(0).value == Keyword(Kw::End) && p.peek(1).value != Keyword(Kw::Generate) {
+		p.bump();
+		parse_optional_matching_ident(p, label, "generate body", "section 11.8");
+		require(p, Semicolon)?;
+		true
+	} else {
+		false
+	};
+	Ok(())
 }

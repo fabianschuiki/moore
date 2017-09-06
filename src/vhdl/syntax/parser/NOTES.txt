@@ -206,23 +206,23 @@ Statements
 
 stmt := [ident ":"] ["postponed"] ...
 
-[ ] wait_stmt          := "wait" ["on" {name}","+] ["until" expr] ["for" expr] ";"
-[ ] assert_stmt        := "assert" expr ["report" expr] ["severity" expr] ";"
-[ ] report_stmt        := "report" expr ["severity" expr] ";"
+[x] wait_stmt          := "wait" ["on" {name}","+] ["until" expr] ["for" expr] ";"
+[x] assert_stmt        := "assert" expr ["report" expr] ["severity" expr] ";"
+[x] report_stmt        := "report" expr ["severity" expr] ";"
 [ ] assign_stmt
 [ ] call_stmt          := name ";"
-[ ] if_stmt            := "if" expr "then" {stmt} {"elsif" expr "then" {stmt}} ["else" {stmt}] "end" "if" [ident] ";"
-[ ] case_stmt          := "case" ["?"] expr "is" {"when" {expr}"|"+ "=>" {stmt}} "end" "case" ["?"] [ident] ";"
-[ ] loop_stmt          := ("while" expr | "for" ident "in" expr) "loop" {stmt} "end" "loop" [ident] ";"
+[x] if_stmt            := "if" expr "then" {stmt} {"elsif" expr "then" {stmt}} ["else" {stmt}] "end" "if" [ident] ";"
+[x] case_stmt          := "case" ["?"] expr "is" {"when" {expr}"|"+ "=>" {stmt}} "end" "case" ["?"] [ident] ";"
+[x] loop_stmt          := ("while" expr | "for" ident "in" expr) "loop" {stmt} "end" "loop" [ident] ";"
 [ ] nexit_stmt         := ("next"|"exit") [ident] ["when" expr] ";"
 [ ] return_stmt        := "return" [expr] ";"
 [ ] null_stmt          := "null" ";"
 [ ] block_stmt         := "block" ["(" expr ")"] ["is"] {decl_item} "begin" {stmt} "end" "block" [ident] ";"
 [ ] process_stmt       := "process" ["(" ("all"|{name}",") ")"] ["is"] {decl_item} "begin" {stmt} "end" ["postponed"] "process" [ident] ";"
 [ ] inst_stmt          := ["component"|"entity"|"configuration"] name [generic_map_aspect] [port_map_aspect] ";"
-[ ] generate_for_stmt  := "for" ident "in" expr "generate" generate_body "end" "generate" [ident] ";"
-[ ] generate_if_stmt   := "if" generate_if_branch {"elsif" generate_if_branch} ["else" generate_if_branch] "end" "generate" [ident] ";"
-[ ] generate_case_stmt := "case" expr "generate" {"when" [ident ":"] {expr}"|"+ "=>" generate_body}+ "end" "generate" [ident] ";"
+[x] generate_for_stmt  := "for" ident "in" expr "generate" generate_body "end" "generate" [ident] ";"
+[x] generate_if_stmt   := "if" generate_if_branch {"elsif" generate_if_branch} ["else" generate_if_branch] "end" "generate" [ident] ";"
+[x] generate_case_stmt := "case" expr "generate" {"when" [ident ":"] {expr}"|"+ "=>" generate_body}+ "end" "generate" [ident] ";"
 
 generate_body := [{decl_item}+ "begin"] {stmt} ["end" [ident] ";"]
 generate_if_branch := [ident ":"] expr "generate" generate_body
@@ -240,7 +240,7 @@ assign_stmt
 	:= assign_dst "release" [force_mode] ";"
 	:= assign_dst assign_mode cond_waves ";"
 	:= "with" expr "select" ["?"] assign_dst assign_mode selected_waves ";"
-assign_dst := primary_expr ("<=" | ":=") ["guarded"]
+assign_dst := (name|paren_expr) ("<=" | ":=") ["guarded"]
 assign_mode := [delay_mech] | "force" [force_mode]
 
 force_mode := "in" | "out"

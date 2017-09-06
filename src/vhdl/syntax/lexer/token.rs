@@ -51,6 +51,7 @@ pub enum Token {
 	Div,
 	Pow,
 	Pipe,
+	Qmark,
 
 	/// The end of the input file.
 	Eof
@@ -97,6 +98,7 @@ impl Token {
 			Div        => "/",
 			Pow        => "**",
 			Pipe       => "|",
+			Qmark      => "?",
 
 			Eof => "end of file",
 		}

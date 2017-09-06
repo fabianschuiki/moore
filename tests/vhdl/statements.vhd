@@ -1,1 +1,0 @@
--- This file tests sequential statements.
