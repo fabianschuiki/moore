@@ -12,10 +12,10 @@ wait until F(S(3)) and (S(l) or S(r));
 wait on S(3), S, l, r until F(S(3)) and (S(l) or S(r));
 wait on S(3), S, l, r until F(S(3)) and (S(l) or S(r)) for 20 ns;
 
---loop
---	wait on Clk;
---	exit when Clk = '1';
---end loop;
+loop
+	wait on Clk;
+	exit when Clk = '1';
+end loop;
 
 
 -- Assertion Statement
@@ -138,6 +138,54 @@ return 102 downto 9;
 
 -- Null Statement
 null;
+
+
+-- Process Statement
+process (ALARM_TIME, CURRENT_TIME)
+begin
+	if (ALARM_TIME = CURRENT_TIME) then
+		--SOUND_ALARM <= '1';
+	else
+		--SOUND_ALARM <= '0';
+	end if;
+end process;
+
+process
+begin
+	if (ALARM_TIME = CURRENT_TIME) then
+		--SOUND_ALARM <= '1';
+	else
+		--SOUND_ALARM <= '0';
+	end if;
+	wait on ALARM_TIME, CURRENT_TIME;
+end process;
+
+WAIT_PROC: process
+begin
+	wait until CLK'event and CLK='1';
+	--Q1 <= D1;
+end process;
+
+SENSE_PROC: process (CLK)
+begin
+	if CLK'event and CLK='1' then
+		--Q2 <= D2;
+	end if;
+end process;
+
+
+-- Block Statement
+CONTROL_LOGIC: block
+begin
+	--U1: CONTROLLER_A port map (CLK,X,Y,Z);
+	--U2: CONTROLLER_A port map (CLK,A,B,C);
+end block CONTROL_LOGIC;
+
+DATA_PATH: block
+begin
+	--U3: DATAPATH_A port map (BUS_A,BUS_B,BUS_C,Z);
+	--U4: DATAPATH_B port map (BUS_A,BUS_C,BUS_D,C);
+end block DATA_PATH;
 
 
 -- Generate Statement

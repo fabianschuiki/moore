@@ -2080,6 +2080,8 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
 		Keyword(Kw::Next) | Keyword(Kw::Exit) => parse_nexit_stmt(p)?,
 		Keyword(Kw::Return) => parse_return_stmt(p)?,
 		Keyword(Kw::Null) => parse_null_stmt(p)?,
+		Keyword(Kw::Block) => parse_block_stmt(p, label)?,
+		Keyword(Kw::Process) => parse_proc_stmt(p, label)?,
 
 		wrong => {
 			let q = p.peek(0).span;
@@ -2533,5 +2535,61 @@ where T: Predicate<P> {
 	} else {
 		false
 	};
+	Ok(())
+}
+
+
+/// Parse a block statement. See IEEE 1076-2008 section 11.2.
+///
+/// ```text
+/// block_stmt := "block" ["(" expr ")"] ["is"] {decl_item} "begin" {stmt} "end" "block" [ident] ";"
+/// ```
+pub fn parse_block_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Block))?;
+	let guard = try_flanked(p, Paren, parse_expr)?;
+	accept(p, Keyword(Kw::Is));
+	let decl_items = repeat(p, try_decl_item)?;
+	require(p, Keyword(Kw::Begin))?;
+	let stmts = repeat_until(p, Keyword(Kw::End), parse_stmt)?;
+	require(p, Keyword(Kw::End))?;
+	require(p, Keyword(Kw::Block))?;
+	parse_optional_matching_ident(p, label, "block", "section 11.2");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a process statement. See IEEE 1076-2008 section 11.3.
+///
+/// ```text
+/// process_stmt := "process" ["(" ("all"|{name}",") ")"] ["is"] {decl_item} "begin" {stmt} "end" ["postponed"] "process" [ident] ";"
+/// ```
+pub fn parse_proc_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> ReportedResult<()> {
+	require(p, Keyword(Kw::Process))?;
+
+	// Parse the optional sensitivity list.
+	let sensitivity = try_flanked(p, Paren, |p|{
+		if accept(p, Keyword(Kw::All)) {
+			Ok(())
+		} else {
+			separated(p, Comma, CloseDelim(Paren), "signal name", parse_name)?;
+			Ok(())
+		}
+	})?;
+	accept(p, Keyword(Kw::Is));
+
+	// Parse the declarative part.
+	let decl_items = repeat(p, try_decl_item)?;
+
+	// Parse the statement body.
+	require(p, Keyword(Kw::Begin))?;
+	let stmts = repeat_until(p, Keyword(Kw::End), parse_stmt)?;
+	require(p, Keyword(Kw::End))?;
+
+	// Parse the rest.
+	let postponed = accept(p, Keyword(Kw::Postponed));
+	require(p, Keyword(Kw::Process))?;
+	parse_optional_matching_ident(p, label, "process", "section 11.3");
+	require(p, Semicolon)?;
 	Ok(())
 }
