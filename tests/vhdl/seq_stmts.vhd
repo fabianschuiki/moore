@@ -40,79 +40,79 @@ report "Setup or Hold violation; outputs driven to 'X'" severity WARNING;
 
 -- If Statement
 if (X = 5) and (Y = 9) then
-	--Z <= A;
+	Z <= A;
 elsif (X >= 5) then
-	--Z <= B;
+	Z <= B;
 else
-	--Z < C;
+	Z <= C;
 end if;
 
 if RESET = '1' then
-	--COUNT <= 0;
+	COUNT <= 0;
 elsif CLK'event and CLK = '1' then
 	if (COUNT >= 9) then
-		--COUNT <= 0;
+		COUNT <= 0;
 	else
-		--COUNT <= COUNT + 1;
+		COUNT <= COUNT + 1;
 	end if;
 end if;
 
 
 -- Case Statement
 case SEL is
-	when "01" =>   -- Z <= A;
-	when "10" =>   -- Z <= B;
-	when others => -- Z <= 'X';
+	when "01" =>   Z <= A;
+	when "10" =>   Z <= B;
+	when others => Z <= 'X';
 end case;
 
 case INT_A is
-	when 0      => -- Z <= A;
-	when 1 to 3 => -- Z <= B;
-	when 4|6|8  => -- Z <= C;
-	when others => -- Z <= 'X';
+	when 0      => Z <= A;
+	when 1 to 3 => Z <= B;
+	when 4|6|8  => Z <= C;
+	when others => Z <= 'X';
 end case;
 
 
 -- Loop Statement
 for I in o to 3 loop
 	if (A = I) then
-		--Z(I) <= '1';
+		Z(I) <= '1';
 	end if;
 end loop;
 
---TMP := '0';
+TMP := '0';
 for I in A'low to A'high loop
-	--TMP := TMP xor A(I);
+	TMP := TMP xor A(I);
 end loop;
---ODD <= TMP;
+ODD <= TMP;
 
 for SEL in PRIMARY loop
-	--V_BUS <= VIDEO(SEL);
+	V_BUS <= VIDEO(SEL);
 	wait for 10 ns;
 end loop;
 
---Z <= "0000";
---I := 0;
+Z <= "0000";
+I := 0;
 while (I <= 3) loop
 	if (A = I) then
-		--Z(I) <= '1';
+		Z(I) <= '1';
 	end if;
-	--I := I + 1;
+	I := I + 1;
 end loop;
 
 while NOW < MAX_SIM_TIME loop
-	--CLK <= not CLK;
+	CLK <= not CLK;
 	wait for PERIOD/2;
 end loop;
 wait;
 
---Z <= "0000";
---I := 0;
+Z <= "0000";
+I := 0;
 L1: loop
 	if (A = I) then
-		--Z(I) <= '1';
+		Z(I) <= '1';
 	end if;
-	--I := I + 1;
+	I := I + 1;
 end loop;
 
 
@@ -144,18 +144,18 @@ null;
 process (ALARM_TIME, CURRENT_TIME)
 begin
 	if (ALARM_TIME = CURRENT_TIME) then
-		--SOUND_ALARM <= '1';
+		SOUND_ALARM <= '1';
 	else
-		--SOUND_ALARM <= '0';
+		SOUND_ALARM <= '0';
 	end if;
 end process;
 
 process
 begin
 	if (ALARM_TIME = CURRENT_TIME) then
-		--SOUND_ALARM <= '1';
+		SOUND_ALARM <= '1';
 	else
-		--SOUND_ALARM <= '0';
+		SOUND_ALARM <= '0';
 	end if;
 	wait on ALARM_TIME, CURRENT_TIME;
 end process;
@@ -163,13 +163,13 @@ end process;
 WAIT_PROC: process
 begin
 	wait until CLK'event and CLK='1';
-	--Q1 <= D1;
+	Q1 <= D1;
 end process;
 
 SENSE_PROC: process (CLK)
 begin
 	if CLK'event and CLK='1' then
-		--Q2 <= D2;
+		Q2 <= D2;
 	end if;
 end process;
 
@@ -177,23 +177,23 @@ end process;
 -- Block Statement
 CONTROL_LOGIC: block
 begin
-	--U1: CONTROLLER_A port map (CLK,X,Y,Z);
-	--U2: CONTROLLER_A port map (CLK,A,B,C);
+	U1: CONTROLLER_A port map (CLK,X,Y,Z);
+	U2: CONTROLLER_A port map (CLK,A,B,C);
 end block CONTROL_LOGIC;
 
 DATA_PATH: block
 begin
-	--U3: DATAPATH_A port map (BUS_A,BUS_B,BUS_C,Z);
-	--U4: DATAPATH_B port map (BUS_A,BUS_C,BUS_D,C);
+	U3: DATAPATH_A port map (BUS_A,BUS_B,BUS_C,Z);
+	U4: DATAPATH_B port map (BUS_A,BUS_C,BUS_D,C);
 end block DATA_PATH;
 
 
 -- Generate Statement
---L1: CELL port map (Top, Bottom, A(0), B(0));
+L1: CELL port map (Top, Bottom, A(0), B(0));
 L2: for I in 1 to 3 generate
 	L3: for J in 1 to 3 generate
 		L4: if I+J>4 generate
-			--L5: CELL port map (A(I-1),B(J-1),A(I),B(J));
+			L5: CELL port map (A(I-1),B(J-1),A(I),B(J));
 		end generate;
 	end generate;
 end generate;
@@ -201,30 +201,30 @@ end generate;
 L6: for I in 1 to 3 generate
 	L7: for J in 1 to 3 generate
 		L8: if I+J<4 generate
-			--L9: CELL port map (A(I+1),B(J+1),A(I),B(J));
+			L9: CELL port map (A(I+1),B(J+1),A(I),B(J));
 		end generate;
 	end generate;
 end generate;
 
 L1: case verify_mode generate
 	when V_rtl: all_rtl | cpu_rtl =>
-		--CPU1: entity work.cpu(rtl) port map (foo);
+		CPU1: entity work.cpu(rtl) port map (foo);
 	when V_bfm: others =>
 			signal bfm_sig : BIT;
 		begin
-			--CPU1: entity work.cpu(bfm) port map (bar);
+			CPU1: entity work.cpu(bfm) port map (bar);
 	end V_bfm;
 end generate L1;
 
 L2: if A1: max_latency < 10 generate
 		signal s1 : BIT;
 	begin
-		--multiplier1: parallel_multiplier port map (foo);
+		multiplier1: parallel_multiplier port map (foo);
 	end A1;
 else A2: generate
 		signal s1 : STD_LOGIC;
 	begin
-		--multiplier1: sequential_multiplier port map (bar);
+		multiplier1: sequential_multiplier port map (bar);
 	end A2;
 end generate L2;
 

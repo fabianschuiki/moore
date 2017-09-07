@@ -158,25 +158,6 @@ fn entity_decl_part() {
 }
 
 #[test]
-fn entity_stmt_part() {
-	parse!("
-		entity Latch is
-			port (
-				Din: in Word;
-				Dout: out Word;
-				Load: in Bit;
-				Clk: in Bit);
-			constant Setup: Time := 12 ns;
-			constant PulseWidth: Time := 50 ns;
-			use Work.TimingMonitors.all;
-		begin
-			-- assert Clk='1' or Clk'Delayed'Stable (PulseWidth);
-			-- CheckTiming (Setup, Din, Load, Clk);
-		end;
-	", parse_entity_decl);
-}
-
-#[test]
 fn intf_decl() {
 	parse!("
 		constant a : std_logic;
@@ -254,44 +235,6 @@ fn elem_resolution() {
 }
 
 #[test]
-fn package_body() {
-	parse!("package body foo is end;", parse_package_body);
-	parse!("package body foo is end package body;", parse_package_body);
-	parse!("package body foo is end package body foo;", parse_package_body);
-	// parse!("package body foo is end package body bar;", parse_package_body); // check if this emits a warning
-
-	parse!("
-		package body TriState is
-			function BitVal (Value: Tri) return Bit is
-				constant Bits : Bit_Vector := \"0100\";
-			begin
-			--	return Bits(Tri'Pos(Value));
-			end;
-
-			function TriVal (Value: Bit) return Tri is
-			begin
-			--	return Tri'Val(Bit'Pos(Value));
-			end;
-
-			function Resolve (Sources: TriVector) return Tri is
-				variable V: Tri := 'Z';
-			begin
-			--	for i in Sources'Range loop
-			--		if Sources(i) /= 'Z' then
-			--			if V = 'Z' then
-			--				V := Sources(i);
-			--			else
-			--				return 'E';
-			--			end if;
-			--		end if;
-			--	end loop;
-			--	return V;
-			end;
-		end package body TriState;
-	", parse_package_body);
-}
-
-#[test]
 fn package_inst() {
 	parse!("package foo is new bar;", |p| parse_package_inst(p, true));
 	parse!("package foo is new bar generic map (STUFF => 8);", |p| parse_package_inst(p, true));
@@ -306,90 +249,6 @@ fn decl_items() {
 			package body bar is end;
 			package baz is new foo;
 			package baz is new foo generic map (STUFF => 8);
-		end;
-	", parse_package_decl)
-}
-
-#[test]
-fn type_decl() {
-	parse!("
-		package foo is
-			-- enum_type_def
-			type foo;
-			type MULTI_LEVEL_LOGIC is (LOW, HIGH, RISING, FALLING, AMBIGUOUS);
-			type BIT is ('0','1');
-			type SWITCH_LEVEL is ('0','1','X');
-
-			-- integer_type_def
-			type TWOS_COMPLEMENT_INTEGER is range -32768 to 32767;
-			type BYTE_LENGTH_INTEGER is range 0 to 255;
-			type WORD_INDEX is range 31 downto 0;
-
-			-- floating_type_def
-			type bubba is range -1E18 to 1E18;
-
-			-- physical_type_def
-			type DURATION is range -1E18 to 1E18
-				units
-					fs;
-					ps    = 1000 fs;
-					ns    = 1000 ps;
-					us    = 1000 ns;
-					ms    = 1000 us;
-					sec   = 1000 ms;
-					min   = 60 sec;
-				end units;
-			type DISTANCE is range 0 to 1E16
-				units
-					-- primary unit:
-					Å;
-					-- metric lengths:
-					nm   = 10 Å;
-					um   = 1000 nm;
-					mm   = 1000 um;
-					cm   = 10 mm;
-					m    = 1000 mm;
-					km   = 1000 m;
-					-- English lengths:
-					mil  = 254000 Å;
-					inch = 1000 mil;
-					ft   = 12 inch;
-					yd   = 3 ft;
-					fm   = 6 ft;
-					mi   = 5280 ft;
-					lg   = 3 mi;
-				end units DISTANCE;
-
-			-- array_type_def
-			type MY_WORD is array (0 to 31) of BIT;
-			type DATA_IN is array (7 downto 0) of FIVE_LEVEL_LOGIC;
-			type MEMORY is array (INTEGER range <>) of MY_WORD;
-			type SIGNED_FXPT is array (INTEGER range <>) of BIT;
-			type SIGNED_FXPT_VECTOR is array (NATURAL range <>) of SIGNED_FXPT;
-			type SIGNED_FXPT_5x4 is array (1 to 5, 1 to 4) of SIGNED_FXPT;
-			type Word is array (NATURAL range <>) of BIT;
-			type Memory is array (NATURAL range <>) of Word (31 downto 0);
-			type E is array (NATURAL range <>) of INTEGER;
-			type T is array (1 to 10) of E (1 to 0);
-
-			-- record_type_def
-			type DATE is record
-					DAY : INTEGER range 1 to 31;
-					MONTH : MONTH_NAME;
-					YEAR : INTEGER range 0 to 4000;
-				end record;
-			type SIGNED_FXPT_COMPLEX is record
-					RE : SIGNED_FXPT;
-					IM : SIGNED_FXPT;
-				end record;
-
-			-- access_type_def
-			type ADDRESS is access MEMORY;
-			type BUFFER_PTR is access TEMP_BUFFER;
-
-			-- file_type_def
-			type A is file of STRING;
-			type B is file of NATURAL;
 		end;
 	", parse_package_decl)
 }
@@ -427,17 +286,17 @@ fn protected_type_body() {
 
 			procedure increment (N: Integer := 1) is
 			begin
-			-- 	counter := counter + N;
+				counter := counter + N;
 			end procedure increment;
 
 			procedure decrement (N: Integer := 1) is
 			begin
-			-- 	counter := counter - N;
+				counter := counter - N;
 			end procedure decrement;
 
 			impure function value return Integer is
 			begin
-			-- 	return counter;
+				return counter;
 			end function value;
 		end protected body SharedCounter;
 	", |p| parse_type_decl(p, true));
@@ -448,18 +307,18 @@ fn protected_type_body() {
 
 			procedure extract (r, i: out Real) is
 			begin
-			-- 	r := re;
-			-- 	i := im;
+				r := re;
+				i := im;
 			end procedure extract;
 
 			procedure add (variable a, b: inout ComplexNumber) is
 				variable a_real, b_real: Real;
 				variable a_imag, b_imag: Real;
 			begin
-			-- 	a.extract (a_real, a_imag);
-			-- 	b.extract (b_real, b_imag);
-			-- 	re := a_real + b_real;
-			-- 	im := a_imag + b_imag;
+				a.extract (a_real, a_imag);
+				b.extract (b_real, b_imag);
+				re := a_real + b_real;
+				im := a_imag + b_imag;
 			end procedure add;
 		end protected body ComplexNumber;
 	", |p| parse_type_decl(p, true));
@@ -474,21 +333,21 @@ fn protected_type_body() {
 			procedure add_bit (index: Positive; value: Bit) is
 				variable tmp: bit_vector_access;
 			begin
-			-- 	if index > bit_array_length then
-			-- 		tmp := bit_array;
-			-- 		bit_array := new bit_vector (1 to index);
-			-- 		if tmp /= null then
-			-- 			bit_array (1 to bit_array_length) := tmp.all;
-			-- 			deallocate (tmp);
-			-- 		end if;
-			-- 		bit_array_length := index;
-			-- 	end if;
-			-- 	bit_array (index) := value;
+				if index > bit_array_length then
+					tmp := bit_array;
+					bit_array := new bit_vector (1 to index);
+					if tmp /= null then
+						bit_array (1 to bit_array_length) := tmp.all;
+						deallocate (tmp);
+					end if;
+					bit_array_length := index;
+				end if;
+				bit_array (index) := value;
 			end procedure add_bit;
 
 			impure function size return Natural is
 			begin
-			-- 	return bit_array_length;
+				return bit_array_length;
 			end function size;
 		end protected body VariableSizeBitArray;
 	", |p| parse_type_decl(p, true));
@@ -540,52 +399,6 @@ fn expr() {
 #[test]
 fn subtype_decl() {
 	parse!("subtype foo is integer;", parse_subtype_decl);
-}
-
-#[test]
-fn arch_body() {
-	parse!("
-		architecture DataFlow of Full_Adder is
-			signal A,B: Bit;
-		begin
-			-- A <= X xor Y;
-			-- B <= A and Cin;
-			-- Sum <= A xor Cin;
-			-- Cout <= B or (X and Y);
-		end architecture DataFlow;
-	", parse_arch_body);
-
-	parse!("
-		architecture Structure of TestBench is
-			component C is end component C;
-			component Full_Adder
-				port (X, Y, Cin: Bit; Cout, Sum: out Bit);
-			end component;
-			signal A,B,C,D,E,F,G: Bit;
-			signal OK: Boolean;
-		begin
-			-- UUT:        Full_Adder port map (A,B,C,D,E);
-			-- Generator:  AdderTest  port map (A,B,C,F,G);
-			-- Comparator: AdderCheck port map (D,E,F,G,OK);
-		end Structure;
-	", parse_arch_body);
-
-	parse!("
-		architecture Behavior of AndGate is begin
-			-- process (Inputs)
-			-- 	variable Temp: Bit;
-			-- begin
-			-- 	Temp := '1';
-			-- 	for i in Inputs'Range loop
-			-- 		if Inputs(i) = '0' then
-			-- 			Temp := '0';
-			-- 			exit;
-			-- 		end if;
-			-- 	end loop;
-			-- 	Result <= Temp after 10 ns;
-			-- end process;
-		end Behavior;
-	", parse_arch_body);
 }
 
 #[test]

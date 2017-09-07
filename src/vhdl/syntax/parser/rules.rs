@@ -8,6 +8,7 @@
 //!
 //! | VHDL Standard                        | Generalized to       |
 //! |--------------------------------------|----------------------|
+//! | aggregate                            | paren_expr           |
 //! | array_constraint                     | name                 |
 //! | attribute_declaration                | attr_decl            |
 //! | attribute_name                       | name                 |
@@ -308,13 +309,17 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 	}
 
 	// Try to parse an attribute name.
-	if p.peek(0).value == OpenDelim(Brack) || (p.peek(0).value == Apostrophe && p.peek(1).value.is_ident()) {
+	if p.peek(0).value == OpenDelim(Brack) || (p.peek(0).value == Apostrophe && p.peek(1).value != OpenDelim(Paren)) {
 		// Parse the optional signature.
 		let sig = try_flanked(p, Brack, parse_signature)?;
 
 		// Consume the apostrophe and attribute name.
 		require(p, Apostrophe)?;
-		let attr = parse_ident(p, "attribute name")?;
+		let attr = if accept(p, Keyword(Kw::Range)) {
+			Spanned::new(get_name_table().intern("range", false), p.last_span())
+		} else {
+			parse_ident(p, "attribute name")?
+		};
 
 		// Extend the name.
 		name.span.expand(p.last_span());
@@ -397,7 +402,7 @@ pub fn parse_context_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 ///   "entity" ident "is"
 ///     entity_header
 ///     entity_decl_part
-///   ["begin" entity_stmt_part]
+///   ["begin" {stmt}]
 ///   "end" ["entity"] [ident] ";"
 /// ```
 pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
@@ -412,9 +417,11 @@ pub fn parse_entity_decl<P: Parser>(p: &mut P) -> ReportedResult<()> {
 	repeat(p, try_decl_item)?;
 
 	// Parse the optional statement part.
-	if accept(p, Keyword(Kw::Begin)) {
-		// TODO
-	}
+	let stmts = if accept(p, Keyword(Kw::Begin)) {
+		Some(repeat_until(p, Keyword(Kw::End), parse_stmt)?)
+	} else {
+		None
+	};
 
 	// Parse the tail of the declaration.
 	require(p, Keyword(Kw::End))?;
@@ -2082,15 +2089,34 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<()> {
 		Keyword(Kw::Null) => parse_null_stmt(p)?,
 		Keyword(Kw::Block) => parse_block_stmt(p, label)?,
 		Keyword(Kw::Process) => parse_proc_stmt(p, label)?,
+		Keyword(Kw::With) => parse_select_assign(p)?,
+		Keyword(Kw::Component) | Keyword(Kw::Entity) | Keyword(Kw::Configuration) => {
+			p.bump();
+			let name = parse_name(p)?;
+			parse_inst_or_call_tail(p, Some(()), name)?
+		}
 
 		wrong => {
-			let q = p.peek(0).span;
-			p.emit(
-				DiagBuilder2::error(format!("Expected statement, found {} instead", wrong))
-				.span(q)
-				.add_note("see IEEE 1076-2008 section 10")
-			);
-			return Err(Reported);
+			if let Some(name) = try_name(p)? {
+				// Try to parse a statement that begins with a name.
+				match p.peek(0).value {
+					Leq | VarAssign => parse_assign_tail(p, ())?,
+					_ => parse_inst_or_call_tail(p, None, name)?,
+				}
+			} else if let Some(expr) = try_flanked(p, Paren, parse_paren_expr)? {
+				// Try to parse a statement that begins with a parenthesized
+				// expression, aka an assignment.
+				parse_assign_tail(p, ())?
+			} else {
+				// If we get here, nothing matched, so throw an error.
+				let q = p.peek(0).span;
+				p.emit(
+					DiagBuilder2::error(format!("Expected statement, found {} instead", wrong))
+					.span(q)
+					.add_note("see IEEE 1076-2008 section 10")
+				);
+				return Err(Reported);
+			}
 		}
 	}
 
@@ -2590,6 +2616,235 @@ pub fn parse_proc_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 	let postponed = accept(p, Keyword(Kw::Postponed));
 	require(p, Keyword(Kw::Process))?;
 	parse_optional_matching_ident(p, label, "process", "section 11.3");
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse the tail of an assign statement. This function assumes that the name
+/// of the signal to be assigned has already been parsed. See IEEE 1076-2008
+/// section 10.5.
+///
+/// ```text
+/// assign_stmt
+///   := assign_dst "release" [force_mode] ";"
+///   := assign_dst assign_mode cond_waves ";"
+/// assign_dst := (name|paren_expr) . ("<=" | ":=") ["guarded"]
+/// assign_mode := [delay_mech] | "force" [force_mode]
+///
+/// force_mode := "in" | "out"
+/// delay_mech := "transport" | ["reject" expr] "inertial"
+/// ```
+pub fn parse_assign_tail<P: Parser>(p: &mut P, target: ()) -> ReportedResult<()> {
+	let dst = parse_assign_dst_tail(p)?;
+	match p.peek(0).value {
+		Keyword(Kw::Release) => {
+			p.bump();
+			let fm = try_force_mode(p);
+			()
+		}
+
+		Keyword(Kw::Force) => {
+			p.bump();
+			let fm = try_force_mode(p);
+			let waves = parse_cond_waves(p)?;
+			()
+		}
+
+		_ => {
+			let dm = try_delay_mech(p)?;
+			let waves = parse_cond_waves(p)?;
+			()
+		}
+	}
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+/// Parse a select assign statement. See IEEE 1076-2008 section 10.5.
+///
+/// ```text
+/// assign_stmt := "with" expr "select" ["?"] assign_dst assign_mode selected_waves ";"
+/// assign_dst  := (name|paren_expr) ("<=" | ":=") ["guarded"]
+/// assign_mode := [delay_mech] | "force" [force_mode]
+///
+/// force_mode := "in" | "out"
+/// delay_mech := "transport" | ["reject" expr] "inertial"
+/// ```
+pub fn parse_select_assign<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	require(p, Keyword(Kw::With))?;
+	let expr = parse_expr(p)?;
+	require(p, Keyword(Kw::Select))?;
+	let qm = accept(p, Qmark);
+
+	// Parse the assignment target, which is either a signal name or an
+	// aggregate.
+	let target = if let Some(name) = try_name(p)? {
+		()
+	} else if let Some(expr) = try_flanked(p, Paren, parse_paren_expr)? {
+		()
+	} else {
+		let pk = p.peek(0);
+		p.emit(
+			DiagBuilder2::error(format!("Expected signal name, variable name or aggregate, found {} instead", pk.value))
+			.span(pk.span)
+			.add_note("see IEEE 1076-2008 section 10.5")
+		);
+		return Err(Reported);
+	};
+
+	// Parse the rest of the destination.
+	let dst = parse_assign_dst_tail(p)?;
+
+	// Parse the assignment mode and rest of the statement.
+	match p.peek(0).value {
+		Keyword(Kw::Force) => {
+			p.bump();
+			let fm = try_force_mode(p);
+			let waves = parse_selected_waves(p)?;
+			()
+		}
+
+		_ => {
+			let dm = try_delay_mech(p)?;
+			let waves = parse_selected_waves(p)?;
+			()
+		}
+	}
+	require(p, Semicolon)?;
+	Ok(())
+}
+
+
+pub fn parse_assign_dst_tail<P: Parser>(p: &mut P) -> ReportedResult<((), bool)> {
+	let pk = p.peek(0);
+	let mode = match pk.value {
+		Leq => (),
+		VarAssign => (),
+		_ => {
+			p.emit(
+				DiagBuilder2::error(format!("Expected `<=` or `:=` after assignment target, found {} instead", pk.value))
+				.span(pk.span)
+				.add_note("see IEEE 1076-2008 section 10.5")
+			);
+			return Err(Reported);
+		}
+	};
+	p.bump();
+	let guarded = accept(p, Keyword(Kw::Guarded));
+	Ok((mode, guarded))
+}
+
+
+pub fn try_force_mode<P: Parser>(p: &mut P) -> Option<Spanned<()>> {
+	if let Some(m) = match p.peek(0).value {
+		Keyword(Kw::In)  => Some(()),
+		Keyword(Kw::Out) => Some(()),
+		_ => None
+	}{
+		p.bump();
+		Some(Spanned::new(m, p.last_span()))
+	} else {
+		None
+	}
+}
+
+
+/// Try to parse a delay mechanism.
+///
+/// ```text
+/// "transport" | ["reject" expr] "inertial"
+/// ```
+pub fn try_delay_mech<P: Parser>(p: &mut P) -> ReportedResult<Option<Spanned<()>>> {
+	Ok(match p.peek(0).value {
+		Keyword(Kw::Transport) => {
+			p.bump();
+			Some(Spanned::new((), p.last_span()))
+		}
+		Keyword(Kw::Inertial) => {
+			p.bump();
+			Some(Spanned::new((), p.last_span()))
+		}
+		Keyword(Kw::Reject) => {
+			p.bump();
+			let sp = p.last_span();
+			let expr = parse_expr(p)?;
+			require(p, Keyword(Kw::Inertial))?;
+			Some(Spanned::new((), sp))
+		}
+		_ => return Ok(None),
+	})
+}
+
+
+/// Parse a list of conditional waveforms. See IEEE 1076-2008 section 10.5.
+///
+/// ```text
+/// cond_waves := { wave ["when" expr] }"else"+
+/// ```
+pub fn parse_cond_waves<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
+	separated_nonempty(p, Keyword(Kw::Else), Semicolon, "waveform", |p|{
+		let wave = parse_wave(p)?;
+		let cond = if accept(p, Keyword(Kw::When)) {
+			Some(parse_expr(p)?)
+		} else {
+			None
+		};
+		Ok(())
+	}).map_err(|e| e.into())
+}
+
+
+/// Parse a list of selected waveforms. See IEEE 1076-2008 section 10.5.
+///
+/// ```text
+/// selected_waves := { wave "when" {expr}"|"+ }","+
+/// ```
+pub fn parse_selected_waves<P: Parser>(p: &mut P) -> ReportedResult<Vec<()>> {
+	separated_nonempty(p, Comma, Semicolon, "waveform", |p|{
+		let wave = parse_wave(p)?;
+		require(p, Keyword(Kw::When))?;
+		let choices = separated_nonempty(p, Pipe, token_predicate!(Comma, Semicolon), "choice", parse_expr)?;
+		Ok(())
+	}).map_err(|e| e.into())
+}
+
+
+/// Parse a waveform. See IEEE 1076-2008 section 10.5.
+///
+/// ```text
+/// wave := {expr ["after" expr]}","+ | "unaffected"
+/// ```
+pub fn parse_wave<P: Parser>(p: &mut P) -> ReportedResult<()> {
+	let mut span = p.peek(0).span;
+	let elems = if accept(p, Keyword(Kw::Unaffected)) {
+		None
+	} else {
+		Some(separated(p, Comma, token_predicate!(Keyword(Kw::When), Semicolon), "waveform element", |p|{
+			let expr = parse_expr(p)?;
+			if accept(p, Keyword(Kw::After)) {
+				let delay = parse_expr(p)?;
+				Ok(())
+			} else {
+				Ok(())
+			}
+		})?)
+	};
+	span.expand(p.last_span());
+	Ok(())
+}
+
+
+/// Parse the tail of an instantiation or procedure call statement. See IEEE
+/// 1076-2008 sections 10.7, 11.4, and 11.7.
+///
+/// ```text
+/// ["component"|"entity"|"configuration"] name . [generic_map_aspect] [port_map_aspect] ";"
+/// ```
+pub fn parse_inst_or_call_tail<P: Parser>(p: &mut P, kind: Option<()>, name: ast::CompoundName) -> ReportedResult<()> {
+	let gm = try_map_aspect(p, Kw::Generic)?;
+	let pm = try_map_aspect(p, Kw::Port)?;
 	require(p, Semicolon)?;
 	Ok(())
 }

@@ -209,8 +209,7 @@ stmt := [ident ":"] ["postponed"] ...
 [x] wait_stmt          := "wait" ["on" {name}","+] ["until" expr] ["for" expr] ";"
 [x] assert_stmt        := "assert" expr ["report" expr] ["severity" expr] ";"
 [x] report_stmt        := "report" expr ["severity" expr] ";"
-[ ] assign_stmt
-[ ] call_stmt          := name ";"
+[x] assign_stmt
 [x] if_stmt            := "if" expr "then" {stmt} {"elsif" expr "then" {stmt}} ["else" {stmt}] "end" "if" [ident] ";"
 [x] case_stmt          := "case" ["?"] expr "is" {"when" {expr}"|"+ "=>" {stmt}} "end" "case" ["?"] [ident] ";"
 [x] loop_stmt          := ["while" expr | "for" ident "in" expr] "loop" {stmt} "end" "loop" [ident] ";"
@@ -219,7 +218,7 @@ stmt := [ident ":"] ["postponed"] ...
 [x] null_stmt          := "null" ";"
 [x] block_stmt         := "block" ["(" expr ")"] ["is"] {decl_item} "begin" {stmt} "end" "block" [ident] ";"
 [x] process_stmt       := "process" ["(" ("all"|{name}",") ")"] ["is"] {decl_item} "begin" {stmt} "end" ["postponed"] "process" [ident] ";"
-[ ] inst_stmt          := ["component"|"entity"|"configuration"] name [generic_map_aspect] [port_map_aspect] ";"
+[x] inst_or_call_stmt  := ["component"|"entity"|"configuration"] name [generic_map_aspect] [port_map_aspect] ";"
 [x] generate_for_stmt  := "for" ident "in" expr "generate" generate_body "end" "generate" [ident] ";"
 [x] generate_if_stmt   := "if" generate_if_branch {"elsif" generate_if_branch} ["else" generate_if_branch] "end" "generate" [ident] ";"
 [x] generate_case_stmt := "case" expr "generate" {"when" [ident ":"] {expr}"|"+ "=>" generate_body}+ "end" "generate" [ident] ";"
