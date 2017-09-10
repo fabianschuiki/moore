@@ -35,6 +35,9 @@ fn main() {
 			.arg(Arg::with_name("preproc")
 				.short("E")
 				.help("Only preprocess input files"))
+			.arg(Arg::with_name("dump_ast")
+				.long("dump-ast")
+				.help("Dump the parsed abstract syntax tree"))
 			.arg(Arg::with_name("INPUT")
 				.help("The input file to use")
 				.required(true)
@@ -118,7 +121,13 @@ fn compile(matches: &ArgMatches) {
 			}
 		}
 		Language::Vhdl => {
-			vhdl::parser::parse(source);
+			let ast = match vhdl::syntax::parse(source) {
+				Ok(x) => x,
+				Err(()) => std::process::exit(1),
+			};
+			if matches.is_present("dump_ast") {
+				println!("{:#?}", ast);
+			}
 		}
 	}
 }

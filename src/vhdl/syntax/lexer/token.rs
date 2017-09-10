@@ -1,9 +1,10 @@
 // Copyright (c) 2017 Fabian Schuiki
 
 use std;
+use std::fmt::{Display, Formatter, Result};
 use moore_common::name::*;
 pub use self::Token::*;
-pub use self::Delim::*;
+pub use self::DelimToken::*;
 
 
 /// A primary token as emitted by the lexer.
@@ -14,9 +15,9 @@ pub enum Token {
 	/// A literal.
 	Lit(Literal),
 	/// An opening delimiter.
-	OpenDelim(Delim),
+	OpenDelim(DelimToken),
 	/// A closing delimiter.
-	CloseDelim(Delim),
+	CloseDelim(DelimToken),
 	/// A keyword.
 	Keyword(Kw),
 
@@ -49,9 +50,83 @@ pub enum Token {
 	Mul,
 	Div,
 	Pow,
+	Pipe,
+	Qmark,
+
+	/// The end of the input file.
+	Eof
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+impl Token {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Ident(_) => "identifier",
+			Lit(l) => l.as_str(),
+			OpenDelim(Paren)  => "(",
+			CloseDelim(Paren) => ")",
+			OpenDelim(Brack)  => "[",
+			CloseDelim(Brack) => "]",
+			Keyword(kw) => kw.as_str(),
+
+			Period     => ".",
+			Comma      => ",",
+			Colon      => ":",
+			Semicolon  => ";",
+			Apostrophe => "'",
+			Ampersand  => "&",
+			Arrow      => "=>",
+			Condition  => "??",
+			LtGt       => "<>",
+			VarAssign  => ":=",
+			Lshift     => "<<",
+			Rshift     => ">>",
+			Eq         => "=",
+			Neq        => "/=",
+			Lt         => "<",
+			Leq        => "<=",
+			Gt         => ">",
+			Geq        => ">=",
+			MatchEq    => "?=",
+			MatchNeq   => "?/=",
+			MatchLt    => "?<",
+			MatchLeq   => "?<=",
+			MatchGt    => "?>",
+			MatchGeq   => "?>=",
+			Add        => "+",
+			Sub        => "-",
+			Mul        => "*",
+			Div        => "/",
+			Pow        => "**",
+			Pipe       => "|",
+			Qmark      => "?",
+
+			Eof => "end of file",
+		}
+	}
+
+	/// Checks if this token is a identifier.
+	pub fn is_ident(self) -> bool {
+		match self {
+			Ident(_) => true,
+			_ => false
+		}
+	}
+}
+
+impl Display for Token {
+	fn fmt(&self, f: &mut Formatter) -> Result {
+		match *self {
+			Ident(n) => write!(f, "identifier `{}`", n),
+			Lit(l) => write!(f, "{}", l.as_str()),
+			Keyword(kw) => write!(f, "keyword `{}`", kw.as_str()),
+			tkn => write!(f, "`{}`", tkn.as_str()),
+		}
+	}
+}
+
+
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
 pub enum Literal {
 	Abstract(
 		/// Base
@@ -75,14 +150,27 @@ pub enum Literal {
 	String(Name),
 }
 
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Delim {
-	Paren,
+impl Literal {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Literal::Abstract(..) => "abstract literal",
+			Literal::BitString(..) => "bit string literal",
+			Literal::Char(..) => "character literal",
+			Literal::String(..) => "string literal",
+		}
+	}
 }
 
 
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum DelimToken {
+	Paren,
+	Brack,
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
 pub struct Exponent(
 	/// Sign
 	pub ExponentSign,
@@ -90,13 +178,13 @@ pub struct Exponent(
 	pub Name,
 );
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
 pub enum ExponentSign {
 	Positive,
 	Negative,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
 pub enum BitStringBase {
 	B, O, X, D,
 	UB, UO, UX,

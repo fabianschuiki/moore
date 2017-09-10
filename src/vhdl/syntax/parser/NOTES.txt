@@ -1,0 +1,283 @@
+Names
+-----
+
+primary_name:
+	ident
+	char_lit
+	string_lit
+
+name:
+	primary_name
+	name "." ident               # selected_name
+	name "." char_lit            # selected_name
+	name "." string_lit          # selected_name
+	name "." "all"               # selected_name
+	name [signature] "'" ident   # attribute_name, range
+	name paren_expr              # func_call, slice_name, indexed_name, array_constraint, record_constraint, elem_constraint, elem_resol, assoc_list
+	name "range" expr            # range_constraint, index_subtype_definition
+
+
+Expressions
+-----------
+
+primary_expr:
+	name                           # name, func_call, type_conv, physical_lit, enum_lit, subtype_ind, resol_ind
+	name name                      # subtype_ind/resol_ind, elem_resol
+	name "'" paren_expr            # qualified_expr
+	abstract_lit
+	abstract_lit name              # physical_lit
+	bit_string_lit
+	"null"
+	"open"                         # array_constraint
+	"others"                       # assoc_list
+	"<>"                           # index_subtype_definition, intf_pkg_generic_map_aspect
+	"default"                      # intf_pkg_generic_map_aspect
+	paren_expr                     # aggregate, (expr), resol_ind
+	paren_expr name                # subtype_ind/resol_ind
+	"new" name                     # alloc/subtype_ind
+	"new" name name                # alloc/subtype_ind
+	"new" paren_expr name          # alloc/subtype_ind
+	"new" name "'" paren_expr      # alloc/qualified_expr
+
+paren_expr:
+	"(" { [ { expr }"|"+ "=>" ] expr }","+ ")"  # aggregate, elem_resol, assoc_list, assoc_elem, formal_part, actual_part, formal_desig, array_constraint, record_constraint, name, subtype_ind, range, slice_name
+
+expr:
+	[ 0] primary_expr
+	[ 1] "abs" expr[0]
+	[ 1] "not" expr[0]
+	[ 1] logical_op expr[0]
+	[ 1] expr[0] "**" expr[0]       # enforce non-associativity later
+	[ 2] expr[2] mult_op expr[1]
+	[ 3] sign expr[2]
+	[ 4] expr[4] add_op expr[3]     # enforce sign/term stuff later
+	[ 5] expr[4] dir expr[4]        # range
+	[ 6] expr[6] shift_op expr[5]   # enforce non-associativity later
+	[ 7] expr[7] rel_op expr[6]     # enforce non-associativity later
+	[ 8] expr[8] logical_op expr[7] # enforce non-associativity for nand/nor later
+	[ 9] "??" expr[0]
+	[10] "inertial" expr[9]        # actual_part
+
+
+Resolution Indication
+---------------------
+
+resol_ind:
+	name
+	paren_expr
+
+elem_resol:
+	resol_ind
+	{ simple_name name }","+
+	{ simple_name paren_expr }","+
+
+
+Subtypes
+--------
+
+subtype_ind:
+	name                      # array_constraint, record_constraint, elem_constraint, range_constraint
+	name name                 # array_constraint, record_constraint, elem_constraint, range_constraint
+	paren_expr name           # array_constraint, record_constraint, elem_constraint, range_constraint
+	-> ";" "," ")" ":=" "register" "bus" "open" "is" ">>" mult_op add_op shift_op rel_op logical_op "**"
+
+
+Declarative Items
+-----------------
+
+- [x] subprogram_declaration                "procedure" "pure" "impure" "function"
+- [x] subprogram_body                       "procedure" "pure" "impure" "function"
+- [x] subprogram_instantiation_declaration  "procedure" "function"
+- [x] package_declaration                   "package"
+- [x] package_body                          "package body"
+- [x] package_instantiation_declaration     "package"
+- [x] type_declaration                      "type"
+- [x] subtype_declaration                   "subtype"
+- [x] constant_declaration                  "constant"
+- [x] variable_declaration                  "shared" "variable"
+- [x] signal_declaration                    "signal"
+- [x] file_declaration                      "file"
+- [x] alias_declaration                     "alias"
+- [x] component_declaration                 "component"
+- [x] attribute_declaration                 "attribute"
+- [x] attribute_specification               "attribute"
+- [x] configuration_specification           "for"
+- [x] disconnection_specification           "disconnect"
+- [x] use_clause                            "use"
+- [x] group_template_declaration            "group"
+- [x] group_declaration                     "group"
+- [x] generic_clause                        "generic"
+- [x] generic_map_aspect                    "generic map"
+- [x] port_clause                           "port"
+- [x] port_map_aspect                       "port map"
+
+
+Type Definitions
+----------------
+
+type_def
+	- scalar_type_def
+		- enum_type_def
+		- integer_type_def
+		- floating_type_def
+		- physical_type_def
+	- composite_type_def
+		- array_type_def
+		- record_type_def
+	- access_type_def
+	- file_type_def
+	- protected_type_def
+		- protected_type_decl
+		- protected_type_body
+
+paren_expr                                                            # enum_type_def
+"range" range                                                         # integer_type_def/floating_type_def
+"range" range units_decl                                              # physical_type_def
+"array" paren_expr "of" subtype_ind                                   # array_type_def
+"record" { {ident}","+ ":" subtype_ind ";" }+ "end" "record" [ident]  # record_type_def
+"access" subtype_ind                                                  # access_type_def
+"file" "of" name                                                      # file_type_def
+protected_type_decl                                                   # protected_type_def
+protected_type_body                                                   # protected_type_def
+
+units_decl := "units" {ident ["=" [abstract_lit] name] ";"}+ "end" "units" [ident]
+protected_type_decl :=
+	"protected"
+		{decl_item}
+	"end" "protected" [ident]
+protected_type_body :=
+	"protected" "body"
+		{decl_item}
+	"end" "protected" "body" [ident]
+
+
+Subprograms
+-----------
+
+subprog_decl := subprog_spec ";"
+subprog_body := subprog_spec "is" {decl_item} "begin" {stmt} "end" ["procedure"|"function"] [name] ";"
+subprog_inst := subprog_spec "is" "new" name [signature] [generic_map_aspect] ";"
+intf_subprog_decl
+	:= subprog_spec
+	:= subprog_spec "is" name|"<>"
+
+subprog_spec :=
+	["pure"|"impure"] "procedure"|"function"
+	primary_name
+	["generic" paren_expr]
+	["generic" "map" paren_expr]
+	[["parameter"] paren_expr]
+	["return" name]
+
+
+Configuration Declarations/Specifications
+-----------------------------------------
+
+config_decl := "configuration" ident "of" name "is" {config_decl_item} "end" ["configuration"] [ident] ";"
+config_decl_item
+	:= use_clause
+	:= attribute_specification
+	:= group_declaration
+	:= vunit_binding_ind ";"
+	:= block_comp_config
+block_comp_config := "for" block_comp_spec [binding_ind ";"] {block_config_item} "end" "for" ";"
+block_config_item
+	:= use_clause
+	:= vunit_binding_ind ";"
+	:= block_comp_config
+
+config_spec  := "for" block_comp_spec binding_ind ";" {vunit_binding_ind ";"} ["end" "for" ";"]
+block_comp_spec
+	:= name                   # block_config
+	:= {ident}","+ ":" name   # comp_config
+	:= "others" ":" name      # comp_config
+	:= "all" ":" name         # comp_config
+binding_ind := ["use" entity_aspect] [generic_map_aspect] [port_map_aspect]
+entity_aspect
+	:= "entity" name
+	:= "configuration" name
+	:= "open"
+
+vunit_binding_ind := "use" "vunit" {name}","+
+
+
+Statements
+----------
+
+stmt := [ident ":"] ["postponed"] ...
+
+[x] wait_stmt          := "wait" ["on" {name}","+] ["until" expr] ["for" expr] ";"
+[x] assert_stmt        := "assert" expr ["report" expr] ["severity" expr] ";"
+[x] report_stmt        := "report" expr ["severity" expr] ";"
+[x] assign_stmt
+[x] if_stmt            := "if" expr "then" {stmt} {"elsif" expr "then" {stmt}} ["else" {stmt}] "end" "if" [ident] ";"
+[x] case_stmt          := "case" ["?"] expr "is" {"when" {expr}"|"+ "=>" {stmt}} "end" "case" ["?"] [ident] ";"
+[x] loop_stmt          := ["while" expr | "for" ident "in" expr] "loop" {stmt} "end" "loop" [ident] ";"
+[x] nexit_stmt         := ("next"|"exit") [ident] ["when" expr] ";"
+[x] return_stmt        := "return" [expr] ";"
+[x] null_stmt          := "null" ";"
+[x] block_stmt         := "block" ["(" expr ")"] ["is"] {decl_item} "begin" {stmt} "end" "block" [ident] ";"
+[x] process_stmt       := "process" ["(" ("all"|{name}",") ")"] ["is"] {decl_item} "begin" {stmt} "end" ["postponed"] "process" [ident] ";"
+[x] inst_or_call_stmt  := ["component"|"entity"|"configuration"] name [generic_map_aspect] [port_map_aspect] ";"
+[x] generate_for_stmt  := "for" ident "in" expr "generate" generate_body "end" "generate" [ident] ";"
+[x] generate_if_stmt   := "if" generate_if_branch {"elsif" generate_if_branch} ["else" generate_if_branch] "end" "generate" [ident] ";"
+[x] generate_case_stmt := "case" expr "generate" {"when" [ident ":"] {expr}"|"+ "=>" generate_body}+ "end" "generate" [ident] ";"
+
+generate_body := [{decl_item}+ "begin"] {stmt} ["end" [ident] ";"]
+generate_if_branch := [ident ":"] expr "generate" generate_body
+
+# Care needs to be taken in order to differentiate assignments and instantiations:
+#   primary_expr "<=" ...
+#   name ...
+# Maybe parse a primary_expr for both, then decide based on whether it is followed by "<="|":=" or "generic"|"port"|";".
+
+
+Assignments
+-----------
+
+assign_stmt
+	:= assign_dst "release" [force_mode] ";"
+	:= assign_dst assign_mode cond_waves ";"
+	:= "with" expr "select" ["?"] assign_dst assign_mode selected_waves ";"
+assign_dst := (name|paren_expr) ("<=" | ":=") ["guarded"]
+assign_mode := [delay_mech] | "force" [force_mode]
+
+force_mode := "in" | "out"
+delay_mech := "transport" | ["reject" expr] "inertial"
+
+wave := {expr ["after" expr]}","+ | "unaffected"
+cond_waves := wave ["when" expr {"else" wave "when" expr} ["else" wave]]
+selected_waves := { wave "when" {expr}"|"+ }","+
+
+
+Attributes and Groups
+---------------------
+
+attribute_decl
+	:= "attribute" ident ":" name ";"
+	:= "attribute" ident "of" ({primary_name [signature]}","+ | "others" | "all") ":" entity_class "is" expr ";"
+
+group_decl
+	:= "group" ident "is" "(" {entity_class ["<>"]}","+ ")" ";"
+	:= "group" ident ":" name ";"
+
+entity_class
+	:= "entity"
+	:= "architecture"
+	:= "configuration"
+	:= "procedure"
+	:= "function"
+	:= "package"
+	:= "type"
+	:= "subtype"
+	:= "constant"
+	:= "signal"
+	:= "variable"
+	:= "component"
+	:= "label"
+	:= "literal"
+	:= "units"
+	:= "group"
+	:= "file"
+	:= "property"
+	:= "sequence"

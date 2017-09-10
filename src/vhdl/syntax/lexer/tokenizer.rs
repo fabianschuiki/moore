@@ -4,8 +4,8 @@ use moore_common::grind::{Grinder, Lookahead};
 use moore_common::errors::*;
 use moore_common::source::*;
 use moore_common::name::*;
-use parser::bundler::Bundle;
-use parser::token::*;
+use syntax::lexer::bundler::Bundle;
+use syntax::lexer::token::*;
 
 
 /// A grinder that combines character bundles into lexical tokens. This is the
@@ -226,6 +226,8 @@ impl<T: Grinder> Tokenizer<T> where T: Grinder<Item=Option<Spanned<Bundle>>, Err
 		if let Some(tkn) = match c0 {
 			'('  => Some(OpenDelim(Paren)),
 			')'  => Some(CloseDelim(Paren)),
+			'['  => Some(OpenDelim(Brack)),
+			']'  => Some(CloseDelim(Brack)),
 			'.'  => Some(Period),
 			','  => Some(Comma),
 			':'  => Some(Colon),
@@ -239,6 +241,8 @@ impl<T: Grinder> Tokenizer<T> where T: Grinder<Item=Option<Spanned<Bundle>>, Err
 			'-'  => Some(Sub),
 			'*'  => Some(Mul),
 			'/'  => Some(Div),
+			'|'  => Some(Pipe),
+			'?'  => Some(Qmark),
 			_ => None
 		} {
 			return Some(Spanned::new(tkn, span));

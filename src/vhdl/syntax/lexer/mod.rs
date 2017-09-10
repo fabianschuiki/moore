@@ -1,17 +1,22 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-//! This module implements lexical analysis of VHDL source files. It converts a
-//! stream of input bytes into a stream of language tokens such as identifiers,
-//! literals, and symbols.
+//! A VHDL lexer. This module implements lexical analysis of VHDL source files.
+//! It converts a stream of input bytes into a stream of language tokens such as
+//! identifiers, literals, and symbols.
+
+pub mod categorizer;
+pub mod bundler;
+pub mod tokenizer;
+pub mod token;
 
 use moore_common::grind::Grinder;
 use moore_common::grind::utf8::Utf8;
 use moore_common::errors::*;
 use moore_common::source::*;
-use parser::bundler::Bundler;
-use parser::categorizer::Categorizer;
-use parser::tokenizer::Tokenizer;
-use parser::token::*;
+use self::bundler::Bundler;
+use self::categorizer::Categorizer;
+use self::tokenizer::Tokenizer;
+use self::token::*;
 
 
 /// A VHDL lexer. Converts a stream of bytes to VHDL tokens. Emits errors
@@ -53,7 +58,7 @@ mod test {
 	use moore_common::name::*;
 	use moore_common::errors::*;
 	use moore_common::grind::{self, Grinder};
-	use parser::token::*;
+	use syntax::lexer::token::*;
 
 	fn lex(src: Source) -> Vec<Token> {
 		let content = src.get_content();

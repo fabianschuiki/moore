@@ -3,5 +3,7 @@
 //! This crate implements VHDL for the moore compiler.
 
 extern crate moore_common;
+extern crate rustc_serialize;
 extern crate num;
-pub mod parser;
+
+pub mod syntax;
