@@ -9,6 +9,7 @@ use syntax::lexer::token;
 use syntax::parser::rules::*;
 use syntax::parser::core::*;
 use syntax::parser::basic::BasicParser;
+use syntax::ast;
 
 macro_rules! parse {
     ($content:expr, $parse_fn:expr) => {{
@@ -68,21 +69,21 @@ fn name() {
 
 #[test]
 fn library_clause() {
-	parse!("library ieee;", parse_context_item);
+	parse!("library ieee;", try_context_item);
 }
 
 #[test]
 fn use_clause() {
-	parse!("use ieee;", parse_context_item);
-	parse!("use ieee, ieee.std_logic_1164.all;", parse_context_item);
-	parse!("use work.'X', work.\"+\";", parse_context_item);
+	parse!("use ieee;", try_context_item);
+	parse!("use ieee, ieee.std_logic_1164.all;", try_context_item);
+	parse!("use work.'X', work.\"+\";", try_context_item);
 }
 
 #[test]
 fn context_ref() {
-	parse!("context ctx;", parse_context_item);
-	parse!("context ctx, work, stuff;", parse_context_item);
-	parse!("context work.'X', work'blah.text;", parse_context_item);
+	parse!("context ctx;", try_context_item);
+	parse!("context ctx, work, stuff;", try_context_item);
+	parse!("context work.'X', work'blah.text;", try_context_item);
 }
 
 #[test]
@@ -211,9 +212,9 @@ fn intf_decl() {
 	));
 
 	// Default objects.
-	parse!("a, b, c : in integer", |p| parse_intf_decl(p, Some(IntfObjectKind::Constant)));
-	parse!("a, b, c : inout integer bus", |p| parse_intf_decl(p, Some(IntfObjectKind::Signal)));
-	parse!("a, b, c : inout integer", |p| parse_intf_decl(p, Some(IntfObjectKind::Variable)));
+	parse!("a, b, c : in integer", |p| parse_intf_decl(p, Some(ast::IntfObjKind::Const)));
+	parse!("a, b, c : inout integer bus", |p| parse_intf_decl(p, Some(ast::IntfObjKind::Signal)));
+	parse!("a, b, c : inout integer", |p| parse_intf_decl(p, Some(ast::IntfObjKind::Var)));
 }
 
 #[test]
@@ -250,7 +251,7 @@ fn decl_items() {
 			package baz is new foo;
 			package baz is new foo generic map (STUFF => 8);
 		end;
-	", parse_package_decl)
+	", parse_package_decl);
 }
 
 #[test]
