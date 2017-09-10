@@ -12,9 +12,8 @@ use moore_common::source::*;
 use moore_common::errors::*;
 
 
-pub fn parse(src: Source) -> Result<(),()> {
+pub fn parse(src: Source) -> Result<Vec<ast::DesignUnit>,()> {
 	use self::parser::token_stream::TokenStream;
-	println!("parsing VHDL source {:?}", src);
 
 	// Get a grinder on the bytes of the source file.
 	let content = src.get_content();
@@ -26,25 +25,11 @@ pub fn parse(src: Source) -> Result<(),()> {
 
 	// Parse the file.
 	let mut parser = parser::basic::BasicParser::new(tokens);
-	/*let ast =*/ parser::rules::parse_design_file(&mut parser);
-
-	// Parse the file.
-	// let mut i = 0;
-	// loop {
-	// 	let c = tokens.next();
-	// 	println!("{:?}", c);
-	// 	// i += c.span.begin;
-	// 	if c.is_end() {
-	// 		break;
-	// 	}
-	// }
-
-	// println!("done");
-	// println!("done ({})", i);
+	let ast = parser::rules::parse_design_file(&mut parser);
 
 	if parser.is_error() {
 		Err(())
 	} else {
-		Ok(())
+		Ok(ast)
 	}
 }
