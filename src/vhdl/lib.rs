@@ -7,3 +7,5 @@ extern crate rustc_serialize;
 extern crate num;
 
 pub mod syntax;
+pub mod symtbl;
+pub mod pass;

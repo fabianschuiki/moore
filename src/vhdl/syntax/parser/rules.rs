@@ -139,6 +139,7 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<ast::DesignUni
 		}
 	} {
 		Ok(x) => Ok(ast::DesignUnit{
+			id: Default::default(),
 			ctx: context,
 			data: x,
 		}),
@@ -624,7 +625,12 @@ pub fn parse_intf_decl<P: Parser>(p: &mut P, default: Option<ast::IntfObjKind>) 
 				None
 			};
 			span.expand(p.last_span());
-			return Ok(ast::IntfDecl::SubprogSpec(span, spec, default));
+			return Ok(ast::IntfDecl::SubprogSpec(ast::IntfSubprogDecl{
+				id: Default::default(),
+				span: span,
+				spec: spec,
+				default: default,
+			}));
 		}
 
 		// Try to short-circuit a package interface declaration.
@@ -784,6 +790,7 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
 	if accept(p, Semicolon) {
 		span.expand(p.last_span());
 		return Ok(ast::Subprog{
+			id: Default::default(),
 			span: span,
 			spec: spec,
 			data: ast::SubprogData::Decl,
@@ -800,6 +807,7 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
 			require(p, Semicolon)?;
 			span.expand(p.last_span());
 			return Ok(ast::Subprog{
+				id: Default::default(),
 				span: span,
 				spec: spec,
 				data: ast::SubprogData::Inst{
@@ -820,6 +828,7 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
 			require(p, Semicolon)?;
 			span.expand(p.last_span());
 			return Ok(ast::Subprog{
+				id: Default::default(),
 				span: span,
 				spec: spec,
 				data: ast::SubprogData::Body{
@@ -1565,6 +1574,7 @@ pub fn parse_alias_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::AliasDecl> 
 	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(ast::AliasDecl{
+		id: Default::default(),
 		span: span,
 		name: name,
 		subtype: subtype,
@@ -1777,7 +1787,7 @@ pub fn parse_subprog_spec<P: Parser>(p: &mut P) -> ReportedResult<ast::SubprogSp
 		name: name,
 		kind: kind,
 		purity: purity,
-		generic_claus: gc,
+		generic_clause: gc,
 		generic_map: gm,
 		params: params,
 		retty: retty,
@@ -2333,6 +2343,7 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
 
 	span.expand(p.last_span());
 	Ok(ast::Stmt{
+		id: Default::default(),
 		span: span,
 		label: label,
 		data: data,
@@ -2481,13 +2492,19 @@ pub fn parse_if_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Repo
 				token_predicate!(Keyword(Kw::Elsif), Keyword(Kw::Else), Keyword(Kw::End)),
 				parse_stmt
 			)?;
-			Ok((cond, stmts))
+			Ok((cond, ast::StmtBody{
+				id: Default::default(),
+				stmts: stmts
+			}))
 		}
 	)?;
 
 	// Parse the optional `else` branch.
 	let alt = if accept(p, Keyword(Kw::Else)) {
-		Some(repeat_until(p, Keyword(Kw::End), parse_stmt)?)
+		Some(ast::StmtBody{
+			id: Default::default(),
+			stmts: repeat_until(p, Keyword(Kw::End), parse_stmt)?,
+		})
 	} else {
 		None
 	};
@@ -2521,7 +2538,10 @@ pub fn parse_case_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
 			require(p, Arrow)?;
 			let stmts = repeat_until(p, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)), parse_stmt)?;
-			Ok(Some((choices, stmts)))
+			Ok(Some((choices, ast::StmtBody{
+				id: Default::default(),
+				stmts: stmts,
+			})))
 		} else {
 			Ok(None)
 		}
@@ -2574,7 +2594,10 @@ pub fn parse_loop_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 	require(p, Semicolon)?;
 	Ok(ast::LoopStmt{
 		scheme: scheme,
-		stmts: stmts,
+		body: ast::StmtBody{
+			id: Default::default(),
+			stmts: stmts,
+		},
 	})
 }
 
@@ -2666,7 +2689,7 @@ pub fn parse_if_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>
 			let cond = parse_expr(p)?;
 			require(p, Keyword(Kw::Generate))?;
 			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::Elsif), Keyword(Kw::Else), Keyword(Kw::End)))?;
-			Ok((label.map(|l| l.into()), cond, body))
+			Ok((cond, body))
 		}
 	)?;
 
@@ -2675,7 +2698,7 @@ pub fn parse_if_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>
 		let label = try_label(p);
 		require(p, Keyword(Kw::Generate))?;
 		let body = parse_generate_body(p, label, Keyword(Kw::End))?;
-		Some((label.map(|l| l.into()), body))
+		Some(body)
 	} else {
 		None
 	};
@@ -2703,13 +2726,13 @@ pub fn parse_case_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name
 	require(p, Keyword(Kw::Generate))?;
 
 	// Parse the cases.
-	let cases = repeat(p, |p| -> ReportedResult<Option<(Option<ast::Ident>, Vec<ast::Expr>, ast::GenBody)>> {
+	let cases = repeat(p, |p| -> ReportedResult<Option<(Vec<ast::Expr>, ast::GenBody)>> {
 		if accept(p, Keyword(Kw::When)) {
 			let label = try_label(p);
 			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
 			require(p, Arrow)?;
 			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)))?;
-			Ok(Some((label.map(|l| l.into()), choices, body)))
+			Ok(Some((choices, body)))
 		} else {
 			Ok(None)
 		}
@@ -2816,6 +2839,8 @@ where T: Predicate<P> {
 
 	span.expand(p.last_span());
 	Ok(ast::GenBody{
+		id: Default::default(),
+		label: label,
 		span: span,
 		decls: decl_items,
 		stmts: stmts,

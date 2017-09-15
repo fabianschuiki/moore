@@ -63,6 +63,7 @@ pub const DUMMY_NODE_ID: NodeId = NodeId(0);
 /// unit.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct DesignUnit {
+	pub id: NodeId,
 	pub ctx: Vec<CtxItem>,
 	pub data: DesignUnitData,
 }
@@ -87,7 +88,7 @@ pub enum CtxItem {
 }
 
 /// An identifier. Has a node ID such that it may be referenced later on.
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Ident {
 	pub id: NodeId,
 	pub span: Span,
@@ -101,6 +102,12 @@ impl From<Spanned<Name>> for Ident {
 			span: n.span,
 			name: n.value,
 		}
+	}
+}
+
+impl Into<Spanned<Name>> for Ident {
+	fn into(self) -> Spanned<Name> {
+		Spanned::new(self.name, self.span)
 	}
 }
 
@@ -227,9 +234,17 @@ pub struct PkgInst {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum IntfDecl {
 	TypeDecl(TypeDecl),
-	SubprogSpec(Span, SubprogSpec, Option<SubprogDefault>),
+	SubprogSpec(IntfSubprogDecl),
 	PkgInst(PkgInst),
 	ObjDecl(IntfObjDecl),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct IntfSubprogDecl {
+	pub id: NodeId,
+	pub span: Span,
+	pub spec: SubprogSpec,
+	pub default: Option<SubprogDefault>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -298,6 +313,7 @@ pub enum PortgenKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Subprog {
+	pub id: NodeId,
 	pub span: Span,
 	pub spec: SubprogSpec,
 	pub data: SubprogData,
@@ -322,7 +338,7 @@ pub struct SubprogSpec {
 	pub name: PrimaryName,
 	pub kind: SubprogKind,
 	pub purity: Option<SubprogPurity>,
-	pub generic_claus: Option<Vec<IntfDecl>>,
+	pub generic_clause: Option<Vec<IntfDecl>>,
 	pub generic_map: Option<Vec<ParenElem>>,
 	pub params: Option<Vec<IntfDecl>>,
 	pub retty: Option<CompoundName>,
@@ -364,6 +380,7 @@ pub enum ResolInd {
 /// An alias declaration.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct AliasDecl {
+	pub id: NodeId,
 	pub span: Span,
 	pub name: PrimaryName,
 	pub subtype: Option<SubtypeInd>,
@@ -660,6 +677,7 @@ pub enum TypeData {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Stmt {
+	pub id: NodeId,
 	pub span: Span,
 	pub label: Option<Spanned<Name>>,
 	pub data: StmtData,
@@ -682,17 +700,17 @@ pub enum StmtData {
 		severity: Option<Expr>,
 	},
 	IfStmt {
-		conds: Vec<(Expr, Vec<Stmt>)>,
-		alt: Option<Vec<Stmt>>,
+		conds: Vec<(Expr, StmtBody)>,
+		alt: Option<StmtBody>,
 	},
 	CaseStmt {
 		qm: bool,
 		switch: Expr,
-		cases: Vec<(Vec<Expr>, Vec<Stmt>)>,
+		cases: Vec<(Vec<Expr>, StmtBody)>,
 	},
 	LoopStmt {
 		scheme: LoopScheme,
-		stmts: Vec<Stmt>,
+		body: StmtBody,
 	},
 	NexitStmt {
 		mode: NexitMode,
@@ -702,12 +720,12 @@ pub enum StmtData {
 	ReturnStmt(Option<Expr>),
 	NullStmt,
 	IfGenStmt {
-		conds: Vec<(Option<Ident>, Expr, GenBody)>,
-		alt: Option<(Option<Ident>, GenBody)>,
+		conds: Vec<(Expr, GenBody)>,
+		alt: Option<GenBody>,
 	},
 	CaseGenStmt {
 		switch: Expr,
-		cases: Vec<(Option<Ident>, Vec<Expr>, GenBody)>,
+		cases: Vec<(Vec<Expr>, GenBody)>,
 	},
 	ForGenStmt {
 		param: Ident,
@@ -748,6 +766,13 @@ pub enum StmtData {
 	},
 }
 
+/// The body of an if, loop, or case statement.
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct StmtBody {
+	pub id: NodeId,
+	pub stmts: Vec<Stmt>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum LoopScheme {
 	While(Expr),
@@ -763,6 +788,8 @@ pub enum NexitMode {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenBody {
+	pub id: NodeId,
+	pub label: Option<Spanned<Name>>,
 	pub span: Span,
 	pub decls: Vec<DeclItem>,
 	pub stmts: Vec<Stmt>,

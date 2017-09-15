@@ -121,13 +121,32 @@ fn compile(matches: &ArgMatches) {
 			}
 		}
 		Language::Vhdl => {
-			let ast = match vhdl::syntax::parse(source) {
+			let mut ast = match vhdl::syntax::parse(source) {
 				Ok(x) => x,
 				Err(()) => std::process::exit(1),
 			};
 			if matches.is_present("dump_ast") {
 				println!("{:#?}", ast);
 			}
+
+			// Be very stupid for now, and don't write anything to disk. Just
+			// keep on using this AST and pretend that it was loaded from disk.
+			// TODO: Fix this once we have a proper way of persisting build data
+			// to disk.
+
+			// 1) renumber AST nodes and build scope and symbol table
+			let mut symtbl = vhdl::symtbl::SymTbl::new();
+			{
+				use name::get_name_table;
+				let mut renum = vhdl::pass::renumber::Renumberer::new(&mut symtbl);
+				let lib_id = renum.symtbl.get_library_id(get_name_table().intern("work", false));
+				renum.push_scope(lib_id);
+				ast = ast.into_iter().map(|n| renum.fold_design_unit(n)).collect();
+				renum.pop_scope();
+				println!("renumbered {} design units", ast.len());
+			}
+
+			// 2) resolve names and map to HIR
 		}
 	}
 }
