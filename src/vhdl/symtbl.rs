@@ -15,7 +15,7 @@ pub struct SymTbl {
 	next_id: usize,
 	pub root_scope: Scope,
 	libs: HashMap<Name, NodeId>,
-	scopes: HashMap<NodeId, Scope>,
+	pub scopes: HashMap<NodeId, Scope>,
 }
 
 impl SymTbl {
@@ -69,8 +69,9 @@ impl SymTbl {
 #[derive(Debug)]
 pub struct Scope {
 	pub node_id: NodeId,
-	subscopes: HashSet<NodeId>,
-	defs: HashMap<DefName, Vec<(Spanned<DefName>, Def)>>,
+	pub subscopes: HashSet<NodeId>,
+	pub defs: HashMap<DefName, Vec<(Span, Def)>>,
+	pub parent_id: Option<NodeId>,
 }
 
 impl Scope {
@@ -80,6 +81,7 @@ impl Scope {
 			node_id: node_id,
 			subscopes: HashSet::new(),
 			defs: HashMap::new(),
+			parent_id: None,
 		}
 	}
 
@@ -101,7 +103,7 @@ impl Scope {
 	/// Declare a name that can be bound to in this scope.
 	pub fn declare(&mut self, name: Spanned<DefName>, def: Def) {
 		assert!(def.node_id() != Default::default());
-		self.defs.entry(name.value).or_insert_with(|| Vec::new()).push((name, def));
+		self.defs.entry(name.value).or_insert_with(|| Vec::new()).push((name.span, def));
 	}
 }
 

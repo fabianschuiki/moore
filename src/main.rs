@@ -138,15 +138,36 @@ fn compile(matches: &ArgMatches) {
 			let mut symtbl = vhdl::symtbl::SymTbl::new();
 			{
 				use name::get_name_table;
+				use source::{Spanned, INVALID_SPAN};
+				use self::vhdl::symtbl::{DefName, Def};
 				let mut renum = vhdl::pass::renumber::Renumberer::new(&mut symtbl);
-				let lib_id = renum.symtbl.get_library_id(get_name_table().intern("work", false));
+				let name = get_name_table().intern("work", false); // could be something other than "work"
+				let work = get_name_table().intern("work", false);
+				let lib_id = renum.symtbl.get_library_id(name);
 				renum.push_scope(lib_id);
+				// This declares the library under its actual name, but also the
+				// alias "work". Maybe we should move this somewhere more
+				// appropriate.
+				renum.declare(Spanned::new(DefName::Ident(name), INVALID_SPAN), Def::Lib(lib_id));
+				if name != work {
+					renum.declare(Spanned::new(DefName::Ident(work), INVALID_SPAN), Def::Lib(lib_id));
+				}
 				ast = ast.into_iter().map(|n| renum.fold_design_unit(n)).collect();
 				renum.pop_scope();
 				println!("renumbered {} design units", ast.len());
 			}
 
 			// 2) resolve names and map to HIR
+			{
+				use name::get_name_table;
+				let mut lower = vhdl::pass::lower::Lowerer::new(&mut symtbl);
+				let name = get_name_table().intern("work", false); // could be something other than "work"
+				let lib_id = lower.symtbl.get_library_id(name);
+				lower.push_scope(lib_id);
+				let hir: Vec<_> = ast.into_iter().map(|n| lower.fold_design_unit(n)).collect();
+				lower.pop_scope();
+				println!("lowered design units: {:#?}", hir);
+			}
 		}
 	}
 }

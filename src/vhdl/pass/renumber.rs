@@ -5,7 +5,7 @@
 //! them for every item in the tree that can be referred to by name.
 
 use moore_common::source::*;
-use syntax::ast::{self, NodeId};
+use syntax::ast::{self, NodeId, def_name_from_primary_name};
 use symtbl::{SymTbl, Scope, Def, DefName};
 
 
@@ -31,18 +31,24 @@ impl<'ts> Renumberer<'ts> {
 	/// Push a scope for a specific node ID onto the stack. Call this before
 	/// walking a node's children.
 	pub fn push_scope(&mut self, node_id: NodeId) {
-		self.scope_stack.last_mut().unwrap_or(&mut self.symtbl.root_scope).declare_subscope(node_id);
-		for _ in 0..self.scope_stack.len() { print!("| "); }
-		println!("push scope {}", node_id);
-		self.scope_stack.push(Scope::new(node_id));
+		let parent_id = {
+			let scope = self.scope_stack.last_mut().unwrap_or(&mut self.symtbl.root_scope);
+			scope.declare_subscope(node_id);
+			scope.node_id
+		};
+		// for _ in 0..self.scope_stack.len() { print!("| "); }
+		// println!("push scope {}", node_id);
+		let mut scope = Scope::new(node_id);
+		scope.parent_id = Some(parent_id);
+		self.scope_stack.push(scope);
 	}
 
 	/// Pop a scope off the stack. Call this when done with renumbering a node's
 	/// children.
 	pub fn pop_scope(&mut self) {
 		let scope = self.scope_stack.pop().expect("no scope on the stack");
-		for _ in 0..self.scope_stack.len() { print!("| "); }
-		println!("pop scope {}", scope.node_id);
+		// for _ in 0..self.scope_stack.len() { print!("| "); }
+		// println!("pop scope {}", scope.node_id);
 		self.symtbl.add_scope(scope);
 	}
 
@@ -58,8 +64,8 @@ impl<'ts> Renumberer<'ts> {
 
 	/// Declare a name in the current scope.
 	pub fn declare(&mut self, name: Spanned<DefName>, def: Def) {
-		for _ in 0..self.scope_stack.len() { print!("| "); }
-		println!("declare {:?} `{}`", def, name.value);
+		// for _ in 0..self.scope_stack.len() { print!("| "); }
+		// println!("declare {:?} `{}`", def, name.value);
 		self.scope_mut().declare(name, def);
 		// If this is the design unit scope (i.e. the stack contains two scopes:
 		// [library, design unit]), also declare the name in the library scope.
@@ -80,6 +86,21 @@ impl<'ts> Renumberer<'ts> {
 		// where the context items will be imported to.
 		node.id = self.alloc_id();
 		self.push_scope(node.id);
+
+		// Add declarations of context items.
+		node.ctx = node.ctx.into_iter().map(|n|{
+			match n {
+				ast::CtxItem::LibClause(names) => {
+					ast::CtxItem::LibClause(names.map(|n| n.into_iter().map(|mut n|{
+						n.id = self.alloc_id();
+						self.declare(Spanned::new(DefName::Ident(n.name), n.span), Def::Lib(n.id));
+						n
+					}).collect()))
+				}
+				other => other
+			}
+		}).collect();
+
 		node.data = match node.data {
 			EntityDecl(n) => EntityDecl(self.fold_entity_decl(n)),
 			CfgDecl(n) => CfgDecl(self.fold_cfg_decl(n)),
@@ -378,14 +399,4 @@ impl<'ts> Renumberer<'ts> {
 		self.pop_scope();
 		node
 	}
-}
-
-
-/// Converts a primary name to a definition name that can be stored in a scope.
-fn def_name_from_primary_name(name: &ast::PrimaryName) -> Spanned<DefName> {
-	Spanned::new(match name.kind {
-		ast::PrimaryNameKind::Ident(n) => DefName::Ident(n),
-		ast::PrimaryNameKind::Char(n) => DefName::Char(n),
-		ast::PrimaryNameKind::String(n) => DefName::String(n),
-	}, name.span)
 }
