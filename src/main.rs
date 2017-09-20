@@ -1,17 +1,24 @@
 // Copyright (c) 2016-2017 Fabian Schuiki
-extern crate owning_ref;
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 extern crate clap;
 extern crate sha1;
 extern crate bincode;
 extern crate rustc_serialize;
+extern crate typed_arena;
+#[macro_use]
 extern crate moore_common;
 extern crate moore_svlog;
 extern crate moore_vhdl;
+pub mod score;
 use moore_common::*;
+use moore_common::name::Name;
 use moore_svlog as svlog;
 use moore_vhdl as vhdl;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use std::path::Path;
+use score::Scoreboard;
 
 
 #[derive(Debug)]
@@ -24,6 +31,8 @@ enum Language {
 
 fn main() {
 	let matches = App::new("moore")
+		.arg(Arg::with_name("trace_scoreboard")
+			.long("trace-scoreboard"))
 		.subcommand(SubCommand::with_name("compile")
 			.arg(Arg::with_name("inc")
 				.short("I")
@@ -50,19 +59,48 @@ fn main() {
 			.arg(Arg::with_name("ignore_duplicate_defs")
 				.long("ignore-duplicate-defs")
 				.help("Ignore multiple module/entity definitions")))
+		.subcommand(SubCommand::with_name("score")
+			.arg(Arg::with_name("inc")
+				.short("I")
+				.value_name("DIR")
+				.help("Add a search path for SystemVerilog includes")
+				.multiple(true)
+				.takes_value(true)
+				.number_of_values(1))
+			.arg(Arg::with_name("dump_ast")
+				.long("dump-ast")
+				.help("Dump the parsed abstract syntax tree"))
+			.arg(Arg::with_name("lib")
+				.short("l")
+				.long("lib")
+				.value_name("LIB")
+				.help("Name of the library to compile into")
+				.takes_value(true)
+				.number_of_values(1))
+			.arg(Arg::with_name("elaborate")
+				.short("e")
+				.long("elaborate")
+				.value_name("ENTITY")
+				.help("Elaborate an entity or module")
+				.multiple(true)
+				.takes_value(true)
+				.number_of_values(1))
+			.arg(Arg::with_name("INPUT")
+				.help("The input files to compile")
+				.multiple(true)
+				.required(true)))
 		.get_matches();
 
-	let mut session = Session {
-		opts: SessionOptions {
-			ignore_duplicate_defs: false,
-		}
-	};
+	let mut session = Session::new();
+	session.opts.trace_scoreboard = matches.is_present("trace_scoreboard");
 
 	if let Some(m) = matches.subcommand_matches("compile") {
 		compile(m);
 	} else if let Some(m) = matches.subcommand_matches("elaborate") {
 		session.opts.ignore_duplicate_defs = m.is_present("ignore_duplicate_defs");
 		elaborate(m, &session);
+	} else if let Some(m) = matches.subcommand_matches("score") {
+		score(m);
 	}
 }
 
@@ -221,4 +259,203 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 		},
 	};
 	println!("lowered {} modules", hir.mods.len());
+}
+
+
+fn score(matches: &ArgMatches) {
+	use moore_common::name::get_name_table;
+
+	// Prepare a list of include paths.
+	let include_paths: Vec<_> = match matches.values_of("inc") {
+		Some(args) => args.map(|x| std::path::Path::new(x)).collect(),
+		None => Vec::new()
+	};
+
+	// Establish into which library the entities will be compiled. Later on this
+	// should be made configurable per entity.
+	let lib = get_name_table().intern(matches.value_of("lib").unwrap_or("work"), true);
+
+	// Parse the input files.
+	let mut failed = false;
+	let mut asts = Vec::new();
+	for filename in matches.values_of("INPUT").unwrap() {
+		// Detect the file type.
+		let language = match Path::new(&filename).extension().and_then(|s| s.to_str()) {
+			Some("sv") | Some("svh") => Language::SystemVerilog,
+			Some("v") => Language::Verilog,
+			Some("vhd") | Some("vhdl") => Language::Vhdl,
+			Some(_) => panic!("Unrecognized extension of file '{}'", filename),
+			None => panic!("Unable to determine language of file '{}'", filename),
+		};
+
+		// Add the file to the source manager.
+		let sm = source::get_source_manager();
+		let source = match sm.open(&filename) {
+			Some(s) => s,
+			None => panic!("Unable to open input file '{}'", filename),
+		};
+
+		// Parse the file.
+		match language {
+			Language::SystemVerilog | Language::Verilog => {
+				let preproc = svlog::preproc::Preprocessor::new(source, &include_paths);
+				let lexer = svlog::lexer::Lexer::new(preproc);
+				match svlog::parser::parse(lexer) {
+					Ok(x) => asts.push(score::Ast::Svlog(x)),
+					Err(()) => failed = true,
+				}
+			}
+			Language::Vhdl => {
+				match vhdl::syntax::parse(source) {
+					Ok(x) => asts.push(score::Ast::Vhdl(x)),
+					Err(()) => failed = true,
+				}
+			}
+		}
+	}
+	if failed {
+		std::process::exit(1);
+	}
+
+	// Dump the AST if so requested.
+	if matches.is_present("dump_ast") {
+		println!("{:#?}", asts);
+	}
+
+	// Create the scoreboard and add the initial map of libraries.
+	let arenas = score::Arenas::new();
+	let mut sb = Scoreboard::new(&arenas);
+	// vhdl_sb.set_parent(&sb);
+	let lib_id = sb.add_library(lib, &asts);
+	println!("lib_id = {:?}", lib_id);
+	println!("{:?}", sb);
+
+	// Elaborate the requested entities or modules.
+	if let Some(names) = matches.values_of("elaborate") {
+		for name in names {
+			// match elaborate_name(&mut sb, lib_id, name, matches) {
+			// 	Ok(_) => (),
+			// 	Err(_) => failed = true,
+			// };
+		}
+	}
+	if failed {
+		std::process::exit(1);
+	}
+}
+
+
+// fn elaborate_name(sb: &mut Scoreboard, lib_id: NodeId, name: &str, matches: &ArgMatches) -> std::result::Result<(),()> {
+// 	let (lib, name, arch) = parse_elaborate_name(name)?;
+
+// 	// Resolve the library name if one was provided.
+// 	let lib = {
+// 		if let Some(lib) = lib {
+// 			let rid = sb.root_id;
+// 			match sb.defs(rid)?.get(&lib) {
+// 				Some(ids) => {
+// 					if ids.len() != 1 {
+// 						panic!("library `{}` is ambiguous", lib);
+// 					} else {
+// 						ids[0]
+// 					}
+// 				}
+// 				None => panic!("library `{}` does not exist", lib),
+// 			}
+// 		} else {
+// 			lib_id
+// 		}
+// 	};
+// 	println!("using library {}", lib);
+
+// 	// Resolve the entity name.
+// 	let entity = match sb.defs(lib)?.get(&name) {
+// 		Some(ids) => {
+// 			if ids.len() != 1 {
+// 				panic!("entity `{}` is ambiguous", lib);
+// 			} else {
+// 				ids[0]
+// 			}
+// 		}
+// 		None => panic!("entity `{}` does not exist", lib),
+// 	};
+// 	println!("using entity {}", entity);
+
+// 	// Resolve the architecture name if one was provided.
+// 	let arch = {
+// 		if let Some(arch) = arch {
+// 			println!("would now resolve architecture name {:?}", arch);
+// 			lib_id
+// 		} else {
+// 			lib_id
+// 		}
+// 	};
+
+// 	Ok(())
+// }
+
+
+/// Parse an entity name of the form `(first\.)?second((arch))?` for
+/// elaboration.
+fn parse_elaborate_name<S: AsRef<str>>(name: S) -> Result<(Option<Name>, Name, Option<Name>), ()> {
+	use self::name::get_name_table;
+	let name = name.as_ref();
+	let nt = get_name_table();
+
+	// Isolate the first name.
+	let x: &[_] = &['.', '('];
+	let (first, rest) = {
+		if let Some(pos) = name.find(x) {
+			let (a,b) = name.split_at(pos);
+			(a, Some(b))
+		} else {
+			(name, None)
+		}
+	};
+	let first = nt.intern(first, true);
+
+	// Isolate the second name.
+	let (second, rest) = {
+		if let Some(rest) = rest {
+			if rest.starts_with('.') {
+				let rest = &rest[1..];
+				if let Some(pos) = rest.find('(') {
+					let (a,b) = rest.split_at(pos);
+					(Some(a), Some(b))
+				} else {
+					(Some(rest), None)
+				}
+			} else {
+				(None, Some(rest))
+			}
+		} else {
+			(None, None)
+		}
+	};
+	let second = second.map(|s| nt.intern(s, true));
+
+	// Isolate the architecture name.
+	let third = {
+		if let Some(rest) = rest {
+			if rest.starts_with('(') && rest.ends_with(')') {
+				Some(&rest[1..rest.len()-1])
+			} else {
+				None
+			}
+		} else {
+			None
+		}
+	};
+	let third = third.map(|t| nt.intern(t, true));
+
+	// Return the names in the appropriate order.
+	let (lib, ent) = {
+		if let Some(second) = second {
+			(Some(first), second)
+		} else {
+			(None, first)
+		}
+	};
+
+	Ok((lib, ent, third))
 }

@@ -11,6 +11,10 @@ pub mod lexer;
 pub mod name;
 pub mod source;
 pub mod grind;
+pub mod id;
+pub mod score;
+
+pub use self::id::NodeId;
 
 
 pub struct Session {
@@ -22,6 +26,7 @@ impl Session {
 		Session {
 			opts: SessionOptions {
 				ignore_duplicate_defs: false,
+				trace_scoreboard: false,
 			}
 		}
 	}
@@ -30,4 +35,6 @@ impl Session {
 #[derive(Debug)]
 pub struct SessionOptions {
 	pub ignore_duplicate_defs: bool,
+	/// Print a trace of scoreboard invocations for debugging purposes.
+	pub trace_scoreboard: bool,
 }
