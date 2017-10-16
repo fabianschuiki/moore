@@ -8,19 +8,17 @@
 
 use std;
 use std::collections::HashMap;
+use std::cell::RefCell;
 use typed_arena::Arena;
 use moore_common;
 use moore_common::Session;
 use moore_common::name::Name;
 use moore_common::errors::*;
 use moore_common::NodeId;
-use moore_common::score::NodeMaker;
+use moore_common::score::{NodeMaker, Result};
 use moore_vhdl::syntax::ast as vhdl_ast;
 use moore_vhdl as vhdl;
 use moore_svlog::ast as svlog_ast;
-
-
-pub type Result<T> = std::result::Result<T, ()>;
 
 
 /// The global scoreboard that drives the compilation of pretty much anything.
@@ -40,7 +38,7 @@ pub struct Scoreboard<'ast, 'ctx> {
 	/// maintained by the global scoreboard.
 	libs: HashMap<LibRef, (Name, &'ast [Ast])>,
 	/// A table of definitions in each scope.
-	defs: HashMap<ScopeRef, &'ctx Scope>,
+	defs: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
 	// /// A table of unprocessed AST nodes.
 	// asts: HashMap<NodeId, Ast<'ast>>,
 	// /// A table of processed HIR nodes.
@@ -58,7 +56,7 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 			next_id: 1,
 			vhdl: vhdl::score::Scoreboard::new(&arenas.vhdl),
 			libs: HashMap::new(),
-			defs: HashMap::new(),
+			defs: RefCell::new(HashMap::new()),
 			// asts: HashMap::new(),
 			// hirs: HashMap::new(),
 		}
@@ -80,27 +78,30 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 	pub fn add_library(&mut self, name: Name, asts: &'ast [Ast]) -> LibRef {
 		let id = LibRef::new(self.alloc_id());
 		self.libs.insert(id, (name, asts));
-		// if self.defs
-		// 	.borrow()
-		// 	.entry(self.root_id)
-		// 	.or_insert_with(|| HashMap::new())
-		// 	.insert(name, Def::Lib(id))
-		// 	.is_some() {
-		// 	panic!("library {} already defined", name);
-		// }
+
+		// Pass on the VHDL nodes to the VHDL scoreboard.
+		let vhdl_ast = asts
+			.iter()
+			.flat_map(|v| match *v {
+				Ast::Vhdl(ref a) => a.iter(),
+				_ => [].iter()
+			})
+			.collect();
+		self.vhdl.add_library(vhdl::score::LibRef::new(id.into()), vhdl_ast);
+
+		// TODO: Do the same for the SVLOG scoreboard.
 		id
 	}
 
-	pub fn defs(&mut self, id: ScopeRef) -> Result<&'ctx Scope> {
-		if let Some(&s) = self.defs.get(&id) {
-			Ok(s)
-		} else {
-			let s = self.make(id)?;
-			if self.defs.insert(id, s).is_some() {
-				panic!("node should not exist");
-			}
-			Ok(s)
+	pub fn defs(&self, id: ScopeRef) -> Result<&'ctx Scope> {
+		if let Some(&s) = self.defs.borrow().get(&id) {
+			return Ok(s);
 		}
+		let s = self.make(id)?;
+		if self.defs.borrow_mut().insert(id, s).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(s)
 	}
 }
 
@@ -118,7 +119,7 @@ impl<'ast, 'ctx> std::fmt::Debug for Scoreboard<'ast, 'ctx> {
 			write!(f, "\n - {}: contains {} root nodes", k, v.1.len())?;
 		}
 		write!(f, "\nDefs:")?;
-		for (k,&v) in &self.defs {
+		for (k,&v) in self.defs.borrow().iter() {
 			write!(f, "\n - scope {:?}: contains {} defs nodes", k, v.len())?;
 			for (n,d) in v {
 				write!(f, "\n   - `{}` -> {:?}", n, d)?;
@@ -130,8 +131,8 @@ impl<'ast, 'ctx> std::fmt::Debug for Scoreboard<'ast, 'ctx> {
 
 
 impl<'ast, 'ctx> NodeMaker<'ctx, ScopeRef, Scope> for Scoreboard<'ast, 'ctx> {
-	fn make(&mut self, id: ScopeRef) -> Result<&'ctx Scope> {
-		println!("trying to make scope {:?}", id);
+	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
+		println!("[SB] trying to make scope {:?}", id);
 		match id {
 			ScopeRef::Root(_) => {
 				// Gather the names of all libraries and create a root scope out
@@ -147,7 +148,17 @@ impl<'ast, 'ctx> NodeMaker<'ctx, ScopeRef, Scope> for Scoreboard<'ast, 'ctx> {
 			}
 
 			ScopeRef::Lib(id) => {
-				unimplemented!("defs for lib");
+				let lib = self.libs[&id];
+
+				// Ask the VHDL scoreboard for the definitions in this library.
+				let vhdl = self.vhdl.defs(vhdl::score::ScopeRef::Lib(vhdl::score::LibRef::new(id.into())));
+				println!("[SB] vhdl_sb returned {:?}", vhdl);
+
+				// Approach:
+				// 1) ask vhdl scoreboard for the defs
+				// 2) ask svlog scoreboard for the defs
+				// 3) create new def that is the union of the two and return
+				unimplemented!("defs for lib {:?}", lib);
 			}
 		}
 	}
@@ -184,7 +195,7 @@ pub enum Ast {
 
 
 /// A scope, i.e. a map of names and definitions.
-type Scope = HashMap<Name, Def>;
+pub type Scope = HashMap<Name, Def>;
 
 
 // Declare some node references.

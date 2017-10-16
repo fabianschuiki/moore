@@ -121,18 +121,18 @@ pub trait NodeStorage<'tn, I> {
 /// struct Table;
 ///
 /// impl<'tn> NodeMaker<'tn, FooId, Foo> for Table {
-///     fn make(&mut self, id: FooId) -> score::Result<&'tn Foo> {
+///     fn make(&self, id: FooId) -> score::Result<&'tn Foo> {
 ///         Ok(unsafe { &*(1 as *const Foo) }) // usually you would allocate this in an arena
 ///     }
 /// }
 ///
 /// impl<'tn> NodeMaker<'tn, BarId, Bar> for Table {
-///     fn make(&mut self, id: BarId) -> score::Result<&'tn Bar> {
+///     fn make(&self, id: BarId) -> score::Result<&'tn Bar> {
 ///         Ok(unsafe { &*(1 as *const Bar) }) // usually you would allocate this in an arena
 ///     }
 /// }
 ///
-/// let mut tbl = Table;
+/// let tbl = Table;
 /// let foo = tbl.make(FooId(1)).unwrap();
 /// let bar = tbl.make(BarId(2)).unwrap();
 /// assert_eq!(foo, &Foo);
@@ -150,7 +150,7 @@ pub trait NodeMaker<'tn, I, N> {
 	/// for the `NodeMaker` to generate multiple nodes at the same time. The
 	/// generated nodes should be owned by an arena or the owner of the
 	/// `NodeMaker` itself.
-	fn make(&mut self, id: I) -> Result<&'tn N>;
+	fn make(&self, id: I) -> Result<&'tn N>;
 }
 
 
@@ -234,7 +234,7 @@ macro_rules! node_ref_group {
 
 		impl std::fmt::Debug for $name {
 			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				node_ref_group!(@matches *self, $($name::$var(id) => write!(f, "{}({})", stringify!($name), id)),*)
+				node_ref_group!(@matches *self, $($name::$var(id) => write!(f, "{:?}", id)),*)
 			}
 		}
 
