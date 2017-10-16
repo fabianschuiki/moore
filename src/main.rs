@@ -13,6 +13,7 @@ extern crate moore_svlog;
 extern crate moore_vhdl;
 pub mod score;
 use moore_common::*;
+use moore_common::errors::*;
 use moore_common::name::Name;
 use moore_svlog as svlog;
 use moore_vhdl as vhdl;
@@ -100,7 +101,7 @@ fn main() {
 		session.opts.ignore_duplicate_defs = m.is_present("ignore_duplicate_defs");
 		elaborate(m, &session);
 	} else if let Some(m) = matches.subcommand_matches("score") {
-		score(m);
+		score(&session, m);
 	}
 }
 
@@ -262,7 +263,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 }
 
 
-fn score(matches: &ArgMatches) {
+fn score(sess: &Session, matches: &ArgMatches) {
 	use moore_common::name::get_name_table;
 
 	// Prepare a list of include paths.
@@ -324,7 +325,7 @@ fn score(matches: &ArgMatches) {
 
 	// Create the scoreboard and add the initial map of libraries.
 	let arenas = score::Arenas::new();
-	let mut sb = Scoreboard::new(&arenas);
+	let mut sb = Scoreboard::new(sess, &arenas);
 	// vhdl_sb.set_parent(&sb);
 	let lib_id = sb.add_library(lib, &asts);
 	println!("lib_id = {:?}", lib_id);
@@ -333,10 +334,10 @@ fn score(matches: &ArgMatches) {
 	// Elaborate the requested entities or modules.
 	if let Some(names) = matches.values_of("elaborate") {
 		for name in names {
-			// match elaborate_name(&mut sb, lib_id, name, matches) {
-			// 	Ok(_) => (),
-			// 	Err(_) => failed = true,
-			// };
+			match elaborate_name(&mut sb, lib_id, name) {
+				Ok(_) => (),
+				Err(_) => failed = true,
+			};
 		}
 	}
 	if failed {
@@ -345,28 +346,26 @@ fn score(matches: &ArgMatches) {
 }
 
 
-// fn elaborate_name(sb: &mut Scoreboard, lib_id: NodeId, name: &str, matches: &ArgMatches) -> std::result::Result<(),()> {
-// 	let (lib, name, arch) = parse_elaborate_name(name)?;
+fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) -> Result<(),()> {
+	let (lib, name, arch) = parse_elaborate_name(input_name)?;
+	println!("parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})", input_name, lib, name, arch);
 
-// 	// Resolve the library name if one was provided.
-// 	let lib = {
-// 		if let Some(lib) = lib {
-// 			let rid = sb.root_id;
-// 			match sb.defs(rid)?.get(&lib) {
-// 				Some(ids) => {
-// 					if ids.len() != 1 {
-// 						panic!("library `{}` is ambiguous", lib);
-// 					} else {
-// 						ids[0]
-// 					}
-// 				}
-// 				None => panic!("library `{}` does not exist", lib),
-// 			}
-// 		} else {
-// 			lib_id
-// 		}
-// 	};
-// 	println!("using library {}", lib);
+	// Resolve the library name if one was provided.
+	let lib = {
+		if let Some(lib) = lib {
+			let rid = sb.root_id;
+			match sb.defs(score::ScopeRef::Root)?.get(&lib) {
+				Some(&score::Def::Lib(d)) => d,
+				_ => {
+					sb.emit(DiagBuilder2::error(format!("Library `{}` does not exist", lib)));
+					return Err(());
+				},
+			}
+		} else {
+			lib_id
+		}
+	};
+	println!("using library {:?}", lib);
 
 // 	// Resolve the entity name.
 // 	let entity = match sb.defs(lib)?.get(&name) {
@@ -391,8 +390,8 @@ fn score(matches: &ArgMatches) {
 // 		}
 // 	};
 
-// 	Ok(())
-// }
+	Ok(())
+}
 
 
 /// Parse an entity name of the form `(first\.)?second((arch))?` for

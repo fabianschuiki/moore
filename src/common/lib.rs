@@ -15,6 +15,7 @@ pub mod id;
 pub mod score;
 
 pub use self::id::NodeId;
+use errors::DiagBuilder2;
 
 
 pub struct Session {
@@ -22,6 +23,7 @@ pub struct Session {
 }
 
 impl Session {
+	/// Create a new session.
 	pub fn new() -> Session {
 		Session {
 			opts: SessionOptions {
@@ -29,6 +31,11 @@ impl Session {
 				trace_scoreboard: false,
 			}
 		}
+	}
+
+	/// Emit a diagnostic.
+	pub fn emit(&self, err: DiagBuilder2) {
+		println!("{}", err);
 	}
 }
 
