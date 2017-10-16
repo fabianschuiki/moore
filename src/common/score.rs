@@ -214,6 +214,53 @@ macro_rules! node_ref {
 }
 
 
+/// Create a new group of node references.
+///
+/// This is a simple enum that contains variants for each of the references.
+/// Implements `From` for the various references, and `Into<NodeId>`.
+#[macro_export]
+macro_rules! node_ref_group {
+	($name:ident: $($var:ident($ty:path)),+) => {
+		#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
+		pub enum $name {
+			$($var($ty),)*
+		}
+
+		impl std::fmt::Display for $name {
+			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+				node_ref_group!(@matches *self, $($name::$var(id) => write!(f, "{}", id)),*)
+			}
+		}
+
+		impl std::fmt::Debug for $name {
+			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+				node_ref_group!(@matches *self, $($name::$var(id) => write!(f, "{}({})", stringify!($name), id)),*)
+			}
+		}
+
+		impl Into<$crate::NodeId> for $name {
+			fn into(self) -> $crate::NodeId {
+				node_ref_group!(@matches self, $($name::$var(id) => id.into()),*)
+			}
+		}
+
+		$(
+		impl From<$ty> for $name {
+			fn from(id: $ty) -> $name {
+				$name::$var(id)
+			}
+		}
+		)*
+	};
+
+	(@matches $value:expr, $($lhs:pat => $rhs:expr),+) => {
+		match $value {
+			$($lhs => $rhs),+
+		}
+	};
+}
+
+
 /// Create a new table that implements the `NodeStorage` trait.
 ///
 /// The resulting table can then be used to store nodes in a type safe manner.

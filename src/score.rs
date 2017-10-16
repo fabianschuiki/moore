@@ -133,7 +133,7 @@ impl<'ast, 'ctx> NodeMaker<'ctx, ScopeRef, Scope> for Scoreboard<'ast, 'ctx> {
 	fn make(&mut self, id: ScopeRef) -> Result<&'ctx Scope> {
 		println!("trying to make scope {:?}", id);
 		match id {
-			ScopeRef::Root => {
+			ScopeRef::Root(_) => {
 				// Gather the names of all libraries and create a root scope out
 				// of them.
 				let mut scope = HashMap::new();
@@ -183,21 +183,14 @@ pub enum Ast {
 }
 
 
-/// The definitions maintained by the global scoreboard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Def {
-	Lib(LibRef),
-}
-
+/// A scope, i.e. a map of names and definitions.
 type Scope = HashMap<Name, Def>;
-
-/// A reference to a scope.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScopeRef {
-	Root,
-	Lib(LibRef),
-}
 
 
 // Declare some node references.
+node_ref!(RootRef);
 node_ref!(LibRef);
+
+// Declare some node reference groups.
+node_ref_group!(Def: Lib(LibRef));
+node_ref_group!(ScopeRef: Root(RootRef), Lib(LibRef));

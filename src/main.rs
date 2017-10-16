@@ -354,7 +354,7 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	let lib = {
 		if let Some(lib) = lib {
 			let rid = sb.root_id;
-			match sb.defs(score::ScopeRef::Root)?.get(&lib) {
+			match sb.defs(score::ScopeRef::Root(score::RootRef::new(rid)))?.get(&lib) {
 				Some(&score::Def::Lib(d)) => d,
 				_ => {
 					sb.emit(DiagBuilder2::error(format!("Library `{}` does not exist", lib)));
@@ -367,18 +367,15 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	};
 	println!("using library {:?}", lib);
 
-// 	// Resolve the entity name.
-// 	let entity = match sb.defs(lib)?.get(&name) {
-// 		Some(ids) => {
-// 			if ids.len() != 1 {
-// 				panic!("entity `{}` is ambiguous", lib);
-// 			} else {
-// 				ids[0]
-// 			}
-// 		}
-// 		None => panic!("entity `{}` does not exist", lib),
-// 	};
-// 	println!("using entity {}", entity);
+	// Resolve the entity name.
+	let entity = match sb.defs(lib.into())?.get(&name) {
+		Some(e) => e,
+		None => {
+			sb.emit(DiagBuilder2::error(format!("Entity or module `{}` does not exist", name)));
+			return Err(());
+		}
+	};
+	println!("using entity {:?}", entity);
 
 // 	// Resolve the architecture name if one was provided.
 // 	let arch = {
