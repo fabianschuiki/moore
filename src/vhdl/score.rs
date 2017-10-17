@@ -69,11 +69,11 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		}
 	}
 
-	pub fn hir<I>(&self, id: I) -> Result<&'ctx <HirTable<'ctx> as NodeStorage<'ctx, I>>::Node> where
+	pub fn hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node> where
 		I: 'ctx + Copy + Debug,
-		HirTable<'ctx>: NodeStorage<'ctx, I>,
-		Scoreboard<'ast, 'ctx>: NodeMaker<'ctx, I, <HirTable<'ctx> as NodeStorage<'ctx, I>>::Node>,
-		<HirTable<'ctx> as NodeStorage<'ctx, I>>::Node: Debug {
+		HirTable<'ctx>: NodeStorage<I>,
+		Scoreboard<'ast, 'ctx>: NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
+		<HirTable<'ctx> as NodeStorage<I>>::Node: Copy + Debug {
 
 		if let Some(node) = self.hir_table.borrow().get(&id) {
 			return Ok(node);
@@ -94,7 +94,7 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 }
 
 
-impl<'ast, 'ctx> NodeMaker<'ctx, ScopeRef, Scope> for Scoreboard<'ast, 'ctx> {
+impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
 		println!("[SB][VHDL] trying to make scope {:?}", id);
 		match id {
@@ -111,9 +111,21 @@ impl<'ast, 'ctx> NodeMaker<'ctx, ScopeRef, Scope> for Scoreboard<'ast, 'ctx> {
 }
 
 
-impl<'ast, 'ctx> NodeMaker<'ctx, LibRef, hir::Lib> for Scoreboard<'ast, 'ctx> {
+impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx hir::Lib> {
 		println!("[SB][VHDL] make hir for lib {:?}", id);
+		let mut entities = Vec::new();
+		for du in &self.libs[&id] {
+			match du.data {
+				ast::DesignUnitData::EntityDecl(ref decl) => {
+					let id = EntityRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
+					entities.push(id);
+				}
+				_ => unimplemented!("design unit type"),
+			}
+			println!(" - design unit {:?}", du);
+		}
 		unimplemented!("hir for lib {:?}", id);
 	}
 }
@@ -141,6 +153,7 @@ pub type Scope = HashMap<Name, Vec<Def>>;
 // Declare the node references.
 node_ref!(LibRef);
 node_ref!(DesignUnitRef);
+node_ref!(EntityRef);
 
 // Declare the node reference groups.
 node_ref_group!(Def: Lib(LibRef));
@@ -148,12 +161,13 @@ node_ref_group!(ScopeRef: Lib(LibRef));
 
 
 // Declare the node tables.
-node_storage!(AstTable,
-	design_units: DesignUnitRef => ast::DesignUnit,
+node_storage!(AstTable<'ast>,
+	design_units: DesignUnitRef => &'ast ast::DesignUnit,
+	entity_decls: EntityRef => (&'ast [ast::CtxItem], &'ast ast::EntityDecl),
 );
 
-node_storage!(HirTable,
-	libs: LibRef => hir::Lib,
+node_storage!(HirTable<'ctx>,
+	libs: LibRef => &'ctx hir::Lib,
 );
 
 

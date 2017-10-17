@@ -30,8 +30,6 @@ pub struct Scoreboard<'ast, 'ctx> {
 	arenas: &'ctx Arenas,
 	/// The root node ID, where the libraries live.
 	pub root_id: NodeId,
-	/// The next node ID to be assigned.
-	next_id: usize,
 	/// The VHDL scoreboard.
 	vhdl: vhdl::score::Scoreboard<'ast, 'ctx>,
 	/// A table of library nodes. This is the only node that is actively
@@ -52,8 +50,7 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		Scoreboard {
 			sess: sess,
 			arenas: arenas,
-			root_id: NodeId::new(0),
-			next_id: 1,
+			root_id: NodeId::alloc(),
 			vhdl: vhdl::score::Scoreboard::new(&arenas.vhdl),
 			libs: HashMap::new(),
 			defs: RefCell::new(HashMap::new()),
@@ -67,16 +64,9 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		println!("{}", err);
 	}
 
-	/// Allocate a new unused node ID.
-	pub fn alloc_id(&mut self) -> NodeId {
-		let id = NodeId::new(self.next_id);
-		self.next_id += 1;
-		id
-	}
-
 	/// Add a library to the scoreboard.
 	pub fn add_library(&mut self, name: Name, asts: &'ast [Ast]) -> LibRef {
-		let id = LibRef::new(self.alloc_id());
+		let id = LibRef::new(NodeId::alloc());
 		self.libs.insert(id, (name, asts));
 
 		// Pass on the VHDL nodes to the VHDL scoreboard.
@@ -113,7 +103,6 @@ impl<'ast, 'ctx> moore_common::score::Scoreboard for Scoreboard<'ast, 'ctx> {
 
 impl<'ast, 'ctx> std::fmt::Debug for Scoreboard<'ast, 'ctx> {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "Next ID: {}", self.next_id)?;
 		write!(f, "\nLibraries:")?;
 		for (k,v) in &self.libs {
 			write!(f, "\n - {}: contains {} root nodes", k, v.1.len())?;
@@ -130,7 +119,7 @@ impl<'ast, 'ctx> std::fmt::Debug for Scoreboard<'ast, 'ctx> {
 }
 
 
-impl<'ast, 'ctx> NodeMaker<'ctx, ScopeRef, Scope> for Scoreboard<'ast, 'ctx> {
+impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
 		println!("[SB] trying to make scope {:?}", id);
 		match id {

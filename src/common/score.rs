@@ -75,7 +75,7 @@ pub trait Scoreboard {
 /// // let _: &Foo = tbl.get(&BarId(1)).unwrap();
 /// // let _: &Bar = tbl.get(&FooId(2)).unwrap();
 /// ```
-pub trait NodeStorage<'tn, I> {
+pub trait NodeStorage<I> {
 	/// The type of the node that is returned when presented with an ID of type
 	/// `I`.
 	type Node;
@@ -83,13 +83,13 @@ pub trait NodeStorage<'tn, I> {
 	/// Obtains a reference to the node with the given ID.
 	///
 	/// Returns `None` when no node with the given ID exists.
-	fn get(&self, id: &I) -> Option<&'tn Self::Node>;
+	fn get(&self, id: &I) -> Option<Self::Node>;
 
 	/// Store a reference to a node under the given ID.
 	///
 	/// Later that reference can be retrieved again by presenting the same ID to
 	/// the `get` function.
-	fn set(&mut self, id: I, node: &'tn Self::Node);
+	fn set(&mut self, id: I, node: Self::Node);
 }
 
 
@@ -142,7 +142,7 @@ pub trait NodeStorage<'tn, I> {
 /// // assert_eq!(foo, &Bar);
 /// // assert_eq!(bar, &Foo);
 /// ```
-pub trait NodeMaker<'tn, I, N> {
+pub trait NodeMaker<I, N> {
 	/// Creates the node with the given ID.
 	///
 	/// Returns `Err(())` upon failure. Note that the generated node has
@@ -150,7 +150,7 @@ pub trait NodeMaker<'tn, I, N> {
 	/// for the `NodeMaker` to generate multiple nodes at the same time. The
 	/// generated nodes should be owned by an arena or the owner of the
 	/// `NodeMaker` itself.
-	fn make(&self, id: I) -> Result<&'tn N>;
+	fn make(&self, id: I) -> Result<N>;
 }
 
 
@@ -307,15 +307,15 @@ macro_rules! node_ref_group {
 /// ```
 #[macro_export]
 macro_rules! node_storage {
-	($name:ident, $($node_name:ident : $node_ref:path => $node:path,)*) => {
+	($name:ident<$lt:tt>, $($node_name:ident : $node_ref:ty => $node:ty,)*) => {
 		#[derive(Debug)]
-		pub struct $name<'tn> {
-			$($node_name: std::collections::HashMap<$node_ref, &'tn $node>,)*
+		pub struct $name<$lt> {
+			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
 		}
 
-		impl<'tn> $name<'tn> {
+		impl<$lt> $name<$lt> {
 			/// Create a new empty table.
-			pub fn new() -> $name<'tn> {
+			pub fn new() -> $name<$lt> {
 				$name {
 					$($node_name: std::collections::HashMap::new(),)*
 				}
@@ -325,14 +325,14 @@ macro_rules! node_storage {
 		// Implement the `NodeStorage` trait for each of the node types that
 		// this table will support.
 		$(
-		impl<'tn> $crate::score::NodeStorage<'tn, $node_ref> for $name<'tn> {
+		impl<$lt> $crate::score::NodeStorage<$node_ref> for $name<$lt> {
 			type Node = $node;
 
-			fn get(&self, id: &$node_ref) -> Option<&'tn $node> {
+			fn get(&self, id: &$node_ref) -> Option<$node> {
 				self.$node_name.get(id).map(|n| *n)
 			}
 
-			fn set(&mut self, id: $node_ref, node: &'tn $node) {
+			fn set(&mut self, id: $node_ref, node: $node) {
 				self.$node_name.insert(id, node);
 			}
 		}
