@@ -7,7 +7,7 @@
 //! compilation.
 
 use std;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
 use typed_arena::Arena;
 use moore_common;
@@ -29,7 +29,7 @@ pub struct Scoreboard<'ast, 'ctx> {
 	/// The arenas within which the various nodes will be allocated.
 	arenas: &'ctx Arenas,
 	/// The root node ID, where the libraries live.
-	pub root_id: NodeId,
+	pub root: RootRef,
 	/// The VHDL scoreboard.
 	vhdl: vhdl::score::Scoreboard<'ast, 'ctx>,
 	/// A table of library nodes. This is the only node that is actively
@@ -37,10 +37,6 @@ pub struct Scoreboard<'ast, 'ctx> {
 	libs: HashMap<LibRef, (Name, &'ast [Ast])>,
 	/// A table of definitions in each scope.
 	defs: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
-	// /// A table of unprocessed AST nodes.
-	// asts: HashMap<NodeId, Ast<'ast>>,
-	// /// A table of processed HIR nodes.
-	// hirs: HashMap<NodeId, &'ctx Hir>,
 }
 
 
@@ -50,12 +46,10 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		Scoreboard {
 			sess: sess,
 			arenas: arenas,
-			root_id: NodeId::alloc(),
-			vhdl: vhdl::score::Scoreboard::new(&arenas.vhdl),
+			root: RootRef::new(NodeId::alloc()),
+			vhdl: vhdl::score::Scoreboard::new(sess, &arenas.vhdl),
 			libs: HashMap::new(),
 			defs: RefCell::new(HashMap::new()),
-			// asts: HashMap::new(),
-			// hirs: HashMap::new(),
 		}
 	}
 
@@ -84,14 +78,16 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 	}
 
 	pub fn defs(&self, id: ScopeRef) -> Result<&'ctx Scope> {
-		if let Some(&s) = self.defs.borrow().get(&id) {
-			return Ok(s);
+		if let Some(&node) = self.defs.borrow().get(&id) {
+			return Ok(node);
 		}
-		let s = self.make(id)?;
-		if self.defs.borrow_mut().insert(id, s).is_some() {
+		if self.sess.opts.trace_scoreboard { println!("[SB] make scope for {:?}", id); }
+		let node = self.make(id)?;
+		if self.sess.opts.trace_scoreboard { println!("[SB] scope for {:?} is {:?}", id, node); }
+		if self.defs.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
-		Ok(s)
+		Ok(node)
 	}
 }
 
@@ -121,7 +117,6 @@ impl<'ast, 'ctx> std::fmt::Debug for Scoreboard<'ast, 'ctx> {
 
 impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
-		println!("[SB] trying to make scope {:?}", id);
 		match id {
 			ScopeRef::Root(_) => {
 				// Gather the names of all libraries and create a root scope out
@@ -138,16 +133,41 @@ impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 
 			ScopeRef::Lib(id) => {
 				let lib = self.libs[&id];
-
-				// Ask the VHDL scoreboard for the definitions in this library.
-				let vhdl = self.vhdl.defs(vhdl::score::ScopeRef::Lib(vhdl::score::LibRef::new(id.into())));
-				println!("[SB] vhdl_sb returned {:?}", vhdl);
-
 				// Approach:
 				// 1) ask vhdl scoreboard for the defs
 				// 2) ask svlog scoreboard for the defs
 				// 3) create new def that is the union of the two and return
-				unimplemented!("defs for lib {:?}", lib);
+
+				// Ask the VHDL scoreboard for the definitions in this library.
+				let vhdl = self.vhdl.defs(vhdl::score::ScopeRef::Lib(vhdl::score::LibRef::new(id.into())))?;
+				if self.sess.opts.trace_scoreboard { println!("[SB] vhdl_sb returned {:?}", vhdl); }
+
+				// Build a union of the names defined by the above scoreboards.
+				// Then determine the actual definition for each name, and throw
+				// an error if multiple definitions are encountered.
+				let names: HashSet<Name> = vhdl.iter().map(|(&k,_)| k).collect();
+				let mut defs = HashMap::new();
+				let mut had_dups = false;
+				for name in names {
+					let both_spans: Vec<_> = vhdl[&name].iter().map(|v| v.span).collect(); // TODO: chain with svlog results
+					if both_spans.len() > 1 {
+						let mut d = DiagBuilder2::error(format!("`{}` declared multiple times", name));
+						for span in both_spans {
+							d = d.span(span);
+						}
+						self.sess.emit(d);
+						had_dups = true;
+						continue;
+					}
+					let mut both_defs = vhdl[&name].iter().map(|v| Def::Vhdl(v.value)); // TODO: chain with svlog results
+					defs.insert(name, both_defs.nth(0).unwrap());
+				}
+				if had_dups {
+					return Err(());
+				}
+
+				// Return the scope of definitions.
+				Ok(self.arenas.scope.alloc(defs))
 			}
 		}
 	}
@@ -192,5 +212,8 @@ node_ref!(RootRef);
 node_ref!(LibRef);
 
 // Declare some node reference groups.
-node_ref_group!(Def: Lib(LibRef));
-node_ref_group!(ScopeRef: Root(RootRef), Lib(LibRef));
+node_ref_group!(Def:
+	Lib(LibRef),
+	Vhdl(vhdl::score::Def),
+);
+node_ref_group!(ScopeRef: Root(RootRef), Lib(LibRef),);

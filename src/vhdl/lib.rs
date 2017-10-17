@@ -6,8 +6,10 @@
 extern crate moore_common;
 extern crate rustc_serialize;
 extern crate num;
+extern crate typed_arena;
 
 pub mod syntax;
 pub mod symtbl;
 pub mod pass;
 pub mod score;
+pub mod hir;

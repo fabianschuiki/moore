@@ -220,7 +220,7 @@ macro_rules! node_ref {
 /// Implements `From` for the various references, and `Into<NodeId>`.
 #[macro_export]
 macro_rules! node_ref_group {
-	($name:ident: $($var:ident($ty:path)),+) => {
+	($name:ident: $($var:ident($ty:path),)+) => {
 		#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
 		pub enum $name {
 			$($var($ty),)*
@@ -307,7 +307,7 @@ macro_rules! node_ref_group {
 /// ```
 #[macro_export]
 macro_rules! node_storage {
-	($name:ident<$lt:tt>, $($node_name:ident : $node_ref:ty => $node:ty,)*) => {
+	($name:ident<$lt:tt>, $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
 		#[derive(Debug)]
 		pub struct $name<$lt> {
 			$($node_name: std::collections::HashMap<$node_ref, $node>,)*

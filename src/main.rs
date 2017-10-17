@@ -353,8 +353,8 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	// Resolve the library name if one was provided.
 	let lib = {
 		if let Some(lib) = lib {
-			let rid = sb.root_id;
-			match sb.defs(score::ScopeRef::Root(score::RootRef::new(rid)))?.get(&lib) {
+			let rid = sb.root;
+			match sb.defs(score::ScopeRef::Root(rid))?.get(&lib) {
 				Some(&score::Def::Lib(d)) => d,
 				_ => {
 					sb.emit(DiagBuilder2::error(format!("Library `{}` does not exist", lib)));
@@ -368,6 +368,8 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	println!("using library {:?}", lib);
 
 	// Resolve the entity name.
+	// TODO: Make sure that the thing we resolve to actually is a VHDL entity or
+	// a SystemVerilog module. Right we happily accept packages as well.
 	let entity = match sb.defs(lib.into())?.get(&name) {
 		Some(e) => e,
 		None => {
