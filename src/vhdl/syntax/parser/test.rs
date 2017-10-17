@@ -4,12 +4,12 @@ use std::fmt::Debug;
 use moore_common::errors::*;
 use moore_common::source::*;
 use moore_common::grind::{self, Grinder};
-use syntax::lexer::Lexer;
-use syntax::lexer::token;
-use syntax::parser::rules::*;
-use syntax::parser::core::*;
-use syntax::parser::basic::BasicParser;
-use syntax::ast;
+use lexer::Lexer;
+use lexer::token;
+use parser::rules::*;
+use parser::core::*;
+use parser::basic::BasicParser;
+use ast;
 
 macro_rules! parse {
     ($content:expr, $parse_fn:expr) => {{

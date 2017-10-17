@@ -178,3 +178,12 @@ impl Def {
 		}
 	}
 }
+
+// /// Converts a primary name to a definition name that can be stored in a scope.
+pub fn def_name_from_primary_name(name: &ast::PrimaryName) -> Spanned<DefName> {
+	Spanned::new(match name.kind {
+		ast::PrimaryNameKind::Ident(n) => DefName::Ident(n),
+		ast::PrimaryNameKind::Char(n) => DefName::Char(n),
+		ast::PrimaryNameKind::String(n) => DefName::String(n),
+	}, name.span)
+}

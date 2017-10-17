@@ -8,7 +8,7 @@ path = "lib.rs"
 
 [dependencies]
 moore-common = { path = "../common" }
-# moore-vhdl-syntax = { path = "syntax" }
+moore-vhdl-syntax = { path = "syntax" }
 # moore-vhdl-hir = { path = "hir" }
 num = "0.1"
 bincode = "0.6"

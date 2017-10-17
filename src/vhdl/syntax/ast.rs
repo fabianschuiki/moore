@@ -6,8 +6,7 @@
 use std;
 use moore_common::source::{Span, Spanned};
 use moore_common::name::Name;
-use symtbl::DefName;
-use syntax::lexer::token::Literal;
+use lexer::token::Literal;
 
 pub use self::ExprData::*;
 pub use self::TypeData::*;
@@ -868,14 +867,4 @@ pub struct Signature {
 	pub span: Span,
 	pub args: Vec<CompoundName>,
 	pub retty: Option<CompoundName>,
-}
-
-
-/// Converts a primary name to a definition name that can be stored in a scope.
-pub fn def_name_from_primary_name(name: &PrimaryName) -> Spanned<DefName> {
-	Spanned::new(match name.kind {
-		PrimaryNameKind::Ident(n) => DefName::Ident(n),
-		PrimaryNameKind::Char(n) => DefName::Char(n),
-		PrimaryNameKind::String(n) => DefName::String(n),
-	}, name.span)
 }

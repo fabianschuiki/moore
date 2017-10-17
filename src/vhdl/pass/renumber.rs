@@ -5,8 +5,8 @@
 //! them for every item in the tree that can be referred to by name.
 
 use moore_common::source::*;
-use syntax::ast::{self, NodeId, def_name_from_primary_name};
-use symtbl::{SymTbl, Scope, Def, DefName};
+use syntax::ast::{self, NodeId};
+use symtbl::{SymTbl, Scope, Def, DefName, def_name_from_primary_name};
 
 
 pub struct Renumberer<'ts> {

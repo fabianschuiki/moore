@@ -49,10 +49,10 @@ use std::fmt::Display;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
-use syntax::lexer::token::*;
-use syntax::parser::TokenStream;
-use syntax::parser::core::*;
-use syntax::ast;
+use lexer::token::*;
+use parser::TokenStream;
+use parser::core::*;
+use ast;
 
 pub trait Parser: TokenStream<Token> {}
 impl<T> Parser for T where T: TokenStream<Token> {}

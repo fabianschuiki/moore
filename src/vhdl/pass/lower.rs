@@ -11,8 +11,8 @@
 use std;
 use moore_common::source::*;
 use moore_common::errors::*;
-use syntax::ast::{self, NodeId, def_name_from_primary_name};
-use symtbl::{SymTbl, Scope, Def, DefName};
+use syntax::ast::{self, NodeId};
+use symtbl::{SymTbl, Scope, Def, DefName, def_name_from_primary_name};
 
 
 type Result<T> = std::result::Result<T, ()>;
