@@ -376,7 +376,7 @@ impl<'a> Lowerer<'a> {
 					if !dims.is_empty() {
 						// for example: `a[3:0]`
 						panic!("the part-select of port {} has not been converted into an expression properly", name.name);
-						(span, None, Some(expr))
+						// (span, None, Some(expr))
 					} else {
 						// for example: `a`
 						(span, Some(name), Some(expr))

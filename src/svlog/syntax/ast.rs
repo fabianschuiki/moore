@@ -1,4 +1,7 @@
 // Copyright (c) 2016-2017 Fabian Schuiki
+
+#![allow(unused_variables)]
+
 use moore_common::source::Span;
 use moore_common::name::Name;
 use std::fmt;

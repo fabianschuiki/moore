@@ -2,6 +2,10 @@
 
 //! A parser for the SystemVerilog language. Based on IEEE 1800-2009.
 
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(dead_code)]
+
 use std;
 use lexer::{Lexer, TokenAndSpan};
 use token::*;

@@ -20,13 +20,17 @@
 //! something, we resolve to checking the lookup table discussed above. Be wary
 //! of the precedence between the lookup table and the individual local scopes.
 
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(dead_code)]
+
 use std;
 use super::ast::{self, NodeId};
 use moore_common::name::*;
 use moore_common::source::*;
 use moore_common::errors::*;
 use moore_common::Session;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

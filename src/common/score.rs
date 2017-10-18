@@ -228,19 +228,19 @@ macro_rules! node_ref_group {
 
 		impl std::fmt::Display for $name {
 			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				node_ref_group!(@matches *self, $($name::$var(id) => write!(f, "{}", id)),*)
+				node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{}", id)),*)
 			}
 		}
 
 		impl std::fmt::Debug for $name {
 			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				node_ref_group!(@matches *self, $($name::$var(id) => write!(f, "{:?}", id)),*)
+				node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{:?}", id)),*)
 			}
 		}
 
 		impl Into<$crate::NodeId> for $name {
 			fn into(self) -> $crate::NodeId {
-				node_ref_group!(@matches self, $($name::$var(id) => id.into()),*)
+				node_ref_group!(MATCHES self, $($name::$var(id) => id.into()),*)
 			}
 		}
 
@@ -253,7 +253,7 @@ macro_rules! node_ref_group {
 		)*
 	};
 
-	(@matches $value:expr, $($lhs:pat => $rhs:expr),+) => {
+	(MATCHES $value:expr, $($lhs:pat => $rhs:expr),+) => {
 		match $value {
 			$($lhs => $rhs),+
 		}
