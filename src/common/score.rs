@@ -193,12 +193,6 @@ macro_rules! node_ref {
 			}
 		}
 
-		impl std::fmt::Display for $name {
-			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				write!(f, "{}", self.0)
-			}
-		}
-
 		impl std::fmt::Debug for $name {
 			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 				write!(f, "{}({})", stringify!($name), self.0)
@@ -220,21 +214,15 @@ macro_rules! node_ref {
 /// Implements `From` for the various references, and `Into<NodeId>`.
 #[macro_export]
 macro_rules! node_ref_group {
-	($name:ident: $($var:ident($ty:path),)+) => {
+	($name:ident: $($var:ident($ty:ty),)+) => {
 		#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
 		pub enum $name {
 			$($var($ty),)*
 		}
 
-		impl std::fmt::Display for $name {
-			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{}", id)),*)
-			}
-		}
-
 		impl std::fmt::Debug for $name {
 			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{:?}", id)),*)
+				node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{}({:?})", stringify!($var), id)),*)
 			}
 		}
 

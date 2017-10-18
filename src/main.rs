@@ -345,7 +345,8 @@ fn score(sess: &Session, matches: &ArgMatches) {
 	}
 }
 
-
+/// Resolve an entity/module specificaiton of the form `[lib.]entity[.arch]` for
+/// elaboration.
 fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) -> Result<(),()> {
 	let (lib, name, arch) = parse_elaborate_name(input_name)?;
 	println!("parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})", input_name, lib, name, arch);
@@ -370,25 +371,56 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	// Resolve the entity name.
 	// TODO: Make sure that the thing we resolve to actually is a VHDL entity or
 	// a SystemVerilog module. Right we happily accept packages as well.
+	#[derive(Debug)]
+	enum Entity {
+		Vhdl(vhdl::score::EntityRef),
+		Svlog(NodeId), // TODO: handle svlog case
+	};
 	let entity = match sb.defs(lib.into())?.get(&name) {
-		Some(e) => e,
-		None => {
+		Some(&score::Def::Vhdl(vhdl::score::Def::Entity(e))) => Entity::Vhdl(e),
+		Some(&score::Def::Svlog(e)) => Entity::Svlog(e),
+		_ => {
 			sb.emit(DiagBuilder2::error(format!("Entity or module `{}` does not exist", name)));
 			return Err(());
 		}
 	};
 	println!("using entity {:?}", entity);
 
-// 	// Resolve the architecture name if one was provided.
-// 	let arch = {
-// 		if let Some(arch) = arch {
-// 			println!("would now resolve architecture name {:?}", arch);
-// 			lib_id
-// 		} else {
-// 			lib_id
-// 		}
-// 	};
+	// In case we're elaborating a VHDL entity, resolve the architecture name if
+	// one was provided, or find a default architecture to use.
+	#[derive(Debug)]
+	enum Elaborate {
+		Vhdl(vhdl::score::EntityRef, vhdl::score::ArchRef),
+		Svlog(NodeId),
+	}
+	let elab = match entity {
+		Entity::Vhdl(entity) => {
+			let archs = sb.vhdl.archs(vhdl::score::LibRef::new(lib.into()))?.get(&entity).unwrap();
+			let arch_ref = if let Some(arch) = arch {
+				match archs.1.get(&arch) {
+					Some(&id) => id,
+					None => {
+						sb.emit(DiagBuilder2::error(format!("`{}` is not an architecture of entity `{}`", arch, name)));
+						return Err(());
+					}
+				}
+			} else {
+				match archs.0.last() {
+					Some(&id) => id,
+					None => {
+						sb.emit(DiagBuilder2::error(format!("Entity `{}` has no architecture defined", name)));
+						return Err(());
+					}
+				}
+			};
+			Elaborate::Vhdl(entity, arch_ref)
+		}
+		Entity::Svlog(module) => {
+			Elaborate::Svlog(module)
+		}
+	};
 
+	println!("elaborating {:?}", elab);
 	Ok(())
 }
 

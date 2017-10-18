@@ -31,7 +31,7 @@ pub struct Scoreboard<'ast, 'ctx> {
 	/// The root node ID, where the libraries live.
 	pub root: RootRef,
 	/// The VHDL scoreboard.
-	vhdl: vhdl::score::Scoreboard<'ast, 'ctx>,
+	pub vhdl: vhdl::score::Scoreboard<'ast, 'ctx>,
 	/// A table of library nodes. This is the only node that is actively
 	/// maintained by the global scoreboard.
 	libs: HashMap<LibRef, (Name, &'ast [Ast])>,
@@ -101,13 +101,13 @@ impl<'ast, 'ctx> std::fmt::Debug for Scoreboard<'ast, 'ctx> {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "\nLibraries:")?;
 		for (k,v) in &self.libs {
-			write!(f, "\n - {}: contains {} root nodes", k, v.1.len())?;
+			write!(f, "\n - {:?}: contains {} root nodes", k, v.1.len())?;
 		}
 		write!(f, "\nDefs:")?;
 		for (k,&v) in self.defs.borrow().iter() {
 			write!(f, "\n - scope {:?}: contains {} defs nodes", k, v.len())?;
 			for (n,d) in v {
-				write!(f, "\n   - `{}` -> {:?}", n, d)?;
+				write!(f, "\n   - `{:?}` -> {:?}", n, d)?;
 			}
 		}
 		Ok(())
@@ -124,7 +124,7 @@ impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 				let mut scope = HashMap::new();
 				for (&id, &(name, _)) in &self.libs {
 					if scope.insert(name, Def::Lib(id)).is_some() {
-						self.sess.emit(DiagBuilder2::fatal("Library `{}` defined multiple times"));
+						self.sess.emit(DiagBuilder2::fatal(format!("Library `{}` defined multiple times", name)));
 						return Err(());
 					}
 				}
@@ -215,5 +215,6 @@ node_ref!(LibRef);
 node_ref_group!(Def:
 	Lib(LibRef),
 	Vhdl(vhdl::score::Def),
+	Svlog(NodeId), // TODO: handle this case
 );
 node_ref_group!(ScopeRef: Root(RootRef), Lib(LibRef),);

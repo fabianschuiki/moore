@@ -39,6 +39,8 @@ pub struct Scoreboard<'ast, 'ctx> {
 	hir_table: RefCell<HirTable<'ctx>>,
 	/// A table of definitions in each scope.
 	def_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
+	/// A table of architecture per entity and library.
+	arch_table: RefCell<HashMap<LibRef, &'ctx Archs>>,
 }
 
 
@@ -61,6 +63,7 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 			ast_table: RefCell::new(AstTable::new()),
 			hir_table: RefCell::new(HirTable::new()),
 			def_table: RefCell::new(HashMap::new()),
+			arch_table: RefCell::new(HashMap::new()),
 		}
 	}
 
@@ -118,6 +121,19 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		}
 		Ok(node)
 	}
+
+	pub fn archs(&self, id: LibRef) -> Result<&'ctx Archs> {
+		if let Some(&node) = self.arch_table.borrow().get(&id) {
+			return Ok(node);
+		}
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make arch for {:?}", id); }
+		let node = self.make(id)?;
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] arch for {:?} is {:?}", id, node); }
+		if self.arch_table.borrow_mut().insert(id, node).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(node)
+	}
 }
 
 
@@ -169,6 +185,7 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for Scoreboard<'ast, 'ctx> {
 }
 
 
+// Definitions per library.
 impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
 		match id {
@@ -223,10 +240,85 @@ impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 }
 
 
+// Group the architectures declared in a library by entity.
+impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx Archs> for Scoreboard<'ast, 'ctx> {
+	fn make(&self, id: LibRef) -> Result<&'ctx Archs> {
+		let lib = self.hir(id)?;
+		let defs = self.defs(ScopeRef::Lib(id.into()))?;
+		let mut res: HashMap<_,_> = lib.entities.iter().map(|&id| (id, (Vec::new(), HashMap::new()))).collect();
+		let mut had_fails = false;
+		for &arch_ref in &lib.archs {
+			let arch = self.ast(arch_ref).1;
+
+			// Extract a simple entity name for now. Maybe we need to support
+			// the full-blown compound names at some point?
+			let entity_name = match if arch.target.parts.is_empty() {
+				match arch.target.primary.kind {
+					ast::PrimaryNameKind::Ident(n) => Some(n),
+					_ => None,
+				}
+			} else {
+				None
+			}{
+				Some(n) => n,
+				None => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("`{}` is not a valid entity name", arch.target.span.extract()))
+						.span(arch.target.span)
+					);
+					had_fails = true;
+					continue;
+				}
+			};
+
+			// Try to find the entity with the name.
+			let entity = match defs.get(&entity_name) {
+				Some(e) => {
+					let last = e.last().unwrap();
+					match last.value {
+						Def::Entity(e) => e,
+						_ => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("`{}` is not an entity", entity_name))
+								.span(arch.target.span)
+								.add_note(format!("`{}` defined here:", entity_name))
+								.span(last.span)
+							);
+							had_fails = true;
+							continue;
+						}
+					}
+				}
+				None => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("Unknown entity `{}`", entity_name))
+						.span(arch.target.span)
+					);
+					had_fails = true;
+					continue;
+				}
+			};
+
+			// Insert the results into the table of architectures for the found
+			// entity.
+			let entry = res.get_mut(&entity).unwrap();
+			entry.0.push(arch_ref);
+			entry.1.insert(arch.name.value, arch_ref);
+		}
+		if had_fails {
+			Err(())
+		} else {
+			Ok(self.arenas.archs.alloc(res))
+		}
+	}
+}
+
+
 /// A collection of arenas that the scoreboard uses to allocate its nodes.
 pub struct Arenas {
 	pub hir: hir::Arenas,
 	pub scope: Arena<Scope>,
+	pub archs: Arena<Archs>,
 }
 
 
@@ -236,6 +328,7 @@ impl Arenas {
 		Arenas {
 			hir: hir::Arenas::new(),
 			scope: Arena::new(),
+			archs: Arena::new(),
 		}
 	}
 }
@@ -243,6 +336,7 @@ impl Arenas {
 
 /// A set of names and definitions.
 pub type Scope = HashMap<Name, Vec<Spanned<Def>>>;
+pub type Archs = HashMap<EntityRef, (Vec<ArchRef>, HashMap<Name, ArchRef>)>;
 
 
 // Declare the node references.

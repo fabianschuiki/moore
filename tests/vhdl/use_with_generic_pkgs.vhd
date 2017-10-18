@@ -44,3 +44,12 @@ entity e3 is
 	package p2a is new gen2_pkg generic map (value => 42);
 	package p2b is new gen2_pkg generic map (value => 99);
 end;
+
+architecture dummy of e3 is
+begin
+end architecture;
+
+
+architecture bla of e3 is
+begin
+end architecture;
