@@ -419,8 +419,9 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 			Elaborate::Svlog(module)
 		}
 	};
-
 	println!("elaborating {:?}", elab);
+
+
 	Ok(())
 }
 
