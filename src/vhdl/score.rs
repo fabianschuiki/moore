@@ -265,10 +265,14 @@ impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'c
 					port_spans.push(span);
 					for decl in &decls.value {
 						match *decl {
-							ast::IntfDecl::ObjDecl(ref obj @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
-								let subid = IntfSignalRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(subid, (id.into(), obj));
-								entity.ports.push(subid);
+							ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
+								let ty = SubtypeIndRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(ty, (id.into(), &decl.ty));
+								for name in &decl.names {
+									let subid = IntfSignalRef(NodeId::alloc());
+									self.ast_table.borrow_mut().set(subid, (id.into(), decl, ty, name));
+									entity.ports.push(subid);
+								}
 							}
 							ref wrong => {
 								self.sess.emit(
@@ -304,9 +308,13 @@ impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'c
 								entity.generics.push(subid.into());
 							}
 							ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
-								let subid = IntfConstRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
-								entity.generics.push(subid.into());
+								let ty = SubtypeIndRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(ty, (id.into(), &decl.ty));
+								for name in &decl.names {
+									let subid = IntfConstRef(NodeId::alloc());
+									self.ast_table.borrow_mut().set(subid, (id.into(), decl, ty, name));
+									entity.generics.push(subid.into());
+								}
 							}
 							ref wrong => {
 								self.sess.emit(
@@ -332,6 +340,36 @@ impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'c
 		// TODO(strict): Complain when port and generic clauses are not the
 		// first in the entity.
 		Ok(self.arenas.hir.entity.alloc(entity))
+	}
+}
+
+
+// Lower an interface signal to HIR.
+impl<'ast, 'ctx> NodeMaker<IntfSignalRef, &'ctx hir::IntfSignal> for Scoreboard<'ast, 'ctx> {
+	fn make(&self, id: IntfSignalRef) -> Result<&'ctx hir::IntfSignal> {
+		let (scope_id, decl, subty_id, ident) = self.ast(id);
+		let init = match decl.default {
+			Some(ref e) => {
+				let subid = ExprRef(NodeId::alloc());
+				self.ast_table.borrow_mut().set(subid, (id.into(), e));
+				Some(subid)
+			}
+			None => None
+		};
+		let sig = hir::IntfSignal {
+			name: Spanned::new(ident.name, ident.span),
+			mode: match decl.mode {
+				None | Some(ast::IntfMode::In) => hir::IntfSignalMode::In,
+				Some(ast::IntfMode::Out) => hir::IntfSignalMode::Out,
+				Some(ast::IntfMode::Inout) => hir::IntfSignalMode::Inout,
+				Some(ast::IntfMode::Buffer) => hir::IntfSignalMode::Buffer,
+				Some(ast::IntfMode::Linkage) => hir::IntfSignalMode::Linkage,
+			},
+			ty: subty_id,
+			bus: decl.bus,
+			init: init,
+		};
+		Ok(self.arenas.hir.intf_sig.alloc(sig))
 	}
 }
 
@@ -482,12 +520,46 @@ impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
 		let entity_id = *self.archs(arch.0)?.by_arch.get(&id).unwrap();
 		let entity = self.hir(entity_id)?;
 
+		// Assemble the types and names for the entity.
+		println!("entity ports: {:?}", entity.ports);
+		let mut in_tys    = Vec::new();
+		let mut out_tys   = Vec::new();
+		let mut in_names  = Vec::new();
+		let mut out_names = Vec::new();
+		for &port in &entity.ports {
+			let hir = self.hir(port)?;
+			let ty = llhd::void_ty();
+			match hir.mode {
+				hir::IntfSignalMode::In | hir::IntfSignalMode::Inout | hir::IntfSignalMode::Linkage => {
+					in_tys.push(ty.clone());
+					in_names.push(hir.name.value);
+				}
+				_ => ()
+			}
+			match hir.mode {
+				hir::IntfSignalMode::Out | hir::IntfSignalMode::Inout | hir::IntfSignalMode::Buffer => {
+					out_tys.push(ty.clone());
+					out_names.push(hir.name.value);
+				}
+				_ => ()
+			}
+		}
+
 		// TODO: Actually get the lltype of the entity for this.
-		let ty = llhd::entity_ty(vec![], vec![]);
+		let ty = llhd::entity_ty(in_tys, out_tys);
 
 		// Create a new entity into which we will generate all the code.
-		let name = format!("{}_{}", self.ast(entity_id).2.name.value, arch.2.name.value);
-		let entity = llhd::Entity::new(name, ty);
+		let name = format!("{}_{}", entity.name.value, arch.2.name.value);
+		let mut entity = llhd::Entity::new(name, ty);
+
+		// Assign names to the arguments. This is merely cosmetic, but makes the
+		// emitted LLHD easier to read.
+		for (arg, &name) in entity.inputs_mut().iter_mut().zip(in_names.iter()) {
+			arg.set_name(name.as_str().to_owned());
+		}
+		for (arg, &name) in entity.outputs_mut().iter_mut().zip(out_names.iter()) {
+			arg.set_name(name.as_str().to_owned());
+		}
 
 		// Add the entity to the module and return a reference to it.
 		Ok(DefValueRef(self.llmod.borrow_mut().add_entity(entity).into()))
@@ -569,6 +641,8 @@ node_ref!(LibRef);
 node_ref!(PkgBodyRef);
 node_ref!(PkgDeclRef);
 node_ref!(PkgInstRef);
+node_ref!(ExprRef);
+node_ref!(SubtypeIndRef);
 
 // Declare the node reference groups.
 node_ref_group!(Def:
@@ -593,7 +667,8 @@ node_ref_group!(GenericRef:
 
 // Declare the node tables.
 node_storage!(AstTable<'ast>,
-	design_units: DesignUnitRef => &'ast ast::DesignUnit,
+	subtys: SubtypeIndRef => (NodeId, &'ast ast::SubtypeInd),
+
 	// The design units are tuples that also carry the list of context items
 	// that were defined before them.
 	entity_decls: EntityRef  => (LibRef, &'ast [ast::CtxItem], &'ast ast::EntityDecl),
@@ -605,14 +680,17 @@ node_storage!(AstTable<'ast>,
 	pkg_bodies:   PkgBodyRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgBody),
 
 	// Interface declarations
-	intf_sigs:     IntfSignalRef  => (NodeId, &'ast ast::IntfObjDecl),
-	intf_types:    IntfTypeRef    => (NodeId, &'ast ast::TypeDecl),
-	intf_subprogs: IntfSubprogRef => (NodeId, &'ast ast::IntfSubprogDecl),
-	intf_pkgs:     IntfPkgRef     => (NodeId, &'ast ast::PkgInst),
-	intf_consts:   IntfConstRef   => (NodeId, &'ast ast::IntfObjDecl),
+	intf_sigs:       IntfSignalRef      => (NodeId, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
+	intf_types:      IntfTypeRef        => (NodeId, &'ast ast::TypeDecl),
+	intf_subprogs:   IntfSubprogRef     => (NodeId, &'ast ast::IntfSubprogDecl),
+	intf_pkgs:       IntfPkgRef         => (NodeId, &'ast ast::PkgInst),
+	intf_consts:     IntfConstRef       => (NodeId, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
+
+	exprs: ExprRef => (NodeId, &'ast ast::Expr),
 );
 
 node_storage!(HirTable<'ctx>,
-	libs:     LibRef    => &'ctx hir::Lib,
-	entities: EntityRef => &'ctx hir::Entity,
+	libs:      LibRef        => &'ctx hir::Lib,
+	entities:  EntityRef     => &'ctx hir::Entity,
+	intf_sigs: IntfSignalRef => &'ctx hir::IntfSignal,
 );

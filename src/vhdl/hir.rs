@@ -12,6 +12,7 @@ use typed_arena::Arena;
 pub struct Arenas {
 	pub lib: Arena<Lib>,
 	pub entity: Arena<Entity>,
+	pub intf_sig: Arena<IntfSignal>,
 }
 
 
@@ -21,6 +22,7 @@ impl Arenas {
 		Arenas {
 			lib: Arena::new(),
 			entity: Arena::new(),
+			intf_sig: Arena::new(),
 		}
 	}
 }
@@ -62,4 +64,29 @@ pub struct Entity {
 	pub generics: Vec<GenericRef>,
 	/// The list of ports that the entity declares.
 	pub ports: Vec<IntfSignalRef>,
+}
+
+
+#[derive(Debug)]
+pub struct IntfSignal {
+	/// The name of this signal.
+	pub name: Spanned<Name>,
+	/// The mode of this signal.
+	pub mode: IntfSignalMode,
+	/// The type of this signal.
+	pub ty: SubtypeIndRef,
+	/// Whether this signal was declared with the `bus` keyword.
+	pub bus: bool,
+	/// The expression determining the initial value of this signals.
+	pub init: Option<ExprRef>,
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum IntfSignalMode {
+	In,
+	Out,
+	Inout,
+	Buffer,
+	Linkage,
 }

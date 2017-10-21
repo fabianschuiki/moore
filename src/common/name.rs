@@ -63,6 +63,12 @@ impl Decodable for Name {
 	}
 }
 
+impl Into<String> for Name {
+	fn into(self) -> String {
+		self.as_str().into()
+	}
+}
+
 
 
 /// A reference-counted string that acts like a regular str slice, hiding the
@@ -113,6 +119,12 @@ impl Deref for RcStr {
 	type Target = str;
 	fn deref(&self) -> &str {
 		&self.0[..]
+	}
+}
+
+impl Into<String> for RcStr {
+	fn into(self) -> String {
+		(*self.0).clone()
 	}
 }
 
