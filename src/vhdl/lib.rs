@@ -7,6 +7,7 @@ extern crate moore_common;
 extern crate rustc_serialize;
 extern crate num;
 extern crate typed_arena;
+extern crate llhd;
 pub extern crate moore_vhdl_syntax;
 
 pub use moore_vhdl_syntax as syntax;

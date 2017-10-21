@@ -11,6 +11,7 @@ extern crate typed_arena;
 extern crate moore_common;
 extern crate moore_svlog;
 extern crate moore_vhdl;
+extern crate llhd;
 pub mod score;
 use moore_common::*;
 use moore_common::errors::*;
@@ -343,6 +344,17 @@ fn score(sess: &Session, matches: &ArgMatches) {
 	if failed {
 		std::process::exit(1);
 	}
+
+	// Extract the populated LLHD modules from the scoreboards and link them
+	// together.
+	let vhdl_module = sb.vhdl.llmod.into_inner();
+
+	// Emit the module.
+	{
+		use llhd::visit::Visitor;
+		let stdout = std::io::stdout();
+		llhd::assembly::Writer::new(&mut stdout.lock()).visit_module(&vhdl_module);
+	}
 }
 
 /// Resolve an entity/module specificaiton of the form `[lib.]entity[.arch]` for
@@ -395,9 +407,9 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	}
 	let elab = match entity {
 		Entity::Vhdl(entity) => {
-			let archs = sb.vhdl.archs(vhdl::score::LibRef::new(lib.into()))?.get(&entity).unwrap();
+			let archs = sb.vhdl.archs(vhdl::score::LibRef::new(lib.into()))?.by_entity.get(&entity).unwrap();
 			let arch_ref = if let Some(arch) = arch {
-				match archs.1.get(&arch) {
+				match archs.by_name.get(&arch) {
 					Some(&id) => id,
 					None => {
 						sb.emit(DiagBuilder2::error(format!("`{}` is not an architecture of entity `{}`", arch, name)));
@@ -405,7 +417,7 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 					}
 				}
 			} else {
-				match archs.0.last() {
+				match archs.ordered.last() {
 					Some(&id) => id,
 					None => {
 						sb.emit(DiagBuilder2::error(format!("Entity `{}` has no architecture defined", name)));
@@ -421,7 +433,20 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	};
 	println!("elaborating {:?}", elab);
 
-
+	// Generate the LLHD definition for whatever we're elaborating.
+	match elab {
+		Elaborate::Vhdl(entity, arch) => {
+			// let decl = sb.vhdl.lldecl(arch);
+			// println!("Architecture declared as {:?}", decl);
+			let def = sb.vhdl.lldef(arch)?;
+			println!("Architecture declared as {:?}", def);
+		}
+		Elaborate::Svlog(module) => {
+			// TODO: Implement this.
+			sb.emit(DiagBuilder2::error(format!("SystemVerilog elaboration not supported")));
+			return Err(());
+		}
+	}
 	Ok(())
 }
 

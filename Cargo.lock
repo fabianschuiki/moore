@@ -211,6 +211,7 @@ name = "moore-vhdl"
 version = "0.1.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "llhd 0.1.0 (git+https://github.com/fabianschuiki/llhd?rev=b4678ea)",
  "moore-common 0.1.0",
  "moore-vhdl-syntax 0.1.0",
  "num 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",

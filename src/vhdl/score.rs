@@ -19,6 +19,7 @@ use moore_common::score::{NodeStorage, NodeMaker, Result};
 use syntax::ast;
 use hir;
 use typed_arena::Arena;
+use llhd;
 
 
 /// The VHDL scoreboard that keeps track of compilation results.
@@ -40,7 +41,16 @@ pub struct Scoreboard<'ast, 'ctx> {
 	/// A table of definitions in each scope.
 	def_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
 	/// A table of architecture per entity and library.
-	arch_table: RefCell<HashMap<LibRef, &'ctx Archs>>,
+	arch_table: RefCell<HashMap<LibRef, &'ctx ArchTable>>,
+	/// The LLHD module into which code is emitted.
+	pub llmod: RefCell<llhd::Module>,
+	/// A table of LLHD declarations (i.e. prototypes). These are useful for
+	/// example when an entity needs so be instantiated, for which only the
+	/// signature of the entity is required, but not its full definition with
+	/// its interior.
+	lldecl_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
+	/// A table of LLHD definitions.
+	lldef_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
 }
 
 
@@ -64,6 +74,9 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 			hir_table: RefCell::new(HirTable::new()),
 			def_table: RefCell::new(HashMap::new()),
 			arch_table: RefCell::new(HashMap::new()),
+			llmod: RefCell::new(llhd::Module::new()),
+			lldecl_table: RefCell::new(HashMap::new()),
+			lldef_table: RefCell::new(HashMap::new()),
 		}
 	}
 
@@ -122,7 +135,7 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		Ok(node)
 	}
 
-	pub fn archs(&self, id: LibRef) -> Result<&'ctx Archs> {
+	pub fn archs(&self, id: LibRef) -> Result<&'ctx ArchTable> {
 		if let Some(&node) = self.arch_table.borrow().get(&id) {
 			return Ok(node);
 		}
@@ -134,7 +147,53 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		}
 		Ok(node)
 	}
+
+	pub fn lldecl<I>(&self, id: I) -> Result<llhd::ValueRef>
+	where
+		I: 'ctx + Copy + Debug + Into<NodeId>,
+		Scoreboard<'ast, 'ctx>: NodeMaker<I, DeclValueRef>
+	{
+		if let Some(node) = self.lldecl_table.borrow().get(&id.into()).cloned() {
+			return Ok(node);
+		}
+		if let Some(node) = self.lldef_table.borrow().get(&id.into()).cloned() {
+			return Ok(node);
+		}
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make lldecl for {:?}", id); }
+		let node = self.make(id)?.0;
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] lldecl for {:?} is {:?}", id, node); }
+		if self.lldecl_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(node)
+	}
+
+	pub fn lldef<I>(&self, id: I) -> Result<llhd::ValueRef>
+	where
+		I: 'ctx + Copy + Debug + Into<NodeId>,
+		Scoreboard<'ast, 'ctx>: NodeMaker<I, DefValueRef>
+	{
+		if let Some(node) = self.lldef_table.borrow().get(&id.into()).cloned() {
+			return Ok(node);
+		}
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make lldef for {:?}", id); }
+		let node = self.make(id)?.0;
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] lldef for {:?} is {:?}", id, node); }
+		if self.lldef_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(node)
+	}
 }
+
+
+// Wrapper types around ValueRef such that we can distinguish in the
+// scoreboard's implementations of the NodeMaker trait whether we're building a
+// declaration or definition.
+#[derive(Debug, Clone)]
+pub struct DeclValueRef(pub llhd::ValueRef);
+#[derive(Debug, Clone)]
+pub struct DefValueRef(pub llhd::ValueRef);
 
 
 // Library lowering to HIR.
@@ -144,39 +203,39 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for Scoreboard<'ast, 'ctx> {
 		for du in &self.libs[&id] {
 			match du.data {
 				ast::DesignUnitData::EntityDecl(ref decl) => {
-					let id = EntityRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.entities.push(id);
+					let subid = EntityRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.entities.push(subid);
 				}
 				ast::DesignUnitData::CfgDecl(ref decl) => {
-					let id = CfgRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.cfgs.push(id);
+					let subid = CfgRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.cfgs.push(subid);
 				}
 				ast::DesignUnitData::PkgDecl(ref decl) => {
-					let id = PkgDeclRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.pkg_decls.push(id);
+					let subid = PkgDeclRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.pkg_decls.push(subid);
 				}
 				ast::DesignUnitData::PkgInst(ref decl) => {
-					let id = PkgInstRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.pkg_insts.push(id);
+					let subid = PkgInstRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.pkg_insts.push(subid);
 				}
 				ast::DesignUnitData::CtxDecl(ref decl) => {
-					let id = CtxRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.ctxs.push(id);
+					let subid = CtxRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.ctxs.push(subid);
 				}
 				ast::DesignUnitData::ArchBody(ref decl) => {
-					let id = ArchRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.archs.push(id);
+					let subid = ArchRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.archs.push(subid);
 				}
 				ast::DesignUnitData::PkgBody(ref decl) => {
-					let id = PkgBodyRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(id, (du.ctx.as_slice(), decl));
-					lib.pkg_bodies.push(id);
+					let subid = PkgBodyRef(NodeId::alloc());
+					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					lib.pkg_bodies.push(subid);
 				}
 			}
 		}
@@ -202,11 +261,11 @@ impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 				// mapping each ID to the corresponding name and definition.
 				// The name is determined by looking up the AST node of the
 				// design unit to be defined.
-				let iter = lib.entities.iter().map(|&n| (self.ast(n).1.name, Def::Entity(n)));
-				let iter = iter.chain(lib.cfgs.iter().map(|&n| (self.ast(n).1.name, Def::Cfg(n))));
-				let iter = iter.chain(lib.pkg_decls.iter().map(|&n| (self.ast(n).1.name, Def::Pkg(n))));
-				let iter = iter.chain(lib.pkg_insts.iter().map(|&n| (self.ast(n).1.name, Def::PkgInst(n))));
-				let iter = iter.chain(lib.ctxs.iter().map(|&n| (self.ast(n).1.name, Def::Ctx(n))));
+				let iter = lib.entities.iter().map(|&n| (self.ast(n).2.name, Def::Entity(n)));
+				let iter = iter.chain(lib.cfgs.iter().map(|&n| (self.ast(n).2.name, Def::Cfg(n))));
+				let iter = iter.chain(lib.pkg_decls.iter().map(|&n| (self.ast(n).2.name, Def::Pkg(n))));
+				let iter = iter.chain(lib.pkg_insts.iter().map(|&n| (self.ast(n).2.name, Def::PkgInst(n))));
+				let iter = iter.chain(lib.ctxs.iter().map(|&n| (self.ast(n).2.name, Def::Ctx(n))));
 
 				// For every element the iterator produces, add it to the map of
 				// definitions.
@@ -241,14 +300,15 @@ impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 
 
 // Group the architectures declared in a library by entity.
-impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx Archs> for Scoreboard<'ast, 'ctx> {
-	fn make(&self, id: LibRef) -> Result<&'ctx Archs> {
+impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for Scoreboard<'ast, 'ctx> {
+	fn make(&self, id: LibRef) -> Result<&'ctx ArchTable> {
 		let lib = self.hir(id)?;
 		let defs = self.defs(ScopeRef::Lib(id.into()))?;
-		let mut res: HashMap<_,_> = lib.entities.iter().map(|&id| (id, (Vec::new(), HashMap::new()))).collect();
+		let mut res = ArchTable::new();
+		res.by_entity = lib.entities.iter().map(|&id| (id, EntityArchTable::new())).collect();
 		let mut had_fails = false;
 		for &arch_ref in &lib.archs {
-			let arch = self.ast(arch_ref).1;
+			let arch = self.ast(arch_ref).2;
 
 			// Extract a simple entity name for now. Maybe we need to support
 			// the full-blown compound names at some point?
@@ -301,9 +361,10 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx Archs> for Scoreboard<'ast, 'ctx> {
 
 			// Insert the results into the table of architectures for the found
 			// entity.
-			let entry = res.get_mut(&entity).unwrap();
-			entry.0.push(arch_ref);
-			entry.1.insert(arch.name.value, arch_ref);
+			let entry = res.by_entity.get_mut(&entity).unwrap();
+			entry.ordered.push(arch_ref);
+			entry.by_name.insert(arch.name.value, arch_ref);
+			res.by_arch.insert(arch_ref, entity);
 		}
 		if had_fails {
 			Err(())
@@ -314,11 +375,43 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx Archs> for Scoreboard<'ast, 'ctx> {
 }
 
 
+// Generate the prototype for an architecture.
+impl<'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for Scoreboard<'ast, 'ctx> {
+	fn make(&self, id: ArchRef) -> Result<DeclValueRef> {
+		unimplemented!("llhd decl for {:?}", id);
+	}
+}
+
+
+// Generate the definition for an architecture.
+impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
+	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
+		// Approach:
+		// 1) Get ref to arch's entity
+		// 2) Get lltype of entity
+		// 3) Add to module and return
+		let arch = self.ast(id);
+		let entity_id = *self.archs(arch.0)?.by_arch.get(&id).unwrap();
+		println!("arch {:?} has entity {:?}", id, entity_id);
+
+		// TODO: Actually get the lltype of the entity for this.
+		let ty = llhd::entity_ty(vec![], vec![]);
+
+		// Create a new entity into which we will generate all the code.
+		let name = format!("{}_{}", self.ast(entity_id).2.name.value, arch.2.name.value);
+		let entity = llhd::Entity::new(name, ty);
+
+		// Add the entity to the module and return a reference to it.
+		Ok(DefValueRef(self.llmod.borrow_mut().add_entity(entity).into()))
+	}
+}
+
+
 /// A collection of arenas that the scoreboard uses to allocate its nodes.
 pub struct Arenas {
 	pub hir: hir::Arenas,
 	pub scope: Arena<Scope>,
-	pub archs: Arena<Archs>,
+	pub archs: Arena<ArchTable>,
 }
 
 
@@ -329,6 +422,40 @@ impl Arenas {
 			hir: hir::Arenas::new(),
 			scope: Arena::new(),
 			archs: Arena::new(),
+		}
+	}
+}
+
+
+/// A table of the architectures in a library, and how they relate to the
+/// entities.
+#[derive(Debug)]
+pub struct ArchTable {
+	pub by_arch: HashMap<ArchRef, EntityRef>,
+	pub by_entity: HashMap<EntityRef, EntityArchTable>,
+}
+
+/// A table of the architectures associated with an entity.
+#[derive(Debug)]
+pub struct EntityArchTable {
+	pub ordered: Vec<ArchRef>,
+	pub by_name: HashMap<Name, ArchRef>,
+}
+
+impl ArchTable {
+	pub fn new() -> ArchTable {
+		ArchTable {
+			by_arch: HashMap::new(),
+			by_entity: HashMap::new(),
+		}
+	}
+}
+
+impl EntityArchTable {
+	pub fn new() -> EntityArchTable {
+		EntityArchTable {
+			ordered: Vec::new(),
+			by_name: HashMap::new(),
 		}
 	}
 }
@@ -370,13 +497,13 @@ node_storage!(AstTable<'ast>,
 	design_units: DesignUnitRef => &'ast ast::DesignUnit,
 	// The design units are tuples that also carry the list of context items
 	// that were defined before them.
-	entity_decls: EntityRef  => (&'ast [ast::CtxItem], &'ast ast::EntityDecl),
-	cfg_decls:    CfgRef     => (&'ast [ast::CtxItem], &'ast ast::CfgDecl),
-	pkg_decls:    PkgDeclRef => (&'ast [ast::CtxItem], &'ast ast::PkgDecl),
-	pkg_insts:    PkgInstRef => (&'ast [ast::CtxItem], &'ast ast::PkgInst),
-	ctx_decls:    CtxRef     => (&'ast [ast::CtxItem], &'ast ast::CtxDecl),
-	arch_bodies:  ArchRef    => (&'ast [ast::CtxItem], &'ast ast::ArchBody),
-	pkg_bodies:   PkgBodyRef => (&'ast [ast::CtxItem], &'ast ast::PkgBody),
+	entity_decls: EntityRef  => (LibRef, &'ast [ast::CtxItem], &'ast ast::EntityDecl),
+	cfg_decls:    CfgRef     => (LibRef, &'ast [ast::CtxItem], &'ast ast::CfgDecl),
+	pkg_decls:    PkgDeclRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgDecl),
+	pkg_insts:    PkgInstRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgInst),
+	ctx_decls:    CtxRef     => (LibRef, &'ast [ast::CtxItem], &'ast ast::CtxDecl),
+	arch_bodies:  ArchRef    => (LibRef, &'ast [ast::CtxItem], &'ast ast::ArchBody),
+	pkg_bodies:   PkgBodyRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgBody),
 );
 
 node_storage!(HirTable<'ctx>,
