@@ -13,6 +13,26 @@ pub use self::TypeData::*;
 pub use self::StmtData::*;
 
 
+/// Information about the portion of the input file that a node covers.
+pub trait HasSpan {
+	/// Obtain the full span of the input file that this node covers.
+	fn span(&self) -> Span;
+
+	/// Obtain a span which can be used to refer to this node in error messages
+	/// presented to humans. This will generally be the name for things like
+	/// entities, processes, and variables. Defaults to return whatever `span()`
+	/// returns.
+	fn human_span(&self) -> Span {
+		self.span()
+	}
+}
+
+pub trait HasDesc {
+	/// Obtain a human-readable descriptive name for this node.
+	fn desc(&self) -> &'static str;
+}
+
+
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight
 /// way to refer to individual nodes, e.g. during symbol table construction and
 /// name resolution.
@@ -239,6 +259,36 @@ pub enum IntfDecl {
 	ObjDecl(IntfObjDecl),
 }
 
+impl HasSpan for IntfDecl {
+	fn span(&self) -> Span {
+		match *self {
+			IntfDecl::TypeDecl(ref n) => n.span,
+			IntfDecl::SubprogSpec(ref n) => n.span,
+			IntfDecl::PkgInst(ref n) => n.span,
+			IntfDecl::ObjDecl(ref n) => n.span,
+		}
+	}
+
+	fn human_span(&self) -> Span {
+		match *self {
+			IntfDecl::TypeDecl(ref n) => n.name.span,
+			IntfDecl::PkgInst(ref n) => n.name.span,
+			_ => self.span()
+		}
+	}
+}
+
+impl HasDesc for IntfDecl {
+	fn desc(&self) -> &'static str {
+		match *self {
+			IntfDecl::TypeDecl(_) => "interface type declaration",
+			IntfDecl::SubprogSpec(_) => "interface subprogram declaration",
+			IntfDecl::PkgInst(_) => "interface package declaration",
+			IntfDecl::ObjDecl(ref n) => n.desc(),
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct IntfSubprogDecl {
 	pub id: NodeId,
@@ -263,6 +313,17 @@ pub struct IntfObjDecl {
 	pub ty: SubtypeInd,
 	pub bus: bool,
 	pub default: Option<Expr>,
+}
+
+impl HasDesc for IntfObjDecl {
+	fn desc(&self) -> &'static str {
+		match self.kind {
+			IntfObjKind::Const => "interface constant declaration",
+			IntfObjKind::Signal => "interface signal declaration",
+			IntfObjKind::Var => "interface variable declaration",
+			IntfObjKind::File => "interface file declaration",
+		}
+	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -292,17 +353,84 @@ pub enum DeclItem {
 	SubtypeDecl(SubtypeDecl),
 	ObjDecl(ObjDecl),
 	AliasDecl(AliasDecl),
-	UseClause(Spanned<Vec<CompoundName>>),
+	UseClause(Span, Spanned<Vec<CompoundName>>),
 	SubprogDecl(Subprog),
 	CompDecl(CompDecl),
 	DisconDecl(DisconSpec),
 	CfgSpec(CfgSpec),
 	AttrDecl(AttrDecl),
-	PortgenMap(PortgenKind, Vec<ParenElem>),
-	PortgenClause(PortgenKind, Spanned<Vec<IntfDecl>>),
+	PortgenMap(Span, Spanned<PortgenKind>, Vec<ParenElem>),
+	PortgenClause(Span, Spanned<PortgenKind>, Spanned<Vec<IntfDecl>>),
 	GroupDecl(GroupDecl),
 	VunitBindInd(()),
 	BlockCompCfg(BlockCompCfg),
+}
+
+impl HasSpan for DeclItem {
+	fn span(&self) -> Span {
+		match *self {
+			DeclItem::PkgBody(ref n) => n.span,
+			DeclItem::PkgInst(ref n) => n.span,
+			DeclItem::PkgDecl(ref n) => n.span,
+			DeclItem::TypeDecl(ref n) => n.span,
+			DeclItem::SubtypeDecl(ref n) => n.span,
+			DeclItem::ObjDecl(ref n) => n.span,
+			DeclItem::AliasDecl(ref n) => n.span,
+			DeclItem::UseClause(sp, ref n) => Span::union(sp, n.span),
+			DeclItem::SubprogDecl(ref n) => n.span,
+			DeclItem::CompDecl(ref n) => n.span,
+			DeclItem::DisconDecl(ref n) => n.span,
+			DeclItem::CfgSpec(ref n) => n.span,
+			DeclItem::AttrDecl(ref n) => n.span,
+			DeclItem::PortgenMap(sp, _, _) => sp,
+			DeclItem::PortgenClause(sp, _, _) => sp,
+			DeclItem::GroupDecl(ref n) => n.span,
+			DeclItem::VunitBindInd(_) => unimplemented!(),
+			DeclItem::BlockCompCfg(ref n) => n.span,
+		}
+	}
+
+	fn human_span(&self) -> Span {
+		match *self {
+			DeclItem::PkgBody(ref n) => n.name.span,
+			DeclItem::PkgInst(ref n) => n.name.span,
+			DeclItem::PkgDecl(ref n) => n.name.span,
+			DeclItem::TypeDecl(ref n) => n.name.span,
+			DeclItem::SubtypeDecl(ref n) => n.name.span,
+			DeclItem::AliasDecl(ref n) => n.name.span,
+			DeclItem::UseClause(sp, _) => sp,
+			DeclItem::PortgenMap(_, Spanned{ span, .. }, _) => span,
+			DeclItem::PortgenClause(_, Spanned{ span, .. }, _) => span,
+			_ => self.span()
+		}
+	}
+}
+
+impl HasDesc for DeclItem {
+	fn desc(&self) -> &'static str {
+		match *self {
+			DeclItem::PkgBody(..)       => "package body",
+			DeclItem::PkgInst(..)       => "package instance",
+			DeclItem::PkgDecl(..)       => "package declaration",
+			DeclItem::TypeDecl(..)      => "type declaration",
+			DeclItem::SubtypeDecl(..)   => "subtype declaration",
+			DeclItem::ObjDecl(..)       => "object declaration",
+			DeclItem::AliasDecl(..)     => "alias declaration",
+			DeclItem::UseClause(..)     => "use clause",
+			DeclItem::SubprogDecl(..)   => "subprogram declaration",
+			DeclItem::CompDecl(..)      => "component declaration",
+			DeclItem::DisconDecl(..)    => "disconnection declaration",
+			DeclItem::CfgSpec(..)       => "configuration specification",
+			DeclItem::AttrDecl(..)      => "attribute declaration",
+			DeclItem::PortgenMap(_, Spanned{ value: PortgenKind::Port, .. }, ..)       => "port map",
+			DeclItem::PortgenMap(_, Spanned{ value: PortgenKind::Generic, .. }, ..)    => "generic map",
+			DeclItem::PortgenClause(_, Spanned{ value: PortgenKind::Port, .. }, ..)    => "port clause",
+			DeclItem::PortgenClause(_, Spanned{ value: PortgenKind::Generic, .. }, ..) => "generic clause",
+			DeclItem::GroupDecl(..)     => "group declaration",
+			DeclItem::VunitBindInd(..)  => "vunit binding indication",
+			DeclItem::BlockCompCfg(..)  => "block component configuration",
+		}
+	}
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]

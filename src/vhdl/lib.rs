@@ -12,6 +12,6 @@ pub extern crate moore_vhdl_syntax;
 
 pub use moore_vhdl_syntax as syntax;
 pub mod symtbl;
-pub mod pass;
+// pub mod pass;
 pub mod score;
 pub mod hir;

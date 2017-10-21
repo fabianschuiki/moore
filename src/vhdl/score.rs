@@ -17,6 +17,7 @@ use moore_common::errors::*;
 use moore_common::NodeId;
 use moore_common::score::{NodeStorage, NodeMaker, Result};
 use syntax::ast;
+use syntax::ast::{HasSpan, HasDesc};
 use hir;
 use typed_arena::Arena;
 use llhd;
@@ -244,6 +245,97 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for Scoreboard<'ast, 'ctx> {
 }
 
 
+// Lower an entity to HIR.
+impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'ctx> {
+	fn make(&self, id: EntityRef) -> Result<&'ctx hir::Entity> {
+		let (lib, _, ast) = self.ast(id);
+		let mut entity = hir::Entity{
+			lib: lib,
+			name: ast.name,
+			generics: Vec::new(),
+			ports: Vec::new(),
+		};
+		let mut port_spans = Vec::new();
+		let mut generic_spans = Vec::new();
+		for decl in &ast.decls {
+			match *decl {
+				// Port clauses
+				ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Port, span }, ref decls) => {
+					// For ports only signal interface declarations are allowed.
+					port_spans.push(span);
+					for decl in &decls.value {
+						match *decl {
+							ast::IntfDecl::ObjDecl(ref obj @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
+								let subid = IntfSignalRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(subid, (id.into(), obj));
+								entity.ports.push(subid);
+							}
+							ref wrong => {
+								self.sess.emit(
+									DiagBuilder2::error(format!("A {} cannot appear in a port clause", wrong.desc()))
+									.span(wrong.human_span())
+								);
+								continue;
+							}
+						}
+					}
+				}
+
+				// Generic clauses
+				ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Generic, span }, ref decls) => {
+					// For generics only constant, type, subprogram, and package
+					// interface declarations are allowed.
+					generic_spans.push(span);
+					for decl in &decls.value {
+						match *decl {
+							ast::IntfDecl::TypeDecl(ref decl) => {
+								let subid = IntfTypeRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								entity.generics.push(subid.into());
+							}
+							ast::IntfDecl::SubprogSpec(ref decl) => {
+								let subid = IntfSubprogRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								entity.generics.push(subid.into());
+							}
+							ast::IntfDecl::PkgInst(ref decl) => {
+								let subid = IntfPkgRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								entity.generics.push(subid.into());
+							}
+							ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
+								let subid = IntfConstRef(NodeId::alloc());
+								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								entity.generics.push(subid.into());
+							}
+							ref wrong => {
+								self.sess.emit(
+									DiagBuilder2::error(format!("A {} cannot appear in a generic clause", wrong.desc()))
+									.span(wrong.human_span())
+								);
+								continue;
+							}
+						}
+					}
+				}
+
+				ref wrong => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("A {} cannot appear in an entity declaration", wrong.desc()))
+						.span(decl.human_span())
+					);
+					continue;
+				}
+			}
+		}
+		// TODO(strict): Complain about multiple port and generic clauses.
+		// TODO(strict): Complain when port and generic clauses are not the
+		// first in the entity.
+		Ok(self.arenas.hir.entity.alloc(entity))
+	}
+}
+
+
 // Definitions per library.
 impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
@@ -386,13 +478,9 @@ impl<'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for Scoreboard<'ast, 'ctx> {
 // Generate the definition for an architecture.
 impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
-		// Approach:
-		// 1) Get ref to arch's entity
-		// 2) Get lltype of entity
-		// 3) Add to module and return
 		let arch = self.ast(id);
 		let entity_id = *self.archs(arch.0)?.by_arch.get(&id).unwrap();
-		println!("arch {:?} has entity {:?}", id, entity_id);
+		let entity = self.hir(entity_id)?;
 
 		// TODO: Actually get the lltype of the entity for this.
 		let ty = llhd::entity_ty(vec![], vec![]);
@@ -472,6 +560,11 @@ node_ref!(CfgRef);
 node_ref!(CtxRef);
 node_ref!(DesignUnitRef);
 node_ref!(EntityRef);
+node_ref!(IntfConstRef);
+node_ref!(IntfPkgRef);
+node_ref!(IntfSignalRef);
+node_ref!(IntfSubprogRef);
+node_ref!(IntfTypeRef);
 node_ref!(LibRef);
 node_ref!(PkgBodyRef);
 node_ref!(PkgDeclRef);
@@ -490,6 +583,12 @@ node_ref_group!(Def:
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
 );
+node_ref_group!(GenericRef:
+	Type(IntfTypeRef),
+	Subprog(IntfSubprogRef),
+	Pkg(IntfPkgRef),
+	Const(IntfConstRef),
+);
 
 
 // Declare the node tables.
@@ -504,8 +603,16 @@ node_storage!(AstTable<'ast>,
 	ctx_decls:    CtxRef     => (LibRef, &'ast [ast::CtxItem], &'ast ast::CtxDecl),
 	arch_bodies:  ArchRef    => (LibRef, &'ast [ast::CtxItem], &'ast ast::ArchBody),
 	pkg_bodies:   PkgBodyRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgBody),
+
+	// Interface declarations
+	intf_sigs:     IntfSignalRef  => (NodeId, &'ast ast::IntfObjDecl),
+	intf_types:    IntfTypeRef    => (NodeId, &'ast ast::TypeDecl),
+	intf_subprogs: IntfSubprogRef => (NodeId, &'ast ast::IntfSubprogDecl),
+	intf_pkgs:     IntfPkgRef     => (NodeId, &'ast ast::PkgInst),
+	intf_consts:   IntfConstRef   => (NodeId, &'ast ast::IntfObjDecl),
 );
 
 node_storage!(HirTable<'ctx>,
-	libs: LibRef => &'ctx hir::Lib,
+	libs:     LibRef    => &'ctx hir::Lib,
+	entities: EntityRef => &'ctx hir::Entity,
 );

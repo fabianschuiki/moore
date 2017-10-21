@@ -702,6 +702,7 @@ pub fn parse_intf_decl<P: Parser>(p: &mut P, default: Option<ast::IntfObjKind>) 
 
 /// Try to parse a declarative item. See IEEE 1076-2008 section 3.2.3.
 pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::DeclItem>> {
+	let mut span = p.peek(0).span;
 	Ok(match p.peek(0).value {
 		// package_decl := "package" ident "is" ...
 		// package_body := "package" "body" ident "is" ...
@@ -731,7 +732,7 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::DeclIte
 		// alias_decl := "alias" ...
 		Keyword(Kw::Alias) => Some(ast::DeclItem::AliasDecl(parse_alias_decl(p)?)),
 		// use_clause := "use" ...
-		Keyword(Kw::Use) => Some(ast::DeclItem::UseClause(parse_use_clause(p)?)),
+		Keyword(Kw::Use) => Some(ast::DeclItem::UseClause(span, parse_use_clause(p)?)),
 		// subprog_spec := "pure"|"impure"|"procedure"|"function" ...
 		Keyword(Kw::Pure) |
 		Keyword(Kw::Impure) |
@@ -748,23 +749,31 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::DeclIte
 		// generic_clause     := "generic" ...
 		// generic_map_aspect := "generic" "map" ...
 		Keyword(Kw::Generic) => {
+			let pk = Spanned::new(ast::PortgenKind::Generic, p.peek(0).span);
 			if p.peek(1).value == Keyword(Kw::Map) {
 				let a = try_map_aspect(p, Kw::Generic)?.unwrap();
 				require(p, Semicolon)?;
-				Some(ast::DeclItem::PortgenMap(ast::PortgenKind::Generic, a))
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenMap(span, pk, a))
 			} else {
-				Some(ast::DeclItem::PortgenClause(ast::PortgenKind::Generic, try_generic_clause(p)?.unwrap()))
+				let c = try_generic_clause(p)?.unwrap();
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenClause(span, pk, c))
 			}
 		}
 		// port_clause     := "port" ...
 		// port_map_aspect := "port" "map" ...
 		Keyword(Kw::Port) => {
+			let pk = Spanned::new(ast::PortgenKind::Port, p.peek(0).span);
 			if p.peek(1).value == Keyword(Kw::Map) {
 				let a = try_map_aspect(p, Kw::Port)?.unwrap();
 				require(p, Semicolon)?;
-				Some(ast::DeclItem::PortgenMap(ast::PortgenKind::Port, a))
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenMap(span, pk, a))
 			} else {
-				Some(ast::DeclItem::PortgenClause(ast::PortgenKind::Port, try_port_clause(p)?.unwrap()))
+				let c = try_port_clause(p)?.unwrap();
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenClause(span, pk, c))
 			}
 		}
 		// group_decl := "group" ...
@@ -1875,7 +1884,10 @@ pub fn parse_block_comp_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::D
 		// vunit_binding_ind := "use" "vunit" ...
 		(Keyword(Kw::Use), Keyword(Kw::Vunit)) => parse_vunit_binding_ind(p).map(|i| ast::DeclItem::VunitBindInd(i)),
 		// use_clause := "use" ...
-		(Keyword(Kw::Use), _) => parse_use_clause(p).map(|i| ast::DeclItem::UseClause(i)),
+		(Keyword(Kw::Use), _) => {
+			let span = p.peek(1).span;
+			parse_use_clause(p).map(|i| ast::DeclItem::UseClause(span, i))
+		}
 		// block_comp_config := "for" ...
 		(Keyword(Kw::For), _) => parse_block_comp_config(p).map(|i| ast::DeclItem::BlockCompCfg(i)),
 		// attr_spec := "attribute" ...
