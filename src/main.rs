@@ -20,7 +20,7 @@ use moore_svlog as svlog;
 use moore_vhdl as vhdl;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use std::path::Path;
-use score::Scoreboard;
+use score::{ScoreBoard, ScoreContext};
 
 
 #[derive(Debug)]
@@ -326,16 +326,22 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
 	// Create the scoreboard and add the initial map of libraries.
 	let arenas = score::Arenas::new();
-	let mut sb = Scoreboard::new(sess, &arenas);
-	// vhdl_sb.set_parent(&sb);
-	let lib_id = sb.add_library(lib, &asts);
-	println!("lib_id = {:?}", lib_id);
-	println!("{:?}", sb);
+	let sb = ScoreBoard::new(&arenas);
+	let vhdl_sb = vhdl::score::ScoreBoard::new(&arenas.vhdl);
 
 	// Elaborate the requested entities or modules.
 	if let Some(names) = matches.values_of("elaborate") {
+		let ctx = ScoreContext{
+			sess: sess,
+			sb: &sb,
+			vhdl: &vhdl_sb,
+			svlog: &(),
+		};
+		let lib_id = ctx.add_library(lib, &asts);
+		println!("lib_id = {:?}", lib_id);
+		println!("{:?}", sb);
 		for name in names {
-			match elaborate_name(&mut sb, lib_id, name) {
+			match elaborate_name(&ctx, lib_id, name) {
 				Ok(_) => (),
 				Err(_) => failed = true,
 			};
@@ -347,7 +353,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
 	// Extract the populated LLHD modules from the scoreboards and link them
 	// together.
-	let vhdl_module = sb.vhdl.llmod.into_inner();
+	let vhdl_module = vhdl_sb.llmod.into_inner();
 
 	// Emit the module.
 	{
@@ -359,18 +365,18 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
 /// Resolve an entity/module specificaiton of the form `[lib.]entity[.arch]` for
 /// elaboration.
-fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) -> Result<(),()> {
+fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -> Result<(),()> {
 	let (lib, name, arch) = parse_elaborate_name(input_name)?;
 	println!("parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})", input_name, lib, name, arch);
 
 	// Resolve the library name if one was provided.
 	let lib = {
 		if let Some(lib) = lib {
-			let rid = sb.root;
-			match sb.defs(score::ScopeRef::Root(rid))?.get(&lib) {
+			let rid = ctx.sb.root;
+			match ctx.defs(score::ScopeRef::Root(rid))?.get(&lib) {
 				Some(&score::Def::Lib(d)) => d,
 				_ => {
-					sb.emit(DiagBuilder2::error(format!("Library `{}` does not exist", lib)));
+					ctx.sess.emit(DiagBuilder2::error(format!("Library `{}` does not exist", lib)));
 					return Err(());
 				},
 			}
@@ -388,11 +394,11 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 		Vhdl(vhdl::score::EntityRef),
 		Svlog(NodeId), // TODO: handle svlog case
 	};
-	let entity = match sb.defs(lib.into())?.get(&name) {
+	let entity = match ctx.defs(lib.into())?.get(&name) {
 		Some(&score::Def::Vhdl(vhdl::score::Def::Entity(e))) => Entity::Vhdl(e),
 		Some(&score::Def::Svlog(e)) => Entity::Svlog(e),
 		_ => {
-			sb.emit(DiagBuilder2::error(format!("Entity or module `{}` does not exist", name)));
+			ctx.sess.emit(DiagBuilder2::error(format!("Entity or module `{}` does not exist", name)));
 			return Err(());
 		}
 	};
@@ -407,12 +413,12 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	}
 	let elab = match entity {
 		Entity::Vhdl(entity) => {
-			let archs = sb.vhdl.archs(vhdl::score::LibRef::new(lib.into()))?.by_entity.get(&entity).unwrap();
+			let archs = ctx.vhdl().archs(vhdl::score::LibRef::new(lib.into()))?.by_entity.get(&entity).unwrap();
 			let arch_ref = if let Some(arch) = arch {
 				match archs.by_name.get(&arch) {
 					Some(&id) => id,
 					None => {
-						sb.emit(DiagBuilder2::error(format!("`{}` is not an architecture of entity `{}`", arch, name)));
+						ctx.sess.emit(DiagBuilder2::error(format!("`{}` is not an architecture of entity `{}`", arch, name)));
 						return Err(());
 					}
 				}
@@ -420,7 +426,7 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 				match archs.ordered.last() {
 					Some(&id) => id,
 					None => {
-						sb.emit(DiagBuilder2::error(format!("Entity `{}` has no architecture defined", name)));
+						ctx.sess.emit(DiagBuilder2::error(format!("Entity `{}` has no architecture defined", name)));
 						return Err(());
 					}
 				}
@@ -436,14 +442,14 @@ fn elaborate_name(sb: &mut Scoreboard, lib_id: score::LibRef, input_name: &str) 
 	// Generate the LLHD definition for whatever we're elaborating.
 	match elab {
 		Elaborate::Vhdl(entity, arch) => {
-			// let decl = sb.vhdl.lldecl(arch);
+			// let decl = ctx.vhdl.lldecl(arch);
 			// println!("Architecture declared as {:?}", decl);
-			let def = sb.vhdl.lldef(arch)?;
+			let def = ctx.vhdl().lldef(arch)?;
 			println!("Architecture declared as {:?}", def);
 		}
 		Elaborate::Svlog(module) => {
 			// TODO: Implement this.
-			sb.emit(DiagBuilder2::error(format!("SystemVerilog elaboration not supported")));
+			ctx.sess.emit(DiagBuilder2::error(format!("SystemVerilog elaboration not supported")));
 			return Err(());
 		}
 	}

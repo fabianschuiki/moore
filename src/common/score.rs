@@ -8,7 +8,9 @@
 use std;
 
 
-pub trait Scoreboard {
+/// A context which provides a language-agnostic scoreboard. This is used by
+/// the language-specific scoreboards to communicate with the global scoreboard.
+pub trait GenericContext {
 }
 
 

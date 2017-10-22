@@ -750,7 +750,7 @@ pub enum Sign {
 	Neg,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum LogicalOp {
 	And,
 	Or,
@@ -760,7 +760,7 @@ pub enum LogicalOp {
 	Xnor,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum RelationalOp {
 	Eq,
 	Neq,
@@ -770,7 +770,7 @@ pub enum RelationalOp {
 	Geq,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum ShiftOp {
 	Sll,
 	Srl,

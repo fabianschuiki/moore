@@ -1,9 +1,11 @@
+library std;
+
 entity foo is
 	port (
-		A: in integer;
-		B,C: out integer;
-		D: inout integer;
-		E: buffer integer
+		A:   in     std.standard.integer;
+		B,C: out    std.standard.integer;
+		D:   inout  std.standard.integer;
+		E:   buffer std.standard.integer
 	);
 end;
 

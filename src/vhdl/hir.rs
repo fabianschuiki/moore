@@ -13,6 +13,7 @@ pub struct Arenas {
 	pub lib: Arena<Lib>,
 	pub entity: Arena<Entity>,
 	pub intf_sig: Arena<IntfSignal>,
+	pub subtype_ind: Arena<SubtypeInd>,
 }
 
 
@@ -23,6 +24,7 @@ impl Arenas {
 			lib: Arena::new(),
 			entity: Arena::new(),
 			intf_sig: Arena::new(),
+			subtype_ind: Arena::new(),
 		}
 	}
 }
@@ -56,6 +58,8 @@ impl Lib {
 
 #[derive(Debug)]
 pub struct Entity {
+	/// The parent scope.
+	pub parent: ScopeRef,
 	/// The library in which the entity is defined.
 	pub lib: LibRef,
 	/// The entity name.
@@ -89,4 +93,12 @@ pub enum IntfSignalMode {
 	Inout,
 	Buffer,
 	Linkage,
+}
+
+
+#[derive(Debug)]
+pub struct SubtypeInd {
+	/// The location within the source code.
+	pub span: Span,
+	pub type_mark: (),
 }

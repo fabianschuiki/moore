@@ -2,45 +2,57 @@
 
 //! This module implements the scoreboard that drives the compilation of VHDL.
 
-#![allow(dead_code)]
+// #![allow(dead_code)]
 #![allow(unused_imports)]
 
 use std;
 use std::fmt::Debug;
 use std::collections::HashMap;
 use std::cell::{RefCell, Cell};
-use moore_common;
 use moore_common::Session;
 use moore_common::name::*;
 use moore_common::source::*;
 use moore_common::errors::*;
 use moore_common::NodeId;
-use moore_common::score::{NodeStorage, NodeMaker, Result};
+use moore_common::score::{GenericContext, NodeStorage, NodeMaker, Result};
 use syntax::ast;
 use syntax::ast::{HasSpan, HasDesc};
 use hir;
 use typed_arena::Arena;
 use llhd;
+use ty::*;
+
+
+/// The VHDL context which holds information about the language scoreboard and
+/// the global scoreboard in its language-agnostic generic form. All useful
+/// operations are defined on this context rather than on the scoreboard
+/// directly, to decouple processing and ownership.
+pub struct ScoreContext<'sb, 'ast: 'sb, 'ctx: 'sb> {
+	/// The compiler session which carries the options and is used to emit
+	/// diagnostics.
+	pub sess: &'sb Session,
+	/// The global context.
+	pub global: &'sb GenericContext,
+	/// The VHDL scoreboard.
+	pub sb: &'sb ScoreBoard<'ast, 'ctx>,
+}
 
 
 /// The VHDL scoreboard that keeps track of compilation results.
-pub struct Scoreboard<'ast, 'ctx> {
-	/// The compiler session which carries the options and is used to emit
-	/// diagnostics.
-	sess: &'ctx Session,
+pub struct ScoreBoard<'ast, 'ctx> {
 	/// A reference to the arenas where the scoreboard allocates nodes.
 	arenas: &'ctx Arenas,
-	/// An optional reference to a parent scoreboard.
-	parent: Cell<Option<&'ctx moore_common::score::Scoreboard>>,
 	/// A table of library nodes. This is a filtered version of what the global
 	/// scoreboard has, with only the VHDL nodes remaining.
-	libs: HashMap<LibRef, Vec<&'ast ast::DesignUnit>>,
+	libs: RefCell<HashMap<LibRef, Vec<&'ast ast::DesignUnit>>>,
+	/// A lookup table of library names.
+	lib_names: RefCell<HashMap<Name, LibRef>>,
 	/// A table of AST nodes.
 	ast_table: RefCell<AstTable<'ast>>,
 	/// A table of HIR nodes.
 	hir_table: RefCell<HirTable<'ctx>>,
 	/// A table of definitions in each scope.
-	def_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
+	def_table: RefCell<HashMap<ScopeRef, &'ctx Defs>>,
 	/// A table of architecture per entity and library.
 	arch_table: RefCell<HashMap<LibRef, &'ctx ArchTable>>,
 	/// The LLHD module into which code is emitted.
@@ -52,47 +64,72 @@ pub struct Scoreboard<'ast, 'ctx> {
 	lldecl_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
 	/// A table of LLHD definitions.
 	lldef_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
+	/// A table of types.
+	ty_table: RefCell<HashMap<NodeId, &'ctx Ty<'ctx>>>,
+	/// A table of scopes.
+	scope_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
 }
 
 
-impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
+lazy_static! {
+	static ref STD_LIB_REF: LibRef = LibRef(NodeId::alloc());
+	static ref STANDARD_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
+	static ref TEXTIO_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
+	static ref ENV_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
+}
+
+
+impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 	/// Creates a new empty VHDL scoreboard.
-	///
-	/// # Example
-	/// ```
-	/// use moore_vhdl::score::{Arenas, Scoreboard};
-	///
-	/// let arenas = Arenas::new();
-	/// let sb = Scoreboard::new(&arenas);
-	/// ```
-	pub fn new(sess: &'ctx Session, arenas: &'ctx Arenas) -> Scoreboard<'ast, 'ctx> {
-		Scoreboard {
-			sess: sess,
+	pub fn new(arenas: &'ctx Arenas) -> ScoreBoard<'ast, 'ctx> {
+		let nt = get_name_table();
+		let mut pkg_defs = HashMap::new();
+		let mut lib_names = HashMap::new();
+		let mut def_table = HashMap::new();
+
+		// Declare the builtin libraries and packages.
+		pkg_defs.insert(
+			nt.intern("standard", false).into(),
+			vec![Spanned::new(Def::BuiltinPkg(*STANDARD_PKG_REF), INVALID_SPAN)]
+		);
+		pkg_defs.insert(
+			nt.intern("textio", false).into(),
+			vec![Spanned::new(Def::BuiltinPkg(*TEXTIO_PKG_REF), INVALID_SPAN)]
+		);
+		pkg_defs.insert(
+			nt.intern("env", false).into(),
+			vec![Spanned::new(Def::BuiltinPkg(*ENV_PKG_REF), INVALID_SPAN)]
+		);
+		lib_names.insert(nt.intern("std", false), *STD_LIB_REF);
+		def_table.insert((*STD_LIB_REF).into(), &*arenas.defs.alloc(pkg_defs));
+
+		// Assemble the scoreboard.
+		ScoreBoard {
 			arenas: arenas,
-			parent: Cell::new(None),
-			libs: HashMap::new(),
+			libs: RefCell::new(HashMap::new()),
+			lib_names: RefCell::new(lib_names),
 			ast_table: RefCell::new(AstTable::new()),
 			hir_table: RefCell::new(HirTable::new()),
-			def_table: RefCell::new(HashMap::new()),
+			def_table: RefCell::new(def_table),
 			arch_table: RefCell::new(HashMap::new()),
 			llmod: RefCell::new(llhd::Module::new()),
 			lldecl_table: RefCell::new(HashMap::new()),
 			lldef_table: RefCell::new(HashMap::new()),
+			ty_table: RefCell::new(HashMap::new()),
+			scope_table: RefCell::new(HashMap::new()),
 		}
 	}
+}
 
-	/// Change the parent scoreboard.
-	pub fn set_parent(&self, parent: &'ctx moore_common::score::Scoreboard) {
-		self.parent.set(Some(parent));
-	}
 
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Add a library of AST nodes. This function is called by the global
 	/// scoreboard to add VHDL-specific AST nodes.
-	pub fn add_library(&mut self, id: LibRef, lib: Vec<&'ast ast::DesignUnit>) {
-		if self.libs.insert(id, lib).is_some() {
-			panic!("library did already exist");
-		}
+	pub fn add_library(&self, name: Name, id: LibRef, lib: Vec<&'ast ast::DesignUnit>) {
+		self.sb.libs.borrow_mut().insert(id, lib);
+		self.sb.lib_names.borrow_mut().insert(name, id);
 	}
+
 
 	/// Obtain the AST node corresponding to a node reference. The AST node must
 	/// have previously been added to the `ast_table`, otherwise this function
@@ -101,86 +138,133 @@ impl<'ast, 'ctx> Scoreboard<'ast, 'ctx> {
 		I: 'ast + Copy + Debug,
 		AstTable<'ast>: NodeStorage<I>,
 		<AstTable<'ast> as NodeStorage<I>>::Node: Copy + Debug {
-		match self.ast_table.borrow().get(&id) {
+		match self.sb.ast_table.borrow().get(&id) {
 			Some(node) => node,
 			None => panic!("AST for {:?} should exist", id),
 		}
 	}
 
+
+	/// Store an AST node in the scoreboard.
+	pub fn set_ast<I>(&self, id: I, ast: <AstTable<'ast> as NodeStorage<I>>::Node)
+	where
+		I: Copy + Debug,
+		AstTable<'ast>: NodeStorage<I>
+	{
+		self.sb.ast_table.borrow_mut().set(id, ast);
+	}
+
+
 	pub fn hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node> where
 		I: 'ctx + Copy + Debug,
 		HirTable<'ctx>: NodeStorage<I>,
-		Scoreboard<'ast, 'ctx>: NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
+		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
 		<HirTable<'ctx> as NodeStorage<I>>::Node: Copy + Debug {
 
-		if let Some(node) = self.hir_table.borrow().get(&id) {
+		if let Some(node) = self.sb.hir_table.borrow().get(&id) {
 			return Ok(node);
 		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make hir for {:?}", id); }
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] hir for {:?} is {:?}", id, node); }
-		self.hir_table.borrow_mut().set(id, node);
+		self.sb.hir_table.borrow_mut().set(id, node);
 		Ok(node)
 	}
 
-	pub fn defs(&self, id: ScopeRef) -> Result<&'ctx Scope> {
-		if let Some(&node) = self.def_table.borrow().get(&id) {
+
+	pub fn defs(&self, id: ScopeRef) -> Result<&'ctx Defs> {
+		if let Some(&node) = self.sb.def_table.borrow().get(&id) {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make scope for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make defs for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] scope for {:?} is {:?}", id, node); }
-		if self.def_table.borrow_mut().insert(id, node).is_some() {
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] defs for {:?} is {:?}", id, node); }
+		if self.sb.def_table.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
 		Ok(node)
 	}
 
+
 	pub fn archs(&self, id: LibRef) -> Result<&'ctx ArchTable> {
-		if let Some(&node) = self.arch_table.borrow().get(&id) {
+		if let Some(&node) = self.sb.arch_table.borrow().get(&id) {
 			return Ok(node);
 		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make arch for {:?}", id); }
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] arch for {:?} is {:?}", id, node); }
-		if self.arch_table.borrow_mut().insert(id, node).is_some() {
+		if self.sb.arch_table.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
 		Ok(node)
 	}
 
+
 	pub fn lldecl<I>(&self, id: I) -> Result<llhd::ValueRef>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		Scoreboard<'ast, 'ctx>: NodeMaker<I, DeclValueRef>
+		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, DeclValueRef>
 	{
-		if let Some(node) = self.lldecl_table.borrow().get(&id.into()).cloned() {
+		if let Some(node) = self.sb.lldecl_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
-		if let Some(node) = self.lldef_table.borrow().get(&id.into()).cloned() {
+		if let Some(node) = self.sb.lldef_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make lldecl for {:?}", id); }
 		let node = self.make(id)?.0;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] lldecl for {:?} is {:?}", id, node); }
-		if self.lldecl_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
+		if self.sb.lldecl_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
 			panic!("node should not exist");
 		}
 		Ok(node)
 	}
 
+
 	pub fn lldef<I>(&self, id: I) -> Result<llhd::ValueRef>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		Scoreboard<'ast, 'ctx>: NodeMaker<I, DefValueRef>
+		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, DefValueRef>
 	{
-		if let Some(node) = self.lldef_table.borrow().get(&id.into()).cloned() {
+		if let Some(node) = self.sb.lldef_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make lldef for {:?}", id); }
 		let node = self.make(id)?.0;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] lldef for {:?} is {:?}", id, node); }
-		if self.lldef_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
+		if self.sb.lldef_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(node)
+	}
+
+
+	pub fn ty<I>(&self, id: I) -> Result<&'ctx Ty<'ctx>>
+	where
+		I: 'ctx + Copy + Debug + Into<NodeId>,
+		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty<'ctx>>
+	{
+		if let Some(node) = self.sb.ty_table.borrow().get(&id.into()).cloned() {
+			return Ok(node);
+		}
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make ty for {:?}", id); }
+		let node = self.make(id)?;
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] ty for {:?} is {:?}", id, node); }
+		if self.sb.ty_table.borrow_mut().insert(id.into(), node).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(node)
+	}
+
+
+	pub fn scope(&self, id: ScopeRef) -> Result<&'ctx Scope> {
+		if let Some(node) = self.sb.scope_table.borrow().get(&id.into()).cloned() {
+			return Ok(node);
+		}
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make scope for {:?}", id); }
+		let node = self.make(id)?;
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] scope for {:?} is {:?}", id, node); }
+		if self.sb.scope_table.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
 		Ok(node)
@@ -198,58 +282,61 @@ pub struct DefValueRef(pub llhd::ValueRef);
 
 
 // Library lowering to HIR.
-impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for Scoreboard<'ast, 'ctx> {
+impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx hir::Lib> {
 		let mut lib = hir::Lib::new();
-		for du in &self.libs[&id] {
+		for du in &self.sb.libs.borrow()[&id] {
+			let ctx_id = CtxItemsRef(NodeId::alloc());
+			self.set_ast(ctx_id, (id.into(), du.ctx.as_slice()));
 			match du.data {
 				ast::DesignUnitData::EntityDecl(ref decl) => {
 					let subid = EntityRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.entities.push(subid);
 				}
 				ast::DesignUnitData::CfgDecl(ref decl) => {
 					let subid = CfgRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.cfgs.push(subid);
 				}
 				ast::DesignUnitData::PkgDecl(ref decl) => {
 					let subid = PkgDeclRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.pkg_decls.push(subid);
 				}
 				ast::DesignUnitData::PkgInst(ref decl) => {
 					let subid = PkgInstRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.pkg_insts.push(subid);
 				}
 				ast::DesignUnitData::CtxDecl(ref decl) => {
 					let subid = CtxRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.ctxs.push(subid);
 				}
 				ast::DesignUnitData::ArchBody(ref decl) => {
 					let subid = ArchRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.archs.push(subid);
 				}
 				ast::DesignUnitData::PkgBody(ref decl) => {
 					let subid = PkgBodyRef(NodeId::alloc());
-					self.ast_table.borrow_mut().set(subid, (id, du.ctx.as_slice(), decl));
+					self.set_ast(subid, (id, ctx_id, decl));
 					lib.pkg_bodies.push(subid);
 				}
 			}
 		}
-		Ok(self.arenas.hir.lib.alloc(lib))
+		Ok(self.sb.arenas.hir.lib.alloc(lib))
 	}
 }
 
 
 // Lower an entity to HIR.
-impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'ctx> {
+impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: EntityRef) -> Result<&'ctx hir::Entity> {
-		let (lib, _, ast) = self.ast(id);
+		let (lib, ctx_id, ast) = self.ast(id);
 		let mut entity = hir::Entity{
+			parent: ctx_id.into(),
 			lib: lib,
 			name: ast.name,
 			generics: Vec::new(),
@@ -267,10 +354,10 @@ impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'c
 						match *decl {
 							ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
 								let ty = SubtypeIndRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(ty, (id.into(), &decl.ty));
+								self.set_ast(ty, (id.into(), &decl.ty));
 								for name in &decl.names {
 									let subid = IntfSignalRef(NodeId::alloc());
-									self.ast_table.borrow_mut().set(subid, (id.into(), decl, ty, name));
+									self.set_ast(subid, (id.into(), decl, ty, name));
 									entity.ports.push(subid);
 								}
 							}
@@ -294,25 +381,25 @@ impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'c
 						match *decl {
 							ast::IntfDecl::TypeDecl(ref decl) => {
 								let subid = IntfTypeRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								self.set_ast(subid, (id.into(), decl));
 								entity.generics.push(subid.into());
 							}
 							ast::IntfDecl::SubprogSpec(ref decl) => {
 								let subid = IntfSubprogRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								self.set_ast(subid, (id.into(), decl));
 								entity.generics.push(subid.into());
 							}
 							ast::IntfDecl::PkgInst(ref decl) => {
 								let subid = IntfPkgRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(subid, (id.into(), decl));
+								self.set_ast(subid, (id.into(), decl));
 								entity.generics.push(subid.into());
 							}
 							ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
 								let ty = SubtypeIndRef(NodeId::alloc());
-								self.ast_table.borrow_mut().set(ty, (id.into(), &decl.ty));
+								self.set_ast(ty, (id.into(), &decl.ty));
 								for name in &decl.names {
 									let subid = IntfConstRef(NodeId::alloc());
-									self.ast_table.borrow_mut().set(subid, (id.into(), decl, ty, name));
+									self.set_ast(subid, (id.into(), decl, ty, name));
 									entity.generics.push(subid.into());
 								}
 							}
@@ -339,19 +426,19 @@ impl<'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for Scoreboard<'ast, 'c
 		// TODO(strict): Complain about multiple port and generic clauses.
 		// TODO(strict): Complain when port and generic clauses are not the
 		// first in the entity.
-		Ok(self.arenas.hir.entity.alloc(entity))
+		Ok(self.sb.arenas.hir.entity.alloc(entity))
 	}
 }
 
 
 // Lower an interface signal to HIR.
-impl<'ast, 'ctx> NodeMaker<IntfSignalRef, &'ctx hir::IntfSignal> for Scoreboard<'ast, 'ctx> {
+impl<'sb, 'ast, 'ctx> NodeMaker<IntfSignalRef, &'ctx hir::IntfSignal> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: IntfSignalRef) -> Result<&'ctx hir::IntfSignal> {
-		let (scope_id, decl, subty_id, ident) = self.ast(id);
+		let (_, decl, subty_id, ident) = self.ast(id);
 		let init = match decl.default {
 			Some(ref e) => {
 				let subid = ExprRef(NodeId::alloc());
-				self.ast_table.borrow_mut().set(subid, (id.into(), e));
+				self.set_ast(subid, (id.into(), e));
 				Some(subid)
 			}
 			None => None
@@ -369,68 +456,319 @@ impl<'ast, 'ctx> NodeMaker<IntfSignalRef, &'ctx hir::IntfSignal> for Scoreboard<
 			bus: decl.bus,
 			init: init,
 		};
-		Ok(self.arenas.hir.intf_sig.alloc(sig))
+		Ok(self.sb.arenas.hir.intf_sig.alloc(sig))
 	}
 }
 
 
-// Definitions per library.
-impl<'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for Scoreboard<'ast, 'ctx> {
-	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
-		match id {
-			ScopeRef::Lib(id) => {
-				// Approach:
-				// 1) Get the HIR of the library
-				// 2) Gather definitions from the HIR.
-				// 3) Create scope and return.
-				let lib = self.hir(id)?;
+// Lower a subtype indication to HIR.
+impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx hir::SubtypeInd> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx hir::SubtypeInd> {
+		let (scope_id, ast) = self.ast(id);
 
-				// Assemble an uber-iterator that will iterate over each
-				// definition in the library. We do this by obtaining an
-				// iterator for every design unit type in the library, then
-				// mapping each ID to the corresponding name and definition.
-				// The name is determined by looking up the AST node of the
-				// design unit to be defined.
-				let iter = lib.entities.iter().map(|&n| (self.ast(n).2.name, Def::Entity(n)));
-				let iter = iter.chain(lib.cfgs.iter().map(|&n| (self.ast(n).2.name, Def::Cfg(n))));
-				let iter = iter.chain(lib.pkg_decls.iter().map(|&n| (self.ast(n).2.name, Def::Pkg(n))));
-				let iter = iter.chain(lib.pkg_insts.iter().map(|&n| (self.ast(n).2.name, Def::PkgInst(n))));
-				let iter = iter.chain(lib.ctxs.iter().map(|&n| (self.ast(n).2.name, Def::Ctx(n))));
+		// TODO: Implement resolution indications.
+		if let Some(_) = ast.res {
+			self.sess.emit(
+				DiagBuilder2::error("Resolution indications on subtypes not yet supported")
+				.span(ast.span)
+			);
+		}
 
-				// For every element the iterator produces, add it to the map of
-				// definitions.
-				let mut defs = HashMap::new();
-				for (name, def) in iter {
-					defs.entry(name.value).or_insert_with(|| Vec::new()).push(Spanned::new(def, name.span));
-				}
+		// Separate the type mark from the constraint.
+		// let scope = self.scope(scope_id)?;
+		let out = self.resolve_compound_name(&ast.name, scope_id)?;
+		println!("primary resolved to {:?}", out);
 
-				// Warn the user about duplicate definitions.
-				let mut had_dups = false;
-				for (name, defs) in &defs {
-					if defs.len() <= 1 {
-						continue;
+		Ok(self.sb.arenas.hir.subtype_ind.alloc(hir::SubtypeInd{
+			span: ast.span,
+			type_mark: (),
+		}))
+	}
+}
+
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Convert a primary name as it is present in the AST to a resolvable name
+	/// that can be defined and resolved in a scope.
+	pub fn resolvable_from_primary_name(&self, primary: &ast::PrimaryName) -> Result<Spanned<ResolvableName>> {
+		match primary.kind {
+			ast::PrimaryNameKind::Ident(n) => Ok(Spanned::new(ResolvableName::Ident(n), primary.span)),
+			ast::PrimaryNameKind::Char(c) => Ok(Spanned::new(ResolvableName::Bit(c), primary.span)),
+			ast::PrimaryNameKind::String(s) => {
+				// Declare a static table that maps operator symbols to the
+				// actual operator.
+				lazy_static!(static ref TBL: HashMap<Name, Operator> = {
+					let mut tbl = HashMap::new();
+					let nt = get_name_table();
+					tbl.insert(nt.intern("and",  false), Operator::Logical(ast::LogicalOp::And));
+					tbl.insert(nt.intern("or",   false), Operator::Logical(ast::LogicalOp::Or));
+					tbl.insert(nt.intern("nand", false), Operator::Logical(ast::LogicalOp::Nand));
+					tbl.insert(nt.intern("nor",  false), Operator::Logical(ast::LogicalOp::Nor));
+					tbl.insert(nt.intern("xor",  false), Operator::Logical(ast::LogicalOp::Xor));
+					tbl.insert(nt.intern("xnor", false), Operator::Logical(ast::LogicalOp::Xnor));
+					tbl.insert(nt.intern("=",    false), Operator::Rel(ast::RelationalOp::Eq));
+					tbl.insert(nt.intern("/=",   false), Operator::Rel(ast::RelationalOp::Neq));
+					tbl.insert(nt.intern("<",    false), Operator::Rel(ast::RelationalOp::Lt));
+					tbl.insert(nt.intern("<=",   false), Operator::Rel(ast::RelationalOp::Leq));
+					tbl.insert(nt.intern(">",    false), Operator::Rel(ast::RelationalOp::Gt));
+					tbl.insert(nt.intern(">=",   false), Operator::Rel(ast::RelationalOp::Geq));
+					tbl.insert(nt.intern("?=",   false), Operator::Match(ast::RelationalOp::Eq));
+					tbl.insert(nt.intern("?/=",  false), Operator::Match(ast::RelationalOp::Neq));
+					tbl.insert(nt.intern("?<",   false), Operator::Match(ast::RelationalOp::Lt));
+					tbl.insert(nt.intern("?<=",  false), Operator::Match(ast::RelationalOp::Leq));
+					tbl.insert(nt.intern("?>",   false), Operator::Match(ast::RelationalOp::Gt));
+					tbl.insert(nt.intern("?>=",  false), Operator::Match(ast::RelationalOp::Geq));
+					tbl.insert(nt.intern("sll",  false), Operator::Shift(ast::ShiftOp::Sll));
+					tbl.insert(nt.intern("srl",  false), Operator::Shift(ast::ShiftOp::Srl));
+					tbl.insert(nt.intern("sla",  false), Operator::Shift(ast::ShiftOp::Sla));
+					tbl.insert(nt.intern("sra",  false), Operator::Shift(ast::ShiftOp::Sra));
+					tbl.insert(nt.intern("rol",  false), Operator::Shift(ast::ShiftOp::Rol));
+					tbl.insert(nt.intern("ror",  false), Operator::Shift(ast::ShiftOp::Ror));
+					tbl.insert(nt.intern("+",    false), Operator::Add);
+					tbl.insert(nt.intern("-",    false), Operator::Sub);
+					tbl.insert(nt.intern("&",    false), Operator::Concat);
+					tbl.insert(nt.intern("*",    false), Operator::Mul);
+					tbl.insert(nt.intern("/",    false), Operator::Div);
+					tbl.insert(nt.intern("mod",  false), Operator::Mod);
+					tbl.insert(nt.intern("rem",  false), Operator::Rem);
+					tbl.insert(nt.intern("**",   false), Operator::Pow);
+					tbl.insert(nt.intern("abs",  false), Operator::Abs);
+					tbl.insert(nt.intern("not",  false), Operator::Not);
+					tbl
+				};);
+
+				// Try to find an operator for the provided name. If none is in
+				// the above table, emit an error.
+				match TBL.get(&s) {
+					Some(&op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
+					None => {
+						self.sess.emit(
+							DiagBuilder2::error(format!("`{}` is not a valid operator symbol", s))
+							.span(primary.span)
+							.add_note("see IEEE 1076-2008 section 9.2 for a list of operators")
+						);
+						Err(())
 					}
-					let mut d = DiagBuilder2::error(format!("`{}` declared multiple times", name));
-					for def in defs {
-						d = d.span(def.span);
-					}
-					self.sess.emit(d);
-					had_dups = true;
 				}
-				if had_dups {
-					return Err(());
-				}
-
-				// Return the scope of definitions.
-				Ok(self.arenas.scope.alloc(defs))
 			}
+		}
+	}
+
+
+	/// Resolve a name within a scope. Traverses to the parent scopes if nothing
+	/// matching the name is found.
+	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef) -> Result<Vec<Spanned<Def>>> {
+		println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id);
+		let scope = self.scope(scope_id)?;
+		let mut found_defs = Vec::new();
+		for &defs_id in &scope.defs {
+			let defs = self.defs(defs_id)?;
+			if let Some(d) = defs.get(&name.value) {
+				found_defs.extend(d);
+			}
+		}
+
+		// If nothing matched the definition, try to escalate to the parent
+		// scope. If there is no parent scope, i.e. we're the parent, fail with
+		// a diagnostic.
+		if found_defs.is_empty() {
+			if let Some(parent_id) = scope.parent {
+				self.resolve_name(name, parent_id)
+			} else {
+				self.sess.emit(DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span));
+				Err(())
+			}
+		} else {
+			println!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs);
+			Ok(found_defs)
+		}
+	}
+
+
+	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef) -> Result<(Vec<Spanned<Def>>, &'a [ast::NamePart])> {
+		println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id);
+
+		// First resolve the primary name.
+		let mut last_span = name.primary.span;
+		let mut defs = self.resolve_name(self.resolvable_from_primary_name(&name.primary)?, scope_id)?;
+
+		// Resolve as many name parts as possible.
+		for i in 0..name.parts.len() {
+			match name.parts[i] {
+				ast::NamePart::Select(ref pn) => {
+					// Ensure that we only have one definition, i.e. that the
+					// name up to this point is not ambiguous.
+					let def = if defs.len() == 1 {
+						defs[0]
+					} else {
+						let start = name.span.begin().into();
+						let span = Span::union(start, last_span);
+						let span_str = span.extract();
+						let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", span_str))
+							.span(span)
+							.add_note(format!("`{}` refers to the following {} items:", span_str, defs.len()));
+						for def in &defs {
+							d = d.span(def.span);
+						}
+						self.sess.emit(d);
+						return Err(());
+					};
+
+					// Make sure that we can map the definition to a scope
+					// reference. We can only select into things that have a
+					// scope of their own.
+					let scope = match def.value {
+						Def::Lib(id) => id.into(),
+						Def::BuiltinPkg(id) => id.into(),
+						d => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("Cannot select into {:?}", d))
+								.span(pn.span)
+							);
+							return Err(());
+						}
+					};
+
+					// Perform the name resolution in the scope determined
+					// above.
+					last_span = pn.span;
+					defs = self.resolve_name(self.resolvable_from_primary_name(pn)?, scope)?;
+				}
+
+				// All other name parts we do not resolve and simply pass back
+				// to the caller.
+				_ => return Ok((defs, &name.parts[i..]))
+			}
+		}
+
+		// If we arrive here, we were able to resolve the entire name. So we
+		// simply return the definitions found and an empty slice of remaining
+		// parts.
+		Ok((defs, &[]))
+	}
+}
+
+
+// Definitions in a scope.
+impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: ScopeRef) -> Result<&'ctx Defs> {
+		match id {
+			ScopeRef::Lib(id) => self.make(id),
+			ScopeRef::CtxItems(id) => self.make(id),
+			ScopeRef::Entity(id) => self.make(id),
+			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_DEFS)[&id])
 		}
 	}
 }
 
 
+// Definitions in a library.
+impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: LibRef) -> Result<&'ctx Defs> {
+		// Approach:
+		// 1) Get the HIR of the library
+		// 2) Gather definitions from the HIR.
+		// 3) Create defs and return.
+		let lib = self.hir(id)?;
+
+		// Assemble an uber-iterator that will iterate over each
+		// definition in the library. We do this by obtaining an
+		// iterator for every design unit type in the library, then
+		// mapping each ID to the corresponding name and definition.
+		// The name is determined by looking up the AST node of the
+		// design unit to be defined.
+		let iter = lib.entities.iter().map(|&n| (self.ast(n).2.name, Def::Entity(n)));
+		let iter = iter.chain(lib.cfgs.iter().map(|&n| (self.ast(n).2.name, Def::Cfg(n))));
+		let iter = iter.chain(lib.pkg_decls.iter().map(|&n| (self.ast(n).2.name, Def::Pkg(n))));
+		let iter = iter.chain(lib.pkg_insts.iter().map(|&n| (self.ast(n).2.name, Def::PkgInst(n))));
+		let iter = iter.chain(lib.ctxs.iter().map(|&n| (self.ast(n).2.name, Def::Ctx(n))));
+
+		// For every element the iterator produces, add it to the map of
+		// definitions.
+		let mut defs = HashMap::new();
+		for (name, def) in iter {
+			defs.entry(name.value.into()).or_insert_with(|| Vec::new()).push(Spanned::new(def, name.span));
+		}
+
+		// Warn the user about duplicate definitions.
+		let mut had_dups = false;
+		for (name, defs) in &defs {
+			if defs.len() <= 1 {
+				continue;
+			}
+			let mut d = DiagBuilder2::error(format!("`{}` declared multiple times", name));
+			for def in defs {
+				d = d.span(def.span);
+			}
+			self.sess.emit(d);
+			had_dups = true;
+		}
+		if had_dups {
+			return Err(());
+		}
+
+		// Return the definitions.
+		Ok(self.sb.arenas.defs.alloc(defs))
+	}
+}
+
+
+// Definitions made by the context items that appear before design units.
+impl<'sb, 'ast, 'ctx> NodeMaker<CtxItemsRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: CtxItemsRef) -> Result<&'ctx Defs> {
+		let (_, ast) = self.ast(id);
+		let mut defs = HashMap::new();
+		let mut has_fails = false;
+		for item in ast {
+			// For each name in a library clause, find the corresponding library
+			// and create a definition for it.
+			match *item {
+				ast::CtxItem::LibClause(Spanned{ value: ref names, .. }) => {
+					for ident in names {
+						if let Some(&lib_id) = self.sb.lib_names.borrow().get(&ident.name) {
+							let mut defs = defs.entry(ident.name.into()).or_insert_with(||vec![]);
+							if !defs.is_empty() {
+								self.sess.emit(
+									DiagBuilder2::error(format!("`{}` has already been declared", ident.name))
+									.span(ident.span)
+									// TODO: Show previous declarations
+								);
+								has_fails = true;
+							} else {
+								defs.push(Spanned::new(Def::Lib(lib_id), ident.span));
+							}
+						} else {
+							self.sess.emit(
+								DiagBuilder2::error(format!("no library named `{}` found", ident.name))
+								.span(ident.span)
+								// TODO: Print list of libraries.
+							);
+							has_fails = true;
+						}
+					}
+				}
+				_ => ()
+			}
+		}
+		if has_fails {
+			Err(())
+		} else {
+			Ok(self.sb.arenas.defs.alloc(defs))
+		}
+	}
+}
+
+
+// Definitions in an entity.
+impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, _: EntityRef) -> Result<&'ctx Defs> {
+		// TODO: Implement this.
+		Ok(self.sb.arenas.defs.alloc(HashMap::new()))
+	}
+}
+
+
 // Group the architectures declared in a library by entity.
-impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for Scoreboard<'ast, 'ctx> {
+impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx ArchTable> {
 		let lib = self.hir(id)?;
 		let defs = self.defs(ScopeRef::Lib(id.into()))?;
@@ -462,7 +800,7 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for Scoreboard<'ast, 'ctx> {
 			};
 
 			// Try to find the entity with the name.
-			let entity = match defs.get(&entity_name) {
+			let entity = match defs.get(&entity_name.into()) {
 				Some(e) => {
 					let last = e.last().unwrap();
 					match last.value {
@@ -499,14 +837,14 @@ impl<'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for Scoreboard<'ast, 'ctx> {
 		if had_fails {
 			Err(())
 		} else {
-			Ok(self.arenas.archs.alloc(res))
+			Ok(self.sb.arenas.archs.alloc(res))
 		}
 	}
 }
 
 
 // Generate the prototype for an architecture.
-impl<'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for Scoreboard<'ast, 'ctx> {
+impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DeclValueRef> {
 		unimplemented!("llhd decl for {:?}", id);
 	}
@@ -514,7 +852,7 @@ impl<'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for Scoreboard<'ast, 'ctx> {
 
 
 // Generate the definition for an architecture.
-impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
+impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
 		let arch = self.ast(id);
 		let entity_id = *self.archs(arch.0)?.by_arch.get(&id).unwrap();
@@ -528,6 +866,7 @@ impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
 		let mut out_names = Vec::new();
 		for &port in &entity.ports {
 			let hir = self.hir(port)?;
+			self.ty(hir.ty)?; // for now just ask for the type directly
 			let ty = llhd::void_ty();
 			match hir.mode {
 				hir::IntfSignalMode::In | hir::IntfSignalMode::Inout | hir::IntfSignalMode::Linkage => {
@@ -562,7 +901,75 @@ impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
 		}
 
 		// Add the entity to the module and return a reference to it.
-		Ok(DefValueRef(self.llmod.borrow_mut().add_entity(entity).into()))
+		Ok(DefValueRef(self.sb.llmod.borrow_mut().add_entity(entity).into()))
+	}
+}
+
+
+// Determine the type represented by a subtype indication.
+impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx Ty<'ctx>> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx Ty<'ctx>> {
+		let hir = self.hir(id)?;
+		println!("hir of subtype is {:?}", hir);
+		self.sess.emit(DiagBuilder2::error("Type calculation not implemented").span(hir.span));
+		Err(())
+	}
+}
+
+
+// Populate a scope.
+impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: ScopeRef) -> Result<&'ctx Scope> {
+		match id {
+			ScopeRef::Lib(id) => self.make(id),
+			ScopeRef::CtxItems(id) => self.make(id),
+			ScopeRef::Entity(id) => self.make(id),
+			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id])
+		}
+	}
+}
+
+
+// Populate the scope of an library.
+impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: LibRef) -> Result<&'ctx Scope> {
+		let mut defs = Vec::new();
+		defs.push(id.into());
+		Ok(self.sb.arenas.scope.alloc(Scope{
+			parent: None,
+			defs: defs,
+		}))
+	}
+}
+
+
+// Populate the scope of the context items that appear before a design unit. The
+// scope of the design unit itself is a subscope of the context items.
+impl<'sb, 'ast, 'ctx> NodeMaker<CtxItemsRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: CtxItemsRef) -> Result<&'ctx Scope> {
+		let mut defs = Vec::new();
+		defs.push(id.into());
+		// TODO: Resolve use clauses.
+		Ok(self.sb.arenas.scope.alloc(Scope{
+			parent: None,
+			defs: defs,
+		}))
+	}
+}
+
+
+// Populate the scope of an entity.
+impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: EntityRef) -> Result<&'ctx Scope> {
+		let hir = self.hir(id)?;
+		let mut defs = Vec::new();
+		defs.push(id.into());
+		// TODO: Resolve use clauses and add whatever they bring into scope to
+		// the defs array.
+		Ok(self.sb.arenas.scope.alloc(Scope{
+			parent: Some(hir.parent),
+			defs: defs,
+		}))
 	}
 }
 
@@ -570,8 +977,9 @@ impl<'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for Scoreboard<'ast, 'ctx> {
 /// A collection of arenas that the scoreboard uses to allocate its nodes.
 pub struct Arenas {
 	pub hir: hir::Arenas,
-	pub scope: Arena<Scope>,
+	pub defs: Arena<Defs>,
 	pub archs: Arena<ArchTable>,
+	pub scope: Arena<Scope>,
 }
 
 
@@ -580,8 +988,9 @@ impl Arenas {
 	pub fn new() -> Arenas {
 		Arenas {
 			hir: hir::Arenas::new(),
-			scope: Arena::new(),
+			defs: Arena::new(),
 			archs: Arena::new(),
+			scope: Arena::new(),
 		}
 	}
 }
@@ -622,16 +1031,116 @@ impl EntityArchTable {
 
 
 /// A set of names and definitions.
-pub type Scope = HashMap<Name, Vec<Spanned<Def>>>;
-pub type Archs = HashMap<EntityRef, (Vec<ArchRef>, HashMap<Name, ArchRef>)>;
+pub type Defs = HashMap<ResolvableName, Vec<Spanned<Def>>>;
+
+
+/// A scope.
+#[derive(Debug)]
+pub struct Scope {
+	/// The parent scope to which name resolution progresses if this scoped does
+	/// not provide the required definition.
+	pub parent: Option<ScopeRef>,
+	/// The definitions visible within this scope. Note that these are
+	/// references to Defs in the scoreboard, not the definitions themselves.
+	pub defs: Vec<ScopeRef>,
+}
+
+
+/// A name that can be resolved in a scope.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ResolvableName {
+	Ident(Name),
+	Bit(char),
+	Operator(Operator),
+}
+
+impl std::fmt::Display for ResolvableName {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match *self {
+			ResolvableName::Ident(n)    => write!(f, "{}", n),
+			ResolvableName::Bit(n)      => write!(f, "{}", n),
+			ResolvableName::Operator(n) => write!(f, "{}", n),
+		}
+	}
+}
+
+impl From<Name> for ResolvableName {
+	fn from(name: Name) -> ResolvableName {
+		ResolvableName::Ident(name)
+	}
+}
+
+
+/// An operator as defined in IEEE 1076-2008 section 9.2.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Operator {
+	Logical(ast::LogicalOp),
+	Rel(ast::RelationalOp),
+	Match(ast::RelationalOp),
+	Shift(ast::ShiftOp),
+	Add,
+	Sub,
+	Concat,
+	Mul,
+	Div,
+	Mod,
+	Rem,
+	Pow,
+	Abs,
+	Not
+}
+
+impl std::fmt::Display for Operator {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match *self {
+			Operator::Logical(ast::LogicalOp::And)  => write!(f, "and"),
+			Operator::Logical(ast::LogicalOp::Or)   => write!(f, "or"),
+			Operator::Logical(ast::LogicalOp::Nand) => write!(f, "nand"),
+			Operator::Logical(ast::LogicalOp::Nor)  => write!(f, "nor"),
+			Operator::Logical(ast::LogicalOp::Xor)  => write!(f, "xor"),
+			Operator::Logical(ast::LogicalOp::Xnor) => write!(f, "xnor"),
+			Operator::Rel(ast::RelationalOp::Eq)    => write!(f, "="),
+			Operator::Rel(ast::RelationalOp::Neq)   => write!(f, "/="),
+			Operator::Rel(ast::RelationalOp::Lt)    => write!(f, "<"),
+			Operator::Rel(ast::RelationalOp::Leq)   => write!(f, "<="),
+			Operator::Rel(ast::RelationalOp::Gt)    => write!(f, ">"),
+			Operator::Rel(ast::RelationalOp::Geq)   => write!(f, ">="),
+			Operator::Match(ast::RelationalOp::Eq)  => write!(f, "?="),
+			Operator::Match(ast::RelationalOp::Neq) => write!(f, "?/="),
+			Operator::Match(ast::RelationalOp::Lt)  => write!(f, "?<"),
+			Operator::Match(ast::RelationalOp::Leq) => write!(f, "?<="),
+			Operator::Match(ast::RelationalOp::Gt)  => write!(f, "?>"),
+			Operator::Match(ast::RelationalOp::Geq) => write!(f, "?>="),
+			Operator::Shift(ast::ShiftOp::Sll)      => write!(f, "sll"),
+			Operator::Shift(ast::ShiftOp::Srl)      => write!(f, "srl"),
+			Operator::Shift(ast::ShiftOp::Sla)      => write!(f, "sla"),
+			Operator::Shift(ast::ShiftOp::Sra)      => write!(f, "sra"),
+			Operator::Shift(ast::ShiftOp::Rol)      => write!(f, "rol"),
+			Operator::Shift(ast::ShiftOp::Ror)      => write!(f, "ror"),
+			Operator::Add                           => write!(f, "+"),
+			Operator::Sub                           => write!(f, "-"),
+			Operator::Concat                        => write!(f, "&"),
+			Operator::Mul                           => write!(f, "*"),
+			Operator::Div                           => write!(f, "/"),
+			Operator::Mod                           => write!(f, "mod"),
+			Operator::Rem                           => write!(f, "rem"),
+			Operator::Pow                           => write!(f, "**"),
+			Operator::Abs                           => write!(f, "abs"),
+			Operator::Not                           => write!(f, "not"),
+		}
+	}
+}
 
 
 // Declare the node references.
 node_ref!(ArchRef);
+node_ref!(BuiltinPkgRef);
 node_ref!(CfgRef);
+node_ref!(CtxItemsRef);
 node_ref!(CtxRef);
 node_ref!(DesignUnitRef);
 node_ref!(EntityRef);
+node_ref!(ExprRef);
 node_ref!(IntfConstRef);
 node_ref!(IntfPkgRef);
 node_ref!(IntfSignalRef);
@@ -641,7 +1150,6 @@ node_ref!(LibRef);
 node_ref!(PkgBodyRef);
 node_ref!(PkgDeclRef);
 node_ref!(PkgInstRef);
-node_ref!(ExprRef);
 node_ref!(SubtypeIndRef);
 
 // Declare the node reference groups.
@@ -653,9 +1161,13 @@ node_ref_group!(Def:
 	Lib(LibRef),
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
+	BuiltinPkg(BuiltinPkgRef),
 );
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
+	CtxItems(CtxItemsRef),
+	Entity(EntityRef),
+	BuiltinPkg(BuiltinPkgRef),
 );
 node_ref_group!(GenericRef:
 	Type(IntfTypeRef),
@@ -667,17 +1179,18 @@ node_ref_group!(GenericRef:
 
 // Declare the node tables.
 node_storage!(AstTable<'ast>,
-	subtys: SubtypeIndRef => (NodeId, &'ast ast::SubtypeInd),
+	subtys: SubtypeIndRef => (ScopeRef, &'ast ast::SubtypeInd),
+	ctx_items: CtxItemsRef => (ScopeRef, &'ast [ast::CtxItem]),
 
 	// The design units are tuples that also carry the list of context items
 	// that were defined before them.
-	entity_decls: EntityRef  => (LibRef, &'ast [ast::CtxItem], &'ast ast::EntityDecl),
-	cfg_decls:    CfgRef     => (LibRef, &'ast [ast::CtxItem], &'ast ast::CfgDecl),
-	pkg_decls:    PkgDeclRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgDecl),
-	pkg_insts:    PkgInstRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgInst),
-	ctx_decls:    CtxRef     => (LibRef, &'ast [ast::CtxItem], &'ast ast::CtxDecl),
-	arch_bodies:  ArchRef    => (LibRef, &'ast [ast::CtxItem], &'ast ast::ArchBody),
-	pkg_bodies:   PkgBodyRef => (LibRef, &'ast [ast::CtxItem], &'ast ast::PkgBody),
+	entity_decls: EntityRef  => (LibRef, CtxItemsRef, &'ast ast::EntityDecl),
+	cfg_decls:    CfgRef     => (LibRef, CtxItemsRef, &'ast ast::CfgDecl),
+	pkg_decls:    PkgDeclRef => (LibRef, CtxItemsRef, &'ast ast::PkgDecl),
+	pkg_insts:    PkgInstRef => (LibRef, CtxItemsRef, &'ast ast::PkgInst),
+	ctx_decls:    CtxRef     => (LibRef, CtxItemsRef, &'ast ast::CtxDecl),
+	arch_bodies:  ArchRef    => (LibRef, CtxItemsRef, &'ast ast::ArchBody),
+	pkg_bodies:   PkgBodyRef => (LibRef, CtxItemsRef, &'ast ast::PkgBody),
 
 	// Interface declarations
 	intf_sigs:       IntfSignalRef      => (NodeId, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
@@ -690,7 +1203,37 @@ node_storage!(AstTable<'ast>,
 );
 
 node_storage!(HirTable<'ctx>,
-	libs:      LibRef        => &'ctx hir::Lib,
-	entities:  EntityRef     => &'ctx hir::Entity,
-	intf_sigs: IntfSignalRef => &'ctx hir::IntfSignal,
+	libs:         LibRef        => &'ctx hir::Lib,
+	entities:     EntityRef     => &'ctx hir::Entity,
+	intf_sigs:    IntfSignalRef => &'ctx hir::IntfSignal,
+	subtype_inds: SubtypeIndRef => &'ctx hir::SubtypeInd,
 );
+
+
+lazy_static! {
+	/// A table of the scopes of all builtin packages.
+	static ref BUILTIN_PKG_SCOPES: HashMap<BuiltinPkgRef, Scope> = {
+		let mut scopes = HashMap::new();
+		scopes.insert(*STANDARD_PKG_REF, Scope{
+			parent: None,
+			defs: vec![(*STANDARD_PKG_REF).into()],
+		});
+		scopes
+	};
+
+	/// A table of the definitions of all builtin packages.
+	static ref BUILTIN_PKG_DEFS: HashMap<BuiltinPkgRef, Defs> = {
+		let nt = get_name_table();
+		let mut table = HashMap::new();
+		table.insert(*STANDARD_PKG_REF, {
+			let mut defs = HashMap::new();
+			// TODO: Insert builtin definitions here.
+			// defs.insert(
+			// 	nt.intern("integer", false).into(),
+			// 	vec![Spanned::new(Def::BuiltinTy(IntTy), INVALID_SPAN)]
+			// );
+			defs
+		});
+		table
+	};
+}
