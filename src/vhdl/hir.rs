@@ -14,6 +14,7 @@ pub struct Arenas {
 	pub entity: Arena<Entity>,
 	pub intf_sig: Arena<IntfSignal>,
 	pub subtype_ind: Arena<SubtypeInd>,
+	pub package: Arena<Package>,
 }
 
 
@@ -25,6 +26,7 @@ impl Arenas {
 			entity: Arena::new(),
 			intf_sig: Arena::new(),
 			subtype_ind: Arena::new(),
+			package: Arena::new(),
 		}
 	}
 }
@@ -101,4 +103,17 @@ pub struct SubtypeInd {
 	/// The location within the source code.
 	pub span: Span,
 	pub type_mark: (),
+}
+
+
+#[derive(Debug)]
+pub struct Package {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The package name.
+	pub name: Spanned<Name>,
+	/// The list of generics.
+	pub generics: Vec<GenericRef>,
+	/// The list of declarations in the package.
+	pub decls: Vec<DeclInPkgRef>,
 }

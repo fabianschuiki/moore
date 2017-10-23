@@ -301,12 +301,12 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'sb, 'a
 				}
 				ast::DesignUnitData::PkgDecl(ref decl) => {
 					let subid = PkgDeclRef(NodeId::alloc());
-					self.set_ast(subid, (id, ctx_id, decl));
+					self.set_ast(subid, (ctx_id.into(), decl));
 					lib.pkg_decls.push(subid);
 				}
 				ast::DesignUnitData::PkgInst(ref decl) => {
 					let subid = PkgInstRef(NodeId::alloc());
-					self.set_ast(subid, (id, ctx_id, decl));
+					self.set_ast(subid, (ctx_id.into(), decl));
 					lib.pkg_insts.push(subid);
 				}
 				ast::DesignUnitData::CtxDecl(ref decl) => {
@@ -618,6 +618,8 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					// scope of their own.
 					let scope = match def.value {
 						Def::Lib(id) => id.into(),
+						Def::Pkg(id) => id.into(),
+						Def::PkgInst(id) => id.into(),
 						Def::BuiltinPkg(id) => id.into(),
 						d => {
 							self.sess.emit(
@@ -648,6 +650,61 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 }
 
 
+// Lower a package declaration to HIR.
+impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx hir::Package> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: PkgDeclRef) -> Result<&'ctx hir::Package> {
+		let (scope_id, ast) = self.ast(id);
+		let generics = Vec::new();
+		// let generic_maps = Vec::new();
+		let mut decls = Vec::new();
+
+		// Filter the declarations in the package to only those that we actually
+		// support, and separate the generic clauses and maps.
+		for decl in &ast.decls {
+			match *decl {
+				ast::DeclItem::PkgDecl(ref decl) => {
+					let subid = PkgDeclRef(NodeId::alloc());
+					self.set_ast(subid, (id.into(), decl));
+					decls.push(subid.into());
+				}
+				ast::DeclItem::PkgInst(ref decl) => {
+					let subid = PkgInstRef(NodeId::alloc());
+					self.set_ast(subid, (id.into(), decl));
+					decls.push(subid.into());
+				}
+				ast::DeclItem::TypeDecl(ref decl) => {
+					let subid = TypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (id.into(), decl));
+					decls.push(subid.into());
+				}
+				ast::DeclItem::SubtypeDecl(ref decl) => {
+					let subid = SubtypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (id.into(), decl));
+					decls.push(subid.into());
+				}
+
+				// Emit an error for any other kinds of declarations.
+				ref wrong => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("A {} cannot appear in a package declaration", wrong.desc()))
+						.span(decl.human_span())
+					);
+					continue;
+				}
+			}
+		}
+
+		let pkg = hir::Package{
+			parent: scope_id,
+			name: ast.name,
+			generics: generics,
+			decls: decls,
+		};
+		Ok(self.sb.arenas.hir.package.alloc(pkg))
+	}
+}
+
+
 // Definitions in a scope.
 impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ScopeRef) -> Result<&'ctx Defs> {
@@ -655,7 +712,9 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'sb, 'ast
 			ScopeRef::Lib(id) => self.make(id),
 			ScopeRef::CtxItems(id) => self.make(id),
 			ScopeRef::Entity(id) => self.make(id),
-			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_DEFS)[&id])
+			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_DEFS)[&id]),
+			ScopeRef::Pkg(id) => self.make(id),
+			ScopeRef::PkgInst(id) => self.make(id),
 		}
 	}
 }
@@ -678,8 +737,8 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 
 		// design unit to be defined.
 		let iter = lib.entities.iter().map(|&n| (self.ast(n).2.name, Def::Entity(n)));
 		let iter = iter.chain(lib.cfgs.iter().map(|&n| (self.ast(n).2.name, Def::Cfg(n))));
-		let iter = iter.chain(lib.pkg_decls.iter().map(|&n| (self.ast(n).2.name, Def::Pkg(n))));
-		let iter = iter.chain(lib.pkg_insts.iter().map(|&n| (self.ast(n).2.name, Def::PkgInst(n))));
+		let iter = iter.chain(lib.pkg_decls.iter().map(|&n| (self.ast(n).1.name, Def::Pkg(n))));
+		let iter = iter.chain(lib.pkg_insts.iter().map(|&n| (self.ast(n).1.name, Def::PkgInst(n))));
 		let iter = iter.chain(lib.ctxs.iter().map(|&n| (self.ast(n).2.name, Def::Ctx(n))));
 
 		// For every element the iterator produces, add it to the map of
@@ -763,6 +822,47 @@ impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Defs> for ScoreContext<'sb, 'as
 	fn make(&self, _: EntityRef) -> Result<&'ctx Defs> {
 		// TODO: Implement this.
 		Ok(self.sb.arenas.defs.alloc(HashMap::new()))
+	}
+}
+
+
+// Definitions in a package declaration.
+impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: PkgDeclRef) -> Result<&'ctx Defs> {
+		let hir = self.hir(id)?;
+		let mut defs = HashMap::new();
+		let mut had_fails = false;
+		for decl in &hir.decls {
+			let (name, def) = match *decl {
+				DeclInPkgRef::Pkg(id) => (self.ast(id).1.name.map_into(), Def::Pkg(id)),
+				DeclInPkgRef::PkgInst(id) => (self.ast(id).1.name.map_into(), Def::PkgInst(id)),
+				DeclInPkgRef::Type(id) => (self.ast(id).1.name.map_into(), Def::Type(id)),
+				DeclInPkgRef::Subtype(id) => (self.ast(id).1.name.map_into(), Def::Subtype(id)),
+			};
+			if let Some(existing) = defs.insert(name.value, vec![Spanned::new(def, name.span)]) {
+				self.sess.emit(
+					DiagBuilder2::error(format!("`{}` has already been declared", name.value))
+					.span(name.span)
+					.add_note("Previous definition was here:")
+					.span(existing.last().unwrap().span)
+				);
+				had_fails = true;
+			}
+		}
+		if had_fails {
+			Err(())
+		} else {
+			Ok(self.sb.arenas.defs.alloc(defs))
+		}
+	}
+}
+
+
+// Definitions in a package instance.
+impl<'sb, 'ast, 'ctx> NodeMaker<PkgInstRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, _: PkgInstRef) -> Result<&'ctx Defs> {
+		// TODO: Implement this.
+		unimplemented!();
 	}
 }
 
@@ -924,7 +1024,9 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for ScoreContext<'sb, 'as
 			ScopeRef::Lib(id) => self.make(id),
 			ScopeRef::CtxItems(id) => self.make(id),
 			ScopeRef::Entity(id) => self.make(id),
-			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id])
+			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
+			ScopeRef::Pkg(id) => self.make(id),
+			ScopeRef::PkgInst(id) => self.make(id),
 		}
 	}
 }
@@ -970,6 +1072,31 @@ impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Scope> for ScoreContext<'sb, 'a
 			parent: Some(hir.parent),
 			defs: defs,
 		}))
+	}
+}
+
+
+// Populate the scope of a package declaration.
+impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: PkgDeclRef) -> Result<&'ctx Scope> {
+		let hir = self.hir(id)?;
+		let mut defs = Vec::new();
+		defs.push(id.into());
+		// TODO: Resolve use clauses and add whatever they bring into scope to
+		// the defs array.
+		Ok(self.sb.arenas.scope.alloc(Scope{
+			parent: Some(hir.parent),
+			defs: defs,
+		}))
+	}
+}
+
+
+// Populate the scope of a package instance.
+impl<'sb, 'ast, 'ctx> NodeMaker<PkgInstRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, _: PkgInstRef) -> Result<&'ctx Scope> {
+		// TODO: Implement this.
+		unimplemented!();
 	}
 }
 
@@ -1151,6 +1278,8 @@ node_ref!(PkgBodyRef);
 node_ref!(PkgDeclRef);
 node_ref!(PkgInstRef);
 node_ref!(SubtypeIndRef);
+node_ref!(TypeDeclRef);
+node_ref!(SubtypeDeclRef);
 
 // Declare the node reference groups.
 node_ref_group!(Def:
@@ -1162,18 +1291,46 @@ node_ref_group!(Def:
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
 	BuiltinPkg(BuiltinPkgRef),
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
 );
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
 	CtxItems(CtxItemsRef),
 	Entity(EntityRef),
 	BuiltinPkg(BuiltinPkgRef),
+	Pkg(PkgDeclRef),
+	PkgInst(PkgInstRef),
 );
 node_ref_group!(GenericRef:
 	Type(IntfTypeRef),
 	Subprog(IntfSubprogRef),
 	Pkg(IntfPkgRef),
 	Const(IntfConstRef),
+);
+
+/// All declarations that may possibly appear in a package. See IEEE 1076-2008
+/// section 4.7.
+node_ref_group!(DeclInPkgRef:
+	Pkg(PkgDeclRef),
+	PkgInst(PkgInstRef),
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
+	// Missing support for the following:
+	// - subprogram_declaration
+	// - subprogram_instantiation_declaration
+	// - constant_declaration
+	// - signal_declaration
+	// - variable_declaration
+	// - file_declaration
+	// - alias_declaration
+	// - component_declaration
+	// - attribute_declaration
+	// - attribute_specification
+	// - disconnection_specification
+	// - use_clause
+	// - group_template_declaration
+	// - group_declaration
 );
 
 
@@ -1186,8 +1343,8 @@ node_storage!(AstTable<'ast>,
 	// that were defined before them.
 	entity_decls: EntityRef  => (LibRef, CtxItemsRef, &'ast ast::EntityDecl),
 	cfg_decls:    CfgRef     => (LibRef, CtxItemsRef, &'ast ast::CfgDecl),
-	pkg_decls:    PkgDeclRef => (LibRef, CtxItemsRef, &'ast ast::PkgDecl),
-	pkg_insts:    PkgInstRef => (LibRef, CtxItemsRef, &'ast ast::PkgInst),
+	pkg_decls:    PkgDeclRef => (ScopeRef, &'ast ast::PkgDecl),
+	pkg_insts:    PkgInstRef => (ScopeRef, &'ast ast::PkgInst),
 	ctx_decls:    CtxRef     => (LibRef, CtxItemsRef, &'ast ast::CtxDecl),
 	arch_bodies:  ArchRef    => (LibRef, CtxItemsRef, &'ast ast::ArchBody),
 	pkg_bodies:   PkgBodyRef => (LibRef, CtxItemsRef, &'ast ast::PkgBody),
@@ -1199,6 +1356,10 @@ node_storage!(AstTable<'ast>,
 	intf_pkgs:       IntfPkgRef         => (NodeId, &'ast ast::PkgInst),
 	intf_consts:     IntfConstRef       => (NodeId, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
 
+	// Declarations
+	type_decls:    TypeDeclRef    => (ScopeRef, &'ast ast::TypeDecl),
+	subtype_decls: SubtypeDeclRef => (ScopeRef, &'ast ast::SubtypeDecl),
+
 	exprs: ExprRef => (NodeId, &'ast ast::Expr),
 );
 
@@ -1207,6 +1368,7 @@ node_storage!(HirTable<'ctx>,
 	entities:     EntityRef     => &'ctx hir::Entity,
 	intf_sigs:    IntfSignalRef => &'ctx hir::IntfSignal,
 	subtype_inds: SubtypeIndRef => &'ctx hir::SubtypeInd,
+	pkgs:         PkgDeclRef    => &'ctx hir::Package,
 );
 
 
