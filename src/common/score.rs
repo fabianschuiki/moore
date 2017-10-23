@@ -48,14 +48,14 @@ pub trait GenericContext {
 ///     bars: HashMap<BarId, &'tn Bar>,
 /// }
 ///
-/// impl<'tn> NodeStorage<'tn, FooId> for Table<'tn> {
-///     type Node = Foo;
+/// impl<'tn> NodeStorage<FooId> for Table<'tn> {
+///     type Node = &'tn Foo;
 ///     fn get(&self, id: &FooId) -> Option<&'tn Foo> { self.foos.get(id).map(|n| *n) }
 ///     fn set(&mut self, id: FooId, node: &'tn Foo) { self.foos.insert(id, node); }
 /// }
 ///
-/// impl<'tn> NodeStorage<'tn, BarId> for Table<'tn> {
-///     type Node = Bar;
+/// impl<'tn> NodeStorage<BarId> for Table<'tn> {
+///     type Node = &'tn Bar;
 ///     fn get(&self, id: &BarId) -> Option<&'tn Bar> { self.bars.get(id).map(|n| *n) }
 ///     fn set(&mut self, id: BarId, node: &'tn Bar) { self.bars.insert(id, node); }
 /// }
@@ -122,13 +122,13 @@ pub trait NodeStorage<I> {
 ///
 /// struct Table;
 ///
-/// impl<'tn> NodeMaker<'tn, FooId, Foo> for Table {
+/// impl<'tn> NodeMaker<FooId, &'tn Foo> for Table {
 ///     fn make(&self, id: FooId) -> score::Result<&'tn Foo> {
 ///         Ok(unsafe { &*(1 as *const Foo) }) // usually you would allocate this in an arena
 ///     }
 /// }
 ///
-/// impl<'tn> NodeMaker<'tn, BarId, Bar> for Table {
+/// impl<'tn> NodeMaker<BarId, &'tn Bar> for Table {
 ///     fn make(&self, id: BarId) -> score::Result<&'tn Bar> {
 ///         Ok(unsafe { &*(1 as *const Bar) }) // usually you would allocate this in an arena
 ///     }
@@ -190,7 +190,7 @@ macro_rules! node_ref {
 
 		impl $name {
 			/// Create a new reference.
-			pub fn new(id: NodeId) -> $name {
+			pub fn new(id: $crate::NodeId) -> $name {
 				$name(id)
 			}
 		}
@@ -274,9 +274,9 @@ macro_rules! node_ref_group {
 /// #[derive(PartialEq, Eq, Debug)]
 /// struct Bar;
 ///
-/// node_storage!(NodeTable,
-///     foos: FooRef => Foo,
-///     bars: BarRef => Bar,
+/// node_storage!(NodeTable<'tn>,
+///     foos: FooRef => &'tn Foo,
+///     bars: BarRef => &'tn Bar,
 /// );
 ///
 /// # fn main() {

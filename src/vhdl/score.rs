@@ -845,8 +845,8 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, '
 
 // Generate the prototype for an architecture.
 impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: ArchRef) -> Result<DeclValueRef> {
-		unimplemented!("llhd decl for {:?}", id);
+	fn make(&self, _: ArchRef) -> Result<DeclValueRef> {
+		unimplemented!();
 	}
 }
 
@@ -1223,10 +1223,10 @@ lazy_static! {
 
 	/// A table of the definitions of all builtin packages.
 	static ref BUILTIN_PKG_DEFS: HashMap<BuiltinPkgRef, Defs> = {
-		let nt = get_name_table();
+		// let nt = get_name_table();
 		let mut table = HashMap::new();
 		table.insert(*STANDARD_PKG_REF, {
-			let mut defs = HashMap::new();
+			let defs = HashMap::new();
 			// TODO: Insert builtin definitions here.
 			// defs.insert(
 			// 	nt.intern("integer", false).into(),

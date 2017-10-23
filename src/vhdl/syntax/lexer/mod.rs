@@ -58,7 +58,7 @@ mod test {
 	use moore_common::name::*;
 	use moore_common::errors::*;
 	use moore_common::grind::{self, Grinder};
-	use syntax::lexer::token::*;
+	use lexer::token::*;
 
 	fn lex(src: Source) -> Vec<Token> {
 		let content = src.get_content();
