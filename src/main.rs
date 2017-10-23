@@ -373,10 +373,18 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
 	let lib = {
 		if let Some(lib) = lib {
 			let rid = ctx.sb.root;
-			match ctx.defs(score::ScopeRef::Root(rid))?.get(&lib) {
+			let defs = ctx.defs(score::ScopeRef::Root(rid))?;
+			match defs.get(&lib) {
 				Some(&score::Def::Lib(d)) => d,
 				_ => {
-					ctx.sess.emit(DiagBuilder2::error(format!("Library `{}` does not exist", lib)));
+					let mut d = DiagBuilder2::error(format!("Library `{}` does not exist", lib))
+						.add_note("The following libraries do exist:");
+					let mut names: Vec<_> = defs.iter().map(|(&k,_)| k).collect();
+					names.sort(); // sorts by name ID, roughly equivalent to order of declaration
+					for name in names {
+						d = d.add_note(format!("- {}", name));
+					}
+					ctx.sess.emit(d);
 					return Err(());
 				},
 			}
@@ -394,11 +402,19 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
 		Vhdl(vhdl::score::EntityRef),
 		Svlog(NodeId), // TODO: handle svlog case
 	};
-	let entity = match ctx.defs(lib.into())?.get(&name) {
+	let defs = ctx.defs(lib.into())?;
+	let entity = match defs.get(&name) {
 		Some(&score::Def::Vhdl(vhdl::score::Def::Entity(e))) => Entity::Vhdl(e),
 		Some(&score::Def::Svlog(e)) => Entity::Svlog(e),
 		_ => {
-			ctx.sess.emit(DiagBuilder2::error(format!("Entity or module `{}` does not exist", name)));
+			let mut d = DiagBuilder2::error(format!("Entity or module `{}` does not exist", name))
+				.add_note("The following items are defined:");
+			let mut names: Vec<_> = defs.iter().map(|(&k,_)| k).collect();
+			names.sort(); // sorts by name ID, roughly equivalent to order of declaration
+			for name in names {
+				d = d.add_note(format!("- {}", name));
+			}
+			ctx.sess.emit(d);
 			return Err(());
 		}
 	};
