@@ -102,7 +102,8 @@ pub enum IntfSignalMode {
 pub struct SubtypeInd {
 	/// The location within the source code.
 	pub span: Span,
-	pub type_mark: (),
+	/// The type mark.
+	pub type_mark: Spanned<TypeMarkRef>,
 }
 
 

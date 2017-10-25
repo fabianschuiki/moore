@@ -65,7 +65,7 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	/// A table of LLHD definitions.
 	lldef_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
 	/// A table of types.
-	ty_table: RefCell<HashMap<NodeId, &'ctx Ty<'ctx>>>,
+	ty_table: RefCell<HashMap<NodeId, &'ctx Ty>>,
 	/// A table of scopes.
 	scope_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
 }
@@ -239,10 +239,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 
-	pub fn ty<I>(&self, id: I) -> Result<&'ctx Ty<'ctx>>
+	pub fn ty<I>(&self, id: I) -> Result<&'ctx Ty>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty<'ctx>>
+		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
 	{
 		if let Some(node) = self.sb.ty_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
@@ -474,14 +474,70 @@ impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx hir::SubtypeInd> for ScoreC
 			);
 		}
 
-		// Separate the type mark from the constraint.
-		// let scope = self.scope(scope_id)?;
-		let out = self.resolve_compound_name(&ast.name, scope_id)?;
-		println!("primary resolved to {:?}", out);
+		// First try to resolve the name. This will yield a list of definitions
+		// and the remaining parts of the name that were not resolved. The
+		// latter will contain optional constraints.
+		let (mut defs, defs_span, tail_parts) = self.resolve_compound_name(&ast.name, scope_id)?;
+
+		// Make sure that the definition is unambiguous and unpack it.
+		let tm = match defs.pop() {
+			Some(Spanned{value: Def::Type(id), ..}) => id.into(),
+			Some(Spanned{value: Def::Subtype(id), ..}) => id.into(),
+			Some(_) => {
+				self.sess.emit(
+					DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
+					.span(ast.span)
+				);
+				return Err(());
+			}
+			None => unreachable!()
+		};
+		if !defs.is_empty() {
+			self.sess.emit(
+				DiagBuilder2::error(format!("`{}` is ambiguous", ast.span.extract()))
+				.span(ast.span)
+			);
+			return Err(());
+		}
+
+		// Parse the constraint.
+		match tail_parts.last() {
+			Some(&ast::NamePart::Range(ref expr)) => {
+				// TODO: Parse range constraint.
+				self.sess.emit(
+					DiagBuilder2::error(format!("Range constraints on subtype indications not yet implemented"))
+					.span(expr.span)
+				);
+				return Err(());
+			}
+			Some(&ast::NamePart::Call(ref elems)) => {
+				// TODO: Parse array or record constraint.
+				self.sess.emit(
+					DiagBuilder2::error(format!("Array and record constraints on subtype indications not yet implemented"))
+					.span(elems.span)
+				);
+				return Err(());
+			}
+			Some(_) => {
+				self.sess.emit(
+					DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
+					.span(ast.span)
+				);
+				return Err(());
+			}
+			None => ()
+		}
+		if tail_parts.len() > 1 {
+			self.sess.emit(
+				DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
+				.span(ast.span)
+			);
+			return Err(());
+		}
 
 		Ok(self.sb.arenas.hir.subtype_ind.alloc(hir::SubtypeInd{
 			span: ast.span,
-			type_mark: (),
+			type_mark: Spanned::new(tm, defs_span),
 		}))
 	}
 }
@@ -584,11 +640,11 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 
-	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef) -> Result<(Vec<Spanned<Def>>, &'a [ast::NamePart])> {
+	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef) -> Result<(Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
 		println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id);
 
 		// First resolve the primary name.
-		let mut last_span = name.primary.span;
+		let mut seen_span = name.primary.span;
 		let mut defs = self.resolve_name(self.resolvable_from_primary_name(&name.primary)?, scope_id)?;
 
 		// Resolve as many name parts as possible.
@@ -600,11 +656,9 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					let def = if defs.len() == 1 {
 						defs[0]
 					} else {
-						let start = name.span.begin().into();
-						let span = Span::union(start, last_span);
-						let span_str = span.extract();
+						let span_str = seen_span.extract();
 						let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", span_str))
-							.span(span)
+							.span(seen_span)
 							.add_note(format!("`{}` refers to the following {} items:", span_str, defs.len()));
 						for def in &defs {
 							d = d.span(def.span);
@@ -632,20 +686,20 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 					// Perform the name resolution in the scope determined
 					// above.
-					last_span = pn.span;
+					seen_span.expand(pn.span);
 					defs = self.resolve_name(self.resolvable_from_primary_name(pn)?, scope)?;
 				}
 
 				// All other name parts we do not resolve and simply pass back
 				// to the caller.
-				_ => return Ok((defs, &name.parts[i..]))
+				_ => return Ok((defs, seen_span, &name.parts[i..]))
 			}
 		}
 
 		// If we arrive here, we were able to resolve the entire name. So we
 		// simply return the definitions found and an empty slice of remaining
 		// parts.
-		Ok((defs, &[]))
+		Ok((defs, seen_span, &[]))
 	}
 }
 
@@ -1007,12 +1061,10 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 
 
 // Determine the type represented by a subtype indication.
-impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx Ty<'ctx>> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx Ty<'ctx>> {
+impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx Ty> {
 		let hir = self.hir(id)?;
-		println!("hir of subtype is {:?}", hir);
-		self.sess.emit(DiagBuilder2::error("Type calculation not implemented").span(hir.span));
-		Err(())
+		Ok(self.sb.arenas.ty.alloc(Ty::Named(hir.type_mark.span, hir.type_mark.value)))
 	}
 }
 
@@ -1107,6 +1159,7 @@ pub struct Arenas {
 	pub defs: Arena<Defs>,
 	pub archs: Arena<ArchTable>,
 	pub scope: Arena<Scope>,
+	pub ty: Arena<Ty>,
 }
 
 
@@ -1118,6 +1171,7 @@ impl Arenas {
 			defs: Arena::new(),
 			archs: Arena::new(),
 			scope: Arena::new(),
+			ty: Arena::new(),
 		}
 	}
 }
@@ -1307,6 +1361,11 @@ node_ref_group!(GenericRef:
 	Subprog(IntfSubprogRef),
 	Pkg(IntfPkgRef),
 	Const(IntfConstRef),
+);
+
+node_ref_group!(TypeMarkRef:
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
 );
 
 /// All declarations that may possibly appear in a package. See IEEE 1076-2008

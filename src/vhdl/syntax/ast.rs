@@ -176,7 +176,7 @@ pub enum NamePart {
 	SelectAll(Span),
 	Signature(Signature),
 	Attribute(Ident),
-	Call(Vec<ParenElem>),
+	Call(ParenElems),
 	Range(Box<Expr>),
 }
 
@@ -246,7 +246,7 @@ pub struct PkgInst {
 	pub span: Span,
 	pub name: Spanned<Name>,
 	pub target: CompoundName,
-	pub generics: Option<Vec<ParenElem>>,
+	pub generics: Option<ParenElems>,
 }
 
 
@@ -359,7 +359,7 @@ pub enum DeclItem {
 	DisconDecl(DisconSpec),
 	CfgSpec(CfgSpec),
 	AttrDecl(AttrDecl),
-	PortgenMap(Span, Spanned<PortgenKind>, Vec<ParenElem>),
+	PortgenMap(Span, Spanned<PortgenKind>, ParenElems),
 	PortgenClause(Span, Spanned<PortgenKind>, Spanned<Vec<IntfDecl>>),
 	GroupDecl(GroupDecl),
 	VunitBindInd(()),
@@ -452,7 +452,7 @@ pub enum SubprogData {
 	Decl,
 	Inst {
 		name: CompoundName,
-		generics: Option<Vec<ParenElem>>,
+		generics: Option<ParenElems>,
 	},
 	Body {
 		decls: Vec<DeclItem>,
@@ -467,7 +467,7 @@ pub struct SubprogSpec {
 	pub kind: SubprogKind,
 	pub purity: Option<SubprogPurity>,
 	pub generic_clause: Option<Vec<IntfDecl>>,
-	pub generic_map: Option<Vec<ParenElem>>,
+	pub generic_map: Option<ParenElems>,
 	pub params: Option<Vec<IntfDecl>>,
 	pub retty: Option<CompoundName>,
 }
@@ -501,7 +501,7 @@ pub struct SubtypeDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ResolInd {
-	Exprs(Vec<ParenElem>),
+	Exprs(ParenElems),
 	Name(CompoundName),
 }
 
@@ -589,8 +589,8 @@ pub enum BlockCompSpec {
 pub struct BindingInd{
 	pub span: Span,
 	pub entity: Option<EntityAspect>,
-	pub generics: Option<Vec<ParenElem>>,
-	pub ports: Option<Vec<ParenElem>>,
+	pub generics: Option<ParenElems>,
+	pub ports: Option<ParenElems>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -683,6 +683,10 @@ pub struct ParenElem {
 	pub expr: Expr,
 }
 
+/// A vector of parenthesized expression elements, including the span of the
+/// expression that this would cover.
+pub type ParenElems = Spanned<Vec<ParenElem>>;
+
 
 /// An expression.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -701,10 +705,10 @@ pub enum ExprData {
 	BoxExpr,
 	NewExpr(Box<Expr>),
 	LitExpr(Literal, Option<CompoundName>),
-	ResolExpr(Vec<ParenElem>, CompoundName),
-	ParenExpr(Vec<ParenElem>),
+	ResolExpr(ParenElems, CompoundName),
+	ParenExpr(ParenElems),
 	DoubleNameExpr(CompoundName, CompoundName),
-	QualExpr(CompoundName, Vec<ParenElem>),
+	QualExpr(CompoundName, ParenElems),
 	NameExpr(CompoundName),
 	UnaryExpr(UnaryOp, Box<Expr>),
 	BinaryExpr(BinaryOp, Box<Expr>, Box<Expr>),
@@ -793,9 +797,9 @@ pub struct TypeDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum TypeData {
-	EnumType(Vec<ParenElem>),
+	EnumType(ParenElems),
 	RangeType(Box<Expr>, Option<Vec<(Ident, Option<Box<Expr>>)>>),
-	ArrayType(Vec<ParenElem>, SubtypeInd),
+	ArrayType(ParenElems, SubtypeInd),
 	RecordType(Vec<(Vec<Ident>, SubtypeInd)>),
 	AccessType(SubtypeInd),
 	FileType(CompoundName),
@@ -889,8 +893,8 @@ pub enum StmtData {
 	InstOrCallStmt {
 		target: Option<InstTarget>,
 		name: CompoundName,
-		generics: Option<Vec<ParenElem>>,
-		ports: Option<Vec<ParenElem>>,
+		generics: Option<ParenElems>,
+		ports: Option<ParenElems>,
 	},
 }
 
@@ -932,7 +936,7 @@ pub enum Sensitivity {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum AssignTarget {
 	Name(CompoundName),
-	Aggregate(Vec<ParenElem>),
+	Aggregate(ParenElems),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]

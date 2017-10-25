@@ -344,7 +344,7 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 	}
 
 	// Try to parse a function call, slice name, or indexed name.
-	if let Some(al) = try_flanked(p, Paren, parse_paren_expr)? {
+	if let Some(al) = try_paren_expr(p)? {
 		name.span.expand(p.last_span());
 		name.parts.push(ast::NamePart::Call(al));
 		return parse_name_suffix(p, name);
@@ -874,7 +874,7 @@ pub fn parse_subtype_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::SubtypeInd
 	// Try to determine if the subtype indication starts out with a resolution
 	// indication. This might either be another name in front of the subtype
 	// name, or a element resolution in parenthesis.
-	let (res, name) = if let Some(exprs) = try_flanked(p, Paren, parse_paren_expr)? {
+	let (res, name) = if let Some(exprs) = try_paren_expr(p)? {
 		let name = parse_name(p)?;
 		(Some(ast::ResolInd::Exprs(exprs)), name)
 	} else {
@@ -907,7 +907,29 @@ pub fn parse_subtype_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::SubtypeInd
 /// ```text
 /// paren_expr := "(" { [ { expr }"|"+ "=>" ] expr }","+ ")"
 /// ```
-pub fn parse_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::ParenElem>> {
+pub fn parse_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::ParenElems> {
+	let mut span = p.peek(0).span;
+	let v = flanked(p, Paren, parse_paren_elem_vec)?;
+	span.expand(p.last_span());
+	Ok(Spanned::new(v, span))
+}
+
+
+pub fn try_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::ParenElems>> {
+	let mut span = p.peek(0).span;
+	match try_flanked(p, Paren, parse_paren_elem_vec)? {
+		Some(v) => {
+			span.expand(p.last_span());
+			Ok(Some(Spanned::new(v, span)))
+		}
+		None => {
+			Ok(None)
+		}
+	}
+}
+
+
+pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::ParenElem>> {
 	separated(p, Comma, CloseDelim(Paren), "expression", |p|{
 		// Parse a list of choices, i.e. expressions separated by `|`.
 		let mut choices = separated_nonempty(p, Pipe, token_predicate!(Arrow, Comma, CloseDelim(Paren)), "expression", parse_expr)?;
@@ -981,7 +1003,7 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 			// }
 
 			// // Try to parse a name prefixed by parenthesis.
-			// else if let Some(paren) = try_flanked(p, Paren, parse_paren_expr)? {
+			// else if let Some(paren) = try_paren_expr(p)? {
 			// 	let name = parse_name(p)?;
 			// 	span.expand(p.last_span());
 			// 	expr_span.expand(p.last_span());
@@ -1014,7 +1036,7 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 		}
 
 		OpenDelim(Paren) => {
-			let expr = flanked(p, Paren, parse_paren_expr)?;
+			let expr = parse_paren_expr(p)?;
 
 			// Try to parse a name, which caters for the case of subtype
 			// indications that are prefixed with element resolution.
@@ -1069,7 +1091,7 @@ pub fn try_name_or_qualified_primary_expr<P: Parser>(p: &mut P) -> ReportedResul
 		// Try to parse a `'`, which would make this a qualified expression.
 		if accept(p, Apostrophe) {
 			if p.peek(0).value == OpenDelim(Paren) {
-				let expr = flanked(p, Paren, parse_paren_expr)?;
+				let expr = parse_paren_expr(p)?;
 				return Ok(Some(ast::Expr{
 					span: span,
 					data: ast::QualExpr(name, expr),
@@ -1379,11 +1401,11 @@ pub fn parse_package_inst<P: Parser>(p: &mut P, with_semicolon: bool) -> Reporte
 /// ```text
 /// map_aspect := ["generic"|"port"] "map" paren_expr
 /// ```
-pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<Vec<ast::ParenElem>>> {
+pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<ast::ParenElems>> {
 	if p.peek(0).value == Keyword(kw) && p.peek(1).value == Keyword(Kw::Map) {
 		p.bump();
 		p.bump();
-		let v = flanked(p, Paren, parse_paren_expr)?;
+		let v = parse_paren_expr(p)?;
 		Ok(Some(v))
 	} else {
 		Ok(None)
@@ -1417,7 +1439,7 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 		let Spanned{ value: tkn, span: sp } = p.peek(0);
 		Some(match tkn {
 			// Enumeration type definition
-			OpenDelim(Paren) => ast::EnumType(flanked(p, Paren, parse_paren_expr)?),
+			OpenDelim(Paren) => ast::EnumType(parse_paren_expr(p)?),
 
 			// Integer, float, physical type definition
 			Keyword(Kw::Range) => {
@@ -1447,7 +1469,7 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 			// Array type definition
 			Keyword(Kw::Array) => {
 				p.bump();
-				let indices = flanked(p, Paren, parse_paren_expr)?;
+				let indices = parse_paren_expr(p)?;
 				require(p, Keyword(Kw::Of))?;
 				let subtype = parse_subtype_ind(p)?;
 				ast::ArrayType(indices, subtype)
@@ -2336,7 +2358,7 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
 					Leq | VarAssign => parse_assign_tail(p, ast::AssignTarget::Name(name))?,
 					_ => parse_inst_or_call_tail(p, None, name)?,
 				}
-			} else if let Some(expr) = try_flanked(p, Paren, parse_paren_expr)? {
+			} else if let Some(expr) = try_paren_expr(p)? {
 				// Try to parse a statement that begins with a parenthesized
 				// expression, aka an assignment.
 				parse_assign_tail(p, ast::AssignTarget::Aggregate(expr))?
@@ -2991,7 +3013,7 @@ pub fn parse_select_assign<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData
 	// aggregate.
 	let target = if let Some(name) = try_name(p)? {
 		ast::AssignTarget::Name(name)
-	} else if let Some(exprs) = try_flanked(p, Paren, parse_paren_expr)? {
+	} else if let Some(exprs) = try_paren_expr(p)? {
 		ast::AssignTarget::Aggregate(exprs)
 	} else {
 		let pk = p.peek(0);
