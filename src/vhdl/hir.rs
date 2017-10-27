@@ -6,6 +6,9 @@ use moore_common::source::*;
 use moore_common::name::*;
 use score::*;
 use typed_arena::Arena;
+use syntax::ast;
+use konst::*;
+pub use syntax::ast::Dir;
 
 
 /// A collection of arenas where HIR nodes may be allocated.
@@ -15,6 +18,8 @@ pub struct Arenas {
 	pub intf_sig: Arena<IntfSignal>,
 	pub subtype_ind: Arena<SubtypeInd>,
 	pub package: Arena<Package>,
+	pub type_decl: Arena<TypeDecl>,
+	pub expr: Arena<Expr>,
 }
 
 
@@ -27,6 +32,8 @@ impl Arenas {
 			intf_sig: Arena::new(),
 			subtype_ind: Arena::new(),
 			package: Arena::new(),
+			type_decl: Arena::new(),
+			expr: Arena::new(),
 		}
 	}
 }
@@ -117,4 +124,56 @@ pub struct Package {
 	pub generics: Vec<GenericRef>,
 	/// The list of declarations in the package.
 	pub decls: Vec<DeclInPkgRef>,
+}
+
+
+#[derive(Debug)]
+pub struct TypeDecl {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The type name.
+	pub name: Spanned<Name>,
+	/// The type data.
+	pub data: Option<TypeData>,
+}
+
+
+#[derive(Debug)]
+pub enum TypeData {
+	/// An integer, float, or physical type with optional units.
+	Range(Span, Dir, ExprRef, ExprRef),
+}
+
+
+#[derive(Debug)]
+pub struct Expr {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The range in the source file that this expression covers.
+	pub span: Span,
+	/// The expression data.
+	pub data: ExprData,
+}
+
+
+#[derive(Debug)]
+pub enum ExprData {
+	/// An integer literal.
+	IntegerLiteral(ConstInt),
+	/// A float literal.
+	FloatLiteral(ConstFloat),
+	/// A unary operator expression.
+	Unary(UnaryOp, ExprRef),
+	/// A binary operator expression.
+	Binary(Operator, ExprRef, ExprRef),
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum UnaryOp {
+	Not,
+	Abs,
+	Pos,
+	Neg,
+	Logical(ast::LogicalOp),
 }

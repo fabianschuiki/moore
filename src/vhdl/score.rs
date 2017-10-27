@@ -21,6 +21,8 @@ use hir;
 use typed_arena::Arena;
 use llhd;
 use ty::*;
+use konst::*;
+use num::{BigInt, Signed};
 
 
 /// The VHDL context which holds information about the language scoreboard and
@@ -68,6 +70,8 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	ty_table: RefCell<HashMap<NodeId, &'ctx Ty>>,
 	/// A table of scopes.
 	scope_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
+	/// A table of nodes' constant values.
+	const_table: RefCell<HashMap<NodeId, &'ctx Const>>,
 }
 
 
@@ -117,6 +121,7 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 			lldef_table: RefCell::new(HashMap::new()),
 			ty_table: RefCell::new(HashMap::new()),
 			scope_table: RefCell::new(HashMap::new()),
+			const_table: RefCell::new(HashMap::new()),
 		}
 	}
 }
@@ -265,6 +270,24 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] scope for {:?} is {:?}", id, node); }
 		if self.sb.scope_table.borrow_mut().insert(id, node).is_some() {
+			panic!("node should not exist");
+		}
+		Ok(node)
+	}
+
+
+	pub fn const_value<I>(&self, id: I) -> Result<&'ctx Const>
+	where
+		I: 'ctx + Copy + Debug + Into<NodeId>,
+		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Const>
+	{
+		if let Some(node) = self.sb.const_table.borrow().get(&id.into()).cloned() {
+			return Ok(node);
+		}
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make const for {:?}", id); }
+		let node = self.make(id)?;
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] const for {:?} is {:?}", id, node); }
+		if self.sb.const_table.borrow_mut().insert(id.into(), node).is_some() {
 			panic!("node should not exist");
 		}
 		Ok(node)
@@ -434,11 +457,11 @@ impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for ScoreContext<'
 // Lower an interface signal to HIR.
 impl<'sb, 'ast, 'ctx> NodeMaker<IntfSignalRef, &'ctx hir::IntfSignal> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: IntfSignalRef) -> Result<&'ctx hir::IntfSignal> {
-		let (_, decl, subty_id, ident) = self.ast(id);
+		let (scope_id, decl, subty_id, ident) = self.ast(id);
 		let init = match decl.default {
 			Some(ref e) => {
 				let subid = ExprRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), e));
+				self.set_ast(subid, (scope_id, e));
 				Some(subid)
 			}
 			None => None
@@ -613,7 +636,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Resolve a name within a scope. Traverses to the parent scopes if nothing
 	/// matching the name is found.
 	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef) -> Result<Vec<Spanned<Def>>> {
-		println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id);
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
 		let scope = self.scope(scope_id)?;
 		let mut found_defs = Vec::new();
 		for &defs_id in &scope.defs {
@@ -634,14 +657,14 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				Err(())
 			}
 		} else {
-			println!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs);
+			if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs); }
 			Ok(found_defs)
 		}
 	}
 
 
 	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef) -> Result<(Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
-		println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id);
+		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id); }
 
 		// First resolve the primary name.
 		let mut seen_span = name.primary.span;
@@ -755,6 +778,144 @@ impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx hir::Package> for ScoreContext
 			decls: decls,
 		};
 		Ok(self.sb.arenas.hir.package.alloc(pkg))
+	}
+}
+
+
+// Lower a type declaration to HIR.
+impl<'sb, 'ast, 'ctx> NodeMaker<TypeDeclRef, &'ctx hir::TypeDecl> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: TypeDeclRef) -> Result<&'ctx hir::TypeDecl> {
+		let (scope_id, ast) = self.ast(id);
+		let data = match ast.data {
+			// Integer, real, and physical types.
+			Some(ast::RangeType(ref range_expr, ref _units)) => {
+				let (dir, lb, rb) = match range_expr.data {
+					ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
+						let lb = ExprRef(NodeId::alloc());
+						let rb = ExprRef(NodeId::alloc());
+						self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
+						self.set_ast(rb, (scope_id.into(), rb_expr.as_ref()));
+						(dir, lb, rb)
+					}
+					_ => {
+						self.sess.emit(
+							DiagBuilder2::error("Invalid range expression")
+							.span(range_expr.span)
+						);
+						return Err(());
+					}
+				};
+				// TODO: Handle units
+				Some(hir::TypeData::Range(range_expr.span, dir, lb, rb))
+			}
+			Some(_) => unimplemented!(),
+			None => None
+		};
+		let decl = hir::TypeDecl{
+			parent: scope_id,
+			name: ast.name,
+			data: data,
+		};
+		Ok(self.sb.arenas.hir.type_decl.alloc(decl))
+	}
+}
+
+
+// Lower an expression to HIR.
+impl<'sb, 'ast, 'ctx> NodeMaker<ExprRef, &'ctx hir::Expr> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: ExprRef) -> Result<&'ctx hir::Expr> {
+		let (scope_id, ast) = self.ast(id);
+		let data = match ast.data {
+			/// Literals
+			ast::LitExpr(ref lit, ref _unit) => {
+				use syntax::lexer::token::Literal;
+				match *lit {
+					Literal::Abstract(base, int, frac, exp) => {
+						// Parse the base.
+						let base = match base {
+							Some(base) => match base.as_str().parse() {
+								Ok(base) => base,
+								Err(_) => {
+									self.sess.emit(
+										DiagBuilder2::error(format!("`{}` is not a valid base for a number literal", base))
+										.span(ast.span)
+									);
+									return Err(());
+								}
+							},
+							None => 10,
+						};
+
+						// Parse the rest of the number.
+						if frac.is_none() && exp.is_none() {
+							match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
+								Some(v) => hir::ExprData::IntegerLiteral(ConstInt::new(v)),
+								None => {
+									self.sess.emit(
+										DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base))
+										.span(ast.span)
+									);
+									return Err(());
+								}
+							}
+						} else {
+							self.sess.emit(
+								DiagBuilder2::error("Float literals not yet supported")
+								.span(ast.span)
+							);
+							return Err(());
+						}
+					}
+					_ => {
+						self.sess.emit(
+							DiagBuilder2::error("Literal not yet supported")
+							.span(ast.span)
+						);
+						return Err(());
+					}
+				}
+			}
+
+			// Unary operators.
+			ast::UnaryExpr(op, ref arg) => {
+				let op = match op {
+					ast::UnaryOp::Not => hir::UnaryOp::Not,
+					ast::UnaryOp::Abs => hir::UnaryOp::Abs,
+					ast::UnaryOp::Sign(ast::Sign::Pos) => hir::UnaryOp::Pos,
+					ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
+					ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
+					_ => {
+						self.sess.emit(
+							DiagBuilder2::error("Invalid unary operator")
+							.span(ast.span)
+						);
+						return Err(());
+					}
+				};
+				let subid = ExprRef(NodeId::alloc());
+				self.set_ast(subid, (scope_id, arg.as_ref()));
+				hir::ExprData::Unary(op, subid)
+			}
+
+			// Binary operators.
+			// ast::BinaryExpr(op, ref lhs, ref rhs) => {
+
+			// }
+
+			// All other expressions we simply do not support.
+			_ => {
+				self.sess.emit(
+					DiagBuilder2::error("Invalid expression")
+					.span(ast.span)
+				);
+				return Err(());
+			}
+		};
+		Ok(self.sb.arenas.hir.expr.alloc(hir::Expr{
+			parent: scope_id,
+			span: ast.span,
+			data: data,
+		}))
 	}
 }
 
@@ -1020,8 +1181,8 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 		let mut out_names = Vec::new();
 		for &port in &entity.ports {
 			let hir = self.hir(port)?;
-			self.ty(hir.ty)?; // for now just ask for the type directly
-			let ty = llhd::void_ty();
+			let ty = self.map_type(self.ty(hir.ty)?)?;
+			// let ty = llhd::void_ty();
 			match hir.mode {
 				hir::IntfSignalMode::In | hir::IntfSignalMode::Inout | hir::IntfSignalMode::Linkage => {
 					in_tys.push(ty.clone());
@@ -1060,11 +1221,110 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 }
 
 
-// Determine the type represented by a subtype indication.
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Map a VHDL type to the corresponding LLHD type.
+	pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
+		let ty = self.deref_named_type(ty)?;
+		Ok(match *ty {
+			Ty::Named(..) => unreachable!(),
+			Ty::Int(ref ty) => {
+				let diff = match ty.dir {
+					hir::Dir::To => &ty.right_bound - &ty.left_bound,
+					hir::Dir::Downto => &ty.left_bound - &ty.right_bound,
+				};
+				if diff.is_negative() {
+					llhd::void_ty()
+				} else {
+					llhd::int_ty(diff.bits())
+				}
+			}
+		})
+	}
+
+
+	/// Replace `Ty::Named` by the actual type definition recursively.
+	#[allow(unreachable_patterns)]
+	pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty> where 'ctx: 'a {
+		match ty {
+			&Ty::Named(_, tmr) => {
+				let inner = self.ty(tmr)?;
+				self.deref_named_type(inner)
+			}
+			other => Ok(other)
+		}
+	}
+}
+
+
+// Determine the type of a type mark.
+impl<'sb, 'ast, 'ctx> NodeMaker<TypeMarkRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: TypeMarkRef) -> Result<&'ctx Ty> {
+		match id {
+			TypeMarkRef::Type(id) => self.make(id),
+			TypeMarkRef::Subtype(id) => self.make(id),
+		}
+	}
+}
+
+
+// Determine the type of a subtype indication.
 impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx Ty> {
 		let hir = self.hir(id)?;
 		Ok(self.sb.arenas.ty.alloc(Ty::Named(hir.type_mark.span, hir.type_mark.value)))
+	}
+}
+
+
+// Determine the type of a type declaration.
+impl<'sb, 'ast, 'ctx> NodeMaker<TypeDeclRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: TypeDeclRef) -> Result<&'ctx Ty> {
+		let hir = self.hir(id)?;
+		let data = match hir.data {
+			Some(ref d) => d,
+			None => {
+				self.sess.emit(
+					DiagBuilder2::error(format!("Declaration of type `{}` is incomplete", hir.name.value))
+					.span(hir.name.span)
+				);
+				return Err(());
+			}
+		};
+		match *data {
+			hir::TypeData::Range(span, dir, lb_id, rb_id) => {
+				let lb = self.const_value(lb_id)?;
+				let rb = self.const_value(rb_id)?;
+				Ok(match (lb, rb) {
+					(&Const::Int(ref lb), &Const::Int(ref rb)) => {
+						self.sb.arenas.ty.alloc(IntTy::new(dir, lb.value.clone(), rb.value.clone()).into())
+					}
+
+					(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
+						self.sess.emit(
+							DiagBuilder2::error("Float range bounds not yet supported")
+							.span(span)
+						);
+						return Err(());
+					}
+
+					_ => {
+						self.sess.emit(
+							DiagBuilder2::error("Bounds of range are not of the same type")
+							.span(span)
+						);
+						return Err(());
+					}
+				})
+			}
+		}
+	}
+}
+
+
+// Determine the type of a subtype declaration.
+impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeDeclRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, _: SubtypeDeclRef) -> Result<&'ctx Ty> {
+		unimplemented!()
 	}
 }
 
@@ -1153,6 +1413,42 @@ impl<'sb, 'ast, 'ctx> NodeMaker<PkgInstRef, &'ctx Scope> for ScoreContext<'sb, '
 }
 
 
+// Calculate the constant value of an expression.
+impl<'sb, 'ast, 'ctx> NodeMaker<ExprRef, &'ctx Const> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: ExprRef) -> Result<&'ctx Const> {
+		let hir = self.hir(id)?;
+		Ok(match hir.data {
+			// Integer literals.
+			hir::ExprData::IntegerLiteral(ref c) => self.sb.arenas.konst.alloc(Const::from(c.clone())),
+
+			// Float literals.
+			hir::ExprData::FloatLiteral(ref c) => self.sb.arenas.konst.alloc(Const::from(c.clone())),
+
+			// Unary operators.
+			hir::ExprData::Unary(op, arg_id) => {
+				let arg = self.const_value(arg_id)?;
+				// TODO: Lookup the type of the current expression and perform
+				// the operation accordingly.
+				match op {
+					hir::UnaryOp::Pos => arg,
+					hir::UnaryOp::Neg => self.sb.arenas.konst.alloc(arg.negate()),
+					_ => unimplemented!()
+				}
+			}
+
+			// All other expressions cannot be turned into a constant value.
+			_ => {
+				self.sess.emit(
+					DiagBuilder2::error("Expression does not have a constant value")
+					.span(hir.span)
+				);
+				return Err(());
+			}
+		})
+	}
+}
+
+
 /// A collection of arenas that the scoreboard uses to allocate its nodes.
 pub struct Arenas {
 	pub hir: hir::Arenas,
@@ -1160,6 +1456,7 @@ pub struct Arenas {
 	pub archs: Arena<ArchTable>,
 	pub scope: Arena<Scope>,
 	pub ty: Arena<Ty>,
+	pub konst: Arena<Const>,
 }
 
 
@@ -1172,6 +1469,7 @@ impl Arenas {
 			archs: Arena::new(),
 			scope: Arena::new(),
 			ty: Arena::new(),
+			konst: Arena::new(),
 		}
 	}
 }
@@ -1409,17 +1707,17 @@ node_storage!(AstTable<'ast>,
 	pkg_bodies:   PkgBodyRef => (LibRef, CtxItemsRef, &'ast ast::PkgBody),
 
 	// Interface declarations
-	intf_sigs:       IntfSignalRef      => (NodeId, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
-	intf_types:      IntfTypeRef        => (NodeId, &'ast ast::TypeDecl),
-	intf_subprogs:   IntfSubprogRef     => (NodeId, &'ast ast::IntfSubprogDecl),
-	intf_pkgs:       IntfPkgRef         => (NodeId, &'ast ast::PkgInst),
-	intf_consts:     IntfConstRef       => (NodeId, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
+	intf_sigs:       IntfSignalRef      => (ScopeRef, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
+	intf_types:      IntfTypeRef        => (ScopeRef, &'ast ast::TypeDecl),
+	intf_subprogs:   IntfSubprogRef     => (ScopeRef, &'ast ast::IntfSubprogDecl),
+	intf_pkgs:       IntfPkgRef         => (ScopeRef, &'ast ast::PkgInst),
+	intf_consts:     IntfConstRef       => (ScopeRef, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
 
 	// Declarations
 	type_decls:    TypeDeclRef    => (ScopeRef, &'ast ast::TypeDecl),
 	subtype_decls: SubtypeDeclRef => (ScopeRef, &'ast ast::SubtypeDecl),
 
-	exprs: ExprRef => (NodeId, &'ast ast::Expr),
+	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
 );
 
 node_storage!(HirTable<'ctx>,
@@ -1428,6 +1726,8 @@ node_storage!(HirTable<'ctx>,
 	intf_sigs:    IntfSignalRef => &'ctx hir::IntfSignal,
 	subtype_inds: SubtypeIndRef => &'ctx hir::SubtypeInd,
 	pkgs:         PkgDeclRef    => &'ctx hir::Package,
+	type_decls:   TypeDeclRef   => &'ctx hir::TypeDecl,
+	exprs:        ExprRef       => &'ctx hir::Expr,
 );
 
 

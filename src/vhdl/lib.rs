@@ -16,3 +16,4 @@ pub mod symtbl;
 pub mod score;
 pub mod hir;
 pub mod ty;
+pub mod konst;
