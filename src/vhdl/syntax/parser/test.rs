@@ -229,10 +229,10 @@ fn subtype_ind() {
 
 #[test]
 fn elem_resolution() {
-	parse!("(func)", |p| flanked(p, token::Paren, parse_paren_expr));
-	parse!("((elemfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
-	parse!("((elemfunc) stuff (1 to 4))", |p| flanked(p, token::Paren, parse_paren_expr));
-	parse!("(a func, b func, c (elemfunc), d (x elemfunc, y elemenfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
+	parse!("(func)", parse_paren_expr);
+	parse!("((elemfunc))", parse_paren_expr);
+	parse!("((elemfunc) stuff (1 to 4))", parse_paren_expr);
+	parse!("(a func, b func, c (elemfunc), d (x elemfunc, y elemenfunc))", parse_paren_expr);
 }
 
 #[test]
