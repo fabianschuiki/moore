@@ -15,6 +15,7 @@ pub use syntax::ast::Dir;
 pub struct Arenas {
 	pub lib: Arena<Lib>,
 	pub entity: Arena<Entity>,
+	pub arch: Arena<Arch>,
 	pub intf_sig: Arena<IntfSignal>,
 	pub subtype_ind: Arena<SubtypeInd>,
 	pub package: Arena<Package>,
@@ -29,6 +30,7 @@ impl Arenas {
 		Arenas {
 			lib: Arena::new(),
 			entity: Arena::new(),
+			arch: Arena::new(),
 			intf_sig: Arena::new(),
 			subtype_ind: Arena::new(),
 			package: Arena::new(),
@@ -77,6 +79,21 @@ pub struct Entity {
 	pub generics: Vec<GenericRef>,
 	/// The list of ports that the entity declares.
 	pub ports: Vec<IntfSignalRef>,
+}
+
+
+#[derive(Debug)]
+pub struct Arch {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	// /// The entity of the architecture.
+	// pub entity: EntityRef,
+	/// The architecture name.
+	pub name: Spanned<Name>,
+	/// The list of declarations in the architecture.
+	pub decls: Vec<DeclInBlockRef>,
+	/// The list of statements in the architecture.
+	pub stmts: Vec<ConcStmtRef>,
 }
 
 
@@ -176,4 +193,70 @@ pub enum UnaryOp {
 	Pos,
 	Neg,
 	Logical(ast::LogicalOp),
+}
+
+
+#[derive(Debug)]
+pub struct ConstDecl {
+	/// The scope within which the constant is declared.
+	pub parent: ScopeRef,
+	/// The name of the constant.
+	pub name: Spanned<Name>,
+	/// The subtype of the constant.
+	pub subty: SubtypeIndRef,
+	/// The optional initial value for the constant.
+	pub init: Option<ExprRef>,
+}
+
+
+#[derive(Debug)]
+pub struct SignalDecl {
+	/// The scope within which the signal is declared.
+	pub parent: ScopeRef,
+	/// The name of the signal.
+	pub name: Spanned<Name>,
+	/// The subtype of the signal.
+	pub subty: SubtypeIndRef,
+	/// The signal kind.
+	pub kind: SignalKind,
+	/// The optional initial value for the signals.
+	pub init: Option<ExprRef>,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalKind {
+	Normal,
+	Register,
+	Bus,
+}
+
+
+#[derive(Debug)]
+pub struct VariableDecl {
+	/// The scope within which the variable is declared.
+	pub parent: ScopeRef,
+	/// Whether the variable was declared as shared or not.
+	pub shared: bool,
+	/// The name of the variable.
+	pub name: Spanned<Name>,
+	/// The subtype of the variable.
+	pub subty: SubtypeIndRef,
+	/// The optional initial value for the variable.
+	pub init: Option<ExprRef>,
+}
+
+
+#[derive(Debug)]
+pub struct FileDecl {
+	/// The scope within which the file is declared.
+	pub parent: ScopeRef,
+	/// The name of the file.
+	pub name: Spanned<Name>,
+	/// The subtype of the file.
+	pub subty: SubtypeIndRef,
+	/// Additional file opening information. The first expression evaluates to a
+	/// string containing the file name. The second expression evaluates to a
+	/// file open kind.
+	pub open: Option<(ExprRef, Option<ExprRef>)>,
 }

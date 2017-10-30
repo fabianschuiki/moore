@@ -339,7 +339,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'sb, 'a
 				}
 				ast::DesignUnitData::ArchBody(ref decl) => {
 					let subid = ArchRef(NodeId::alloc());
-					self.set_ast(subid, (id, ctx_id, decl));
+					self.set_ast(subid, (id, ctx_id.into(), decl));
 					lib.archs.push(subid);
 				}
 				ast::DesignUnitData::PkgBody(ref decl) => {
@@ -734,6 +734,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx hir::Package> for ScoreContext
 		let generics = Vec::new();
 		// let generic_maps = Vec::new();
 		let mut decls = Vec::new();
+		let mut had_fails = false;
 
 		// Filter the declarations in the package to only those that we actually
 		// support, and separate the generic clauses and maps.
@@ -766,18 +767,150 @@ impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx hir::Package> for ScoreContext
 						DiagBuilder2::error(format!("A {} cannot appear in a package declaration", wrong.desc()))
 						.span(decl.human_span())
 					);
+					had_fails = true;
 					continue;
 				}
 			}
 		}
 
-		let pkg = hir::Package{
+		if had_fails {
+			Err(())
+		} else {
+			Ok(self.sb.arenas.hir.package.alloc(hir::Package{
+				parent: scope_id,
+				name: ast.name,
+				generics: generics,
+				decls: decls,
+			}))
+		}
+	}
+}
+
+
+// Lower an architecture to HIR.
+impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, &'ctx hir::Arch> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: ArchRef) -> Result<&'ctx hir::Arch> {
+		let (_, scope_id, ast) = self.ast(id);
+		let decls = self.unpack_block_decls(id.into(), &ast.decls, "an architecture")?;
+		let stmts = self.unpack_concurrent_stmts(id.into(), &ast.stmts, "an architecture")?;
+		Ok(self.sb.arenas.hir.arch.alloc(hir::Arch{
 			parent: scope_id,
+			// entity: entity,
 			name: ast.name,
-			generics: generics,
 			decls: decls,
-		};
-		Ok(self.sb.arenas.hir.package.alloc(pkg))
+			stmts: stmts,
+		}))
+	}
+}
+
+
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Unpack a slice of AST declarative items into a list of items admissible
+	/// in the declarative part of a block. See IEEE 1076-2008 section 3.3.2.
+	fn unpack_block_decls(&self, scope_id: ScopeRef, decls: &'ast [ast::DeclItem], container_name: &str) -> Result<Vec<DeclInBlockRef>> {
+		let mut refs = Vec::new();
+		let mut had_fails = false;
+
+		for decl in decls {
+			match *decl {
+				ast::DeclItem::PkgDecl(ref decl) => {
+					let subid = PkgDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgInst(ref decl) => {
+					let subid = PkgInstRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::TypeDecl(ref decl) => {
+					let subid = TypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::SubtypeDecl(ref decl) => {
+					let subid = SubtypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::ObjDecl(ref decl) => {
+					match decl.kind {
+						ast::ObjKind::Const => {
+							let subid = ConstDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::Signal => {
+							let subid = SignalDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::Var => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("Not a shared variable; only shared variables may appear in {}", container_name))
+								.span(decl.human_span())
+							);
+							had_fails = true;
+						}
+						ast::ObjKind::SharedVar => {
+							let subid = SharedVariableDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::File => {
+							let subid = FileDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+
+				// Emit an error for any other kinds of declarations.
+				ref wrong => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("A {} cannot appear in {}", wrong.desc(), container_name))
+						.span(decl.human_span())
+					);
+					had_fails = true;
+				}
+			}
+		}
+
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
+	}
+
+
+	/// Unpack a slice of AST concurrent statements. See IEEE 1076-2008 section
+	/// 11.1.
+	fn unpack_concurrent_stmts(&self, _scope_id: ScopeRef, stmts: &'ast [ast::Stmt], container_name: &str) -> Result<Vec<ConcStmtRef>> {
+		let refs = Vec::new();
+		let mut had_fails = false;
+
+		for stmt in stmts {
+			match stmt.data {
+
+				// Emit an error for any other kinds of declarations.
+				_ => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("A {} cannot appear in {}", stmt.desc(), container_name))
+						.span(stmt.human_span())
+						.add_note(format!("Only concurrent statements are allowed in {}. See IEEE 1076-2008 section 11.1.", container_name))
+					);
+					had_fails = true;
+					continue;
+				}
+			}
+		}
+
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
 	}
 }
 
@@ -930,6 +1063,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'sb, 'ast
 			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_DEFS)[&id]),
 			ScopeRef::Pkg(id) => self.make(id),
 			ScopeRef::PkgInst(id) => self.make(id),
+			ScopeRef::Arch(id) => self.make(id),
 		}
 	}
 }
@@ -1035,6 +1169,15 @@ impl<'sb, 'ast, 'ctx> NodeMaker<CtxItemsRef, &'ctx Defs> for ScoreContext<'sb, '
 // Definitions in an entity.
 impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, _: EntityRef) -> Result<&'ctx Defs> {
+		// TODO: Implement this.
+		Ok(self.sb.arenas.defs.alloc(HashMap::new()))
+	}
+}
+
+
+// Definitions in an architecture.
+impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, _: ArchRef) -> Result<&'ctx Defs> {
 		// TODO: Implement this.
 		Ok(self.sb.arenas.defs.alloc(HashMap::new()))
 	}
@@ -1169,8 +1312,9 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'as
 // Generate the definition for an architecture.
 impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
-		let arch = self.ast(id);
-		let entity_id = *self.archs(arch.0)?.by_arch.get(&id).unwrap();
+		let ast = self.ast(id);
+		let hir = self.hir(id)?;
+		let entity_id = *self.archs(ast.0)?.by_arch.get(&id).unwrap();
 		let entity = self.hir(entity_id)?;
 
 		// Assemble the types and names for the entity.
@@ -1198,12 +1342,10 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 				_ => ()
 			}
 		}
-
-		// TODO: Actually get the lltype of the entity for this.
 		let ty = llhd::entity_ty(in_tys, out_tys);
 
 		// Create a new entity into which we will generate all the code.
-		let name = format!("{}_{}", entity.name.value, arch.2.name.value);
+		let name = format!("{}_{}", entity.name.value, hir.name.value);
 		let mut entity = llhd::Entity::new(name, ty);
 
 		// Assign names to the arguments. This is merely cosmetic, but makes the
@@ -1213,6 +1355,11 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 		}
 		for (arg, &name) in entity.outputs_mut().iter_mut().zip(out_names.iter()) {
 			arg.set_name(name.as_str().to_owned());
+		}
+
+		// Generate the code for the declarations in the architecture.
+		for &decl_id in &hir.decls {
+
 		}
 
 		// Add the entity to the module and return a reference to it.
@@ -1339,6 +1486,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for ScoreContext<'sb, 'as
 			ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
 			ScopeRef::Pkg(id) => self.make(id),
 			ScopeRef::PkgInst(id) => self.make(id),
+			ScopeRef::Arch(id) => self.make(id),
 		}
 	}
 }
@@ -1375,6 +1523,22 @@ impl<'sb, 'ast, 'ctx> NodeMaker<CtxItemsRef, &'ctx Scope> for ScoreContext<'sb, 
 // Populate the scope of an entity.
 impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: EntityRef) -> Result<&'ctx Scope> {
+		let hir = self.hir(id)?;
+		let mut defs = Vec::new();
+		defs.push(id.into());
+		// TODO: Resolve use clauses and add whatever they bring into scope to
+		// the defs array.
+		Ok(self.sb.arenas.scope.alloc(Scope{
+			parent: Some(hir.parent),
+			defs: defs,
+		}))
+	}
+}
+
+
+// Populate the scope of an architecture.
+impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
+	fn make(&self, id: ArchRef) -> Result<&'ctx Scope> {
 		let hir = self.hir(id)?;
 		let mut defs = Vec::new();
 		defs.push(id.into());
@@ -1632,6 +1796,33 @@ node_ref!(PkgInstRef);
 node_ref!(SubtypeIndRef);
 node_ref!(TypeDeclRef);
 node_ref!(SubtypeDeclRef);
+node_ref!(WaitStmtRef);
+node_ref!(AssertStmtRef);
+node_ref!(ReportStmtRef);
+node_ref!(SigAssignStmtRef);
+node_ref!(VarAssignStmtRef);
+node_ref!(ProcCallStmtRef);
+node_ref!(IfStmtRef);
+node_ref!(CaseStmtRef);
+node_ref!(LoopStmtRef);
+node_ref!(NextStmtRef);
+node_ref!(ExitStmtRef);
+node_ref!(ReturnStmtRef);
+node_ref!(NullStmtRef);
+node_ref!(BlockStmtRef);
+node_ref!(ProcessStmtRef);
+node_ref!(ConcProcCallStmtRef);
+node_ref!(ConcAssertStmtRef);
+node_ref!(ConcSigAssignStmtRef);
+node_ref!(CompInstStmtRef);
+node_ref!(ForGenStmtRef);
+node_ref!(IfGenStmtRef);
+node_ref!(CaseGenStmtRef);
+node_ref!(ConstDeclRef);
+node_ref!(SignalDeclRef);
+node_ref!(VariableDeclRef);
+node_ref!(SharedVariableDeclRef);
+node_ref!(FileDeclRef);
 
 // Declare the node reference groups.
 node_ref_group!(Def:
@@ -1653,6 +1844,7 @@ node_ref_group!(ScopeRef:
 	BuiltinPkg(BuiltinPkgRef),
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
+	Arch(ArchRef),
 );
 node_ref_group!(GenericRef:
 	Type(IntfTypeRef),
@@ -1668,26 +1860,125 @@ node_ref_group!(TypeMarkRef:
 
 /// All declarations that may possibly appear in a package. See IEEE 1076-2008
 /// section 4.7.
+///
+/// ```text
+/// subprogram_declaration
+/// subprogram_instantiation_declaration
+/// package_declaration
+/// package_instantiation_declaration
+/// type_declaration
+/// subtype_declaration
+/// constant_declaration
+/// signal_declaration
+/// variable_declaration
+/// file_declaration
+/// alias_declaration
+/// component_declaration
+/// attribute_declaration
+/// attribute_specification
+/// disconnection_specification
+/// use_clause
+/// group_template_declaration
+/// group_declaration
+/// ```
 node_ref_group!(DeclInPkgRef:
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
-	// Missing support for the following:
-	// - subprogram_declaration
-	// - subprogram_instantiation_declaration
-	// - constant_declaration
-	// - signal_declaration
-	// - variable_declaration
-	// - file_declaration
-	// - alias_declaration
-	// - component_declaration
-	// - attribute_declaration
-	// - attribute_specification
-	// - disconnection_specification
-	// - use_clause
-	// - group_template_declaration
-	// - group_declaration
+);
+
+/// All declarations that may possibly appear in a block. See IEEE 1076-2008
+/// section 3.3.2.
+///
+/// ```text
+/// subprogram_declaration
+/// subprogram_body
+/// subprogram_instantiation_declaration
+/// package_declaration
+/// package_body
+/// package_instantiation_declaration
+/// type_declaration
+/// subtype_declaration
+/// constant_declaration
+/// signal_declaration
+/// shared_variable_declaration
+/// file_declaration
+/// alias_declaration
+/// component_declaration
+/// attribute_declaration
+/// attribute_specification
+/// configuration_specification
+/// disconnection_specification
+/// use_clause
+/// group_template_declaration
+/// group_declaration
+/// ```
+node_ref_group!(DeclInBlockRef:
+	Pkg(PkgDeclRef),
+	PkgInst(PkgInstRef),
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
+	Const(ConstDeclRef),
+	Signal(SignalDeclRef),
+	SharedVariable(SharedVariableDeclRef),
+	File(FileDeclRef),
+);
+
+/// All concurrent statements. See IEEE 1076-2008 section 11.1.
+///
+/// ```text
+/// block_statement
+/// process_statement
+/// concurrent_procedure_call_statement
+/// concurrent_assertion_statement
+/// concurrent_signal_assignment_statement
+/// component_instantiation_statement
+/// generate_statement
+/// ```
+node_ref_group!(ConcStmtRef:
+	Block(BlockStmtRef),
+	Process(ProcessStmtRef),
+	ConcProcCall(ConcProcCallStmtRef),
+	ConcAssert(ConcAssertStmtRef),
+	ConcSigAssign(ConcSigAssignStmtRef),
+	CompInst(CompInstStmtRef),
+	ForGen(ForGenStmtRef),
+	IfGen(IfGenStmtRef),
+	CaseGen(CaseGenStmtRef),
+);
+
+/// All sequential statements. See IEEE 1076-2008 section 10.1.
+///
+/// ```text
+/// wait_statement
+/// assertion_statement
+/// report_statement
+/// signal_assignment_statement
+/// variable_assignment_statement
+/// procedure_call_statement
+/// if_statement
+/// case_statement
+/// loop_statement
+/// next_statement
+/// exit_statement
+/// return_statement
+/// null_statement
+/// ```
+node_ref_group!(SeqStmtRef:
+	Wait(WaitStmtRef),
+	Assert(AssertStmtRef),
+	Report(ReportStmtRef),
+	SigAssign(SigAssignStmtRef),
+	VarAssign(VarAssignStmtRef),
+	ProcCall(ProcCallStmtRef),
+	If(IfStmtRef),
+	Case(CaseStmtRef),
+	Loop(LoopStmtRef),
+	Next(NextStmtRef),
+	Exit(ExitStmtRef),
+	Return(ReturnStmtRef),
+	Null(NullStmtRef),
 );
 
 
@@ -1703,7 +1994,7 @@ node_storage!(AstTable<'ast>,
 	pkg_decls:    PkgDeclRef => (ScopeRef, &'ast ast::PkgDecl),
 	pkg_insts:    PkgInstRef => (ScopeRef, &'ast ast::PkgInst),
 	ctx_decls:    CtxRef     => (LibRef, CtxItemsRef, &'ast ast::CtxDecl),
-	arch_bodies:  ArchRef    => (LibRef, CtxItemsRef, &'ast ast::ArchBody),
+	arch_bodies:  ArchRef    => (LibRef, ScopeRef, &'ast ast::ArchBody),
 	pkg_bodies:   PkgBodyRef => (LibRef, CtxItemsRef, &'ast ast::PkgBody),
 
 	// Interface declarations
@@ -1714,20 +2005,31 @@ node_storage!(AstTable<'ast>,
 	intf_consts:     IntfConstRef       => (ScopeRef, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
 
 	// Declarations
-	type_decls:    TypeDeclRef    => (ScopeRef, &'ast ast::TypeDecl),
-	subtype_decls: SubtypeDeclRef => (ScopeRef, &'ast ast::SubtypeDecl),
+	type_decls:            TypeDeclRef           => (ScopeRef, &'ast ast::TypeDecl),
+	subtype_decls:         SubtypeDeclRef        => (ScopeRef, &'ast ast::SubtypeDecl),
+	const_decls:           ConstDeclRef          => (ScopeRef, &'ast ast::ObjDecl),
+	signal_decls:          SignalDeclRef         => (ScopeRef, &'ast ast::ObjDecl),
+	variable_decls:        VariableDeclRef       => (ScopeRef, &'ast ast::ObjDecl),
+	shared_variable_decls: SharedVariableDeclRef => (ScopeRef, &'ast ast::ObjDecl),
+	file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
 
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
 );
 
 node_storage!(HirTable<'ctx>,
-	libs:         LibRef        => &'ctx hir::Lib,
-	entities:     EntityRef     => &'ctx hir::Entity,
-	intf_sigs:    IntfSignalRef => &'ctx hir::IntfSignal,
-	subtype_inds: SubtypeIndRef => &'ctx hir::SubtypeInd,
-	pkgs:         PkgDeclRef    => &'ctx hir::Package,
-	type_decls:   TypeDeclRef   => &'ctx hir::TypeDecl,
-	exprs:        ExprRef       => &'ctx hir::Expr,
+	libs:                  LibRef                => &'ctx hir::Lib,
+	entities:              EntityRef             => &'ctx hir::Entity,
+	archs:                 ArchRef               => &'ctx hir::Arch,
+	intf_sigs:             IntfSignalRef         => &'ctx hir::IntfSignal,
+	subtype_inds:          SubtypeIndRef         => &'ctx hir::SubtypeInd,
+	pkgs:                  PkgDeclRef            => &'ctx hir::Package,
+	type_decls:            TypeDeclRef           => &'ctx hir::TypeDecl,
+	exprs:                 ExprRef               => &'ctx hir::Expr,
+	const_decls:           ConstDeclRef          => &'ctx hir::ConstDecl,
+	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
+	variable_decls:        VariableDeclRef       => &'ctx hir::VariableDecl,
+	shared_variable_decls: SharedVariableDeclRef => &'ctx hir::VariableDecl,
+	file_decls:            FileDeclRef           => &'ctx hir::FileDecl,
 );
 
 

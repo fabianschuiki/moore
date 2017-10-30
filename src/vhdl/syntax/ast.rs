@@ -544,6 +544,29 @@ pub enum ObjDetail {
 	Open(Option<Expr>, Expr),
 }
 
+impl HasSpan for ObjDecl {
+	fn span(&self) -> Span {
+		self.span
+	}
+
+	fn human_span(&self) -> Span {
+		self.names.iter().map(|n| n.span).fold(self.names[0].span, Span::union)
+	}
+}
+
+impl HasDesc for ObjDecl {
+	fn desc(&self) -> &'static str {
+		match self.kind {
+			ObjKind::Const     => "constant declaration",
+			ObjKind::Signal    => "signal declaration",
+			ObjKind::File      => "file declaration",
+			ObjKind::Var       => "variable declaration",
+			ObjKind::SharedVar => "shared variable declaration",
+		}
+	}
+}
+
+
 /// A component declaration.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct CompDecl {
@@ -813,6 +836,43 @@ pub struct Stmt {
 	pub span: Span,
 	pub label: Option<Spanned<Name>>,
 	pub data: StmtData,
+}
+
+impl HasSpan for Stmt {
+	fn span(&self) -> Span {
+		self.span
+	}
+
+	fn human_span(&self) -> Span {
+		match self.label {
+			Some(Spanned{ span, .. }) => span,
+			_ => self.span()
+		}
+	}
+}
+
+impl HasDesc for Stmt {
+	fn desc(&self) -> &'static str {
+		match self.data {
+			StmtData::WaitStmt{..} => "wait statement",
+			StmtData::AssertStmt{..} => "assertion statement",
+			StmtData::ReportStmt{..} => "report statement",
+			StmtData::IfStmt{..} => "if statement",
+			StmtData::CaseStmt{..} => "case statement",
+			StmtData::LoopStmt{..} => "loop statement",
+			StmtData::NexitStmt{..} => "next or exit statement",
+			StmtData::ReturnStmt(..) => "return statement",
+			StmtData::NullStmt => "null statement",
+			StmtData::IfGenStmt{..} => "if-generate statement",
+			StmtData::CaseGenStmt{..} => "case-generate statement",
+			StmtData::ForGenStmt{..} => "for-generate statement",
+			StmtData::BlockStmt{..} => "block statement",
+			StmtData::ProcStmt{..} => "process statement",
+			StmtData::AssignStmt{..} => "assign statement",
+			StmtData::SelectAssignStmt{..} => "assign statement",
+			StmtData::InstOrCallStmt{..} => "instantiation or call statement",
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
