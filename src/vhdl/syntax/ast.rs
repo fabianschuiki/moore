@@ -521,7 +521,7 @@ pub struct ObjDecl {
 	pub kind: ObjKind,
 	pub names: Vec<Ident>,
 	pub subtype: SubtypeInd,
-	pub detail: Option<ObjDetail>,
+	pub detail: Option<Spanned<ObjDetail>>,
 	pub init: Option<Expr>,
 }
 

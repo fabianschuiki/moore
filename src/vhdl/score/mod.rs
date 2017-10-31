@@ -23,6 +23,21 @@ use llhd;
 use ty::*;
 use konst::*;
 use num::{BigInt, Signed};
+use codegen::Codegen;
+
+
+/// This macro implements the `NodeMaker` trait for a specific combination of
+/// identifier and output type.
+macro_rules! impl_make {
+	($self:tt, $id:ident: $id_ty:ty => &$out_ty:ty $blk:block) => {
+		impl<'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+			fn make(&$self, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
+		}
+	}
+}
+
+mod hir_lowering;
+mod type_checking;
 
 
 /// The VHDL context which holds information about the language scoreboard and
@@ -160,6 +175,8 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 
+	/// Obtain the HIR of a node, generating it if needed. Returns an error if
+	/// the HIR cannot be generated.
 	pub fn hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node> where
 		I: 'ctx + Copy + Debug,
 		HirTable<'ctx>: NodeStorage<I>,
@@ -174,6 +191,22 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] hir for {:?} is {:?}", id, node); }
 		self.sb.hir_table.borrow_mut().set(id, node);
 		Ok(node)
+	}
+
+
+	/// Obtain the HIR of a node. Returns an error if none exists.
+	pub fn existing_hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node>
+	where
+		I: Copy + Debug,
+		HirTable<'ctx>: NodeStorage<I>
+	{
+		match self.sb.hir_table.borrow().get(&id) {
+			Some(node) => Ok(node),
+			None => {
+				self.sess.emit(DiagBuilder2::fatal(format!("hir for {:?} should exist", id)));
+				Err(())
+			}
+		}
 	}
 
 
@@ -500,7 +533,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx hir::SubtypeInd> for ScoreC
 		// First try to resolve the name. This will yield a list of definitions
 		// and the remaining parts of the name that were not resolved. The
 		// latter will contain optional constraints.
-		let (mut defs, defs_span, tail_parts) = self.resolve_compound_name(&ast.name, scope_id)?;
+		let (_, mut defs, defs_span, tail_parts) = self.resolve_compound_name(&ast.name, scope_id, false)?;
 
 		// Make sure that the definition is unambiguous and unpack it.
 		let tm = match defs.pop() {
@@ -635,23 +668,32 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 	/// Resolve a name within a scope. Traverses to the parent scopes if nothing
 	/// matching the name is found.
-	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef) -> Result<Vec<Spanned<Def>>> {
+	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef, only_defs: bool) -> Result<Vec<Spanned<Def>>> {
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
-		let scope = self.scope(scope_id)?;
 		let mut found_defs = Vec::new();
-		for &defs_id in &scope.defs {
-			let defs = self.defs(defs_id)?;
+		let parent_id = if only_defs {
+			let defs = self.defs(scope_id)?;
 			if let Some(d) = defs.get(&name.value) {
 				found_defs.extend(d);
 			}
-		}
+			None
+		} else {
+			let scope = self.scope(scope_id)?;
+			for &defs_id in &scope.defs {
+				let defs = self.defs(defs_id)?;
+				if let Some(d) = defs.get(&name.value) {
+					found_defs.extend(d);
+				}
+			}
+			scope.parent
+		};
 
 		// If nothing matched the definition, try to escalate to the parent
 		// scope. If there is no parent scope, i.e. we're the parent, fail with
 		// a diagnostic.
 		if found_defs.is_empty() {
-			if let Some(parent_id) = scope.parent {
-				self.resolve_name(name, parent_id)
+			if let Some(parent_id) = parent_id {
+				self.resolve_name(name, parent_id, only_defs)
 			} else {
 				self.sess.emit(DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span));
 				Err(())
@@ -663,12 +705,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 
-	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef) -> Result<(Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
+	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef, only_defs: bool) -> Result<(ResolvableName, Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id); }
 
 		// First resolve the primary name.
 		let mut seen_span = name.primary.span;
-		let mut defs = self.resolve_name(self.resolvable_from_primary_name(&name.primary)?, scope_id)?;
+		let mut res_name = self.resolvable_from_primary_name(&name.primary)?;
+		let mut defs = self.resolve_name(res_name, scope_id, only_defs)?;
 
 		// Resolve as many name parts as possible.
 		for i in 0..name.parts.len() {
@@ -710,19 +753,20 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					// Perform the name resolution in the scope determined
 					// above.
 					seen_span.expand(pn.span);
-					defs = self.resolve_name(self.resolvable_from_primary_name(pn)?, scope)?;
+					res_name = self.resolvable_from_primary_name(pn)?;
+					defs = self.resolve_name(res_name, scope, true)?;
 				}
 
 				// All other name parts we do not resolve and simply pass back
 				// to the caller.
-				_ => return Ok((defs, seen_span, &name.parts[i..]))
+				_ => return Ok((res_name.value, defs, seen_span, &name.parts[i..]))
 			}
 		}
 
 		// If we arrive here, we were able to resolve the entire name. So we
 		// simply return the definitions found and an empty slice of remaining
 		// parts.
-		Ok((defs, seen_span, &[]))
+		Ok((res_name.value, defs, seen_span, &[]))
 	}
 }
 
@@ -840,11 +884,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 							self.set_ast(subid, (scope_id, decl));
 							refs.push(subid.into());
 						}
-						ast::ObjKind::Signal => {
-							let subid = SignalDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
-						}
+						ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut refs)?,
 						ast::ObjKind::Var => {
 							self.sess.emit(
 								DiagBuilder2::error(format!("Not a shared variable; only shared variables may appear in {}", container_name))
@@ -1359,119 +1399,11 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 
 		// Generate the code for the declarations in the architecture.
 		for &decl_id in &hir.decls {
-
+			self.codegen(decl_id, &mut entity)?;
 		}
 
 		// Add the entity to the module and return a reference to it.
 		Ok(DefValueRef(self.sb.llmod.borrow_mut().add_entity(entity).into()))
-	}
-}
-
-
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
-	/// Map a VHDL type to the corresponding LLHD type.
-	pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
-		let ty = self.deref_named_type(ty)?;
-		Ok(match *ty {
-			Ty::Named(..) => unreachable!(),
-			Ty::Int(ref ty) => {
-				let diff = match ty.dir {
-					hir::Dir::To => &ty.right_bound - &ty.left_bound,
-					hir::Dir::Downto => &ty.left_bound - &ty.right_bound,
-				};
-				if diff.is_negative() {
-					llhd::void_ty()
-				} else {
-					llhd::int_ty(diff.bits())
-				}
-			}
-		})
-	}
-
-
-	/// Replace `Ty::Named` by the actual type definition recursively.
-	#[allow(unreachable_patterns)]
-	pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty> where 'ctx: 'a {
-		match ty {
-			&Ty::Named(_, tmr) => {
-				let inner = self.ty(tmr)?;
-				self.deref_named_type(inner)
-			}
-			other => Ok(other)
-		}
-	}
-}
-
-
-// Determine the type of a type mark.
-impl<'sb, 'ast, 'ctx> NodeMaker<TypeMarkRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: TypeMarkRef) -> Result<&'ctx Ty> {
-		match id {
-			TypeMarkRef::Type(id) => self.make(id),
-			TypeMarkRef::Subtype(id) => self.make(id),
-		}
-	}
-}
-
-
-// Determine the type of a subtype indication.
-impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx Ty> {
-		let hir = self.hir(id)?;
-		Ok(self.sb.arenas.ty.alloc(Ty::Named(hir.type_mark.span, hir.type_mark.value)))
-	}
-}
-
-
-// Determine the type of a type declaration.
-impl<'sb, 'ast, 'ctx> NodeMaker<TypeDeclRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: TypeDeclRef) -> Result<&'ctx Ty> {
-		let hir = self.hir(id)?;
-		let data = match hir.data {
-			Some(ref d) => d,
-			None => {
-				self.sess.emit(
-					DiagBuilder2::error(format!("Declaration of type `{}` is incomplete", hir.name.value))
-					.span(hir.name.span)
-				);
-				return Err(());
-			}
-		};
-		match *data {
-			hir::TypeData::Range(span, dir, lb_id, rb_id) => {
-				let lb = self.const_value(lb_id)?;
-				let rb = self.const_value(rb_id)?;
-				Ok(match (lb, rb) {
-					(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-						self.sb.arenas.ty.alloc(IntTy::new(dir, lb.value.clone(), rb.value.clone()).into())
-					}
-
-					(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
-						self.sess.emit(
-							DiagBuilder2::error("Float range bounds not yet supported")
-							.span(span)
-						);
-						return Err(());
-					}
-
-					_ => {
-						self.sess.emit(
-							DiagBuilder2::error("Bounds of range are not of the same type")
-							.span(span)
-						);
-						return Err(());
-					}
-				})
-			}
-		}
-	}
-}
-
-
-// Determine the type of a subtype declaration.
-impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeDeclRef, &'ctx Ty> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, _: SubtypeDeclRef) -> Result<&'ctx Ty> {
-		unimplemented!()
 	}
 }
 
@@ -1492,7 +1424,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Scope> for ScoreContext<'sb, 'as
 }
 
 
-// Populate the scope of an library.
+// Populate the scope of a library.
 impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx Scope> {
 		let mut defs = Vec::new();
@@ -1500,6 +1432,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx Scope> for ScoreContext<'sb, 'ast,
 		Ok(self.sb.arenas.scope.alloc(Scope{
 			parent: None,
 			defs: defs,
+			explicit_defs: HashMap::new(),
 		}))
 	}
 }
@@ -1509,12 +1442,56 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx Scope> for ScoreContext<'sb, 'ast,
 // scope of the design unit itself is a subscope of the context items.
 impl<'sb, 'ast, 'ctx> NodeMaker<CtxItemsRef, &'ctx Scope> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: CtxItemsRef) -> Result<&'ctx Scope> {
+		let (scope_id, items) = self.ast(id);
 		let mut defs = Vec::new();
+		let mut explicit_defs = HashMap::new();
 		defs.push(id.into());
-		// TODO: Resolve use clauses.
+		for item in items {
+			if let &ast::CtxItem::UseClause(Spanned{value: ref names, ..}) = item {
+				for name in names {
+					// TODO: This creates an infinite loop, since the name lookup requires the context items to be ready.
+					let (res_name, mut out_defs, valid_span, mut tail) = self.resolve_compound_name(name, id.into(), true)?;
+					println!("resolving use clause {:?}", name);
+
+					// Resolve the optional `all`.
+					match tail.first() {
+						Some(&ast::NamePart::SelectAll(all_span)) => {
+							tail = &tail[1..];
+							match out_defs.pop() {
+								Some(Spanned{value: Def::Pkg(id), ..}) => {
+									defs.push(id.into());
+								}
+								Some(_) => {
+									self.sess.emit(
+										DiagBuilder2::error(format!("`all` not possible on `{}`", valid_span.extract()))
+										.span(all_span)
+									);
+									continue;
+								}
+								None => unreachable!()
+							}
+						}
+						_ => {
+							explicit_defs.entry(res_name).or_insert_with(|| Vec::new()).extend(out_defs);
+						}
+					}
+
+					// Ensure that there is no garbage.
+					if tail.len() > 0 {
+						let span = Span::union(valid_span.end().into(), name.span.end());
+						self.sess.emit(
+							DiagBuilder2::error("invalid name suffix")
+							.span(span)
+						);
+						continue;
+					}
+				}
+			}
+		}
 		Ok(self.sb.arenas.scope.alloc(Scope{
 			parent: None,
 			defs: defs,
+			explicit_defs: explicit_defs,
 		}))
 	}
 }
@@ -1531,6 +1508,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx Scope> for ScoreContext<'sb, 'a
 		Ok(self.sb.arenas.scope.alloc(Scope{
 			parent: Some(hir.parent),
 			defs: defs,
+			explicit_defs: HashMap::new(),
 		}))
 	}
 }
@@ -1547,6 +1525,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, &'ctx Scope> for ScoreContext<'sb, 'ast
 		Ok(self.sb.arenas.scope.alloc(Scope{
 			parent: Some(hir.parent),
 			defs: defs,
+			explicit_defs: HashMap::new(),
 		}))
 	}
 }
@@ -1563,6 +1542,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx Scope> for ScoreContext<'sb, '
 		Ok(self.sb.arenas.scope.alloc(Scope{
 			parent: Some(hir.parent),
 			defs: defs,
+			explicit_defs: HashMap::new(),
 		}))
 	}
 }
@@ -1609,6 +1589,31 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ExprRef, &'ctx Const> for ScoreContext<'sb, 'ast
 				return Err(());
 			}
 		})
+	}
+}
+
+
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Calculate the implicit default value for a type.
+	pub fn default_value_for_type(&self, ty: &Ty) -> Result<&'ctx Const> {
+		match *ty {
+			Ty::Named(_, ty) => self.default_value_for_type(self.ty(ty)?),
+			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(ty.left_bound.clone()))),
+		}
+	}
+
+
+	/// Internalize the given constant and return a reference to it whose
+	/// lifetime is bound to the arenas associated with the scoreboard.
+	pub fn intern_const<T>(&self, konst: T) -> &'ctx Const where T: Into<Const> {
+		self.sb.arenas.konst.alloc(konst.into())
+	}
+
+
+	/// Internalize the given type and return a reference to it whose lifetime
+	/// is bound to the arenas associated with the scoreboard.
+	pub fn intern_ty<T>(&self, ty: T) -> &'ctx Ty where T: Into<Ty> {
+		self.sb.arenas.ty.alloc(ty.into())
 	}
 }
 
@@ -1686,6 +1691,8 @@ pub struct Scope {
 	/// The definitions visible within this scope. Note that these are
 	/// references to Defs in the scoreboard, not the definitions themselves.
 	pub defs: Vec<ScopeRef>,
+	/// Additional explicitly imported definitions.
+	pub explicit_defs: Defs,
 }
 
 
@@ -2040,6 +2047,7 @@ lazy_static! {
 		scopes.insert(*STANDARD_PKG_REF, Scope{
 			parent: None,
 			defs: vec![(*STANDARD_PKG_REF).into()],
+			explicit_defs: HashMap::new(),
 		});
 		scopes
 	};

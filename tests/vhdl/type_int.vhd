@@ -8,6 +8,8 @@ end;
 library work;
 entity foo is end;
 
+library work;
+use work.pkg.all;
 architecture bar of foo is
 	signal a0 : TWOS_COMPLEMENT_INTEGER; -- should be initialized to -32768
 	signal a1 : TWOS_COMPLEMENT_INTEGER := 0;

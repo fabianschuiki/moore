@@ -1685,9 +1685,10 @@ pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::ObjDecl> {
 	// Parse the additional object details.
 	let pk = p.peek(0);
 	let detail = match pk.value {
-		Keyword(Kw::Register) => { p.bump(); Some(ast::ObjDetail::Register) },
-		Keyword(Kw::Bus) => { p.bump(); Some(ast::ObjDetail::Bus) },
+		Keyword(Kw::Register) => { p.bump(); Some(Spanned::new(ast::ObjDetail::Register, p.last_span())) },
+		Keyword(Kw::Bus) => { p.bump(); Some(Spanned::new(ast::ObjDetail::Bus, p.last_span())) },
 		Keyword(Kw::Open) | Keyword(Kw::Is) => {
+			let mut span = p.peek(0).span;
 			let open = if accept(p, Keyword(Kw::Open)) {
 				Some(parse_expr(p)?)
 			} else {
@@ -1695,7 +1696,8 @@ pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::ObjDecl> {
 			};
 			require(p, Keyword(Kw::Is))?;
 			let path = parse_expr(p)?;
-			Some(ast::ObjDetail::Open(open, path))
+			span.expand(p.last_span());
+			Some(Spanned::new(ast::ObjDetail::Open(open, path), span))
 		}
 		_ => None
 	};

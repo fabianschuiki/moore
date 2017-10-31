@@ -21,6 +21,10 @@ pub struct Arenas {
 	pub package: Arena<Package>,
 	pub type_decl: Arena<TypeDecl>,
 	pub expr: Arena<Expr>,
+	pub const_decl: Arena<ConstDecl>,
+	pub signal_decl: Arena<SignalDecl>,
+	pub variable_decl: Arena<VariableDecl>,
+	pub file_decl: Arena<FileDecl>,
 }
 
 
@@ -36,6 +40,10 @@ impl Arenas {
 			package: Arena::new(),
 			type_decl: Arena::new(),
 			expr: Arena::new(),
+			const_decl: Arena::new(),
+			signal_decl: Arena::new(),
+			variable_decl: Arena::new(),
+			file_decl: Arena::new(),
 		}
 	}
 }
