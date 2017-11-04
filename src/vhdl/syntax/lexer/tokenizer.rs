@@ -40,7 +40,7 @@ impl<T: Grinder> Tokenizer<T> where T: Grinder<Item=Option<Spanned<Bundle>>, Err
 		span.end = value.span.end;
 
 		// Parse the base.
-		let base = match base.value.as_str() {
+		let base = match base.value.to_uppercase().as_str() {
 			"B"  => BitStringBase::B,
 			"O"  => BitStringBase::O,
 			"X"  => BitStringBase::X,
