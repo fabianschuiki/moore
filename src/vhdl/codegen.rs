@@ -4,6 +4,7 @@
 
 use moore_common::score::Result;
 use score::*;
+use konst::*;
 // use hir;
 use llhd;
 
@@ -20,6 +21,20 @@ macro_rules! impl_codegen {
 		impl<'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'sb, 'ast, 'ctx> {
 			fn codegen(&$self, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
 		}
+	}
+}
+
+
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Map a constant value to the LLHD counterpart.
+	pub fn map_const(&self, konst: &Const) -> Result<llhd::ValueRef> {
+		Ok(match *konst {
+			// TODO: Map this to llhd::const_void once available.
+			Const::Null => llhd::const_int(0, 0.into()),
+			Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
+			Const::Float(ref _k) => panic!("cannot map float constant"),
+			Const::IntRange(_) | Const::FloatRange(_) => panic!("cannot map range constant"),
+		}.into())
 	}
 }
 
@@ -58,7 +73,10 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 
 	println!("signal {:?}, type {:?}, init {:?}", id, ty, init);
 	// Create the signal instance.
-	let inst = llhd::inst::Inst::new(Some(hir.name.value.into()), llhd::inst::SignalInst(self.map_type(ty)?, None));
+	let inst = llhd::inst::Inst::new(
+		Some(hir.name.value.into()),
+		llhd::inst::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
+	);
 	ctx.add_inst(inst, llhd::inst::InstPosition::End);
 	Ok(())
 });

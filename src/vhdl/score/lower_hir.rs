@@ -190,7 +190,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 					// Parse the rest of the number.
 					if frac.is_none() && exp.is_none() {
 						match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
-							Some(v) => hir::ExprData::IntegerLiteral(ConstInt::new(v)),
+							Some(v) => hir::ExprData::IntegerLiteral(ConstInt::new(None, v)),
 							None => {
 								self.sess.emit(
 									DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base))

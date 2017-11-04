@@ -10,10 +10,10 @@ impl_make!(self, id: ExprRef => &Const {
 	let hir = self.hir(id)?;
 	Ok(match hir.data {
 		// Integer literals.
-		hir::ExprData::IntegerLiteral(ref c) => self.sb.arenas.konst.alloc(Const::from(c.clone())),
+		hir::ExprData::IntegerLiteral(ref c) => self.intern_const(c.clone()),
 
 		// Float literals.
-		hir::ExprData::FloatLiteral(ref c) => self.sb.arenas.konst.alloc(Const::from(c.clone())),
+		hir::ExprData::FloatLiteral(ref c) => self.intern_const(c.clone()),
 
 		// Unary operators.
 		hir::ExprData::Unary(op, arg_id) => {
@@ -22,7 +22,7 @@ impl_make!(self, id: ExprRef => &Const {
 			// the operation accordingly.
 			match op {
 				hir::UnaryOp::Pos => arg,
-				hir::UnaryOp::Neg => self.sb.arenas.konst.alloc(arg.negate()),
+				hir::UnaryOp::Neg => self.intern_const(arg.clone().negate()),
 				_ => unimplemented!()
 			}
 		}

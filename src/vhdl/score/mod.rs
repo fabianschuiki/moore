@@ -1063,7 +1063,9 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn default_value_for_type(&self, ty: &Ty) -> Result<&'ctx Const> {
 		match *ty {
 			Ty::Named(_, ty) => self.default_value_for_type(self.ty(ty)?),
-			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(ty.left_bound.clone()))),
+			Ty::Null => Ok(self.intern_const(Const::Null)),
+			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
+			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
 		}
 	}
 

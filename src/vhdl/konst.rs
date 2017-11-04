@@ -4,12 +4,14 @@
 
 use std::fmt;
 use num::BigInt;
+use ty::*;
 pub use hir::Dir;
 
 
 /// A constant value.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Const {
+	Null,
 	Int(ConstInt),
 	Float(ConstFloat),
 	IntRange(ConstIntRange),
@@ -17,10 +19,11 @@ pub enum Const {
 }
 
 impl Const {
-	pub fn negate(&self) -> Const {
-		match *self {
-			Const::Int(ref c) => Const::Int(c.negate()),
-			Const::Float(ref c) => Const::Float(c.negate()),
+	pub fn negate(self) -> Const {
+		match self {
+			Const::Null => panic!("cannot negate null"),
+			Const::Int(c) => Const::Int(c.negate()),
+			Const::Float(c) => Const::Float(c.negate()),
 			Const::IntRange(_) => panic!("cannot negate integer range"),
 			Const::FloatRange(_) => panic!("cannot negate float range"),
 		}
@@ -30,6 +33,7 @@ impl Const {
 	/// Provide a textual description of the kind of constant.
 	pub fn kind_desc(&self) -> &'static str {
 		match *self {
+			Const::Null => "null",
 			Const::Int(_) => "integer",
 			Const::Float(_) => "float",
 			Const::IntRange(_) => "integer range",
@@ -66,19 +70,24 @@ impl From<ConstFloatRange> for Const {
 /// A constant integer value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstInt {
+	/// The type of the constant. If `None`, the constant is assumed to be an
+	/// unbounded integer which cannot be mapped to LLHD.
+	pub ty: Option<IntTy>,
+	/// The value of the constant.
 	pub value: BigInt,
 }
 
 impl ConstInt {
 	/// Create a new constant integer.
-	pub fn new(value: BigInt) -> ConstInt {
+	pub fn new(ty: Option<IntTy>, value: BigInt) -> ConstInt {
 		ConstInt {
-			value: value
+			ty: ty,
+			value: value,
 		}
 	}
 
-	pub fn negate(&self) -> ConstInt {
-		ConstInt::new(-self.value.clone())
+	pub fn negate(self) -> ConstInt {
+		ConstInt::new(self.ty, -self.value)
 	}
 }
 
@@ -89,7 +98,7 @@ pub struct ConstFloat {
 }
 
 impl ConstFloat {
-	pub fn negate(&self) -> ConstFloat {
+	pub fn negate(self) -> ConstFloat {
 		ConstFloat{}
 	}
 }
@@ -123,6 +132,7 @@ pub type ConstFloatRange = ConstRange<ConstFloat>;
 impl fmt::Display for Const {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
+			Const::Null => write!(f, "null"),
 			Const::Int(ref k) => k.fmt(f),
 			Const::Float(ref k) => k.fmt(f),
 			Const::IntRange(ref k) => k.fmt(f),

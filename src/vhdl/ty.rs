@@ -9,7 +9,7 @@ use num::BigInt;
 pub use hir::Dir;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
 	/// A named type. In a signal declaration for example, the source code
 	/// mentions the type of the signal. This type name is resolved to its
@@ -18,8 +18,14 @@ pub enum Ty {
 	/// the source code referred to that type. This helps make error messages
 	/// easier to read for the user.
 	Named(Span, TypeMarkRef),
+	/// The null type.
+	Null,
 	/// An integer type.
 	Int(IntTy),
+	/// An unbounded integer type. This is the type integers have that are
+	/// evaluated at compile time, e.g. as part of a range expression. Cannot be
+	/// mapped to LLHD.
+	UnboundedInt,
 }
 
 
@@ -30,7 +36,8 @@ impl Ty {
 	pub fn kind_desc(&self) -> &'static str {
 		match *self {
 			Ty::Named(..) => "named type",
-			Ty::Int(_) => "integer type",
+			Ty::Null => "null type",
+			Ty::Int(_) | Ty::UnboundedInt => "integer type",
 		}
 	}
 }
@@ -43,7 +50,7 @@ impl From<IntTy> for Ty {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntTy {
 	pub dir: Dir,
 	pub left_bound: BigInt,
@@ -58,6 +65,17 @@ impl IntTy {
 			dir: dir,
 			left_bound: left_bound,
 			right_bound: right_bound,
+		}
+	}
+
+
+	/// Map the type to itself if the range has a positive length, or to `null`
+	/// if the range has a negative or zero length.
+	pub fn maybe_null(self) -> Ty {
+		match self.dir {
+			Dir::To     if self.left_bound >= self.right_bound => Ty::Null,
+			Dir::Downto if self.left_bound <= self.right_bound => Ty::Null,
+			_ => self.into(),
 		}
 	}
 }

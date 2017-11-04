@@ -11,6 +11,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let ty = self.deref_named_type(ty)?;
 		Ok(match *ty {
 			Ty::Named(..) => unreachable!(),
+			Ty::Null => llhd::void_ty(),
 			Ty::Int(ref ty) => {
 				let diff = match ty.dir {
 					hir::Dir::To => &ty.right_bound - &ty.left_bound,
@@ -22,6 +23,11 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					llhd::int_ty(diff.bits())
 				}
 			}
+
+			// Unbounded integers cannot be mapped to LLHD. All cases where
+			// such an int can leak through to codegen should actually be caught
+			// beforehand in the type check.
+			Ty::UnboundedInt => unreachable!(),
 		})
 	}
 
@@ -83,7 +89,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 					}
 
 					// Create the new type.
-					Ok(self.intern_ty(IntTy::new(inner.dir, range.left_bound.value.clone(), range.right_bound.value.clone())))
+					Ok(self.intern_ty(IntTy::new(inner.dir, range.left_bound.value.clone(), range.right_bound.value.clone()).maybe_null()))
 				}
 
 				// All other types we simply cannot constrain by range.
@@ -135,7 +141,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			let rb = self.const_value(rb_id)?;
 			Ok(match (lb, rb) {
 				(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-					self.sb.arenas.ty.alloc(IntTy::new(dir, lb.value.clone(), rb.value.clone()).into())
+					self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
 				}
 
 				(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
