@@ -29,9 +29,9 @@ use codegen::Codegen;
 /// This macro implements the `NodeMaker` trait for a specific combination of
 /// identifier and output type.
 macro_rules! impl_make {
-	($self:tt, $id:ident: $id_ty:ty => &$out_ty:ty $blk:block) => {
+	($slf:tt, $id:ident: $id_ty:ty => &$out_ty:ty $blk:block) => {
 		impl<'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'sb, 'ast, 'ctx> {
-			fn make(&$self, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
+			fn make(&$slf, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
 		}
 	}
 }

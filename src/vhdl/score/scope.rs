@@ -6,14 +6,14 @@ use score::*;
 
 
 macro_rules! impl_make_defs {
-	($self:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl_make!($self, $id: $id_ty => &Defs $blk);
+	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+		impl_make!($slf, $id: $id_ty => &Defs $blk);
 	}
 }
 
 macro_rules! impl_make_scope {
-	($self:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl_make!($self, $id: $id_ty => &Scope $blk);
+	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+		impl_make!($slf, $id: $id_ty => &Scope $blk);
 	}
 }
 
@@ -205,7 +205,7 @@ impl_make_scope!(self, id: LibRef => {
 // Populate the scope of the context items that appear before a design unit. The
 // scope of the design unit itself is a subscope of the context items.
 impl_make_scope!(self, id: CtxItemsRef => {
-	let (scope_id, items) = self.ast(id);
+	let (_, items) = self.ast(id);
 	let mut defs = Vec::new();
 	let mut explicit_defs = HashMap::new();
 	defs.push(id.into());

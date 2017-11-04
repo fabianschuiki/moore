@@ -17,9 +17,9 @@ pub trait Codegen<I,C> {
 /// This macro implements the `Codegen` trait for a specific combination of
 /// identifier and context types.
 macro_rules! impl_codegen {
-	($self:tt, $id:ident: $id_ty:ty, $ctx:ident: &mut $ctx_ty:ty => $blk:block) => {
+	($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &mut $ctx_ty:ty => $blk:block) => {
 		impl<'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'sb, 'ast, 'ctx> {
-			fn codegen(&$self, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
+			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
 		}
 	}
 }
