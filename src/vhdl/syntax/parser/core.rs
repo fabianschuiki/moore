@@ -6,8 +6,8 @@ use std::marker::PhantomData;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
-use syntax::lexer::token::*;
-use syntax::parser::rules::{Parser, Reported, Recovered, ReportedResult, RecoveredResult};
+use lexer::token::*;
+use parser::rules::{Parser, Reported, Recovered, ReportedResult, RecoveredResult};
 
 
 /// A predicate that matches on the current position of a token stream.

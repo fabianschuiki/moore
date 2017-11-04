@@ -467,6 +467,15 @@ impl<T> Spanned<T> {
 	pub fn new(value: T, span: Span) -> Spanned<T> {
 		Spanned{ value: value, span: span }
 	}
+
+	/// Map the spanned value, preserving the span.
+	pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Spanned<U> {
+		Spanned::new(f(self.value), self.span)
+    }
+
+    pub fn map_into<U>(self) -> Spanned<U> where T: Into<U> {
+    	Spanned::new(self.value.into(), self.span)
+    }
 }
 
 impl<T> std::fmt::Debug for Spanned<T> where T: std::fmt::Debug {

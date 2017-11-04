@@ -6,11 +6,31 @@
 use std;
 use moore_common::source::{Span, Spanned};
 use moore_common::name::Name;
-use syntax::lexer::token::Literal;
+use lexer::token::Literal;
 
 pub use self::ExprData::*;
 pub use self::TypeData::*;
 pub use self::StmtData::*;
+
+
+/// Information about the portion of the input file that a node covers.
+pub trait HasSpan {
+	/// Obtain the full span of the input file that this node covers.
+	fn span(&self) -> Span;
+
+	/// Obtain a span which can be used to refer to this node in error messages
+	/// presented to humans. This will generally be the name for things like
+	/// entities, processes, and variables. Defaults to return whatever `span()`
+	/// returns.
+	fn human_span(&self) -> Span {
+		self.span()
+	}
+}
+
+pub trait HasDesc {
+	/// Obtain a human-readable descriptive name for this node.
+	fn desc(&self) -> &'static str;
+}
 
 
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight
@@ -63,6 +83,7 @@ pub const DUMMY_NODE_ID: NodeId = NodeId(0);
 /// unit.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct DesignUnit {
+	pub id: NodeId,
 	pub ctx: Vec<CtxItem>,
 	pub data: DesignUnitData,
 }
@@ -87,7 +108,7 @@ pub enum CtxItem {
 }
 
 /// An identifier. Has a node ID such that it may be referenced later on.
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Ident {
 	pub id: NodeId,
 	pub span: Span,
@@ -101,6 +122,12 @@ impl From<Spanned<Name>> for Ident {
 			span: n.span,
 			name: n.value,
 		}
+	}
+}
+
+impl Into<Spanned<Name>> for Ident {
+	fn into(self) -> Spanned<Name> {
+		Spanned::new(self.name, self.span)
 	}
 }
 
@@ -149,7 +176,7 @@ pub enum NamePart {
 	SelectAll(Span),
 	Signature(Signature),
 	Attribute(Ident),
-	Call(Vec<ParenElem>),
+	Call(ParenElems),
 	Range(Box<Expr>),
 }
 
@@ -219,7 +246,7 @@ pub struct PkgInst {
 	pub span: Span,
 	pub name: Spanned<Name>,
 	pub target: CompoundName,
-	pub generics: Option<Vec<ParenElem>>,
+	pub generics: Option<ParenElems>,
 }
 
 
@@ -227,9 +254,47 @@ pub struct PkgInst {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum IntfDecl {
 	TypeDecl(TypeDecl),
-	SubprogSpec(Span, SubprogSpec, Option<SubprogDefault>),
+	SubprogSpec(IntfSubprogDecl),
 	PkgInst(PkgInst),
 	ObjDecl(IntfObjDecl),
+}
+
+impl HasSpan for IntfDecl {
+	fn span(&self) -> Span {
+		match *self {
+			IntfDecl::TypeDecl(ref n) => n.span,
+			IntfDecl::SubprogSpec(ref n) => n.span,
+			IntfDecl::PkgInst(ref n) => n.span,
+			IntfDecl::ObjDecl(ref n) => n.span,
+		}
+	}
+
+	fn human_span(&self) -> Span {
+		match *self {
+			IntfDecl::TypeDecl(ref n) => n.name.span,
+			IntfDecl::PkgInst(ref n) => n.name.span,
+			_ => self.span()
+		}
+	}
+}
+
+impl HasDesc for IntfDecl {
+	fn desc(&self) -> &'static str {
+		match *self {
+			IntfDecl::TypeDecl(_) => "interface type declaration",
+			IntfDecl::SubprogSpec(_) => "interface subprogram declaration",
+			IntfDecl::PkgInst(_) => "interface package declaration",
+			IntfDecl::ObjDecl(ref n) => n.desc(),
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct IntfSubprogDecl {
+	pub id: NodeId,
+	pub span: Span,
+	pub spec: SubprogSpec,
+	pub default: Option<SubprogDefault>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -248,6 +313,17 @@ pub struct IntfObjDecl {
 	pub ty: SubtypeInd,
 	pub bus: bool,
 	pub default: Option<Expr>,
+}
+
+impl HasDesc for IntfObjDecl {
+	fn desc(&self) -> &'static str {
+		match self.kind {
+			IntfObjKind::Const => "interface constant declaration",
+			IntfObjKind::Signal => "interface signal declaration",
+			IntfObjKind::Var => "interface variable declaration",
+			IntfObjKind::File => "interface file declaration",
+		}
+	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -277,17 +353,84 @@ pub enum DeclItem {
 	SubtypeDecl(SubtypeDecl),
 	ObjDecl(ObjDecl),
 	AliasDecl(AliasDecl),
-	UseClause(Spanned<Vec<CompoundName>>),
+	UseClause(Span, Spanned<Vec<CompoundName>>),
 	SubprogDecl(Subprog),
 	CompDecl(CompDecl),
 	DisconDecl(DisconSpec),
 	CfgSpec(CfgSpec),
 	AttrDecl(AttrDecl),
-	PortgenMap(PortgenKind, Vec<ParenElem>),
-	PortgenClause(PortgenKind, Spanned<Vec<IntfDecl>>),
+	PortgenMap(Span, Spanned<PortgenKind>, ParenElems),
+	PortgenClause(Span, Spanned<PortgenKind>, Spanned<Vec<IntfDecl>>),
 	GroupDecl(GroupDecl),
 	VunitBindInd(()),
 	BlockCompCfg(BlockCompCfg),
+}
+
+impl HasSpan for DeclItem {
+	fn span(&self) -> Span {
+		match *self {
+			DeclItem::PkgBody(ref n) => n.span,
+			DeclItem::PkgInst(ref n) => n.span,
+			DeclItem::PkgDecl(ref n) => n.span,
+			DeclItem::TypeDecl(ref n) => n.span,
+			DeclItem::SubtypeDecl(ref n) => n.span,
+			DeclItem::ObjDecl(ref n) => n.span,
+			DeclItem::AliasDecl(ref n) => n.span,
+			DeclItem::UseClause(sp, ref n) => Span::union(sp, n.span),
+			DeclItem::SubprogDecl(ref n) => n.span,
+			DeclItem::CompDecl(ref n) => n.span,
+			DeclItem::DisconDecl(ref n) => n.span,
+			DeclItem::CfgSpec(ref n) => n.span,
+			DeclItem::AttrDecl(ref n) => n.span,
+			DeclItem::PortgenMap(sp, _, _) => sp,
+			DeclItem::PortgenClause(sp, _, _) => sp,
+			DeclItem::GroupDecl(ref n) => n.span,
+			DeclItem::VunitBindInd(_) => unimplemented!(),
+			DeclItem::BlockCompCfg(ref n) => n.span,
+		}
+	}
+
+	fn human_span(&self) -> Span {
+		match *self {
+			DeclItem::PkgBody(ref n) => n.name.span,
+			DeclItem::PkgInst(ref n) => n.name.span,
+			DeclItem::PkgDecl(ref n) => n.name.span,
+			DeclItem::TypeDecl(ref n) => n.name.span,
+			DeclItem::SubtypeDecl(ref n) => n.name.span,
+			DeclItem::AliasDecl(ref n) => n.name.span,
+			DeclItem::UseClause(sp, _) => sp,
+			DeclItem::PortgenMap(_, Spanned{ span, .. }, _) => span,
+			DeclItem::PortgenClause(_, Spanned{ span, .. }, _) => span,
+			_ => self.span()
+		}
+	}
+}
+
+impl HasDesc for DeclItem {
+	fn desc(&self) -> &'static str {
+		match *self {
+			DeclItem::PkgBody(..)       => "package body",
+			DeclItem::PkgInst(..)       => "package instance",
+			DeclItem::PkgDecl(..)       => "package declaration",
+			DeclItem::TypeDecl(..)      => "type declaration",
+			DeclItem::SubtypeDecl(..)   => "subtype declaration",
+			DeclItem::ObjDecl(..)       => "object declaration",
+			DeclItem::AliasDecl(..)     => "alias declaration",
+			DeclItem::UseClause(..)     => "use clause",
+			DeclItem::SubprogDecl(..)   => "subprogram declaration",
+			DeclItem::CompDecl(..)      => "component declaration",
+			DeclItem::DisconDecl(..)    => "disconnection declaration",
+			DeclItem::CfgSpec(..)       => "configuration specification",
+			DeclItem::AttrDecl(..)      => "attribute declaration",
+			DeclItem::PortgenMap(_, Spanned{ value: PortgenKind::Port, .. }, ..)       => "port map",
+			DeclItem::PortgenMap(_, Spanned{ value: PortgenKind::Generic, .. }, ..)    => "generic map",
+			DeclItem::PortgenClause(_, Spanned{ value: PortgenKind::Port, .. }, ..)    => "port clause",
+			DeclItem::PortgenClause(_, Spanned{ value: PortgenKind::Generic, .. }, ..) => "generic clause",
+			DeclItem::GroupDecl(..)     => "group declaration",
+			DeclItem::VunitBindInd(..)  => "vunit binding indication",
+			DeclItem::BlockCompCfg(..)  => "block component configuration",
+		}
+	}
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -298,6 +441,7 @@ pub enum PortgenKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Subprog {
+	pub id: NodeId,
 	pub span: Span,
 	pub spec: SubprogSpec,
 	pub data: SubprogData,
@@ -308,7 +452,7 @@ pub enum SubprogData {
 	Decl,
 	Inst {
 		name: CompoundName,
-		generics: Option<Vec<ParenElem>>,
+		generics: Option<ParenElems>,
 	},
 	Body {
 		decls: Vec<DeclItem>,
@@ -322,8 +466,8 @@ pub struct SubprogSpec {
 	pub name: PrimaryName,
 	pub kind: SubprogKind,
 	pub purity: Option<SubprogPurity>,
-	pub generic_claus: Option<Vec<IntfDecl>>,
-	pub generic_map: Option<Vec<ParenElem>>,
+	pub generic_clause: Option<Vec<IntfDecl>>,
+	pub generic_map: Option<ParenElems>,
 	pub params: Option<Vec<IntfDecl>>,
 	pub retty: Option<CompoundName>,
 }
@@ -357,13 +501,14 @@ pub struct SubtypeDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ResolInd {
-	Exprs(Vec<ParenElem>),
+	Exprs(ParenElems),
 	Name(CompoundName),
 }
 
 /// An alias declaration.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct AliasDecl {
+	pub id: NodeId,
 	pub span: Span,
 	pub name: PrimaryName,
 	pub subtype: Option<SubtypeInd>,
@@ -376,7 +521,7 @@ pub struct ObjDecl {
 	pub kind: ObjKind,
 	pub names: Vec<Ident>,
 	pub subtype: SubtypeInd,
-	pub detail: Option<ObjDetail>,
+	pub detail: Option<Spanned<ObjDetail>>,
 	pub init: Option<Expr>,
 }
 
@@ -398,6 +543,29 @@ pub enum ObjDetail {
 	/// A file opening action.
 	Open(Option<Expr>, Expr),
 }
+
+impl HasSpan for ObjDecl {
+	fn span(&self) -> Span {
+		self.span
+	}
+
+	fn human_span(&self) -> Span {
+		self.names.iter().map(|n| n.span).fold(self.names[0].span, Span::union)
+	}
+}
+
+impl HasDesc for ObjDecl {
+	fn desc(&self) -> &'static str {
+		match self.kind {
+			ObjKind::Const     => "constant declaration",
+			ObjKind::Signal    => "signal declaration",
+			ObjKind::File      => "file declaration",
+			ObjKind::Var       => "variable declaration",
+			ObjKind::SharedVar => "shared variable declaration",
+		}
+	}
+}
+
 
 /// A component declaration.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -444,8 +612,8 @@ pub enum BlockCompSpec {
 pub struct BindingInd{
 	pub span: Span,
 	pub entity: Option<EntityAspect>,
-	pub generics: Option<Vec<ParenElem>>,
-	pub ports: Option<Vec<ParenElem>>,
+	pub generics: Option<ParenElems>,
+	pub ports: Option<ParenElems>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -538,6 +706,10 @@ pub struct ParenElem {
 	pub expr: Expr,
 }
 
+/// A vector of parenthesized expression elements, including the span of the
+/// expression that this would cover.
+pub type ParenElems = Spanned<Vec<ParenElem>>;
+
 
 /// An expression.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -556,10 +728,10 @@ pub enum ExprData {
 	BoxExpr,
 	NewExpr(Box<Expr>),
 	LitExpr(Literal, Option<CompoundName>),
-	ResolExpr(Vec<ParenElem>, CompoundName),
-	ParenExpr(Vec<ParenElem>),
+	ResolExpr(ParenElems, CompoundName),
+	ParenExpr(ParenElems),
 	DoubleNameExpr(CompoundName, CompoundName),
-	QualExpr(CompoundName, Vec<ParenElem>),
+	QualExpr(CompoundName, ParenElems),
 	NameExpr(CompoundName),
 	UnaryExpr(UnaryOp, Box<Expr>),
 	BinaryExpr(BinaryOp, Box<Expr>, Box<Expr>),
@@ -593,11 +765,22 @@ pub enum BinaryOp {
 	Pow,
 }
 
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Dir {
 	To,
 	Downto,
 }
+
+impl std::fmt::Display for Dir {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match *self {
+			Dir::To => write!(f, "to"),
+			Dir::Downto => write!(f, "downto"),
+		}
+	}
+}
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Sign {
@@ -605,7 +788,7 @@ pub enum Sign {
 	Neg,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum LogicalOp {
 	And,
 	Or,
@@ -615,7 +798,7 @@ pub enum LogicalOp {
 	Xnor,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum RelationalOp {
 	Eq,
 	Neq,
@@ -625,7 +808,7 @@ pub enum RelationalOp {
 	Geq,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum ShiftOp {
 	Sll,
 	Srl,
@@ -648,9 +831,9 @@ pub struct TypeDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum TypeData {
-	EnumType(Vec<ParenElem>),
+	EnumType(ParenElems),
 	RangeType(Box<Expr>, Option<Vec<(Ident, Option<Box<Expr>>)>>),
-	ArrayType(Vec<ParenElem>, SubtypeInd),
+	ArrayType(ParenElems, SubtypeInd),
 	RecordType(Vec<(Vec<Ident>, SubtypeInd)>),
 	AccessType(SubtypeInd),
 	FileType(CompoundName),
@@ -660,9 +843,47 @@ pub enum TypeData {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Stmt {
+	pub id: NodeId,
 	pub span: Span,
 	pub label: Option<Spanned<Name>>,
 	pub data: StmtData,
+}
+
+impl HasSpan for Stmt {
+	fn span(&self) -> Span {
+		self.span
+	}
+
+	fn human_span(&self) -> Span {
+		match self.label {
+			Some(Spanned{ span, .. }) => span,
+			_ => self.span()
+		}
+	}
+}
+
+impl HasDesc for Stmt {
+	fn desc(&self) -> &'static str {
+		match self.data {
+			StmtData::WaitStmt{..} => "wait statement",
+			StmtData::AssertStmt{..} => "assertion statement",
+			StmtData::ReportStmt{..} => "report statement",
+			StmtData::IfStmt{..} => "if statement",
+			StmtData::CaseStmt{..} => "case statement",
+			StmtData::LoopStmt{..} => "loop statement",
+			StmtData::NexitStmt{..} => "next or exit statement",
+			StmtData::ReturnStmt(..) => "return statement",
+			StmtData::NullStmt => "null statement",
+			StmtData::IfGenStmt{..} => "if-generate statement",
+			StmtData::CaseGenStmt{..} => "case-generate statement",
+			StmtData::ForGenStmt{..} => "for-generate statement",
+			StmtData::BlockStmt{..} => "block statement",
+			StmtData::ProcStmt{..} => "process statement",
+			StmtData::AssignStmt{..} => "assign statement",
+			StmtData::SelectAssignStmt{..} => "assign statement",
+			StmtData::InstOrCallStmt{..} => "instantiation or call statement",
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -682,17 +903,17 @@ pub enum StmtData {
 		severity: Option<Expr>,
 	},
 	IfStmt {
-		conds: Vec<(Expr, Vec<Stmt>)>,
-		alt: Option<Vec<Stmt>>,
+		conds: Vec<(Expr, StmtBody)>,
+		alt: Option<StmtBody>,
 	},
 	CaseStmt {
 		qm: bool,
 		switch: Expr,
-		cases: Vec<(Vec<Expr>, Vec<Stmt>)>,
+		cases: Vec<(Vec<Expr>, StmtBody)>,
 	},
 	LoopStmt {
 		scheme: LoopScheme,
-		stmts: Vec<Stmt>,
+		body: StmtBody,
 	},
 	NexitStmt {
 		mode: NexitMode,
@@ -702,12 +923,12 @@ pub enum StmtData {
 	ReturnStmt(Option<Expr>),
 	NullStmt,
 	IfGenStmt {
-		conds: Vec<(Option<Ident>, Expr, GenBody)>,
-		alt: Option<(Option<Ident>, GenBody)>,
+		conds: Vec<(Expr, GenBody)>,
+		alt: Option<GenBody>,
 	},
 	CaseGenStmt {
 		switch: Expr,
-		cases: Vec<(Option<Ident>, Vec<Expr>, GenBody)>,
+		cases: Vec<(Vec<Expr>, GenBody)>,
 	},
 	ForGenStmt {
 		param: Ident,
@@ -743,9 +964,16 @@ pub enum StmtData {
 	InstOrCallStmt {
 		target: Option<InstTarget>,
 		name: CompoundName,
-		generics: Option<Vec<ParenElem>>,
-		ports: Option<Vec<ParenElem>>,
+		generics: Option<ParenElems>,
+		ports: Option<ParenElems>,
 	},
+}
+
+/// The body of an if, loop, or case statement.
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub struct StmtBody {
+	pub id: NodeId,
+	pub stmts: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -763,6 +991,8 @@ pub enum NexitMode {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenBody {
+	pub id: NodeId,
+	pub label: Option<Spanned<Name>>,
 	pub span: Span,
 	pub decls: Vec<DeclItem>,
 	pub stmts: Vec<Stmt>,
@@ -777,7 +1007,7 @@ pub enum Sensitivity {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum AssignTarget {
 	Name(CompoundName),
-	Aggregate(Vec<ParenElem>),
+	Aggregate(ParenElems),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]

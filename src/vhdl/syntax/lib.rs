@@ -3,6 +3,9 @@
 //! A lexical analyzer and parser for VHDL source files as per
 //! IEEE 1076-2008.
 
+extern crate moore_common;
+extern crate rustc_serialize;
+
 pub mod lexer;
 pub mod parser;
 pub mod ast;

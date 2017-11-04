@@ -2,6 +2,10 @@
 
 //! This module implements AST node renumbering.
 
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(dead_code)]
+
 use super::ast::{self, NodeId};
 use moore_common::errors::*;
 

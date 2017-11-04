@@ -10,7 +10,8 @@ CPASS=`tput setaf 2`
 
 TMP=`mktemp`
 TESTS_DIR="$(dirname "${BASH_SOURCE[0]}")"
-MOORE="$TESTS_DIR/../target/debug/moore"
+# MOORE="$TESTS_DIR/../target/debug/moore"
+MOORE="cargo run --"
 
 ALL=false
 if [ "$1" = "--all" ] || [ "$1" = "-a" ]; then

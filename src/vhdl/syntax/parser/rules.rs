@@ -49,10 +49,10 @@ use std::fmt::Display;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
-use syntax::lexer::token::*;
-use syntax::parser::TokenStream;
-use syntax::parser::core::*;
-use syntax::ast;
+use lexer::token::*;
+use parser::TokenStream;
+use parser::core::*;
+use ast;
 
 pub trait Parser: TokenStream<Token> {}
 impl<T> Parser for T where T: TokenStream<Token> {}
@@ -139,6 +139,7 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<ast::DesignUni
 		}
 	} {
 		Ok(x) => Ok(ast::DesignUnit{
+			id: Default::default(),
 			ctx: context,
 			data: x,
 		}),
@@ -343,7 +344,7 @@ pub fn parse_name_suffix<P: Parser>(p: &mut P, mut name: ast::CompoundName) -> R
 	}
 
 	// Try to parse a function call, slice name, or indexed name.
-	if let Some(al) = try_flanked(p, Paren, parse_paren_expr)? {
+	if let Some(al) = try_paren_expr(p)? {
 		name.span.expand(p.last_span());
 		name.parts.push(ast::NamePart::Call(al));
 		return parse_name_suffix(p, name);
@@ -624,7 +625,12 @@ pub fn parse_intf_decl<P: Parser>(p: &mut P, default: Option<ast::IntfObjKind>) 
 				None
 			};
 			span.expand(p.last_span());
-			return Ok(ast::IntfDecl::SubprogSpec(span, spec, default));
+			return Ok(ast::IntfDecl::SubprogSpec(ast::IntfSubprogDecl{
+				id: Default::default(),
+				span: span,
+				spec: spec,
+				default: default,
+			}));
 		}
 
 		// Try to short-circuit a package interface declaration.
@@ -696,6 +702,7 @@ pub fn parse_intf_decl<P: Parser>(p: &mut P, default: Option<ast::IntfObjKind>) 
 
 /// Try to parse a declarative item. See IEEE 1076-2008 section 3.2.3.
 pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::DeclItem>> {
+	let mut span = p.peek(0).span;
 	Ok(match p.peek(0).value {
 		// package_decl := "package" ident "is" ...
 		// package_body := "package" "body" ident "is" ...
@@ -725,7 +732,7 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::DeclIte
 		// alias_decl := "alias" ...
 		Keyword(Kw::Alias) => Some(ast::DeclItem::AliasDecl(parse_alias_decl(p)?)),
 		// use_clause := "use" ...
-		Keyword(Kw::Use) => Some(ast::DeclItem::UseClause(parse_use_clause(p)?)),
+		Keyword(Kw::Use) => Some(ast::DeclItem::UseClause(span, parse_use_clause(p)?)),
 		// subprog_spec := "pure"|"impure"|"procedure"|"function" ...
 		Keyword(Kw::Pure) |
 		Keyword(Kw::Impure) |
@@ -742,23 +749,31 @@ pub fn try_decl_item<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::DeclIte
 		// generic_clause     := "generic" ...
 		// generic_map_aspect := "generic" "map" ...
 		Keyword(Kw::Generic) => {
+			let pk = Spanned::new(ast::PortgenKind::Generic, p.peek(0).span);
 			if p.peek(1).value == Keyword(Kw::Map) {
 				let a = try_map_aspect(p, Kw::Generic)?.unwrap();
 				require(p, Semicolon)?;
-				Some(ast::DeclItem::PortgenMap(ast::PortgenKind::Generic, a))
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenMap(span, pk, a))
 			} else {
-				Some(ast::DeclItem::PortgenClause(ast::PortgenKind::Generic, try_generic_clause(p)?.unwrap()))
+				let c = try_generic_clause(p)?.unwrap();
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenClause(span, pk, c))
 			}
 		}
 		// port_clause     := "port" ...
 		// port_map_aspect := "port" "map" ...
 		Keyword(Kw::Port) => {
+			let pk = Spanned::new(ast::PortgenKind::Port, p.peek(0).span);
 			if p.peek(1).value == Keyword(Kw::Map) {
 				let a = try_map_aspect(p, Kw::Port)?.unwrap();
 				require(p, Semicolon)?;
-				Some(ast::DeclItem::PortgenMap(ast::PortgenKind::Port, a))
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenMap(span, pk, a))
 			} else {
-				Some(ast::DeclItem::PortgenClause(ast::PortgenKind::Port, try_port_clause(p)?.unwrap()))
+				let c = try_port_clause(p)?.unwrap();
+				span.expand(p.last_span());
+				Some(ast::DeclItem::PortgenClause(span, pk, c))
 			}
 		}
 		// group_decl := "group" ...
@@ -784,6 +799,7 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
 	if accept(p, Semicolon) {
 		span.expand(p.last_span());
 		return Ok(ast::Subprog{
+			id: Default::default(),
 			span: span,
 			spec: spec,
 			data: ast::SubprogData::Decl,
@@ -800,6 +816,7 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
 			require(p, Semicolon)?;
 			span.expand(p.last_span());
 			return Ok(ast::Subprog{
+				id: Default::default(),
 				span: span,
 				spec: spec,
 				data: ast::SubprogData::Inst{
@@ -820,6 +837,7 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
 			require(p, Semicolon)?;
 			span.expand(p.last_span());
 			return Ok(ast::Subprog{
+				id: Default::default(),
 				span: span,
 				spec: spec,
 				data: ast::SubprogData::Body{
@@ -856,7 +874,7 @@ pub fn parse_subtype_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::SubtypeInd
 	// Try to determine if the subtype indication starts out with a resolution
 	// indication. This might either be another name in front of the subtype
 	// name, or a element resolution in parenthesis.
-	let (res, name) = if let Some(exprs) = try_flanked(p, Paren, parse_paren_expr)? {
+	let (res, name) = if let Some(exprs) = try_paren_expr(p)? {
 		let name = parse_name(p)?;
 		(Some(ast::ResolInd::Exprs(exprs)), name)
 	} else {
@@ -889,7 +907,29 @@ pub fn parse_subtype_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::SubtypeInd
 /// ```text
 /// paren_expr := "(" { [ { expr }"|"+ "=>" ] expr }","+ ")"
 /// ```
-pub fn parse_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::ParenElem>> {
+pub fn parse_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::ParenElems> {
+	let mut span = p.peek(0).span;
+	let v = flanked(p, Paren, parse_paren_elem_vec)?;
+	span.expand(p.last_span());
+	Ok(Spanned::new(v, span))
+}
+
+
+pub fn try_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::ParenElems>> {
+	let mut span = p.peek(0).span;
+	match try_flanked(p, Paren, parse_paren_elem_vec)? {
+		Some(v) => {
+			span.expand(p.last_span());
+			Ok(Some(Spanned::new(v, span)))
+		}
+		None => {
+			Ok(None)
+		}
+	}
+}
+
+
+pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::ParenElem>> {
 	separated(p, Comma, CloseDelim(Paren), "expression", |p|{
 		// Parse a list of choices, i.e. expressions separated by `|`.
 		let mut choices = separated_nonempty(p, Pipe, token_predicate!(Arrow, Comma, CloseDelim(Paren)), "expression", parse_expr)?;
@@ -963,7 +1003,7 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 			// }
 
 			// // Try to parse a name prefixed by parenthesis.
-			// else if let Some(paren) = try_flanked(p, Paren, parse_paren_expr)? {
+			// else if let Some(paren) = try_paren_expr(p)? {
 			// 	let name = parse_name(p)?;
 			// 	span.expand(p.last_span());
 			// 	expr_span.expand(p.last_span());
@@ -996,7 +1036,7 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 		}
 
 		OpenDelim(Paren) => {
-			let expr = flanked(p, Paren, parse_paren_expr)?;
+			let expr = parse_paren_expr(p)?;
 
 			// Try to parse a name, which caters for the case of subtype
 			// indications that are prefixed with element resolution.
@@ -1051,7 +1091,7 @@ pub fn try_name_or_qualified_primary_expr<P: Parser>(p: &mut P) -> ReportedResul
 		// Try to parse a `'`, which would make this a qualified expression.
 		if accept(p, Apostrophe) {
 			if p.peek(0).value == OpenDelim(Paren) {
-				let expr = flanked(p, Paren, parse_paren_expr)?;
+				let expr = parse_paren_expr(p)?;
 				return Ok(Some(ast::Expr{
 					span: span,
 					data: ast::QualExpr(name, expr),
@@ -1140,7 +1180,7 @@ pub fn parse_expr_prec<P: Parser>(p: &mut P, prec: ExprPrec) -> ReportedResult<a
 /// precedence, try to parse additional tokens that extend the already parsed
 /// expression. This is currently limited to binary operations.
 pub fn parse_expr_suffix<P: Parser>(p: &mut P, prefix: ast::Expr, prec: ExprPrec) -> ReportedResult<ast::Expr> {
-	let Spanned{ value: tkn, mut span } = p.peek(0);
+	let tkn = p.peek(0).value;
 
 	// Try to parse a binary operation.
 	if let Some(op) = as_binary_op(tkn) {
@@ -1148,7 +1188,7 @@ pub fn parse_expr_suffix<P: Parser>(p: &mut P, prefix: ast::Expr, prec: ExprPrec
 		if prec <= op_prec {
 			p.bump();
 			let rhs = parse_expr_prec(p, op_prec)?;
-			span.expand(p.last_span());
+			let span = Span::union(prefix.span, p.last_span());
 			return parse_expr_suffix(p, ast::Expr{
 				span: span,
 				data: ast::BinaryExpr(op, Box::new(prefix), Box::new(rhs)),
@@ -1361,11 +1401,11 @@ pub fn parse_package_inst<P: Parser>(p: &mut P, with_semicolon: bool) -> Reporte
 /// ```text
 /// map_aspect := ["generic"|"port"] "map" paren_expr
 /// ```
-pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<Vec<ast::ParenElem>>> {
+pub fn try_map_aspect<P: Parser>(p: &mut P, kw: Kw) -> ReportedResult<Option<ast::ParenElems>> {
 	if p.peek(0).value == Keyword(kw) && p.peek(1).value == Keyword(Kw::Map) {
 		p.bump();
 		p.bump();
-		let v = flanked(p, Paren, parse_paren_expr)?;
+		let v = parse_paren_expr(p)?;
 		Ok(Some(v))
 	} else {
 		Ok(None)
@@ -1399,7 +1439,7 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 		let Spanned{ value: tkn, span: sp } = p.peek(0);
 		Some(match tkn {
 			// Enumeration type definition
-			OpenDelim(Paren) => ast::EnumType(flanked(p, Paren, parse_paren_expr)?),
+			OpenDelim(Paren) => ast::EnumType(parse_paren_expr(p)?),
 
 			// Integer, float, physical type definition
 			Keyword(Kw::Range) => {
@@ -1429,7 +1469,7 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 			// Array type definition
 			Keyword(Kw::Array) => {
 				p.bump();
-				let indices = flanked(p, Paren, parse_paren_expr)?;
+				let indices = parse_paren_expr(p)?;
 				require(p, Keyword(Kw::Of))?;
 				let subtype = parse_subtype_ind(p)?;
 				ast::ArrayType(indices, subtype)
@@ -1565,6 +1605,7 @@ pub fn parse_alias_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::AliasDecl> 
 	require(p, Semicolon)?;
 	span.expand(p.last_span());
 	Ok(ast::AliasDecl{
+		id: Default::default(),
 		span: span,
 		name: name,
 		subtype: subtype,
@@ -1644,9 +1685,10 @@ pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::ObjDecl> {
 	// Parse the additional object details.
 	let pk = p.peek(0);
 	let detail = match pk.value {
-		Keyword(Kw::Register) => { p.bump(); Some(ast::ObjDetail::Register) },
-		Keyword(Kw::Bus) => { p.bump(); Some(ast::ObjDetail::Bus) },
+		Keyword(Kw::Register) => { p.bump(); Some(Spanned::new(ast::ObjDetail::Register, p.last_span())) },
+		Keyword(Kw::Bus) => { p.bump(); Some(Spanned::new(ast::ObjDetail::Bus, p.last_span())) },
 		Keyword(Kw::Open) | Keyword(Kw::Is) => {
+			let mut span = p.peek(0).span;
 			let open = if accept(p, Keyword(Kw::Open)) {
 				Some(parse_expr(p)?)
 			} else {
@@ -1654,7 +1696,8 @@ pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::ObjDecl> {
 			};
 			require(p, Keyword(Kw::Is))?;
 			let path = parse_expr(p)?;
-			Some(ast::ObjDetail::Open(open, path))
+			span.expand(p.last_span());
+			Some(Spanned::new(ast::ObjDetail::Open(open, path), span))
 		}
 		_ => None
 	};
@@ -1777,7 +1820,7 @@ pub fn parse_subprog_spec<P: Parser>(p: &mut P) -> ReportedResult<ast::SubprogSp
 		name: name,
 		kind: kind,
 		purity: purity,
-		generic_claus: gc,
+		generic_clause: gc,
 		generic_map: gm,
 		params: params,
 		retty: retty,
@@ -1865,7 +1908,10 @@ pub fn parse_block_comp_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::D
 		// vunit_binding_ind := "use" "vunit" ...
 		(Keyword(Kw::Use), Keyword(Kw::Vunit)) => parse_vunit_binding_ind(p).map(|i| ast::DeclItem::VunitBindInd(i)),
 		// use_clause := "use" ...
-		(Keyword(Kw::Use), _) => parse_use_clause(p).map(|i| ast::DeclItem::UseClause(i)),
+		(Keyword(Kw::Use), _) => {
+			let span = p.peek(1).span;
+			parse_use_clause(p).map(|i| ast::DeclItem::UseClause(span, i))
+		}
 		// block_comp_config := "for" ...
 		(Keyword(Kw::For), _) => parse_block_comp_config(p).map(|i| ast::DeclItem::BlockCompCfg(i)),
 		// attr_spec := "attribute" ...
@@ -2314,7 +2360,7 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
 					Leq | VarAssign => parse_assign_tail(p, ast::AssignTarget::Name(name))?,
 					_ => parse_inst_or_call_tail(p, None, name)?,
 				}
-			} else if let Some(expr) = try_flanked(p, Paren, parse_paren_expr)? {
+			} else if let Some(expr) = try_paren_expr(p)? {
 				// Try to parse a statement that begins with a parenthesized
 				// expression, aka an assignment.
 				parse_assign_tail(p, ast::AssignTarget::Aggregate(expr))?
@@ -2333,6 +2379,7 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
 
 	span.expand(p.last_span());
 	Ok(ast::Stmt{
+		id: Default::default(),
 		span: span,
 		label: label,
 		data: data,
@@ -2481,13 +2528,19 @@ pub fn parse_if_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Repo
 				token_predicate!(Keyword(Kw::Elsif), Keyword(Kw::Else), Keyword(Kw::End)),
 				parse_stmt
 			)?;
-			Ok((cond, stmts))
+			Ok((cond, ast::StmtBody{
+				id: Default::default(),
+				stmts: stmts
+			}))
 		}
 	)?;
 
 	// Parse the optional `else` branch.
 	let alt = if accept(p, Keyword(Kw::Else)) {
-		Some(repeat_until(p, Keyword(Kw::End), parse_stmt)?)
+		Some(ast::StmtBody{
+			id: Default::default(),
+			stmts: repeat_until(p, Keyword(Kw::End), parse_stmt)?,
+		})
 	} else {
 		None
 	};
@@ -2521,7 +2574,10 @@ pub fn parse_case_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
 			require(p, Arrow)?;
 			let stmts = repeat_until(p, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)), parse_stmt)?;
-			Ok(Some((choices, stmts)))
+			Ok(Some((choices, ast::StmtBody{
+				id: Default::default(),
+				stmts: stmts,
+			})))
 		} else {
 			Ok(None)
 		}
@@ -2574,7 +2630,10 @@ pub fn parse_loop_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 	require(p, Semicolon)?;
 	Ok(ast::LoopStmt{
 		scheme: scheme,
-		stmts: stmts,
+		body: ast::StmtBody{
+			id: Default::default(),
+			stmts: stmts,
+		},
 	})
 }
 
@@ -2666,7 +2725,7 @@ pub fn parse_if_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>
 			let cond = parse_expr(p)?;
 			require(p, Keyword(Kw::Generate))?;
 			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::Elsif), Keyword(Kw::Else), Keyword(Kw::End)))?;
-			Ok((label.map(|l| l.into()), cond, body))
+			Ok((cond, body))
 		}
 	)?;
 
@@ -2675,7 +2734,7 @@ pub fn parse_if_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>
 		let label = try_label(p);
 		require(p, Keyword(Kw::Generate))?;
 		let body = parse_generate_body(p, label, Keyword(Kw::End))?;
-		Some((label.map(|l| l.into()), body))
+		Some(body)
 	} else {
 		None
 	};
@@ -2703,13 +2762,13 @@ pub fn parse_case_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name
 	require(p, Keyword(Kw::Generate))?;
 
 	// Parse the cases.
-	let cases = repeat(p, |p| -> ReportedResult<Option<(Option<ast::Ident>, Vec<ast::Expr>, ast::GenBody)>> {
+	let cases = repeat(p, |p| -> ReportedResult<Option<(Vec<ast::Expr>, ast::GenBody)>> {
 		if accept(p, Keyword(Kw::When)) {
 			let label = try_label(p);
 			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
 			require(p, Arrow)?;
 			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)))?;
-			Ok(Some((label.map(|l| l.into()), choices, body)))
+			Ok(Some((choices, body)))
 		} else {
 			Ok(None)
 		}
@@ -2816,6 +2875,8 @@ where T: Predicate<P> {
 
 	span.expand(p.last_span());
 	Ok(ast::GenBody{
+		id: Default::default(),
+		label: label,
 		span: span,
 		decls: decl_items,
 		stmts: stmts,
@@ -2954,7 +3015,7 @@ pub fn parse_select_assign<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData
 	// aggregate.
 	let target = if let Some(name) = try_name(p)? {
 		ast::AssignTarget::Name(name)
-	} else if let Some(exprs) = try_flanked(p, Paren, parse_paren_expr)? {
+	} else if let Some(exprs) = try_paren_expr(p)? {
 		ast::AssignTarget::Aggregate(exprs)
 	} else {
 		let pk = p.peek(0);

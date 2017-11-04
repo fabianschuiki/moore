@@ -1,5 +1,5 @@
 [package]
-name = "moore-common"
+name = "moore-vhdl-syntax"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 
@@ -7,6 +7,6 @@ authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 path = "lib.rs"
 
 [dependencies]
-memmap = "0.5.0"
-rustc-serialize = "0.3.22"
-serde = "1"
+moore-common = { path = "../../common" }
+rustc-serialize = "0.3"
+bincode = "0.6.1"

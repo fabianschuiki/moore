@@ -4,17 +4,15 @@
 //! disk and deserialized again ata later point.
 
 use std;
-use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
-use std::path::PathBuf;
 use super::ast;
 use bincode::SizeLimit;
 use bincode::rustc_serialize::{encode_into, decode_from};
 
 
-pub fn store_items(path: &str, key: &str, ast: ast::Root) -> std::io::Result<()> {
+pub fn store_items(path: &str, _: &str, ast: ast::Root) -> std::io::Result<()> {
 	let mut file = OpenOptions::new().append(true).create(true).open(path)?;
 	file.write(&[42])?;
 	encode_into(&ast, &mut file, SizeLimit::Infinite)

@@ -4,12 +4,12 @@ use std::fmt::Debug;
 use moore_common::errors::*;
 use moore_common::source::*;
 use moore_common::grind::{self, Grinder};
-use syntax::lexer::Lexer;
-use syntax::lexer::token;
-use syntax::parser::rules::*;
-use syntax::parser::core::*;
-use syntax::parser::basic::BasicParser;
-use syntax::ast;
+use lexer::Lexer;
+use lexer::token;
+use parser::rules::*;
+use parser::core::*;
+use parser::basic::BasicParser;
+use ast;
 
 macro_rules! parse {
     ($content:expr, $parse_fn:expr) => {{
@@ -229,10 +229,10 @@ fn subtype_ind() {
 
 #[test]
 fn elem_resolution() {
-	parse!("(func)", |p| flanked(p, token::Paren, parse_paren_expr));
-	parse!("((elemfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
-	parse!("((elemfunc) stuff (1 to 4))", |p| flanked(p, token::Paren, parse_paren_expr));
-	parse!("(a func, b func, c (elemfunc), d (x elemfunc, y elemenfunc))", |p| flanked(p, token::Paren, parse_paren_expr));
+	parse!("(func)", parse_paren_expr);
+	parse!("((elemfunc))", parse_paren_expr);
+	parse!("((elemfunc) stuff (1 to 4))", parse_paren_expr);
+	parse!("(a func, b func, c (elemfunc), d (x elemfunc, y elemenfunc))", parse_paren_expr);
 }
 
 #[test]

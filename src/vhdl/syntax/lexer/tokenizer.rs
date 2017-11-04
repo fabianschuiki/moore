@@ -4,8 +4,8 @@ use moore_common::grind::{Grinder, Lookahead};
 use moore_common::errors::*;
 use moore_common::source::*;
 use moore_common::name::*;
-use syntax::lexer::bundler::Bundle;
-use syntax::lexer::token::*;
+use lexer::bundler::Bundle;
+use lexer::token::*;
 
 
 /// A grinder that combines character bundles into lexical tokens. This is the
@@ -51,9 +51,9 @@ impl<T: Grinder> Tokenizer<T> where T: Grinder<Item=Option<Spanned<Bundle>>, Err
 			"SB" => BitStringBase::SB,
 			"SO" => BitStringBase::SO,
 			"SX" => BitStringBase::SX,
-			b => {
+			_ => {
 				self.emit(
-					DiagBuilder2::error(format!("`{}` is not a valid base for a bit string literal", b))
+					DiagBuilder2::error(format!("`{}` is not a valid base for a bit string literal", base.value))
 					.span(base.span)
 					.add_note("Valid bases are B, O, X, UB, UO, UX, SB, SO, SX, D")
 				);
