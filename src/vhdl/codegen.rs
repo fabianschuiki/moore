@@ -43,7 +43,7 @@ impl_codegen!(self, _id: ConstDeclRef, _ctx: &mut llhd::Entity => {
 });
 
 
-impl_codegen!(self, id: SignalDeclRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 	// Determine the type of the signal.
 	let hir = self.existing_hir(id)?;
 	let ty = self.ty(id)?;
@@ -57,7 +57,9 @@ impl_codegen!(self, id: SignalDeclRef, _ctx: &mut llhd::Entity => {
 	};
 
 	println!("signal {:?}, type {:?}, init {:?}", id, ty, init);
-
+	// Create the signal instance.
+	let inst = llhd::inst::Inst::new(Some(hir.name.value.into()), llhd::inst::SignalInst(self.map_type(ty)?, None));
+	ctx.add_inst(inst, llhd::inst::InstPosition::End);
 	Ok(())
 });
 

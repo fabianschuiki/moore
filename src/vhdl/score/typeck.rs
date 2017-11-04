@@ -27,7 +27,6 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 
 	/// Replace `Ty::Named` by the actual type definition recursively.
-	#[allow(unreachable_patterns)]
 	pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty> where 'ctx: 'a {
 		match ty {
 			&Ty::Named(_, tmr) => {
@@ -52,7 +51,68 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 /// Determine the type of a subtype indication.
 impl_make!(self, id: SubtypeIndRef => &Ty {
 	let hir = self.hir(id)?;
-	Ok(self.sb.arenas.ty.alloc(Ty::Named(hir.type_mark.span, hir.type_mark.value)))
+	match hir.constraint {
+		hir::Constraint::None => Ok(self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value))),
+
+		/// For range constraints, we first have to check if the constraint is
+		/// applicable given the type mark. If it is, check if the provided
+		/// range actually is a proper subtype, and then apply the constraint.
+		hir::Constraint::Range(span, expr_id) => {
+			let inner = self.deref_named_type(self.ty(hir.type_mark.value)?)?;
+			match *inner {
+				Ty::Int(ref inner) => {
+					// Evaluate the expression to a constant range.
+					let range = match *self.const_value(expr_id)? {
+						Const::IntRange(ref r) => r,
+						ref wrong => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("{} used to constrain integer type", wrong.kind_desc()))
+								.span(span)
+							);
+							return Err(());
+						}
+					};
+
+					// Make sure that this is actually a subtype.
+					if inner.dir != range.dir || inner.left_bound > range.left_bound.value || inner.right_bound < range.right_bound.value {
+						self.sess.emit(
+							DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", range, inner))
+							.span(span)
+						);
+						return Err(());
+					}
+
+					// Create the new type.
+					Ok(self.intern_ty(IntTy::new(inner.dir, range.left_bound.value.clone(), range.right_bound.value.clone())))
+				}
+
+				// All other types we simply cannot constrain by range.
+				_ => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("{} cannot be constrained by range", inner.kind_desc()))
+						.span(span)
+					);
+					return Err(());
+				}
+			}
+		}
+
+		hir::Constraint::Array(ref ac) => {
+			self.sess.emit(
+				DiagBuilder2::error("Array constraints on subtypes not yet supported")
+				.span(ac.span)
+			);
+			Err(())
+		}
+
+		hir::Constraint::Record(ref rc) => {
+			self.sess.emit(
+				DiagBuilder2::error("Record constraints on subtypes not yet supported")
+				.span(rc.span)
+			);
+			Err(())
+		}
+	}
 });
 
 
@@ -100,8 +160,9 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 
 
 /// Determine the type of a subtype declaration.
-impl_make!(self, _id: SubtypeDeclRef => &Ty {
-	unimplemented!()
+impl_make!(self, id: SubtypeDeclRef => &Ty {
+	let hir = self.hir(id)?;
+	self.ty(hir.subty)
 });
 
 

@@ -2,13 +2,11 @@
 
 //! This module implements VHDL types.
 
+use std::fmt;
 use score::*;
 use moore_common::source::Span;
 use num::BigInt;
-use hir;
-
-
-type Dir = hir::Dir;
+pub use hir::Dir;
 
 
 #[derive(Debug, Clone)]
@@ -22,6 +20,19 @@ pub enum Ty {
 	Named(Span, TypeMarkRef),
 	/// An integer type.
 	Int(IntTy),
+}
+
+
+impl Ty {
+	/// Provide a textual description of the kind of type. For example, if
+	/// called on an integer type, the result is `"integer type"`, without any
+	/// information on the exact nature of the integer.
+	pub fn kind_desc(&self) -> &'static str {
+		match *self {
+			Ty::Named(..) => "named type",
+			Ty::Int(_) => "integer type",
+		}
+	}
 }
 
 
@@ -48,5 +59,12 @@ impl IntTy {
 			left_bound: left_bound,
 			right_bound: right_bound,
 		}
+	}
+}
+
+
+impl fmt::Display for IntTy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{} {} {}", self.left_bound, self.dir, self.right_bound)
 	}
 }

@@ -765,11 +765,22 @@ pub enum BinaryOp {
 	Pow,
 }
 
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Dir {
 	To,
 	Downto,
 }
+
+impl std::fmt::Display for Dir {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match *self {
+			Dir::To => write!(f, "to"),
+			Dir::Downto => write!(f, "downto"),
+		}
+	}
+}
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Sign {

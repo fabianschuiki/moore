@@ -39,6 +39,7 @@ macro_rules! impl_make {
 mod lower_hir;
 mod typeck;
 mod scope;
+mod cval;
 
 
 /// The VHDL context which holds information about the language scoreboard and
@@ -518,87 +519,6 @@ impl<'sb, 'ast, 'ctx> NodeMaker<IntfSignalRef, &'ctx hir::IntfSignal> for ScoreC
 }
 
 
-// Lower a subtype indication to HIR.
-impl<'sb, 'ast, 'ctx> NodeMaker<SubtypeIndRef, &'ctx hir::SubtypeInd> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: SubtypeIndRef) -> Result<&'ctx hir::SubtypeInd> {
-		let (scope_id, ast) = self.ast(id);
-
-		// TODO: Implement resolution indications.
-		if let Some(_) = ast.res {
-			self.sess.emit(
-				DiagBuilder2::error("Resolution indications on subtypes not yet supported")
-				.span(ast.span)
-			);
-		}
-
-		// First try to resolve the name. This will yield a list of definitions
-		// and the remaining parts of the name that were not resolved. The
-		// latter will contain optional constraints.
-		let (_, mut defs, defs_span, tail_parts) = self.resolve_compound_name(&ast.name, scope_id, false)?;
-
-		// Make sure that the definition is unambiguous and unpack it.
-		let tm = match defs.pop() {
-			Some(Spanned{value: Def::Type(id), ..}) => id.into(),
-			Some(Spanned{value: Def::Subtype(id), ..}) => id.into(),
-			Some(_) => {
-				self.sess.emit(
-					DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
-					.span(ast.span)
-				);
-				return Err(());
-			}
-			None => unreachable!()
-		};
-		if !defs.is_empty() {
-			self.sess.emit(
-				DiagBuilder2::error(format!("`{}` is ambiguous", ast.span.extract()))
-				.span(ast.span)
-			);
-			return Err(());
-		}
-
-		// Parse the constraint.
-		match tail_parts.last() {
-			Some(&ast::NamePart::Range(ref expr)) => {
-				// TODO: Parse range constraint.
-				self.sess.emit(
-					DiagBuilder2::error(format!("Range constraints on subtype indications not yet implemented"))
-					.span(expr.span)
-				);
-				return Err(());
-			}
-			Some(&ast::NamePart::Call(ref elems)) => {
-				// TODO: Parse array or record constraint.
-				self.sess.emit(
-					DiagBuilder2::error(format!("Array and record constraints on subtype indications not yet implemented"))
-					.span(elems.span)
-				);
-				return Err(());
-			}
-			Some(_) => {
-				self.sess.emit(
-					DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
-					.span(ast.span)
-				);
-				return Err(());
-			}
-			None => ()
-		}
-		if tail_parts.len() > 1 {
-			self.sess.emit(
-				DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
-				.span(ast.span)
-			);
-			return Err(());
-		}
-
-		Ok(self.sb.arenas.hir.subtype_ind.alloc(hir::SubtypeInd{
-			span: ast.span,
-			type_mark: Spanned::new(tm, defs_span),
-		}))
-	}
-}
-
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Convert a primary name as it is present in the AST to a resolvable name
 	/// that can be defined and resolved in a scope.
@@ -995,105 +915,6 @@ impl<'sb, 'ast, 'ctx> NodeMaker<TypeDeclRef, &'ctx hir::TypeDecl> for ScoreConte
 }
 
 
-// Lower an expression to HIR.
-impl<'sb, 'ast, 'ctx> NodeMaker<ExprRef, &'ctx hir::Expr> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: ExprRef) -> Result<&'ctx hir::Expr> {
-		let (scope_id, ast) = self.ast(id);
-		let data = match ast.data {
-			/// Literals
-			ast::LitExpr(ref lit, ref _unit) => {
-				use syntax::lexer::token::Literal;
-				match *lit {
-					Literal::Abstract(base, int, frac, exp) => {
-						// Parse the base.
-						let base = match base {
-							Some(base) => match base.as_str().parse() {
-								Ok(base) => base,
-								Err(_) => {
-									self.sess.emit(
-										DiagBuilder2::error(format!("`{}` is not a valid base for a number literal", base))
-										.span(ast.span)
-									);
-									return Err(());
-								}
-							},
-							None => 10,
-						};
-
-						// Parse the rest of the number.
-						if frac.is_none() && exp.is_none() {
-							match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
-								Some(v) => hir::ExprData::IntegerLiteral(ConstInt::new(v)),
-								None => {
-									self.sess.emit(
-										DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base))
-										.span(ast.span)
-									);
-									return Err(());
-								}
-							}
-						} else {
-							self.sess.emit(
-								DiagBuilder2::error("Float literals not yet supported")
-								.span(ast.span)
-							);
-							return Err(());
-						}
-					}
-					_ => {
-						self.sess.emit(
-							DiagBuilder2::error("Literal not yet supported")
-							.span(ast.span)
-						);
-						return Err(());
-					}
-				}
-			}
-
-			// Unary operators.
-			ast::UnaryExpr(op, ref arg) => {
-				let op = match op {
-					ast::UnaryOp::Not => hir::UnaryOp::Not,
-					ast::UnaryOp::Abs => hir::UnaryOp::Abs,
-					ast::UnaryOp::Sign(ast::Sign::Pos) => hir::UnaryOp::Pos,
-					ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
-					ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
-					_ => {
-						self.sess.emit(
-							DiagBuilder2::error("Invalid unary operator")
-							.span(ast.span)
-						);
-						return Err(());
-					}
-				};
-				let subid = ExprRef(NodeId::alloc());
-				self.set_ast(subid, (scope_id, arg.as_ref()));
-				hir::ExprData::Unary(op, subid)
-			}
-
-			// Binary operators.
-			// ast::BinaryExpr(op, ref lhs, ref rhs) => {
-
-			// }
-
-			// All other expressions we simply do not support.
-			_ => {
-				self.sess.emit(
-					DiagBuilder2::error("Invalid expression")
-					.span(ast.span)
-				);
-				return Err(());
-			}
-		};
-		Ok(self.sb.arenas.hir.expr.alloc(hir::Expr{
-			parent: scope_id,
-			span: ast.span,
-			data: data,
-		}))
-	}
-}
-
-
 // Group the architectures declared in a library by entity.
 impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx ArchTable> {
@@ -1233,42 +1054,6 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 
 		// Add the entity to the module and return a reference to it.
 		Ok(DefValueRef(self.sb.llmod.borrow_mut().add_entity(entity).into()))
-	}
-}
-
-
-// Calculate the constant value of an expression.
-impl<'sb, 'ast, 'ctx> NodeMaker<ExprRef, &'ctx Const> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: ExprRef) -> Result<&'ctx Const> {
-		let hir = self.hir(id)?;
-		Ok(match hir.data {
-			// Integer literals.
-			hir::ExprData::IntegerLiteral(ref c) => self.sb.arenas.konst.alloc(Const::from(c.clone())),
-
-			// Float literals.
-			hir::ExprData::FloatLiteral(ref c) => self.sb.arenas.konst.alloc(Const::from(c.clone())),
-
-			// Unary operators.
-			hir::ExprData::Unary(op, arg_id) => {
-				let arg = self.const_value(arg_id)?;
-				// TODO: Lookup the type of the current expression and perform
-				// the operation accordingly.
-				match op {
-					hir::UnaryOp::Pos => arg,
-					hir::UnaryOp::Neg => self.sb.arenas.konst.alloc(arg.negate()),
-					_ => unimplemented!()
-				}
-			}
-
-			// All other expressions cannot be turned into a constant value.
-			_ => {
-				self.sess.emit(
-					DiagBuilder2::error("Expression does not have a constant value")
-					.span(hir.span)
-				);
-				return Err(());
-			}
-		})
 	}
 }
 
@@ -1711,6 +1496,7 @@ node_storage!(HirTable<'ctx>,
 	subtype_inds:          SubtypeIndRef         => &'ctx hir::SubtypeInd,
 	pkgs:                  PkgDeclRef            => &'ctx hir::Package,
 	type_decls:            TypeDeclRef           => &'ctx hir::TypeDecl,
+	subtype_decls:         SubtypeDeclRef        => &'ctx hir::SubtypeDecl,
 	exprs:                 ExprRef               => &'ctx hir::Expr,
 	const_decls:           ConstDeclRef          => &'ctx hir::ConstDecl,
 	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,

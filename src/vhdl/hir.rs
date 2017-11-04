@@ -2,6 +2,7 @@
 
 //! The High-level Intermediate Representation of a VHDL design.
 
+use std::collections::HashMap;
 use moore_common::source::*;
 use moore_common::name::*;
 use score::*;
@@ -20,6 +21,7 @@ pub struct Arenas {
 	pub subtype_ind: Arena<SubtypeInd>,
 	pub package: Arena<Package>,
 	pub type_decl: Arena<TypeDecl>,
+	pub subtype_decl: Arena<SubtypeDecl>,
 	pub expr: Arena<Expr>,
 	pub const_decl: Arena<ConstDecl>,
 	pub signal_decl: Arena<SignalDecl>,
@@ -39,6 +41,7 @@ impl Arenas {
 			subtype_ind: Arena::new(),
 			package: Arena::new(),
 			type_decl: Arena::new(),
+			subtype_decl: Arena::new(),
 			expr: Arena::new(),
 			const_decl: Arena::new(),
 			signal_decl: Arena::new(),
@@ -136,6 +139,48 @@ pub struct SubtypeInd {
 	pub span: Span,
 	/// The type mark.
 	pub type_mark: Spanned<TypeMarkRef>,
+	/// The optional constraint.
+	pub constraint: Constraint,
+}
+
+
+#[derive(Debug)]
+pub enum Constraint {
+	None,
+	Range(Span, ExprRef),
+	Array(ArrayConstraint),
+	Record(RecordConstraint),
+}
+
+
+#[derive(Debug)]
+pub enum ElementConstraint {
+	Array(ArrayConstraint),
+	Record(RecordConstraint),
+}
+
+
+/// An array constraint as per IEEE 1076-2008 section 5.3.2.
+#[derive(Debug)]
+pub struct ArrayConstraint {
+	/// The span this constraint covers.
+	pub span: Span,
+	/// The index constraint. `None` corresponds to the `open` constraint. Each
+	/// element in the vector refers to an expression that must evaluate to a
+	/// constant range or a subtype indication.
+	pub index: Option<Vec<ExprRef>>,
+	/// The optional constraint for the array elements.
+	pub elem: Option<Box<Spanned<ElementConstraint>>>,
+}
+
+
+/// A record constraint as per IEEE 1076-2008 section 5.3.3.
+#[derive(Debug)]
+pub struct RecordConstraint {
+	/// The span this constraint covers.
+	pub span: Span,
+	/// Constraints for individual elements.
+	pub elems: HashMap<Name, Box<ElementConstraint>>,
 }
 
 
@@ -170,6 +215,18 @@ pub enum TypeData {
 }
 
 
+/// A subtype declaration as per IEEE 1076-2008 section 6.3.
+#[derive(Debug)]
+pub struct SubtypeDecl {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The subtype name.
+	pub name: Spanned<Name>,
+	/// The actualy subtype.
+	pub subty: SubtypeIndRef,
+}
+
+
 #[derive(Debug)]
 pub struct Expr {
 	/// The parent scope.
@@ -191,6 +248,8 @@ pub enum ExprData {
 	Unary(UnaryOp, ExprRef),
 	/// A binary operator expression.
 	Binary(Operator, ExprRef, ExprRef),
+	// A range expression.
+	Range(Dir, ExprRef, ExprRef),
 }
 
 

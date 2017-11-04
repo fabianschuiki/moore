@@ -1180,7 +1180,7 @@ pub fn parse_expr_prec<P: Parser>(p: &mut P, prec: ExprPrec) -> ReportedResult<a
 /// precedence, try to parse additional tokens that extend the already parsed
 /// expression. This is currently limited to binary operations.
 pub fn parse_expr_suffix<P: Parser>(p: &mut P, prefix: ast::Expr, prec: ExprPrec) -> ReportedResult<ast::Expr> {
-	let Spanned{ value: tkn, mut span } = p.peek(0);
+	let tkn = p.peek(0).value;
 
 	// Try to parse a binary operation.
 	if let Some(op) = as_binary_op(tkn) {
@@ -1188,7 +1188,7 @@ pub fn parse_expr_suffix<P: Parser>(p: &mut P, prefix: ast::Expr, prec: ExprPrec
 		if prec <= op_prec {
 			p.bump();
 			let rhs = parse_expr_prec(p, op_prec)?;
-			span.expand(p.last_span());
+			let span = Span::union(prefix.span, p.last_span());
 			return parse_expr_suffix(p, ast::Expr{
 				span: span,
 				data: ast::BinaryExpr(op, Box::new(prefix), Box::new(rhs)),
