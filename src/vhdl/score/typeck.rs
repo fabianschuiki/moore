@@ -24,6 +24,16 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				}
 			}
 
+			Ty::Enum(ref ty) => {
+				let hir = self.hir(ty.decl)?;
+				match hir.data {
+					/// TODO: Swap this out for the actual enum ty once
+					/// supported by LLHD.
+					Some(hir::TypeData::Enum(_, ref lits)) => llhd::int_ty(lits.len()),
+					_ => unreachable!()
+				}
+			}
+
 			// Unbounded integers cannot be mapped to LLHD. All cases where
 			// such an int can leak through to codegen should actually be caught
 			// beforehand in the type check.
@@ -160,6 +170,10 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 					return Err(());
 				}
 			})
+		}
+
+		hir::TypeData::Enum(span, ref lits) => {
+			Ok(self.intern_ty(EnumTy::new(id)))
 		}
 	}
 });

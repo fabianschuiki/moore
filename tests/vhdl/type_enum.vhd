@@ -1,12 +1,15 @@
 package pkg is
 	type MULTI_LEVEL_LOGIC is (LOW, HIGH, RISING, FALLING, AMBIGUOUS);
-	type BIT is ('0','1');
-	type SWITCH_LEVEL is ('0','1','X');
+	type BIT is ('0', '1');
+	type SWITCH_LEVEL is ('0', '1', 'X');
+	type MIXED is ('0', '1', SOME_OTHER);
 end;
 
 library work;
 entity foo is end;
 
+library work;
+use work.pkg.all;
 architecture bar of foo is
 	signal a0 : MULTI_LEVEL_LOGIC; -- should be initialized to LOW
 	signal a1 : MULTI_LEVEL_LOGIC := LOW;
@@ -23,6 +26,11 @@ architecture bar of foo is
 	signal c1 : SWITCH_LEVEL := '0';
 	signal c2 : SWITCH_LEVEL := '1';
 	signal c3 : SWITCH_LEVEL := 'X';
+
+	signal d0 : MIXED; -- should be initialized to '0'
+	signal d1 : MIXED := '0';
+	signal d2 : MIXED := '1';
+	signal d3 : MIXED := SOME_OTHER;
 begin end;
 
 --@ +elab foo(bar)
@@ -41,4 +49,8 @@ begin end;
 --|     %c1 = sig n3 0
 --|     %c2 = sig n3 1
 --|     %c3 = sig n3 2
+--|     %d0 = sig n3 0
+--|     %d1 = sig n3 0
+--|     %d2 = sig n3 1
+--|     %d3 = sig n3 2
 --| }

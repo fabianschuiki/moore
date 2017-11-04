@@ -876,45 +876,6 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 }
 
 
-// Lower a type declaration to HIR.
-impl<'sb, 'ast, 'ctx> NodeMaker<TypeDeclRef, &'ctx hir::TypeDecl> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: TypeDeclRef) -> Result<&'ctx hir::TypeDecl> {
-		let (scope_id, ast) = self.ast(id);
-		let data = match ast.data {
-			// Integer, real, and physical types.
-			Some(ast::RangeType(ref range_expr, ref _units)) => {
-				let (dir, lb, rb) = match range_expr.data {
-					ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
-						let lb = ExprRef(NodeId::alloc());
-						let rb = ExprRef(NodeId::alloc());
-						self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
-						self.set_ast(rb, (scope_id.into(), rb_expr.as_ref()));
-						(dir, lb, rb)
-					}
-					_ => {
-						self.sess.emit(
-							DiagBuilder2::error("Invalid range expression")
-							.span(range_expr.span)
-						);
-						return Err(());
-					}
-				};
-				// TODO: Handle units
-				Some(hir::TypeData::Range(range_expr.span, dir, lb, rb))
-			}
-			Some(_) => unimplemented!(),
-			None => None
-		};
-		let decl = hir::TypeDecl{
-			parent: scope_id,
-			name: ast.name,
-			data: data,
-		};
-		Ok(self.sb.arenas.hir.type_decl.alloc(decl))
-	}
-}
-
-
 // Group the architectures declared in a library by entity.
 impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx ArchTable> {
@@ -1064,6 +1025,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		match *ty {
 			Ty::Named(_, ty) => self.default_value_for_type(self.ty(ty)?),
 			Ty::Null => Ok(self.intern_const(Const::Null)),
+			Ty::Enum(ref ty) => {
+				// TODO: Replace with the first literal in the enum.
+				Ok(self.intern_const(Const::Null))
+			}
 			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
 			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
 		}

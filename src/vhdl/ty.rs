@@ -26,8 +26,9 @@ pub enum Ty {
 	/// evaluated at compile time, e.g. as part of a range expression. Cannot be
 	/// mapped to LLHD.
 	UnboundedInt,
+	/// An enumeration type.
+	Enum(EnumTy),
 }
-
 
 impl Ty {
 	/// Provide a textual description of the kind of type. For example, if
@@ -38,10 +39,10 @@ impl Ty {
 			Ty::Named(..) => "named type",
 			Ty::Null => "null type",
 			Ty::Int(_) | Ty::UnboundedInt => "integer type",
+			Ty::Enum(_) => "enumeration type",
 		}
 	}
 }
-
 
 impl From<IntTy> for Ty {
 	fn from(t: IntTy) -> Ty {
@@ -49,14 +50,20 @@ impl From<IntTy> for Ty {
 	}
 }
 
+impl From<EnumTy> for Ty {
+	fn from(t: EnumTy) -> Ty {
+		Ty::Enum(t)
+	}
+}
 
+
+/// An integer type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntTy {
 	pub dir: Dir,
 	pub left_bound: BigInt,
 	pub right_bound: BigInt,
 }
-
 
 impl IntTy {
 	/// Create a new integer type.
@@ -80,9 +87,25 @@ impl IntTy {
 	}
 }
 
-
 impl fmt::Display for IntTy {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{} {} {}", self.left_bound, self.dir, self.right_bound)
+	}
+}
+
+
+/// An enumeration type. Rather than keeping track of each enumeration value in
+/// here, we simply point at the type declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumTy {
+	pub decl: TypeDeclRef,
+}
+
+impl EnumTy {
+	/// Create a new enumeration type.
+	pub fn new(decl: TypeDeclRef) -> EnumTy {
+		EnumTy {
+			decl: decl,
+		}
 	}
 }

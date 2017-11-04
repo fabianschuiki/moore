@@ -212,6 +212,15 @@ pub struct TypeDecl {
 pub enum TypeData {
 	/// An integer, float, or physical type with optional units.
 	Range(Span, Dir, ExprRef, ExprRef),
+	/// An enumeration type.
+	Enum(Span, Vec<EnumLit>),
+}
+
+
+#[derive(Debug)]
+pub enum EnumLit {
+	Ident(Spanned<Name>),
+	Char(Spanned<char>),
 }
 
 
