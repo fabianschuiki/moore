@@ -89,6 +89,8 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	scope_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
 	/// A table of nodes' constant values.
 	const_table: RefCell<HashMap<NodeId, &'ctx Const>>,
+	/// A table of type contexts for expressions.
+	tyctx_table: RefCell<HashMap<NodeId, TypeCtx<'ctx>>>,
 }
 
 
@@ -139,6 +141,7 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 			ty_table: RefCell::new(HashMap::new()),
 			scope_table: RefCell::new(HashMap::new()),
 			const_table: RefCell::new(HashMap::new()),
+			tyctx_table: RefCell::new(HashMap::new()),
 		}
 	}
 }
@@ -326,6 +329,24 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			panic!("node should not exist");
 		}
 		Ok(node)
+	}
+
+
+	/// Obtain the type context for an expression. Returns `None` if no context
+	/// information is available.
+	pub fn type_context<I>(&self, id: I) -> Option<TypeCtx<'ctx>>
+	where I: Copy + Debug + Into<NodeId>
+	{
+		self.sb.tyctx_table.borrow().get(&id.into()).map(|&t| t)
+	}
+
+
+	/// Store a type context for an expression. Upon type checking, the
+	/// expression is likely to consult this context to determine its type.
+	pub fn set_type_context<I>(&self, id: I, tyctx: TypeCtx<'ctx>)
+	where I: Copy + Debug + Into<NodeId>
+	{
+		self.sb.tyctx_table.borrow_mut().insert(id.into(), tyctx);
 	}
 }
 
@@ -664,7 +685,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						Def::BuiltinPkg(id) => id.into(),
 						d => {
 							self.sess.emit(
-								DiagBuilder2::error(format!("Cannot select into {:?}", d))
+								DiagBuilder2::error(format!("cannot select into {:?}", d))
 								.span(pn.span)
 							);
 							return Err(());
@@ -1025,7 +1046,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		match *ty {
 			Ty::Named(_, ty) => self.default_value_for_type(self.ty(ty)?),
 			Ty::Null => Ok(self.intern_const(Const::Null)),
-			Ty::Enum(ref ty) => {
+			Ty::Enum(ref _ty) => {
 				// TODO: Replace with the first literal in the enum.
 				Ok(self.intern_const(Const::Null))
 			}
@@ -1152,6 +1173,12 @@ impl From<Name> for ResolvableName {
 	}
 }
 
+impl From<char> for ResolvableName {
+	fn from(c: char) -> ResolvableName {
+		ResolvableName::Bit(c)
+	}
+}
+
 
 /// An operator as defined in IEEE 1076-2008 section 9.2.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -1214,6 +1241,18 @@ impl std::fmt::Display for Operator {
 }
 
 
+/// The type requirements imposed upon an expression by its context. This is
+/// needed for overload resolution, where the type of the overload to be picked
+/// is determined by the context in which the expression appears.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TypeCtx<'ctx> {
+	/// The exact type the expression must have.
+	Type(&'ctx Ty),
+	/// The node whose type the expression must match.
+	TypeOf(TypedNodeRef),
+}
+
+
 // Declare the node references.
 node_ref!(ArchRef);
 node_ref!(BuiltinPkgRef);
@@ -1263,6 +1302,17 @@ node_ref!(VariableDeclRef);
 node_ref!(SharedVariableDeclRef);
 node_ref!(FileDeclRef);
 
+/// A reference to an enumeration literal, expressed as the type declaration
+/// which defines the enumeration and the index of the literal.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug)]
+pub struct EnumRef(pub TypeDeclRef, pub usize);
+
+impl Into<NodeId> for EnumRef {
+	fn into(self) -> NodeId {
+		panic!("EnumRef cannot be converted into a NodeId");
+	}
+}
+
 // Declare the node reference groups.
 node_ref_group!(Def:
 	Arch(ArchRef),
@@ -1275,6 +1325,7 @@ node_ref_group!(Def:
 	BuiltinPkg(BuiltinPkgRef),
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
+	Enum(EnumRef),
 );
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
@@ -1418,6 +1469,11 @@ node_ref_group!(SeqStmtRef:
 	Exit(ExitStmtRef),
 	Return(ReturnStmtRef),
 	Null(NullStmtRef),
+);
+
+/// A reference to a node which has a type.
+node_ref_group!(TypedNodeRef:
+	SubtypeInd(SubtypeIndRef),
 );
 
 

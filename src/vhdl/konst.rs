@@ -5,6 +5,7 @@
 use std::fmt;
 use num::BigInt;
 use ty::*;
+use score::TypeDeclRef;
 pub use hir::Dir;
 
 
@@ -14,6 +15,7 @@ pub enum Const {
 	Null,
 	Int(ConstInt),
 	Float(ConstFloat),
+	Enum(ConstEnum),
 	IntRange(ConstIntRange),
 	FloatRange(ConstFloatRange),
 }
@@ -24,6 +26,7 @@ impl Const {
 			Const::Null => panic!("cannot negate null"),
 			Const::Int(c) => Const::Int(c.negate()),
 			Const::Float(c) => Const::Float(c.negate()),
+			Const::Enum(_) => panic!("cannot negate enumeration literal"),
 			Const::IntRange(_) => panic!("cannot negate integer range"),
 			Const::FloatRange(_) => panic!("cannot negate float range"),
 		}
@@ -36,6 +39,7 @@ impl Const {
 			Const::Null => "null",
 			Const::Int(_) => "integer",
 			Const::Float(_) => "float",
+			Const::Enum(_) => "enumeration literal",
 			Const::IntRange(_) => "integer range",
 			Const::FloatRange(_) => "float range",
 		}
@@ -51,6 +55,12 @@ impl From<ConstInt> for Const {
 impl From<ConstFloat> for Const {
 	fn from(k: ConstFloat) -> Const {
 		Const::Float(k)
+	}
+}
+
+impl From<ConstEnum> for Const {
+	fn from(k: ConstEnum) -> Const {
+		Const::Enum(k)
 	}
 }
 
@@ -104,6 +114,26 @@ impl ConstFloat {
 }
 
 
+/// A constant enumeration value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConstEnum {
+	/// The type declaration which declared the enum.
+	pub decl: TypeDeclRef,
+	/// The index of the literal.
+	pub index: usize,
+}
+
+impl ConstEnum {
+	/// Create a new constant integer.
+	pub fn new(decl: TypeDeclRef, index: usize) -> ConstEnum {
+		ConstEnum {
+			decl: decl,
+			index: index,
+		}
+	}
+}
+
+
 /// A constant range value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstRange<T: fmt::Display + fmt::Debug> {
@@ -135,6 +165,7 @@ impl fmt::Display for Const {
 			Const::Null => write!(f, "null"),
 			Const::Int(ref k) => k.fmt(f),
 			Const::Float(ref k) => k.fmt(f),
+			Const::Enum(ref k) => k.fmt(f),
 			Const::IntRange(ref k) => k.fmt(f),
 			Const::FloatRange(ref k) => k.fmt(f),
 		}
@@ -144,6 +175,12 @@ impl fmt::Display for Const {
 impl fmt::Display for ConstInt {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.value.fmt(f)
+	}
+}
+
+impl fmt::Display for ConstEnum {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "<enum>")
 	}
 }
 

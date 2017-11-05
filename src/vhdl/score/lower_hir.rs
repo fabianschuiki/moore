@@ -54,6 +54,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let init = if let Some(ref expr) = ast.init {
 			let id = ExprRef::new(NodeId::alloc());
 			self.set_ast(id, (scope_id, expr));
+			self.set_type_context(id, TypeCtx::TypeOf(ty.into()));
 			Some(id)
 		} else {
 			None
@@ -75,6 +76,82 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 		Ok(())
 	}
+
+
+	// /// Convert a compound name into an HIR expression.
+	// pub fn compound_name_to_expr(&self, ast: &'ast ast::CompoundName, scope_id: ScopeRef) -> Result<&'ctx hir::Expr> {
+	// 	// Map the primary name to a resolvable name, and wrap it in a name
+	// 	// expression.
+	// 	let primary = self.resolvable_from_primary_name(&ast.primary)?;
+	// 	let mut expr: &'ctx hir::Expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+	// 		parent: scope_id,
+	// 		span: primary.span,
+	// 		data: hir::ExprData::Name(primary.value),
+	// 	});
+
+	// 	// Map each name part recursively.
+	// 	for part in &ast.parts {
+	// 		// Allocate a node ID for the inner expression and store it away in
+	// 		// the HIR table.
+	// 		let inner = ExprRef::new(NodeId::alloc());
+	// 		let inner_span = expr.span;
+	// 		self.sb.hir_table.borrow_mut().set(inner, expr);
+
+	// 		match *part {
+	// 			ast::NamePart::Select(name) => {
+	// 				let rn = self.resolvable_from_primary_name(&name)?;
+	// 				expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+	// 					parent: scope_id,
+	// 					span: Span::union(inner_span, rn.span),
+	// 					data: hir::ExprData::Select(inner, rn),
+	// 				});
+	// 			}
+
+	// 			ast::NamePart::Signature(ref _sig) => unimplemented!(),
+
+	// 			ast::NamePart::Attribute(ident) => {
+	// 				expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+	// 					parent: scope_id,
+	// 					span: Span::union(inner_span, ident.span),
+	// 					data: hir::ExprData::Attr(inner, Spanned::new(ident.name.into(), ident.span)),
+	// 				});
+	// 			}
+
+	// 			// Call expressions can map to different things. First we need
+	// 			// to know what type the callee has. Based on this, the list of
+	// 			// arguments can be associated with the correct ports. Or in
+	// 			// case the callee is a type, we perform a type conversion.
+	// 			ast::NamePart::Call(ref _elems) => {
+	// 				let callee_ty = self.ty(inner)?;
+	// 				panic!("call to {:?} not implemented", callee_ty);
+	// 				// let mut had_named = false;
+	// 				// for i in 0..elems.len() {
+
+	// 				// }
+	// 			}
+
+	// 			// Disallow `.all` in expressions.
+	// 			ast::NamePart::SelectAll(span) => {
+	// 				self.sess.emit(
+	// 					DiagBuilder2::error("`.all` in an expression")
+	// 					.span(span)
+	// 				);
+	// 				return Err(());
+	// 			}
+
+	// 			// Disallow ranges in expressions.
+	// 			ast::NamePart::Range(ref expr) => {
+	// 				self.sess.emit(
+	// 					DiagBuilder2::error("range in an expression")
+	// 					.span(expr.span)
+	// 				);
+	// 				return Err(());
+	// 			}
+	// 		}
+	// 	}
+
+	// 	Ok(expr)
+	// }
 }
 
 
@@ -248,6 +325,154 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 
 		// }
 
+		// Names.
+		ast::NameExpr(ref name) => {
+			let (_, defs, matched_span, tail_parts) = self.resolve_compound_name(name, scope_id, false)?;
+			println!("name {} matched {:?}, tail {:?}", name.span.extract(), defs, tail_parts);
+
+			// If there are multiple definitions, perform overload resolution by
+			// consulting the type context for the expression.
+			let defs: Vec<_> = if defs.len() > 1 {
+				if let Some(tyctx) = self.type_context(id) {
+					let ty = self.deref_named_type(match tyctx {
+						TypeCtx::Type(t) => t,
+						TypeCtx::TypeOf(id) => self.ty(id)?,
+					})?;
+					if self.sess.opts.trace_scoreboard {
+						println!("[SB][VHDL][OVLD] resolve overloaded `{}`", matched_span.extract());
+						println!("[SB][VHDL][OVLD] context requires {:?}", ty);
+					}
+
+					// Filter out the defs that are typed and that match the
+					// type imposed by the expression context.
+					let mut filtered = Vec::new();
+					for def in defs {
+						let defty = self.deref_named_type(match def.value {
+							Def::Enum(EnumRef(id,_)) => self.ty(id)?,
+							// TODO: Add subprograms and everything else that
+							// can match here.
+							_ => {
+								if self.sess.opts.trace_scoreboard {
+									println!("[SB][VHDL][OVLD] discarding irrelevant {:?}", def.value);
+								}
+								continue;
+							}
+						})?;
+						if defty == ty {
+							filtered.push(def);
+							if self.sess.opts.trace_scoreboard {
+								println!("[SB][VHDL][OVLD] accepting {:?}", def.value);
+							}
+						} else {
+							if self.sess.opts.trace_scoreboard {
+								println!("[SB][VHDL][OVLD] discarding {:?} because mismatching type {:?}", def.value, defty);
+							}
+						}
+					}
+
+					// If the filtering left no overloads, emit an error.
+					if filtered.is_empty() {
+						self.sess.emit(
+							DiagBuilder2::error(format!("no overload of `{}` applicable", matched_span.extract()))
+							.span(matched_span)
+						);
+						// TODO: Print the required type and the type of what
+						// has been found.
+						return Err(());
+					}
+					filtered
+				} else {
+					defs
+				}
+			} else {
+				defs
+			};
+
+			// Make sure we only have one definition. If we have more than one,
+			// perform overload resolution by consulting the type context for
+			// the expression.
+			let def = if defs.len() == 1 {
+				*defs.last().unwrap()
+			} else {
+				self.sess.emit(
+					DiagBuilder2::error(format!("`{}` is ambiguous", matched_span.extract()))
+					.span(matched_span)
+				);
+				return Err(());
+			};
+
+			// Create the expression representation of the definition.
+			let mut expr: &'ctx hir::Expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+				parent: scope_id,
+				span: matched_span,
+				data: hir::ExprData::Name(def.value, def.span),
+			});
+
+			// Unpack the remaining parts of the name.
+			for part in tail_parts {
+				// Allocate a node ID for the inner expression and store it away in
+				// the HIR table.
+				let inner = ExprRef::new(NodeId::alloc());
+				let inner_span = expr.span;
+				self.sb.hir_table.borrow_mut().set(inner, expr);
+
+				match *part {
+					ast::NamePart::Select(name) => {
+						let rn = self.resolvable_from_primary_name(&name)?;
+						expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+							parent: scope_id,
+							span: Span::union(inner_span, rn.span),
+							data: hir::ExprData::Select(inner, rn),
+						});
+					}
+
+					ast::NamePart::Signature(ref _sig) => unimplemented!(),
+
+					ast::NamePart::Attribute(ident) => {
+						expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+							parent: scope_id,
+							span: Span::union(inner_span, ident.span),
+							data: hir::ExprData::Attr(inner, Spanned::new(ident.name.into(), ident.span)),
+						});
+					}
+
+					// Call expressions can map to different things. First we need
+					// to know what type the callee has. Based on this, the list of
+					// arguments can be associated with the correct ports. Or in
+					// case the callee is a type, we perform a type conversion.
+					ast::NamePart::Call(ref _elems) => {
+						let callee_ty = self.ty(inner)?;
+						panic!("call to {:?} not implemented", callee_ty);
+						// let mut had_named = false;
+						// for i in 0..elems.len() {
+
+						// }
+					}
+
+					// Disallow `.all` in expressions.
+					ast::NamePart::SelectAll(span) => {
+						self.sess.emit(
+							DiagBuilder2::error("`.all` in an expression")
+							.span(span)
+						);
+						return Err(());
+					}
+
+					// Disallow ranges in expressions.
+					ast::NamePart::Range(ref expr) => {
+						self.sess.emit(
+							DiagBuilder2::error("range in an expression")
+							.span(expr.span)
+						);
+						return Err(());
+					}
+				}
+			}
+
+			// return self.compound_name_to_expr(name, scope_id);
+			return Ok(expr);
+		}
+
 		// All other expressions we simply do not support.
 		_ => {
 			self.sess.emit(
@@ -263,7 +488,6 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 		data: data,
 	}))
 });
-
 
 
 // Lower a type declaration to HIR.

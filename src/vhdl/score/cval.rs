@@ -50,6 +50,9 @@ impl_make!(self, id: ExprRef => &Const {
 			}
 		}
 
+		// Names.
+		hir::ExprData::Name(Def::Enum(EnumRef(decl, index)), _) => self.intern_const(ConstEnum::new(decl, index)),
+
 		// All other expressions cannot be turned into a constant value.
 		_ => {
 			self.sess.emit(

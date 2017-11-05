@@ -172,7 +172,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			})
 		}
 
-		hir::TypeData::Enum(span, ref lits) => {
+		hir::TypeData::Enum(..) => {
 			Ok(self.intern_ty(EnumTy::new(id)))
 		}
 	}
@@ -190,4 +190,21 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 impl_make!(self, id: SignalDeclRef => &Ty {
 	let hir = self.existing_hir(id)?;
 	self.ty(hir.subty)
+});
+
+
+/// Determine the type of an expression.
+impl_make!(self, id: ExprRef => &Ty {
+	let hir = self.hir(id)?;
+	match hir.data {
+		_ => panic!("typeck not impl for expr {:?}", hir.data)
+	}
+});
+
+
+/// Determine the type of a typed node.
+impl_make!(self, id: TypedNodeRef => &Ty {
+	match id {
+		TypedNodeRef::SubtypeInd(id) => self.make(id),
+	}
 });

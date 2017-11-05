@@ -5,7 +5,7 @@
 use moore_common::score::Result;
 use score::*;
 use konst::*;
-// use hir;
+use hir;
 use llhd;
 
 
@@ -32,6 +32,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			// TODO: Map this to llhd::const_void once available.
 			Const::Null => llhd::const_int(0, 0.into()),
 			Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
+			Const::Enum(ref k) => {
+				let size = match self.hir(k.decl)?.data {
+					Some(hir::TypeData::Enum(_, ref lits)) => lits.len(),
+					_ => unreachable!(),
+				};
+				llhd::const_int(size, k.index.into())
+			}
 			Const::Float(ref _k) => panic!("cannot map float constant"),
 			Const::IntRange(_) | Const::FloatRange(_) => panic!("cannot map range constant"),
 		}.into())

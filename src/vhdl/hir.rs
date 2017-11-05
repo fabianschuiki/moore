@@ -249,6 +249,12 @@ pub struct Expr {
 
 #[derive(Debug)]
 pub enum ExprData {
+	/// A resolved name. Consists of the definition and the definition's span.
+	Name(Def, Span),
+	/// A selection, e.g. `a.b`.
+	Select(ExprRef, Spanned<ResolvableName>),
+	/// An attribute selection, e.g. `a'b`.
+	Attr(ExprRef, Spanned<ResolvableName>),
 	/// An integer literal.
 	IntegerLiteral(ConstInt),
 	/// A float literal.
