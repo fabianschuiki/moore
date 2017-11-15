@@ -16,7 +16,7 @@ rustc-serialize = "0.3.22"
 serde = "1"
 sha1 = "0.2.0"
 typed-arena = "1.3.0"
-llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "b4678ea" }
+llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "b88f18f" }
 
 [features]
 unstable = []

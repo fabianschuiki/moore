@@ -6,42 +6,6 @@ use score::*;
 
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
-	/// Map a VHDL type to the corresponding LLHD type.
-	pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
-		let ty = self.deref_named_type(ty)?;
-		Ok(match *ty {
-			Ty::Named(..) => unreachable!(),
-			Ty::Null => llhd::void_ty(),
-			Ty::Int(ref ty) => {
-				let diff = match ty.dir {
-					hir::Dir::To => &ty.right_bound - &ty.left_bound,
-					hir::Dir::Downto => &ty.left_bound - &ty.right_bound,
-				};
-				if diff.is_negative() {
-					llhd::void_ty()
-				} else {
-					llhd::int_ty(diff.bits())
-				}
-			}
-
-			Ty::Enum(ref ty) => {
-				let hir = self.hir(ty.decl)?;
-				match hir.data {
-					/// TODO: Swap this out for the actual enum ty once
-					/// supported by LLHD.
-					Some(hir::TypeData::Enum(_, ref lits)) => llhd::int_ty(lits.len()),
-					_ => unreachable!()
-				}
-			}
-
-			// Unbounded integers cannot be mapped to LLHD. All cases where
-			// such an int can leak through to codegen should actually be caught
-			// beforehand in the type check.
-			Ty::UnboundedInt => unreachable!(),
-		})
-	}
-
-
 	/// Replace `Ty::Named` by the actual type definition recursively.
 	pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty> where 'ctx: 'a {
 		match ty {

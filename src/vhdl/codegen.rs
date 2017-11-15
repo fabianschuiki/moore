@@ -5,6 +5,8 @@
 use moore_common::score::Result;
 use score::*;
 use konst::*;
+use ty::*;
+use num::Signed;
 use hir;
 use llhd;
 
@@ -26,6 +28,39 @@ macro_rules! impl_codegen {
 
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Map a VHDL type to the corresponding LLHD type.
+	pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
+		let ty = self.deref_named_type(ty)?;
+		Ok(match *ty {
+			Ty::Named(..) => unreachable!(),
+			Ty::Null => llhd::void_ty(),
+			Ty::Int(ref ty) => {
+				let diff = match ty.dir {
+					hir::Dir::To => &ty.right_bound - &ty.left_bound,
+					hir::Dir::Downto => &ty.left_bound - &ty.right_bound,
+				};
+				if diff.is_negative() {
+					llhd::void_ty()
+				} else {
+					llhd::int_ty(diff.bits())
+				}
+			}
+
+			Ty::Enum(ref ty) => {
+				let hir = self.hir(ty.decl)?;
+				match hir.data {
+					Some(hir::TypeData::Enum(_, ref lits)) => llhd::enum_ty(lits.len()),
+					_ => unreachable!()
+				}
+			}
+
+			// Unbounded integers cannot be mapped to LLHD. All cases where
+			// such an int can leak through to codegen should actually be caught
+			// beforehand in the type check.
+			Ty::UnboundedInt => unreachable!(),
+		})
+	}
+
 	/// Map a constant value to the LLHD counterpart.
 	pub fn map_const(&self, konst: &Const) -> Result<llhd::ValueRef> {
 		Ok(match *konst {
@@ -80,11 +115,11 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 
 	println!("signal {:?}, type {:?}, init {:?}", id, ty, init);
 	// Create the signal instance.
-	let inst = llhd::inst::Inst::new(
+	let inst = llhd::Inst::new(
 		Some(hir.name.value.into()),
-		llhd::inst::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
+		llhd::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
 	);
-	ctx.add_inst(inst, llhd::inst::InstPosition::End);
+	ctx.add_inst(inst, llhd::InstPosition::End);
 	Ok(())
 });
 
