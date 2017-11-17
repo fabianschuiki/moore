@@ -569,3 +569,19 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 	};
 	Ok(self.sb.arenas.hir.type_decl.alloc(decl))
 });
+
+
+// Lower an architecture to HIR.
+impl_make!(self, id: ArchRef => &hir::Arch {
+	let (lib_id, ctx_id, ast) = self.ast(id);
+	let decls = self.unpack_block_decls(id.into(), &ast.decls, "an architecture")?;
+	let stmts = self.unpack_concurrent_stmts(id.into(), &ast.stmts, "an architecture")?;
+	let entity_id = *self.archs(lib_id)?.by_arch.get(&id).unwrap();
+	Ok(self.sb.arenas.hir.arch.alloc(hir::Arch{
+		ctx_items: ctx_id,
+		entity: entity_id,
+		name: ast.name,
+		decls: decls,
+		stmts: stmts,
+	}))
+});

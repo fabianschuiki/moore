@@ -205,7 +205,7 @@ impl_make_defs!(self, _id: PkgInstRef => {
 impl_make_scope!(self, id: ScopeRef => {
 	match id {
 		ScopeRef::Lib(id) => self.make(id),
-		ScopeRef::CtxItems(id) => self.make(id),
+		ScopeRef::CtxItems(_) => unreachable!(),
 		ScopeRef::Entity(id) => self.make(id),
 		ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
 		ScopeRef::Pkg(id) => self.make(id),
@@ -227,61 +227,64 @@ impl_make_scope!(self, id: LibRef => {
 });
 
 
-// Populate the scope of the context items that appear before a design unit. The
-// scope of the design unit itself is a subscope of the context items.
-impl_make_scope!(self, id: CtxItemsRef => {
-	let (_, items) = self.ast(id);
-	let mut defs = Vec::new();
-	let mut explicit_defs = HashMap::new();
-	defs.push(id.into());
-	for item in items {
-		if let &ast::CtxItem::UseClause(Spanned{value: ref names, ..}) = item {
-			for name in names {
-				// TODO: This creates an infinite loop, since the name lookup requires the context items to be ready.
-				let (res_name, mut out_defs, valid_span, mut tail) = self.resolve_compound_name(name, id.into(), true)?;
-				println!("resolving use clause {:?}", name);
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	// Populate the scope of the context items that appear before a design unit. The
+	// scope of the design unit itself is a subscope of the context items.
+	pub fn make_ctx_items_scope(&self, id: CtxItemsRef, parent: Option<ScopeRef>) -> Result<CtxItemsRef> {
+		let (_, items) = self.ast(id);
+		let mut defs = Vec::new();
+		let mut explicit_defs = HashMap::new();
+		defs.push(id.into());
+		for item in items {
+			if let &ast::CtxItem::UseClause(Spanned{value: ref names, ..}) = item {
+				for name in names {
+					// TODO: This creates an infinite loop, since the name lookup requires the context items to be ready.
+					let (res_name, mut out_defs, valid_span, mut tail) = self.resolve_compound_name(name, id.into(), true)?;
+					println!("resolving use clause {:?}", name);
 
-				// Resolve the optional `all`.
-				match tail.first() {
-					Some(&ast::NamePart::SelectAll(all_span)) => {
-						tail = &tail[1..];
-						match out_defs.pop() {
-							Some(Spanned{value: Def::Pkg(id), ..}) => {
-								defs.push(id.into());
+					// Resolve the optional `all`.
+					match tail.first() {
+						Some(&ast::NamePart::SelectAll(all_span)) => {
+							tail = &tail[1..];
+							match out_defs.pop() {
+								Some(Spanned{value: Def::Pkg(id), ..}) => {
+									defs.push(id.into());
+								}
+								Some(_) => {
+									self.sess.emit(
+										DiagBuilder2::error(format!("`all` not possible on `{}`", valid_span.extract()))
+										.span(all_span)
+									);
+									continue;
+								}
+								None => unreachable!()
 							}
-							Some(_) => {
-								self.sess.emit(
-									DiagBuilder2::error(format!("`all` not possible on `{}`", valid_span.extract()))
-									.span(all_span)
-								);
-								continue;
-							}
-							None => unreachable!()
+						}
+						_ => {
+							explicit_defs.entry(res_name).or_insert_with(|| Vec::new()).extend(out_defs);
 						}
 					}
-					_ => {
-						explicit_defs.entry(res_name).or_insert_with(|| Vec::new()).extend(out_defs);
-					}
-				}
 
-				// Ensure that there is no garbage.
-				if tail.len() > 0 {
-					let span = Span::union(valid_span.end().into(), name.span.end());
-					self.sess.emit(
-						DiagBuilder2::error("invalid name suffix")
-						.span(span)
-					);
-					continue;
+					// Ensure that there is no garbage.
+					if tail.len() > 0 {
+						let span = Span::union(valid_span.end().into(), name.span.end());
+						self.sess.emit(
+							DiagBuilder2::error("invalid name suffix")
+							.span(span)
+						);
+						continue;
+					}
 				}
 			}
 		}
+		self.sb.scope_table.borrow_mut().insert(id.into(), self.sb.arenas.scope.alloc(Scope{
+			parent: parent,
+			defs: defs,
+			explicit_defs: explicit_defs,
+		}));
+		Ok(id)
 	}
-	Ok(self.sb.arenas.scope.alloc(Scope{
-		parent: None,
-		defs: defs,
-		explicit_defs: explicit_defs,
-	}))
-});
+}
 
 
 // Populate the scope of an entity.
@@ -291,8 +294,9 @@ impl_make_scope!(self, id: EntityRef => {
 	defs.push(id.into());
 	// TODO: Resolve use clauses and add whatever they bring into scope to
 	// the defs array.
+	let parent = self.make_ctx_items_scope(hir.ctx_items, None)?;
 	Ok(self.sb.arenas.scope.alloc(Scope{
-		parent: Some(hir.parent),
+		parent: Some(parent.into()),
 		defs: defs,
 		explicit_defs: HashMap::new(),
 	}))
@@ -306,8 +310,9 @@ impl_make_scope!(self, id: ArchRef => {
 	defs.push(id.into());
 	// TODO: Resolve use clauses and add whatever they bring into scope to
 	// the defs array.
+	let parent = self.make_ctx_items_scope(hir.ctx_items, Some(hir.entity.into()))?;
 	Ok(self.sb.arenas.scope.alloc(Scope{
-		parent: Some(hir.parent),
+		parent: Some(parent.into()),
 		defs: defs,
 		explicit_defs: HashMap::new(),
 	}))
@@ -321,8 +326,12 @@ impl_make_scope!(self, id: PkgDeclRef => {
 	defs.push(id.into());
 	// TODO: Resolve use clauses and add whatever they bring into scope to
 	// the defs array.
+	let parent = match hir.parent {
+		ScopeRef::CtxItems(id) => self.make_ctx_items_scope(id, None)?.into(),
+		others => others
+	};
 	Ok(self.sb.arenas.scope.alloc(Scope{
-		parent: Some(hir.parent),
+		parent: Some(parent),
 		defs: defs,
 		explicit_defs: HashMap::new(),
 	}))

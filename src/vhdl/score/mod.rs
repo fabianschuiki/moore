@@ -415,7 +415,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<EntityRef, &'ctx hir::Entity> for ScoreContext<'
 	fn make(&self, id: EntityRef) -> Result<&'ctx hir::Entity> {
 		let (lib, ctx_id, ast) = self.ast(id);
 		let mut entity = hir::Entity{
-			parent: ctx_id.into(),
+			ctx_items: ctx_id,
 			lib: lib,
 			name: ast.name,
 			generics: Vec::new(),
@@ -773,23 +773,6 @@ impl<'sb, 'ast, 'ctx> NodeMaker<PkgDeclRef, &'ctx hir::Package> for ScoreContext
 }
 
 
-// Lower an architecture to HIR.
-impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, &'ctx hir::Arch> for ScoreContext<'sb, 'ast, 'ctx> {
-	fn make(&self, id: ArchRef) -> Result<&'ctx hir::Arch> {
-		let (_, scope_id, ast) = self.ast(id);
-		let decls = self.unpack_block_decls(id.into(), &ast.decls, "an architecture")?;
-		let stmts = self.unpack_concurrent_stmts(id.into(), &ast.stmts, "an architecture")?;
-		Ok(self.sb.arenas.hir.arch.alloc(hir::Arch{
-			parent: scope_id,
-			// entity: entity,
-			name: ast.name,
-			decls: decls,
-			stmts: stmts,
-		}))
-	}
-}
-
-
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Unpack a slice of AST declarative items into a list of items admissible
 	/// in the declarative part of a block. See IEEE 1076-2008 section 3.3.2.
@@ -984,10 +967,8 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'as
 // Generate the definition for an architecture.
 impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
-		let ast = self.ast(id);
 		let hir = self.hir(id)?;
-		let entity_id = *self.archs(ast.0)?.by_arch.get(&id).unwrap();
-		let entity = self.hir(entity_id)?;
+		let entity = self.hir(hir.entity)?;
 
 		// Assemble the types and names for the entity.
 		println!("entity ports: {:?}", entity.ports);
@@ -1489,7 +1470,7 @@ node_storage!(AstTable<'ast>,
 	pkg_decls:    PkgDeclRef => (ScopeRef, &'ast ast::PkgDecl),
 	pkg_insts:    PkgInstRef => (ScopeRef, &'ast ast::PkgInst),
 	ctx_decls:    CtxRef     => (LibRef, CtxItemsRef, &'ast ast::CtxDecl),
-	arch_bodies:  ArchRef    => (LibRef, ScopeRef, &'ast ast::ArchBody),
+	arch_bodies:  ArchRef    => (LibRef, CtxItemsRef, &'ast ast::ArchBody),
 	pkg_bodies:   PkgBodyRef => (LibRef, CtxItemsRef, &'ast ast::PkgBody),
 
 	// Interface declarations

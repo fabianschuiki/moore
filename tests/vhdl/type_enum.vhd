@@ -6,10 +6,9 @@ package pkg is
 end;
 
 library work;
+use work.pkg.all;
 entity foo is end;
 
-library work;
-use work.pkg.all;
 architecture bar of foo is
 	signal a0 : MULTI_LEVEL_LOGIC; -- should be initialized to LOW
 	signal a1 : MULTI_LEVEL_LOGIC := LOW;

@@ -80,8 +80,8 @@ impl Lib {
 
 #[derive(Debug)]
 pub struct Entity {
-	/// The parent scope.
-	pub parent: ScopeRef,
+	/// The context items associated with the entity.
+	pub ctx_items: CtxItemsRef,
 	/// The library in which the entity is defined.
 	pub lib: LibRef,
 	/// The entity name.
@@ -95,10 +95,10 @@ pub struct Entity {
 
 #[derive(Debug)]
 pub struct Arch {
-	/// The parent scope.
-	pub parent: ScopeRef,
-	// /// The entity of the architecture.
-	// pub entity: EntityRef,
+	/// The context items associated with the entity.
+	pub ctx_items: CtxItemsRef,
+	/// The entity of the architecture.
+	pub entity: EntityRef,
 	/// The architecture name.
 	pub name: Spanned<Name>,
 	/// The list of declarations in the architecture.
