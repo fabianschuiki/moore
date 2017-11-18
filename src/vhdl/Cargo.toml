@@ -15,4 +15,4 @@ bincode = "0.6"
 rustc-serialize = "0.3"
 typed-arena = "1.3.0"
 lazy_static = "0.2"
-llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "b4678ea" }
+llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "b88f18f" }
