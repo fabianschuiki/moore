@@ -9,3 +9,4 @@ path = "lib.rs"
 [dependencies]
 moore-common = { path = "../../common" }
 moore-svlog-syntax = { path = "../syntax" }
+slog = "2.0.12"

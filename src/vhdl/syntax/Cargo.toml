@@ -8,5 +8,6 @@ path = "lib.rs"
 
 [dependencies]
 moore-common = { path = "../../common" }
-rustc-serialize = "0.3"
 bincode = "0.6.1"
+rustc-serialize = "0.3"
+slog = "2.0.12"

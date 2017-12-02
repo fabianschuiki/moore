@@ -12,3 +12,4 @@ moore-svlog-syntax = { path = "syntax" }
 moore-svlog-hir = { path = "hir" }
 bincode = "0.6"
 rustc-serialize = "0.3"
+slog = "2.0.12"
