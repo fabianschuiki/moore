@@ -21,3 +21,8 @@ typed-arena = "1.3.0"
 
 [features]
 unstable = []
+
+[[bin]]
+doc = false
+name = "moore"
+path = "src/bin/moore.rs"
