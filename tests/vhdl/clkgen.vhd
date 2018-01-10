@@ -2,6 +2,9 @@ package pkg is
 	type BIT is range 0 to 1;
 end package;
 
+library work;
+use work.pkg;
+
 entity clkgen is
 	port (CK: out pkg.BIT);
 end;

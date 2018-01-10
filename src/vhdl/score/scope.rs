@@ -264,6 +264,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 							explicit_defs.entry(res_name).or_insert_with(|| Vec::new()).extend(out_defs);
 						}
 					}
+					println!("yields explicit_defs {:?}", explicit_defs);
 
 					// Ensure that there is no garbage.
 					if tail.len() > 0 {

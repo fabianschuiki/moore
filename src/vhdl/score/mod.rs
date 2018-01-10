@@ -627,6 +627,9 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					found_defs.extend(d);
 				}
 			}
+			if let Some(d) = scope.explicit_defs.get(&name.value) {
+				found_defs.extend(d.iter());
+			}
 			scope.parent
 		};
 
