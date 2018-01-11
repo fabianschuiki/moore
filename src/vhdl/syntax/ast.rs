@@ -864,25 +864,7 @@ impl HasSpan for Stmt {
 
 impl HasDesc for Stmt {
 	fn desc(&self) -> &'static str {
-		match self.data {
-			StmtData::WaitStmt{..} => "wait statement",
-			StmtData::AssertStmt{..} => "assertion statement",
-			StmtData::ReportStmt{..} => "report statement",
-			StmtData::IfStmt{..} => "if statement",
-			StmtData::CaseStmt{..} => "case statement",
-			StmtData::LoopStmt{..} => "loop statement",
-			StmtData::NexitStmt{..} => "next or exit statement",
-			StmtData::ReturnStmt(..) => "return statement",
-			StmtData::NullStmt => "null statement",
-			StmtData::IfGenStmt{..} => "if-generate statement",
-			StmtData::CaseGenStmt{..} => "case-generate statement",
-			StmtData::ForGenStmt{..} => "for-generate statement",
-			StmtData::BlockStmt{..} => "block statement",
-			StmtData::ProcStmt{..} => "process statement",
-			StmtData::AssignStmt{..} => "assign statement",
-			StmtData::SelectAssignStmt{..} => "assign statement",
-			StmtData::InstOrCallStmt{..} => "instantiation or call statement",
-		}
+		self.data.desc()
 	}
 }
 
@@ -967,6 +949,30 @@ pub enum StmtData {
 		generics: Option<ParenElems>,
 		ports: Option<ParenElems>,
 	},
+}
+
+impl HasDesc for StmtData {
+	fn desc(&self) -> &'static str {
+		match *self {
+			StmtData::WaitStmt{..} => "wait statement",
+			StmtData::AssertStmt{..} => "assertion statement",
+			StmtData::ReportStmt{..} => "report statement",
+			StmtData::IfStmt{..} => "if statement",
+			StmtData::CaseStmt{..} => "case statement",
+			StmtData::LoopStmt{..} => "loop statement",
+			StmtData::NexitStmt{..} => "next or exit statement",
+			StmtData::ReturnStmt(..) => "return statement",
+			StmtData::NullStmt => "null statement",
+			StmtData::IfGenStmt{..} => "if-generate statement",
+			StmtData::CaseGenStmt{..} => "case-generate statement",
+			StmtData::ForGenStmt{..} => "for-generate statement",
+			StmtData::BlockStmt{..} => "block statement",
+			StmtData::ProcStmt{..} => "process statement",
+			StmtData::AssignStmt{..} => "assign statement",
+			StmtData::SelectAssignStmt{..} => "assign statement",
+			StmtData::InstOrCallStmt{..} => "instantiation or call statement",
+		}
+	}
 }
 
 /// The body of an if, loop, or case statement.
