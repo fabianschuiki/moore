@@ -34,9 +34,9 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 	match hir.constraint {
 		hir::Constraint::None => Ok(self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value))),
 
-		/// For range constraints, we first have to check if the constraint is
-		/// applicable given the type mark. If it is, check if the provided
-		/// range actually is a proper subtype, and then apply the constraint.
+		// For range constraints, we first have to check if the constraint is
+		// applicable given the type mark. If it is, check if the provided
+		// range actually is a proper subtype, and then apply the constraint.
 		hir::Constraint::Range(span, expr_id) => {
 			let inner = self.deref_named_type(self.ty(hir.type_mark.value)?)?;
 			match *inner {

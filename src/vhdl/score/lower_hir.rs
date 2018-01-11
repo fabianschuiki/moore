@@ -244,7 +244,7 @@ impl_make!(self, id: SubtypeDeclRef => &hir::SubtypeDecl {
 impl_make!(self, id: ExprRef => &hir::Expr {
 	let (scope_id, ast) = self.ast(id);
 	let data = match ast.data {
-		/// Literals
+		// Literals
 		ast::LitExpr(ref lit, ref _unit) => {
 			use syntax::lexer::token::Literal;
 			match *lit {

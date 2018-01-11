@@ -93,7 +93,7 @@ impl_make_defs!(self, id: CtxItemsRef => {
 			ast::CtxItem::LibClause(Spanned{ value: ref names, .. }) => {
 				for ident in names {
 					if let Some(&lib_id) = self.sb.lib_names.borrow().get(&ident.name) {
-						let mut defs = defs.entry(ident.name.into()).or_insert_with(||vec![]);
+						let defs = defs.entry(ident.name.into()).or_insert_with(||vec![]);
 						if !defs.is_empty() {
 							self.sess.emit(
 								DiagBuilder2::error(format!("`{}` has already been declared", ident.name))
