@@ -199,6 +199,15 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 
+	/// Store the HIR of a node.
+	pub fn set_hir<I>(&self, id: I, hir: <HirTable<'ctx> as NodeStorage<I>>::Node)
+	where
+		I: Copy + Debug,
+		HirTable<'ctx>: NodeStorage<I>
+	{
+		self.sb.hir_table.borrow_mut().set(id, hir);
+	}
+
 	/// Obtain the HIR of a node. Returns an error if none exists.
 	pub fn existing_hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node>
 	where
@@ -1021,6 +1030,7 @@ node_ref_group!(ScopeRef:
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
 	Arch(ArchRef),
+	Process(ProcessStmtRef),
 );
 node_ref_group!(GenericRef:
 	Type(IntfTypeRef),
@@ -1098,6 +1108,39 @@ node_ref_group!(DeclInBlockRef:
 	Const(ConstDeclRef),
 	Signal(SignalDeclRef),
 	SharedVariable(SharedVariableDeclRef),
+	File(FileDeclRef),
+);
+
+/// All declarations that may possibly appear in a process statement. See IEEE
+/// 1076-2008 section 11.3.
+///
+/// ```text
+/// [ ] subprogram_declaration
+/// [ ] subprogram_body
+/// [ ] subprogram_instantiation_declaration
+/// [x] package_declaration
+/// [x] package_body
+/// [x] package_instantiation_declaration
+/// [x] type_declaration
+/// [x] subtype_declaration
+/// [x] constant_declaration
+/// [x] variable_declaration
+/// [x] file_declaration
+/// [ ] alias_declaration
+/// [ ] attribute_declaration
+/// [ ] attribute_specification
+/// [ ] use_clause
+/// [ ] group_template_declaration
+/// [ ] group_declaration
+/// ```
+node_ref_group!(DeclInProcRef:
+	Pkg(PkgDeclRef),
+	PkgBody(PkgBodyRef),
+	PkgInst(PkgInstRef),
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
+	Const(ConstDeclRef),
+	Variable(VariableDeclRef),
 	File(FileDeclRef),
 );
 
@@ -1212,6 +1255,7 @@ node_storage!(HirTable<'ctx>,
 	variable_decls:        VariableDeclRef       => &'ctx hir::VariableDecl,
 	shared_variable_decls: SharedVariableDeclRef => &'ctx hir::VariableDecl,
 	file_decls:            FileDeclRef           => &'ctx hir::FileDecl,
+	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,
 );
 
 

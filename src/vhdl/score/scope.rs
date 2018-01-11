@@ -18,7 +18,6 @@ macro_rules! impl_make_scope {
 }
 
 
-// Definitions in a scope.
 impl_make_defs!(self, id: ScopeRef => {
 	match id {
 		ScopeRef::Lib(id) => self.make(id),
@@ -28,6 +27,20 @@ impl_make_defs!(self, id: ScopeRef => {
 		ScopeRef::Pkg(id) => self.make(id),
 		ScopeRef::PkgInst(id) => self.make(id),
 		ScopeRef::Arch(id) => self.make(id),
+		ScopeRef::Process(id) => self.make(id),
+	}
+});
+
+impl_make_scope!(self, id: ScopeRef => {
+	match id {
+		ScopeRef::Lib(id) => self.make(id),
+		ScopeRef::CtxItems(_) => unreachable!(),
+		ScopeRef::Entity(id) => self.make(id),
+		ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
+		ScopeRef::Pkg(id) => self.make(id),
+		ScopeRef::PkgInst(id) => self.make(id),
+		ScopeRef::Arch(id) => self.make(id),
+		ScopeRef::Process(id) => self.make(id),
 	}
 });
 
@@ -201,20 +214,6 @@ impl_make_defs!(self, _id: PkgInstRef => {
 });
 
 
-// Populate a scope.
-impl_make_scope!(self, id: ScopeRef => {
-	match id {
-		ScopeRef::Lib(id) => self.make(id),
-		ScopeRef::CtxItems(_) => unreachable!(),
-		ScopeRef::Entity(id) => self.make(id),
-		ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
-		ScopeRef::Pkg(id) => self.make(id),
-		ScopeRef::PkgInst(id) => self.make(id),
-		ScopeRef::Arch(id) => self.make(id),
-	}
-});
-
-
 // Populate the scope of a library.
 impl_make_scope!(self, id: LibRef => {
 	let mut defs = Vec::new();
@@ -337,4 +336,20 @@ impl_make_scope!(self, id: PkgDeclRef => {
 impl_make_scope!(self, _id: PkgInstRef => {
 	// TODO: Implement this.
 	unimplemented!();
+});
+
+impl_make_defs!(self, _id: ProcessStmtRef => {
+	// TODO: Implement this.
+	Ok(self.sb.arenas.defs.alloc(HashMap::new()))
+});
+
+impl_make_scope!(self, id: ProcessStmtRef => {
+	let hir = self.existing_hir(id)?;
+	let mut defs = Vec::new();
+	defs.push(id.into());
+	Ok(self.sb.arenas.scope.alloc(Scope {
+		parent: Some(hir.parent),
+		defs: defs,
+		explicit_defs: HashMap::new(),
+	}))
 });

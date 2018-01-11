@@ -78,8 +78,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 	/// Unpack a slice of AST declarative items into a list of items admissible
-	/// in the declarative part of a block. See IEEE 1076-2008 section 3.3.2.
-	fn unpack_block_decls(&self, scope_id: ScopeRef, decls: &'ast [ast::DeclItem], container_name: &str) -> Result<Vec<DeclInBlockRef>> {
+	/// in the declarative part of a block.
+	///
+	/// See IEEE 1076-2008 section 3.3.2.
+	pub fn unpack_block_decls(&self, scope_id: ScopeRef, decls: &'ast [ast::DeclItem], container_name: &str) -> Result<Vec<DeclInBlockRef>> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
 
@@ -132,8 +134,6 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						}
 					}
 				}
-
-				// Emit an error for any other kinds of declarations.
 				ref wrong => {
 					self.sess.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
@@ -151,28 +151,111 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		}
 	}
 
-	/// Unpack a slice of AST concurrent statements. See IEEE 1076-2008 section
-	/// 11.1.
-	fn unpack_concurrent_stmts(&self, _scope_id: ScopeRef, stmts: &'ast [ast::Stmt], container_name: &str) -> Result<Vec<ConcStmtRef>> {
-		let refs = Vec::new();
+	/// Unpack a slice of concurrent statements.
+	///
+	/// See IEEE 1076-2008 section 11.1.
+	pub fn unpack_concurrent_stmts(
+		&self,
+		scope_id: ScopeRef,
+		stmts: &'ast [ast::Stmt],
+		container_name: &str
+	) -> Result<Vec<ConcStmtRef>> {
+		let mut refs = Vec::new();
 		let mut had_fails = false;
-
+		let unimp = |s: &ast::Stmt| self.sess.emit(
+			DiagBuilder2::error(format!("{} not implemented", s.desc()))
+			.span(s.human_span())
+		);
 		for stmt in stmts {
 			match stmt.data {
+				ast::BlockStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::InstOrCallStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::AssertStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::AssignStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::SelectAssignStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::IfGenStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::CaseGenStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::ForGenStmt{..} => { unimp(stmt); had_fails = true; }
 
-				// Emit an error for any other kinds of declarations.
-				_ => {
+				ast::ProcStmt {
+					ref sensitivity,
+					ref decls,
+					ref stmts,
+					postponed,
+				} => {
+					let id = ProcessStmtRef(NodeId::alloc());
+					// TODO: map sensititivty
+					// TODO: map decls
+					let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a process")?;
+					let prok = hir::ProcessStmt {
+						parent: scope_id,
+						label: stmt.label,
+						postponed: postponed,
+						sensitivity: hir::ProcessSensitivity::None,
+						decls: Vec::new(),
+						stmts: stmts,
+					};
+					self.set_hir(id, self.sb.arenas.hir.process_stmt.alloc(prok));
+					refs.push(id.into());
+				}
+
+				ref wrong => {
 					self.sess.emit(
-						DiagBuilder2::error(format!("a {} cannot appear in {}", stmt.desc(), container_name))
+						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
 						.span(stmt.human_span())
 						.add_note(format!("Only concurrent statements are allowed in {}. See IEEE 1076-2008 section 11.1.", container_name))
 					);
 					had_fails = true;
-					continue;
 				}
 			}
 		}
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
+	}
 
+	/// Unpack a slice of sequential statements.
+	///
+	/// See IEEE 1076-2008 section 10.
+	pub fn unpack_sequential_stmts(
+		&self,
+		_scope_id: ScopeRef,
+		stmts: &'ast [ast::Stmt],
+		container_name: &str
+	) -> Result<Vec<SeqStmtRef>> {
+		let mut refs = Vec::new();
+		let mut had_fails = false;
+		let unimp = |s: &ast::Stmt| self.sess.emit(
+			DiagBuilder2::error(format!("{} not implemented", s.desc()))
+			.span(s.human_span())
+		);
+		for stmt in stmts {
+			match stmt.data {
+				ast::WaitStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::AssertStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::ReportStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::AssignStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::SelectAssignStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::InstOrCallStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::IfStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::CaseStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::LoopStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::NexitStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::ReturnStmt{..} => { unimp(stmt); had_fails = true; }
+
+				ast::NullStmt => (),
+				ref wrong => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
+						.span(stmt.human_span())
+						.add_note(format!("Only sequential statements are allowed in {}. See IEEE 1076-2008 section 10.", container_name))
+					);
+					had_fails = true;
+				}
+			}
+		}
 		if had_fails {
 			Err(())
 		} else {

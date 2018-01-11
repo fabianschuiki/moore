@@ -27,6 +27,7 @@ pub struct Arenas {
 	pub signal_decl: Arena<SignalDecl>,
 	pub variable_decl: Arena<VariableDecl>,
 	pub file_decl: Arena<FileDecl>,
+	pub process_stmt: Arena<ProcessStmt>,
 }
 
 
@@ -47,6 +48,7 @@ impl Arenas {
 			signal_decl: Arena::new(),
 			variable_decl: Arena::new(),
 			file_decl: Arena::new(),
+			process_stmt: Arena::new(),
 		}
 	}
 }
@@ -341,4 +343,36 @@ pub struct FileDecl {
 	/// string containing the file name. The second expression evaluates to a
 	/// file open kind.
 	pub open: Option<(ExprRef, Option<ExprRef>)>,
+}
+
+/// A process statement.
+///
+/// See IEEE 1076-2008 section 11.3.
+#[derive(Debug)]
+pub struct ProcessStmt {
+	/// The scope within which the process is declared.
+	pub parent: ScopeRef,
+	/// The optional process label.
+	pub label: Option<Spanned<Name>>,
+	/// Whether this is a postponed process. See language reference.
+	pub postponed: bool,
+	/// The sensitivity list.
+	pub sensitivity: ProcessSensitivity,
+	/// The declarations made before the `begin` keyword.
+	pub decls: Vec<DeclInProcRef>,
+	/// The statements inside the process.
+	pub stmts: Vec<SeqStmtRef>,
+}
+
+/// A process sensitivity specification.
+///
+/// See IEEE 1076-2008 section 11.3.
+#[derive(Debug)]
+pub enum ProcessSensitivity {
+	/// No sensitivity list provided.
+	None,
+	/// The `all` sensitivity list.
+	All,
+	/// Explicitly enumerated signals.
+	List(Vec<Def>),
 }
