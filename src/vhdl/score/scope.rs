@@ -293,8 +293,6 @@ impl_make_scope!(self, id: EntityRef => {
 	let hir = self.hir(id)?;
 	let mut defs = Vec::new();
 	defs.push(id.into());
-	// TODO: Resolve use clauses and add whatever they bring into scope to
-	// the defs array.
 	let parent = self.make_ctx_items_scope(hir.ctx_items, None)?;
 	Ok(self.sb.arenas.scope.alloc(Scope{
 		parent: Some(parent.into()),
@@ -309,8 +307,6 @@ impl_make_scope!(self, id: ArchRef => {
 	let hir = self.hir(id)?;
 	let mut defs = Vec::new();
 	defs.push(id.into());
-	// TODO: Resolve use clauses and add whatever they bring into scope to
-	// the defs array.
 	let parent = self.make_ctx_items_scope(hir.ctx_items, Some(hir.entity.into()))?;
 	Ok(self.sb.arenas.scope.alloc(Scope{
 		parent: Some(parent.into()),
@@ -325,8 +321,6 @@ impl_make_scope!(self, id: PkgDeclRef => {
 	let hir = self.hir(id)?;
 	let mut defs = Vec::new();
 	defs.push(id.into());
-	// TODO: Resolve use clauses and add whatever they bring into scope to
-	// the defs array.
 	let parent = match hir.parent {
 		ScopeRef::CtxItems(id) => self.make_ctx_items_scope(id, None)?.into(),
 		others => others

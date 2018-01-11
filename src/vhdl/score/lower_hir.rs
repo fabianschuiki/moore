@@ -16,13 +16,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		self.set_ast(id, (scope_id, ast));
 		Ok(id)
 	}
+
 	/// Unpack an AST subtype indication.
 	pub fn unpack_subtype_ind(&self, ast: &'ast ast::SubtypeInd, scope_id: ScopeRef) -> Result<SubtypeIndRef> {
 		let id = SubtypeIndRef::new(NodeId::alloc());
 		self.set_ast(id, (scope_id, ast));
 		Ok(id)
 	}
-
 
 	/// Unpack an AST signal declaration into individual HIR signal
 	/// declarations, one for each name.
@@ -77,82 +77,293 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		Ok(())
 	}
 
+	/// Unpack a slice of AST declarative items into a list of items admissible
+	/// in the declarative part of a block. See IEEE 1076-2008 section 3.3.2.
+	fn unpack_block_decls(&self, scope_id: ScopeRef, decls: &'ast [ast::DeclItem], container_name: &str) -> Result<Vec<DeclInBlockRef>> {
+		let mut refs = Vec::new();
+		let mut had_fails = false;
 
-	// /// Convert a compound name into an HIR expression.
-	// pub fn compound_name_to_expr(&self, ast: &'ast ast::CompoundName, scope_id: ScopeRef) -> Result<&'ctx hir::Expr> {
-	// 	// Map the primary name to a resolvable name, and wrap it in a name
-	// 	// expression.
-	// 	let primary = self.resolvable_from_primary_name(&ast.primary)?;
-	// 	let mut expr: &'ctx hir::Expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
-	// 		parent: scope_id,
-	// 		span: primary.span,
-	// 		data: hir::ExprData::Name(primary.value),
-	// 	});
+		for decl in decls {
+			match *decl {
+				ast::DeclItem::PkgDecl(ref decl) => {
+					let subid = PkgDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgInst(ref decl) => {
+					let subid = PkgInstRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::TypeDecl(ref decl) => {
+					let subid = TypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::SubtypeDecl(ref decl) => {
+					let subid = SubtypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::ObjDecl(ref decl) => {
+					match decl.kind {
+						ast::ObjKind::Const => {
+							let subid = ConstDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut refs)?,
+						ast::ObjKind::Var => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("not a shared variable; only shared variables may appear in {}", container_name))
+								.span(decl.human_span())
+							);
+							had_fails = true;
+						}
+						ast::ObjKind::SharedVar => {
+							let subid = SharedVariableDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::File => {
+							let subid = FileDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
 
-	// 	// Map each name part recursively.
-	// 	for part in &ast.parts {
-	// 		// Allocate a node ID for the inner expression and store it away in
-	// 		// the HIR table.
-	// 		let inner = ExprRef::new(NodeId::alloc());
-	// 		let inner_span = expr.span;
-	// 		self.sb.hir_table.borrow_mut().set(inner, expr);
+				// Emit an error for any other kinds of declarations.
+				ref wrong => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
+						.span(decl.human_span())
+					);
+					had_fails = true;
+				}
+			}
+		}
 
-	// 		match *part {
-	// 			ast::NamePart::Select(name) => {
-	// 				let rn = self.resolvable_from_primary_name(&name)?;
-	// 				expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
-	// 					parent: scope_id,
-	// 					span: Span::union(inner_span, rn.span),
-	// 					data: hir::ExprData::Select(inner, rn),
-	// 				});
-	// 			}
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
+	}
 
-	// 			ast::NamePart::Signature(ref _sig) => unimplemented!(),
+	/// Unpack a slice of AST concurrent statements. See IEEE 1076-2008 section
+	/// 11.1.
+	fn unpack_concurrent_stmts(&self, _scope_id: ScopeRef, stmts: &'ast [ast::Stmt], container_name: &str) -> Result<Vec<ConcStmtRef>> {
+		let refs = Vec::new();
+		let mut had_fails = false;
 
-	// 			ast::NamePart::Attribute(ident) => {
-	// 				expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
-	// 					parent: scope_id,
-	// 					span: Span::union(inner_span, ident.span),
-	// 					data: hir::ExprData::Attr(inner, Spanned::new(ident.name.into(), ident.span)),
-	// 				});
-	// 			}
+		for stmt in stmts {
+			match stmt.data {
 
-	// 			// Call expressions can map to different things. First we need
-	// 			// to know what type the callee has. Based on this, the list of
-	// 			// arguments can be associated with the correct ports. Or in
-	// 			// case the callee is a type, we perform a type conversion.
-	// 			ast::NamePart::Call(ref _elems) => {
-	// 				let callee_ty = self.ty(inner)?;
-	// 				panic!("call to {:?} not implemented", callee_ty);
-	// 				// let mut had_named = false;
-	// 				// for i in 0..elems.len() {
+				// Emit an error for any other kinds of declarations.
+				_ => {
+					self.sess.emit(
+						DiagBuilder2::error(format!("a {} cannot appear in {}", stmt.desc(), container_name))
+						.span(stmt.human_span())
+						.add_note(format!("Only concurrent statements are allowed in {}. See IEEE 1076-2008 section 11.1.", container_name))
+					);
+					had_fails = true;
+					continue;
+				}
+			}
+		}
 
-	// 				// }
-	// 			}
-
-	// 			// Disallow `.all` in expressions.
-	// 			ast::NamePart::SelectAll(span) => {
-	// 				self.sess.emit(
-	// 					DiagBuilder2::error("`.all` in an expression")
-	// 					.span(span)
-	// 				);
-	// 				return Err(());
-	// 			}
-
-	// 			// Disallow ranges in expressions.
-	// 			ast::NamePart::Range(ref expr) => {
-	// 				self.sess.emit(
-	// 					DiagBuilder2::error("range in an expression")
-	// 					.span(expr.span)
-	// 				);
-	// 				return Err(());
-	// 			}
-	// 		}
-	// 	}
-
-	// 	Ok(expr)
-	// }
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
+	}
 }
+
+
+// Lower an entity to HIR.
+impl_make!(self, id: EntityRef => &hir::Entity {
+	let (lib, ctx_id, ast) = self.ast(id);
+	let mut entity = hir::Entity{
+		ctx_items: ctx_id,
+		lib: lib,
+		name: ast.name,
+		generics: Vec::new(),
+		ports: Vec::new(),
+	};
+	let mut port_spans = Vec::new();
+	let mut generic_spans = Vec::new();
+	for decl in &ast.decls {
+		match *decl {
+			// Port clauses
+			ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Port, span }, ref decls) => {
+				// For ports only signal interface declarations are allowed.
+				port_spans.push(span);
+				for decl in &decls.value {
+					match *decl {
+						ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
+							let ty = SubtypeIndRef(NodeId::alloc());
+							self.set_ast(ty, (id.into(), &decl.ty));
+							for name in &decl.names {
+								let subid = IntfSignalRef(NodeId::alloc());
+								self.set_ast(subid, (id.into(), decl, ty, name));
+								entity.ports.push(subid);
+							}
+						}
+						ref wrong => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("a {} cannot appear in a port clause", wrong.desc()))
+								.span(wrong.human_span())
+							);
+							continue;
+						}
+					}
+				}
+			}
+
+			// Generic clauses
+			ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Generic, span }, ref decls) => {
+				// For generics only constant, type, subprogram, and package
+				// interface declarations are allowed.
+				generic_spans.push(span);
+				for decl in &decls.value {
+					match *decl {
+						ast::IntfDecl::TypeDecl(ref decl) => {
+							let subid = IntfTypeRef(NodeId::alloc());
+							self.set_ast(subid, (id.into(), decl));
+							entity.generics.push(subid.into());
+						}
+						ast::IntfDecl::SubprogSpec(ref decl) => {
+							let subid = IntfSubprogRef(NodeId::alloc());
+							self.set_ast(subid, (id.into(), decl));
+							entity.generics.push(subid.into());
+						}
+						ast::IntfDecl::PkgInst(ref decl) => {
+							let subid = IntfPkgRef(NodeId::alloc());
+							self.set_ast(subid, (id.into(), decl));
+							entity.generics.push(subid.into());
+						}
+						ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
+							let ty = SubtypeIndRef(NodeId::alloc());
+							self.set_ast(ty, (id.into(), &decl.ty));
+							for name in &decl.names {
+								let subid = IntfConstRef(NodeId::alloc());
+								self.set_ast(subid, (id.into(), decl, ty, name));
+								entity.generics.push(subid.into());
+							}
+						}
+						ref wrong => {
+							self.sess.emit(
+								DiagBuilder2::error(format!("a {} cannot appear in a generic clause", wrong.desc()))
+								.span(wrong.human_span())
+							);
+							continue;
+						}
+					}
+				}
+			}
+
+			ref wrong => {
+				self.sess.emit(
+					DiagBuilder2::error(format!("a {} cannot appear in an entity declaration", wrong.desc()))
+					.span(decl.human_span())
+				);
+				continue;
+			}
+		}
+	}
+	// TODO(strict): Complain about multiple port and generic clauses.
+	// TODO(strict): Complain when port and generic clauses are not the
+	// first in the entity.
+	Ok(self.sb.arenas.hir.entity.alloc(entity))
+});
+
+
+// Lower an interface signal to HIR.
+impl_make!(self, id: IntfSignalRef => &hir::IntfSignal {
+	let (scope_id, decl, subty_id, ident) = self.ast(id);
+	let init = match decl.default {
+		Some(ref e) => {
+			let subid = ExprRef(NodeId::alloc());
+			self.set_ast(subid, (scope_id, e));
+			Some(subid)
+		}
+		None => None
+	};
+	let sig = hir::IntfSignal {
+		name: Spanned::new(ident.name, ident.span),
+		mode: match decl.mode {
+			None | Some(ast::IntfMode::In) => hir::IntfSignalMode::In,
+			Some(ast::IntfMode::Out) => hir::IntfSignalMode::Out,
+			Some(ast::IntfMode::Inout) => hir::IntfSignalMode::Inout,
+			Some(ast::IntfMode::Buffer) => hir::IntfSignalMode::Buffer,
+			Some(ast::IntfMode::Linkage) => hir::IntfSignalMode::Linkage,
+		},
+		ty: subty_id,
+		bus: decl.bus,
+		init: init,
+	};
+	Ok(self.sb.arenas.hir.intf_sig.alloc(sig))
+});
+
+
+// Lower a package declaration to HIR.
+impl_make!(self, id: PkgDeclRef => &hir::Package {
+	let (scope_id, ast) = self.ast(id);
+	let generics = Vec::new();
+	// let generic_maps = Vec::new();
+	let mut decls = Vec::new();
+	let mut had_fails = false;
+
+	// Filter the declarations in the package to only those that we actually
+	// support, and separate the generic clauses and maps.
+	for decl in &ast.decls {
+		match *decl {
+			ast::DeclItem::PkgDecl(ref decl) => {
+				let subid = PkgDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::PkgInst(ref decl) => {
+				let subid = PkgInstRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::TypeDecl(ref decl) => {
+				let subid = TypeDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::SubtypeDecl(ref decl) => {
+				let subid = SubtypeDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+
+			// Emit an error for any other kinds of declarations.
+			ref wrong => {
+				self.sess.emit(
+					DiagBuilder2::error(format!("a {} cannot appear in a package declaration", wrong.desc()))
+					.span(decl.human_span())
+				);
+				had_fails = true;
+				continue;
+			}
+		}
+	}
+
+	if had_fails {
+		Err(())
+	} else {
+		Ok(self.sb.arenas.hir.package.alloc(hir::Package{
+			parent: scope_id,
+			name: ast.name,
+			generics: generics,
+			decls: decls,
+		}))
+	}
+});
 
 
 // Lower a subtype indication to HIR.
@@ -569,7 +780,6 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 	};
 	Ok(self.sb.arenas.hir.type_decl.alloc(decl))
 });
-
 
 // Lower an architecture to HIR.
 impl_make!(self, id: ArchRef => &hir::Arch {
