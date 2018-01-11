@@ -1970,7 +1970,7 @@ pub fn parse_block_comp_config<P: Parser>(p: &mut P) -> ReportedResult<ast::Bloc
 pub fn parse_binding_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::BindingInd> {
 	let mut span = p.peek(0).span;
 
-	/// Parse the entity aspect.
+	// Parse the entity aspect.
 	let entity = if accept(p, Keyword(Kw::Use)) {
 		let pk = p.peek(0);
 		Some(match pk.value {
@@ -2003,10 +2003,10 @@ pub fn parse_binding_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::BindingInd
 		None
 	};
 
-	/// Parse the generic map aspect.
+	// Parse the generic map aspect.
 	let gm = try_map_aspect(p, Kw::Generic)?;
 
-	/// Parse the port map aspect.
+	// Parse the port map aspect.
 	let pm = try_map_aspect(p, Kw::Port)?;
 
 	if entity.is_some() || gm.is_some() || pm.is_some() {
