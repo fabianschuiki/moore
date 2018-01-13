@@ -25,7 +25,7 @@ pub struct Arenas {
 	pub expr: Arena<Expr>,
 	pub const_decl: Arena<ConstDecl>,
 	pub signal_decl: Arena<SignalDecl>,
-	pub variable_decl: Arena<VariableDecl>,
+	pub variable_decl: Arena<VarDecl>,
 	pub file_decl: Arena<FileDecl>,
 	pub process_stmt: Arena<ProcessStmt>,
 }
@@ -317,7 +317,7 @@ pub enum SignalKind {
 
 
 #[derive(Debug)]
-pub struct VariableDecl {
+pub struct VarDecl {
 	/// The scope within which the variable is declared.
 	pub parent: ScopeRef,
 	/// Whether the variable was declared as shared or not.

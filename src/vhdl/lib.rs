@@ -18,3 +18,4 @@ pub mod hir;
 pub mod ty;
 pub mod konst;
 pub mod codegen;
+pub mod defs;

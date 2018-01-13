@@ -84,14 +84,14 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 	match id {
-		DeclInBlockRef::Pkg(_id)           => Ok(()),
-		DeclInBlockRef::PkgInst(_id)       => Ok(()),
-		DeclInBlockRef::Type(_id)          => Ok(()),
-		DeclInBlockRef::Subtype(_id)       => Ok(()),
-		DeclInBlockRef::Const(id)          => self.codegen(id, ctx),
-		DeclInBlockRef::Signal(id)         => self.codegen(id, ctx),
-		DeclInBlockRef::SharedVariable(id) => self.codegen(id, ctx),
-		DeclInBlockRef::File(id)           => self.codegen(id, ctx),
+		DeclInBlockRef::Pkg(_id)      => Ok(()),
+		DeclInBlockRef::PkgInst(_id)  => Ok(()),
+		DeclInBlockRef::Type(_id)     => Ok(()),
+		DeclInBlockRef::Subtype(_id)  => Ok(()),
+		DeclInBlockRef::Const(id)     => self.codegen(id, ctx),
+		DeclInBlockRef::Signal(id)    => self.codegen(id, ctx),
+		DeclInBlockRef::SharedVar(id) => self.codegen(id, ctx),
+		DeclInBlockRef::File(id)      => self.codegen(id, ctx),
 	}
 });
 
@@ -125,7 +125,7 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 });
 
 
-impl_codegen!(self, _id: SharedVariableDeclRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, _id: SharedVarDeclRef, _ctx: &mut llhd::Entity => {
 	unimplemented!();
 });
 

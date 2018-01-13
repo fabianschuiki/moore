@@ -194,7 +194,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make hir for {:?}", id); }
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] hir for {:?} is {:?}", id, node); }
-		self.sb.hir_table.borrow_mut().set(id, node);
+		self.set_hir(id, node);
 		Ok(node)
 	}
 
@@ -998,8 +998,8 @@ node_ref!(IfGenStmtRef);
 node_ref!(CaseGenStmtRef);
 node_ref!(ConstDeclRef);
 node_ref!(SignalDeclRef);
-node_ref!(VariableDeclRef);
-node_ref!(SharedVariableDeclRef);
+node_ref!(VarDeclRef);
+node_ref!(SharedVarDeclRef);
 node_ref!(FileDeclRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
@@ -1026,6 +1026,11 @@ node_ref_group!(Def:
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
 	Enum(EnumRef),
+	Const(ConstDeclRef),
+	Signal(SignalDeclRef),
+	File(FileDeclRef),
+	Var(VarDeclRef),
+	SharedVar(SharedVarDeclRef),
 );
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
@@ -1112,7 +1117,7 @@ node_ref_group!(DeclInBlockRef:
 	Subtype(SubtypeDeclRef),
 	Const(ConstDeclRef),
 	Signal(SignalDeclRef),
-	SharedVariable(SharedVariableDeclRef),
+	SharedVar(SharedVarDeclRef),
 	File(FileDeclRef),
 );
 
@@ -1145,7 +1150,7 @@ node_ref_group!(DeclInProcRef:
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
 	Const(ConstDeclRef),
-	Variable(VariableDeclRef),
+	Var(VarDeclRef),
 	File(FileDeclRef),
 );
 
@@ -1238,8 +1243,8 @@ node_storage!(AstTable<'ast>,
 	subtype_decls:         SubtypeDeclRef        => (ScopeRef, &'ast ast::SubtypeDecl),
 	const_decls:           ConstDeclRef          => (ScopeRef, &'ast ast::ObjDecl),
 	signal_decls:          SignalDeclRef         => (ScopeRef, &'ast ast::ObjDecl),
-	variable_decls:        VariableDeclRef       => (ScopeRef, &'ast ast::ObjDecl),
-	shared_variable_decls: SharedVariableDeclRef => (ScopeRef, &'ast ast::ObjDecl),
+	variable_decls:        VarDeclRef       => (ScopeRef, &'ast ast::ObjDecl),
+	shared_variable_decls: SharedVarDeclRef => (ScopeRef, &'ast ast::ObjDecl),
 	file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
 
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
@@ -1257,8 +1262,8 @@ node_storage!(HirTable<'ctx>,
 	exprs:                 ExprRef               => &'ctx hir::Expr,
 	const_decls:           ConstDeclRef          => &'ctx hir::ConstDecl,
 	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
-	variable_decls:        VariableDeclRef       => &'ctx hir::VariableDecl,
-	shared_variable_decls: SharedVariableDeclRef => &'ctx hir::VariableDecl,
+	variable_decls:        VarDeclRef       => &'ctx hir::VarDecl,
+	shared_variable_decls: SharedVarDeclRef => &'ctx hir::VarDecl,
 	file_decls:            FileDeclRef           => &'ctx hir::FileDecl,
 	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,
 );

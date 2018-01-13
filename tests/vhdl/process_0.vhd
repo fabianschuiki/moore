@@ -8,9 +8,11 @@ begin
 	end process;
 end;
 
--- proc @foo_bar_empty () () {
--- }
---
--- entity @foo_bar () () {
---     %empty = inst @foo_bar_empty () ()
--- }
+--@ +elab foo(bar)
+
+--| proc @foo_bar_empty () () {
+--| }
+--|
+--| entity @foo_bar () () {
+--|     %empty = inst @foo_bar_empty () ()
+--| }

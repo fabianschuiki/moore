@@ -70,7 +70,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				kind: kind,
 				init: init,
 			});
-			self.sb.hir_table.borrow_mut().set(id, hir);
+			self.set_hir(id, hir);
 			refs.push(id.into());
 		}
 
@@ -123,7 +123,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 							had_fails = true;
 						}
 						ast::ObjKind::SharedVar => {
-							let subid = SharedVariableDeclRef(NodeId::alloc());
+							let subid = SharedVarDeclRef(NodeId::alloc());
 							self.set_ast(subid, (scope_id, decl));
 							refs.push(subid.into());
 						}
@@ -708,7 +708,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 				// the HIR table.
 				let inner = ExprRef::new(NodeId::alloc());
 				let inner_span = expr.span;
-				self.sb.hir_table.borrow_mut().set(inner, expr);
+				self.set_hir(inner, expr);
 
 				match *part {
 					ast::NamePart::Select(name) => {

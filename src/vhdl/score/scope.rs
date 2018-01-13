@@ -3,6 +3,7 @@
 //! This module implements the tracking of definitions and scopes for VHDL.
 
 use score::*;
+use defs::*;
 
 
 macro_rules! impl_make_defs {
@@ -146,64 +147,70 @@ impl_make_defs!(self, _id: EntityRef => {
 
 
 // Definitions in an architecture.
-impl_make_defs!(self, _id: ArchRef => {
-	// TODO: Implement this.
-	Ok(self.sb.arenas.defs.alloc(HashMap::new()))
+impl_make_defs!(self, id: ArchRef => {
+	let mut ctx = DefsContext::new(self);
+	let hir = self.hir(id)?;
+	for &decl in &hir.decls {
+		ctx.declare_any_in_block(decl);
+	}
+	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
 
 
 // Definitions in a package declaration.
 impl_make_defs!(self, id: PkgDeclRef => {
+	let mut ctx = DefsContext::new(self);
 	let hir = self.hir(id)?;
-	let mut defs = HashMap::new();
-	let mut had_fails = false;
-	for decl in &hir.decls {
-		let names_and_defs = match *decl {
-			DeclInPkgRef::Pkg(id) => vec![(self.ast(id).1.name.map_into(), Def::Pkg(id))],
-			DeclInPkgRef::PkgInst(id) => vec![(self.ast(id).1.name.map_into(), Def::PkgInst(id))],
-			DeclInPkgRef::Type(id) => {
-				let hir = self.hir(id)?;
-				let mut v = vec![(hir.name.map_into(), Def::Type(id))];
-				match hir.data {
-					Some(hir::TypeData::Enum(_, ref lits)) => {
-						for (i, lit) in lits.iter().enumerate() {
-							match *lit {
-								hir::EnumLit::Ident(n) => v.push((n.map_into(), Def::Enum(EnumRef(id, i)))),
-								hir::EnumLit::Char(c) => v.push((c.map_into(), Def::Enum(EnumRef(id, i)))),
-							}
-						}
-					}
-					_ => ()
-				}
-				v
-			}
-			DeclInPkgRef::Subtype(id) => vec![(self.ast(id).1.name.map_into(), Def::Subtype(id))],
-		};
-
-		for (name, def) in names_and_defs {
-			if self.sess.opts.trace_scoreboard { println!("[SB][VHDL][SCOPE] declaring `{}` as {:?}", name.value, def); }
-			match def {
-				// Handle overloadable cases.
-				Def::Enum(_) => defs.entry(name.value).or_insert_with(|| Vec::new()).push(Spanned::new(def, name.span)),
-
-				// Handle unique cases.
-				_ => if let Some(existing) = defs.insert(name.value, vec![Spanned::new(def, name.span)]) {
-					self.sess.emit(
-						DiagBuilder2::error(format!("`{}` has already been declared", name.value))
-						.span(name.span)
-						.add_note("previous declaration was here:")
-						.span(existing.last().unwrap().span)
-					);
-					had_fails = true;
-				}
-			}
-		}
+	for &decl in &hir.decls {
+		ctx.declare_any_in_pkg(decl);
 	}
-	if had_fails {
-		Err(())
-	} else {
-		Ok(self.sb.arenas.defs.alloc(defs))
-	}
+	// 	let names_and_defs = match *decl {
+	// 		DeclInPkgRef::Pkg(id) => vec![(self.ast(id).1.name.map_into(), Def::Pkg(id))],
+	// 		DeclInPkgRef::PkgInst(id) => vec![(self.ast(id).1.name.map_into(), Def::PkgInst(id))],
+	// 		DeclInPkgRef::Type(id) => {
+	// 			let hir = self.hir(id)?;
+	// 			let mut v = vec![(hir.name.map_into(), Def::Type(id))];
+	// 			match hir.data {
+	// 				Some(hir::TypeData::Enum(_, ref lits)) => {
+	// 					for (i, lit) in lits.iter().enumerate() {
+	// 						match *lit {
+	// 							hir::EnumLit::Ident(n) => v.push((n.map_into(), Def::Enum(EnumRef(id, i)))),
+	// 							hir::EnumLit::Char(c) => v.push((c.map_into(), Def::Enum(EnumRef(id, i)))),
+	// 						}
+	// 					}
+	// 				}
+	// 				_ => ()
+	// 			}
+	// 			v
+	// 		}
+	// 		DeclInPkgRef::Subtype(id) => vec![(self.ast(id).1.name.map_into(), Def::Subtype(id))],
+	// 	};
+
+	// 	for (name, def) in names_and_defs {
+	// 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL][SCOPE] declaring `{}` as {:?}", name.value, def); }
+	// 		match def {
+	// 			// Handle overloadable cases.
+	// 			Def::Enum(_) => defs.entry(name.value).or_insert_with(|| Vec::new()).push(Spanned::new(def, name.span)),
+
+	// 			// Handle unique cases.
+	// 			_ => if let Some(existing) = defs.insert(name.value, vec![Spanned::new(def, name.span)]) {
+	// 				self.sess.emit(
+	// 					DiagBuilder2::error(format!("`{}` has already been declared", name.value))
+	// 					.span(name.span)
+	// 					.add_note("previous declaration was here:")
+	// 					.span(existing.last().unwrap().span)
+	// 				);
+	// 				had_fails = true;
+	// 			}
+	// 		}
+	// 	}
+	// }
+	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
+	// if had_fails {
+	// 	Err(())
+	// } else {
+	// 	Ok(self.sb.arenas.defs.alloc(defs))
+	// }
 });
 
 
@@ -353,3 +360,23 @@ impl_make_scope!(self, id: ProcessStmtRef => {
 		explicit_defs: HashMap::new(),
 	}))
 });
+
+// DeclInPkgRef::Pkg(id) => vec![(self.ast(id).1.name.map_into(), Def::Pkg(id))],
+// DeclInPkgRef::PkgInst(id) => vec![(self.ast(id).1.name.map_into(), Def::PkgInst(id))],
+// DeclInPkgRef::Type(id) => {
+// 	let hir = self.hir(id)?;
+// 	let mut v = vec![(hir.name.map_into(), Def::Type(id))];
+// 	match hir.data {
+// 		Some(hir::TypeData::Enum(_, ref lits)) => {
+// 			for (i, lit) in lits.iter().enumerate() {
+// 				match *lit {
+// 					hir::EnumLit::Ident(n) => v.push((n.map_into(), Def::Enum(EnumRef(id, i)))),
+// 					hir::EnumLit::Char(c) => v.push((c.map_into(), Def::Enum(EnumRef(id, i)))),
+// 				}
+// 			}
+// 		}
+// 		_ => ()
+// 	}
+// 	v
+// }
+// DeclInPkgRef::Subtype(id) => vec![(self.ast(id).1.name.map_into(), Def::Subtype(id))],
