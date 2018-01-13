@@ -729,6 +729,11 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 			self.codegen(decl_id, &mut entity)?;
 		}
 
+		// Generate the code for the statements in the architecture.
+		for &stmt_id in &hir.stmts {
+			self.codegen(stmt_id, &mut entity)?;
+		}
+
 		// Add the entity to the module and return a reference to it.
 		Ok(DefValueRef(self.sb.llmod.borrow_mut().add_entity(entity).into()))
 	}
