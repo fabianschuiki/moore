@@ -153,7 +153,7 @@ impl_codegen!(self, _id: BlockStmtRef, _ctx: &mut llhd::Entity => {
 });
 
 impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
-	let hir = self.existing_hir(id)?;
+	let hir = self.hir(id)?;
 	let name = match hir.label {
 		Some(n) => format!("{}_{}", ctx.name(), n.value),
 		None => format!("{}_proc", ctx.name()),

@@ -177,25 +177,9 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				ast::CaseGenStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::ForGenStmt{..} => { unimp(stmt); had_fails = true; }
 
-				ast::ProcStmt {
-					ref sensitivity,
-					ref decls,
-					ref stmts,
-					postponed,
-				} => {
+				ast::ProcStmt{..} => {
 					let id = ProcessStmtRef(NodeId::alloc());
-					// TODO: map sensititivty
-					// TODO: map decls
-					let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a process")?;
-					let prok = hir::ProcessStmt {
-						parent: scope_id,
-						label: stmt.label,
-						postponed: postponed,
-						sensitivity: hir::ProcessSensitivity::None,
-						decls: Vec::new(),
-						stmts: stmts,
-					};
-					self.set_hir(id, self.sb.arenas.hir.process_stmt.alloc(prok));
+					self.set_ast(id, (scope_id, stmt));
 					refs.push(id.into());
 				}
 
@@ -861,7 +845,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 	let (scope_id, ast) = self.ast(id);
 	let data = match ast.data {
 		// Integer, real, and physical types.
-		Some(ast::RangeType(ref range_expr, ref _units)) => {
+		Some(ast::RangeType(_span, ref range_expr, ref _units)) => {
 			let (dir, lb, rb) = match range_expr.data {
 				ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
 					let lb = ExprRef(NodeId::alloc());
@@ -925,7 +909,13 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 			Some(hir::TypeData::Enum(elems.span, lits))
 		}
 
-		Some(_) => unimplemented!(),
+		Some(ref wrong) => {
+			self.sess.emit(
+				DiagBuilder2::bug(format!("lowering to HIR of {} not implemented", wrong.desc()))
+				.span(wrong.human_span())
+			);
+			return Err(());
+		},
 		None => None
 	};
 	let decl = hir::TypeDecl{
@@ -949,4 +939,30 @@ impl_make!(self, id: ArchRef => &hir::Arch {
 		decls: decls,
 		stmts: stmts,
 	}))
+});
+
+impl_make!(self, id: ProcessStmtRef => &hir::ProcessStmt {
+	let (scope_id, ast) = self.ast(id);
+	match ast.data {
+		ast::ProcStmt {
+			// ref sensitivity,
+			// ref decls,
+			ref stmts,
+			postponed,
+			..
+		} => {
+			// TODO: map sensititivty
+			// TODO: map decls
+			let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a process")?;
+			Ok(self.sb.arenas.hir.process_stmt.alloc(hir::ProcessStmt {
+				parent: scope_id,
+				label: ast.label,
+				postponed: postponed,
+				sensitivity: hir::ProcessSensitivity::None,
+				decls: Vec::new(),
+				stmts: stmts,
+			}))
+		}
+		_ => unreachable!()
+	}
 });

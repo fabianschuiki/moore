@@ -829,15 +829,62 @@ pub struct TypeDecl {
 	pub data: Option<TypeData>,
 }
 
+impl HasSpan for TypeDecl {
+	fn span(&self) -> Span {
+		self.span
+	}
+
+	fn human_span(&self) -> Span {
+		self.name.span
+	}
+}
+
+impl HasDesc for TypeDecl {
+	fn desc(&self) -> &'static str {
+		match self.data {
+			Some(ref d) => d.desc(),
+			None => "incomplete type declaration",
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum TypeData {
 	EnumType(ParenElems),
-	RangeType(Box<Expr>, Option<Vec<(Ident, Option<Box<Expr>>)>>),
-	ArrayType(ParenElems, SubtypeInd),
-	RecordType(Vec<(Vec<Ident>, SubtypeInd)>),
+	RangeType(Span, Box<Expr>, Option<Vec<(Ident, Option<Box<Expr>>)>>),
+	ArrayType(Span, ParenElems, SubtypeInd),
+	RecordType(Span, Vec<(Vec<Ident>, SubtypeInd)>),
 	AccessType(SubtypeInd),
 	FileType(CompoundName),
-	ProtectedType(Vec<DeclItem>),
+	ProtectedType(Span, Vec<DeclItem>),
+}
+
+impl HasSpan for TypeData {
+	fn span(&self) -> Span {
+		match *self {
+			TypeData::EnumType(ref n) => n.span,
+			TypeData::RangeType(span,..) => span,
+			TypeData::ArrayType(span,..) => span,
+			TypeData::RecordType(span,..) => span,
+			TypeData::AccessType(ref s) => s.span,
+			TypeData::FileType(ref n) => n.span,
+			TypeData::ProtectedType(span,..) => span,
+		}
+	}
+}
+
+impl HasDesc for TypeData {
+	fn desc(&self) -> &'static str {
+		match *self {
+			TypeData::EnumType(..) => "enumeration type declaration",
+			TypeData::RangeType(..) => "range type declaration",
+			TypeData::ArrayType(..) => "array type declaration",
+			TypeData::RecordType(..) => "record type declaration",
+			TypeData::AccessType(..) => "access type declaration",
+			TypeData::FileType(..) => "file type declaration",
+			TypeData::ProtectedType(..) => "protected type declaration",
+		}
+	}
 }
 
 

@@ -1253,6 +1253,9 @@ node_storage!(AstTable<'ast>,
 	file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
 
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
+
+	// Statements
+	proc_stmts: ProcessStmtRef => (ScopeRef, &'ast ast::Stmt),
 );
 
 node_storage!(HirTable<'ctx>,
