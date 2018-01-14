@@ -220,43 +220,16 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				ast::WaitStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::AssertStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::ReportStmt{..} => { unimp(stmt); had_fails = true; }
-
-				ast::AssignStmt {
-					ref target,
-					kind: ast::AssignKind::Signal,
-					guarded,
-					ref mode,
-				} => {
+				ast::AssignStmt{kind: ast::AssignKind::Signal,..} => {
 					let id = SigAssignStmtRef(NodeId::alloc());
-					let target = self.unpack_signal_assign_target(scope_id, target)?;
-					let kind = self.unpack_signal_assign_mode(scope_id, mode)?;
-					if guarded {
-						self.sess.emit(
-							DiagBuilder2::warning("sequential signal assignment cannot be guarded")
-							.span(stmt.human_span())
-							.add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
-						);
-					}
-					let assign = hir::SigAssignStmt {
-						parent: scope_id,
-						label: stmt.label,
-						target: target,
-						kind: kind,
-					};
-					self.set_hir(id, self.sb.arenas.hir.sig_assign_stmt.alloc(assign));
+					self.set_ast(id, (scope_id, stmt));
 					refs.push(id.into());
 				}
-
-				ast::AssignStmt {
-					ref target,
-					kind: ast::AssignKind::Var,
-					guarded,
-					ref mode,
-				} => {
-					unimp(stmt);
-					had_fails = true;
+				ast::AssignStmt{kind: ast::AssignKind::Var, ..} => {
+					let id = VarAssignStmtRef(NodeId::alloc());
+					self.set_ast(id, (scope_id, stmt));
+					refs.push(id.into());
 				}
-
 				ast::SelectAssignStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::InstOrCallStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::IfStmt{..} => { unimp(stmt); had_fails = true; }
@@ -966,3 +939,40 @@ impl_make!(self, id: ProcessStmtRef => &hir::ProcessStmt {
 		_ => unreachable!()
 	}
 });
+
+// ast::AssignStmt {
+// 	ref target,
+// 	kind: ast::AssignKind::Signal,
+// 	guarded,
+// 	ref mode,
+// } => {
+// 	let id = SigAssignStmtRef(NodeId::alloc());
+// 	let target = self.unpack_signal_assign_target(scope_id, target)?;
+// 	let kind = self.unpack_signal_assign_mode(scope_id, mode)?;
+// 	if guarded {
+// 		self.sess.emit(
+// 			DiagBuilder2::warning("sequential signal assignment cannot be guarded")
+// 			.span(stmt.human_span())
+// 			.add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
+// 		);
+// 	}
+// 	let assign = hir::SigAssignStmt {
+// 		parent: scope_id,
+// 		label: stmt.label,
+// 		target: target,
+// 		kind: kind,
+// 	};
+// 	self.set_hir(id, self.sb.arenas.hir.sig_assign_stmt.alloc(assign));
+// 	refs.push(id.into());
+// }
+
+// ast::AssignStmt {
+// 	ref target,
+// 	kind: ast::AssignKind::Var,
+// 	guarded,
+// 	ref mode,
+// } => {
+// 	unimp(stmt);
+// 	had_fails = true;
+// }
+

@@ -1255,7 +1255,9 @@ node_storage!(AstTable<'ast>,
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
 
 	// Statements
-	proc_stmts: ProcessStmtRef => (ScopeRef, &'ast ast::Stmt),
+	proc_stmts:       ProcessStmtRef   => (ScopeRef, &'ast ast::Stmt),
+	sig_assign_stmts: SigAssignStmtRef => (ScopeRef, &'ast ast::Stmt),
+	var_assign_stmts: VarAssignStmtRef => (ScopeRef, &'ast ast::Stmt),
 );
 
 node_storage!(HirTable<'ctx>,
