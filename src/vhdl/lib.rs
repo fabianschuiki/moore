@@ -13,9 +13,11 @@ extern crate lazy_static;
 pub extern crate moore_vhdl_syntax as syntax;
 
 pub mod symtbl;
+#[macro_use]
 pub mod score;
 pub mod hir;
 pub mod ty;
 pub mod konst;
 pub mod codegen;
 pub mod defs;
+pub mod typeck;

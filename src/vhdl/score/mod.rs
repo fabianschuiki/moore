@@ -24,6 +24,7 @@ use ty::*;
 use konst::*;
 use num::{BigInt, Signed};
 use codegen::Codegen;
+use typeck::Typeck;
 
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
@@ -37,7 +38,6 @@ macro_rules! impl_make {
 }
 
 mod lower_hir;
-mod typeck;
 mod scope;
 mod cval;
 
@@ -681,6 +681,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'as
 // Generate the definition for an architecture.
 impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
+		self.typeck(id)?;
 		let hir = self.hir(id)?;
 		let entity = self.hir(hir.entity)?;
 
