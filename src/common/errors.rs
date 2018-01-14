@@ -57,6 +57,10 @@ impl DiagBuilder2 {
 		}
 	}
 
+	pub fn bug<S: Into<String>>(message: S) -> DiagBuilder2 {
+		DiagBuilder2::new(Severity::Bug, message)
+	}
+
 	pub fn fatal<S: Into<String>>(message: S) -> DiagBuilder2 {
 		DiagBuilder2::new(Severity::Fatal, message)
 	}
@@ -111,6 +115,7 @@ pub enum Severity {
 	Warning,
 	Error,
 	Fatal,
+	Bug,
 }
 
 impl Severity {
@@ -120,6 +125,7 @@ impl Severity {
 			Severity::Error => "error",
 			Severity::Warning => "warning",
 			Severity::Note => "note",
+			Severity::Bug => "compiler bug",
 		}
 	}
 }
@@ -133,7 +139,7 @@ impl fmt::Display for Severity {
 impl fmt::Display for DiagBuilder2 {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let mut colorcode = match self.get_severity() {
-			Severity::Fatal | Severity::Error => "\x1B[31;1m",
+			Severity::Bug | Severity::Fatal | Severity::Error => "\x1B[31;1m",
 			Severity::Warning => "\x1B[33;1m",
 			Severity::Note => "\x1B[36;1m",
 		};
@@ -210,6 +216,12 @@ impl fmt::Display for DiagBuilder2 {
 				DiagSegment::Note(ref message) => write!(f, "\x1B[1mnote:\x1B[m {}\n", message)?,
 			}
 		}
+
+		if self.get_severity() == Severity::Bug {
+			write!(f, "You have encountered a compiler bug. We would appreciate if you open an issue [1] and describe how you triggered the bug, together with a minimal snippet of code to reproduce it. Thanks!\n")?;
+			write!(f, "[1]: https://github.com/fabianschuiki/moore\n")?;
+		}
+
 		Ok(())
 	}
 }

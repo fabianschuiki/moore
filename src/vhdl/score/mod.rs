@@ -217,7 +217,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		match self.sb.hir_table.borrow().get(&id) {
 			Some(node) => Ok(node),
 			None => {
-				self.sess.emit(DiagBuilder2::fatal(format!("hir for {:?} should exist", id)));
+				self.sess.emit(DiagBuilder2::bug(format!("hir for {:?} should exist", id)));
 				Err(())
 			}
 		}

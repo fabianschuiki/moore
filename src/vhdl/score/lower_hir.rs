@@ -163,7 +163,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
 		let unimp = |s: &ast::Stmt| self.sess.emit(
-			DiagBuilder2::error(format!("{} not implemented", s.desc()))
+			DiagBuilder2::bug(format!("{} not implemented", s.desc()))
 			.span(s.human_span())
 		);
 		for stmt in stmts {
@@ -228,7 +228,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
 		let unimp = |s: &ast::Stmt| self.sess.emit(
-			DiagBuilder2::error(format!("{} not implemented", s.desc()))
+			DiagBuilder2::bug(format!("{} not implemented", s.desc()))
 			.span(s.human_span())
 		);
 		for stmt in stmts {
