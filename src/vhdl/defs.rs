@@ -154,7 +154,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			Ok(h) => h,
 			Err(()) => { self.failed = true; return; }
 		};
-		self.declare(hir.name.map_into(), Def::Signal(id))
+		self.declare(hir.name.map_into(), Def::Signal(id.into()))
 	}
 
 	/// Handle a variable declaration.

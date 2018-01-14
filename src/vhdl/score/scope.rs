@@ -164,53 +164,7 @@ impl_make_defs!(self, id: PkgDeclRef => {
 	for &decl in &hir.decls {
 		ctx.declare_any_in_pkg(decl);
 	}
-	// 	let names_and_defs = match *decl {
-	// 		DeclInPkgRef::Pkg(id) => vec![(self.ast(id).1.name.map_into(), Def::Pkg(id))],
-	// 		DeclInPkgRef::PkgInst(id) => vec![(self.ast(id).1.name.map_into(), Def::PkgInst(id))],
-	// 		DeclInPkgRef::Type(id) => {
-	// 			let hir = self.hir(id)?;
-	// 			let mut v = vec![(hir.name.map_into(), Def::Type(id))];
-	// 			match hir.data {
-	// 				Some(hir::TypeData::Enum(_, ref lits)) => {
-	// 					for (i, lit) in lits.iter().enumerate() {
-	// 						match *lit {
-	// 							hir::EnumLit::Ident(n) => v.push((n.map_into(), Def::Enum(EnumRef(id, i)))),
-	// 							hir::EnumLit::Char(c) => v.push((c.map_into(), Def::Enum(EnumRef(id, i)))),
-	// 						}
-	// 					}
-	// 				}
-	// 				_ => ()
-	// 			}
-	// 			v
-	// 		}
-	// 		DeclInPkgRef::Subtype(id) => vec![(self.ast(id).1.name.map_into(), Def::Subtype(id))],
-	// 	};
-
-	// 	for (name, def) in names_and_defs {
-	// 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL][SCOPE] declaring `{}` as {:?}", name.value, def); }
-	// 		match def {
-	// 			// Handle overloadable cases.
-	// 			Def::Enum(_) => defs.entry(name.value).or_insert_with(|| Vec::new()).push(Spanned::new(def, name.span)),
-
-	// 			// Handle unique cases.
-	// 			_ => if let Some(existing) = defs.insert(name.value, vec![Spanned::new(def, name.span)]) {
-	// 				self.sess.emit(
-	// 					DiagBuilder2::error(format!("`{}` has already been declared", name.value))
-	// 					.span(name.span)
-	// 					.add_note("previous declaration was here:")
-	// 					.span(existing.last().unwrap().span)
-	// 				);
-	// 				had_fails = true;
-	// 			}
-	// 		}
-	// 	}
-	// }
 	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
-	// if had_fails {
-	// 	Err(())
-	// } else {
-	// 	Ok(self.sb.arenas.defs.alloc(defs))
-	// }
 });
 
 

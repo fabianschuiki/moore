@@ -28,6 +28,7 @@ pub struct Arenas {
 	pub variable_decl: Arena<VarDecl>,
 	pub file_decl: Arena<FileDecl>,
 	pub process_stmt: Arena<ProcessStmt>,
+	pub sig_assign_stmt: Arena<SigAssignStmt>,
 }
 
 
@@ -49,6 +50,7 @@ impl Arenas {
 			variable_decl: Arena::new(),
 			file_decl: Arena::new(),
 			process_stmt: Arena::new(),
+			sig_assign_stmt: Arena::new(),
 		}
 	}
 }
@@ -376,3 +378,104 @@ pub enum ProcessSensitivity {
 	/// Explicitly enumerated signals.
 	List(Vec<Def>),
 }
+
+/// A sequential signal assignment.
+///
+/// See IEEE 1076-2008 section 10.5.
+#[derive(Debug)]
+pub struct SigAssignStmt {
+	/// The scope within which the statement has been made.
+	pub parent: ScopeRef,
+	/// The optional statement label.
+	pub label: Option<Spanned<Name>>,
+	/// The target of the assignment.
+	pub target: SigAssignTarget,
+	/// The kind of the assignment.
+	pub kind: SigAssignKind,
+}
+
+/// A signal assignment target.
+#[derive(Debug)]
+pub enum SigAssignTarget {
+	Name(SignalRef),
+	Aggregate,
+}
+
+/// A signal assignment kind.
+#[derive(Debug)]
+pub enum SigAssignKind {
+	/// A simple waveform assignment.
+	SimpleWave(DelayMechanism, Waveform),
+	/// A simple force assignment.
+	SimpleForce(ForceMode, ExprRef),
+	/// A simple release assignment.
+	SimpleRelease(ForceMode),
+	/// A conditional waveform assignment.
+	CondWave(DelayMechanism, Cond<Waveform>),
+	/// A conditional force assignment.
+	CondForce(ForceMode, Cond<ExprRef>),
+	/// A selected waveform assignment.
+	SelWave(DelayMechanism, Sel<Waveform>),
+	/// A selected force assignment.
+	SelForce(ForceMode, Sel<ExprRef>),
+}
+
+/// A conditional waveform or expression.
+#[derive(Debug)]
+pub struct Cond<T> {
+	/// The conditional values, represented as (value, cond) tuples.
+	pub when: Vec<(T, ExprRef)>,
+	/// The optional `else` value.
+	pub other: Option<T>,
+}
+
+/// A selected waveform or expression.
+#[derive(Debug)]
+pub struct Sel<T> {
+	/// The discriminant expression that is used to select among the choices.
+	pub disc: ExprRef,
+	/// The selected values, represented as (value, choices) tuples.
+	pub when: Vec<(T, Choices)>,
+}
+
+/// The mode of a signal force/release statement.
+///
+/// See IEEE 1076-2008 section 10.5.2.1.
+#[derive(Copy, Clone, Debug)]
+pub enum ForceMode {
+	/// Specifies an effective-value force/release. This is the default if the
+	/// assignment target is a in port/signal, or no port/signal at all.
+	In,
+	/// Specifies a driving-value force/release. This is the default if the
+	/// assignment target is a out/inout/buffer port/signal.
+	Out,
+}
+
+/// The delay mechanism of a normal signal assignment.
+#[derive(Copy, Clone, Debug)]
+pub enum DelayMechanism {
+	/// A `transport` delay mechanism.
+	Transport,
+	/// A `inertial` delay mechanism.
+	Inertial,
+	/// A `reject <time_expr> inertial` delay mechanism.
+	RejectInertial(ExprRef),
+}
+
+/// A signal assignment waveform.
+///
+/// An empty vector corresponds to the `unaffected` waveform.
+pub type Waveform = Vec<WaveElem>;
+
+/// An element of a signal assignment waveform.
+#[derive(Debug)]
+pub struct WaveElem {
+	/// The value expression of the element. Corresponds to `null` if `None`.
+	pub value: Option<ExprRef>,
+	/// The optional `after` time expression.
+	pub after: Option<ExprRef>,
+}
+
+/// A list of choices used in aggregates, selected assignments, and case
+/// statements.
+pub type Choices = Vec<ExprRef>;

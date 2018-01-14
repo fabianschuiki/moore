@@ -528,7 +528,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		}
 	}
 
-
+	/// Resolve a compound name within a scope.
 	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef, only_defs: bool) -> Result<(ResolvableName, Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id); }
 
@@ -1027,7 +1027,7 @@ node_ref_group!(Def:
 	Subtype(SubtypeDeclRef),
 	Enum(EnumRef),
 	Const(ConstDeclRef),
-	Signal(SignalDeclRef),
+	Signal(SignalRef),
 	File(FileDeclRef),
 	Var(VarDeclRef),
 	SharedVar(SharedVarDeclRef),
@@ -1052,6 +1052,11 @@ node_ref_group!(GenericRef:
 node_ref_group!(TypeMarkRef:
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
+);
+
+node_ref_group!(SignalRef:
+	Intf(IntfSignalRef),
+	Decl(SignalDeclRef),
 );
 
 /// All declarations that may possibly appear in a package. See IEEE 1076-2008
@@ -1262,10 +1267,11 @@ node_storage!(HirTable<'ctx>,
 	exprs:                 ExprRef               => &'ctx hir::Expr,
 	const_decls:           ConstDeclRef          => &'ctx hir::ConstDecl,
 	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
-	variable_decls:        VarDeclRef       => &'ctx hir::VarDecl,
-	shared_variable_decls: SharedVarDeclRef => &'ctx hir::VarDecl,
+	variable_decls:        VarDeclRef            => &'ctx hir::VarDecl,
+	shared_variable_decls: SharedVarDeclRef      => &'ctx hir::VarDecl,
 	file_decls:            FileDeclRef           => &'ctx hir::FileDecl,
 	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,
+	sig_assign_stmts:      SigAssignStmtRef      => &'ctx hir::SigAssignStmt,
 );
 
 
