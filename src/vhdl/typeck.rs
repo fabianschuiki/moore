@@ -31,8 +31,15 @@ impl<'ctx, I, T> Typeck<I> for T where T: NodeMaker<I, &'ctx Ty> {
 }
 
 macro_rules! unimp {
-	($slf:tt, $id:ident) => {{
+	($slf:tt, $id:expr) => {{
 		$slf.sess.emit(DiagBuilder2::bug(format!("typeck of {:?} not implemented", $id)));
+		return Err(());
+	}}
+}
+
+macro_rules! unimpmsg {
+	($slf:tt, $span:expr, $msg:expr) => {{
+		$slf.sess.emit(DiagBuilder2::bug(format!("{} not implemented", $msg)).span($span));
 		return Err(());
 	}}
 }
@@ -69,9 +76,9 @@ impl_typeck!(self, id: GenericRef => {
 	}
 });
 
-impl_typeck!(self, id: IntfSignalRef => {
-	self.typeck(self.hir(id)?.ty)
-});
+// impl_typeck!(self, id: IntfSignalRef => {
+// 	self.typeck(self.hir(id)?.ty)
+// });
 
 impl_typeck!(self, id: IntfTypeRef => {
 	unimp!(self, id)
@@ -251,7 +258,20 @@ impl_typeck!(self, id: ReportStmtRef => {
 });
 
 impl_typeck!(self, id: SigAssignStmtRef => {
-	unimp!(self, id)
+	let hir = self.hir(id)?;
+	let lhs_ty = match hir.target {
+		hir::SigAssignTarget::Name(sig) => self.ty(sig)?,
+		hir::SigAssignTarget::Aggregate => unimpmsg!(self, hir.target_span, "signal assignment to aggregate"),
+	};
+	self.sess.emit(
+		DiagBuilder2::warning("type of right-hand side not checked")
+		.span(hir.kind_span)
+	);
+	// TODO: Check right hand side.
+	// let rhs_ty = match hir.kind {
+
+	// };
+	Ok(())
 });
 
 impl_typeck!(self, id: VarAssignStmtRef => {
@@ -457,4 +477,16 @@ impl_make!(self, id: TypedNodeRef => &Ty {
 	match id {
 		TypedNodeRef::SubtypeInd(id) => self.make(id),
 	}
+});
+
+impl_make!(self, id: SignalRef => &Ty {
+	match id {
+		SignalRef::Intf(id) => self.ty(id),
+		SignalRef::Decl(id) => self.ty(id),
+	}
+});
+
+impl_make!(self, id: IntfSignalRef => &Ty {
+	let hir = self.hir(id)?;
+	self.ty(hir.ty)
 });

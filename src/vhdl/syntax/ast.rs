@@ -976,10 +976,10 @@ pub enum StmtData {
 		postponed: bool,
 	},
 	AssignStmt {
-		target: AssignTarget,
+		target: Spanned<AssignTarget>,
 		kind: AssignKind,
 		guarded: bool,
-		mode: AssignMode,
+		mode: Spanned<AssignMode>,
 	},
 	SelectAssignStmt {
 		select: Expr,

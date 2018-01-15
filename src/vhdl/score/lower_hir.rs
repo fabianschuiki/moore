@@ -8,6 +8,13 @@
 
 use score::*;
 
+/// Emit a compiler bug and return `Err`.
+macro_rules! unimp {
+	($slf:tt, $id:expr) => {{
+		$slf.sess.emit(DiagBuilder2::bug(format!("lowering to HIR of {:?} not implemented", $id)));
+		return Err(());
+	}}
+}
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Unpack an AST expression.
@@ -267,9 +274,33 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		match *target {
 			ast::AssignTarget::Name(ref name) => {
 				println!("will now resolve {:#?}", name);
-				let res = self.resolve_compound_name(name, scope_id, false)?;
-				println!("resolved sig assign target to {:#?}", res);
-				unimplemented!();
+				let (_res_name, mut defs, res_span, tail) = self.resolve_compound_name(name, scope_id, false)?;
+				if !tail.is_empty() {
+					self.sess.emit(
+						DiagBuilder2::bug("handling of non-name signal assignment targets not implemented")
+						.span(name.span)
+					);
+					return Err(());
+				}
+				let sig = match defs.pop() {
+					Some(Spanned{ value: Def::Signal(id), .. }) => id,
+					Some(_) => {
+						self.sess.emit(
+							DiagBuilder2::error(format!("`{}` is not a signal", res_span.extract()))
+							.span(res_span)
+						);
+						return Err(());
+					}
+					None => unreachable!()
+				};
+				if !defs.is_empty() {
+					self.sess.emit(
+						DiagBuilder2::error(format!("`{}` is ambiguous", res_span.extract()))
+						.span(res_span)
+					);
+					return Err(());
+				}
+				Ok(hir::SigAssignTarget::Name(sig))
 			},
 			ast::AssignTarget::Aggregate(ref elems) => {
 				self.sess.emit(
@@ -289,7 +320,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		scope_id: ScopeRef,
 		mode: &'ast ast::AssignMode
 	) -> Result<hir::SigAssignKind> {
-		unimplemented!();
+		unimp!(self, "signal assignment mode");
 	}
 }
 
@@ -934,6 +965,38 @@ impl_make!(self, id: ProcessStmtRef => &hir::ProcessStmt {
 				sensitivity: hir::ProcessSensitivity::None,
 				decls: Vec::new(),
 				stmts: stmts,
+			}))
+		}
+		_ => unreachable!()
+	}
+});
+
+impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
+	let (scope_id, ast) = self.ast(id);
+	match ast.data {
+		ast::AssignStmt {
+			target: Spanned{ value: ref target, span: target_span },
+			mode: Spanned{ value: ref mode, span: mode_span },
+			guarded,
+			..
+		} => {
+			let target = self.unpack_signal_assign_target(scope_id, target)?;
+			let kind = self.unpack_signal_assign_mode(scope_id, mode)?;
+			if guarded {
+				self.sess.emit(
+					DiagBuilder2::warning("sequential signal assignment cannot be guarded")
+					.span(ast.human_span())
+					.add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
+				);
+			}
+			Ok(self.sb.arenas.hir.sig_assign_stmt.alloc(hir::SigAssignStmt {
+				parent: scope_id,
+				span: ast.span,
+				label: ast.label,
+				target: target,
+				target_span: target_span,
+				kind: kind,
+				kind_span: mode_span,
 			}))
 		}
 		_ => unreachable!()

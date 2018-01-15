@@ -2364,14 +2364,16 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
 		wrong => {
 			if let Some(name) = try_name(p)? {
 				// Try to parse a statement that begins with a name.
+				let span = name.span;
 				match p.peek(0).value {
-					Leq | VarAssign => parse_assign_tail(p, ast::AssignTarget::Name(name))?,
+					Leq | VarAssign => parse_assign_tail(p, Spanned::new(ast::AssignTarget::Name(name), span))?,
 					_ => parse_inst_or_call_tail(p, None, name)?,
 				}
 			} else if let Some(expr) = try_paren_expr(p)? {
 				// Try to parse a statement that begins with a parenthesized
 				// expression, aka an assignment.
-				parse_assign_tail(p, ast::AssignTarget::Aggregate(expr))?
+				let span = expr.span;
+				parse_assign_tail(p, Spanned::new(ast::AssignTarget::Aggregate(expr), span))?
 			} else {
 				// If we get here, nothing matched, so throw an error.
 				let q = p.peek(0).span;
@@ -2971,26 +2973,32 @@ pub fn parse_proc_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 /// force_mode := "in" | "out"
 /// delay_mech := "transport" | ["reject" expr] "inertial"
 /// ```
-pub fn parse_assign_tail<P: Parser>(p: &mut P, target: ast::AssignTarget) -> ReportedResult<ast::StmtData> {
+pub fn parse_assign_tail<P: Parser>(p: &mut P, target: Spanned<ast::AssignTarget>) -> ReportedResult<ast::StmtData> {
 	let (kind, guarded) = parse_assign_dst_tail(p)?;
-	let mode = match p.peek(0).value {
+	let (mode, mode_span) = match p.peek(0).value {
 		Keyword(Kw::Release) => {
+			let mut span = p.peek(0).span;
 			p.bump();
 			let fm = try_force_mode(p);
-			ast::AssignMode::Release(fm)
+			span.expand(p.last_span());
+			(ast::AssignMode::Release(fm), span)
 		}
 
 		Keyword(Kw::Force) => {
+			let mut span = p.peek(0).span;
 			p.bump();
 			let fm = try_force_mode(p);
 			let waves = parse_cond_waves(p)?;
-			ast::AssignMode::Force(fm, waves)
+			span.expand(p.last_span());
+			(ast::AssignMode::Force(fm, waves), span)
 		}
 
 		_ => {
+			let mut span = p.peek(0).span;
 			let dm = try_delay_mech(p)?;
 			let waves = parse_cond_waves(p)?;
-			ast::AssignMode::Normal(dm, waves)
+			span.expand(p.last_span());
+			(ast::AssignMode::Normal(dm, waves), span)
 		}
 	};
 	require(p, Semicolon)?;
@@ -2998,7 +3006,7 @@ pub fn parse_assign_tail<P: Parser>(p: &mut P, target: ast::AssignTarget) -> Rep
 		target: target,
 		kind: kind,
 		guarded: guarded,
-		mode: mode,
+		mode: Spanned::new(mode, mode_span),
 	})
 }
 

@@ -386,12 +386,18 @@ pub enum ProcessSensitivity {
 pub struct SigAssignStmt {
 	/// The scope within which the statement has been made.
 	pub parent: ScopeRef,
+	/// The location of the entire statement in the source file.
+	pub span: Span,
 	/// The optional statement label.
 	pub label: Option<Spanned<Name>>,
 	/// The target of the assignment.
 	pub target: SigAssignTarget,
+	/// The location of the right hand side in the source file.
+	pub target_span: Span,
 	/// The kind of the assignment.
 	pub kind: SigAssignKind,
+	/// The location of the right hand side in the source file.
+	pub kind_span: Span,
 }
 
 /// A signal assignment target.
