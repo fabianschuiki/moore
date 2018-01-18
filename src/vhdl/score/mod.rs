@@ -290,7 +290,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		Ok(node)
 	}
 
-
+	/// Determine the type of a node.
+	///
+	/// If called for the first time with the given `id`, calculates the type by
+	/// calling `self.make(id)`. Otherwise returns the existing information.
 	pub fn ty<I>(&self, id: I) -> Result<&'ctx Ty>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
@@ -303,7 +306,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] ty for {:?} is {:?}", id, node); }
 		if self.sb.ty_table.borrow_mut().insert(id.into(), node).is_some() {
-			panic!("node should not exist");
+			self.sess.emit(
+				DiagBuilder2::bug(format!("type for {:?} already in the scoreboard", id))
+			);
+			return Err(());
 		}
 		Ok(node)
 	}

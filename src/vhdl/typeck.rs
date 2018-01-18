@@ -481,8 +481,8 @@ impl_make!(self, id: TypedNodeRef => &Ty {
 
 impl_make!(self, id: SignalRef => &Ty {
 	match id {
-		SignalRef::Intf(id) => self.ty(id),
-		SignalRef::Decl(id) => self.ty(id),
+		SignalRef::Intf(id) => self.make(id),
+		SignalRef::Decl(id) => self.make(id),
 	}
 });
 

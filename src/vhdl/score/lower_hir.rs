@@ -318,9 +318,103 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn unpack_signal_assign_mode(
 		&self,
 		scope_id: ScopeRef,
-		mode: &'ast ast::AssignMode
-	) -> Result<hir::SigAssignKind> {
-		unimp!(self, "signal assignment mode");
+		mode: &'ast Spanned<ast::AssignMode>
+	) -> Result<Spanned<hir::SigAssignKind>> {
+		Ok(Spanned::new(match mode.value {
+			ast::AssignMode::Release(fm) => {
+				unimp!(self, "release signal assignment mode");
+			}
+			ast::AssignMode::Force(fm, ref waves) => {
+				unimp!(self, "force signal assignment mode");
+			}
+			ast::AssignMode::Normal(ref dm, ref waves) => {
+				let dm = self.unpack_delay_mechanism(scope_id, dm)?;
+				assert!(!waves.is_empty()); // guaranteed by parser
+				if waves.len() > 1 || waves[0].1.is_some() {
+					hir::SigAssignKind::CondWave(
+						dm,
+						self.unpack_cond_waveforms(scope_id, waves)?
+					)
+				} else {
+					hir::SigAssignKind::SimpleWave(
+						dm,
+						self.unpack_waveform(scope_id, &waves[0].0)?
+					)
+				}
+			}
+		}, mode.span))
+	}
+
+	/// Unpack a delay mechanism.
+	///
+	/// See IEEE 1076-2008 section 10.5.2.1. If no mechanism is specified,
+	/// inertial is assumed. Theoretically, the inertial transport mechanism is
+	/// mapped to reject-inertial with the pulse rejection limit determined by
+	/// the delay of the first element in the waveform. We don't have that
+	/// information readily available at this time, so we simply map to
+	/// inertial and leave the resolution of this to stages further down the
+	/// pipeline.
+	pub fn unpack_delay_mechanism(
+		&self,
+		scope_id: ScopeRef,
+		dm: &'ast Option<Spanned<ast::DelayMech>>,
+	) -> Result<hir::DelayMechanism> {
+		if let Some(Spanned { value: ref dm, span }) = *dm {
+			Ok(match *dm {
+				ast::DelayMech::Transport => hir::DelayMechanism::Transport,
+				ast::DelayMech::Inertial => hir::DelayMechanism::Inertial,
+				ast::DelayMech::InertialReject(ref expr) => {
+					let expr = self.unpack_expr(expr, scope_id)?;
+					hir::DelayMechanism::RejectInertial(expr)
+				}
+			})
+		} else {
+			Ok(hir::DelayMechanism::Inertial)
+		}
+	}
+
+	/// Unpack the the waves of a simple wave assignment.
+	pub fn unpack_cond_waveforms(
+		&self,
+		scope_id: ScopeRef,
+		waves: &'ast [ast::CondWave],
+	) -> Result<hir::Cond<hir::Waveform>> {
+		// Determine if we have a "else".
+		let (when, other) = if waves.last().unwrap().1.is_some() {
+			(&waves[..], None)
+		} else {
+			(&waves[..waves.len()-1], Some(&waves.last().unwrap().1))
+		};
+		// for w in when {
+
+		// }
+		// let o = match other {
+		// 	Some(o) => Some(self.unpack_waveform(scope_id, other)?),
+		// 	None => None,
+		// };
+		unimp!(self, "conditional waveforms");
+	}
+
+	/// Unpack a single waveform.
+	///
+	/// See IEEE 1076-2008 section 10.5.2.
+	pub fn unpack_waveform(
+		&self,
+		scope_id: ScopeRef,
+		wave: &'ast ast::Wave,
+	) -> Result<hir::Waveform> {
+		wave.elems.iter().flat_map(|i| i.iter()).map(|&(ref value, ref after)|{
+			Ok(hir::WaveElem {
+				value: match value.data {
+					ast::NullExpr => None,
+					_ => Some(self.unpack_expr(value, scope_id)?),
+				},
+				after: match *after {
+					Some(ref expr) => Some(self.unpack_expr(expr, scope_id)?),
+					None => None
+				},
+			})
+		}).collect()
 	}
 }
 
@@ -976,7 +1070,7 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 	match ast.data {
 		ast::AssignStmt {
 			target: Spanned{ value: ref target, span: target_span },
-			mode: Spanned{ value: ref mode, span: mode_span },
+			ref mode,
 			guarded,
 			..
 		} => {
@@ -995,8 +1089,8 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 				label: ast.label,
 				target: target,
 				target_span: target_span,
-				kind: kind,
-				kind_span: mode_span,
+				kind: kind.value,
+				kind_span: kind.span,
 			}))
 		}
 		_ => unreachable!()
