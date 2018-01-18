@@ -2,12 +2,88 @@
 
 //! This module implements the type calculation of the scoreboard.
 
+use std::fmt::Debug;
+use moore_common::NodeId;
 use moore_common::errors::*;
 use moore_common::score::{NodeMaker, Result};
 use score::*;
 use ty::*;
 use konst::*;
 use hir;
+
+/// A context to typecheck things in.
+///
+/// This context helps checking the types of things and keeping track of errors.
+pub struct TypeckContext<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb> {
+	/// The parent context.
+	ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>,
+	/// Whether any of the type checking failed.
+	failed: bool,
+}
+
+impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+	/// Create a new type checking context.
+	pub fn new(ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>) -> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+		TypeckContext {
+			ctx: ctx,
+			failed: false,
+		}
+	}
+
+	/// Consume the context and return the result of the typeck.
+	pub fn finish(self) -> bool {
+		!self.failed
+	}
+
+	/// Emit a diagnostic message.
+	pub fn emit(&mut self, diag: DiagBuilder2) {
+		if diag.severity >= Severity::Error {
+			self.failed = true;
+		}
+		self.ctx.sess.emit(diag)
+	}
+
+	/// Type check the time expression in a delay mechanism.
+	pub fn typeck_delay_mechanism(&mut self, node: &'ctx hir::DelayMechanism) {
+		// TODO: implement this
+	}
+
+	/// Type check a waveform.
+	pub fn typeck_waveform(&mut self, node: &'ctx hir::Waveform, exp: &'ctx Ty) {
+		for elem in node {
+			self.typeck_wave_elem(elem, exp);
+		}
+	}
+
+	/// Type check a waveform element.
+	pub fn typeck_wave_elem(&mut self, node: &'ctx hir::WaveElem, exp: &'ctx Ty) {
+		if let Some(value) = node.value {
+			self.typeck_node(value, exp);
+		}
+		if let Some(after) = node.after {
+			// TODO: type check time expression
+			// self.typeck_node(after, /* time type */);
+		}
+	}
+
+	/// Type check any node that can have its type calculated.
+	pub fn typeck_node<I>(&mut self, id: I, exp: &'ctx Ty)
+		where
+			I: 'ctx + Copy + Debug + Into<NodeId>,
+			ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
+	{
+		if let Ok(act) = self.ctx.ty(id) {
+			if act != exp {
+				// TODO: We need some span information here!
+				self.emit(
+					DiagBuilder2::error(format!("typecheck failed, expected {:?}, got {:?}", exp, act))
+				);
+			}
+		} else {
+			self.failed = true;
+		}
+	}
+}
 
 /// Performs a type check.
 pub trait Typeck<I> {
@@ -27,6 +103,27 @@ macro_rules! impl_typeck {
 impl<'ctx, I, T> Typeck<I> for T where T: NodeMaker<I, &'ctx Ty> {
 	fn typeck(&self, id: I) -> Result<()> {
 		T::make(self, id).map(|_| ())
+	}
+}
+
+/// Checks whether a node is of a given type.
+pub trait TypeckNode<'ctx, I> {
+	fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()>;
+}
+
+// Implement the `TypeckNode` trait for everything that supports type
+// calculation.
+impl<'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'sb, 'ast, 'ctx> where ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
+	fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()> {
+		let actual = self.make(id)?;
+		if actual != expected {
+			self.sess.emit(
+				DiagBuilder2::error(format!("typecheck failed, expected {:?}, got {:?}", expected, actual))
+			);
+			Err(())
+		} else {
+			Ok(())
+		}
 	}
 }
 
@@ -261,17 +358,39 @@ impl_typeck!(self, id: SigAssignStmtRef => {
 	let hir = self.hir(id)?;
 	let lhs_ty = match hir.target {
 		hir::SigAssignTarget::Name(sig) => self.ty(sig)?,
-		hir::SigAssignTarget::Aggregate => unimpmsg!(self, hir.target_span, "signal assignment to aggregate"),
+		hir::SigAssignTarget::Aggregate => unimpmsg!(self, hir.target_span, "assignment to aggregate signal"),
 	};
-	self.sess.emit(
-		DiagBuilder2::warning("type of right-hand side not checked")
-		.span(hir.kind_span)
-	);
-	// TODO: Check right hand side.
-	// let rhs_ty = match hir.kind {
-
+	let mut ctx = TypeckContext::new(self);
+	// let typeck_dm = |dm| match dm {
+	// 	// TODO: typeck time expression
+	// 	// &hir::DelayMechanism::RejectInertial(expr) => self.typeck_node(expr, self.intern_ty(/* time type */))?,
+	// 	_ => Ok(()),
 	// };
-	Ok(())
+	match hir.kind {
+		hir::SigAssignKind::SimpleWave(ref dm, ref wave) => {
+			ctx.typeck_delay_mechanism(dm);
+			ctx.typeck_waveform(wave, lhs_ty);
+		}
+		hir::SigAssignKind::SimpleForce(_, expr) => {
+			// self.typeck_node(expr, lhs_ty)?;
+		}
+		hir::SigAssignKind::SimpleRelease(_) => (),
+		hir::SigAssignKind::CondWave(ref dm, ref cond) => {
+			ctx.typeck_delay_mechanism(dm);
+			// self.typeck_node(cond, lhs_ty)?;
+		}
+		hir::SigAssignKind::CondForce(_, ref cond) => {
+			// self.typeck_node(cond, lhs_ty)?;
+		}
+		hir::SigAssignKind::SelWave(ref dm, ref sel) => {
+			ctx.typeck_delay_mechanism(dm);
+			// self.typeck_node(sel, lhs_ty)?;
+		}
+		hir::SigAssignKind::SelForce(_, ref sel) => {
+			// self.typeck_node(sel, lhs_ty)?;
+		}
+	}
+	if ctx.finish() { Ok(()) } else { Err(()) }
 });
 
 impl_typeck!(self, id: VarAssignStmtRef => {
@@ -467,7 +586,7 @@ impl_make!(self, id: SignalDeclRef => &Ty {
 impl_make!(self, id: ExprRef => &Ty {
 	let hir = self.hir(id)?;
 	match hir.data {
-		_ => panic!("typeck not impl for expr {:?}", hir.data)
+		_ => unimp!(self, id),
 	}
 });
 
@@ -476,6 +595,7 @@ impl_make!(self, id: ExprRef => &Ty {
 impl_make!(self, id: TypedNodeRef => &Ty {
 	match id {
 		TypedNodeRef::SubtypeInd(id) => self.make(id),
+		TypedNodeRef::Signal(id)     => self.make(id),
 	}
 });
 

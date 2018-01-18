@@ -1225,6 +1225,7 @@ node_ref_group!(SeqStmtRef:
 /// A reference to a node which has a type.
 node_ref_group!(TypedNodeRef:
 	SubtypeInd(SubtypeIndRef),
+	Signal(SignalRef),
 );
 
 

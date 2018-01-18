@@ -273,7 +273,6 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	) -> Result<hir::SigAssignTarget> {
 		match *target {
 			ast::AssignTarget::Name(ref name) => {
-				println!("will now resolve {:#?}", name);
 				let (_res_name, mut defs, res_span, tail) = self.resolve_compound_name(name, scope_id, false)?;
 				if !tail.is_empty() {
 					self.sess.emit(
@@ -318,7 +317,8 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn unpack_signal_assign_mode(
 		&self,
 		scope_id: ScopeRef,
-		mode: &'ast Spanned<ast::AssignMode>
+		mode: &'ast Spanned<ast::AssignMode>,
+		tyctx: &TypeCtx<'ctx>,
 	) -> Result<Spanned<hir::SigAssignKind>> {
 		Ok(Spanned::new(match mode.value {
 			ast::AssignMode::Release(fm) => {
@@ -333,12 +333,12 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				if waves.len() > 1 || waves[0].1.is_some() {
 					hir::SigAssignKind::CondWave(
 						dm,
-						self.unpack_cond_waveforms(scope_id, waves)?
+						self.unpack_cond_waveforms(scope_id, waves, tyctx)?
 					)
 				} else {
 					hir::SigAssignKind::SimpleWave(
 						dm,
-						self.unpack_waveform(scope_id, &waves[0].0)?
+						self.unpack_waveform(scope_id, &waves[0].0, tyctx)?
 					)
 				}
 			}
@@ -378,6 +378,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		&self,
 		scope_id: ScopeRef,
 		waves: &'ast [ast::CondWave],
+		tyctx: &TypeCtx<'ctx>,
 	) -> Result<hir::Cond<hir::Waveform>> {
 		// Determine if we have a "else".
 		let (when, other) = if waves.last().unwrap().1.is_some() {
@@ -402,15 +403,25 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		&self,
 		scope_id: ScopeRef,
 		wave: &'ast ast::Wave,
+		tyctx: &TypeCtx<'ctx>,
 	) -> Result<hir::Waveform> {
 		wave.elems.iter().flat_map(|i| i.iter()).map(|&(ref value, ref after)|{
 			Ok(hir::WaveElem {
 				value: match value.data {
 					ast::NullExpr => None,
-					_ => Some(self.unpack_expr(value, scope_id)?),
+					_ => {
+						let expr = self.unpack_expr(value, scope_id)?;
+						self.set_type_context(expr, tyctx.clone());
+						Some(expr)
+					}
 				},
 				after: match *after {
-					Some(ref expr) => Some(self.unpack_expr(expr, scope_id)?),
+					Some(ref expr) => {
+						let expr = self.unpack_expr(expr, scope_id)?;
+						// TODO: Set the type context for the expression.
+						// self.set_type_context(expr, TypeCtx::Type(/* somehow refer to builtin `time` type */));
+						Some(expr)
+					}
 					None => None
 				},
 			})
@@ -1075,7 +1086,11 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 			..
 		} => {
 			let target = self.unpack_signal_assign_target(scope_id, target)?;
-			let kind = self.unpack_signal_assign_mode(scope_id, mode)?;
+			let tyctx = match target {
+				hir::SigAssignTarget::Name(id) => TypeCtx::TypeOf(id.into()),
+				hir::SigAssignTarget::Aggregate => unimplemented!(),
+			};
+			let kind = self.unpack_signal_assign_mode(scope_id, mode, &tyctx)?;
 			if guarded {
 				self.sess.emit(
 					DiagBuilder2::warning("sequential signal assignment cannot be guarded")
