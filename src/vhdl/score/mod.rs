@@ -355,6 +355,18 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		self.sb.tyctx_table.borrow().get(&id.into()).map(|&t| t)
 	}
 
+	/// Obtain the type indicated by the type context for an expression. Returns
+	/// `None` if no context information is available.
+	pub fn type_context_resolved<I>(&self, id: I) -> Result<Option<&'ctx Ty>>
+	where I: Copy + Debug + Into<NodeId>
+	{
+		Ok(match self.type_context(id) {
+			Some(TypeCtx::Type(t)) => Some(t),
+			Some(TypeCtx::TypeOf(id)) => Some(self.ty(id)?),
+			None => None,
+		})
+	}
+
 
 	/// Store a type context for an expression. Upon type checking, the
 	/// expression is likely to consult this context to determine its type.

@@ -586,6 +586,43 @@ impl_make!(self, id: SignalDeclRef => &Ty {
 impl_make!(self, id: ExprRef => &Ty {
 	let hir = self.hir(id)?;
 	match hir.data {
+		hir::ExprData::IntegerLiteral(ref c) => {
+			// Integer literals either have a type attached, or they inherit
+			// their type from the context.
+			if let Some(ref ty) = c.ty {
+				return Ok(self.intern_ty(ty.clone()));
+			}
+			if let Some(ty) = self.type_context_resolved(id)? {
+				if let &Ty::Int(_) = self.deref_named_type(ty)? {
+					return Ok(ty);
+				}
+			}
+			self.sess.emit(
+				DiagBuilder2::error("cannot infer type of integer literal from context")
+				.span(hir.span)
+			);
+			Err(())
+		}
+
+		hir::ExprData::FloatLiteral(ref c) => {
+			unimp!(self, id);
+			// // Float literals either have a type attached, or they inherit their
+			// // type from the context.
+			// if let Some(ref ty) = c.ty {
+			// 	return Ok(self.intern_ty(ty.clone()));
+			// }
+			// if let Some(ty) = self.type_context_resolved(id)? {
+			// 	if let &Ty::Float(_) = self.deref_named_type(ty)? {
+			// 		return Ok(ty);
+			// 	}
+			// }
+			// self.sess.emit(
+			// 	DiagBuilder2::error("cannot infer type of float literal from context")
+			// 	.span(hir.span)
+			// );
+			// Err(())
+		}
+
 		_ => unimp!(self, id),
 	}
 });
