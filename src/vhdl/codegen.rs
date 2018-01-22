@@ -3,6 +3,7 @@
 //! LLHD code generation for VHDL.
 
 use moore_common::score::Result;
+use moore_common::errors::*;
 use score::*;
 use konst::*;
 use ty::*;
@@ -10,12 +11,10 @@ use num::Signed;
 use hir;
 use llhd;
 
-
 /// Generates LLHD code.
 pub trait Codegen<I,C> {
 	fn codegen(&self, id: I, ctx: &mut C) -> Result<()>;
 }
-
 
 /// This macro implements the `Codegen` trait for a specific combination of
 /// identifier and context types.
@@ -24,9 +23,21 @@ macro_rules! impl_codegen {
 		impl<'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'sb, 'ast, 'ctx> {
 			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
 		}
+	};
+
+	($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &$ctx_lt:tt mut $ctx_ty:ty => $blk:block) => {
+		impl<'sb, 'ast, 'ctx, $ctx_lt> Codegen<$id_ty, $ctx_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
+		}
 	}
 }
 
+macro_rules! unimp {
+	($slf:tt, $id:expr) => {{
+		$slf.sess.emit(DiagBuilder2::bug(format!("code generation for {:?} not implemented", $id)));
+		return Err(());
+	}}
+}
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Map a VHDL type to the corresponding LLHD type.
@@ -96,8 +107,8 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 });
 
 
-impl_codegen!(self, _id: ConstDeclRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
 
@@ -125,13 +136,13 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 });
 
 
-impl_codegen!(self, _id: SharedVarDeclRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: SharedVarDeclRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
 
-impl_codegen!(self, _id: FileDeclRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: FileDeclRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
 impl_codegen!(self, id: ConcStmtRef, ctx: &mut llhd::Entity => {
@@ -148,8 +159,8 @@ impl_codegen!(self, id: ConcStmtRef, ctx: &mut llhd::Entity => {
 	}
 });
 
-impl_codegen!(self, _id: BlockStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: BlockStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
 impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
@@ -161,9 +172,18 @@ impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
 	println!("generating process `{}`", name);
 	// TODO: Check which signals are actually read and written.
 	let ty = llhd::entity_ty(vec![], vec![]);
-	let prok = llhd::Process::new(name, ty.clone());
+	let mut prok = llhd::Process::new(name, ty.clone());
 	// TODO: define the process as a local name
+	// TOOD: codegen declarations
 	// TOOD: codegen statements
+	{
+		let body = prok.body_mut();
+		let entry_blk = body.add_block(llhd::Block::new(Some("entry".into())), llhd::block::BlockPosition::End);
+		let mut builder = InstBuilder::new(body, entry_blk);
+		for &stmt in &hir.stmts {
+			self.codegen(stmt, &mut builder)?;
+		}
+	}
 	// TODO: codegen wait statements implied by sensitivity list
 	let prok_ref = self.sb.llmod.borrow_mut().add_process(prok);
 	// TODO: wire instantiation with signals in the process' port.
@@ -176,30 +196,65 @@ impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
 	Ok(())
 });
 
-impl_codegen!(self, _id: ConcProcCallStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: ConcProcCallStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
-impl_codegen!(self, _id: ConcAssertStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: ConcAssertStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
-impl_codegen!(self, _id: ConcSigAssignStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: ConcSigAssignStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
-impl_codegen!(self, _id: CompInstStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: CompInstStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
-impl_codegen!(self, _id: ForGenStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: ForGenStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
-impl_codegen!(self, _id: IfGenStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: IfGenStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
 
-impl_codegen!(self, _id: CaseGenStmtRef, _ctx: &mut llhd::Entity => {
-	unimplemented!();
+impl_codegen!(self, id: CaseGenStmtRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
 });
+
+impl_codegen!(self, id: SeqStmtRef, _ctx: &'a mut InstBuilder<'a> => {
+	unimp!(self, id);
+});
+
+/// An helper to build sequences of instructions.
+pub struct InstBuilder<'ctx> {
+	pub body: &'ctx mut llhd::seq_body::SeqBody,
+	pub block: llhd::value::BlockRef,
+}
+
+impl<'ctx> InstBuilder<'ctx> {
+	/// Create a new instruction builder.
+	pub fn new(body: &'ctx mut llhd::seq_body::SeqBody, block: llhd::value::BlockRef) -> InstBuilder<'ctx> {
+		InstBuilder {
+			body: body,
+			block: block,
+		}
+	}
+
+	/// Add a new instruction.
+	pub fn add_inst(&mut self, inst: llhd::Inst) -> llhd::value::InstRef {
+		self.body.add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
+	}
+
+	/// Add a new block.
+	pub fn add_block(&mut self, block: llhd::block::Block) -> llhd::value::BlockRef {
+		self.body.add_block(block, llhd::block::BlockPosition::After(self.block))
+	}
+
+	/// Change the block at the end of which instructions will be added.
+	pub fn set_block(&mut self, block: llhd::value::BlockRef) {
+		self.block = block
+	}
+}
