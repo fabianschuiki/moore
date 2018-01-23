@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright (c) 2017 Fabian Schuiki
-## This script runs the source files in tests through the compiler.
+# Copyright (c) 2017-2018 Fabian Schuiki
+# This script runs the source files in tests through the compiler.
 
 set -e
 CRST=`tput sgr0`
@@ -10,8 +10,9 @@ CPASS=`tput setaf 2`
 
 TMP=`mktemp`
 TESTS_DIR="$(dirname "${BASH_SOURCE[0]}")"
-# MOORE="$TESTS_DIR/../target/debug/moore"
-MOORE="cargo run --"
+# MOORE="cargo run --"
+(cd "$TESTS_DIR/.." && cargo build)
+MOORE="$TESTS_DIR/../target/debug/moore"
 
 ALL=false
 if [ "$1" = "--all" ] || [ "$1" = "-a" ]; then
@@ -42,7 +43,12 @@ while read -d $'\0' SRCFILE; do
 
 	while read TOP; do
 		echo -n "  elaborating ${CNAME}$TOP${CRST} ..."
-		if ! $COMPILE_RESULT &> $TMP || ! $MOORE elaborate $TOP &> $TMP; then
+		case "$SRCFILE" in
+			*.sv) CMD="$MOORE elaborate $TOP" ;;
+			*.vhd) CMD="$MOORE score -e $TOP $SRCFILE" ;;
+			*) continue ;;
+		esac
+		if ! $COMPILE_RESULT &> $TMP || ! $CMD &> $TMP; then
 			NUM_FAIL=$((NUM_FAIL+1))
 			echo " ${CFAIL}failed${CRST}"
 			cat $TMP
