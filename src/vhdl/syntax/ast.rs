@@ -32,6 +32,18 @@ pub trait HasDesc {
 	fn desc(&self) -> &'static str;
 }
 
+impl<T> HasSpan for Spanned<T> {
+	fn span(&self) -> Span {
+		self.span
+	}
+}
+
+impl<T> HasDesc for Spanned<T> where T: HasDesc {
+	fn desc(&self) -> &'static str {
+		self.value.desc()
+	}
+}
+
 
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight
 /// way to refer to individual nodes, e.g. during symbol table construction and
@@ -826,7 +838,7 @@ pub struct TypeDecl {
 	pub id: NodeId,
 	pub span: Span,
 	pub name: Spanned<Name>,
-	pub data: Option<TypeData>,
+	pub data: Option<Spanned<TypeData>>,
 }
 
 impl HasSpan for TypeDecl {
@@ -851,26 +863,12 @@ impl HasDesc for TypeDecl {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum TypeData {
 	EnumType(ParenElems),
-	RangeType(Span, Box<Expr>, Option<Vec<(Ident, Option<Box<Expr>>)>>),
-	ArrayType(Span, ParenElems, SubtypeInd),
-	RecordType(Span, Vec<(Vec<Ident>, SubtypeInd)>),
+	RangeType(Box<Expr>, Option<Vec<(Ident, Option<Box<Expr>>)>>),
+	ArrayType(ParenElems, SubtypeInd),
+	RecordType(Vec<(Vec<Ident>, SubtypeInd)>),
 	AccessType(SubtypeInd),
 	FileType(CompoundName),
-	ProtectedType(Span, Vec<DeclItem>),
-}
-
-impl HasSpan for TypeData {
-	fn span(&self) -> Span {
-		match *self {
-			TypeData::EnumType(ref n) => n.span,
-			TypeData::RangeType(span,..) => span,
-			TypeData::ArrayType(span,..) => span,
-			TypeData::RecordType(span,..) => span,
-			TypeData::AccessType(ref s) => s.span,
-			TypeData::FileType(ref n) => n.span,
-			TypeData::ProtectedType(span,..) => span,
-		}
-	}
+	ProtectedType(Vec<DeclItem>),
 }
 
 impl HasDesc for TypeData {

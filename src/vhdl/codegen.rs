@@ -57,15 +57,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					llhd::int_ty(diff.bits())
 				}
 			}
-
 			Ty::Enum(ref ty) => {
 				let hir = self.hir(ty.decl)?;
-				match hir.data {
-					Some(hir::TypeData::Enum(_, ref lits)) => llhd::enum_ty(lits.len()),
+				match hir.data.as_ref().unwrap().value {
+					hir::TypeData::Enum(ref lits) => llhd::enum_ty(lits.len()),
 					_ => unreachable!()
 				}
 			}
-
 			// Unbounded integers cannot be mapped to LLHD. All cases where
 			// such an int can leak through to codegen should actually be caught
 			// beforehand in the type check.
@@ -80,8 +78,8 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			Const::Null => llhd::const_int(0, 0.into()),
 			Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
 			Const::Enum(ref k) => {
-				let size = match self.hir(k.decl)?.data {
-					Some(hir::TypeData::Enum(_, ref lits)) => lits.len(),
+				let size = match self.hir(k.decl)?.data.as_ref().unwrap().value {
+					hir::TypeData::Enum(ref lits) => lits.len(),
 					_ => unreachable!(),
 				};
 				llhd::const_int(size, k.index.into())

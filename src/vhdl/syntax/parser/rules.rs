@@ -1436,15 +1436,14 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 	// Parse the optional type definition. If present, this is a full type
 	// declaration. Otherwise it is an incomplete type declaration.
 	let data = if accept(p, Keyword(Kw::Is)) {
-		let Spanned{ value: tkn, span: sp } = p.peek(0);
-		Some(match tkn {
+		let Spanned{ value: tkn, span: mut sp } = p.peek(0);
+		let data = match tkn {
 			// Enumeration type definition
 			OpenDelim(Paren) => ast::EnumType(parse_paren_expr(p)?),
 
 			// Integer, float, physical type definition
 			Keyword(Kw::Range) => {
 				p.bump();
-				let mut span = p.last_span();
 				let range = parse_expr(p)?;
 				let units = if accept(p, Keyword(Kw::Units)) {
 					let u = repeat_until(p, Keyword(Kw::End), |p|{
@@ -1464,25 +1463,22 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 				} else {
 					None
 				};
-				span.expand(p.last_span());
-				ast::RangeType(span, Box::new(range), units)
+				ast::RangeType(Box::new(range), units)
 			}
 
 			// Array type definition
 			Keyword(Kw::Array) => {
 				p.bump();
-				let mut span = p.last_span();
 				let indices = parse_paren_expr(p)?;
 				require(p, Keyword(Kw::Of))?;
 				let subtype = parse_subtype_ind(p)?;
-				span.expand(p.last_span());
-				ast::ArrayType(span, indices, subtype)
+				sp.expand(p.last_span());
+				ast::ArrayType(indices, subtype)
 			}
 
 			// Record type definition
 			Keyword(Kw::Record) => {
 				p.bump();
-				let mut span = p.last_span();
 				let fields = repeat_until(p, Keyword(Kw::End), |p|{
 					let names = separated_nonempty(p,
 						Comma,
@@ -1498,14 +1494,15 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 				require(p, Keyword(Kw::End))?;
 				require(p, Keyword(Kw::Record))?;
 				parse_optional_matching_ident(p, name, "type", "section 5.3.3");
-				span.expand(p.last_span());
-				ast::RecordType(span, fields)
+				sp.expand(p.last_span());
+				ast::RecordType(fields)
 			}
 
 			// Access type definition
 			Keyword(Kw::Access) => {
 				p.bump();
 				let subtype = parse_subtype_ind(p)?;
+				sp.expand(p.last_span());
 				ast::AccessType(subtype)
 			}
 
@@ -1514,13 +1511,13 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 				p.bump();
 				require(p, Keyword(Kw::Of))?;
 				let ty = parse_name(p)?;
+				span.expand(p.last_span());
 				ast::FileType(ty)
 			}
 
 			// Protected type declaration and body
 			Keyword(Kw::Protected) => {
 				p.bump();
-				let mut span = p.last_span();
 				let body = accept(p, Keyword(Kw::Body));
 				let decl_items = repeat(p, try_decl_item)?;
 				require(p, Keyword(Kw::End))?;
@@ -1529,8 +1526,7 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 					require(p, Keyword(Kw::Body))?;
 				}
 				parse_optional_matching_ident(p, name, "type", "section 5.6");
-				span.expand(p.last_span());
-				ast::ProtectedType(span, decl_items)
+				ast::ProtectedType(decl_items)
 			}
 
 			// Emit an error for anything else.
@@ -1541,7 +1537,9 @@ pub fn parse_type_decl<P: Parser>(p: &mut P, with_semicolon: bool) -> ReportedRe
 				);
 				return Err(Reported);
 			}
-		})
+		};
+		sp.expand(p.last_span());
+		Some(Spanned::new(data, sp))
 	} else {
 		None
 	};

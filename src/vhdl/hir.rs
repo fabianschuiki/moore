@@ -208,19 +208,19 @@ pub struct TypeDecl {
 	/// The type name.
 	pub name: Spanned<Name>,
 	/// The type data.
-	pub data: Option<TypeData>,
+	pub data: Option<Spanned<TypeData>>,
 }
 
-
+/// The meat of a type declaration.
 #[derive(Debug)]
 pub enum TypeData {
-	/// An integer, float, or physical type with optional units.
-	Range(Span, Dir, ExprRef, ExprRef),
 	/// An enumeration type.
-	Enum(Span, Vec<EnumLit>),
+	Enum(Vec<EnumLit>),
+	/// An integer, float, or physical type with optional units.
+	Range(Dir, ExprRef, ExprRef),
 }
 
-
+/// An enumeration literal as listed in a type declaration.
 #[derive(Debug)]
 pub enum EnumLit {
 	Ident(Spanned<Name>),

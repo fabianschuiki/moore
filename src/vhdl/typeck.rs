@@ -534,8 +534,8 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			return Err(());
 		}
 	};
-	match *data {
-		hir::TypeData::Range(span, dir, lb_id, rb_id) => {
+	match data.value {
+		hir::TypeData::Range(dir, lb_id, rb_id) => {
 			let lb = self.const_value(lb_id)?;
 			let rb = self.const_value(rb_id)?;
 			Ok(match (lb, rb) {
@@ -546,7 +546,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 				(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
 					self.sess.emit(
 						DiagBuilder2::error("Float range bounds not yet supported")
-						.span(span)
+						.span(data.span)
 					);
 					return Err(());
 				}
@@ -554,7 +554,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 				_ => {
 					self.sess.emit(
 						DiagBuilder2::error("Bounds of range are not of the same type")
-						.span(span)
+						.span(data.span)
 					);
 					return Err(());
 				}

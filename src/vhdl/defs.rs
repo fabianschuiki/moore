@@ -99,8 +99,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			Err(()) => { self.failed = true; return; }
 		};
 		self.declare(hir.name.map_into(), Def::Type(id));
-		match hir.data {
-			Some(hir::TypeData::Enum(_, ref lits)) => {
+		hir.data.as_ref().map(|data| match data.value {
+			hir::TypeData::Enum(ref lits) => {
 				for (i, lit) in lits.iter().enumerate() {
 					match *lit {
 						hir::EnumLit::Ident(n) => self.declare(n.map_into(), Def::Enum(EnumRef(id, i))),
@@ -108,9 +108,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 					}
 				}
 			}
-			Some(hir::TypeData::Range(..)) => (),
-			None => (),
-		}
+			hir::TypeData::Range(..) => (),
+		});
 	}
 
 	/// Handle subtype declarations.
