@@ -28,6 +28,8 @@ pub enum Ty {
 	UnboundedInt,
 	/// An enumeration type.
 	Enum(EnumTy),
+	/// An access type.
+	Access(Box<Ty>),
 }
 
 impl Ty {
@@ -40,6 +42,7 @@ impl Ty {
 			Ty::Null => "null type",
 			Ty::Int(_) | Ty::UnboundedInt => "integer type",
 			Ty::Enum(_) => "enumeration type",
+			Ty::Access(_) => "access type",
 		}
 	}
 }

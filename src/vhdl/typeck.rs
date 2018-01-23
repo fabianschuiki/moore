@@ -564,6 +564,11 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		hir::TypeData::Enum(..) => {
 			Ok(self.intern_ty(EnumTy::new(id)))
 		}
+
+		hir::TypeData::Access(subty_id) => {
+			let ty = self.ty(subty_id)?.clone();
+			Ok(self.intern_ty(Ty::Access(Box::new(ty))))
+		}
 	}
 });
 

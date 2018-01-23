@@ -64,6 +64,9 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					_ => unreachable!()
 				}
 			}
+			Ty::Access(ref ty) => {
+				llhd::pointer_ty(self.map_type(ty)?)
+			}
 			// Unbounded integers cannot be mapped to LLHD. All cases where
 			// such an int can leak through to codegen should actually be caught
 			// beforehand in the type check.

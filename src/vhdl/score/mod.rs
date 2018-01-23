@@ -771,6 +771,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			}
 			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
 			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
+			Ty::Access(_) => Ok(self.intern_const(Const::Null)),
 		}
 	}
 

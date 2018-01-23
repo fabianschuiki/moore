@@ -218,6 +218,8 @@ pub enum TypeData {
 	Enum(Vec<EnumLit>),
 	/// An integer, float, or physical type with optional units.
 	Range(Dir, ExprRef, ExprRef),
+	/// An access type.
+	Access(SubtypeIndRef),
 }
 
 /// An enumeration literal as listed in a type declaration.

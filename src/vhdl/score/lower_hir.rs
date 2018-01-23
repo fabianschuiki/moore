@@ -955,7 +955,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 	let data = if let Some(ref spanned_data) = ast.data {
 		Some(Spanned::new(match spanned_data.value {
 			// Integer, real, and physical types.
-			ast::RangeType(ref range_expr, ref _units) => {
+			ast::RangeType(ref range_expr, ref units) => {
 				let (dir, lb, rb) = match range_expr.data {
 					ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
 						let lb = ExprRef(NodeId::alloc());
@@ -973,6 +973,13 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					}
 				};
 				// TODO: Handle units
+				if let Some(ref units) = *units {
+					self.sess.emit(
+						DiagBuilder2::bug("Units not yet supported")
+						.span(spanned_data.span)
+					);
+					return Err(());
+				}
 				hir::TypeData::Range(dir, lb, rb)
 			}
 
@@ -1016,6 +1023,10 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					}
 				}
 				hir::TypeData::Enum(lits)
+			}
+
+			ast::AccessType(ref subty) => {
+				hir::TypeData::Access(self.unpack_subtype_ind(subty, scope_id)?)
 			}
 
 			_ => unimp!(self, id),
