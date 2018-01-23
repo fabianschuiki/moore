@@ -32,7 +32,7 @@ architecture bar of foo is
 	signal d3 : MIXED := SOME_OTHER;
 begin end;
 
---@ +elab foo(bar)
+-- @elab foo(bar)
 
 --| entity @foo_bar () () {
 --|     %a0 = sig n5 0
