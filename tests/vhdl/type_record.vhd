@@ -17,6 +17,7 @@ package pkg is
 end;
 
 library work;
+use work.pkg.all;
 entity foo is end;
 
 architecture bar of foo is
