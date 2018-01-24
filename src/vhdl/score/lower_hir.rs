@@ -427,6 +427,25 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			})
 		}).collect()
 	}
+
+	/// Ensure that parenthesis contain only a list of expressions.
+	///
+	/// This is useful since the parser generally expects parenthesized
+	/// expressions of the form `(expr|expr|expr => expr, expr)` even in palces
+	/// where only `(expr, expr)` would be applicable. This function takes the
+	/// parenthesized expression and ensures it is of the latter form.
+	pub fn sanitize_paren_elems_as_exprs(&self, elems: &'ast [ast::ParenElem], context: &str) -> Vec<&'ast ast::Expr> {
+		elems.iter().map(|elem|{
+			if !elem.choices.is_empty() {
+				let span = Span::union(elem.choices[0].span, elem.choices.last().unwrap().span);
+				self.sess.emit(
+					DiagBuilder2::error(format!("`=>` not applicable in {}", context))
+					.span(span)
+				);
+			}
+			&elem.expr
+		}).collect()
+	}
 }
 
 
@@ -1029,6 +1048,25 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 				hir::TypeData::Access(self.unpack_subtype_ind(subty, scope_id)?)
 			}
 
+			ast::ArrayType(ref indices, ref elem_subty) => {
+				// Ensure that we have at least on index, and ensure that there
+				// are no stray choices (`expr|expr =>`) in the list. Then map
+				// each index into its own node, unpack the element subtype, and
+				// we're done.
+				assert!(indices.value.len() > 0);
+				let indices = self
+					.sanitize_paren_elems_as_exprs(&indices.value, "an array type index")
+					.into_iter()
+					.map(|index|{
+						let id = ArrayTypeIndexRef::new(NodeId::alloc());
+						self.set_ast(id, (scope_id, index));
+						id
+					})
+					.collect();
+				let elem_subty = self.unpack_subtype_ind(elem_subty, scope_id)?;
+				hir::TypeData::Array(indices, elem_subty)
+			}
+
 			_ => unimp!(self, id),
 		}, spanned_data.span))
 	} else {
@@ -1119,39 +1157,38 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 	}
 });
 
-// ast::AssignStmt {
-// 	ref target,
-// 	kind: ast::AssignKind::Signal,
-// 	guarded,
-// 	ref mode,
-// } => {
-// 	let id = SigAssignStmtRef(NodeId::alloc());
-// 	let target = self.unpack_signal_assign_target(scope_id, target)?;
-// 	let kind = self.unpack_signal_assign_mode(scope_id, mode)?;
-// 	if guarded {
-// 		self.sess.emit(
-// 			DiagBuilder2::warning("sequential signal assignment cannot be guarded")
-// 			.span(stmt.human_span())
-// 			.add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
-// 		);
-// 	}
-// 	let assign = hir::SigAssignStmt {
-// 		parent: scope_id,
-// 		label: stmt.label,
-// 		target: target,
-// 		kind: kind,
-// 	};
-// 	self.set_hir(id, self.sb.arenas.hir.sig_assign_stmt.alloc(assign));
-// 	refs.push(id.into());
-// }
-
-// ast::AssignStmt {
-// 	ref target,
-// 	kind: ast::AssignKind::Var,
-// 	guarded,
-// 	ref mode,
-// } => {
-// 	unimp(stmt);
-// 	had_fails = true;
-// }
-
+impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
+	let (scope_id, ast) = self.ast(id);
+	println!("lowering array type index {:#?}", ast);
+	let index = match ast.data {
+		ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
+			let lb = ExprRef(NodeId::alloc());
+			let rb = ExprRef(NodeId::alloc());
+			self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
+			self.set_ast(rb, (scope_id.into(), rb_expr.as_ref()));
+			hir::ArrayTypeIndex::Range(dir, lb, rb)
+		}
+		ast::NameExpr(ref name) => {
+			// // Check if the name ends in `range <>`, which would indicate that
+			// // this is an unbound index.
+			// if let Some(ast::NamePart::Range(ref expr)) = name.parts.last() {
+			// 	match expr.data {
+			// 		ast::BoxExpr => hir::ArrayTypeIndex::Unbounded(self.unpack_type_mark())
+			// 	}
+			// }
+			unimp!(self, id);
+		}
+		ast::ResolExpr(ref resol, ref name) => {
+			unimp!(self, id);
+		}
+		_ => {
+			self.sess.emit(
+				DiagBuilder2::error("Invalid array type index")
+				.span(ast.span)
+			);
+			return Err(());
+		}
+	};
+	println!("lowered to {:#?}", index);
+	Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
+});

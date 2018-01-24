@@ -29,6 +29,7 @@ pub struct Arenas {
 	pub file_decl: Arena<FileDecl>,
 	pub process_stmt: Arena<ProcessStmt>,
 	pub sig_assign_stmt: Arena<SigAssignStmt>,
+	pub array_type_index: Arena<Spanned<ArrayTypeIndex>>,
 }
 
 
@@ -51,6 +52,7 @@ impl Arenas {
 			file_decl: Arena::new(),
 			process_stmt: Arena::new(),
 			sig_assign_stmt: Arena::new(),
+			array_type_index: Arena::new(),
 		}
 	}
 }
@@ -220,6 +222,8 @@ pub enum TypeData {
 	Range(Dir, ExprRef, ExprRef),
 	/// An access type.
 	Access(SubtypeIndRef),
+	/// An array type.
+	Array(Vec<ArrayTypeIndexRef>, SubtypeIndRef),
 }
 
 /// An enumeration literal as listed in a type declaration.
@@ -227,6 +231,17 @@ pub enum TypeData {
 pub enum EnumLit {
 	Ident(Spanned<Name>),
 	Char(Spanned<char>),
+}
+
+/// An index of an array type.
+#[derive(Debug)]
+pub enum ArrayTypeIndex {
+	/// An unbounded array index of the form `... range <>`.
+	Unbounded(TypeMarkRef),
+	/// A constrained array index of the form of a subtype indication.
+	Subtype(SubtypeIndRef),
+	/// A constrained array index of the form `... to/downto ...`.
+	Range(Dir, ExprRef, ExprRef),
 }
 
 

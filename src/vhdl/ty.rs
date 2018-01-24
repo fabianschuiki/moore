@@ -112,3 +112,17 @@ impl EnumTy {
 		}
 	}
 }
+
+
+/// An array type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArrayTy {
+	pub indices: Vec<ArrayIndex>,
+	pub element: Box<Ty>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArrayIndex {
+	Unbounded(Box<Ty>),
+	Constrained(Box<Ty>),
+}

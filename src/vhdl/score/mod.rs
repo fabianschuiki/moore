@@ -1021,6 +1021,7 @@ node_ref!(SignalDeclRef);
 node_ref!(VarDeclRef);
 node_ref!(SharedVarDeclRef);
 node_ref!(FileDeclRef);
+node_ref!(ArrayTypeIndexRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
 /// which defines the enumeration and the index of the literal.
@@ -1279,6 +1280,8 @@ node_storage!(AstTable<'ast>,
 	proc_stmts:       ProcessStmtRef   => (ScopeRef, &'ast ast::Stmt),
 	sig_assign_stmts: SigAssignStmtRef => (ScopeRef, &'ast ast::Stmt),
 	var_assign_stmts: VarAssignStmtRef => (ScopeRef, &'ast ast::Stmt),
+
+	array_type_indices: ArrayTypeIndexRef => (ScopeRef, &'ast ast::Expr),
 );
 
 node_storage!(HirTable<'ctx>,
@@ -1298,6 +1301,7 @@ node_storage!(HirTable<'ctx>,
 	file_decls:            FileDeclRef           => &'ctx hir::FileDecl,
 	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,
 	sig_assign_stmts:      SigAssignStmtRef      => &'ctx hir::SigAssignStmt,
+	array_type_indices:    ArrayTypeIndexRef     => &'ctx Spanned<hir::ArrayTypeIndex>,
 );
 
 

@@ -5,6 +5,7 @@
 use std::fmt::Debug;
 use moore_common::NodeId;
 use moore_common::errors::*;
+use moore_common::source::Span;
 use moore_common::score::{NodeMaker, Result};
 use score::*;
 use ty::*;
@@ -536,29 +537,30 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 	};
 	match data.value {
 		hir::TypeData::Range(dir, lb_id, rb_id) => {
-			let lb = self.const_value(lb_id)?;
-			let rb = self.const_value(rb_id)?;
-			Ok(match (lb, rb) {
-				(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-					self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
-				}
+			self.make_range_ty(dir, lb_id, rb_id, data.span)
+			// let lb = self.const_value(lb_id)?;
+			// let rb = self.const_value(rb_id)?;
+			// Ok(match (lb, rb) {
+			// 	(&Const::Int(ref lb), &Const::Int(ref rb)) => {
+			// 		self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
+			// 	}
 
-				(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
-					self.sess.emit(
-						DiagBuilder2::error("Float range bounds not yet supported")
-						.span(data.span)
-					);
-					return Err(());
-				}
+			// 	(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
+			// 		self.sess.emit(
+			// 			DiagBuilder2::error("Float range bounds not yet supported")
+			// 			.span(data.span)
+			// 		);
+			// 		return Err(());
+			// 	}
 
-				_ => {
-					self.sess.emit(
-						DiagBuilder2::error("Bounds of range are not of the same type")
-						.span(data.span)
-					);
-					return Err(());
-				}
-			})
+			// 	_ => {
+			// 		self.sess.emit(
+			// 			DiagBuilder2::error("Bounds of range are not of the same type")
+			// 			.span(data.span)
+			// 		);
+			// 		return Err(());
+			// 	}
+			// })
 		}
 
 		hir::TypeData::Enum(..) => {
@@ -569,8 +571,62 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			let ty = self.ty(subty_id)?.clone();
 			Ok(self.intern_ty(Ty::Access(Box::new(ty))))
 		}
+
+		hir::TypeData::Array(ref index_ids, elem_ty) => {
+			// To determine the type of an array, we first need to obtain the
+			// HIR of each index. Based on that we can decide whether this is an
+			// unbounded or constrained array type, and proceed accordingly.
+			let mut had_fails = false;
+			let mut indices = Vec::new();
+			for &index_id in index_ids {
+				let hir = match self.hir(index_id) {
+					Ok(h) => h,
+					Err(()) => { had_fails = true; continue; }
+				};
+				indices.push(match hir.value {
+					hir::ArrayTypeIndex::Unbounded(tm) => ArrayIndex::Unbounded(Box::new(self.ty(tm)?.clone())),
+					hir::ArrayTypeIndex::Subtype(subty) => ArrayIndex::Constrained(Box::new(self.ty(subty)?.clone())),
+					hir::ArrayTypeIndex::Range(dir, lb_id, rb_id) => ArrayIndex::Constrained(Box::new(self.make_range_ty(dir, lb_id, rb_id, hir.span)?.clone())),
+				});
+			}
+			if had_fails {
+				return Err(());
+			}
+			println!("array type indices mapped to {:#?}", indices);
+			let elem_ty = self.ty(elem_ty)?.clone();
+			unimp!(self, id);
+		}
 	}
 });
+
+
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	pub fn make_range_ty(&self, dir: hir::Dir, lb_id: ExprRef, rb_id: ExprRef, span: Span) -> Result<&'ctx Ty> {
+		let lb = self.const_value(lb_id)?;
+		let rb = self.const_value(rb_id)?;
+		Ok(match (lb, rb) {
+			(&Const::Int(ref lb), &Const::Int(ref rb)) => {
+				self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
+			}
+
+			(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
+				self.sess.emit(
+					DiagBuilder2::error("Float range bounds not yet supported")
+					.span(span)
+				);
+				return Err(());
+			}
+
+			_ => {
+				self.sess.emit(
+					DiagBuilder2::error("Bounds of range are not of the same type")
+					.span(span)
+				);
+				return Err(());
+			}
+		})
+	}
+}
 
 
 /// Determine the type of a subtype declaration.

@@ -22,12 +22,12 @@ entity foo is end;
 
 architecture bar of foo is
 	signal a: DATA_IN;
-	signal b: MEMORY (0 to 255);
-	signal c: SIGNED_FXPT (3 downto -4);
-	signal d: SIGNED_FXPT_VECTOR (1 to 20)(9 downto 0);
-	signal e: SIGNED_FXPT_5x4 (open)(3 downto -4);
-	signal f0: T0;
-	signal f1: T1;
+	--signal b: MEMORY (0 to 255);
+	--signal c: SIGNED_FXPT (3 downto -4);
+	--signal d: SIGNED_FXPT_VECTOR (1 to 20)(9 downto 0);
+	--signal e: SIGNED_FXPT_5x4 (open)(3 downto -4);
+	--signal f0: T0;
+	--signal f1: T1;
 begin end;
 
 --@ +elab foo(bar)

@@ -110,6 +110,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			}
 			hir::TypeData::Range(..) => (),
 			hir::TypeData::Access(..) => (),
+			hir::TypeData::Array(..) => (),
 		});
 	}
 
