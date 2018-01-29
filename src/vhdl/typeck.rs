@@ -3,10 +3,13 @@
 //! This module implements the type calculation of the scoreboard.
 
 use std::fmt::Debug;
+use std::cell::Cell;
+
 use moore_common::NodeId;
 use moore_common::errors::*;
 use moore_common::source::Span;
 use moore_common::score::{NodeMaker, Result};
+
 use score::*;
 use ty::*;
 use konst::*;
@@ -19,7 +22,7 @@ pub struct TypeckContext<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb> {
 	/// The parent context.
 	ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>,
 	/// Whether any of the type checking failed.
-	failed: bool,
+	failed: Cell<bool>,
 }
 
 impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
@@ -27,37 +30,37 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	pub fn new(ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>) -> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 		TypeckContext {
 			ctx: ctx,
-			failed: false,
+			failed: Cell::new(false),
 		}
 	}
 
 	/// Consume the context and return the result of the typeck.
 	pub fn finish(self) -> bool {
-		!self.failed
+		!self.failed.get()
 	}
 
 	/// Emit a diagnostic message.
-	pub fn emit(&mut self, diag: DiagBuilder2) {
+	pub fn emit(&self, diag: DiagBuilder2) {
 		if diag.severity >= Severity::Error {
-			self.failed = true;
+			self.failed.set(true);
 		}
 		self.ctx.sess.emit(diag)
 	}
 
 	/// Type check the time expression in a delay mechanism.
-	pub fn typeck_delay_mechanism(&mut self, node: &'ctx hir::DelayMechanism) {
+	pub fn typeck_delay_mechanism(&self, node: &'ctx hir::DelayMechanism) {
 		// TODO: implement this
 	}
 
 	/// Type check a waveform.
-	pub fn typeck_waveform(&mut self, node: &'ctx hir::Waveform, exp: &'ctx Ty) {
+	pub fn typeck_waveform(&self, node: &'ctx hir::Waveform, exp: &'ctx Ty) {
 		for elem in node {
 			self.typeck_wave_elem(elem, exp);
 		}
 	}
 
 	/// Type check a waveform element.
-	pub fn typeck_wave_elem(&mut self, node: &'ctx hir::WaveElem, exp: &'ctx Ty) {
+	pub fn typeck_wave_elem(&self, node: &'ctx hir::WaveElem, exp: &'ctx Ty) {
 		if let Some(value) = node.value {
 			self.typeck_node(value, exp);
 		}
@@ -68,7 +71,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Type check any node that can have its type calculated.
-	pub fn typeck_node<I>(&mut self, id: I, exp: &'ctx Ty)
+	pub fn typeck_node<I>(&self, id: I, exp: &'ctx Ty)
 		where
 			I: 'ctx + Copy + Debug + Into<NodeId>,
 			ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
@@ -81,29 +84,45 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 				);
 			}
 		} else {
-			self.failed = true;
+			self.failed.set(true);
 		}
 	}
 }
 
 /// Performs a type check.
 pub trait Typeck<I> {
-	fn typeck(&self, id: I) -> Result<()>;
+	fn typeck(&self, id: I);
 }
 
 /// A macro to implement the `Typeck` trait.
 macro_rules! impl_typeck {
 	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl<'sb, 'ast, 'ctx> Typeck<$id_ty> for ScoreContext<'sb, 'ast, 'ctx> {
-			fn typeck(&$slf, $id: $id_ty) -> Result<()> $blk
+		impl<'sbc, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+			fn typeck(&$slf, $id: $id_ty) $blk
+		}
+	}
+}
+
+/// A macro to implement the `Typeck` trait.
+macro_rules! impl_typeck_err {
+	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+		impl<'sbc, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+			fn typeck(&$slf, $id: $id_ty) {
+				use std;
+				let res = (move || -> Result<()> { $blk })();
+				std::mem::forget(res);
+			}
 		}
 	}
 }
 
 // Implement the `Typeck` trait for everything that supports type calculation.
-impl<'ctx, I, T> Typeck<I> for T where T: NodeMaker<I, &'ctx Ty> {
-	fn typeck(&self, id: I) -> Result<()> {
-		T::make(self, id).map(|_| ())
+impl<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb, I> Typeck<I> for TypeckContext<'sbc, 'sb, 'ast, 'ctx> where ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
+	fn typeck(&self, id: I) {
+		match ScoreContext::make(self.ctx, id) {
+			Ok(_) => (),
+			Err(()) => self.failed.set(true),
+		}
 	}
 }
 
@@ -118,7 +137,7 @@ impl<'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'sb, 'ast, 'ctx> w
 	fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()> {
 		let actual = self.make(id)?;
 		if actual != expected {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error(format!("typecheck failed, expected {:?}, got {:?}", expected, actual))
 			);
 			Err(())
@@ -130,37 +149,71 @@ impl<'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'sb, 'ast, 'ctx> w
 
 macro_rules! unimp {
 	($slf:tt, $id:expr) => {{
-		$slf.sess.emit(DiagBuilder2::bug(format!("typeck of {:?} not implemented", $id)));
+		$slf.emit(DiagBuilder2::bug(format!("typeck of {:?} not implemented", $id)));
+		return;
+	}}
+}
+
+macro_rules! unimp_err {
+	($slf:tt, $id:expr) => {{
+		$slf.emit(DiagBuilder2::bug(format!("typeck of {:?} not implemented", $id)));
 		return Err(());
 	}}
 }
 
 macro_rules! unimpmsg {
 	($slf:tt, $span:expr, $msg:expr) => {{
-		$slf.sess.emit(DiagBuilder2::bug(format!("{} not implemented", $msg)).span($span));
+		$slf.emit(DiagBuilder2::bug(format!("{} not implemented", $msg)).span($span));
 		return Err(());
 	}}
 }
 
-impl_typeck!(self, id: EntityRef => {
-	let hir = self.hir(id)?;
+impl_typeck_err!(self, id: LibRef => {
+	let hir = self.ctx.hir(id)?;
+	hir.pkg_decls.iter().for_each(|&x| self.typeck(x));
+	hir.pkg_insts.iter().for_each(|&x| self.typeck(x));
+	hir.pkg_bodies.iter().for_each(|&x| self.typeck(x));
+	hir.ctxs.iter().for_each(|&x| self.typeck(x));
+	hir.entities.iter().for_each(|&x| self.typeck(x));
+	hir.archs.iter().for_each(|&x| self.typeck(x));
+	hir.cfgs.iter().for_each(|&x| self.typeck(x));
+	Ok(())
+});
+
+impl_typeck_err!(self, id: PkgDeclRef => {
+	let hir = self.ctx.hir(id)?;
+	hir.generics.iter().for_each(|&x| self.typeck(x));
+	hir.decls.iter().for_each(|&x| self.typeck(x));
+	Ok(())
+});
+
+impl_typeck!(self, id: CtxRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: CfgRef => {
+	unimp!(self, id)
+});
+
+impl_typeck_err!(self, id: EntityRef => {
+	let hir = self.ctx.hir(id)?;
 	for &generic in &hir.generics {
-		self.typeck(generic)?;
+		self.typeck(generic);
 	}
 	for &port in &hir.ports {
-		self.typeck(port)?;
+		self.typeck(port);
 	}
 	Ok(())
 });
 
-impl_typeck!(self, id: ArchRef => {
-	let hir = self.hir(id)?;
-	self.typeck(hir.entity)?;
+impl_typeck_err!(self, id: ArchRef => {
+	let hir = self.ctx.hir(id)?;
+	self.typeck(hir.entity);
 	for &decl in &hir.decls {
-		self.typeck(decl)?;
+		self.typeck(decl);
 	}
 	for &stmt in &hir.stmts {
-		self.typeck(stmt)?;
+		self.typeck(stmt);
 	}
 	Ok(())
 });
@@ -265,17 +318,6 @@ impl_typeck!(self, id: SeqStmtRef => {
 	}
 });
 
-impl_typeck!(self, id: PkgDeclRef => {
-	let hir = self.hir(id)?;
-	for &generic in &hir.generics {
-		self.typeck(generic)?;
-	}
-	for &decl in &hir.decls {
-		self.typeck(decl)?;
-	}
-	Ok(())
-});
-
 impl_typeck!(self, id: PkgBodyRef => {
 	unimp!(self, id)
 });
@@ -304,13 +346,13 @@ impl_typeck!(self, id: BlockStmtRef => {
 	unimp!(self, id)
 });
 
-impl_typeck!(self, id: ProcessStmtRef => {
-	let hir = self.hir(id)?;
+impl_typeck_err!(self, id: ProcessStmtRef => {
+	let hir = self.ctx.hir(id)?;
 	for &decl in &hir.decls {
-		self.typeck(decl)?;
+		self.typeck(decl);
 	}
 	for &stmt in &hir.stmts {
-		self.typeck(stmt)?;
+		self.typeck(stmt);
 	}
 	Ok(())
 });
@@ -355,13 +397,13 @@ impl_typeck!(self, id: ReportStmtRef => {
 	unimp!(self, id)
 });
 
-impl_typeck!(self, id: SigAssignStmtRef => {
-	let hir = self.hir(id)?;
+impl_typeck_err!(self, id: SigAssignStmtRef => {
+	let hir = self.ctx.hir(id)?;
 	let lhs_ty = match hir.target {
-		hir::SigAssignTarget::Name(sig) => self.ty(sig)?,
+		hir::SigAssignTarget::Name(sig) => self.ctx.ty(sig)?,
 		hir::SigAssignTarget::Aggregate => unimpmsg!(self, hir.target_span, "assignment to aggregate signal"),
 	};
-	let mut ctx = TypeckContext::new(self);
+	// let mut ctx = TypeckContext::new(self);
 	// let typeck_dm = |dm| match dm {
 	// 	// TODO: typeck time expression
 	// 	// &hir::DelayMechanism::RejectInertial(expr) => self.typeck_node(expr, self.intern_ty(/* time type */))?,
@@ -369,29 +411,29 @@ impl_typeck!(self, id: SigAssignStmtRef => {
 	// };
 	match hir.kind {
 		hir::SigAssignKind::SimpleWave(ref dm, ref wave) => {
-			ctx.typeck_delay_mechanism(dm);
-			ctx.typeck_waveform(wave, lhs_ty);
+			self.typeck_delay_mechanism(dm);
+			self.typeck_waveform(wave, lhs_ty);
 		}
-		hir::SigAssignKind::SimpleForce(_, expr) => {
+		hir::SigAssignKind::SimpleForce(_, _expr) => {
 			// self.typeck_node(expr, lhs_ty)?;
 		}
 		hir::SigAssignKind::SimpleRelease(_) => (),
-		hir::SigAssignKind::CondWave(ref dm, ref cond) => {
-			ctx.typeck_delay_mechanism(dm);
+		hir::SigAssignKind::CondWave(ref dm, ref _cond) => {
+			self.typeck_delay_mechanism(dm);
 			// self.typeck_node(cond, lhs_ty)?;
 		}
-		hir::SigAssignKind::CondForce(_, ref cond) => {
+		hir::SigAssignKind::CondForce(_, ref _cond) => {
 			// self.typeck_node(cond, lhs_ty)?;
 		}
-		hir::SigAssignKind::SelWave(ref dm, ref sel) => {
-			ctx.typeck_delay_mechanism(dm);
+		hir::SigAssignKind::SelWave(ref dm, ref _sel) => {
+			self.typeck_delay_mechanism(dm);
 			// self.typeck_node(sel, lhs_ty)?;
 		}
-		hir::SigAssignKind::SelForce(_, ref sel) => {
+		hir::SigAssignKind::SelForce(_, ref _sel) => {
 			// self.typeck_node(sel, lhs_ty)?;
 		}
 	}
-	if ctx.finish() { Ok(()) } else { Err(()) }
+	Ok(())
 });
 
 impl_typeck!(self, id: VarAssignStmtRef => {
@@ -428,7 +470,6 @@ impl_typeck!(self, id: ReturnStmtRef => {
 
 impl_typeck!(self, _id: NullStmtRef => {
 	// The null statement always typechecks.
-	Ok(())
 });
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
@@ -471,7 +512,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 					let range = match *self.const_value(expr_id)? {
 						Const::IntRange(ref r) => r,
 						ref wrong => {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("{} used to constrain integer type", wrong.kind_desc()))
 								.span(span)
 							);
@@ -481,7 +522,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 
 					// Make sure that this is actually a subtype.
 					if inner.dir != range.dir || inner.left_bound > range.left_bound.value || inner.right_bound < range.right_bound.value {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", range, inner))
 							.span(span)
 						);
@@ -494,7 +535,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 
 				// All other types we simply cannot constrain by range.
 				_ => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("{} cannot be constrained by range", inner.kind_desc()))
 						.span(span)
 					);
@@ -504,7 +545,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 		}
 
 		hir::Constraint::Array(ref ac) => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error("Array constraints on subtypes not yet supported")
 				.span(ac.span)
 			);
@@ -512,7 +553,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 		}
 
 		hir::Constraint::Record(ref rc) => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error("Record constraints on subtypes not yet supported")
 				.span(rc.span)
 			);
@@ -528,7 +569,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 	let data = match hir.data {
 		Some(ref d) => d,
 		None => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error(format!("Declaration of type `{}` is incomplete", hir.name.value))
 				.span(hir.name.span)
 			);
@@ -594,7 +635,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			}
 
 			(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error("Float range bounds not yet supported")
 					.span(span)
 				);
@@ -602,7 +643,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			}
 
 			_ => {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error("Bounds of range are not of the same type")
 					.span(span)
 				);
@@ -642,15 +683,15 @@ impl_make!(self, id: ExprRef => &Ty {
 					return Ok(ty);
 				}
 			}
-			self.sess.emit(
-				DiagBuilder2::error("cannot infer type of integer literal from context")
+			self.emit(
+				DiagBuilder2::error(format!("cannot infer type of `{}` from context", hir.span.extract()))
 				.span(hir.span)
 			);
 			Err(())
 		}
 
-		hir::ExprData::FloatLiteral(ref c) => {
-			unimp!(self, id);
+		hir::ExprData::FloatLiteral(ref _c) => {
+			unimp_err!(self, id);
 			// // Float literals either have a type attached, or they inherit their
 			// // type from the context.
 			// if let Some(ref ty) = c.ty {
@@ -661,14 +702,14 @@ impl_make!(self, id: ExprRef => &Ty {
 			// 		return Ok(ty);
 			// 	}
 			// }
-			// self.sess.emit(
+			// self.emit(
 			// 	DiagBuilder2::error("cannot infer type of float literal from context")
 			// 	.span(hir.span)
 			// );
 			// Err(())
 		}
 
-		_ => unimp!(self, id),
+		_ => unimp_err!(self, id),
 	}
 });
 

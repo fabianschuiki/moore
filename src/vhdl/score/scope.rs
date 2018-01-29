@@ -83,7 +83,7 @@ impl_make_defs!(self, id: LibRef => {
 		for def in defs {
 			d = d.span(def.span);
 		}
-		self.sess.emit(d);
+		self.emit(d);
 		had_dups = true;
 	}
 	if had_dups {
@@ -109,7 +109,7 @@ impl_make_defs!(self, id: CtxItemsRef => {
 					if let Some(&lib_id) = self.sb.lib_names.borrow().get(&ident.name) {
 						let defs = defs.entry(ident.name.into()).or_insert_with(||vec![]);
 						if !defs.is_empty() {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("`{}` has already been declared", ident.name))
 								.span(ident.span)
 								// TODO: Show previous declarations
@@ -119,7 +119,7 @@ impl_make_defs!(self, id: CtxItemsRef => {
 							defs.push(Spanned::new(Def::Lib(lib_id), ident.span));
 						}
 					} else {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error(format!("no library named `{}` found", ident.name))
 							.span(ident.span)
 							// TODO: Print list of libraries.
@@ -211,7 +211,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 									defs.push(id.into());
 								}
 								Some(_) => {
-									self.sess.emit(
+									self.emit(
 										DiagBuilder2::error(format!("`all` not possible on `{}`", valid_span.extract()))
 										.span(all_span)
 									);
@@ -229,7 +229,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					// Ensure that there is no garbage.
 					if tail.len() > 0 {
 						let span = Span::union(valid_span.end().into(), name.span.end());
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error("invalid name suffix")
 							.span(span)
 						);

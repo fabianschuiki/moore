@@ -41,7 +41,7 @@ impl_make!(self, id: ExprRef => &Const {
 					self.intern_const(ConstFloatRange::new(dir, lb.clone(), rb.clone()))
 				}
 				_ => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error("left and right bound of range must both be integer or float")
 						.span(hir.span)
 					);
@@ -55,7 +55,7 @@ impl_make!(self, id: ExprRef => &Const {
 
 		// All other expressions cannot be turned into a constant value.
 		_ => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error("expression does not have a constant value")
 				.span(hir.span)
 			);

@@ -13,6 +13,7 @@ pub mod source;
 pub mod grind;
 pub mod id;
 pub mod score;
+pub mod util;
 
 pub use self::id::NodeId;
 use errors::DiagBuilder2;

@@ -6,43 +6,12 @@
 use std;
 use moore_common::source::{Span, Spanned};
 use moore_common::name::Name;
+use moore_common::util::{HasSpan, HasDesc};
 use lexer::token::Literal;
 
 pub use self::ExprData::*;
 pub use self::TypeData::*;
 pub use self::StmtData::*;
-
-
-/// Information about the portion of the input file that a node covers.
-pub trait HasSpan {
-	/// Obtain the full span of the input file that this node covers.
-	fn span(&self) -> Span;
-
-	/// Obtain a span which can be used to refer to this node in error messages
-	/// presented to humans. This will generally be the name for things like
-	/// entities, processes, and variables. Defaults to return whatever `span()`
-	/// returns.
-	fn human_span(&self) -> Span {
-		self.span()
-	}
-}
-
-pub trait HasDesc {
-	/// Obtain a human-readable descriptive name for this node.
-	fn desc(&self) -> &'static str;
-}
-
-impl<T> HasSpan for Spanned<T> {
-	fn span(&self) -> Span {
-		self.span
-	}
-}
-
-impl<T> HasDesc for Spanned<T> where T: HasDesc {
-	fn desc(&self) -> &'static str {
-		self.value.desc()
-	}
-}
 
 
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight

@@ -6,14 +6,14 @@ package pkg is
 
 	type MY_WORD is array (0 to 31) of BIT;                             -- fully constrained
 	type DATA_IN is array (7 downto 0) of FIVE_LEVEL_LOGIC;             -- fully constrained
-	type MEMORY is array (INTEGER range <>) of MY_WORD;                 -- partially constrained
-	type SIGNED_FXPT is array (INTEGER range <>) of BIT;                -- unconstrained
-	type SIGNED_FXPT_VECTOR is array (NATURAL range <>) of SIGNED_FXPT; -- unconstrained
-	type SIGNED_FXPT_5x4 is array (1 to 5, 1 to 4) of SIGNED_FXPT;      -- partially constrained
+	--type MEMORY is array (INTEGER range <>) of MY_WORD;                 -- partially constrained
+	--type SIGNED_FXPT is array (INTEGER range <>) of BIT;                -- unconstrained
+	--type SIGNED_FXPT_VECTOR is array (NATURAL range <>) of SIGNED_FXPT; -- unconstrained
+	--type SIGNED_FXPT_5x4 is array (1 to 5, 1 to 4) of SIGNED_FXPT;      -- partially constrained
 
-	type E is array (NATURAL range <>) of INTEGER;
-	type T0 is array (1 to 10) of E (1 to 0);
-	type T1 is array (10 to 1) of E (0 to 1);
+	--type E is array (NATURAL range <>) of INTEGER;
+	--type T0 is array (1 to 10) of E (1 to 0);
+	--type T1 is array (10 to 1) of E (0 to 1);
 end;
 
 library work;
@@ -21,7 +21,7 @@ use work.pkg.all;
 entity foo is end;
 
 architecture bar of foo is
-	signal a: DATA_IN;
+	--signal a: DATA_IN;
 	--signal b: MEMORY (0 to 255);
 	--signal c: SIGNED_FXPT (3 downto -4);
 	--signal d: SIGNED_FXPT_VECTOR (1 to 20)(9 downto 0);

@@ -9,22 +9,25 @@ use std;
 use std::fmt::Debug;
 use std::collections::HashMap;
 use std::cell::{RefCell, Cell};
+
 use moore_common::Session;
 use moore_common::name::*;
 use moore_common::source::*;
 use moore_common::errors::*;
 use moore_common::NodeId;
 use moore_common::score::{GenericContext, NodeStorage, NodeMaker, Result};
-use syntax::ast;
-use syntax::ast::{HasSpan, HasDesc};
-use hir;
+use moore_common::util::{HasSpan, HasDesc};
+
 use typed_arena::Arena;
+use num::{BigInt, Signed};
 use llhd;
+
+use syntax::ast;
+use hir;
 use ty::*;
 use konst::*;
-use num::{BigInt, Signed};
 use codegen::Codegen;
-use typeck::Typeck;
+use typeck::{Typeck, TypeckContext};
 
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
@@ -148,6 +151,11 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+	/// Emit a diagnostic message.
+	pub fn emit(&self, diag: DiagBuilder2) {
+		self.sess.emit(diag)
+	}
+
 	/// Add a library of AST nodes. This function is called by the global
 	/// scoreboard to add VHDL-specific AST nodes.
 	pub fn add_library(&self, name: Name, id: LibRef, lib: Vec<&'ast ast::DesignUnit>) {
@@ -217,7 +225,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		match self.sb.hir_table.borrow().get(&id) {
 			Some(node) => Ok(node),
 			None => {
-				self.sess.emit(DiagBuilder2::bug(format!("hir for {:?} should exist", id)));
+				self.emit(DiagBuilder2::bug(format!("hir for {:?} should exist", id)));
 				Err(())
 			}
 		}
@@ -306,7 +314,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] ty for {:?} is {:?}", id, node); }
 		if self.sb.ty_table.borrow_mut().insert(id.into(), node).is_some() {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::bug(format!("type for {:?} already in the scoreboard", id))
 			);
 			return Err(());
@@ -492,7 +500,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				match TBL.get(&s) {
 					Some(&op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
 					None => {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error(format!("`{}` is not a valid operator symbol", s))
 							.span(primary.span)
 							.add_note("see IEEE 1076-2008 section 9.2 for a list of operators")
@@ -537,7 +545,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			if let Some(parent_id) = parent_id {
 				self.resolve_name(name, parent_id, only_defs)
 			} else {
-				self.sess.emit(DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span));
+				self.emit(DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span));
 				Err(())
 			}
 		} else {
@@ -571,7 +579,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						for def in &defs {
 							d = d.span(def.span);
 						}
-						self.sess.emit(d);
+						self.emit(d);
 						return Err(());
 					};
 
@@ -584,7 +592,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						Def::PkgInst(id) => id.into(),
 						Def::BuiltinPkg(id) => id.into(),
 						d => {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("cannot select into {:?}", d))
 								.span(pn.span)
 							);
@@ -635,7 +643,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, '
 			}{
 				Some(n) => n,
 				None => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("`{}` is not a valid entity name", arch.target.span.extract()))
 						.span(arch.target.span)
 					);
@@ -651,7 +659,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, '
 					match last.value {
 						Def::Entity(e) => e,
 						_ => {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("`{}` is not an entity", entity_name))
 								.span(arch.target.span)
 								.add_note(format!("`{}` defined here:", entity_name))
@@ -663,7 +671,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, '
 					}
 				}
 				None => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("Unknown entity `{}`", entity_name))
 						.span(arch.target.span)
 					);
@@ -699,7 +707,15 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'as
 // Generate the definition for an architecture.
 impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
-		self.typeck(id)?;
+		// Type check the entire library where the architecture is defined in.
+		let typeck_ctx = TypeckContext::new(self);
+		typeck_ctx.typeck(self.ast(id).0); // typeck the entire library
+		if !typeck_ctx.finish() {
+			return Err(());
+		}
+		// self.typeck(id)?;
+		// self.typeck(self.ast(id).0)?; // typeck the entire library
+
 		let hir = self.hir(id)?;
 		let entity = self.hir(hir.entity)?;
 
@@ -773,7 +789,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
 			Ty::Access(_) => Ok(self.intern_const(Const::Null)),
 			Ty::Array(ref ty) => {
-				self.sess.emit(DiagBuilder2::bug(format!("default value for type `{}` not implemented", ty)));
+				self.emit(DiagBuilder2::bug(format!("default value for type `{}` not implemented", ty)));
 				// TODO: Use the correct default value.
 				Ok(self.intern_const(Const::Null))
 			}

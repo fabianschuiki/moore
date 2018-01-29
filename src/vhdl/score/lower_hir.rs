@@ -48,7 +48,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			Some(Spanned{value: ast::ObjDetail::Register, ..}) => hir::SignalKind::Register,
 			Some(Spanned{value: ast::ObjDetail::Bus, ..}) => hir::SignalKind::Bus,
 			Some(Spanned{span, ..}) => {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error("expected `:=` or `;`")
 					.span(span)
 				);
@@ -123,7 +123,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						}
 						ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut refs)?,
 						ast::ObjKind::Var => {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("not a shared variable; only shared variables may appear in {}", container_name))
 								.span(decl.human_span())
 							);
@@ -142,7 +142,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					}
 				}
 				ref wrong => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
 						.span(decl.human_span())
 					);
@@ -169,7 +169,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	) -> Result<Vec<ConcStmtRef>> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
-		let unimp = |s: &ast::Stmt| self.sess.emit(
+		let unimp = |s: &ast::Stmt| self.emit(
 			DiagBuilder2::bug(format!("{} not implemented", s.desc()))
 			.span(s.human_span())
 		);
@@ -191,7 +191,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				}
 
 				ref wrong => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
 						.span(stmt.human_span())
 						.add_note(format!("Only concurrent statements are allowed in {}. See IEEE 1076-2008 section 11.1.", container_name))
@@ -218,7 +218,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	) -> Result<Vec<SeqStmtRef>> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
-		let unimp = |s: &ast::Stmt| self.sess.emit(
+		let unimp = |s: &ast::Stmt| self.emit(
 			DiagBuilder2::bug(format!("{} not implemented", s.desc()))
 			.span(s.human_span())
 		);
@@ -247,7 +247,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 				ast::NullStmt => (),
 				ref wrong => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
 						.span(stmt.human_span())
 						.add_note(format!("Only sequential statements are allowed in {}. See IEEE 1076-2008 section 10.", container_name))
@@ -275,7 +275,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			ast::AssignTarget::Name(ref name) => {
 				let (_res_name, mut defs, res_span, tail) = self.resolve_compound_name(name, scope_id, false)?;
 				if !tail.is_empty() {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::bug("handling of non-name signal assignment targets not implemented")
 						.span(name.span)
 					);
@@ -284,7 +284,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				let sig = match defs.pop() {
 					Some(Spanned{ value: Def::Signal(id), .. }) => id,
 					Some(_) => {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error(format!("`{}` is not a signal", res_span.extract()))
 							.span(res_span)
 						);
@@ -293,7 +293,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					None => unreachable!()
 				};
 				if !defs.is_empty() {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error(format!("`{}` is ambiguous", res_span.extract()))
 						.span(res_span)
 					);
@@ -302,7 +302,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				Ok(hir::SigAssignTarget::Name(sig))
 			},
 			ast::AssignTarget::Aggregate(ref elems) => {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error("aggregate signal assignment not implemented")
 					.span(elems.span)
 				);
@@ -438,7 +438,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		elems.iter().map(|elem|{
 			if !elem.choices.is_empty() {
 				let span = Span::union(elem.choices[0].span, elem.choices.last().unwrap().span);
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error(format!("`=>` not applicable in {}", context))
 					.span(span)
 				);
@@ -479,7 +479,7 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 							}
 						}
 						ref wrong => {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("a {} cannot appear in a port clause", wrong.desc()))
 								.span(wrong.human_span())
 							);
@@ -521,7 +521,7 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 							}
 						}
 						ref wrong => {
-							self.sess.emit(
+							self.emit(
 								DiagBuilder2::error(format!("a {} cannot appear in a generic clause", wrong.desc()))
 								.span(wrong.human_span())
 							);
@@ -532,7 +532,7 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 			}
 
 			ref wrong => {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error(format!("a {} cannot appear in an entity declaration", wrong.desc()))
 					.span(decl.human_span())
 				);
@@ -610,7 +610,7 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 
 			// Emit an error for any other kinds of declarations.
 			ref wrong => {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error(format!("a {} cannot appear in a package declaration", wrong.desc()))
 					.span(decl.human_span())
 				);
@@ -639,7 +639,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 
 	// TODO: Implement resolution indications.
 	if let Some(_) = ast.res {
-		self.sess.emit(
+		self.emit(
 			DiagBuilder2::error("Resolution indications on subtypes not yet supported")
 			.span(ast.span)
 		);
@@ -655,7 +655,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 		Some(Spanned{value: Def::Type(id), ..}) => id.into(),
 		Some(Spanned{value: Def::Subtype(id), ..}) => id.into(),
 		Some(_) => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
 				.span(ast.span)
 			);
@@ -664,7 +664,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 		None => unreachable!()
 	};
 	if !defs.is_empty() {
-		self.sess.emit(
+		self.emit(
 			DiagBuilder2::error(format!("`{}` is ambiguous", ast.span.extract()))
 			.span(ast.span)
 		);
@@ -676,14 +676,14 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 		Some(&ast::NamePart::Range(ref expr)) => hir::Constraint::Range(expr.span, self.unpack_expr(expr, scope_id)?),
 		Some(&ast::NamePart::Call(ref elems)) => {
 			// TODO: Parse array or record constraint.
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error(format!("Array and record constraints on subtype indications not yet implemented"))
 				.span(elems.span)
 			);
 			return Err(());
 		}
 		Some(_) => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
 				.span(ast.span)
 			);
@@ -692,7 +692,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 		None => hir::Constraint::None,
 	};
 	if tail_parts.len() > 1 {
-		self.sess.emit(
+		self.emit(
 			DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
 			.span(ast.span)
 		);
@@ -732,7 +732,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 						Some(base) => match base.as_str().parse() {
 							Ok(base) => base,
 							Err(_) => {
-								self.sess.emit(
+								self.emit(
 									DiagBuilder2::error(format!("`{}` is not a valid base for a number literal", base))
 									.span(ast.span)
 								);
@@ -747,7 +747,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 						match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
 							Some(v) => hir::ExprData::IntegerLiteral(ConstInt::new(None, v)),
 							None => {
-								self.sess.emit(
+								self.emit(
 									DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base))
 									.span(ast.span)
 								);
@@ -755,7 +755,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 							}
 						}
 					} else {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error("Float literals not yet supported")
 							.span(ast.span)
 						);
@@ -763,7 +763,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 					}
 				}
 				_ => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error("Literal not yet supported")
 						.span(ast.span)
 					);
@@ -781,7 +781,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 				ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
 				ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
 				_ => {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::error("invalid unary operator")
 						.span(ast.span)
 					);
@@ -850,7 +850,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 
 					// If the filtering left no overloads, emit an error.
 					if filtered.is_empty() {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error(format!("no overload of `{}` applicable", matched_span.extract()))
 							.span(matched_span)
 						);
@@ -872,7 +872,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 			let def = if defs.len() == 1 {
 				*defs.last().unwrap()
 			} else {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::error(format!("`{}` is ambiguous", matched_span.extract()))
 					.span(matched_span)
 				);
@@ -929,7 +929,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 
 					// Disallow `.all` in expressions.
 					ast::NamePart::SelectAll(span) => {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error("`.all` in an expression")
 							.span(span)
 						);
@@ -938,7 +938,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 
 					// Disallow ranges in expressions.
 					ast::NamePart::Range(ref expr) => {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error("range in an expression")
 							.span(expr.span)
 						);
@@ -953,7 +953,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 
 		// All other expressions we simply do not support.
 		_ => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error("invalid expression")
 				.span(ast.span)
 			);
@@ -984,7 +984,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 						(dir, lb, rb)
 					}
 					_ => {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error("Invalid range expression")
 							.span(range_expr.span)
 						);
@@ -993,7 +993,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 				};
 				// TODO: Handle units
 				if let Some(ref units) = *units {
-					self.sess.emit(
+					self.emit(
 						DiagBuilder2::bug("Units not yet supported")
 						.span(spanned_data.span)
 					);
@@ -1033,7 +1033,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					if let Some(lit) = lit {
 						lits.push(lit);
 					} else {
-						self.sess.emit(
+						self.emit(
 							DiagBuilder2::error("not an enumeration literal")
 							.span(elem.span)
 							.add_note("expected an identifier or character literal")
@@ -1137,7 +1137,7 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 			};
 			let kind = self.unpack_signal_assign_mode(scope_id, mode, &tyctx)?;
 			if guarded {
-				self.sess.emit(
+				self.emit(
 					DiagBuilder2::warning("sequential signal assignment cannot be guarded")
 					.span(ast.human_span())
 					.add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
@@ -1159,7 +1159,7 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 
 impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 	let (scope_id, ast) = self.ast(id);
-	println!("lowering array type index {:#?}", ast);
+	// println!("lowering array type index {:#?}", ast);
 	let index = match ast.data {
 		ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
 			let lb = ExprRef(NodeId::alloc());
@@ -1182,13 +1182,13 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 			unimp!(self, id);
 		}
 		_ => {
-			self.sess.emit(
+			self.emit(
 				DiagBuilder2::error("Invalid array type index")
 				.span(ast.span)
 			);
 			return Err(());
 		}
 	};
-	println!("lowered to {:#?}", index);
+	// println!("lowered to {:#?}", index);
 	Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
 });
