@@ -9,7 +9,6 @@ use moore_common::source::*;
 use moore_common::errors::*;
 use moore_common::score::Result;
 use score::*;
-use hir;
 
 /// A context to declare things in.
 ///
@@ -94,24 +93,29 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 
 	/// Handle type declarations.
 	pub fn declare_type(&mut self, id: TypeDeclRef) {
-		let hir = match self.ctx.hir(id) {
-			Ok(h) => h,
-			Err(()) => { self.failed = true; return; }
-		};
-		self.declare(hir.name.map_into(), Def::Type(id));
-		hir.data.as_ref().map(|data| match data.value {
-			hir::TypeData::Enum(ref lits) => {
-				for (i, lit) in lits.iter().enumerate() {
-					match *lit {
-						hir::EnumLit::Ident(n) => self.declare(n.map_into(), Def::Enum(EnumRef(id, i))),
-						hir::EnumLit::Char(c)  => self.declare(c.map_into(), Def::Enum(EnumRef(id, i))),
+		use syntax::ast;
+		let ast = self.ctx.ast(id).1;
+		self.declare(ast.name.map_into(), Def::Type(id));
+		// This is a rather hacky way of declaring the variant names for enum
+		// literals, but it does not require the HIR to be constructed, which is
+		// a requirement to avoid infinite loops.
+		match ast.data {
+			Some(Spanned{ value: ast::EnumType(ref paren_elems), .. }) => {
+				for (i, lit) in paren_elems.value.iter().enumerate() {
+					match lit.expr.data {
+						ast::NameExpr(ref name) => self.declare(
+							match self.ctx.resolvable_from_primary_name(&name.primary) {
+								Ok(n) => n,
+								Err(()) => continue
+							},
+							Def::Enum(EnumRef(id, i))
+						),
+						_ => ()
 					}
 				}
 			}
-			hir::TypeData::Range(..) => (),
-			hir::TypeData::Access(..) => (),
-			hir::TypeData::Array(..) => (),
-		});
+			_ => ()
+		}
 	}
 
 	/// Handle subtype declarations.

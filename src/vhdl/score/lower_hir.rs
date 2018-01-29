@@ -52,9 +52,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 	/// Unpack an AST subtype indication.
 	pub fn unpack_subtype_ind(&self, ast: &'ast ast::SubtypeInd, scope_id: ScopeRef) -> Result<SubtypeIndRef> {
-		let id = SubtypeIndRef::new(NodeId::alloc());
-		self.set_ast(id, (scope_id, ast));
+		let ctx = TermContext::new(self, scope_id);
+		let term = ctx.termify_subtype_ind(ast)?;
+		let id = ctx.term_to_subtype_ind(term)?;
 		Ok(id)
+		// let id = SubtypeIndRef::new(NodeId::alloc());
+		// self.set_ast(id, (scope_id, ast));
+		// Ok(id)
 	}
 
 	/// Unpack an AST signal declaration into individual HIR signal
@@ -1089,11 +1093,15 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 						id
 					})
 					.collect();
-				let elem_subty = self.unpack_subtype_ind(elem_subty, scope_id)?;
+				let ctx = TermContext::new(self, scope_id);
+				let subty = ctx.termify_subtype_ind(elem_subty)?;
+				let elem_subty = ctx.term_to_subtype_ind(subty)?;
 				hir::TypeData::Array(indices, elem_subty)
 			}
 
-			_ => unimp!(self, id),
+			ast::RecordType(..) => unimp_msg!(self, "record types", ast.span),
+			ast::FileType(..) => unimp_msg!(self, "file types", ast.span),
+			ast::ProtectedType(..) => unimp_msg!(self, "protected types", ast.span),
 		}, spanned_data.span))
 	} else {
 		None
@@ -1243,6 +1251,10 @@ pub enum Term {
 	/// A term of the form `[T] <type_mark> [T]`. The first optional subterm is
 	/// the resolution indication, the second is the constraint.
 	SubtypeInd(Spanned<TypeMarkRef>, Option<Subterm>, Option<Subterm>),
+	/// A term of the form `(T) T`.
+	PrefixParen(Subterm, Subterm),
+	/// A term of the form `T (T)`.
+	SuffixParen(Subterm, Subterm),
 }
 
 pub type Subterm = Box<Spanned<Term>>;
@@ -1290,9 +1302,31 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 					_ => Term::RangeSuffix(subterm, range),
 				}
 			}
+			Term::SuffixParen(subterm, suffix) => {
+				match subterm.value {
+					Term::TypeMark(tm) => Term::SubtypeInd(tm, None, Some(suffix)),
+					_ => Term::SuffixParen(subterm, suffix),
+				}
+			}
 			other => other
 		};
 		Spanned::new(new, term.span)
+	}
+
+	/// Map an AST subtype indication to a term.
+	pub fn termify_subtype_ind(&self, subty: &'ast ast::SubtypeInd) -> Result<Spanned<Term>> {
+		let name = self.termify_compound_name(&subty.name)?;
+		let res = match subty.res {
+			Some(ast::ResolInd::Exprs(ref paren_elems)) => Some(self.termify_paren_elems(paren_elems)?),
+			Some(ast::ResolInd::Name(ref name)) => Some(self.termify_compound_name(name)?),
+			None => None,
+		};
+		if let Some(res) = res {
+			let sp = Span::union(name.span, res.span);
+			Ok(Spanned::new(Term::PrefixParen(Box::new(res), Box::new(name)), sp))
+		} else {
+			Ok(name)
+		}
 	}
 
 	/// Map an AST expression to a term.
@@ -1384,13 +1418,13 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// Map an AST compound name to a term.
 	pub fn termify_compound_name(&self, ast: &'ast ast::CompoundName) -> Result<Spanned<Term>> {
 		// Map the primary name.
-		let mut term = self.termify_name(
+		let mut term = self.fold(self.termify_name(
 			self.ctx.resolvable_from_primary_name(&ast.primary)?
-		)?;
+		)?);
 
 		// For each name part, wrap the term in another layer. Like an onion.
 		for part in &ast.parts {
-			term = match *part {
+			term = self.fold(match *part {
 				ast::NamePart::Select(ref primary) => {
 					let n = self.ctx.resolvable_from_primary_name(primary)?;
 					let sp = Span::union(term.span, n.span);
@@ -1425,7 +1459,9 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 					}
 				}
 				ast::NamePart::Call(ref paren_elems) => {
-					unimp_msg!(self, "termification of call suffix", paren_elems.span);
+					let subterm = self.termify_paren_elems(paren_elems)?;
+					let sp = Span::union(term.span, subterm.span);
+					Spanned::new(Term::SuffixParen(Box::new(term), Box::new(subterm)), sp)
 				}
 				ast::NamePart::Range(ref expr) => {
 					if expr.data == ast::BoxExpr {
@@ -1437,21 +1473,25 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 						Spanned::new(Term::RangeSuffix(Box::new(term), Box::new(expr)), sp)
 					}
 				}
-			};
+			});
 		}
 
-		Ok(self.fold(term))
+		Ok(term)
 	}
 
-	/// Map a resolvable name to an identifier.
+	/// Map a resolvable name to a term.
 	///
 	/// This function is the bottom of the pit. Names are resolved here and
 	/// mapped to the corresponding term. Calling functions may then proceed to
 	/// handle the term as they see fit, usually inspecting what exact kind the
 	/// term is of.
 	pub fn termify_name(&self, name: Spanned<ResolvableName>) -> Result<Spanned<Term>> {
+		println!("termify_name {:?}", name);
 		// First resolve the name to a list of definitions.
-		let mut defs = self.ctx.resolve_name(name, self.scope, false)?;
+		// FIXME: For now we pass `true` as the last parameter, indicating that
+		// we're only interested in matching definitions. This is an ugly hack
+		// to get around some limitations of the current scoping system.
+		let mut defs = self.ctx.resolve_name(name, self.scope, true)?;
 		assert!(!defs.is_empty());
 
 		fn is_enum(def: &Spanned<Def>) -> bool { match def.value { Def::Enum(..) => true, _ => false }}
@@ -1487,6 +1527,15 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 		};
 
 		Ok(self.fold(Spanned::new(term, name.span)))
+	}
+
+	/// Map multiple parenthesis elements to a term.
+	pub fn termify_paren_elems(&self, elems: &'ast ast::ParenElems) -> Result<Spanned<Term>> {
+		self.emit(
+			DiagBuilder2::bug(format!("termification of parentheses `{}` not implemented", elems.span.extract()))
+			.span(elems.span)
+		);
+		Err(())
 	}
 
 	/// Map a term to an expression.
