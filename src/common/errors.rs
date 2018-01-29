@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Fabian Schuiki
+// Copyright (c) 2016-2018 Fabian Schuiki
 
 //! Utilities to implement diagnostics and error reporting facilities.
 
@@ -28,7 +28,11 @@ pub struct DiagnosticBuilder<'a> {
 /// or an assembled diagnostic in the Err variant.
 pub type DiagResult<'a, T> = Result<T, DiagnosticBuilder<'a>>;
 
-
+/// Emits diagnostic messages.
+pub trait DiagEmitter {
+	/// Emit a diagnostic message.
+	fn emit(&self, diag: DiagBuilder2);
+}
 
 #[must_use]
 #[derive(Clone, Debug)]
@@ -218,7 +222,7 @@ impl fmt::Display for DiagBuilder2 {
 		}
 
 		if self.get_severity() == Severity::Bug {
-			write!(f, "You have encountered a compiler bug. We would appreciate if you open an issue [1] and describe how you triggered the bug, together with a minimal snippet of code to reproduce it. Thanks!\n")?;
+			write!(f, "\nYou have encountered a compiler bug. Sorry about that! We would appreciate if you open an issue [1] and describe how you triggered the bug, together with a minimal snippet of code to reproduce it. Thanks!\n")?;
 			write!(f, "[1]: https://github.com/fabianschuiki/moore\n")?;
 		}
 

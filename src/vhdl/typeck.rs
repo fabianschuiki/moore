@@ -7,7 +7,7 @@ use std::cell::Cell;
 
 use moore_common::NodeId;
 use moore_common::errors::*;
-use moore_common::source::Span;
+use moore_common::source::{Span, Spanned};
 use moore_common::score::{NodeMaker, Result};
 
 use score::*;
@@ -499,12 +499,12 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 impl_make!(self, id: SubtypeIndRef => &Ty {
 	let hir = self.hir(id)?;
 	match hir.constraint {
-		hir::Constraint::None => Ok(self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value))),
+		None => Ok(self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value))),
 
 		// For range constraints, we first have to check if the constraint is
 		// applicable given the type mark. If it is, check if the provided
 		// range actually is a proper subtype, and then apply the constraint.
-		hir::Constraint::Range(span, expr_id) => {
+		Some(Spanned{ value: hir::Constraint::Range(_, expr_id), span }) => {
 			let inner = self.deref_named_type(self.ty(hir.type_mark.value)?)?;
 			match *inner {
 				Ty::Int(ref inner) => {
@@ -544,7 +544,52 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 			}
 		}
 
-		hir::Constraint::Array(ref ac) => {
+		// This is more or less the same as above, but for the more modern Term-
+		// based constraint determination.
+		Some(Spanned{ value: hir::Constraint::Range2(dir, lb, rb), span }) => {
+			let lb = self.const_value(lb)?;
+			let rb = self.const_value(rb)?;
+			let inner = self.deref_named_type(self.ty(hir.type_mark.value)?)?;
+			match *inner {
+				Ty::Int(ref inner) => {
+					// Make sure we have an integer range.
+					let (lb, rb) = match (lb, rb) {
+						(&Const::Int(ref lb), &Const::Int(ref rb)) => (lb, rb),
+						_ => {
+							self.emit(
+								DiagBuilder2::error(format!("non-integer range `{} {} {}` cannot constrain an integer type", lb, dir, rb))
+								.span(span)
+							);
+							return Err(());
+						}
+					};
+
+					// Make sure that this is actually a subtype.
+					if inner.dir != dir || inner.left_bound > lb.value || inner.right_bound < rb.value {
+						self.emit(
+							DiagBuilder2::error(format!("`{} {} {}` is not a subrange of `{}`", lb, dir, rb, inner))
+							.span(span)
+						);
+						return Err(());
+					}
+
+					// Create the new type.
+					Ok(self.intern_ty(IntTy::new(inner.dir, lb.value.clone(), rb.value.clone()).maybe_null()))
+				}
+
+				// All other types we simply cannot constrain by range.
+				_ => {
+					self.emit(
+						DiagBuilder2::error(format!("{} cannot be constrained by range", inner.kind_desc()))
+						.span(span)
+					);
+					return Err(());
+				}
+			}
+
+		}
+
+		Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
 			self.emit(
 				DiagBuilder2::error("Array constraints on subtypes not yet supported")
 				.span(ac.span)
@@ -552,7 +597,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 			Err(())
 		}
 
-		hir::Constraint::Record(ref rc) => {
+		Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
 			self.emit(
 				DiagBuilder2::error("Record constraints on subtypes not yet supported")
 				.span(rc.span)
@@ -603,7 +648,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 				};
 				indices.push(match hir.value {
 					hir::ArrayTypeIndex::Unbounded(tm) => {
-						ArrayIndex::Unbounded(Box::new(self.ty(tm)?.clone()))
+						ArrayIndex::Unbounded(Box::new(self.ty(tm.value)?.clone()))
 					}
 					hir::ArrayTypeIndex::Subtype(subty) => {
 						ArrayIndex::Constrained(Box::new(self.ty(subty)?.clone()))

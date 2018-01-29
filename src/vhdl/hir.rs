@@ -146,14 +146,14 @@ pub struct SubtypeInd {
 	/// The type mark.
 	pub type_mark: Spanned<TypeMarkRef>,
 	/// The optional constraint.
-	pub constraint: Constraint,
+	pub constraint: Option<Spanned<Constraint>>,
 }
 
 
 #[derive(Debug)]
 pub enum Constraint {
-	None,
 	Range(Span, ExprRef),
+	Range2(Dir, ExprRef, ExprRef),
 	Array(ArrayConstraint),
 	Record(RecordConstraint),
 }
@@ -237,7 +237,7 @@ pub enum EnumLit {
 #[derive(Debug)]
 pub enum ArrayTypeIndex {
 	/// An unbounded array index of the form `... range <>`.
-	Unbounded(TypeMarkRef),
+	Unbounded(Spanned<TypeMarkRef>),
 	/// A constrained array index of the form of a subtype indication.
 	Subtype(SubtypeIndRef),
 	/// A constrained array index of the form `... to/downto ...`.

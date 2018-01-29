@@ -1075,13 +1075,14 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 
 
 pub fn try_name_or_qualified_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::Expr>> {
-	let span = p.peek(0).span;
+	let mut span = p.peek(0).span;
 
 	// Try to parse a name.
 	if let Some(name) = try_name(p)? {
 		// Try to parse another name, for things that look like element
 		// resolutions.
 		if let Some(suffix_name) = try_name(p)? {
+			span.expand(p.last_span());
 			return Ok(Some(ast::Expr{
 				span: span,
 				data: ast::DoubleNameExpr(name, suffix_name),
@@ -1092,6 +1093,7 @@ pub fn try_name_or_qualified_primary_expr<P: Parser>(p: &mut P) -> ReportedResul
 		if accept(p, Apostrophe) {
 			if p.peek(0).value == OpenDelim(Paren) {
 				let expr = parse_paren_expr(p)?;
+				span.expand(p.last_span());
 				return Ok(Some(ast::Expr{
 					span: span,
 					data: ast::QualExpr(name, expr),
@@ -1108,6 +1110,7 @@ pub fn try_name_or_qualified_primary_expr<P: Parser>(p: &mut P) -> ReportedResul
 			}
 		}
 
+		span.expand(p.last_span());
 		return Ok(Some(ast::Expr{
 			span: span,
 			data: ast::NameExpr(name),

@@ -7,11 +7,37 @@
 //! lowering to HIR.
 
 use score::*;
+use syntax::lexer::token::Literal;
 
 /// Emit a compiler bug and return `Err`.
 macro_rules! unimp {
 	($slf:tt, $id:expr) => {{
-		$slf.sess.emit(DiagBuilder2::bug(format!("lowering to HIR of {:?} not implemented", $id)));
+		$slf.emit(
+			DiagBuilder2::bug(format!("lowering to HIR of {:?} not implemented", $id))
+		);
+		return Err(());
+	}};
+	($slf:tt, $id:expr, $span:expr) => {{
+		$slf.emit(
+			DiagBuilder2::bug(format!("lowering to HIR of {:?} not implemented", $id))
+			.span($span)
+		);
+		return Err(());
+	}}
+}
+
+macro_rules! unimp_msg {
+	($slf:tt, $msg:expr) => {{
+		$slf.emit(
+			DiagBuilder2::bug(format!("lowering to HIR: {} not implemented", $msg))
+		);
+		return Err(());
+	}};
+	($slf:tt, $msg:expr, $span:expr) => {{
+		$slf.emit(
+			DiagBuilder2::bug(format!("lowering to HIR: {} not implemented", $msg))
+			.span($span)
+		);
 		return Err(());
 	}}
 }
@@ -673,7 +699,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 
 	// Parse the constraint.
 	let constraint = match tail_parts.last() {
-		Some(&ast::NamePart::Range(ref expr)) => hir::Constraint::Range(expr.span, self.unpack_expr(expr, scope_id)?),
+		Some(&ast::NamePart::Range(ref expr)) => Some(Spanned::new(hir::Constraint::Range(expr.span, self.unpack_expr(expr, scope_id)?), expr.span)),
 		Some(&ast::NamePart::Call(ref elems)) => {
 			// TODO: Parse array or record constraint.
 			self.emit(
@@ -689,7 +715,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 			);
 			return Err(());
 		}
-		None => hir::Constraint::None,
+		None => None,
 	};
 	if tail_parts.len() > 1 {
 		self.emit(
@@ -1159,36 +1185,401 @@ impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
 
 impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 	let (scope_id, ast) = self.ast(id);
-	// println!("lowering array type index {:#?}", ast);
-	let index = match ast.data {
-		ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
-			let lb = ExprRef(NodeId::alloc());
-			let rb = ExprRef(NodeId::alloc());
-			self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
-			self.set_ast(rb, (scope_id.into(), rb_expr.as_ref()));
+	let ctx = TermContext::new(self, scope_id);
+	let term = ctx.termify_expr(ast)?;
+	self.emit(
+		DiagBuilder2::note(format!("termified expr `{}`", ast.span.extract()))
+		.span(ast.span)
+		.add_note(format!("{:?}", term))
+	);
+	let index = match term.value {
+		Term::Range(dir, lb, rb) => {
+			let lb = ctx.term_to_expr(*lb)?;
+			let rb = ctx.term_to_expr(*rb)?;
 			hir::ArrayTypeIndex::Range(dir, lb, rb)
 		}
-		ast::NameExpr(ref name) => {
-			// // Check if the name ends in `range <>`, which would indicate that
-			// // this is an unbound index.
-			// if let Some(ast::NamePart::Range(ref expr)) = name.parts.last() {
-			// 	match expr.data {
-			// 		ast::BoxExpr => hir::ArrayTypeIndex::Unbounded(self.unpack_type_mark())
-			// 	}
-			// }
-			unimp!(self, id);
+		Term::UnboundedRange(subterm) => {
+			let tm = ctx.term_to_type_mark(*subterm)?;
+			hir::ArrayTypeIndex::Unbounded(tm)
 		}
-		ast::ResolExpr(ref resol, ref name) => {
-			unimp!(self, id);
+		Term::TypeMark(..) | Term::SubtypeInd(..) => {
+			let subty = ctx.term_to_subtype_ind(term)?;
+			hir::ArrayTypeIndex::Subtype(subty)
 		}
 		_ => {
 			self.emit(
-				DiagBuilder2::error("Invalid array type index")
-				.span(ast.span)
+				DiagBuilder2::error(format!("`{}` is not a valid array index", term.span.extract()))
+				.span(term.span)
 			);
 			return Err(());
 		}
 	};
-	// println!("lowered to {:#?}", index);
 	Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
 });
+
+impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+}
+
+#[derive(Debug)]
+pub enum Term {
+	/// An integer literal.
+	IntLit(BigInt),
+	/// A term that refers to a definition.
+	Ident(Spanned<Def>),
+	/// A term that refers to a type or subtype definition.
+	TypeMark(Spanned<TypeMarkRef>),
+	/// A term that refers to an enum variant.
+	Enum(Vec<Spanned<EnumRef>>),
+	/// A term of the form `T.<name>`.
+	Select(Subterm, Spanned<ResolvableName>),
+	/// A term of the form `T.all`.
+	SelectAll(Subterm),
+	/// A term of the form `T (to|downto) T`.
+	Range(Dir, Subterm, Subterm),
+	/// A term of the form `T range T`.
+	RangeSuffix(Subterm, Subterm),
+	/// A term of the form `T range <>`.
+	UnboundedRange(Subterm),
+	/// A term of the form `[T] <type_mark> [T]`. The first optional subterm is
+	/// the resolution indication, the second is the constraint.
+	SubtypeInd(Spanned<TypeMarkRef>, Option<Subterm>, Option<Subterm>),
+}
+
+pub type Subterm = Box<Spanned<Term>>;
+
+/// A context within which termification can occur.
+pub struct TermContext<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb> {
+	/// The underlying scoreboard context.
+	pub ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>,
+	/// The scope within which the terms will resolve their names.
+	pub scope: ScopeRef,
+}
+
+impl<'sbc, 'sb, 'ast, 'ctx> DiagEmitter for TermContext<'sbc, 'sb, 'ast, 'ctx> {
+	fn emit(&self, diag: DiagBuilder2) {
+		self.ctx.emit(diag)
+	}
+}
+
+impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
+	/// Create a new termification context.
+	pub fn new(ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>, scope: ScopeRef) -> TermContext<'sbc, 'sb, 'ast, 'ctx> {
+		TermContext {
+			ctx: ctx,
+			scope: scope,
+		}
+	}
+
+	/// Perform term folding.
+	///
+	/// This is a post-processing step that should be applied to all terms once
+	/// they are constructed. Folding applies transformations to the terms, e.g.
+	/// changing `Ident(Type|Subtype)` to `TypeMark`, or gobbling up subtype
+	/// constraints where appropriate.
+	pub fn fold(&self, term: Spanned<Term>) -> Spanned<Term> {
+		let new = match term.value {
+			Term::Ident(Spanned{ value: Def::Type(id), span }) => {
+				Term::TypeMark(Spanned::new(id.into(), span))
+			}
+			Term::Ident(Spanned{ value: Def::Subtype(id), span }) => {
+				Term::TypeMark(Spanned::new(id.into(), span))
+			}
+			Term::RangeSuffix(subterm, range) => {
+				match subterm.value {
+					Term::TypeMark(tm) => Term::SubtypeInd(tm, None, Some(range)),
+					_ => Term::RangeSuffix(subterm, range),
+				}
+			}
+			other => other
+		};
+		Spanned::new(new, term.span)
+	}
+
+	/// Map an AST expression to a term.
+	pub fn termify_expr(&self, ast: &'ast ast::Expr) -> Result<Spanned<Term>> {
+		let term = match ast.data {
+			// Literals with optional unit.
+			ast::LitExpr(ref lit, ref unit) => {
+				let lit = self.termify_literal(Spanned::new(lit, ast.span))?;
+				let unit = match *unit {
+					Some(ref unit_name) => Some(self.termify_compound_name(unit_name)?),
+					None => None,
+				};
+				if let Some(unit) = unit {
+					unimp_msg!(self, "termification of physical type", unit.span());
+				} else {
+					return Ok(lit);
+				}
+			}
+			ast::NameExpr(ref name) => return self.termify_compound_name(name),
+			// ast::ResolExpr(ref paren_elems, ref name) => {
+			// 	let name = self.termify_compound_name(name)?;
+			// }
+			// Ranges of the form `T to T` and `T downto T`.
+			ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => {
+				Term::Range(d, self.termify_expr(lb)?.into(), self.termify_expr(rb)?.into())
+			}
+			ref wrong => {
+				self.emit(
+					DiagBuilder2::bug(format!("termification of expression `{}` not implemented", ast.span.extract()))
+					.span(ast.span)
+					.add_note(format!("{:?}", wrong))
+				);
+				return Err(());
+			}
+		};
+		Ok(self.fold(Spanned::new(term, ast.span)))
+	}
+
+	/// Map an AST literal to a term.
+	pub fn termify_literal(&self, ast: Spanned<&'ast Literal>) -> Result<Spanned<Term>> {
+		Ok(Spanned::new(match *ast.value {
+			Literal::Abstract(base, int, frac, exp) => {
+				let base = match base {
+					Some(base) => match base.as_str().parse() {
+						Ok(base) => base,
+						Err(_) => {
+							self.emit(
+								DiagBuilder2::error(format!("`{}` is not a valid base for a number literal", base))
+								.span(ast.span)
+							);
+							return Err(());
+						}
+					},
+					None => 10,
+				};
+				let int = match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
+					Some(v) => v,
+					None => {
+						self.emit(
+							DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base))
+							.span(ast.span)
+						);
+						return Err(());
+					}
+				};
+
+				// Parse the rest of the number.
+				if frac.is_none() && exp.is_none() {
+					Term::IntLit(int)
+				} else {
+					self.emit(
+						DiagBuilder2::bug("Float literals not yet supported")
+						.span(ast.span)
+					);
+					return Err(());
+				}
+			}
+			ref wrong => {
+				self.emit(
+					DiagBuilder2::bug(format!("termification of literal `{}` not implemented", ast.span.extract()))
+					.span(ast.span)
+					.add_note(format!("{:?}", wrong))
+				);
+				return Err(());
+			}
+		}, ast.span))
+	}
+
+	/// Map an AST compound name to a term.
+	pub fn termify_compound_name(&self, ast: &'ast ast::CompoundName) -> Result<Spanned<Term>> {
+		// Map the primary name.
+		let mut term = self.termify_name(
+			self.ctx.resolvable_from_primary_name(&ast.primary)?
+		)?;
+
+		// For each name part, wrap the term in another layer. Like an onion.
+		for part in &ast.parts {
+			term = match *part {
+				ast::NamePart::Select(ref primary) => {
+					let n = self.ctx.resolvable_from_primary_name(primary)?;
+					let sp = Span::union(term.span, n.span);
+					Spanned::new(Term::Select(Box::new(term), n), sp)
+				}
+				ast::NamePart::SelectAll(span) => {
+					let sp = Span::union(term.span, span);
+					Spanned::new(Term::SelectAll(Box::new(term)), sp)
+				}
+				ast::NamePart::Signature(ref sig) => {
+					unimp_msg!(self, "termification of signature suffix", sig.span);
+				}
+				ast::NamePart::Attribute(ident) => {
+					let attr = self.termify_name(Spanned::new(ident.name.into(), ident.span))?;
+					match attr.value {
+						// TODO: Enable this as soon as we handle attribute
+						// declarations.
+						// Term::Ident(Spanned { value: Def::Attr(id), span }) => {
+						//	let sp = Span::union(term.span, attr.span);
+						// 	Spanned::new(Term::Attribute(Box::new(term), Spanned::new(id, span)), sp)
+						// }
+						Term::Ident(other) => {
+							self.emit(
+								DiagBuilder2::error(format!("`{}` is not an attribute name", ident.name))
+								.span(ident.span)
+								.add_note("Declared here:")
+								.span(other.span)
+							);
+							return Err(());
+						}
+						_ => unreachable!(),
+					}
+				}
+				ast::NamePart::Call(ref paren_elems) => {
+					unimp_msg!(self, "termification of call suffix", paren_elems.span);
+				}
+				ast::NamePart::Range(ref expr) => {
+					if expr.data == ast::BoxExpr {
+						let sp = Span::union(term.span, expr.span);
+						Spanned::new(Term::UnboundedRange(Box::new(term)), sp)
+					} else {
+						let expr = self.termify_expr(expr)?;
+						let sp = Span::union(term.span, expr.span);
+						Spanned::new(Term::RangeSuffix(Box::new(term), Box::new(expr)), sp)
+					}
+				}
+			};
+		}
+
+		Ok(self.fold(term))
+	}
+
+	/// Map a resolvable name to an identifier.
+	///
+	/// This function is the bottom of the pit. Names are resolved here and
+	/// mapped to the corresponding term. Calling functions may then proceed to
+	/// handle the term as they see fit, usually inspecting what exact kind the
+	/// term is of.
+	pub fn termify_name(&self, name: Spanned<ResolvableName>) -> Result<Spanned<Term>> {
+		// First resolve the name to a list of definitions.
+		let mut defs = self.ctx.resolve_name(name, self.scope, false)?;
+		assert!(!defs.is_empty());
+
+		fn is_enum(def: &Spanned<Def>) -> bool { match def.value { Def::Enum(..) => true, _ => false }}
+		let all_enum = defs.iter().all(is_enum);
+
+		// Handle overloading. Basically if the definitions are all enum fields
+		// or functions, that's fine. For everything else the name must be
+		// unique.
+		let first_def = defs.pop().unwrap();
+		let term = match first_def.value {
+			Def::Enum(id) if all_enum => {
+				let mut ids = vec![Spanned::new(id, first_def.span)];
+				for def in defs {
+					match def.value {
+						Def::Enum(id) => ids.push(Spanned::new(id, def.span)),
+						_ => unreachable!(),
+					}
+				}
+				Term::Enum(ids)
+			}
+			// TODO: Handle the function case.
+			_ if !defs.is_empty() => {
+				let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", name.value)).span(name.span);
+				d = d.add_note("Found the following definitions:");
+				d = d.span(first_def.span());
+				for def in defs {
+					d = d.span(def.span());
+				}
+				self.emit(d);
+				return Err(());
+			}
+			other => Term::Ident(first_def),
+		};
+
+		Ok(self.fold(Spanned::new(term, name.span)))
+	}
+
+	/// Map a term to an expression.
+	pub fn term_to_expr(&self, term: Spanned<Term>) -> Result<ExprRef> {
+		let data = match term.value {
+			Term::IntLit(value) => {
+				hir::ExprData::IntegerLiteral(ConstInt::new(None, value))
+			}
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a valid expression", term.span.extract()))
+					.span(term.span)
+				);
+				return Err(());
+			}
+		};
+		let hir = hir::Expr {
+			parent: self.scope,
+			span: term.span,
+			data: data
+		};
+		let id = ExprRef(NodeId::alloc());
+		self.ctx.set_hir(id, self.ctx.sb.arenas.hir.expr.alloc(hir));
+		Ok(id)
+	}
+
+	/// Map a term to a type mark.
+	pub fn term_to_type_mark(&self, term: Spanned<Term>) -> Result<Spanned<TypeMarkRef>> {
+		match term.value {
+			Term::TypeMark(tm) => Ok(tm),
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a type or subtype", term.span.extract()))
+					.span(term.span)
+				);
+				return Err(());
+			}
+		}
+	}
+
+	/// Map a term to a subtype indication.
+	pub fn term_to_subtype_ind(&self, term: Spanned<Term>) -> Result<SubtypeIndRef> {
+		let (tm, resol, con) = match term.value {
+			Term::SubtypeInd(tm, resol, con) => (tm, resol, con),
+			Term::TypeMark(tm) => (tm, None, None),
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a subtype indication", term.span.extract()))
+					.span(term.span)
+				);
+				return Err(());
+			}
+		};
+		let resol = match resol {
+			Some(x) => Some(self.term_to_resolution_indication(*x)?),
+			None => None,
+		};
+		let con = match con {
+			Some(x) => Some(self.term_to_constraint(*x)?),
+			None => None,
+		};
+		let hir = hir::SubtypeInd {
+			span: term.span,
+			type_mark: tm,
+			// TODO: Track resolution indication.
+			constraint: con,
+		};
+		let id = SubtypeIndRef::new(NodeId::alloc());
+		self.ctx.set_hir(id, self.ctx.sb.arenas.hir.subtype_ind.alloc(hir));
+		Ok(id)
+	}
+
+	/// Map a term to a resolution indication.
+	pub fn term_to_resolution_indication(&self, term: Spanned<Term>) -> Result<Spanned<()>> {
+		self.emit(
+			DiagBuilder2::bug(format!("interpretation of `{}` as a resolution indication not implemented", term.span.extract()))
+			.span(term.span)
+		);
+		Err(())
+	}
+
+	/// Map a term to a constraint.
+	pub fn term_to_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::Constraint>> {
+		Ok(Spanned::new(match term.value {
+			Term::Range(dir, lb, rb) => hir::Constraint::Range2(dir, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a valid constraint", term.span.extract()))
+					.span(term.span)
+					.add_note("Did you mean a range constraint (`range ...`) or an array or record constraint (`(...)`)? See IEEE 1076-2008 section 6.3.")
+				);
+				return Err(());
+			}
+		}, term.span))
+	}
+}
