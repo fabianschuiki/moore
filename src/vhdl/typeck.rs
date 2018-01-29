@@ -87,6 +87,18 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 			self.failed.set(true);
 		}
 	}
+
+	/// Type check a slice of nodes.
+	pub fn typeck_slice<T,I>(&self, ids: T)
+		where
+			T: AsRef<[I]>,
+			I: Copy,
+			TypeckContext<'sbc, 'sb, 'ast, 'ctx>: Typeck<I>,
+	{
+		for &id in ids.as_ref() {
+			self.typeck(id);
+		}
+	}
 }
 
 /// Performs a type check.
@@ -170,20 +182,20 @@ macro_rules! unimpmsg {
 
 impl_typeck_err!(self, id: LibRef => {
 	let hir = self.ctx.hir(id)?;
-	hir.pkg_decls.iter().for_each(|&x| self.typeck(x));
-	hir.pkg_insts.iter().for_each(|&x| self.typeck(x));
-	hir.pkg_bodies.iter().for_each(|&x| self.typeck(x));
-	hir.ctxs.iter().for_each(|&x| self.typeck(x));
-	hir.entities.iter().for_each(|&x| self.typeck(x));
-	hir.archs.iter().for_each(|&x| self.typeck(x));
-	hir.cfgs.iter().for_each(|&x| self.typeck(x));
+	self.typeck_slice(&hir.pkg_decls);
+	self.typeck_slice(&hir.pkg_insts);
+	self.typeck_slice(&hir.pkg_bodies);
+	self.typeck_slice(&hir.ctxs);
+	self.typeck_slice(&hir.entities);
+	self.typeck_slice(&hir.archs);
+	self.typeck_slice(&hir.cfgs);
 	Ok(())
 });
 
 impl_typeck_err!(self, id: PkgDeclRef => {
 	let hir = self.ctx.hir(id)?;
-	hir.generics.iter().for_each(|&x| self.typeck(x));
-	hir.decls.iter().for_each(|&x| self.typeck(x));
+	self.typeck_slice(&hir.generics);
+	self.typeck_slice(&hir.decls);
 	Ok(())
 });
 
