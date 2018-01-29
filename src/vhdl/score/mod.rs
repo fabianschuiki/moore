@@ -772,6 +772,11 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
 			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
 			Ty::Access(_) => Ok(self.intern_const(Const::Null)),
+			Ty::Array(ref ty) => {
+				self.sess.emit(DiagBuilder2::bug(format!("default value for type `{}` not implemented", ty)));
+				// TODO: Use the correct default value.
+				Ok(self.intern_const(Const::Null))
+			}
 		}
 	}
 

@@ -67,6 +67,12 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			Ty::Access(ref ty) => {
 				llhd::pointer_ty(self.map_type(ty)?)
 			}
+			Ty::Array(ref ty) => {
+				// TODO: This we can only do once we know how many elements are
+				// in the array for each index.
+				self.sess.emit(DiagBuilder2::bug(format!("emitting bogus type for `{}`", ty)));
+				llhd::vector_ty(0, self.map_type(&ty.element)?)
+			}
 			// Unbounded integers cannot be mapped to LLHD. All cases where
 			// such an int can leak through to codegen should actually be caught
 			// beforehand in the type check.

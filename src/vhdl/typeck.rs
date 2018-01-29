@@ -538,29 +538,6 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 	match data.value {
 		hir::TypeData::Range(dir, lb_id, rb_id) => {
 			self.make_range_ty(dir, lb_id, rb_id, data.span)
-			// let lb = self.const_value(lb_id)?;
-			// let rb = self.const_value(rb_id)?;
-			// Ok(match (lb, rb) {
-			// 	(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-			// 		self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
-			// 	}
-
-			// 	(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
-			// 		self.sess.emit(
-			// 			DiagBuilder2::error("Float range bounds not yet supported")
-			// 			.span(data.span)
-			// 		);
-			// 		return Err(());
-			// 	}
-
-			// 	_ => {
-			// 		self.sess.emit(
-			// 			DiagBuilder2::error("Bounds of range are not of the same type")
-			// 			.span(data.span)
-			// 		);
-			// 		return Err(());
-			// 	}
-			// })
 		}
 
 		hir::TypeData::Enum(..) => {
@@ -584,17 +561,24 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 					Err(()) => { had_fails = true; continue; }
 				};
 				indices.push(match hir.value {
-					hir::ArrayTypeIndex::Unbounded(tm) => ArrayIndex::Unbounded(Box::new(self.ty(tm)?.clone())),
-					hir::ArrayTypeIndex::Subtype(subty) => ArrayIndex::Constrained(Box::new(self.ty(subty)?.clone())),
-					hir::ArrayTypeIndex::Range(dir, lb_id, rb_id) => ArrayIndex::Constrained(Box::new(self.make_range_ty(dir, lb_id, rb_id, hir.span)?.clone())),
+					hir::ArrayTypeIndex::Unbounded(tm) => {
+						ArrayIndex::Unbounded(Box::new(self.ty(tm)?.clone()))
+					}
+					hir::ArrayTypeIndex::Subtype(subty) => {
+						ArrayIndex::Constrained(Box::new(self.ty(subty)?.clone()))
+					}
+					hir::ArrayTypeIndex::Range(dir, lb_id, rb_id) => {
+						ArrayIndex::Constrained(Box::new(
+							self.make_range_ty(dir, lb_id, rb_id, hir.span)?.clone()
+						))
+					}
 				});
 			}
 			if had_fails {
 				return Err(());
 			}
-			println!("array type indices mapped to {:#?}", indices);
 			let elem_ty = self.ty(elem_ty)?.clone();
-			unimp!(self, id);
+			Ok(self.intern_ty(ArrayTy::new(indices, Box::new(elem_ty))))
 		}
 	}
 });

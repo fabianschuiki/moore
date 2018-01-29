@@ -30,6 +30,8 @@ pub enum Ty {
 	Enum(EnumTy),
 	/// An access type.
 	Access(Box<Ty>),
+	/// An array type.
+	Array(ArrayTy),
 }
 
 impl Ty {
@@ -43,6 +45,7 @@ impl Ty {
 			Ty::Int(_) | Ty::UnboundedInt => "integer type",
 			Ty::Enum(_) => "enumeration type",
 			Ty::Access(_) => "access type",
+			Ty::Array(_) => "array type",
 		}
 	}
 }
@@ -56,6 +59,26 @@ impl From<IntTy> for Ty {
 impl From<EnumTy> for Ty {
 	fn from(t: EnumTy) -> Ty {
 		Ty::Enum(t)
+	}
+}
+
+impl From<ArrayTy> for Ty {
+	fn from(t: ArrayTy) -> Ty {
+		Ty::Array(t)
+	}
+}
+
+impl fmt::Display for Ty {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			Ty::Named(span, _) => write!(f, "{}", span.extract()),
+			Ty::Null => write!(f, "null"),
+			Ty::Int(ref ty) => write!(f, "{}", ty),
+			Ty::UnboundedInt => write!(f, "{{integer}}"),
+			Ty::Enum(ref ty) => write!(f, "{}", ty),
+			Ty::Access(ref ty) => write!(f, "access {}", ty),
+			Ty::Array(ref ty) => write!(f, "{}", ty),
+		}
 	}
 }
 
@@ -113,16 +136,96 @@ impl EnumTy {
 	}
 }
 
+impl fmt::Display for EnumTy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		// TODO: It should be possible somehow to print better information here.
+		//       Maybe if we make `Ty` aware of its own internalization we could
+		//       assign additional user-facing metadata, e.g. a variant list.
+		write!(f, "enum")
+	}
+}
+
 
 /// An array type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrayTy {
+	/// The index types of the array, at least one.
 	pub indices: Vec<ArrayIndex>,
+	/// The type of the array element.
 	pub element: Box<Ty>,
 }
 
+impl ArrayTy {
+	/// Create a new array type.
+	pub fn new(indices: Vec<ArrayIndex>, element: Box<Ty>) -> ArrayTy {
+		assert!(indices.len() > 0);
+		ArrayTy {
+			indices: indices,
+			element: element,
+		}
+	}
+}
+
+impl fmt::Display for ArrayTy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "array ({}) of {}",
+			DisplayList(self.indices.iter(), Some(&","), None),
+			self.element
+		)
+	}
+}
+
+/// An index type of an array type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArrayIndex {
+	/// An unbounded index of the form `<type_mark> range <>`.
 	Unbounded(Box<Ty>),
+	/// A constrained index of the form `range ...`.
 	Constrained(Box<Ty>),
+}
+
+impl fmt::Display for ArrayIndex {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			ArrayIndex::Unbounded(ref ty) => write!(f, "{} range <>", ty),
+			ArrayIndex::Constrained(ref ty) => write!(f, "{}", ty),
+		}
+	}
+}
+
+pub struct DisplayList<'a, T> (T, Option<&'a fmt::Display>, Option<&'a fmt::Display>);
+
+impl<'a, T, I> fmt::Display for DisplayList<'a, T>
+	where T: Iterator<Item=I> + Clone, I: fmt::Display
+{
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let mut iter = self.0.clone();
+		match iter.next() {
+			Some(x) => write!(f, "{}", x)?,
+			None => return Ok(()),
+		}
+		let mut last = match iter.next() {
+			Some(x) => x,
+			None => return Ok(()),
+		};
+		let mut had_separator = false;
+		while let Some(x) = iter.next() {
+			if let Some(sep) = self.1 {
+				write!(f, "{}", sep)?;
+			}
+			write!(f, " {}", last)?;
+			last = x;
+			had_separator = true;
+		}
+		if had_separator {
+			if let Some(sep) = self.1 {
+				write!(f, "{}", sep)?;
+			}
+		}
+		if let Some(con) = self.2 {
+			write!(f, " {}", con)?;
+		}
+		write!(f, " {}", last)?;
+		Ok(())
+	}
 }
