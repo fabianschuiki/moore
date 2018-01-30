@@ -1234,8 +1234,16 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Term {
+	/// A term of the form `null`.
+	Null,
+	/// A term of the form `open`.
+	Open,
+	/// A term of the form `others`.
+	Others,
+	/// A term of the form `default`.
+	Default,
 	/// An integer literal.
 	IntLit(BigInt),
 	/// A term that refers to a definition.
@@ -1261,6 +1269,10 @@ pub enum Term {
 	PrefixParen(Subterm, Subterm),
 	/// A term of the form `T (T)`.
 	SuffixParen(Subterm, Subterm),
+	/// A term of the form `(T,T,…)`.
+	Paren(Vec<Spanned<Term>>),
+	/// A term of the form `(T|T|… => T, T|T|… => T, …)`.
+	Aggregate(Vec<(Vec<Spanned<Term>>, Spanned<Term>)>),
 }
 
 pub type Subterm = Box<Spanned<Term>>;
@@ -1359,6 +1371,10 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 			ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => {
 				Term::Range(d, self.termify_expr(lb)?.into(), self.termify_expr(rb)?.into())
 			}
+			ast::NullExpr => Term::Null,
+			ast::OpenExpr => Term::Open,
+			ast::OthersExpr => Term::Others,
+			ast::DefaultExpr => Term::Default,
 			ref wrong => {
 				self.emit(
 					DiagBuilder2::bug(format!("termification of expression `{}` not implemented", ast.span.extract()))
@@ -1492,7 +1508,6 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// handle the term as they see fit, usually inspecting what exact kind the
 	/// term is of.
 	pub fn termify_name(&self, name: Spanned<ResolvableName>) -> Result<Spanned<Term>> {
-		println!("termify_name {:?}", name);
 		// First resolve the name to a list of definitions.
 		// FIXME: For now we pass `true` as the last parameter, indicating that
 		// we're only interested in matching definitions. This is an ugly hack
@@ -1537,11 +1552,20 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 
 	/// Map multiple parenthesis elements to a term.
 	pub fn termify_paren_elems(&self, elems: &'ast ast::ParenElems) -> Result<Spanned<Term>> {
-		self.emit(
-			DiagBuilder2::bug(format!("termification of parentheses `{}` not implemented", elems.span.extract()))
-			.span(elems.span)
-		);
-		Err(())
+		let is_aggregate = elems.value.iter().any(|e| !e.choices.is_empty());
+		let term = if is_aggregate {
+			Term::Aggregate(elems.value.iter().map(|e| Ok((
+				e.choices.iter().map(|c| self.termify_expr(c)).collect::<Result<Vec<_>>>()?,
+				self.termify_expr(&e.expr)?
+			))).collect::<Result<Vec<_>>>()?)
+		} else {
+			Term::Paren(elems.value
+				.iter()
+				.map(|e| self.termify_expr(&e.expr))
+				.collect::<Result<Vec<_>>>()?
+			)
+		};
+		Ok(self.fold(Spanned::new(term, elems.span)))
 	}
 
 	/// Map a term to an expression.
@@ -1627,6 +1651,31 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	pub fn term_to_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::Constraint>> {
 		Ok(Spanned::new(match term.value {
 			Term::Range(dir, lb, rb) => hir::Constraint::Range2(dir, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
+			Term::Paren(ref terms) => {
+				if terms.is_empty() {
+					self.emit(
+						DiagBuilder2::error(format!("array or record constraint cannot be empty"))
+						.span(term.span)
+					);
+					return Err(());
+				}
+				let indices = if terms.len() == 1 && terms[0].value == Term::Open {
+					vec![]
+				} else {
+					terms.iter().map(|e| Ok(match e.value {
+						Term::SubtypeInd(..) => (),
+						Term::Range(dir, ref lb, ref rb) => (),
+						_ => {
+							self.emit(
+								DiagBuilder2::error(format!("`{}` is not a valid index constraint", e.span.extract()))
+								.span(e.span)
+							);
+							return Err(());
+						}
+					})).collect::<Result<Vec<_>>>()?
+				};
+				unimp_msg!(self, "array or record constraint", term.span);
+			}
 			_ => {
 				self.emit(
 					DiagBuilder2::error(format!("`{}` is not a valid constraint", term.span.extract()))

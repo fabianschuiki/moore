@@ -16,6 +16,9 @@ package pkg is
 	type E is array (NATURAL range <>) of INTEGER;
 	--type T0 is array (1 to 10) of E (1 to 0);
 	--type T1 is array (10 to 1) of E (0 to 1);
+	--type T2 is array (1 to 10) of E (0 to 1) range 0 to 10;
+	--type T3 is array (1 to 10) of E (open);
+	--type T4 is array (1 to 10) of E (open) range 0 to 32;
 end;
 
 library work;
@@ -23,7 +26,7 @@ use work.pkg.all;
 entity foo is end;
 
 architecture bar of foo is
-	signal a: DATA_IN;
+	--signal a: DATA_IN;
 	--signal b: MEMORY (0 to 255);
 	--signal c: SIGNED_FXPT (3 downto -4);
 	--signal d: SIGNED_FXPT_VECTOR (1 to 20)(9 downto 0);
