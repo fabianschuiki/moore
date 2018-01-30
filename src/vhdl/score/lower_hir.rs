@@ -1099,8 +1099,14 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 				hir::TypeData::Array(indices, elem_subty)
 			}
 
+			ast::FileType(ref name) => {
+				let ctx = TermContext::new(self, scope_id);
+				let term = ctx.termify_compound_name(name)?;
+				let tm = ctx.term_to_type_mark(term)?;
+				hir::TypeData::File(tm.value)
+			}
+
 			ast::RecordType(..) => unimp_msg!(self, "record types", ast.span),
-			ast::FileType(..) => unimp_msg!(self, "file types", ast.span),
 			ast::ProtectedType(..) => unimp_msg!(self, "protected types", ast.span),
 		}, spanned_data.span))
 	} else {

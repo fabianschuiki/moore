@@ -224,6 +224,8 @@ pub enum TypeData {
 	Access(SubtypeIndRef),
 	/// An array type.
 	Array(Vec<ArrayTypeIndexRef>, SubtypeIndRef),
+	/// A file type.
+	File(TypeMarkRef),
 }
 
 /// An enumeration literal as listed in a type declaration.

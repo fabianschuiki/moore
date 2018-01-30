@@ -32,6 +32,8 @@ pub enum Ty {
 	Access(Box<Ty>),
 	/// An array type.
 	Array(ArrayTy),
+	/// A file type.
+	File(Box<Ty>),
 }
 
 impl Ty {
@@ -46,6 +48,7 @@ impl Ty {
 			Ty::Enum(_) => "enumeration type",
 			Ty::Access(_) => "access type",
 			Ty::Array(_) => "array type",
+			Ty::File(..) => "file type",
 		}
 	}
 }
@@ -78,6 +81,7 @@ impl fmt::Display for Ty {
 			Ty::Enum(ref ty) => write!(f, "{}", ty),
 			Ty::Access(ref ty) => write!(f, "access {}", ty),
 			Ty::Array(ref ty) => write!(f, "{}", ty),
+			Ty::File(ref ty) => write!(f, "file of {}", ty),
 		}
 	}
 }

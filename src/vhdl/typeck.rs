@@ -678,6 +678,11 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			let elem_ty = self.ty(elem_ty)?.clone();
 			Ok(self.intern_ty(ArrayTy::new(indices, Box::new(elem_ty))))
 		}
+
+		hir::TypeData::File(tm) => {
+			let inner = self.ty(tm)?.clone();
+			Ok(self.intern_ty(Ty::File(Box::new(inner))))
+		}
 	}
 });
 
