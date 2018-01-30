@@ -5,7 +5,19 @@
 use source::Span;
 use std::fmt;
 
+/// Print debug information. Omitted in release builds.
+#[macro_export]
+#[cfg(debug_assertions)]
+macro_rules! debugln {
+    ($($arg:tt)*) => { eprintln!("\x1B[34;1mdebug:\x1B[m {}", format!($($arg)*)); }
+}
 
+/// Print debug information. Omitted in release builds.
+#[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! debugln {
+    ($($arg:tt)*) => {}
+}
 
 /// A handler deals with errors.
 #[derive(Debug)]
