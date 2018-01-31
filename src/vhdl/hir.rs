@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use moore_common::source::*;
 use moore_common::name::*;
+use moore_common::util::HasSpan;
 use score::*;
 use typed_arena::Arena;
 use syntax::ast;
@@ -158,13 +159,27 @@ pub enum Constraint {
 	Record(RecordConstraint),
 }
 
-
+/// An element constraint.
+///
+/// See IEEE 1076-2008 section 6.3.
+///
+/// ```ignore
+/// element_constraint := array_constraint | record_constraint
+/// ```
 #[derive(Debug)]
 pub enum ElementConstraint {
 	Array(ArrayConstraint),
 	Record(RecordConstraint),
 }
 
+impl HasSpan for ElementConstraint {
+	fn span(&self) -> Span {
+		match *self {
+			ElementConstraint::Array(ref n) => n.span(),
+			ElementConstraint::Record(ref n) => n.span(),
+		}
+	}
+}
 
 /// An array constraint.
 ///
@@ -179,12 +194,17 @@ pub enum ElementConstraint {
 pub struct ArrayConstraint {
 	/// The span this constraint covers.
 	pub span: Span,
-	/// The index constraint. `None` corresponds to the `open` constraint. Each
-	/// element in the vector refers to an expression that must evaluate to a
-	/// constant range or a subtype indication.
-	pub index: Option<Vec<ExprRef>>,
-	/// The optional constraint for the array elements.
-	pub elem: Option<Box<Spanned<ElementConstraint>>>,
+	/// The index constraint. An empty vector corresponds to the `open`
+	/// constraint.
+	pub index: Vec<DiscreteRange>,
+	/// The optional element constraint.
+	pub elem: Option<Box<ElementConstraint>>,
+}
+
+impl HasSpan for ArrayConstraint {
+	fn span(&self) -> Span {
+		self.span
+	}
 }
 
 /// A discrete range.
@@ -223,6 +243,12 @@ pub struct RecordConstraint {
 	pub span: Span,
 	/// Constraints for individual elements.
 	pub elems: HashMap<Name, Box<ElementConstraint>>,
+}
+
+impl HasSpan for RecordConstraint {
+	fn span(&self) -> Span {
+		self.span
+	}
 }
 
 
