@@ -166,7 +166,15 @@ pub enum ElementConstraint {
 }
 
 
-/// An array constraint as per IEEE 1076-2008 section 5.3.2.
+/// An array constraint.
+///
+/// See IEEE 1076-2008 section 5.3.2.
+///
+/// ```ignore
+/// array_constraint :=
+///     index_constraint [array.element_constraint] |
+///     "(" "open" ")" [array.element_constraint]
+/// ```
 #[derive(Debug)]
 pub struct ArrayConstraint {
 	/// The span this constraint covers.
@@ -177,6 +185,34 @@ pub struct ArrayConstraint {
 	pub index: Option<Vec<ExprRef>>,
 	/// The optional constraint for the array elements.
 	pub elem: Option<Box<Spanned<ElementConstraint>>>,
+}
+
+/// A discrete range.
+///
+/// See IEEE 1076-2008 section 5.3.2.1.
+///
+/// ```ignore
+/// discrete_range := discrete.subtype_indication | range
+/// ```
+#[derive(Debug)]
+pub enum DiscreteRange {
+	/// A discrete range specified by a discrete subtype.
+	Subtype(SubtypeIndRef),
+	/// A discrete range specified by a range.
+	Range(Range),
+}
+
+/// A range.
+///
+/// See IEEE 1076-2008 section 5.2.1.
+///
+/// ```ignore
+/// range := range.attribute_name | simple_expression direction simple_expression
+/// ```
+#[derive(Debug)]
+pub enum Range {
+	// Attr(AttrRef),
+	Immediate(Spanned<Dir>, ExprRef, ExprRef),
 }
 
 
