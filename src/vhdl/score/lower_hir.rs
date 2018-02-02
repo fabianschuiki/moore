@@ -54,7 +54,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn unpack_subtype_ind(&self, ast: &'ast ast::SubtypeInd, scope_id: ScopeRef) -> Result<SubtypeIndRef> {
 		let ctx = TermContext::new(self, scope_id);
 		let term = ctx.termify_subtype_ind(ast)?;
-		let id = ctx.term_to_subtype_ind(term)?;
+		let id = ctx.term_to_subtype_ind(term)?.value;
 		Ok(id)
 		// let id = SubtypeIndRef::new(NodeId::alloc());
 		// self.set_ast(id, (scope_id, ast));
@@ -1096,7 +1096,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 				let ctx = TermContext::new(self, scope_id);
 				let subty = ctx.termify_subtype_ind(elem_subty)?;
 				let elem_subty = ctx.term_to_subtype_ind(subty)?;
-				hir::TypeData::Array(indices, elem_subty)
+				hir::TypeData::Array(indices, elem_subty.value)
 			}
 
 			ast::FileType(ref name) => {
@@ -1201,11 +1201,14 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 	let (scope_id, ast) = self.ast(id);
 	let ctx = TermContext::new(self, scope_id);
 	let term = ctx.termify_expr(ast)?;
-	self.emit(
-		DiagBuilder2::note(format!("termified expr `{}`", ast.span.extract()))
-		.span(ast.span)
-		.add_note(format!("{:?}", term))
-	);
+	if self.sb.trace_termification {
+		self.emit(
+			DiagBuilder2::note(format!("termified expr `{}`", ast.span.extract()))
+			.span(ast.span)
+			.add_note(format!("{:?}", term))
+		);
+	}
+	let term = ctx.fold_term_as_type(term);
 	let index = match term.value {
 		Term::Range(dir, lb, rb) => {
 			let lb = ctx.term_to_expr(*lb)?;
@@ -1218,13 +1221,14 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 		}
 		Term::TypeMark(..) | Term::SubtypeInd(..) => {
 			let subty = ctx.term_to_subtype_ind(term)?;
-			hir::ArrayTypeIndex::Subtype(subty)
+			hir::ArrayTypeIndex::Subtype(subty.value)
 		}
 		_ => {
 			self.emit(
 				DiagBuilder2::error(format!("`{}` is not a valid array index", term.span.extract()))
 				.span(term.span)
 			);
+			debugln!("It is a {:#?}", term);
 			return Err(());
 		}
 	};
@@ -1313,18 +1317,6 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 			}
 			Term::Ident(Spanned{ value: Def::Subtype(id), span }) => {
 				Term::TypeMark(Spanned::new(id.into(), span))
-			}
-			Term::RangeSuffix(subterm, range) => {
-				match subterm.value {
-					Term::TypeMark(tm) => Term::SubtypeInd(tm, None, Some(range)),
-					_ => Term::RangeSuffix(subterm, range),
-				}
-			}
-			Term::SuffixParen(subterm, suffix) => {
-				match subterm.value {
-					Term::TypeMark(tm) => Term::SubtypeInd(tm, None, Some(suffix)),
-					_ => Term::SuffixParen(subterm, suffix),
-				}
 			}
 			other => other
 		};
@@ -1579,6 +1571,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 					DiagBuilder2::error(format!("`{}` is not a valid expression", term.span.extract()))
 					.span(term.span)
 				);
+				debugln!("It is a {:#?}", term);
 				return Err(());
 			}
 		};
@@ -1601,13 +1594,67 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 					DiagBuilder2::error(format!("`{}` is not a type or subtype", term.span.extract()))
 					.span(term.span)
 				);
+				debugln!("It is a {:#?}", term);
 				return Err(());
 			}
 		}
 	}
 
+	/// Perform term folding expecting to yield a type.
+	///
+	/// This is a pre-processing step on terms. It is applied as soon as it is
+	/// clear that a certain term should yield a type, e.g. when mapping to a
+	/// subtype indication. This function performs certain precedence swaps and
+	/// combines terms into higher level ones, e.g. `Term::SubtypeInd`.
+	fn fold_term_as_type(&self, term: Spanned<Term>) -> Spanned<Term> {
+		let (new, new_term) = match term.value {
+			Term::RangeSuffix(subterm, range) => {
+				let subterm = self.fold_term_as_type(*subterm);
+				let range = self.fold_term_as_type(*range);
+				match subterm.value {
+					// Fold `TypeMark range T` to `SubtypeInd`.
+					Term::TypeMark(tm) => (true, Term::SubtypeInd(tm, None, Some(Box::new(range)))),
+					// Fold `SubtypeInd range T` to `SubtypeInd`.
+					Term::SubtypeInd(tm, resol, Some(con)) => {
+						let sp = Span::union(con.span, range.span);
+						let new_con = Spanned::new(Term::RangeSuffix(con, Box::new(range)), sp);
+						(true, Term::SubtypeInd(tm, resol, Some(Box::new(new_con))))
+					}
+					_ => (false, Term::RangeSuffix(Box::new(subterm), Box::new(range))),
+				}
+			}
+			Term::SuffixParen(subterm, suffix) => {
+				let subterm = self.fold_term_as_type(*subterm);
+				let suffix = self.fold_term_as_type(*suffix);
+				match subterm.value {
+					// Fold `TypeMark (T)` to `SubtypeInd`.
+					Term::TypeMark(tm) => (true, Term::SubtypeInd(tm, None, Some(Box::new(suffix)))),
+					// Fold `SubtypeInd (T)` to `SubtypeInd`.
+					Term::SubtypeInd(tm, resol, Some(con)) => {
+						let sp = Span::union(con.span, suffix.span);
+						let new_con = Spanned::new(Term::SuffixParen(con, Box::new(suffix)), sp);
+						(true, Term::SubtypeInd(tm, resol, Some(Box::new(new_con))))
+					}
+					// Fold `SubtypeInd (T)` to `SubtypeInd`.
+					Term::SubtypeInd(tm, resol, None) => {
+						(true, Term::SubtypeInd(tm, resol, Some(Box::new(suffix))))
+					}
+					_ => (false, Term::SuffixParen(Box::new(subterm), Box::new(suffix))),
+				}
+			}
+			others => (false, others)
+		};
+		let new_term = Spanned::new(new_term, term.span);
+		if new {
+			self.fold_term_as_type(new_term)
+		} else {
+			new_term
+		}
+	}
+
 	/// Map a term to a subtype indication.
-	pub fn term_to_subtype_ind(&self, term: Spanned<Term>) -> Result<SubtypeIndRef> {
+	pub fn term_to_subtype_ind(&self, term: Spanned<Term>) -> Result<Spanned<SubtypeIndRef>> {
+		let term = self.fold_term_as_type(term);
 		let (tm, resol, con) = match term.value {
 			Term::SubtypeInd(tm, resol, con) => (tm, resol, con),
 			Term::TypeMark(tm) => (tm, None, None),
@@ -1616,6 +1663,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 					DiagBuilder2::error(format!("`{}` is not a subtype indication", term.span.extract()))
 					.span(term.span)
 				);
+				debugln!("It is a {:#?}", term);
 				return Err(());
 			}
 		};
@@ -1635,7 +1683,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 		};
 		let id = SubtypeIndRef::new(NodeId::alloc());
 		self.ctx.set_hir(id, self.ctx.sb.arenas.hir.subtype_ind.alloc(hir));
-		Ok(id)
+		Ok(Spanned::new(id, term.span))
 	}
 
 	/// Map a term to a resolution indication.
@@ -1649,9 +1697,23 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 
 	/// Map a term to a constraint.
 	pub fn term_to_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::Constraint>> {
+		// Handle range constraints.
+		match term.value {
+			Term::Range(dir, lb, rb) => return Ok(Spanned::new(
+				hir::Constraint::Range2(dir, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
+				term.span,
+			)),
+			_ => ()
+		};
+
+		// Unpack the optional element constraint on array constraints.
+		let (term, elem) = match term.value {
+			Term::RangeSuffix(subterm, con) | Term::SuffixParen(subterm, con) => (*subterm, Some(*con)),
+			_ => (term, None),
+		};
+
 		Ok(Spanned::new(match term.value {
-			Term::Range(dir, lb, rb) => hir::Constraint::Range2(dir, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
-			Term::Paren(ref terms) => {
+			Term::Paren(terms) => {
 				if terms.is_empty() {
 					self.emit(
 						DiagBuilder2::error(format!("array or record constraint cannot be empty"))
@@ -1662,19 +1724,18 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				let indices = if terms.len() == 1 && terms[0].value == Term::Open {
 					vec![]
 				} else {
-					terms.iter().map(|e| Ok(match e.value {
-						Term::SubtypeInd(..) => (),
-						Term::Range(dir, ref lb, ref rb) => (),
-						_ => {
-							self.emit(
-								DiagBuilder2::error(format!("`{}` is not a valid index constraint", e.span.extract()))
-								.span(e.span)
-							);
-							return Err(());
-						}
-					})).collect::<Result<Vec<_>>>()?
+					terms.into_iter().map(|e| self.term_to_discrete_range(e)).collect::<Result<Vec<_>>>()?
 				};
-				unimp_msg!(self, "array or record constraint", term.span);
+				let elem = match elem {
+					Some(e) => Some(self.term_to_element_constraint(e)?),
+					None => None,
+				};
+
+				hir::ArrayConstraint {
+					span: term.span,
+					index: indices,
+					elem: elem.map(|e| Box::new(e)),
+				}.into()
 			}
 			_ => {
 				self.emit(
@@ -1682,6 +1743,62 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 					.span(term.span)
 					.add_note("Did you mean a range constraint (`range ...`) or an array or record constraint (`(...)`)? See IEEE 1076-2008 section 6.3.")
 				);
+				debugln!("It is a {:#?}", term);
+				return Err(());
+			}
+		}, term.span))
+	}
+
+	/// Map a term to an element constraint.
+	pub fn term_to_element_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::ElementConstraint>> {
+		let con = self.term_to_constraint(term)?;
+		Ok(Spanned::new(match con.value {
+			hir::Constraint::Array(c) => c.into(),
+			hir::Constraint::Record(c) => c.into(),
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a valid element constraint", con.span.extract()))
+					.span(con.span)
+					.add_note("Did you mean an array or record constraint (`(...)`)? See IEEE 1076-2008 section 6.3.")
+				);
+				debugln!("It is a {:#?}", con);
+				return Err(());
+			}
+		}, con.span))
+	}
+
+	/// Map a term to a discrete range.
+	pub fn term_to_discrete_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::DiscreteRange>> {
+		let term = self.fold_term_as_type(term);
+		Ok(match term.value {
+			Term::SubtypeInd(..) => self.term_to_subtype_ind(term)?.map_into(),
+			Term::Range(..) => self.term_to_range(term)?.map_into(),
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a valid discrete range", term.span.extract()))
+					.span(term.span)
+				);
+				debugln!("It is a {:#?}", term);
+				return Err(());
+			}
+		})
+	}
+
+	/// Map a term to a range.
+	pub fn term_to_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::Range>> {
+		Ok(Spanned::new(match term.value {
+			// Term::Attr(..) => ...
+			Term::Range(dir, lb, rb) => hir::Range::Immediate(
+				dir,
+				self.term_to_expr(*lb)?,
+				self.term_to_expr(*rb)?
+			),
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a valid range", term.span.extract()))
+					.span(term.span)
+				);
+				debugln!("It is a {:#?}", term);
 				return Err(());
 			}
 		}, term.span))

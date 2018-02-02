@@ -94,6 +94,8 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	const_table: RefCell<HashMap<NodeId, &'ctx Const>>,
 	/// A table of type contexts for expressions.
 	tyctx_table: RefCell<HashMap<NodeId, TypeCtx<'ctx>>>,
+	/// Emit note for each AST node converted to a term.
+	trace_termification: bool,
 }
 
 
@@ -145,6 +147,7 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 			scope_table: RefCell::new(HashMap::new()),
 			const_table: RefCell::new(HashMap::new()),
 			tyctx_table: RefCell::new(HashMap::new()),
+			trace_termification: false,
 		}
 	}
 }

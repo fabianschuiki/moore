@@ -159,6 +159,18 @@ pub enum Constraint {
 	Record(RecordConstraint),
 }
 
+impl From<ArrayConstraint> for Constraint {
+	fn from(value: ArrayConstraint) -> Constraint {
+		Constraint::Array(value)
+	}
+}
+
+impl From<RecordConstraint> for Constraint {
+	fn from(value: RecordConstraint) -> Constraint {
+		Constraint::Record(value)
+	}
+}
+
 /// An element constraint.
 ///
 /// See IEEE 1076-2008 section 6.3.
@@ -181,6 +193,18 @@ impl HasSpan for ElementConstraint {
 	}
 }
 
+impl From<ArrayConstraint> for ElementConstraint {
+	fn from(value: ArrayConstraint) -> ElementConstraint {
+		ElementConstraint::Array(value)
+	}
+}
+
+impl From<RecordConstraint> for ElementConstraint {
+	fn from(value: RecordConstraint) -> ElementConstraint {
+		ElementConstraint::Record(value)
+	}
+}
+
 /// An array constraint.
 ///
 /// See IEEE 1076-2008 section 5.3.2.
@@ -196,9 +220,9 @@ pub struct ArrayConstraint {
 	pub span: Span,
 	/// The index constraint. An empty vector corresponds to the `open`
 	/// constraint.
-	pub index: Vec<DiscreteRange>,
+	pub index: Vec<Spanned<DiscreteRange>>,
 	/// The optional element constraint.
-	pub elem: Option<Box<ElementConstraint>>,
+	pub elem: Option<Box<Spanned<ElementConstraint>>>,
 }
 
 impl HasSpan for ArrayConstraint {
@@ -222,6 +246,18 @@ pub enum DiscreteRange {
 	Range(Range),
 }
 
+impl From<SubtypeIndRef> for DiscreteRange {
+	fn from(value: SubtypeIndRef) -> DiscreteRange {
+		DiscreteRange::Subtype(value)
+	}
+}
+
+impl From<Range> for DiscreteRange {
+	fn from(value: Range) -> DiscreteRange {
+		DiscreteRange::Range(value)
+	}
+}
+
 /// A range.
 ///
 /// See IEEE 1076-2008 section 5.2.1.
@@ -232,7 +268,7 @@ pub enum DiscreteRange {
 #[derive(Debug)]
 pub enum Range {
 	// Attr(AttrRef),
-	Immediate(Spanned<Dir>, ExprRef, ExprRef),
+	Immediate(Dir, ExprRef, ExprRef),
 }
 
 
