@@ -151,7 +151,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Apply an array constraint to a type.
-	pub fn apply_array_constraint(&self, ty: &Ty, con: Spanned<&hir::ArrayConstraint>) -> Result<&'ctx Ty> {
+	pub fn apply_array_constraint(&self, ty: &'ctx Ty, con: Spanned<&hir::ArrayConstraint>) -> Result<&'ctx Ty> {
 		// Determine the inner type to which the constraint shall be applied.
 		let ty = self.ctx.deref_named_type(ty)?;
 		match *ty {
@@ -197,16 +197,60 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Apply a record constraint to a type.
-	pub fn apply_record_constraint(&self, _ty: &Ty, con: Spanned<&hir::RecordConstraint>) -> Result<&'ctx Ty> {
-		self.emit(
-			DiagBuilder2::error("Record constraints on subtypes not yet supported")
-			.span(con.span)
-		);
-		Err(())
+	pub fn apply_record_constraint(&self, ty: &'ctx Ty, con: Spanned<&hir::RecordConstraint>) -> Result<&'ctx Ty> {
+		use moore_common::name::Name;
+		// Determine the inner type to which the constraint shall be applied.
+		let ty = self.ctx.deref_named_type(ty)?;
+		match *ty {
+			Ty::Record(ref ty) => {
+				let mut fields: Vec<(Name, &Ty)> = ty.fields
+					.iter()
+					.map(|&(name, ref ty)| (name, ty.as_ref()))
+					.collect();
+				let mut had_fails = false;
+				for &(name, ref con) in &con.value.elems {
+					// Find the field that we're supposed to constrain.
+					let idx = match ty.lookup.get(&name.value) {
+						Some(&idx) => idx,
+						None => {
+							self.emit(
+								DiagBuilder2::error(format!("record has no element `{}`", name.value))
+								.span(name.span)
+								.add_note(format!("{}", ty))
+							);
+							had_fails = true;
+							continue;
+						}
+					};
+
+					// Constrain the field.
+					fields[idx].1 = match con.value {
+						hir::ElementConstraint::Array(ref ac) => {
+							self.apply_array_constraint(&fields[idx].1, Spanned::new(ac, con.span))?
+						}
+						hir::ElementConstraint::Record(ref rc) => {
+							self.apply_record_constraint(&fields[idx].1, Spanned::new(rc, con.span))?
+						}
+					};
+				}
+				if had_fails {
+					return Err(());
+				}
+				let fields = fields.into_iter().map(|(name, ty)| (name, Box::new(ty.clone()))).collect();
+				Ok(self.ctx.intern_ty(RecordTy::new(fields)))
+			}
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("array constraint `{}` does not apply to {}", con.span.extract(), ty.kind_desc()))
+					.span(con.span)
+				);
+				return Err(());
+			}
+		}
 	}
 
 	/// Apply an index constraint to an array index.
-	pub fn apply_index_constraint(&self, index: &ArrayIndex, con: Spanned<&hir::DiscreteRange>) -> Result<ArrayIndex> {
+	pub fn apply_index_constraint(&self, index: &'ctx ArrayIndex, con: Spanned<&hir::DiscreteRange>) -> Result<ArrayIndex> {
 		// Convert the discrete range applied as constraint into a type.
 		let con_ty = Spanned::new(self.ctx.deref_named_type(self.type_from_discrete_range(con)?)?, con.span);
 
@@ -221,14 +265,15 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Impose a subtype on a type.
-	pub fn apply_subtype(&self, ty: &Ty, subty: Spanned<&Ty>) -> Result<&'ctx Ty> {
+	pub fn apply_subtype(&self, orig_ty: &'ctx Ty, subty: Spanned<&Ty>) -> Result<&'ctx Ty> {
+		let deref = self.ctx.deref_named_type(orig_ty)?;
 		let span = subty.span;
-		match (ty, subty.value) {
+		match (deref, self.ctx.deref_named_type(subty.value)?) {
 			(&Ty::Int(ref ty), &Ty::Int(ref subty)) => {
 				use std::cmp::{max, min};
 				if ty.dir != subty.dir {
 					self.emit(
-						DiagBuilder2::error(format!("direction of `{}` and `{}` disagrees", ty, subty))
+						DiagBuilder2::error(format!("directions disagree; `{}` and `{}`", subty, ty))
 						.span(span)
 					);
 					return Err(());
@@ -251,11 +296,16 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 					Dir::To => (lo, hi),
 					Dir::Downto => (hi, lo),
 				};
-				Ok(self.ctx.intern_ty(IntTy::new(ty.dir, lb.clone(), rb.clone())))
+				let new_ty: Ty = IntTy::new(ty.dir, lb.clone(), rb.clone()).into();
+				if &new_ty == deref {
+					Ok(orig_ty)
+				} else {
+					Ok(self.ctx.intern_ty(new_ty))
+				}
 			}
 			_ => {
 				self.emit(
-					DiagBuilder2::error(format!("`{}` is not a subtype of `{}`", subty.span.extract(), ty))
+					DiagBuilder2::error(format!("`{}` is not a subtype of `{}`", subty.span.extract(), orig_ty))
 					.span(span)
 				);
 				return Err(());

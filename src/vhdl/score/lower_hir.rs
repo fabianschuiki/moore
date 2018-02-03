@@ -482,6 +482,55 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		self.set_hir(id, self.sb.arenas.hir.subtype_ind.alloc(hir));
 		id
 	}
+
+	/// Lower an AST unary operator to a HIR unary operator.
+	///
+	/// Emits an error if the operator is not a valid unary operator.
+	pub fn lower_unary_op(&self, ast: Spanned<ast::UnaryOp>) -> Result<Spanned<hir::UnaryOp>> {
+		let op = match ast.value {
+			ast::UnaryOp::Not => hir::UnaryOp::Not,
+			ast::UnaryOp::Abs => hir::UnaryOp::Abs,
+			ast::UnaryOp::Sign(ast::Sign::Pos) => hir::UnaryOp::Pos,
+			ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
+			ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
+			_ => {
+				self.emit(
+					DiagBuilder2::error("invalid unary operator")
+					.span(ast.span)
+				);
+				return Err(());
+			}
+		};
+		Ok(Spanned::new(op, ast.span))
+	}
+
+	/// Lower an AST binary operator to a HIR binary operator.
+	///
+	/// Emits an error if the operator is not a valid binary operator.
+	pub fn lower_binary_op(&self, ast: Spanned<ast::BinaryOp>) -> Result<Spanned<hir::BinaryOp>> {
+		let op = match ast.value {
+			ast::BinaryOp::Logical(op) => hir::BinaryOp::Logical(op),
+			ast::BinaryOp::Rel(op) => hir::BinaryOp::Rel(op),
+			ast::BinaryOp::Match(op) => hir::BinaryOp::Match(op),
+			ast::BinaryOp::Shift(op) => hir::BinaryOp::Shift(op),
+			ast::BinaryOp::Add => hir::BinaryOp::Add,
+			ast::BinaryOp::Sub => hir::BinaryOp::Sub,
+			ast::BinaryOp::Concat => hir::BinaryOp::Concat,
+			ast::BinaryOp::Mul => hir::BinaryOp::Mul,
+			ast::BinaryOp::Div => hir::BinaryOp::Div,
+			ast::BinaryOp::Mod => hir::BinaryOp::Mod,
+			ast::BinaryOp::Rem => hir::BinaryOp::Rem,
+			ast::BinaryOp::Pow => hir::BinaryOp::Pow,
+			_ => {
+				self.emit(
+					DiagBuilder2::error("invalid binary operator")
+					.span(ast.span)
+				);
+				return Err(());
+			}
+		};
+		Ok(Spanned::new(op, ast.span))
+	}
 }
 
 
@@ -736,20 +785,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 
 		// Unary operators.
 		ast::UnaryExpr(op, ref arg) => {
-			let op = match op {
-				ast::UnaryOp::Not => hir::UnaryOp::Not,
-				ast::UnaryOp::Abs => hir::UnaryOp::Abs,
-				ast::UnaryOp::Sign(ast::Sign::Pos) => hir::UnaryOp::Pos,
-				ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
-				ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
-				_ => {
-					self.emit(
-						DiagBuilder2::error("invalid unary operator")
-						.span(ast.span)
-					);
-					return Err(());
-				}
-			};
+			let op = self.lower_unary_op(Spanned::new(op, ast.span))?;
 			let subid = ExprRef(NodeId::alloc());
 			self.set_ast(subid, (scope_id, arg.as_ref()));
 			hir::ExprData::Unary(op, subid)
@@ -1147,7 +1183,7 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 			.add_note(format!("{:?}", term))
 		);
 	}
-	let term = ctx.fold_term_as_type(term);
+	let term = ctx.fold_term_as_type(term)?;
 	let index = match term.value {
 		Term::Range(dir, lb, rb) => {
 			let lb = ctx.term_to_expr(*lb)?;
@@ -1196,6 +1232,8 @@ pub enum Term {
 	Default,
 	/// An integer literal.
 	IntLit(BigInt),
+	/// An unresolved name.
+	Unresolved(ResolvableName),
 	/// A term that refers to a definition.
 	Ident(Spanned<Def>),
 	/// A term that refers to a type or subtype definition.
@@ -1223,6 +1261,10 @@ pub enum Term {
 	Paren(Vec<Spanned<Term>>),
 	/// A term of the form `(T|T|… => T, T|T|… => T, …)`.
 	Aggregate(Vec<(Vec<Spanned<Term>>, Spanned<Term>)>),
+	/// A term of the form `op T`.
+	Unary(Spanned<hir::UnaryOp>, Subterm),
+	/// A term of the form `T op T`.
+	Binary(Spanned<hir::BinaryOp>, Subterm, Subterm),
 }
 
 pub type Subterm = Box<Spanned<Term>>;
@@ -1309,6 +1351,15 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 			ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => {
 				Term::Range(d, self.termify_expr(lb)?.into(), self.termify_expr(rb)?.into())
 			}
+			ast::UnaryExpr(op, ref arg) => Term::Unary(
+				self.ctx.lower_unary_op(Spanned::new(op, ast.span))?,
+				self.termify_expr(arg)?.into(),
+			),
+			ast::BinaryExpr(op, ref lhs, ref rhs) => Term::Binary(
+				self.ctx.lower_binary_op(Spanned::new(op, ast.span))?,
+				self.termify_expr(lhs)?.into(),
+				self.termify_expr(rhs)?.into(),
+			),
 			ast::NullExpr => Term::Null,
 			ast::OpenExpr => Term::Open,
 			ast::OthersExpr => Term::Others,
@@ -1447,8 +1498,10 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// term is of.
 	pub fn termify_name(&self, name: Spanned<ResolvableName>) -> Result<Spanned<Term>> {
 		// First resolve the name to a list of definitions.
-		let mut defs = self.ctx.resolve_name(name, self.scope, false)?;
-		assert!(!defs.is_empty());
+		let mut defs = self.ctx.resolve_name(name, self.scope, false, true)?;
+		if defs.is_empty() {
+			return Ok(name.map(Term::Unresolved));
+		}
 
 		fn is_enum(def: &Spanned<Def>) -> bool { match def.value { Def::Enum(..) => true, _ => false }}
 		let all_enum = defs.iter().all(is_enum);
@@ -1509,6 +1562,13 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 			Term::IntLit(value) => {
 				hir::ExprData::IntegerLiteral(ConstInt::new(None, value))
 			}
+			Term::Unary(op, arg) => {
+				hir::ExprData::Unary(op, self.term_to_expr(*arg)?)
+			}
+			// TODO: Enable this as soon as the HIR accepts BinaryOp.
+			// Term::Binary(op, lhs, rhs) => {
+			// 	hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
+			// }
 			_ => {
 				self.emit(
 					DiagBuilder2::error(format!("`{}` is not a valid expression", term.span.extract()))
@@ -1549,11 +1609,18 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// clear that a certain term should yield a type, e.g. when mapping to a
 	/// subtype indication. This function performs certain precedence swaps and
 	/// combines terms into higher level ones, e.g. `Term::SubtypeInd`.
-	fn fold_term_as_type(&self, term: Spanned<Term>) -> Spanned<Term> {
+	fn fold_term_as_type(&self, term: Spanned<Term>) -> Result<Spanned<Term>> {
 		let (new, new_term) = match term.value {
+			Term::Unresolved(name) => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is unknown", name))
+					.span(term.span)
+				);
+				return Err(());
+			}
 			Term::RangeSuffix(subterm, range) => {
-				let subterm = self.fold_term_as_type(*subterm);
-				let range = self.fold_term_as_type(*range);
+				let subterm = self.fold_term_as_type(*subterm)?;
+				let range = self.fold_term_as_type(*range)?;
 				match subterm.value {
 					// Fold `TypeMark range T` to `SubtypeInd`.
 					Term::TypeMark(tm) => (true, Term::SubtypeInd(tm, None, Some(Box::new(range)))),
@@ -1567,8 +1634,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				}
 			}
 			Term::SuffixParen(subterm, suffix) => {
-				let subterm = self.fold_term_as_type(*subterm);
-				let suffix = self.fold_term_as_type(*suffix);
+				let subterm = self.fold_term_as_type(*subterm)?;
+				let suffix = self.fold_term_as_type(*suffix)?;
 				match subterm.value {
 					// Fold `TypeMark (T)` to `SubtypeInd`.
 					Term::TypeMark(tm) => (true, Term::SubtypeInd(tm, None, Some(Box::new(suffix)))),
@@ -1591,13 +1658,13 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 		if new {
 			self.fold_term_as_type(new_term)
 		} else {
-			new_term
+			Ok(new_term)
 		}
 	}
 
 	/// Map a term to a subtype indication.
 	pub fn term_to_subtype_ind(&self, term: Spanned<Term>) -> Result<Spanned<hir::SubtypeInd>> {
-		let term = self.fold_term_as_type(term);
+		let term = self.fold_term_as_type(term)?;
 		let (tm, resol, con) = match term.value {
 			Term::SubtypeInd(tm, resol, con) => (tm, resol, con),
 			Term::TypeMark(tm) => (tm, None, None),
@@ -1652,30 +1719,18 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 			_ => (term, None),
 		};
 
-		Ok(Spanned::new(match term.value {
+		// Otherwise handle the array and record constraint cases.
+		match term.value {
 			Term::Paren(terms) => {
-				if terms.is_empty() {
-					self.emit(
-						DiagBuilder2::error(format!("array or record constraint cannot be empty"))
-						.span(term.span)
-					);
-					return Err(());
-				}
-				let indices = if terms.len() == 1 && terms[0].value == Term::Open {
-					vec![]
+				let any_records = terms.iter().any(|t| match t.value {
+					Term::SuffixParen(..) => true,
+					_ => false,
+				});
+				if any_records && elem.is_none() {
+					self.term_to_record_constraint(term.span, terms).map(|t| t.map_into())
 				} else {
-					terms.into_iter().map(|e| self.term_to_discrete_range(e)).collect::<Result<Vec<_>>>()?
-				};
-				let elem = match elem {
-					Some(e) => Some(self.term_to_element_constraint(e)?),
-					None => None,
-				};
-
-				hir::ArrayConstraint {
-					span: term.span,
-					index: indices,
-					elem: elem.map(|e| Box::new(e)),
-				}.into()
+					self.term_to_array_constraint(term.span, terms, elem).map(|t| t.map_into())
+				}
 			}
 			_ => {
 				self.emit(
@@ -1686,7 +1741,107 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				debugln!("It is a {:#?}", term);
 				return Err(());
 			}
-		}, term.span))
+		}
+	}
+
+	/// Map a term to an array constraint.
+	pub fn term_to_array_constraint(
+		&self,
+		span: Span,
+		terms: Vec<Spanned<Term>>,
+		elem: Option<Spanned<Term>>
+	) -> Result<Spanned<hir::ArrayConstraint>> {
+		if terms.is_empty() {
+			self.emit(
+				DiagBuilder2::error(format!("array constraint cannot be empty"))
+				.span(span)
+			);
+			return Err(());
+		}
+		let indices = if terms.len() == 1 && terms[0].value == Term::Open {
+			vec![]
+		} else {
+			terms.into_iter().map(|e| self.term_to_discrete_range(e)).collect::<Result<Vec<_>>>()?
+		};
+		let elem = match elem {
+			Some(e) => Some(self.term_to_element_constraint(e)?),
+			None => None,
+		};
+		Ok(Spanned::new(hir::ArrayConstraint {
+			span: span,
+			index: indices,
+			elem: elem.map(|e| Box::new(e)),
+		}, span))
+	}
+
+	/// Map a term to a record constraint.
+	pub fn term_to_record_constraint(
+		&self,
+		span: Span,
+		terms: Vec<Spanned<Term>>
+	) -> Result<Spanned<hir::RecordConstraint>> {
+		if terms.is_empty() {
+			self.emit(
+				DiagBuilder2::error(format!("record constraint cannot be empty"))
+				.span(span)
+			);
+			return Err(());
+		}
+		let mut fields = Vec::new();
+		let mut has_fails = false;
+		let mut used_names = HashMap::new();
+		for term in terms {
+			// Make sure that the term is of the form `field (constraint)`.
+			let (name, con) = match term.value {
+				Term::SuffixParen(name, con) => (name, *con),
+				_ => {
+					self.emit(
+						DiagBuilder2::error(format!("`{}` is not a valid constraint for a record element", term.span.extract()))
+						.span(term.span)
+						.add_note("Element constraints must be of the form `name (constraint)`. See IEEE 1076-2008 section 5.3.3.")
+					);
+					debugln!("It is a {:#?}", term.value);
+					has_fails = true;
+					continue;
+				}
+			};
+			let name = match name.value {
+				Term::Unresolved(ResolvableName::Ident(i)) => Spanned::new(i, name.span),
+				_ => {
+					self.emit(
+						DiagBuilder2::error(format!("`{}` is not a valid record element name", name.span.extract()))
+						.span(name.span)
+					);
+					debugln!("It is a {:#?}", name.value);
+					has_fails = true;
+					continue;
+				}
+			};
+
+			// Make sure a field is not constrained twice.
+			if let Some(&span) = used_names.get(&name.value) {
+				self.emit(
+					DiagBuilder2::error(format!("element `{}` has already been constrained", name.value))
+					.span(name.span)
+					.add_note("Previous constraint was here:")
+					.span(span)
+				);
+				has_fails = true;
+				continue;
+			} else {
+				used_names.insert(name.value, name.span);
+			}
+
+			// Parse the constraint.
+			fields.push((name, Box::new(self.term_to_element_constraint(con)?)));
+		}
+		if has_fails {
+			return Err(());
+		}
+		Ok(Spanned::new(hir::RecordConstraint {
+			span: span,
+			elems: fields,
+		}, span))
 	}
 
 	/// Map a term to an element constraint.
@@ -1709,7 +1864,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 
 	/// Map a term to a discrete range.
 	pub fn term_to_discrete_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::DiscreteRange>> {
-		let term = self.fold_term_as_type(term);
+		let term = self.fold_term_as_type(term)?;
 		Ok(match term.value {
 			Term::SubtypeInd(..) | Term::TypeMark(..) => self.term_to_subtype_ind(term)?.map(|i| self.ctx.intern_subtype_ind(i)).map_into(),
 			Term::Range(..) => self.term_to_range(term)?.map_into(),

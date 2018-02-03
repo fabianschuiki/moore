@@ -20,10 +20,16 @@ impl_make!(self, id: ExprRef => &Const {
 			let arg = self.const_value(arg_id)?;
 			// TODO: Lookup the type of the current expression and perform
 			// the operation accordingly.
-			match op {
+			match op.value {
 				hir::UnaryOp::Pos => arg,
 				hir::UnaryOp::Neg => self.intern_const(arg.clone().negate()),
-				_ => unimplemented!()
+				_ => {
+					self.emit(
+						DiagBuilder2::bug(format!("constant unary operator {:?} not yet implemented", op.value))
+						.span(op.span)
+					);
+					return Err(());
+				}
 			}
 		}
 

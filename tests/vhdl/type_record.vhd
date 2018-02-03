@@ -24,9 +24,9 @@ architecture bar of foo is
 	signal a0: DATE;
 
 	signal b0: SIGNED_FXPT_COMPLEX;
-	--signal b1: SIGNED_FXPT_COMPLEX (RE(4 downto -16), IM(4 downto -12));
-	--signal b2: SIGNED_FXPT_COMPLEX (RE(-16 downto 4), IM(4 downto -12));
-	--signal b3: SIGNED_FXPT_COMPLEX (RE(4 downto -16), IM(-12 downto 4));
+	signal b1: SIGNED_FXPT_COMPLEX (RE(4 to -16), IM(4 to -12));
+	signal b2: SIGNED_FXPT_COMPLEX (RE(-16 to 4), IM(4 to -12));
+	signal b3: SIGNED_FXPT_COMPLEX (RE(4 to -16), IM(-12 to 4));
 begin end;
 
 --@elab foo(bar)

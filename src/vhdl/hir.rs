@@ -2,7 +2,6 @@
 
 //! The High-level Intermediate Representation of a VHDL design.
 
-use std::collections::HashMap;
 use moore_common::source::*;
 use moore_common::name::*;
 use moore_common::util::HasSpan;
@@ -287,7 +286,7 @@ pub struct RecordConstraint {
 	/// The span this constraint covers.
 	pub span: Span,
 	/// Constraints for individual elements.
-	pub elems: HashMap<Name, Box<ElementConstraint>>,
+	pub elems: Vec<(Spanned<Name>, Box<Spanned<ElementConstraint>>)>,
 }
 
 impl HasSpan for RecordConstraint {
@@ -392,21 +391,60 @@ pub enum ExprData {
 	/// A float literal.
 	FloatLiteral(ConstFloat),
 	/// A unary operator expression.
-	Unary(UnaryOp, ExprRef),
+	Unary(Spanned<UnaryOp>, ExprRef),
 	/// A binary operator expression.
 	Binary(Operator, ExprRef, ExprRef),
 	// A range expression.
 	Range(Dir, ExprRef, ExprRef),
 }
 
-
-#[derive(Debug, Clone, Copy)]
+/// A unary operator.
+///
+/// See IEEE 1076-2008 section 9.2.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum UnaryOp {
+	/// The `not` operator.
 	Not,
+	/// The `abs` operator.
 	Abs,
+	/// The `+` sign operator.
 	Pos,
+	/// The `-` sign operator.
 	Neg,
+	/// A logical operator.
 	Logical(ast::LogicalOp),
+}
+
+/// A binary operator.
+///
+/// See IEEE 1076-2008 section 9.2.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum BinaryOp {
+	/// A logical operator.
+	Logical(ast::LogicalOp),
+	/// A relational operator.
+	Rel(ast::RelationalOp),
+	/// A matching relational operator. These are the relational operators
+	/// prefixed with a `?`.
+	Match(ast::RelationalOp),
+	/// A shift operator.
+	Shift(ast::ShiftOp),
+	/// The `+` operator.
+	Add,
+	/// The `-` operator.
+	Sub,
+	/// The `&` operator.
+	Concat,
+	/// The `*` operator.
+	Mul,
+	/// The `/` operator.
+	Div,
+	/// The `mod` operator.
+	Mod,
+	/// The `rem` operator.
+	Rem,
+	/// The `**` operator.
+	Pow,
 }
 
 

@@ -518,7 +518,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 	/// Resolve a name within a scope. Traverses to the parent scopes if nothing
 	/// matching the name is found.
-	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef, only_defs: bool) -> Result<Vec<Spanned<Def>>> {
+	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef, only_defs: bool, allow_fail: bool) -> Result<Vec<Spanned<Def>>> {
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
 		let mut found_defs = Vec::new();
 		let parent_id = if only_defs {
@@ -546,7 +546,9 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		// a diagnostic.
 		if found_defs.is_empty() {
 			if let Some(parent_id) = parent_id {
-				self.resolve_name(name, parent_id, only_defs)
+				self.resolve_name(name, parent_id, only_defs, allow_fail)
+			} else if allow_fail {
+				Ok(vec![])
 			} else {
 				self.emit(DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span));
 				Err(())
@@ -564,7 +566,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		// First resolve the primary name.
 		let mut seen_span = name.primary.span;
 		let mut res_name = self.resolvable_from_primary_name(&name.primary)?;
-		let mut defs = self.resolve_name(res_name, scope_id, only_defs)?;
+		let mut defs = self.resolve_name(res_name, scope_id, only_defs, false)?;
 
 		// Resolve as many name parts as possible.
 		for i in 0..name.parts.len() {
@@ -607,7 +609,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					// above.
 					seen_span.expand(pn.span);
 					res_name = self.resolvable_from_primary_name(pn)?;
-					defs = self.resolve_name(res_name, scope, true)?;
+					defs = self.resolve_name(res_name, scope, true, false)?;
 				}
 
 				// All other name parts we do not resolve and simply pass back
