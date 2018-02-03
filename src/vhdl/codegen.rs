@@ -7,9 +7,9 @@ use moore_common::errors::*;
 use score::*;
 use konst::*;
 use ty::*;
-use num::Signed;
 use hir;
 use llhd;
+use num::{Signed, Zero, ToPrimitive};
 
 /// Generates LLHD code.
 pub trait Codegen<I,C> {
@@ -68,10 +68,53 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				llhd::pointer_ty(self.map_type(ty)?)
 			}
 			Ty::Array(ref ty) => {
-				// TODO: This we can only do once we know how many elements are
-				// in the array for each index.
-				self.emit(DiagBuilder2::bug(format!("emitting bogus type for `{}`", ty)));
-				llhd::vector_ty(0, self.map_type(&ty.element)?)
+				let mut llty = self.map_type(&ty.element)?;
+				for index in ty.indices.iter().rev() {
+					match *index {
+						ArrayIndex::Unbounded(_) => {
+							self.emit(
+								DiagBuilder2::error(format!("type `{}` is unbounded", ty))
+								// TODO: What span should we use here?
+							);
+							return Err(());
+						}
+						ArrayIndex::Constrained(ref ty) => {
+							let num = match **ty {
+								Ty::Int(ref ty) => {
+									let l = ty.len();
+									if l.is_negative() || l.is_zero() {
+										return Ok(llhd::void_ty());
+									}
+									match l.to_usize() {
+										Some(l) => l,
+										None => {
+											self.emit(
+												DiagBuilder2::error(format!("array index `{}` is too large; {} elements", ty, l))
+												// TODO: What span should we use here?
+											);
+											return Err(());
+										}
+									}
+								}
+								Ty::Enum(ref ty) => {
+									match self.hir(ty.decl)?.data.as_ref().unwrap().value {
+										hir::TypeData::Enum(ref lits) => lits.len(),
+										_ => unreachable!()
+									}
+								}
+								_ => {
+									self.emit(
+										DiagBuilder2::error(format!("`{}` is an invalid array index type", ty))
+										// TODO: What span should we use here?
+									);
+									return Err(());
+								}
+							};
+							llty = llhd::vector_ty(num, llty);
+						}
+					}
+				}
+				llty
 			}
 			Ty::File(ref _ty) => {
 				llhd::int_ty(32)

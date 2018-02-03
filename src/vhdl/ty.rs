@@ -5,7 +5,7 @@
 use std::fmt;
 use std::collections::HashMap;
 
-use num::BigInt;
+use num::{BigInt, One};
 
 use score::*;
 use moore_common::source::Span;
@@ -129,6 +129,14 @@ impl IntTy {
 			_ => self.into(),
 		}
 	}
+
+	/// The length of the range.
+	pub fn len(&self) -> BigInt {
+		match self.dir {
+			Dir::To     => &self.left_bound + BigInt::one() - &self.right_bound,
+			Dir::Downto => &self.right_bound + BigInt::one() - &self.left_bound,
+		}
+	}
 }
 
 impl fmt::Display for IntTy {
@@ -142,6 +150,7 @@ impl fmt::Display for IntTy {
 /// here, we simply point at the type declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumTy {
+	/// The declaration of the enum.
 	pub decl: TypeDeclRef,
 }
 
