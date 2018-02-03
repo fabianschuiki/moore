@@ -701,7 +701,7 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 
 /// Determine the type of a subtype indication.
 impl_make!(self, id: SubtypeIndRef => &Ty {
-	let hir = self.existing_hir(id)?;
+	let hir = self.hir(id)?;
 	let ctx = TypeckContext::new(self);
 	let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
 	match hir.constraint {

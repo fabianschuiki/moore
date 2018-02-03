@@ -52,13 +52,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 	/// Unpack an AST subtype indication.
 	pub fn unpack_subtype_ind(&self, ast: &'ast ast::SubtypeInd, scope_id: ScopeRef) -> Result<SubtypeIndRef> {
-		let ctx = TermContext::new(self, scope_id);
-		let term = ctx.termify_subtype_ind(ast)?;
-		let id = ctx.term_to_subtype_ind(term)?.value;
-		Ok(id)
-		// let id = SubtypeIndRef::new(NodeId::alloc());
-		// self.set_ast(id, (scope_id, ast));
+		// let ctx = TermContext::new(self, scope_id);
+		// let term = ctx.termify_subtype_ind(ast)?;
+		// let id = ctx.term_to_subtype_ind(term)?.value;
 		// Ok(id)
+		let id = SubtypeIndRef::new(NodeId::alloc());
+		self.set_ast(id, (scope_id, ast));
+		Ok(id)
 	}
 
 	/// Unpack an AST signal declaration into individual HIR signal
@@ -70,8 +70,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		assert_eq!(ast.kind, ast::ObjKind::Signal);
 
 		// Unpack the subtype indication.
-		let ty = SubtypeIndRef::new(NodeId::alloc());
-		self.set_ast(ty, (scope_id, &ast.subtype));
+		let ty = self.unpack_subtype_ind(&ast.subtype, scope_id)?;
 
 		// Unpack the signal kind.
 		let kind = match ast.detail {
@@ -475,6 +474,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			}
 			&elem.expr
 		}).collect()
+	}
+
+	/// Internalize a subtype indication.
+	pub fn intern_subtype_ind(&self, hir: hir::SubtypeInd) -> SubtypeIndRef {
+		let id = SubtypeIndRef::new(NodeId::alloc());
+		self.set_hir(id, self.sb.arenas.hir.subtype_ind.alloc(hir));
+		id
 	}
 }
 
@@ -1021,7 +1027,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					.collect();
 				let ctx = TermContext::new(self, scope_id);
 				let subty = ctx.termify_subtype_ind(elem_subty)?;
-				let elem_subty = ctx.term_to_subtype_ind(subty)?;
+				let elem_subty = ctx.term_to_subtype_ind(subty)?.map(|i| self.intern_subtype_ind(i));
 				hir::TypeData::Array(indices, elem_subty.value)
 			}
 
@@ -1146,7 +1152,7 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 			hir::ArrayTypeIndex::Unbounded(tm)
 		}
 		Term::TypeMark(..) | Term::SubtypeInd(..) => {
-			let subty = ctx.term_to_subtype_ind(term)?;
+			let subty = ctx.term_to_subtype_ind(term)?.map(|i| self.intern_subtype_ind(i));
 			hir::ArrayTypeIndex::Subtype(subty.value)
 		}
 		_ => {
@@ -1159,6 +1165,13 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 		}
 	};
 	Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
+});
+
+impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
+	let (scope_id, ast) = self.ast(id);
+	let ctx = TermContext::new(self, scope_id);
+	let term = ctx.termify_subtype_ind(ast)?;
+	Ok(self.sb.arenas.hir.subtype_ind.alloc(ctx.term_to_subtype_ind(term)?.value))
 });
 
 impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
@@ -1427,10 +1440,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// term is of.
 	pub fn termify_name(&self, name: Spanned<ResolvableName>) -> Result<Spanned<Term>> {
 		// First resolve the name to a list of definitions.
-		// FIXME: For now we pass `true` as the last parameter, indicating that
-		// we're only interested in matching definitions. This is an ugly hack
-		// to get around some limitations of the current scoping system.
-		let mut defs = self.ctx.resolve_name(name, self.scope, true)?;
+		let mut defs = self.ctx.resolve_name(name, self.scope, false)?;
 		assert!(!defs.is_empty());
 
 		fn is_enum(def: &Spanned<Def>) -> bool { match def.value { Def::Enum(..) => true, _ => false }}
@@ -1579,7 +1589,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Map a term to a subtype indication.
-	pub fn term_to_subtype_ind(&self, term: Spanned<Term>) -> Result<Spanned<SubtypeIndRef>> {
+	pub fn term_to_subtype_ind(&self, term: Spanned<Term>) -> Result<Spanned<hir::SubtypeInd>> {
 		let term = self.fold_term_as_type(term);
 		let (tm, resol, con) = match term.value {
 			Term::SubtypeInd(tm, resol, con) => (tm, resol, con),
@@ -1601,15 +1611,15 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 			Some(x) => Some(self.term_to_constraint(*x)?),
 			None => None,
 		};
-		let hir = hir::SubtypeInd {
+		Ok(Spanned::new(hir::SubtypeInd {
 			span: term.span,
 			type_mark: tm,
 			// TODO: Track resolution indication.
 			constraint: con,
-		};
-		let id = SubtypeIndRef::new(NodeId::alloc());
-		self.ctx.set_hir(id, self.ctx.sb.arenas.hir.subtype_ind.alloc(hir));
-		Ok(Spanned::new(id, term.span))
+		}, term.span))
+		// let id = SubtypeIndRef::new(NodeId::alloc());
+		// self.ctx.set_hir(id, self.ctx.sb.arenas.hir.subtype_ind.alloc(hir));
+		// Ok(Spanned::new(id, term.span))
 	}
 
 	/// Map a term to a resolution indication.
@@ -1694,7 +1704,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	pub fn term_to_discrete_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::DiscreteRange>> {
 		let term = self.fold_term_as_type(term);
 		Ok(match term.value {
-			Term::SubtypeInd(..) | Term::TypeMark(..) => self.term_to_subtype_ind(term)?.map_into(),
+			Term::SubtypeInd(..) | Term::TypeMark(..) => self.term_to_subtype_ind(term)?.map(|i| self.ctx.intern_subtype_ind(i)).map_into(),
 			Term::Range(..) => self.term_to_range(term)?.map_into(),
 			_ => {
 				self.emit(

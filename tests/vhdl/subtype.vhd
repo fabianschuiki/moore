@@ -41,4 +41,4 @@ architecture bar of foo is
 	-- library.
 begin end;
 
--- @ elab foo(bar)
+-- @elab foo(bar)
