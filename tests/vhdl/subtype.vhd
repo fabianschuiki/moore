@@ -1,6 +1,7 @@
 package pkg is
 	type BIT is ('0', '1');
 	type range_type is range -100 to 100;
+	type range_type_2 is range -10 to 10;
 
 	-- Array subtyping
 	type unbounded_array_type is array (range_type range <>) of BIT;
@@ -13,8 +14,11 @@ package pkg is
 	--subtype array_subtype_3 is constrained_array_type_1 (0 to 2); -- should fail
 	subtype array_subtype_4 is constrained_array_type_2 (0 to 3);
 	--subtype array_subtype_5 is constrained_array_type_2 (0 to 12); -- should fail
-	subtype array_subtype_6 is constrained_array_type_3 (0 to 4, open);
-	subtype array_subtype_7 is array_subtype_6 (open, 0 to 1);
+	--subtype array_subtype_6 is constrained_array_type_3 (0 to 4, open); -- should fail
+	--subtype array_subtype_7 is constrained_array_type_3 (open, 0 to 1); -- should fail
+	subtype array_subtype_8 is constrained_array_type_3 (0 to 4, 0 to 1);
+	subtype array_subtype_9 is unbounded_array_type (range_type_2);
+	--subtype array_subtype_10 is constrained_array_type_3 (0 to 4); -- should fail
 
 	-- Record subtyping
 	--type record_type is record

@@ -1694,7 +1694,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	pub fn term_to_discrete_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::DiscreteRange>> {
 		let term = self.fold_term_as_type(term);
 		Ok(match term.value {
-			Term::SubtypeInd(..) => self.term_to_subtype_ind(term)?.map_into(),
+			Term::SubtypeInd(..) | Term::TypeMark(..) => self.term_to_subtype_ind(term)?.map_into(),
 			Term::Range(..) => self.term_to_range(term)?.map_into(),
 			_ => {
 				self.emit(

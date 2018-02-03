@@ -15,11 +15,11 @@ package pkg is
 
 	type E is array (NATURAL range <>) of INTEGER;
 	type F is array (NATURAL range <>) of MY_WORD;
-	--type T0 is array (1 to 10) of F (1 to 0);
-	--type T1 is array (10 to 1) of F (0 to 1);
-	--type T2 is array (1 to 10) of F (0 to 1) (4 to 8);
-	--type T3 is array (1 to 10) of F (open);
-	--type T4 is array (1 to 10) of F (open) (4 to 8);
+	type T0 is array (1 to 10) of F (1 to 0);
+	type T1 is array (10 to 1) of F (0 to 1);
+	type T2 is array (1 to 10) of F (0 to 1) (4 to 8);
+	type T3 is array (1 to 10) of F (open);
+	type T4 is array (1 to 10) of F (open) (4 to 8);
 end;
 
 library work;

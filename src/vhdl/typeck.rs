@@ -99,6 +99,198 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 			self.typeck(id);
 		}
 	}
+
+	/// Apply a range constraint to a type.
+	pub fn apply_range_constraint(&self, ty: &Ty, con: Spanned<&hir::Range>) -> Result<&'ctx Ty> {
+		// Determine the applied range.
+		let (dir, lb, rb) = match *con.value {
+			hir::Range::Immediate(dir, lb, rb) => (dir, lb, rb),
+		};
+		let lb = self.ctx.const_value(lb)?;
+		let rb = self.ctx.const_value(rb)?;
+
+		// Determine the inner type to which the constraint shall be applied.
+		let ty = self.ctx.deref_named_type(ty)?;
+		match *ty {
+			Ty::Int(ref ty) => {
+				// Make sure we have an integer range.
+				let (lb, rb) = match (lb, rb) {
+					(&Const::Int(ref lb), &Const::Int(ref rb)) => (lb, rb),
+					_ => {
+						self.emit(
+							DiagBuilder2::error(format!("non-integer range `{} {} {}` cannot constrain an integer type", lb, dir, rb))
+							.span(con.span)
+						);
+						return Err(());
+					}
+				};
+
+				// Make sure that this is actually a subtype.
+				if ty.dir != dir || ty.left_bound > lb.value || ty.right_bound < rb.value {
+					self.emit(
+						DiagBuilder2::error(format!("`{} {} {}` is not a subrange of `{}`", lb, dir, rb, ty))
+						.span(con.span)
+					);
+					return Err(());
+				}
+
+				// Create the new type.
+				Ok(self.ctx.intern_ty(IntTy::new(ty.dir, lb.value.clone(), rb.value.clone()).maybe_null()))
+			}
+
+			// All other types we simply cannot constrain by range.
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("{} cannot be constrained by range", ty.kind_desc()))
+					.span(con.span)
+				);
+				return Err(());
+			}
+		}
+	}
+
+	/// Apply an array constraint to a type.
+	pub fn apply_array_constraint(&self, ty: &Ty, con: Spanned<&hir::ArrayConstraint>) -> Result<&'ctx Ty> {
+		// Determine the inner type to which the constraint shall be applied.
+		let ty = self.ctx.deref_named_type(ty)?;
+		match *ty {
+			Ty::Array(ref ty) => {
+				let indices = if !con.value.index.is_empty() {
+					if con.value.index.len() != ty.indices.len() {
+						self.emit(
+							DiagBuilder2::error(format!("constrained {} indices, but array has {}", con.value.index.len(), ty.indices.len()))
+							.span(con.span)
+							.add_note(format!("`{}` constrained with `{}`", ty, con.span.extract()))
+						);
+						return Err(());
+					}
+					ty.indices.iter()
+						.zip(con.value.index.iter())
+						.map(|(ty, con)| self.apply_index_constraint(ty, con.as_ref()))
+						.collect::<Result<Vec<_>>>()?
+				} else {
+					ty.indices.clone()
+				};
+				let element = if let Some(ref elem_con) = con.value.elem {
+					match elem_con.value {
+						hir::ElementConstraint::Array(ref ac) => {
+							self.apply_array_constraint(&*ty.element, Spanned::new(ac, elem_con.span))?
+						}
+						hir::ElementConstraint::Record(ref rc) => {
+							self.apply_record_constraint(&*ty.element, Spanned::new(rc, elem_con.span))?
+						}
+					}
+				} else {
+					&*ty.element
+				};
+				Ok(self.ctx.intern_ty(ArrayTy::new(indices, Box::new(element.clone()))))
+			}
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("array constraint `{}` does not apply to {}", con.span.extract(), ty.kind_desc()))
+					.span(con.span)
+				);
+				return Err(());
+			}
+		}
+	}
+
+	/// Apply a record constraint to a type.
+	pub fn apply_record_constraint(&self, _ty: &Ty, con: Spanned<&hir::RecordConstraint>) -> Result<&'ctx Ty> {
+		self.emit(
+			DiagBuilder2::error("Record constraints on subtypes not yet supported")
+			.span(con.span)
+		);
+		Err(())
+	}
+
+	/// Apply an index constraint to an array index.
+	pub fn apply_index_constraint(&self, index: &ArrayIndex, con: Spanned<&hir::DiscreteRange>) -> Result<ArrayIndex> {
+		// Convert the discrete range applied as constraint into a type.
+		let con_ty = Spanned::new(self.ctx.deref_named_type(self.type_from_discrete_range(con)?)?, con.span);
+
+		// Impose the type as a subtype on the index.
+		let index_ty = match *index {
+			ArrayIndex::Unbounded(ref ty) | ArrayIndex::Constrained(ref ty) => {
+				self.apply_subtype(&*ty, con_ty)?
+			}
+		};
+
+		Ok(ArrayIndex::Constrained(Box::new(index_ty.clone())))
+	}
+
+	/// Impose a subtype on a type.
+	pub fn apply_subtype(&self, ty: &Ty, subty: Spanned<&Ty>) -> Result<&'ctx Ty> {
+		let span = subty.span;
+		match (ty, subty.value) {
+			(&Ty::Int(ref ty), &Ty::Int(ref subty)) => {
+				use std::cmp::{max, min};
+				if ty.dir != subty.dir {
+					self.emit(
+						DiagBuilder2::error(format!("direction of `{}` and `{}` disagrees", ty, subty))
+						.span(span)
+					);
+					return Err(());
+				}
+				let (ty_lo, ty_hi, subty_lo, subty_hi) = match ty.dir {
+					Dir::To => (&ty.left_bound, &ty.right_bound, &subty.left_bound, &subty.right_bound),
+					Dir::Downto => (&ty.right_bound, &ty.left_bound, &subty.right_bound, &subty.left_bound),
+				};
+				if ty_lo > subty_lo || ty_hi < subty_hi {
+					self.emit(
+						DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", subty, ty))
+						.span(span)
+						.add_note("The range of a subtype must be entirely contained within the range of the target type.")
+						// TODO: Add reference to standard.
+					);
+				}
+				let lo = max(ty_lo, subty_lo);
+				let hi = min(ty_hi, subty_hi);
+				let (lb, rb) = match ty.dir {
+					Dir::To => (lo, hi),
+					Dir::Downto => (hi, lo),
+				};
+				Ok(self.ctx.intern_ty(IntTy::new(ty.dir, lb.clone(), rb.clone())))
+			}
+			_ => {
+				self.emit(
+					DiagBuilder2::error(format!("`{}` is not a subtype of `{}`", subty.span.extract(), ty))
+					.span(span)
+				);
+				return Err(());
+			}
+		}
+	}
+
+	/// Evaluate a discrete range as a type.
+	pub fn type_from_discrete_range(&self, range: Spanned<&hir::DiscreteRange>) -> Result<&'ctx Ty> {
+		match *range.value {
+			hir::DiscreteRange::Subtype(id) => self.ctx.ty(id),
+			hir::DiscreteRange::Range(ref r) => self.type_from_range(Spanned::new(r, range.span)),
+		}
+	}
+
+	/// Evaluate a range as a type.
+	pub fn type_from_range(&self, range: Spanned<&hir::Range>) -> Result<&'ctx Ty> {
+		match *range.value {
+			hir::Range::Immediate(dir, lb, rb) => {
+				let lb = self.ctx.const_value(lb)?;
+				let rb = self.ctx.const_value(rb)?;
+				match (lb, rb) {
+					(&Const::Int(ref lb), &Const::Int(ref rb)) => {
+						Ok(self.ctx.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone())))
+					}
+					_ => {
+						self.emit(
+							DiagBuilder2::error(format!("`{} {} {}` is not a valid range", lb, dir, rb))
+							.span(range.span)
+						);
+						return Err(());
+					}
+				}
+			}
+		}
+	}
 }
 
 /// Performs a type check.
@@ -510,69 +702,18 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 /// Determine the type of a subtype indication.
 impl_make!(self, id: SubtypeIndRef => &Ty {
 	let hir = self.existing_hir(id)?;
+	let ctx = TypeckContext::new(self);
+	let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
 	match hir.constraint {
-		None => Ok(self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value))),
-
-		// For range constraints, we first have to check if the constraint is
-		// applicable given the type mark. If it is, check if the provided
-		// range actually is a proper subtype, and then apply the constraint.
-		Some(Spanned{ value: hir::Constraint::Range(hir::Range::Immediate(dir, lb, rb)), span }) => {
-			let lb = self.const_value(lb)?;
-			let rb = self.const_value(rb)?;
-			let inner = self.deref_named_type(self.ty(hir.type_mark.value)?)?;
-			match *inner {
-				Ty::Int(ref inner) => {
-					// Make sure we have an integer range.
-					let (lb, rb) = match (lb, rb) {
-						(&Const::Int(ref lb), &Const::Int(ref rb)) => (lb, rb),
-						_ => {
-							self.emit(
-								DiagBuilder2::error(format!("non-integer range `{} {} {}` cannot constrain an integer type", lb, dir, rb))
-								.span(span)
-							);
-							return Err(());
-						}
-					};
-
-					// Make sure that this is actually a subtype.
-					if inner.dir != dir || inner.left_bound > lb.value || inner.right_bound < rb.value {
-						self.emit(
-							DiagBuilder2::error(format!("`{} {} {}` is not a subrange of `{}`", lb, dir, rb, inner))
-							.span(span)
-						);
-						return Err(());
-					}
-
-					// Create the new type.
-					Ok(self.intern_ty(IntTy::new(inner.dir, lb.value.clone(), rb.value.clone()).maybe_null()))
-				}
-
-				// All other types we simply cannot constrain by range.
-				_ => {
-					self.emit(
-						DiagBuilder2::error(format!("{} cannot be constrained by range", inner.kind_desc()))
-						.span(span)
-					);
-					return Err(());
-				}
-			}
-
+		None => Ok(inner),
+		Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
+			ctx.apply_range_constraint(inner, Spanned::new(con, span))
 		}
-
 		Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
-			self.emit(
-				DiagBuilder2::error("Array constraints on subtypes not yet supported")
-				.span(ac.span)
-			);
-			Err(())
+			ctx.apply_array_constraint(inner, Spanned::new(ac, span))
 		}
-
 		Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
-			self.emit(
-				DiagBuilder2::error("Record constraints on subtypes not yet supported")
-				.span(rc.span)
-			);
-			Err(())
+			ctx.apply_record_constraint(inner, Spanned::new(rc, span))
 		}
 	}
 });

@@ -173,7 +173,7 @@ impl ArrayTy {
 impl fmt::Display for ArrayTy {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "array ({}) of {}",
-			DisplayList(self.indices.iter(), Some(&","), None),
+			DisplayList(self.indices.iter(), Some(&","), Some(&", "), Some(&", ")),
 			self.element
 		)
 	}
@@ -197,7 +197,7 @@ impl fmt::Display for ArrayIndex {
 	}
 }
 
-pub struct DisplayList<'a, T> (T, Option<&'a fmt::Display>, Option<&'a fmt::Display>);
+pub struct DisplayList<'a, T> (T, Option<&'a fmt::Display>, Option<&'a fmt::Display>, Option<&'a fmt::Display>);
 
 impl<'a, T, I> fmt::Display for DisplayList<'a, T>
 	where T: Iterator<Item=I> + Clone, I: fmt::Display
@@ -217,19 +217,20 @@ impl<'a, T, I> fmt::Display for DisplayList<'a, T>
 			if let Some(sep) = self.1 {
 				write!(f, "{}", sep)?;
 			}
-			write!(f, " {}", last)?;
+			write!(f, "{}", last)?;
 			last = x;
 			had_separator = true;
 		}
-		if had_separator {
-			if let Some(sep) = self.1 {
+		if !had_separator {
+			if let Some(sep) = self.2 {
 				write!(f, "{}", sep)?;
 			}
+		} else {
+			if let Some(con) = self.3 {
+				write!(f, "{}", con)?;
+			}
 		}
-		if let Some(con) = self.2 {
-			write!(f, " {}", con)?;
-		}
-		write!(f, " {}", last)?;
+		write!(f, "{}", last)?;
 		Ok(())
 	}
 }
