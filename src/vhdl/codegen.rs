@@ -73,7 +73,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				self.emit(DiagBuilder2::bug(format!("emitting bogus type for `{}`", ty)));
 				llhd::vector_ty(0, self.map_type(&ty.element)?)
 			}
-			Ty::File(ref ty) => {
+			Ty::File(ref _ty) => {
 				llhd::int_ty(32)
 			}
 			// Unbounded integers cannot be mapped to LLHD. All cases where

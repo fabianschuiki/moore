@@ -48,7 +48,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Type check the time expression in a delay mechanism.
-	pub fn typeck_delay_mechanism(&self, node: &'ctx hir::DelayMechanism) {
+	pub fn typeck_delay_mechanism(&self, _node: &'ctx hir::DelayMechanism) {
 		// TODO: implement this
 	}
 
@@ -64,7 +64,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 		if let Some(value) = node.value {
 			self.typeck_node(value, exp);
 		}
-		if let Some(after) = node.after {
+		if let Some(_after) = node.after {
 			// TODO: type check time expression
 			// self.typeck_node(after, /* time type */);
 		}

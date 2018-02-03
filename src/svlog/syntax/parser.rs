@@ -2055,7 +2055,7 @@ pub enum StreamDir {
 }
 
 fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<ExprData> {
-	/// Streaming concatenations have a "<<" or ">>" following the opening "{".
+	// Streaming concatenations have a "<<" or ">>" following the opening "{".
 	let stream = match p.peek(0).0 {
 		Operator(Op::LogicShL) => Some(StreamDir::Out),
 		Operator(Op::LogicShR) => Some(StreamDir::In),

@@ -351,10 +351,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		tyctx: &TypeCtx<'ctx>,
 	) -> Result<Spanned<hir::SigAssignKind>> {
 		Ok(Spanned::new(match mode.value {
-			ast::AssignMode::Release(fm) => {
+			ast::AssignMode::Release(_fm) => {
 				unimp!(self, "release signal assignment mode");
 			}
-			ast::AssignMode::Force(fm, ref waves) => {
+			ast::AssignMode::Force(_fm, ref _waves) => {
 				unimp!(self, "force signal assignment mode");
 			}
 			ast::AssignMode::Normal(ref dm, ref waves) => {
@@ -389,7 +389,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		scope_id: ScopeRef,
 		dm: &'ast Option<Spanned<ast::DelayMech>>,
 	) -> Result<hir::DelayMechanism> {
-		if let Some(Spanned { value: ref dm, span }) = *dm {
+		if let Some(Spanned { value: ref dm, .. }) = *dm {
 			Ok(match *dm {
 				ast::DelayMech::Transport => hir::DelayMechanism::Transport,
 				ast::DelayMech::Inertial => hir::DelayMechanism::Inertial,
@@ -406,12 +406,12 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	/// Unpack the the waves of a simple wave assignment.
 	pub fn unpack_cond_waveforms(
 		&self,
-		scope_id: ScopeRef,
+		_scope_id: ScopeRef,
 		waves: &'ast [ast::CondWave],
-		tyctx: &TypeCtx<'ctx>,
+		_tyctx: &TypeCtx<'ctx>,
 	) -> Result<hir::Cond<hir::Waveform>> {
 		// Determine if we have a "else".
-		let (when, other) = if waves.last().unwrap().1.is_some() {
+		let (_when, _other) = if waves.last().unwrap().1.is_some() {
 			(&waves[..], None)
 		} else {
 			(&waves[..waves.len()-1], Some(&waves.last().unwrap().1))
@@ -948,7 +948,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					}
 				};
 				// TODO: Handle units
-				if let Some(ref units) = *units {
+				if let Some(ref _units) = *units {
 					self.emit(
 						DiagBuilder2::bug("Units not yet supported")
 						.span(spanned_data.span)
@@ -1462,7 +1462,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				self.emit(d);
 				return Err(());
 			}
-			other => Term::Ident(first_def),
+			_ => Term::Ident(first_def),
 		};
 
 		Ok(self.fold(Spanned::new(term, name.span)))
@@ -1593,7 +1593,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				return Err(());
 			}
 		};
-		let resol = match resol {
+		let _resol = match resol {
 			Some(x) => Some(self.term_to_resolution_indication(*x)?),
 			None => None,
 		};
