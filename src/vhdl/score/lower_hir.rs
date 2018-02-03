@@ -1777,6 +1777,11 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				self.emit(
 					DiagBuilder2::error(format!("`{}` is not a valid discrete range", term.span.extract()))
 					.span(term.span)
+					.add_note("A discrete range can be one of the following:")
+					.add_note("- a subtype indication of the form `[resolution] type_mark [constraint]`")
+					.add_note("- a range of the form `a to b` or `a downto b`")
+					.add_note("- a range attribute of the form `T'range`")
+					.add_note("See IEEE 1076-2008 section 5.3.2.1.")
 				);
 				debugln!("It is a {:#?}", term);
 				return Err(());
@@ -1797,6 +1802,11 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 				self.emit(
 					DiagBuilder2::error(format!("`{}` is not a valid range", term.span.extract()))
 					.span(term.span)
+					.add_note("A range can be one of the following:")
+					.add_note("- an ascending range of the form `a to b`")
+					.add_note("- a descending range of the form `a downto b`")
+					.add_note("- a range attribute of the form `T'range`")
+					.add_note("See IEEE 1076-2008 section 5.2.1.")
 				);
 				debugln!("It is a {:#?}", term);
 				return Err(());
