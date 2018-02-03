@@ -476,6 +476,10 @@ impl<T> Spanned<T> {
     pub fn map_into<U>(self) -> Spanned<U> where T: Into<U> {
     	Spanned::new(self.value.into(), self.span)
     }
+
+    pub fn as_ref(&self) -> Spanned<&T> {
+    	Spanned::new(&self.value, self.span)
+    }
 }
 
 impl<T> std::fmt::Debug for Spanned<T> where T: std::fmt::Debug {
