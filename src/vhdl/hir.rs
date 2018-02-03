@@ -151,11 +151,20 @@ pub struct SubtypeInd {
 }
 
 
+/// A constraint.
+///
+/// See IEEE 1076-2008 section 6.3.
+///
+/// ```ignore
+/// constraint := range_constraint | array_constraint | record_constraint
+/// ```
 #[derive(Debug)]
 pub enum Constraint {
-	Range(Span, ExprRef),
-	Range2(Dir, ExprRef, ExprRef),
+	/// A range constraint.
+	Range(Range),
+	/// An array constraint.
 	Array(ArrayConstraint),
+	/// A record constraint.
 	Record(RecordConstraint),
 }
 

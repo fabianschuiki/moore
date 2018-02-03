@@ -663,80 +663,6 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 });
 
 
-// Lower a subtype indication to HIR.
-impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
-	let (scope_id, ast) = self.ast(id);
-
-	// TODO: Implement resolution indications.
-	if let Some(_) = ast.res {
-		self.emit(
-			DiagBuilder2::error("Resolution indications on subtypes not yet supported")
-			.span(ast.span)
-		);
-	}
-
-	// First try to resolve the name. This will yield a list of definitions
-	// and the remaining parts of the name that were not resolved. The
-	// latter will contain optional constraints.
-	let (_, mut defs, defs_span, tail_parts) = self.resolve_compound_name(&ast.name, scope_id, false)?;
-
-	// Make sure that the definition is unambiguous and unpack it.
-	let tm = match defs.pop() {
-		Some(Spanned{value: Def::Type(id), ..}) => id.into(),
-		Some(Spanned{value: Def::Subtype(id), ..}) => id.into(),
-		Some(_) => {
-			self.emit(
-				DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
-				.span(ast.span)
-			);
-			return Err(());
-		}
-		None => unreachable!()
-	};
-	if !defs.is_empty() {
-		self.emit(
-			DiagBuilder2::error(format!("`{}` is ambiguous", ast.span.extract()))
-			.span(ast.span)
-		);
-		return Err(());
-	}
-
-	// Parse the constraint.
-	let constraint = match tail_parts.last() {
-		Some(&ast::NamePart::Range(ref expr)) => Some(Spanned::new(hir::Constraint::Range(expr.span, self.unpack_expr(expr, scope_id)?), expr.span)),
-		Some(&ast::NamePart::Call(ref elems)) => {
-			// TODO: Parse array or record constraint.
-			self.emit(
-				DiagBuilder2::error(format!("Array and record constraints on subtype indications not yet implemented"))
-				.span(elems.span)
-			);
-			return Err(());
-		}
-		Some(_) => {
-			self.emit(
-				DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
-				.span(ast.span)
-			);
-			return Err(());
-		}
-		None => None,
-	};
-	if tail_parts.len() > 1 {
-		self.emit(
-			DiagBuilder2::error(format!("`{}` is not a type or subtype", ast.span.extract()))
-			.span(ast.span)
-		);
-		return Err(());
-	}
-
-	Ok(self.sb.arenas.hir.subtype_ind.alloc(hir::SubtypeInd{
-		span: ast.span,
-		type_mark: Spanned::new(tm, defs_span),
-		constraint: constraint,
-	}))
-});
-
-
 impl_make!(self, id: SubtypeDeclRef => &hir::SubtypeDecl {
 	let (scope_id, ast) = self.ast(id);
 	let subty = self.unpack_subtype_ind(&ast.subtype, scope_id)?;
@@ -1699,10 +1625,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 	pub fn term_to_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::Constraint>> {
 		// Handle range constraints.
 		match term.value {
-			Term::Range(dir, lb, rb) => return Ok(Spanned::new(
-				hir::Constraint::Range2(dir, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
-				term.span,
-			)),
+			Term::Range(..) => return Ok(self.term_to_range(term)?.map(|r| hir::Constraint::Range(r))),
 			_ => ()
 		};
 
