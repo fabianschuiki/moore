@@ -333,6 +333,8 @@ pub enum TypeData {
 	Array(Vec<ArrayTypeIndexRef>, SubtypeIndRef),
 	/// A file type.
 	File(TypeMarkRef),
+	/// A record type.
+	Record(Vec<(Spanned<Name>, SubtypeIndRef)>),
 }
 
 /// An enumeration literal as listed in a type declaration.

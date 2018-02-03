@@ -801,6 +801,11 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				// TODO: Use the correct default value.
 				Ok(self.intern_const(Const::Null))
 			}
+			Ty::Record(ref ty) => {
+				self.emit(DiagBuilder2::bug(format!("default value for type `{}` not implemented", ty)));
+				// TODO: Use the correct default value.
+				Ok(self.intern_const(Const::Null))
+			}
 		}
 	}
 

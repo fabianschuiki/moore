@@ -3,9 +3,13 @@
 //! This module implements VHDL types.
 
 use std::fmt;
+use std::collections::HashMap;
+
+use num::BigInt;
+
 use score::*;
 use moore_common::source::Span;
-use num::BigInt;
+use moore_common::name::Name;
 pub use hir::Dir;
 
 
@@ -34,6 +38,8 @@ pub enum Ty {
 	Array(ArrayTy),
 	/// A file type.
 	File(Box<Ty>),
+	/// A record type.
+	Record(RecordTy),
 }
 
 impl Ty {
@@ -49,6 +55,7 @@ impl Ty {
 			Ty::Access(_) => "access type",
 			Ty::Array(_) => "array type",
 			Ty::File(..) => "file type",
+			Ty::Record(_) => "record type",
 		}
 	}
 }
@@ -71,6 +78,12 @@ impl From<ArrayTy> for Ty {
 	}
 }
 
+impl From<RecordTy> for Ty {
+	fn from(t: RecordTy) -> Ty {
+		Ty::Record(t)
+	}
+}
+
 impl fmt::Display for Ty {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
@@ -82,6 +95,7 @@ impl fmt::Display for Ty {
 			Ty::Access(ref ty) => write!(f, "access {}", ty),
 			Ty::Array(ref ty) => write!(f, "{}", ty),
 			Ty::File(ref ty) => write!(f, "file of {}", ty),
+			Ty::Record(ref ty) => write!(f, "{}", ty),
 		}
 	}
 }
@@ -194,6 +208,42 @@ impl fmt::Display for ArrayIndex {
 			ArrayIndex::Unbounded(ref ty) => write!(f, "{} range <>", ty),
 			ArrayIndex::Constrained(ref ty) => write!(f, "{}", ty),
 		}
+	}
+}
+
+/// A record type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordTy {
+	/// The fields of the record.
+	pub fields: Vec<(Name, Box<Ty>)>,
+	/// A lookup table to access fields by name.
+	pub lookup: HashMap<Name, usize>,
+}
+
+impl RecordTy {
+	/// Create a new array type.
+	pub fn new(fields: Vec<(Name, Box<Ty>)>) -> RecordTy {
+		let lookup = fields.iter().enumerate().map(|(i,&(n,_))| (n,i)).collect();
+		RecordTy {
+			fields: fields,
+			lookup: lookup,
+		}
+	}
+}
+
+impl fmt::Display for RecordTy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "record")?;
+		if self.fields.is_empty() {
+			return Ok(());
+		}
+		write!(f, "\n")?;
+		for &(name, ref field) in &self.fields {
+			let indented = format!("{}", field).replace('\n', "\n    ");
+			write!(f, "   {}: {};\n", name, indented)?;
+		}
+		write!(f, "end record")?;
+		Ok(())
 	}
 }
 

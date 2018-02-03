@@ -4,6 +4,7 @@
 
 use std::fmt::Debug;
 use std::cell::Cell;
+use std::collections::HashMap;
 
 use moore_common::NodeId;
 use moore_common::errors::*;
@@ -781,6 +782,30 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		hir::TypeData::File(tm) => {
 			let inner = self.ty(tm)?.clone();
 			Ok(self.intern_ty(Ty::File(Box::new(inner))))
+		}
+
+		hir::TypeData::Record(ref fields) => {
+			let mut had_fails = false;
+			let mut mapped_fields = Vec::new();
+			let mut used_names = HashMap::new();
+			for &(name, subty) in fields {
+				if let Some(&span) = used_names.get(&name.value) {
+					self.emit(
+						DiagBuilder2::error(format!("field `{}` already declared", name.value))
+						.span(name.span)
+						.add_note("Previous declaration was here:")
+						.span(span)
+					);
+					had_fails = true;
+				} else {
+					used_names.insert(name.value, name.span);
+				}
+				mapped_fields.push((name.value, Box::new(self.ty(subty)?.clone())))
+			}
+			if had_fails {
+				return Err(());
+			}
+			Ok(self.intern_ty(RecordTy::new(mapped_fields)))
 		}
 	}
 });

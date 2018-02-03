@@ -76,6 +76,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			Ty::File(ref _ty) => {
 				llhd::int_ty(32)
 			}
+			Ty::Record(ref ty) => {
+				let fields = ty.fields
+					.iter()
+					.map(|&(_, ref ty)| self.map_type(ty))
+					.collect::<Result<_>>()?;
+				llhd::struct_ty(fields)
+			}
 			// Unbounded integers cannot be mapped to LLHD. All cases where
 			// such an int can leak through to codegen should actually be caught
 			// beforehand in the type check.

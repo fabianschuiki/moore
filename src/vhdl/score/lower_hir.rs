@@ -1038,7 +1038,14 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 				hir::TypeData::File(tm.value)
 			}
 
-			ast::RecordType(..) => unimp_msg!(self, "record types", ast.span),
+			ast::RecordType(ref fields) => {
+				let fields = fields.iter().flat_map(|&(ref names, ref subty)|{
+					let subty = self.unpack_subtype_ind(subty, scope_id);
+					names.iter().map(move |name| Ok((Spanned::new(name.name, name.span), subty?)))
+				}).collect::<Result<Vec<_>>>()?;
+				hir::TypeData::Record(fields)
+			}
+
 			ast::ProtectedType(..) => unimp_msg!(self, "protected types", ast.span),
 		}, spanned_data.span))
 	} else {

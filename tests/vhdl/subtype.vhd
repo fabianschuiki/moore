@@ -21,12 +21,12 @@ package pkg is
 	--subtype array_subtype_10 is constrained_array_type_3 (0 to 4); -- should fail
 
 	-- Record subtyping
-	--type record_type is record
-	--	a : range_type;
-	--	b : range_type;
-	--end record;
+	type record_type is record
+		a : range_type;
+		b : range_type;
+	end record;
 
-	--subtype record_subtype_1 is record_type;
+	subtype record_subtype_1 is record_type;
 	--subtype record_subtype_2 is record_type (a(0 to 10), b(10 to 20));
 	--subtype record_subtype_3 is record_type (a(-10 to 10));
 	--subtype record_subtype_4 is record_type (b(0 to 105)); -- should fail
