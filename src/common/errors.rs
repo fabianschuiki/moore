@@ -229,7 +229,7 @@ impl fmt::Display for DiagBuilder2 {
 					write!(f, "\x1B[m\n")?;
 					colorcode = "\x1B[1m";
 				}
-				DiagSegment::Note(ref message) => write!(f, "\x1B[1mnote:\x1B[m {}\n", message)?,
+				DiagSegment::Note(ref message) => write!(f, "   = \x1B[1mnote:\x1B[m {}\n", message)?,
 			}
 		}
 
