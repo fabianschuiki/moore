@@ -531,6 +531,119 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		};
 		Ok(Spanned::new(op, ast.span))
 	}
+
+	/// Lower an AST subprogram specification to HIR.
+	pub fn lower_subprog_spec(
+		&self,
+		scope_id: ScopeRef,
+		ast: &'ast ast::SubprogSpec
+	) -> Result<hir::SubprogSpec> {
+		let name = self.resolvable_from_primary_name(&ast.name)?;
+		let kind = match (ast.kind, ast.purity) {
+			(ast::SubprogKind::Proc, None) => hir::SubprogKind::Proc,
+			(ast::SubprogKind::Func, None) |
+			(ast::SubprogKind::Func, Some(ast::SubprogPurity::Pure)) => hir::SubprogKind::PureFunc,
+			(ast::SubprogKind::Func, Some(ast::SubprogPurity::Impure)) => hir::SubprogKind::ImpureFunc,
+			(ast::SubprogKind::Proc, Some(_)) => {
+				self.emit(
+					DiagBuilder2::error(format!("Procedure `{}` cannot be pure/impure", name.value))
+					.span(name.span)
+				);
+				hir::SubprogKind::Proc
+			}
+		};
+		let mut generics = Vec::new();
+		if let Some(ref gc) = ast.generic_clause {
+			self.unpack_generics(scope_id, gc, &mut generics);
+		}
+		if let Some(ref gm) = ast.generic_map {
+			unimp_msg!(self, "lowering of generic maps in subprogram specifications", gm.span);
+		}
+		let generic_map = vec![];
+		if ast.params.is_some() {
+			unimp_msg!(self, "lowering of parameters in subprogram specifications", name.span);
+		}
+		let return_type = match ast.retty {
+			Some(ref name) => {
+				let ctx = TermContext::new(self, scope_id);
+				let term = ctx.termify_compound_name(name)?;
+				Some(ctx.term_to_type_mark(term)?)
+			},
+			None => None,
+		};
+		if ast.kind == ast::SubprogKind::Func && ast.retty.is_none() {
+			self.emit(
+				DiagBuilder2::error(format!("Function `{}` has no return type", name.value))
+				.span(name.span)
+				.add_note("Functions require a return type. Use a procedure if you want no return type. See IEEE 1076-2008 section 4.2.1.")
+			);
+			return Err(());
+		}
+		if name.value.is_bit() {
+			self.emit(
+				DiagBuilder2::error(format!("`{}` is not a valid subprogram name", name.value))
+				.span(name.span)
+				.add_note("Operators. Use a procedure if you want no return type. See IEEE 1076-2008 section 4.2.1.")
+			);
+			return Err(());
+		}
+		if ast.kind == ast::SubprogKind::Proc && !name.value.is_ident() {
+			self.emit(
+				DiagBuilder2::error(format!("`{}` overload must be a function", name.value))
+				.span(name.span)
+				.add_note("Procedures cannot overload operators. Use a function. See IEEE 1076-2008 section 4.2.1.")
+			);
+			return Err(());
+		}
+		Ok(hir::SubprogSpec {
+			name: name,
+			kind: kind,
+			generics: generics,
+			generic_map: generic_map,
+			params: vec![],
+			return_type: return_type,
+		})
+	}
+
+	/// Unpack generics from a list of interface declarations.
+	///
+	/// See IEEE 1076-2008 section 6.5.6.1.
+	pub fn unpack_generics(&self, scope_id: ScopeRef, decls: &'ast [ast::IntfDecl], into: &mut Vec<GenericRef>) {
+		for decl in decls {
+			match *decl {
+				ast::IntfDecl::TypeDecl(ref decl) => {
+					let id = IntfTypeRef(NodeId::alloc());
+					self.set_ast(id, (scope_id, decl));
+					into.push(id.into());
+				}
+				ast::IntfDecl::SubprogSpec(ref decl) => {
+					let id = IntfSubprogRef(NodeId::alloc());
+					self.set_ast(id, (scope_id, decl));
+					into.push(id.into());
+				}
+				ast::IntfDecl::PkgInst(ref decl) => {
+					let id = IntfPkgRef(NodeId::alloc());
+					self.set_ast(id, (scope_id, decl));
+					into.push(id.into());
+				}
+				ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
+					let ty = SubtypeIndRef(NodeId::alloc());
+					self.set_ast(ty, (scope_id, &decl.ty));
+					for name in &decl.names {
+						let id = IntfConstRef(NodeId::alloc());
+						self.set_ast(id, (scope_id, decl, ty, name));
+						into.push(id.into());
+					}
+				}
+				ref wrong => {
+					self.emit(
+						DiagBuilder2::error(format!("a {} cannot appear in a generic clause", wrong.desc()))
+						.span(wrong.human_span())
+					);
+				}
+			}
+		}
+	}
 }
 
 
@@ -576,44 +689,8 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 
 			// Generic clauses
 			ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Generic, span }, ref decls) => {
-				// For generics only constant, type, subprogram, and package
-				// interface declarations are allowed.
 				generic_spans.push(span);
-				for decl in &decls.value {
-					match *decl {
-						ast::IntfDecl::TypeDecl(ref decl) => {
-							let subid = IntfTypeRef(NodeId::alloc());
-							self.set_ast(subid, (id.into(), decl));
-							entity.generics.push(subid.into());
-						}
-						ast::IntfDecl::SubprogSpec(ref decl) => {
-							let subid = IntfSubprogRef(NodeId::alloc());
-							self.set_ast(subid, (id.into(), decl));
-							entity.generics.push(subid.into());
-						}
-						ast::IntfDecl::PkgInst(ref decl) => {
-							let subid = IntfPkgRef(NodeId::alloc());
-							self.set_ast(subid, (id.into(), decl));
-							entity.generics.push(subid.into());
-						}
-						ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
-							let ty = SubtypeIndRef(NodeId::alloc());
-							self.set_ast(ty, (id.into(), &decl.ty));
-							for name in &decl.names {
-								let subid = IntfConstRef(NodeId::alloc());
-								self.set_ast(subid, (id.into(), decl, ty, name));
-								entity.generics.push(subid.into());
-							}
-						}
-						ref wrong => {
-							self.emit(
-								DiagBuilder2::error(format!("a {} cannot appear in a generic clause", wrong.desc()))
-								.span(wrong.human_span())
-							);
-							continue;
-						}
-					}
-				}
+				self.unpack_generics(id.into(), &decls.value, &mut entity.generics);
 			}
 
 			ref wrong => {
@@ -672,6 +749,11 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 	// support, and separate the generic clauses and maps.
 	for decl in &ast.decls {
 		match *decl {
+			ast::DeclItem::SubprogDecl(ref decl) => {
+				let subid = SubprogDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
 			ast::DeclItem::PkgDecl(ref decl) => {
 				let subid = PkgDeclRef(NodeId::alloc());
 				self.set_ast(subid, (id.into(), decl));
@@ -692,8 +774,33 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 				self.set_ast(subid, (id.into(), decl));
 				decls.push(subid.into());
 			}
-
-			// Emit an error for any other kinds of declarations.
+			ast::DeclItem::ObjDecl(ref decl) => {
+				match decl.kind {
+					ast::ObjKind::Const => {
+						let subid = ConstDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut decls)?,
+					ast::ObjKind::SharedVar => {
+						self.emit(
+							DiagBuilder2::error("not a variable; shared variables may not appear in a package declaration")
+							.span(decl.human_span())
+						);
+						had_fails = true;
+					}
+					ast::ObjKind::Var => {
+						let subid = VarDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::ObjKind::File => {
+						let subid = FileDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+				}
+			}
 			ref wrong => {
 				self.emit(
 					DiagBuilder2::error(format!("a {} cannot appear in a package declaration", wrong.desc()))
@@ -1909,3 +2016,13 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 		}, term.span))
 	}
 }
+
+// Lower a subprogram declaration to HIR.
+impl_make!(self, id: SubprogDeclRef => &hir::Subprog {
+	let (scope_id, ast) = self.ast(id);
+	let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
+	Ok(self.sb.arenas.hir.subprog.alloc(hir::Subprog {
+		parent: scope_id,
+		spec: spec,
+	}))
+});

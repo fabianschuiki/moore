@@ -21,27 +21,29 @@ macro_rules! impl_make_scope {
 
 impl_make_defs!(self, id: ScopeRef => {
 	match id {
-		ScopeRef::Lib(id) => self.make(id),
-		ScopeRef::CtxItems(id) => self.make(id),
-		ScopeRef::Entity(id) => self.make(id),
+		ScopeRef::Lib(id)        => self.make(id),
+		ScopeRef::CtxItems(id)   => self.make(id),
+		ScopeRef::Entity(id)     => self.make(id),
 		ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_DEFS)[&id]),
-		ScopeRef::Pkg(id) => self.make(id),
-		ScopeRef::PkgInst(id) => self.make(id),
-		ScopeRef::Arch(id) => self.make(id),
-		ScopeRef::Process(id) => self.make(id),
+		ScopeRef::Pkg(id)        => self.make(id),
+		ScopeRef::PkgInst(id)    => self.make(id),
+		ScopeRef::Arch(id)       => self.make(id),
+		ScopeRef::Process(id)    => self.make(id),
+		ScopeRef::Subprog(id)    => self.make(id),
 	}
 });
 
 impl_make_scope!(self, id: ScopeRef => {
 	match id {
-		ScopeRef::Lib(id) => self.make(id),
-		ScopeRef::CtxItems(_) => unreachable!(),
-		ScopeRef::Entity(id) => self.make(id),
+		ScopeRef::Lib(id)        => self.make(id),
+		ScopeRef::CtxItems(_)    => unreachable!(),
+		ScopeRef::Entity(id)     => self.make(id),
 		ScopeRef::BuiltinPkg(id) => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
-		ScopeRef::Pkg(id) => self.make(id),
-		ScopeRef::PkgInst(id) => self.make(id),
-		ScopeRef::Arch(id) => self.make(id),
-		ScopeRef::Process(id) => self.make(id),
+		ScopeRef::Pkg(id)        => self.make(id),
+		ScopeRef::PkgInst(id)    => self.make(id),
+		ScopeRef::Arch(id)       => self.make(id),
+		ScopeRef::Process(id)    => self.make(id),
+		ScopeRef::Subprog(id)    => self.make(id),
 	}
 });
 
@@ -156,7 +158,6 @@ impl_make_defs!(self, id: ArchRef => {
 	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
 
-
 // Definitions in a package declaration.
 impl_make_defs!(self, id: PkgDeclRef => {
 	let mut ctx = DefsContext::new(self);
@@ -167,9 +168,22 @@ impl_make_defs!(self, id: PkgDeclRef => {
 	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
 
-
 // Definitions in a package instance.
 impl_make_defs!(self, _id: PkgInstRef => {
+	// TODO: Implement this.
+	unimplemented!();
+});
+
+// Definitions in a subprogram declaration.
+impl_make_defs!(self, _id: SubprogDeclRef => {
+	let ctx = DefsContext::new(self);
+	// let hir = self.hir(id)?;
+	// TODO: Declare generics.
+	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
+});
+
+// Definitions in a subprogram instance.
+impl_make_defs!(self, _id: SubprogInstRef => {
 	// TODO: Implement this.
 	unimplemented!();
 });
@@ -275,7 +289,6 @@ impl_make_scope!(self, id: ArchRef => {
 	}))
 });
 
-
 // Populate the scope of a package declaration.
 impl_make_scope!(self, id: PkgDeclRef => {
 	let hir = self.hir(id)?;
@@ -292,9 +305,30 @@ impl_make_scope!(self, id: PkgDeclRef => {
 	}))
 });
 
-
 // Populate the scope of a package instance.
 impl_make_scope!(self, _id: PkgInstRef => {
+	// TODO: Implement this.
+	unimplemented!();
+});
+
+// Populate the scope of a subprogram declaration.
+impl_make_scope!(self, id: SubprogDeclRef => {
+	let hir = self.hir(id)?;
+	let mut defs = Vec::new();
+	defs.push(id.into());
+	let parent = match hir.parent {
+		ScopeRef::CtxItems(id) => self.make_ctx_items_scope(id, None)?.into(),
+		others => others
+	};
+	Ok(self.sb.arenas.scope.alloc(Scope{
+		parent: Some(parent),
+		defs: defs,
+		explicit_defs: HashMap::new(),
+	}))
+});
+
+// Populate the scope of a subprogram instance.
+impl_make_scope!(self, _id: SubprogInstRef => {
 	// TODO: Implement this.
 	unimplemented!();
 });

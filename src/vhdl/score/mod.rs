@@ -913,6 +913,32 @@ pub enum ResolvableName {
 	Operator(Operator),
 }
 
+impl ResolvableName {
+	/// Check whether this name is an identifier.
+	pub fn is_ident(&self) -> bool {
+		match *self {
+			ResolvableName::Ident(_) => true,
+			_ => false,
+		}
+	}
+
+	/// Check whether this name is a bit.
+	pub fn is_bit(&self) -> bool {
+		match *self {
+			ResolvableName::Bit(_) => true,
+			_ => false,
+		}
+	}
+
+	/// Check whether this name is an operator.
+	pub fn is_operator(&self) -> bool {
+		match *self {
+			ResolvableName::Operator(_) => true,
+			_ => false,
+		}
+	}
+}
+
 impl std::fmt::Display for ResolvableName {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match *self {
@@ -1019,14 +1045,19 @@ node_ref!(DesignUnitRef);
 node_ref!(EntityRef);
 node_ref!(ExprRef);
 node_ref!(IntfConstRef);
-node_ref!(IntfPkgRef);
 node_ref!(IntfSignalRef);
+node_ref!(IntfVarRef);
+node_ref!(IntfFileRef);
+node_ref!(IntfPkgRef);
 node_ref!(IntfSubprogRef);
 node_ref!(IntfTypeRef);
 node_ref!(LibRef);
 node_ref!(PkgBodyRef);
 node_ref!(PkgDeclRef);
 node_ref!(PkgInstRef);
+node_ref!(SubprogBodyRef);
+node_ref!(SubprogDeclRef);
+node_ref!(SubprogInstRef);
 node_ref!(SubtypeIndRef);
 node_ref!(TypeDeclRef);
 node_ref!(SubtypeDeclRef);
@@ -1058,6 +1089,8 @@ node_ref!(VarDeclRef);
 node_ref!(SharedVarDeclRef);
 node_ref!(FileDeclRef);
 node_ref!(ArrayTypeIndexRef);
+node_ref!(GenericMapRef);
+node_ref!(PortMapRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
 /// which defines the enumeration and the index of the literal.
@@ -1088,6 +1121,8 @@ node_ref_group!(Def:
 	File(FileDeclRef),
 	Var(VarDeclRef),
 	SharedVar(SharedVarDeclRef),
+	Subprog(SubprogDeclRef),
+	SubprogInst(SubprogInstRef),
 );
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
@@ -1098,12 +1133,21 @@ node_ref_group!(ScopeRef:
 	PkgInst(PkgInstRef),
 	Arch(ArchRef),
 	Process(ProcessStmtRef),
+	Subprog(SubprogDeclRef),
 );
 node_ref_group!(GenericRef:
 	Type(IntfTypeRef),
 	Subprog(IntfSubprogRef),
 	Pkg(IntfPkgRef),
 	Const(IntfConstRef),
+);
+
+/// An interface object.
+node_ref_group!(IntfObjRef:
+	Const(IntfConstRef),
+	Var(IntfVarRef),
+	Signal(IntfSignalRef),
+	File(IntfFileRef),
 );
 
 node_ref_group!(TypeMarkRef:
@@ -1120,60 +1164,70 @@ node_ref_group!(SignalRef:
 /// section 4.7.
 ///
 /// ```text
-/// subprogram_declaration
-/// subprogram_instantiation_declaration
-/// package_declaration
-/// package_instantiation_declaration
-/// type_declaration
-/// subtype_declaration
-/// constant_declaration
-/// signal_declaration
-/// variable_declaration
-/// file_declaration
-/// alias_declaration
-/// component_declaration
-/// attribute_declaration
-/// attribute_specification
-/// disconnection_specification
-/// use_clause
-/// group_template_declaration
-/// group_declaration
+/// [x] subprogram_declaration
+/// [x] subprogram_instantiation_declaration
+/// [x] package_declaration
+/// [x] package_instantiation_declaration
+/// [x] type_declaration
+/// [x] subtype_declaration
+/// [ ] constant_declaration
+/// [ ] signal_declaration
+/// [ ] variable_declaration
+/// [ ] file_declaration
+/// [ ] alias_declaration
+/// [ ] component_declaration
+/// [ ] attribute_declaration
+/// [ ] attribute_specification
+/// [ ] disconnection_specification
+/// [ ] use_clause
+/// [ ] group_template_declaration
+/// [ ] group_declaration
 /// ```
 node_ref_group!(DeclInPkgRef:
+	Subprog(SubprogDeclRef),
+	SubprogInst(SubprogInstRef),
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
+	Const(ConstDeclRef),
+	Signal(SignalDeclRef),
+	Var(VarDeclRef),
+	File(FileDeclRef),
 );
 
 /// All declarations that may possibly appear in a block. See IEEE 1076-2008
 /// section 3.3.2.
 ///
 /// ```text
-/// subprogram_declaration
-/// subprogram_body
-/// subprogram_instantiation_declaration
-/// package_declaration
-/// package_body
-/// package_instantiation_declaration
-/// type_declaration
-/// subtype_declaration
-/// constant_declaration
-/// signal_declaration
-/// shared_variable_declaration
-/// file_declaration
-/// alias_declaration
-/// component_declaration
-/// attribute_declaration
-/// attribute_specification
-/// configuration_specification
-/// disconnection_specification
-/// use_clause
-/// group_template_declaration
-/// group_declaration
+/// [x] subprogram_declaration
+/// [x] subprogram_body
+/// [x] subprogram_instantiation_declaration
+/// [x] package_declaration
+/// [x] package_body
+/// [x] package_instantiation_declaration
+/// [x] type_declaration
+/// [x] subtype_declaration
+/// [x] constant_declaration
+/// [x] signal_declaration
+/// [x] shared_variable_declaration
+/// [x] file_declaration
+/// [ ] alias_declaration
+/// [ ] component_declaration
+/// [ ] attribute_declaration
+/// [ ] attribute_specification
+/// [ ] configuration_specification
+/// [ ] disconnection_specification
+/// [ ] use_clause
+/// [ ] group_template_declaration
+/// [ ] group_declaration
 /// ```
 node_ref_group!(DeclInBlockRef:
+	Subprog(SubprogDeclRef),
+	SubprogBody(SubprogBodyRef),
+	SubprogInst(SubprogInstRef),
 	Pkg(PkgDeclRef),
+	PkgBody(PkgBodyRef),
 	PkgInst(PkgInstRef),
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
@@ -1187,9 +1241,9 @@ node_ref_group!(DeclInBlockRef:
 /// 1076-2008 section 11.3.
 ///
 /// ```text
-/// [ ] subprogram_declaration
-/// [ ] subprogram_body
-/// [ ] subprogram_instantiation_declaration
+/// [x] subprogram_declaration
+/// [x] subprogram_body
+/// [x] subprogram_instantiation_declaration
 /// [x] package_declaration
 /// [x] package_body
 /// [x] package_instantiation_declaration
@@ -1206,6 +1260,9 @@ node_ref_group!(DeclInBlockRef:
 /// [ ] group_declaration
 /// ```
 node_ref_group!(DeclInProcRef:
+	Subprog(SubprogDeclRef),
+	SubprogBody(SubprogBodyRef),
+	SubprogInst(SubprogInstRef),
 	Pkg(PkgDeclRef),
 	PkgBody(PkgBodyRef),
 	PkgInst(PkgInstRef),
@@ -1306,9 +1363,12 @@ node_storage!(AstTable<'ast>,
 	subtype_decls:         SubtypeDeclRef        => (ScopeRef, &'ast ast::SubtypeDecl),
 	const_decls:           ConstDeclRef          => (ScopeRef, &'ast ast::ObjDecl),
 	signal_decls:          SignalDeclRef         => (ScopeRef, &'ast ast::ObjDecl),
-	variable_decls:        VarDeclRef       => (ScopeRef, &'ast ast::ObjDecl),
-	shared_variable_decls: SharedVarDeclRef => (ScopeRef, &'ast ast::ObjDecl),
+	variable_decls:        VarDeclRef            => (ScopeRef, &'ast ast::ObjDecl),
+	shared_variable_decls: SharedVarDeclRef      => (ScopeRef, &'ast ast::ObjDecl),
 	file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
+	subprog_bodies:        SubprogBodyRef        => (ScopeRef, &'ast ast::Subprog),
+	subprog_decls:         SubprogDeclRef        => (ScopeRef, &'ast ast::Subprog),
+	subprog_insts:         SubprogInstRef        => (ScopeRef, &'ast ast::Subprog),
 
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
 
@@ -1338,6 +1398,7 @@ node_storage!(HirTable<'ctx>,
 	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,
 	sig_assign_stmts:      SigAssignStmtRef      => &'ctx hir::SigAssignStmt,
 	array_type_indices:    ArrayTypeIndexRef     => &'ctx Spanned<hir::ArrayTypeIndex>,
+	subprogs:              SubprogDeclRef        => &'ctx hir::Subprog,
 );
 
 

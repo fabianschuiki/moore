@@ -155,14 +155,18 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 	match id {
-		DeclInBlockRef::Pkg(_id)      => Ok(()),
-		DeclInBlockRef::PkgInst(_id)  => Ok(()),
-		DeclInBlockRef::Type(_id)     => Ok(()),
-		DeclInBlockRef::Subtype(_id)  => Ok(()),
-		DeclInBlockRef::Const(id)     => self.codegen(id, ctx),
-		DeclInBlockRef::Signal(id)    => self.codegen(id, ctx),
-		DeclInBlockRef::SharedVar(id) => self.codegen(id, ctx),
-		DeclInBlockRef::File(id)      => self.codegen(id, ctx),
+		DeclInBlockRef::Subprog(id)     => self.codegen(id, &mut ()),
+		DeclInBlockRef::SubprogBody(id) => self.codegen(id, &mut ()),
+		DeclInBlockRef::SubprogInst(id) => self.codegen(id, &mut ()),
+		DeclInBlockRef::Pkg(id)         => self.codegen(id, &mut ()),
+		DeclInBlockRef::PkgBody(id)     => self.codegen(id, &mut ()),
+		DeclInBlockRef::PkgInst(id)     => self.codegen(id, &mut ()),
+		DeclInBlockRef::Type(_id)       => Ok(()),
+		DeclInBlockRef::Subtype(_id)    => Ok(()),
+		DeclInBlockRef::Const(id)       => self.codegen(id, ctx),
+		DeclInBlockRef::Signal(id)      => self.codegen(id, ctx),
+		DeclInBlockRef::SharedVar(id)   => self.codegen(id, ctx),
+		DeclInBlockRef::File(id)        => self.codegen(id, ctx),
 	}
 });
 
@@ -285,6 +289,30 @@ impl_codegen!(self, id: CaseGenStmtRef, _ctx: &mut llhd::Entity => {
 });
 
 impl_codegen!(self, id: SeqStmtRef, _ctx: &'a mut InstBuilder<'a> => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: SubprogDeclRef, _ctx: &mut () => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: SubprogBodyRef, _ctx: &mut () => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: SubprogInstRef, _ctx: &mut () => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: PkgDeclRef, _ctx: &mut () => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: PkgBodyRef, _ctx: &mut () => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: PkgInstRef, _ctx: &mut () => {
 	unimp!(self, id);
 });
 

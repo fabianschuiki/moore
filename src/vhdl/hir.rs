@@ -30,6 +30,7 @@ pub struct Arenas {
 	pub process_stmt: Arena<ProcessStmt>,
 	pub sig_assign_stmt: Arena<SigAssignStmt>,
 	pub array_type_index: Arena<Spanned<ArrayTypeIndex>>,
+	pub subprog: Arena<Subprog>,
 }
 
 
@@ -53,6 +54,7 @@ impl Arenas {
 			process_stmt: Arena::new(),
 			sig_assign_stmt: Arena::new(),
 			array_type_index: Arena::new(),
+			subprog: Arena::new(),
 		}
 	}
 }
@@ -651,3 +653,47 @@ pub struct WaveElem {
 /// A list of choices used in aggregates, selected assignments, and case
 /// statements.
 pub type Choices = Vec<ExprRef>;
+
+/// A subprogram.
+///
+/// See IEEE 1076-2008 section 4.2.
+#[derive(Clone, Debug)]
+pub struct Subprog {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The specification, aka the signature.
+	pub spec: SubprogSpec,
+}
+
+/// A subprogram specification.
+///
+/// This can be thought of as the signature of a subprogram. It is shared by the
+/// subprogram declaration and body, and must match.
+#[derive(Clone, Debug)]
+pub struct SubprogSpec {
+	/// The name of the subprogram. For functions this must be an identifier.
+	pub name: Spanned<ResolvableName>,
+	/// Whether this is a procedure, pure function, or impure function.
+	pub kind: SubprogKind,
+	/// The list of generics.
+	pub generics: Vec<GenericRef>,
+	/// The generic map.
+	pub generic_map: Vec<GenericMapRef>,
+	/// The subprogram parameters.
+	pub params: Vec<IntfObjRef>,
+	/// The return type.
+	pub return_type: Option<Spanned<TypeMarkRef>>,
+}
+
+/// A subprogram kind.
+///
+/// Identifies a subprogram as procedure, pure function, or impure function.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum SubprogKind {
+	/// A procedure.
+	Proc,
+	/// A pure function.
+	PureFunc,
+	/// An impure function.
+	ImpureFunc,
+}
