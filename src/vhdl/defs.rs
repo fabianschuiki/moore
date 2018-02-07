@@ -10,6 +10,7 @@ use moore_common::errors::*;
 use moore_common::score::Result;
 use score::*;
 use syntax::ast;
+use hir;
 
 /// A context to declare things in.
 ///
@@ -168,6 +169,40 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 		}
 	}
 
+	/// Handle any of the declarations that can appear in a package.
+	pub fn declare_any_in_pkg_body(&mut self, id: DeclInPkgBodyRef) {
+		match id {
+			DeclInPkgBodyRef::Subprog(id)      => self.declare_subprog(id),
+			DeclInPkgBodyRef::SubprogBody(_id) => (),
+			DeclInPkgBodyRef::SubprogInst(id)  => self.declare_subprog_inst(id),
+			DeclInPkgBodyRef::Pkg(id)          => self.declare_pkg(id),
+			DeclInPkgBodyRef::PkgBody(_id)     => (),
+			DeclInPkgBodyRef::PkgInst(id)      => self.declare_pkg_inst(id),
+			DeclInPkgBodyRef::Type(id)         => self.declare_type(id),
+			DeclInPkgBodyRef::Subtype(id)      => self.declare_subtype(id),
+			DeclInPkgBodyRef::Const(id)        => self.declare_const(id),
+			DeclInPkgBodyRef::Var(id)          => self.declare_var(id),
+			DeclInPkgBodyRef::File(id)         => self.declare_file(id),
+		}
+	}
+
+	/// Handle any of the declarations that can appear in a subprogram.
+	pub fn declare_any_in_subprog(&mut self, id: DeclInSubprogRef) {
+		match id {
+			DeclInSubprogRef::Subprog(id)      => self.declare_subprog(id),
+			DeclInSubprogRef::SubprogBody(_id) => (),
+			DeclInSubprogRef::SubprogInst(id)  => self.declare_subprog_inst(id),
+			DeclInSubprogRef::Pkg(id)          => self.declare_pkg(id),
+			DeclInSubprogRef::PkgBody(_id)     => (),
+			DeclInSubprogRef::PkgInst(id)      => self.declare_pkg_inst(id),
+			DeclInSubprogRef::Type(id)         => self.declare_type(id),
+			DeclInSubprogRef::Subtype(id)      => self.declare_subtype(id),
+			DeclInSubprogRef::Const(id)        => self.declare_const(id),
+			DeclInSubprogRef::Var(id)          => self.declare_var(id),
+			DeclInSubprogRef::File(id)         => self.declare_file(id),
+		}
+	}
+
 	/// Handle a constant declaration.
 	pub fn declare_const(&mut self, _id: ConstDeclRef) {
 		unimplemented!();
@@ -209,5 +244,30 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// Handle subprogram instantiations.
 	pub fn declare_subprog_inst(&mut self, id: SubprogInstRef) {
 		self.declare_primary_name(&self.ctx.ast(id).1.spec.name, Def::SubprogInst(id))
+	}
+
+	/// Handle subprogram specifications.
+	///
+	/// Note that this does not declare the subprogram itself, but rather its
+	/// parameters and generics.
+	pub fn declare_subprog_spec(&mut self, hir: &hir::SubprogSpec) {
+		self.declare_generics(&hir.generics);
+		self.declare_intf_objs(&hir.params);
+	}
+
+	/// Handle interface objects.
+	///
+	/// These are mainly subprogram parameters and entity ports.
+	pub fn declare_intf_objs(&mut self, ids: &[IntfObjRef]) {
+		if !ids.is_empty() {
+			unimplemented!();
+		}
+	}
+
+	/// Handle generics.
+	pub fn declare_generics(&mut self, ids: &[GenericRef]) {
+		if !ids.is_empty() {
+			unimplemented!();
+		}
 	}
 }

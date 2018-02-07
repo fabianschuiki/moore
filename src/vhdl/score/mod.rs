@@ -37,6 +37,11 @@ macro_rules! impl_make {
 		impl<'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'sb, 'ast, 'ctx> {
 			fn make(&$slf, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
 		}
+	};
+	($slf:tt, $id:ident: $id_ty:ty => $out_ty:ty $blk:block) => {
+		impl<'sb, 'ast, 'ctx> NodeMaker<$id_ty, $out_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+			fn make(&$slf, $id: $id_ty) -> Result<$out_ty> $blk
+		}
 	}
 }
 
@@ -438,7 +443,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'sb, 'a
 				}
 				ast::DesignUnitData::PkgBody(ref decl) => {
 					let subid = PkgBodyRef(NodeId::alloc());
-					self.set_ast(subid, (id, ctx_id, decl));
+					self.set_ast(subid, (ctx_id.into(), decl));
 					lib.pkg_bodies.push(subid);
 				}
 			}
@@ -594,7 +599,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					let scope = match def.value {
 						Def::Lib(id) => id.into(),
 						Def::Pkg(id) => id.into(),
-						Def::PkgInst(id) => id.into(),
+						// Def::PkgInst(id) => id.into(),
 						Def::BuiltinPkg(id) => id.into(),
 						d => {
 							self.emit(
@@ -1091,6 +1096,9 @@ node_ref!(FileDeclRef);
 node_ref!(ArrayTypeIndexRef);
 node_ref!(GenericMapRef);
 node_ref!(PortMapRef);
+node_ref!(LatentTypeMarkRef);
+node_ref!(LatentPkgRef);
+node_ref!(LatentSubprogRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
 /// which defines the enumeration and the index of the literal.
@@ -1124,17 +1132,20 @@ node_ref_group!(Def:
 	Subprog(SubprogDeclRef),
 	SubprogInst(SubprogInstRef),
 );
+
 node_ref_group!(ScopeRef:
 	Lib(LibRef),
 	CtxItems(CtxItemsRef),
 	Entity(EntityRef),
 	BuiltinPkg(BuiltinPkgRef),
 	Pkg(PkgDeclRef),
-	PkgInst(PkgInstRef),
+	PkgBody(PkgBodyRef),
 	Arch(ArchRef),
 	Process(ProcessStmtRef),
 	Subprog(SubprogDeclRef),
+	SubprogBody(SubprogBodyRef),
 );
+
 node_ref_group!(GenericRef:
 	Type(IntfTypeRef),
 	Subprog(IntfSubprogRef),
@@ -1158,6 +1169,16 @@ node_ref_group!(TypeMarkRef:
 node_ref_group!(SignalRef:
 	Intf(IntfSignalRef),
 	Decl(SignalDeclRef),
+);
+
+node_ref_group!(PkgRef:
+	Decl(PkgDeclRef),
+	Inst(PkgInstRef),
+);
+
+node_ref_group!(SubprogRef:
+	Decl(SubprogDeclRef),
+	Inst(SubprogInstRef),
 );
 
 /// All declarations that may possibly appear in a package. See IEEE 1076-2008
@@ -1192,6 +1213,78 @@ node_ref_group!(DeclInPkgRef:
 	Subtype(SubtypeDeclRef),
 	Const(ConstDeclRef),
 	Signal(SignalDeclRef),
+	Var(VarDeclRef),
+	File(FileDeclRef),
+);
+
+/// All declarations that may possibly appear in a package body. See IEEE
+/// 1076-2008 section 4.8.
+///
+/// ```text
+/// [x] subprogram_declaration
+/// [x] subprogram_body
+/// [x] subprogram_instantiation_declaration
+/// [x] package_declaration
+/// [x] package_body
+/// [x] package_instantiation_declaration
+/// [x] type_declaration
+/// [x] subtype_declaration
+/// [x] constant_declaration
+/// [x] variable_declaration
+/// [x] file_declaration
+/// [ ] alias_declaration
+/// [ ] attribute_declaration
+/// [ ] attribute_specification
+/// [ ] use_clause
+/// [ ] group_template_declaration
+/// [ ] group_declaration
+/// ```
+node_ref_group!(DeclInPkgBodyRef:
+	Subprog(SubprogDeclRef),
+	SubprogBody(SubprogBodyRef),
+	SubprogInst(SubprogInstRef),
+	Pkg(PkgDeclRef),
+	PkgBody(PkgBodyRef),
+	PkgInst(PkgInstRef),
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
+	Const(ConstDeclRef),
+	Var(VarDeclRef),
+	File(FileDeclRef),
+);
+
+/// All declarations that may possibly appear in a subprogram. See IEEE
+/// 1076-2008 section 4.3.
+///
+/// ```text
+/// [x] subprogram_declaration
+/// [x] subprogram_body
+/// [x] subprogram_instantiation_declaration
+/// [x] package_declaration
+/// [x] package_body
+/// [x] package_instantiation_declaration
+/// [x] type_declaration
+/// [x] subtype_declaration
+/// [x] constant_declaration
+/// [x] variable_declaration
+/// [x] file_declaration
+/// [ ] alias_declaration
+/// [ ] attribute_declaration
+/// [ ] attribute_specification
+/// [ ] use_clause
+/// [ ] group_template_declaration
+/// [ ] group_declaration
+/// ```
+node_ref_group!(DeclInSubprogRef:
+	Subprog(SubprogDeclRef),
+	SubprogBody(SubprogBodyRef),
+	SubprogInst(SubprogInstRef),
+	Pkg(PkgDeclRef),
+	PkgBody(PkgBodyRef),
+	PkgInst(PkgInstRef),
+	Type(TypeDeclRef),
+	Subtype(SubtypeDeclRef),
+	Const(ConstDeclRef),
 	Var(VarDeclRef),
 	File(FileDeclRef),
 );
@@ -1349,7 +1442,7 @@ node_storage!(AstTable<'ast>,
 	pkg_insts:    PkgInstRef => (ScopeRef, &'ast ast::PkgInst),
 	ctx_decls:    CtxRef     => (LibRef, CtxItemsRef, &'ast ast::CtxDecl),
 	arch_bodies:  ArchRef    => (LibRef, CtxItemsRef, &'ast ast::ArchBody),
-	pkg_bodies:   PkgBodyRef => (LibRef, CtxItemsRef, &'ast ast::PkgBody),
+	pkg_bodies:   PkgBodyRef => (ScopeRef, &'ast ast::PkgBody),
 
 	// Interface declarations
 	intf_sigs:       IntfSignalRef      => (ScopeRef, &'ast ast::IntfObjDecl, SubtypeIndRef, &'ast ast::Ident),
@@ -1378,6 +1471,9 @@ node_storage!(AstTable<'ast>,
 	var_assign_stmts: VarAssignStmtRef => (ScopeRef, &'ast ast::Stmt),
 
 	array_type_indices: ArrayTypeIndexRef => (ScopeRef, &'ast ast::Expr),
+	type_marks:         LatentTypeMarkRef => (ScopeRef, LatentName<'ast>),
+	pkg_names:          LatentPkgRef      => (ScopeRef, LatentName<'ast>),
+	subprog_names:      LatentSubprogRef  => (ScopeRef, LatentName<'ast>),
 );
 
 node_storage!(HirTable<'ctx>,
@@ -1387,6 +1483,8 @@ node_storage!(HirTable<'ctx>,
 	intf_sigs:             IntfSignalRef         => &'ctx hir::IntfSignal,
 	subtype_inds:          SubtypeIndRef         => &'ctx hir::SubtypeInd,
 	pkgs:                  PkgDeclRef            => &'ctx hir::Package,
+	pkg_bodies:            PkgBodyRef            => &'ctx hir::PackageBody,
+	pkg_insts:             PkgInstRef            => &'ctx hir::PackageInst,
 	type_decls:            TypeDeclRef           => &'ctx hir::TypeDecl,
 	subtype_decls:         SubtypeDeclRef        => &'ctx hir::SubtypeDecl,
 	exprs:                 ExprRef               => &'ctx hir::Expr,
@@ -1399,6 +1497,11 @@ node_storage!(HirTable<'ctx>,
 	sig_assign_stmts:      SigAssignStmtRef      => &'ctx hir::SigAssignStmt,
 	array_type_indices:    ArrayTypeIndexRef     => &'ctx Spanned<hir::ArrayTypeIndex>,
 	subprogs:              SubprogDeclRef        => &'ctx hir::Subprog,
+	subprog_bodies:        SubprogBodyRef        => &'ctx hir::SubprogBody,
+	subprog_insts:         SubprogInstRef        => &'ctx hir::SubprogInst,
+	latent_type_marks:     LatentTypeMarkRef     => Spanned<TypeMarkRef>,
+	latent_pkgs:           LatentPkgRef          => Spanned<PkgRef>,
+	latent_subprogs:       LatentSubprogRef      => Spanned<SubprogRef>,
 );
 
 
@@ -1429,4 +1532,51 @@ lazy_static! {
 		});
 		table
 	};
+}
+
+
+/// A general name in the AST that can be resolved. Used for e.g. for package
+/// and subprogram bodies to resolve the name of their target.
+#[derive(Copy, Clone, Debug)]
+pub enum LatentName<'ast> {
+	/// A simple name.
+	Simple(&'ast Spanned<Name>),
+	/// A primary name.
+	Primary(&'ast ast::PrimaryName),
+	/// A compound name.
+	Compound(&'ast ast::CompoundName),
+}
+
+impl<'ast> From<&'ast Spanned<Name>> for LatentName<'ast> {
+	fn from(other: &'ast Spanned<Name>) -> LatentName<'ast> {
+		LatentName::Simple(other)
+	}
+}
+
+impl<'ast> From<&'ast ast::PrimaryName> for LatentName<'ast> {
+	fn from(other: &'ast ast::PrimaryName) -> LatentName<'ast> {
+		LatentName::Primary(other)
+	}
+}
+
+impl<'ast> From<&'ast ast::CompoundName> for LatentName<'ast> {
+	fn from(other: &'ast ast::CompoundName) -> LatentName<'ast> {
+		LatentName::Compound(other)
+	}
+}
+
+impl<'ast> HasSpan for LatentName<'ast> {
+	fn span(&self) -> Span {
+		match *self {
+			LatentName::Simple(n)   => n.span,
+			LatentName::Primary(n)  => n.span,
+			LatentName::Compound(n) => n.span,
+		}
+	}
+}
+
+impl<'ast> HasDesc for LatentName<'ast> {
+	fn desc(&self) -> &'static str {
+		"name"
+	}
 }

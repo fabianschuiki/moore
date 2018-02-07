@@ -61,6 +61,27 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		Ok(id)
 	}
 
+	/// Unpack a compound name as a type mark.
+	pub fn unpack_type_mark(&self, ast: LatentName<'ast>, scope_id: ScopeRef) -> Result<Spanned<LatentTypeMarkRef>> {
+		let id = LatentTypeMarkRef::new(NodeId::alloc());
+		self.set_ast(id, (scope_id, ast));
+		Ok(Spanned::new(id, ast.span()))
+	}
+
+	/// Unpack a compound name as a package name.
+	pub fn unpack_package_name(&self, ast: LatentName<'ast>, scope_id: ScopeRef) -> Result<Spanned<LatentPkgRef>> {
+		let id = LatentPkgRef::new(NodeId::alloc());
+		self.set_ast(id, (scope_id, ast));
+		Ok(Spanned::new(id, ast.span()))
+	}
+
+	/// Unpack a compound name as a subprogram name.
+	pub fn unpack_subprog_name(&self, ast: LatentName<'ast>, scope_id: ScopeRef) -> Result<Spanned<LatentSubprogRef>> {
+		let id = LatentSubprogRef::new(NodeId::alloc());
+		self.set_ast(id, (scope_id, ast));
+		Ok(Spanned::new(id, ast.span()))
+	}
+
 	/// Unpack an AST signal declaration into individual HIR signal
 	/// declarations, one for each name.
 	pub fn unpack_signal_decl<I>(&self, ast: &'ast ast::ObjDecl, scope_id: ScopeRef, refs: &mut Vec<I>) -> Result<()>
@@ -173,6 +194,114 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				ref wrong => {
 					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
+						.span(decl.human_span())
+					);
+					had_fails = true;
+				}
+			}
+		}
+
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
+	}
+
+	/// Unpack a slice of AST declarative items into a list of items admissible
+	/// in the declarative part of a subprogram.
+	///
+	/// See IEEE 1076-2008 section 4.3.
+	pub fn unpack_subprog_decls(
+		&self,
+		scope_id: ScopeRef,
+		decls: &'ast [ast::DeclItem]
+	) -> Result<Vec<DeclInSubprogRef>> {
+		let mut refs = Vec::new();
+		let mut had_fails = false;
+
+		for decl in decls {
+			match *decl {
+				ast::DeclItem::SubprogDecl(ref decl) => {
+					match decl.data {
+						ast::SubprogData::Decl => {
+							let subid = SubprogDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::SubprogData::Body{..} => {
+							let subid = SubprogBodyRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::SubprogData::Inst{..} => {
+							let subid = SubprogInstRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::PkgDecl(ref decl) => {
+					let subid = PkgDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgBody(ref decl) => {
+					let subid = PkgBodyRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgInst(ref decl) => {
+					let subid = PkgInstRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::TypeDecl(ref decl) => {
+					let subid = TypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::SubtypeDecl(ref decl) => {
+					let subid = SubtypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::ObjDecl(ref decl) => {
+					match decl.kind {
+						ast::ObjKind::Const => {
+							let subid = ConstDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::Signal => {
+							self.emit(
+								DiagBuilder2::error("a signal declaration cannot appear in a subprogram")
+								.span(decl.human_span())
+							);
+							had_fails = true;
+						}
+						ast::ObjKind::SharedVar => {
+							self.emit(
+								DiagBuilder2::error("not a variable; shared variables may not appear in a package body")
+								.span(decl.human_span())
+							);
+							had_fails = true;
+						}
+						ast::ObjKind::Var => {
+							let subid = VarDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::File => {
+							let subid = FileDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ref wrong => {
+					self.emit(
+						DiagBuilder2::error(format!("a {} cannot appear in a subprogram", wrong.desc()))
 						.span(decl.human_span())
 					);
 					had_fails = true;
@@ -564,11 +693,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			unimp_msg!(self, "lowering of parameters in subprogram specifications", name.span);
 		}
 		let return_type = match ast.retty {
-			Some(ref name) => {
-				let ctx = TermContext::new(self, scope_id);
-				let term = ctx.termify_compound_name(name)?;
-				Some(ctx.term_to_type_mark(term)?)
-			},
+			Some(ref name) => Some(self.unpack_type_mark(name.into(), scope_id)?),
 			None => None,
 		};
 		if ast.kind == ast::SubprogKind::Func && ast.retty.is_none() {
@@ -643,6 +768,20 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 				}
 			}
 		}
+	}
+
+	/// Unpack a generic map from a parenthesized list of elements.
+	///
+	/// See IEEE 1076-2008 section 6.5.7.2.
+	pub fn unpack_generic_map(
+		&self,
+		_scope_id: ScopeRef,
+		elems: &'ast ast::ParenElems
+	) -> Result<Vec<()>> {
+		if !elems.value.is_empty() {
+			unimp_msg!(self, "generic map aspect", elems.span);
+		}
+		Ok(Vec::new())
 	}
 }
 
@@ -750,6 +889,18 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 	for decl in &ast.decls {
 		match *decl {
 			ast::DeclItem::SubprogDecl(ref decl) => {
+				match decl.data {
+					ast::SubprogData::Decl => (),
+					_ => {
+						self.emit(
+							DiagBuilder2::error(format!("a {} cannot appear in a package declaration", decl.desc()))
+							.span(decl.human_span())
+							.add_note("Only subprogram declarations can appear in a package declaration. See IEEE 1076-2008 section 4.7.")
+						);
+						had_fails = true;
+						continue;
+					}
+				}
 				let subid = SubprogDeclRef(NodeId::alloc());
 				self.set_ast(subid, (id.into(), decl));
 				decls.push(subid.into());
@@ -822,6 +973,130 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 			decls: decls,
 		}))
 	}
+});
+
+// Lower a package body to HIR.
+impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
+	let (scope_id, ast) = self.ast(id);
+	let pkg = self.unpack_package_name((&ast.name).into(), scope_id)?;
+	let mut decls = Vec::new();
+	let mut had_fails = false;
+	for decl in &ast.decls {
+		match *decl {
+			ast::DeclItem::SubprogDecl(ref decl) => {
+				match decl.data {
+					ast::SubprogData::Decl => {
+						let subid = SubprogDeclRef(NodeId::alloc());
+						self.set_ast(subid, (id.into(), decl));
+						decls.push(subid.into());
+					}
+					ast::SubprogData::Body{..} => {
+						let subid = SubprogBodyRef(NodeId::alloc());
+						self.set_ast(subid, (id.into(), decl));
+						decls.push(subid.into());
+					}
+					ast::SubprogData::Inst{..} => {
+						let subid = SubprogInstRef(NodeId::alloc());
+						self.set_ast(subid, (id.into(), decl));
+						decls.push(subid.into());
+					}
+				}
+			}
+			ast::DeclItem::PkgDecl(ref decl) => {
+				let subid = PkgDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::PkgBody(ref decl) => {
+				let subid = PkgBodyRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::PkgInst(ref decl) => {
+				let subid = PkgInstRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::TypeDecl(ref decl) => {
+				let subid = TypeDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::SubtypeDecl(ref decl) => {
+				let subid = SubtypeDeclRef(NodeId::alloc());
+				self.set_ast(subid, (id.into(), decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::ObjDecl(ref decl) => {
+				match decl.kind {
+					ast::ObjKind::Const => {
+						let subid = ConstDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::ObjKind::Signal => {
+						self.emit(
+							DiagBuilder2::error("a signal declaration cannot appear in a package body")
+							.span(decl.human_span())
+						);
+						had_fails = true;
+					}
+					ast::ObjKind::SharedVar => {
+						self.emit(
+							DiagBuilder2::error("not a variable; shared variables may not appear in a package body")
+							.span(decl.human_span())
+						);
+						had_fails = true;
+					}
+					ast::ObjKind::Var => {
+						let subid = VarDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::ObjKind::File => {
+						let subid = FileDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+				}
+			}
+			ref wrong => {
+				self.emit(
+					DiagBuilder2::error(format!("a {} cannot appear in a package body", wrong.desc()))
+					.span(decl.human_span())
+				);
+				had_fails = true;
+				continue;
+			}
+		}
+	}
+
+	if had_fails {
+		Err(())
+	} else {
+		Ok(self.sb.arenas.hir.package_body.alloc(hir::PackageBody {
+			parent: scope_id,
+			name: ast.name,
+			pkg: pkg,
+			decls: decls,
+		}))
+	}
+});
+
+// Lower a package instantiation to HIR.
+impl_make!(self, id: PkgInstRef => &hir::PackageInst {
+	let (scope_id, ast) = self.ast(id);
+	let pkg = self.unpack_package_name((&ast.target).into(), scope_id)?;
+	let gm = match ast.generics {
+		Some(ref g) => self.unpack_generic_map(scope_id, g)?,
+		None => vec![],
+	};
+	Ok(self.sb.arenas.hir.package_inst.alloc(hir::PackageInst {
+		parent: scope_id,
+		name: ast.name,
+		pkg: pkg,
+		generic_map: gm,
+	}))
 });
 
 
@@ -1663,6 +1938,15 @@ impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
 		Ok(self.fold(Spanned::new(term, elems.span)))
 	}
 
+	/// Map a latent name to a term.
+	pub fn termify_latent_name(&self, name: LatentName<'ast>) -> Result<Spanned<Term>> {
+		match name {
+			LatentName::Simple(n) => self.termify_name(n.map_into()),
+			LatentName::Primary(n) => self.termify_name(self.ctx.resolvable_from_primary_name(n)?),
+			LatentName::Compound(n) => self.termify_compound_name(n),
+		}
+	}
+
 	/// Map a term to an expression.
 	pub fn term_to_expr(&self, term: Spanned<Term>) -> Result<ExprRef> {
 		let data = match term.value {
@@ -2025,4 +2309,45 @@ impl_make!(self, id: SubprogDeclRef => &hir::Subprog {
 		parent: scope_id,
 		spec: spec,
 	}))
+});
+
+// Lower a subprogram body to HIR.
+impl_make!(self, id: SubprogBodyRef => &hir::SubprogBody {
+	let (scope_id, ast) = self.ast(id);
+	let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
+	let subprog = self.unpack_subprog_name((&ast.spec.name).into(), scope_id)?;
+	let (decls, stmts) = match ast.data {
+		ast::SubprogData::Body { ref decls, ref stmts } => (decls, stmts),
+		_ => unreachable!(),
+	};
+	let decls = self.unpack_subprog_decls(scope_id, decls)?;
+	let stmts = self.unpack_sequential_stmts(scope_id, stmts, "a subprogram")?;
+	Ok(self.sb.arenas.hir.subprog_body.alloc(hir::SubprogBody {
+		parent: scope_id,
+		spec: spec,
+		subprog: subprog,
+		decls: decls,
+		stmts: stmts,
+	}))
+});
+
+// Lower a subprogram instantiation to HIR.
+impl_make!(self, id: SubprogInstRef => &hir::SubprogInst {
+	let (_scope_id, ast) = self.ast(id);
+	unimp_msg!(self, "subprogram instantiations", ast.span);
+	// let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
+	// Ok(self.sb.arenas.hir.subprog_inst.alloc(hir::SubprogInst {
+	// 	parent: scope_id,
+	// 	kind: ,
+	// 	name: ,
+	// 	subprog: ,
+	// 	generic_map: ,
+	// }))
+});
+
+impl_make!(self, id: LatentTypeMarkRef => Spanned<TypeMarkRef> {
+	let (scope_id, ast) = self.ast(id);
+	let ctx = TermContext::new(self, scope_id);
+	let term = ctx.termify_latent_name(ast)?;
+	ctx.term_to_type_mark(term)
 });

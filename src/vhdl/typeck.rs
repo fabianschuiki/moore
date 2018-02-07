@@ -71,6 +71,16 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 		}
 	}
 
+	/// Type check a subprogram specification.
+	pub fn typeck_subprog_spec(&self, node: &'ctx hir::SubprogSpec) {
+		self.typeck_slice(&node.generics);
+		// self.typeck_slice(&node.generic_map);
+		self.typeck_slice(&node.params);
+		if let Some(ref ty) = node.return_type {
+			self.typeck(ty.value);
+		}
+	}
+
 	/// Type check any node that can have its type calculated.
 	pub fn typeck_node<I>(&self, id: I, exp: &'ctx Ty)
 		where
@@ -442,6 +452,18 @@ impl_typeck_err!(self, id: PkgDeclRef => {
 	Ok(())
 });
 
+impl_typeck_err!(self, id: PkgBodyRef => {
+	let hir = self.ctx.hir(id)?;
+	self.typeck_slice(&hir.decls);
+	Ok(())
+});
+
+impl_typeck_err!(self, id: PkgInstRef => {
+	let _hir = self.ctx.hir(id)?;
+	// self.typeck_slice(&hir.generic_map);
+	Ok(())
+});
+
 impl_typeck!(self, id: CtxRef => {
 	unimp!(self, id)
 });
@@ -501,9 +523,24 @@ impl_typeck!(self, id: IntfPkgRef => {
 	// self.typeck(self.hir(id)?.ty)
 });
 
-impl_typeck!(self, id: IntfConstRef => {
-	unimp!(self, id)
-	// self.typeck(self.hir(id)?.ty)
+impl_make!(self, id: IntfConstRef => &Ty {
+	// TODO: Implement this.
+	unimp_err!(self, id)
+});
+
+impl_make!(self, id: IntfVarRef => &Ty {
+	// TODO: Implement this.
+	unimp_err!(self, id)
+});
+
+impl_make!(self, id: IntfSignalRef => &Ty {
+	let hir = self.hir(id)?;
+	self.ty(hir.ty)
+});
+
+impl_make!(self, id: IntfFileRef => &Ty {
+	// TODO: Implement this.
+	unimp_err!(self, id)
 });
 
 impl_typeck!(self, id: DeclInPkgRef => {
@@ -518,6 +555,38 @@ impl_typeck!(self, id: DeclInPkgRef => {
 		DeclInPkgRef::Signal(id)      => self.typeck(id),
 		DeclInPkgRef::Var(id)         => self.typeck(id),
 		DeclInPkgRef::File(id)        => self.typeck(id),
+	}
+});
+
+impl_typeck!(self, id: DeclInPkgBodyRef => {
+	match id {
+		DeclInPkgBodyRef::Subprog(id)     => self.typeck(id),
+		DeclInPkgBodyRef::SubprogBody(id) => self.typeck(id),
+		DeclInPkgBodyRef::SubprogInst(id) => self.typeck(id),
+		DeclInPkgBodyRef::Pkg(id)         => self.typeck(id),
+		DeclInPkgBodyRef::PkgBody(id)     => self.typeck(id),
+		DeclInPkgBodyRef::PkgInst(id)     => self.typeck(id),
+		DeclInPkgBodyRef::Type(id)        => self.typeck(id),
+		DeclInPkgBodyRef::Subtype(id)     => self.typeck(id),
+		DeclInPkgBodyRef::Const(id)       => self.typeck(id),
+		DeclInPkgBodyRef::Var(id)         => self.typeck(id),
+		DeclInPkgBodyRef::File(id)        => self.typeck(id),
+	}
+});
+
+impl_typeck!(self, id: DeclInSubprogRef => {
+	match id {
+		DeclInSubprogRef::Subprog(id)     => self.typeck(id),
+		DeclInSubprogRef::SubprogBody(id) => self.typeck(id),
+		DeclInSubprogRef::SubprogInst(id) => self.typeck(id),
+		DeclInSubprogRef::Pkg(id)         => self.typeck(id),
+		DeclInSubprogRef::PkgBody(id)     => self.typeck(id),
+		DeclInSubprogRef::PkgInst(id)     => self.typeck(id),
+		DeclInSubprogRef::Type(id)        => self.typeck(id),
+		DeclInSubprogRef::Subtype(id)     => self.typeck(id),
+		DeclInSubprogRef::Const(id)       => self.typeck(id),
+		DeclInSubprogRef::Var(id)         => self.typeck(id),
+		DeclInSubprogRef::File(id)        => self.typeck(id),
 	}
 });
 
@@ -586,24 +655,24 @@ impl_typeck!(self, id: SeqStmtRef => {
 	}
 });
 
-impl_typeck!(self, id: PkgBodyRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: SubprogDeclRef => {
+	let hir = self.ctx.hir(id)?;
+	self.typeck_subprog_spec(&hir.spec);
+	Ok(())
 });
 
-impl_typeck!(self, id: PkgInstRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: SubprogBodyRef => {
+	let hir = self.ctx.hir(id)?;
+	self.typeck_subprog_spec(&hir.spec);
+	self.typeck_slice(&hir.decls);
+	self.typeck_slice(&hir.stmts);
+	Ok(())
 });
 
-impl_typeck!(self, id: SubprogDeclRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: SubprogBodyRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: SubprogInstRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: SubprogInstRef => {
+	let _hir = self.ctx.hir(id)?;
+	// self.typeck_slice(&hir.generic_map);
+	Ok(())
 });
 
 impl_typeck!(self, id: ConstDeclRef => {
@@ -990,7 +1059,26 @@ impl_make!(self, id: SignalRef => &Ty {
 	}
 });
 
-impl_make!(self, id: IntfSignalRef => &Ty {
-	let hir = self.hir(id)?;
-	self.ty(hir.ty)
+impl_make!(self, id: IntfObjRef => &Ty {
+	match id {
+		IntfObjRef::Const(id)  => self.make(id),
+		IntfObjRef::Var(id)    => self.make(id),
+		IntfObjRef::Signal(id) => self.make(id),
+		IntfObjRef::File(id)   => self.make(id),
+	}
 });
+
+impl_make!(self, id: LatentTypeMarkRef => &Ty {
+	self.ty(self.hir(id)?.value)
+});
+
+// impl_make!(self, id: LatentSubprogRef => &Ty {
+// 	self.ty(self.hir(id)?.value)
+// });
+
+// impl_make!(self, id: SubprogRef => &Ty {
+// 	match id {
+// 		SubprogRef::Decl(id) => self.make(id),
+// 		SubprogRef::Inst(id) => self.make(id),
+// 	}
+// });

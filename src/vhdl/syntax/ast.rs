@@ -137,6 +137,18 @@ pub struct CompoundName {
 	pub parts: Vec<NamePart>,
 }
 
+impl HasSpan for CompoundName {
+	fn span(&self) -> Span {
+		self.span
+	}
+}
+
+impl HasDesc for CompoundName {
+	fn desc(&self) -> &'static str {
+		"name"
+	}
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct PrimaryName {
 	pub id: NodeId,
@@ -358,7 +370,7 @@ impl HasSpan for DeclItem {
 			DeclItem::ObjDecl(ref n) => n.span,
 			DeclItem::AliasDecl(ref n) => n.span,
 			DeclItem::UseClause(sp, ref n) => Span::union(sp, n.span),
-			DeclItem::SubprogDecl(ref n) => n.span,
+			DeclItem::SubprogDecl(ref n) => n.span(),
 			DeclItem::CompDecl(ref n) => n.span,
 			DeclItem::DisconDecl(ref n) => n.span,
 			DeclItem::CfgSpec(ref n) => n.span,
@@ -380,6 +392,7 @@ impl HasSpan for DeclItem {
 			DeclItem::SubtypeDecl(ref n) => n.name.span,
 			DeclItem::AliasDecl(ref n) => n.name.span,
 			DeclItem::UseClause(sp, _) => sp,
+			DeclItem::SubprogDecl(ref n) => n.human_span(),
 			DeclItem::PortgenMap(_, Spanned{ span, .. }, _) => span,
 			DeclItem::PortgenClause(_, Spanned{ span, .. }, _) => span,
 			_ => self.span()
@@ -390,26 +403,26 @@ impl HasSpan for DeclItem {
 impl HasDesc for DeclItem {
 	fn desc(&self) -> &'static str {
 		match *self {
-			DeclItem::PkgBody(..)       => "package body",
-			DeclItem::PkgInst(..)       => "package instance",
-			DeclItem::PkgDecl(..)       => "package declaration",
-			DeclItem::TypeDecl(..)      => "type declaration",
-			DeclItem::SubtypeDecl(..)   => "subtype declaration",
-			DeclItem::ObjDecl(..)       => "object declaration",
-			DeclItem::AliasDecl(..)     => "alias declaration",
-			DeclItem::UseClause(..)     => "use clause",
-			DeclItem::SubprogDecl(..)   => "subprogram declaration",
-			DeclItem::CompDecl(..)      => "component declaration",
-			DeclItem::DisconDecl(..)    => "disconnection declaration",
-			DeclItem::CfgSpec(..)       => "configuration specification",
-			DeclItem::AttrDecl(..)      => "attribute declaration",
+			DeclItem::PkgBody(..)        => "package body",
+			DeclItem::PkgInst(..)        => "package instance",
+			DeclItem::PkgDecl(..)        => "package declaration",
+			DeclItem::TypeDecl(..)       => "type declaration",
+			DeclItem::SubtypeDecl(..)    => "subtype declaration",
+			DeclItem::ObjDecl(..)        => "object declaration",
+			DeclItem::AliasDecl(..)      => "alias declaration",
+			DeclItem::UseClause(..)      => "use clause",
+			DeclItem::SubprogDecl(ref n) => n.desc(),
+			DeclItem::CompDecl(..)       => "component declaration",
+			DeclItem::DisconDecl(..)     => "disconnection declaration",
+			DeclItem::CfgSpec(..)        => "configuration specification",
+			DeclItem::AttrDecl(..)       => "attribute declaration",
 			DeclItem::PortgenMap(_, Spanned{ value: PortgenKind::Port, .. }, ..)       => "port map",
 			DeclItem::PortgenMap(_, Spanned{ value: PortgenKind::Generic, .. }, ..)    => "generic map",
 			DeclItem::PortgenClause(_, Spanned{ value: PortgenKind::Port, .. }, ..)    => "port clause",
 			DeclItem::PortgenClause(_, Spanned{ value: PortgenKind::Generic, .. }, ..) => "generic clause",
-			DeclItem::GroupDecl(..)     => "group declaration",
-			DeclItem::VunitBindInd(..)  => "vunit binding indication",
-			DeclItem::BlockCompCfg(..)  => "block component configuration",
+			DeclItem::GroupDecl(..)      => "group declaration",
+			DeclItem::VunitBindInd(..)   => "vunit binding indication",
+			DeclItem::BlockCompCfg(..)   => "block component configuration",
 		}
 	}
 }
@@ -428,6 +441,22 @@ pub struct Subprog {
 	pub data: SubprogData,
 }
 
+impl HasSpan for Subprog {
+	fn span(&self) -> Span {
+		self.span
+	}
+
+	fn human_span(&self) -> Span {
+		self.spec.name.span
+	}
+}
+
+impl HasDesc for Subprog {
+	fn desc(&self) -> &'static str {
+		self.data.desc()
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum SubprogData {
 	Decl,
@@ -439,6 +468,16 @@ pub enum SubprogData {
 		decls: Vec<DeclItem>,
 		stmts: Vec<Stmt>,
 	},
+}
+
+impl HasDesc for SubprogData {
+	fn desc(&self) -> &'static str {
+		match *self {
+			SubprogData::Decl => "subprogram declaration",
+			SubprogData::Inst{..} => "subprogram instantiation",
+			SubprogData::Body{..} => "subprogram body",
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]

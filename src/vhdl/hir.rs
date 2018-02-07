@@ -20,6 +20,8 @@ pub struct Arenas {
 	pub intf_sig: Arena<IntfSignal>,
 	pub subtype_ind: Arena<SubtypeInd>,
 	pub package: Arena<Package>,
+	pub package_body: Arena<PackageBody>,
+	pub package_inst: Arena<PackageInst>,
 	pub type_decl: Arena<TypeDecl>,
 	pub subtype_decl: Arena<SubtypeDecl>,
 	pub expr: Arena<Expr>,
@@ -31,6 +33,9 @@ pub struct Arenas {
 	pub sig_assign_stmt: Arena<SigAssignStmt>,
 	pub array_type_index: Arena<Spanned<ArrayTypeIndex>>,
 	pub subprog: Arena<Subprog>,
+	pub subprog_body: Arena<SubprogBody>,
+	pub subprog_inst: Arena<SubprogInst>,
+	pub type_mark: Arena<TypeMarkRef>,
 }
 
 
@@ -44,6 +49,8 @@ impl Arenas {
 			intf_sig: Arena::new(),
 			subtype_ind: Arena::new(),
 			package: Arena::new(),
+			package_body: Arena::new(),
+			package_inst: Arena::new(),
 			type_decl: Arena::new(),
 			subtype_decl: Arena::new(),
 			expr: Arena::new(),
@@ -55,6 +62,9 @@ impl Arenas {
 			sig_assign_stmt: Arena::new(),
 			array_type_index: Arena::new(),
 			subprog: Arena::new(),
+			subprog_body: Arena::new(),
+			subprog_inst: Arena::new(),
+			type_mark: Arena::new(),
 		}
 	}
 }
@@ -298,6 +308,9 @@ impl HasSpan for RecordConstraint {
 }
 
 
+/// A package declaration.
+///
+/// See IEEE 1076-2008 section 4.7.
 #[derive(Debug)]
 pub struct Package {
 	/// The parent scope.
@@ -308,6 +321,36 @@ pub struct Package {
 	pub generics: Vec<GenericRef>,
 	/// The list of declarations in the package.
 	pub decls: Vec<DeclInPkgRef>,
+}
+
+/// A package body.
+///
+/// See IEEE 1076-2008 section 4.8.
+#[derive(Debug)]
+pub struct PackageBody {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The package name.
+	pub name: Spanned<Name>,
+	/// The package which this body targets.
+	pub pkg: Spanned<LatentPkgRef>,
+	/// The declarations.
+	pub decls: Vec<DeclInPkgBodyRef>,
+}
+
+/// A package instantiation.
+///
+/// See IEEE 1076-2008 section 4.9.
+#[derive(Debug)]
+pub struct PackageInst {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The name of the package.
+	pub name: Spanned<Name>,
+	/// The package to be instantiated.
+	pub pkg: Spanned<LatentPkgRef>,
+	/// The generic map.
+	pub generic_map: Vec<()>,
 }
 
 
@@ -665,6 +708,40 @@ pub struct Subprog {
 	pub spec: SubprogSpec,
 }
 
+/// A subprogram body.
+///
+/// See IEEE 1076-2008 section 4.3.
+#[derive(Clone, Debug)]
+pub struct SubprogBody {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The specification, aka the signature.
+	pub spec: SubprogSpec,
+	/// The subprogram this body targets.
+	pub subprog: Spanned<LatentSubprogRef>,
+	/// The declarations in the subprogram.
+	pub decls: Vec<DeclInSubprogRef>,
+	/// The statements in the subprogram.
+	pub stmts: Vec<SeqStmtRef>,
+}
+
+/// A subprogram instantiation.
+///
+/// See IEEE 1076-2008 section 4.4.
+#[derive(Clone, Debug)]
+pub struct SubprogInst {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// Whether this is a procedure, pure function, or impure function.
+	pub kind: SubprogKind,
+	/// The name of the subprogram.
+	pub name: Spanned<Name>,
+	/// The subprogram to be instantiated.
+	pub subprog: Spanned<LatentSubprogRef>,
+	/// The generic map.
+	pub generic_map: Vec<()>,
+}
+
 /// A subprogram specification.
 ///
 /// This can be thought of as the signature of a subprogram. It is shared by the
@@ -678,11 +755,11 @@ pub struct SubprogSpec {
 	/// The list of generics.
 	pub generics: Vec<GenericRef>,
 	/// The generic map.
-	pub generic_map: Vec<GenericMapRef>,
+	pub generic_map: Vec<()>,
 	/// The subprogram parameters.
 	pub params: Vec<IntfObjRef>,
 	/// The return type.
-	pub return_type: Option<Spanned<TypeMarkRef>>,
+	pub return_type: Option<Spanned<LatentTypeMarkRef>>,
 }
 
 /// A subprogram kind.
