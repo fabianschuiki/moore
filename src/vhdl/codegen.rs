@@ -169,6 +169,8 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 		DeclInBlockRef::File(id)        => self.codegen(id, ctx),
 		DeclInBlockRef::Alias(_id)      => Ok(()),
 		DeclInBlockRef::Comp(id)        => self.codegen(id, &mut ()),
+		DeclInBlockRef::Attr(_id)       => Ok(()),
+		DeclInBlockRef::AttrSpec(_id)   => Ok(()),
 	}
 });
 

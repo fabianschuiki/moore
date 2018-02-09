@@ -225,6 +225,20 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					self.set_ast(subid, (scope_id, decl));
 					refs.push(subid.into());
 				}
+				ast::DeclItem::AttrDecl(ref decl) => {
+					match decl.data {
+						ast::AttrData::Decl(..) => {
+							let subid = AttrDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::AttrData::Spec{..} => {
+							let subid = AttrSpecRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
 				ref wrong => {
 					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))

@@ -1095,6 +1095,8 @@ node_ref!(SharedVarDeclRef);
 node_ref!(FileDeclRef);
 node_ref!(AliasDeclRef);
 node_ref!(CompDeclRef);
+node_ref!(AttrDeclRef);
+node_ref!(AttrSpecRef);
 node_ref!(ArrayTypeIndexRef);
 node_ref!(GenericMapRef);
 node_ref!(PortMapRef);
@@ -1133,6 +1135,7 @@ node_ref_group!(Def:
 	SharedVar(SharedVarDeclRef),
 	Alias(AliasDeclRef),
 	Comp(CompDeclRef),
+	Attr(AttrDeclRef),
 	Subprog(SubprogDeclRef),
 	SubprogInst(SubprogInstRef),
 );
@@ -1201,8 +1204,8 @@ node_ref_group!(SubprogRef:
 /// [x] file_declaration
 /// [x] alias_declaration
 /// [x] component_declaration
-/// [ ] attribute_declaration
-/// [ ] attribute_specification
+/// [x] attribute_declaration
+/// [x] attribute_specification
 /// [ ] disconnection_specification
 /// [ ] use_clause
 /// [ ] group_template_declaration
@@ -1221,6 +1224,8 @@ node_ref_group!(DeclInPkgRef:
 	File(FileDeclRef),
 	Alias(AliasDeclRef),
 	Comp(CompDeclRef),
+	Attr(AttrDeclRef),
+	AttrSpec(AttrSpecRef),
 );
 
 /// All declarations that may possibly appear in a package body. See IEEE
@@ -1239,8 +1244,8 @@ node_ref_group!(DeclInPkgRef:
 /// [x] variable_declaration
 /// [x] file_declaration
 /// [x] alias_declaration
-/// [ ] attribute_declaration
-/// [ ] attribute_specification
+/// [x] attribute_declaration
+/// [x] attribute_specification
 /// [ ] use_clause
 /// [ ] group_template_declaration
 /// [ ] group_declaration
@@ -1258,6 +1263,8 @@ node_ref_group!(DeclInPkgBodyRef:
 	Var(VarDeclRef),
 	File(FileDeclRef),
 	Alias(AliasDeclRef),
+	Attr(AttrDeclRef),
+	AttrSpec(AttrSpecRef),
 );
 
 /// All declarations that may possibly appear in a subprogram. See IEEE
@@ -1276,8 +1283,8 @@ node_ref_group!(DeclInPkgBodyRef:
 /// [x] variable_declaration
 /// [x] file_declaration
 /// [x] alias_declaration
-/// [ ] attribute_declaration
-/// [ ] attribute_specification
+/// [x] attribute_declaration
+/// [x] attribute_specification
 /// [ ] use_clause
 /// [ ] group_template_declaration
 /// [ ] group_declaration
@@ -1295,6 +1302,8 @@ node_ref_group!(DeclInSubprogRef:
 	Var(VarDeclRef),
 	File(FileDeclRef),
 	Alias(AliasDeclRef),
+	Attr(AttrDeclRef),
+	AttrSpec(AttrSpecRef),
 );
 
 /// All declarations that may possibly appear in a block. See IEEE 1076-2008
@@ -1315,8 +1324,8 @@ node_ref_group!(DeclInSubprogRef:
 /// [x] file_declaration
 /// [x] alias_declaration
 /// [x] component_declaration
-/// [ ] attribute_declaration
-/// [ ] attribute_specification
+/// [x] attribute_declaration
+/// [x] attribute_specification
 /// [ ] configuration_specification
 /// [ ] disconnection_specification
 /// [ ] use_clause
@@ -1338,6 +1347,8 @@ node_ref_group!(DeclInBlockRef:
 	File(FileDeclRef),
 	Alias(AliasDeclRef),
 	Comp(CompDeclRef),
+	Attr(AttrDeclRef),
+	AttrSpec(AttrSpecRef),
 );
 
 /// All declarations that may possibly appear in a process statement. See IEEE
@@ -1356,8 +1367,8 @@ node_ref_group!(DeclInBlockRef:
 /// [x] variable_declaration
 /// [x] file_declaration
 /// [x] alias_declaration
-/// [ ] attribute_declaration
-/// [ ] attribute_specification
+/// [x] attribute_declaration
+/// [x] attribute_specification
 /// [ ] use_clause
 /// [ ] group_template_declaration
 /// [ ] group_declaration
@@ -1375,6 +1386,8 @@ node_ref_group!(DeclInProcRef:
 	Var(VarDeclRef),
 	File(FileDeclRef),
 	Alias(AliasDeclRef),
+	Attr(AttrDeclRef),
+	AttrSpec(AttrSpecRef),
 );
 
 /// All concurrent statements. See IEEE 1076-2008 section 11.1.
@@ -1475,6 +1488,8 @@ node_storage!(AstTable<'ast>,
 	subprog_insts:         SubprogInstRef        => (ScopeRef, &'ast ast::Subprog),
 	alias_decls:           AliasDeclRef          => (ScopeRef, &'ast ast::AliasDecl),
 	comp_decls:            CompDeclRef           => (ScopeRef, &'ast ast::CompDecl),
+	attr_decls:            AttrDeclRef           => (ScopeRef, &'ast ast::AttrDecl),
+	attr_specs:            AttrSpecRef           => (ScopeRef, &'ast ast::AttrDecl),
 
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
 

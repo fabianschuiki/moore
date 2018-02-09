@@ -52,7 +52,11 @@ architecture bar of foo is
 	--end component;
 
 	-- attribute_declaration
+	--attribute attr_a : BIT;
+
 	-- attribute_specification
+	--attribute attr_a of NUM : type is '0';
+
 	-- configuration_specification
 	-- disconnection_specification
 	-- use_clause

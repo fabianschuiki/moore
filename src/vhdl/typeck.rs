@@ -557,6 +557,8 @@ impl_typeck!(self, id: DeclInPkgRef => {
 		DeclInPkgRef::File(id)        => self.typeck(id),
 		DeclInPkgRef::Alias(id)       => self.typeck(id),
 		DeclInPkgRef::Comp(id)        => self.typeck(id),
+		DeclInPkgRef::Attr(id)        => self.typeck(id),
+		DeclInPkgRef::AttrSpec(id)    => self.typeck(id),
 	}
 });
 
@@ -574,6 +576,8 @@ impl_typeck!(self, id: DeclInPkgBodyRef => {
 		DeclInPkgBodyRef::Var(id)         => self.typeck(id),
 		DeclInPkgBodyRef::File(id)        => self.typeck(id),
 		DeclInPkgBodyRef::Alias(id)       => self.typeck(id),
+		DeclInPkgBodyRef::Attr(id)        => self.typeck(id),
+		DeclInPkgBodyRef::AttrSpec(id)    => self.typeck(id),
 	}
 });
 
@@ -591,6 +595,8 @@ impl_typeck!(self, id: DeclInSubprogRef => {
 		DeclInSubprogRef::Var(id)         => self.typeck(id),
 		DeclInSubprogRef::File(id)        => self.typeck(id),
 		DeclInSubprogRef::Alias(id)       => self.typeck(id),
+		DeclInSubprogRef::Attr(id)        => self.typeck(id),
+		DeclInSubprogRef::AttrSpec(id)    => self.typeck(id),
 	}
 });
 
@@ -610,6 +616,8 @@ impl_typeck!(self, id: DeclInBlockRef => {
 		DeclInBlockRef::File(id)        => self.typeck(id),
 		DeclInBlockRef::Alias(id)       => self.typeck(id),
 		DeclInBlockRef::Comp(id)        => self.typeck(id),
+		DeclInBlockRef::Attr(id)        => self.typeck(id),
+		DeclInBlockRef::AttrSpec(id)    => self.typeck(id),
 	}
 });
 
@@ -627,6 +635,8 @@ impl_typeck!(self, id: DeclInProcRef => {
 		DeclInProcRef::Var(id)         => self.typeck(id),
 		DeclInProcRef::File(id)        => self.typeck(id),
 		DeclInProcRef::Alias(id)       => self.typeck(id),
+		DeclInProcRef::Attr(id)        => self.typeck(id),
+		DeclInProcRef::AttrSpec(id)    => self.typeck(id),
 	}
 });
 
@@ -703,6 +713,14 @@ impl_typeck!(self, id: AliasDeclRef => {
 });
 
 impl_typeck!(self, id: CompDeclRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: AttrDeclRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: AttrSpecRef => {
 	unimp!(self, id)
 });
 

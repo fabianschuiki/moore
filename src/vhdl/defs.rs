@@ -152,6 +152,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInBlockRef::File(id)         => self.declare_file(id),
 			DeclInBlockRef::Alias(id)        => self.declare_alias(id),
 			DeclInBlockRef::Comp(id)         => self.declare_comp(id),
+			DeclInBlockRef::Attr(id)         => self.declare_attr(id),
+			DeclInBlockRef::AttrSpec(_id)    => (),
 		}
 	}
 
@@ -170,6 +172,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgRef::File(id)        => self.declare_file(id),
 			DeclInPkgRef::Alias(id)       => self.declare_alias(id),
 			DeclInPkgRef::Comp(id)        => self.declare_comp(id),
+			DeclInPkgRef::Attr(id)        => self.declare_attr(id),
+			DeclInPkgRef::AttrSpec(_id)   => (),
 		}
 	}
 
@@ -188,6 +192,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgBodyRef::Var(id)          => self.declare_var(id),
 			DeclInPkgBodyRef::File(id)         => self.declare_file(id),
 			DeclInPkgBodyRef::Alias(id)        => self.declare_alias(id),
+			DeclInPkgBodyRef::Attr(id)         => self.declare_attr(id),
+			DeclInPkgBodyRef::AttrSpec(_id)    => (),
 		}
 	}
 
@@ -206,6 +212,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInSubprogRef::Var(id)          => self.declare_var(id),
 			DeclInSubprogRef::File(id)         => self.declare_file(id),
 			DeclInSubprogRef::Alias(id)        => self.declare_alias(id),
+			DeclInSubprogRef::Attr(id)         => self.declare_attr(id),
+			DeclInSubprogRef::AttrSpec(_id)    => (),
 		}
 	}
 
@@ -262,6 +270,11 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// Handle a component declaration.
 	pub fn declare_comp(&mut self, id: CompDeclRef) {
 		self.declare(self.ctx.ast(id).1.name.map_into(), Def::Comp(id))
+	}
+
+	/// Handle an attribute declaration.
+	pub fn declare_attr(&mut self, id: AttrDeclRef) {
+		self.declare(self.ctx.ast(id).1.name.map_into(), Def::Attr(id))
 	}
 
 	/// Handle subprogram declarations.
