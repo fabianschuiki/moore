@@ -963,20 +963,26 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 		match *decl {
 			ast::DeclItem::SubprogDecl(ref decl) => {
 				match decl.data {
-					ast::SubprogData::Decl => (),
-					_ => {
+					ast::SubprogData::Decl => {
+						let subid = SubprogDeclRef(NodeId::alloc());
+						self.set_ast(subid, (id.into(), decl));
+						decls.push(subid.into());
+					}
+					ast::SubprogData::Body{..} => {
 						self.emit(
 							DiagBuilder2::error(format!("a {} cannot appear in a package declaration", decl.desc()))
 							.span(decl.human_span())
-							.add_note("Only subprogram declarations can appear in a package declaration. See IEEE 1076-2008 section 4.7.")
+							.add_note("Only subprogram declarations or instantiations can appear in a package declaration. See IEEE 1076-2008 section 4.7.")
 						);
 						had_fails = true;
 						continue;
 					}
+					ast::SubprogData::Inst{..} => {
+						let subid = SubprogInstRef(NodeId::alloc());
+						self.set_ast(subid, (id.into(), decl));
+						decls.push(subid.into());
+					}
 				}
-				let subid = SubprogDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
 			}
 			ast::DeclItem::PkgDecl(ref decl) => {
 				let subid = PkgDeclRef(NodeId::alloc());
@@ -1025,6 +1031,50 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 					}
 				}
 			}
+			ast::DeclItem::AliasDecl(ref decl) => {
+				let subid = AliasDeclRef(NodeId::alloc());
+				self.set_ast(subid, (scope_id, decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::CompDecl(ref decl) => {
+				let subid = CompDeclRef(NodeId::alloc());
+				self.set_ast(subid, (scope_id, decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::AttrDecl(ref decl) => {
+				match decl.data {
+					ast::AttrData::Decl(..) => {
+						let subid = AttrDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::AttrData::Spec{..} => {
+						let subid = AttrSpecRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+				}
+			}
+			ast::DeclItem::DisconDecl(ref decl) => {
+				let subid = DisconSpecRef(NodeId::alloc());
+				self.set_ast(subid, (scope_id, decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::GroupDecl(ref decl) => {
+				match decl.data {
+					ast::GroupData::Decl(..) => {
+						let subid = GroupDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::GroupData::Temp{..} => {
+						let subid = GroupTempRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+				}
+			}
+			ast::DeclItem::UseClause(..) => (),
 			ref wrong => {
 				self.emit(
 					DiagBuilder2::error(format!("a {} cannot appear in a package declaration", wrong.desc()))
