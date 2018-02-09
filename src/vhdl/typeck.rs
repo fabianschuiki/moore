@@ -560,6 +560,8 @@ impl_typeck!(self, id: DeclInPkgRef => {
 		DeclInPkgRef::Attr(id)        => self.typeck(id),
 		DeclInPkgRef::AttrSpec(id)    => self.typeck(id),
 		DeclInPkgRef::Discon(id)      => self.typeck(id),
+		DeclInPkgRef::GroupTemp(id)   => self.typeck(id),
+		DeclInPkgRef::Group(id)       => self.typeck(id),
 	}
 });
 
@@ -579,6 +581,8 @@ impl_typeck!(self, id: DeclInPkgBodyRef => {
 		DeclInPkgBodyRef::Alias(id)       => self.typeck(id),
 		DeclInPkgBodyRef::Attr(id)        => self.typeck(id),
 		DeclInPkgBodyRef::AttrSpec(id)    => self.typeck(id),
+		DeclInPkgBodyRef::GroupTemp(id)   => self.typeck(id),
+		DeclInPkgBodyRef::Group(id)       => self.typeck(id),
 	}
 });
 
@@ -598,6 +602,8 @@ impl_typeck!(self, id: DeclInSubprogRef => {
 		DeclInSubprogRef::Alias(id)       => self.typeck(id),
 		DeclInSubprogRef::Attr(id)        => self.typeck(id),
 		DeclInSubprogRef::AttrSpec(id)    => self.typeck(id),
+		DeclInSubprogRef::GroupTemp(id)   => self.typeck(id),
+		DeclInSubprogRef::Group(id)       => self.typeck(id),
 	}
 });
 
@@ -621,6 +627,8 @@ impl_typeck!(self, id: DeclInBlockRef => {
 		DeclInBlockRef::AttrSpec(id)    => self.typeck(id),
 		DeclInBlockRef::CfgSpec(id)     => self.typeck(id),
 		DeclInBlockRef::Discon(id)      => self.typeck(id),
+		DeclInBlockRef::GroupTemp(id)   => self.typeck(id),
+		DeclInBlockRef::Group(id)       => self.typeck(id),
 	}
 });
 
@@ -640,6 +648,8 @@ impl_typeck!(self, id: DeclInProcRef => {
 		DeclInProcRef::Alias(id)       => self.typeck(id),
 		DeclInProcRef::Attr(id)        => self.typeck(id),
 		DeclInProcRef::AttrSpec(id)    => self.typeck(id),
+		DeclInProcRef::GroupTemp(id)   => self.typeck(id),
+		DeclInProcRef::Group(id)       => self.typeck(id),
 	}
 });
 
@@ -732,6 +742,14 @@ impl_typeck!(self, id: CfgSpecRef => {
 });
 
 impl_typeck!(self, id: DisconSpecRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: GroupTempRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: GroupDeclRef => {
 	unimp!(self, id)
 });
 

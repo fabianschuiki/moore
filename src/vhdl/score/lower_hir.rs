@@ -249,6 +249,20 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 					self.set_ast(subid, (scope_id, decl));
 					refs.push(subid.into());
 				}
+				ast::DeclItem::GroupDecl(ref decl) => {
+					match decl.data {
+						ast::GroupData::Decl(..) => {
+							let subid = GroupDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::GroupData::Temp{..} => {
+							let subid = GroupTempRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
 				ast::DeclItem::UseClause(..) => (),
 				ref wrong => {
 					self.emit(

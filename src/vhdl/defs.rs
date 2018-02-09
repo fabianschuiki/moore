@@ -156,6 +156,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInBlockRef::AttrSpec(_id)    => (),
 			DeclInBlockRef::CfgSpec(_id)     => (),
 			DeclInBlockRef::Discon(_id)      => (),
+			DeclInBlockRef::GroupTemp(id)    => self.declare_group_temp(id),
+			DeclInBlockRef::Group(id)        => self.declare_group(id),
 		}
 	}
 
@@ -177,6 +179,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgRef::Attr(id)        => self.declare_attr(id),
 			DeclInPkgRef::AttrSpec(_id)   => (),
 			DeclInPkgRef::Discon(_id)     => (),
+			DeclInPkgRef::GroupTemp(id)   => self.declare_group_temp(id),
+			DeclInPkgRef::Group(id)       => self.declare_group(id),
 		}
 	}
 
@@ -197,6 +201,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgBodyRef::Alias(id)        => self.declare_alias(id),
 			DeclInPkgBodyRef::Attr(id)         => self.declare_attr(id),
 			DeclInPkgBodyRef::AttrSpec(_id)    => (),
+			DeclInPkgBodyRef::GroupTemp(id)    => self.declare_group_temp(id),
+			DeclInPkgBodyRef::Group(id)        => self.declare_group(id),
 		}
 	}
 
@@ -217,6 +223,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInSubprogRef::Alias(id)        => self.declare_alias(id),
 			DeclInSubprogRef::Attr(id)         => self.declare_attr(id),
 			DeclInSubprogRef::AttrSpec(_id)    => (),
+			DeclInSubprogRef::GroupTemp(id)    => self.declare_group_temp(id),
+			DeclInSubprogRef::Group(id)        => self.declare_group(id),
 		}
 	}
 
@@ -278,6 +286,16 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 	/// Handle an attribute declaration.
 	pub fn declare_attr(&mut self, id: AttrDeclRef) {
 		self.declare(self.ctx.ast(id).1.name.map_into(), Def::Attr(id))
+	}
+
+	/// Handle a group template declaration.
+	pub fn declare_group_temp(&mut self, id: GroupTempRef) {
+		self.declare(self.ctx.ast(id).1.name.map_into(), Def::GroupTemp(id))
+	}
+
+	/// Handle a group declaration.
+	pub fn declare_group(&mut self, id: GroupDeclRef) {
+		self.declare(self.ctx.ast(id).1.name.map_into(), Def::Group(id))
 	}
 
 	/// Handle subprogram declarations.

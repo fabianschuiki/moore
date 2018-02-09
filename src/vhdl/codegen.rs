@@ -173,6 +173,8 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 		DeclInBlockRef::AttrSpec(_id)   => Ok(()),
 		DeclInBlockRef::CfgSpec(_id)    => Ok(()),
 		DeclInBlockRef::Discon(_id)     => Ok(()),
+		DeclInBlockRef::GroupTemp(_id)  => Ok(()),
+		DeclInBlockRef::Group(_id)      => Ok(()),
 	}
 });
 

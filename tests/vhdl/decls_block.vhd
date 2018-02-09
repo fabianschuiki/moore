@@ -67,7 +67,10 @@ architecture bar of foo is
 	use work.pkg.all;
 
 	-- group_template_declaration
+	--group grp_tmp_a is (signal, signal);
+
 	-- group_declaration
+	--group grp_a : grp_tmp_a (sig_a, sig_a);
 begin end;
 
 -- @elab foo
