@@ -372,6 +372,40 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						}
 					}
 				}
+				ast::DeclItem::AliasDecl(ref decl) => {
+					let subid = AliasDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::AttrDecl(ref decl) => {
+					match decl.data {
+						ast::AttrData::Decl(..) => {
+							let subid = AttrDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::AttrData::Spec{..} => {
+							let subid = AttrSpecRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::GroupDecl(ref decl) => {
+					match decl.data {
+						ast::GroupData::Decl(..) => {
+							let subid = GroupDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::GroupData::Temp{..} => {
+							let subid = GroupTempRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::UseClause(..) => (),
 				ref wrong => {
 					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in a subprogram", wrong.desc()))
@@ -2477,8 +2511,8 @@ impl_make!(self, id: SubprogBodyRef => &hir::SubprogBody {
 		ast::SubprogData::Body { ref decls, ref stmts } => (decls, stmts),
 		_ => unreachable!(),
 	};
-	let decls = self.unpack_subprog_decls(scope_id, decls)?;
-	let stmts = self.unpack_sequential_stmts(scope_id, stmts, "a subprogram")?;
+	let decls = self.unpack_subprog_decls(id.into(), decls)?;
+	let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a subprogram")?;
 	Ok(self.sb.arenas.hir.subprog_body.alloc(hir::SubprogBody {
 		parent: scope_id,
 		spec: spec,
