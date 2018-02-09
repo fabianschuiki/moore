@@ -150,6 +150,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInBlockRef::Signal(id)       => self.declare_signal(id),
 			DeclInBlockRef::SharedVar(id)    => self.declare_shared_var(id),
 			DeclInBlockRef::File(id)         => self.declare_file(id),
+			DeclInBlockRef::Alias(id)        => self.declare_alias(id),
+			DeclInBlockRef::Comp(id)         => self.declare_comp(id),
 		}
 	}
 
@@ -166,6 +168,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgRef::Signal(id)      => self.declare_signal(id),
 			DeclInPkgRef::Var(id)         => self.declare_var(id),
 			DeclInPkgRef::File(id)        => self.declare_file(id),
+			DeclInPkgRef::Alias(id)       => self.declare_alias(id),
+			DeclInPkgRef::Comp(id)        => self.declare_comp(id),
 		}
 	}
 
@@ -183,6 +187,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgBodyRef::Const(id)        => self.declare_const(id),
 			DeclInPkgBodyRef::Var(id)          => self.declare_var(id),
 			DeclInPkgBodyRef::File(id)         => self.declare_file(id),
+			DeclInPkgBodyRef::Alias(id)        => self.declare_alias(id),
 		}
 	}
 
@@ -200,13 +205,17 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInSubprogRef::Const(id)        => self.declare_const(id),
 			DeclInSubprogRef::Var(id)          => self.declare_var(id),
 			DeclInSubprogRef::File(id)         => self.declare_file(id),
+			DeclInSubprogRef::Alias(id)        => self.declare_alias(id),
 		}
 	}
 
 	/// Handle a constant declaration.
-	pub fn declare_const(&mut self, _id: ConstDeclRef) {
-		unimplemented!();
-		// self.declare(self.ctx.ast(id).1.name.map_into(), Def::Const(id))
+	pub fn declare_const(&mut self, id: ConstDeclRef) {
+		let hir = match self.ctx.existing_hir(id) {
+			Ok(h) => h,
+			Err(()) => { self.failed = true; return; }
+		};
+		self.declare(hir.name.map_into(), Def::Const(id.into()))
 	}
 
 	/// Handle a signal declaration.
@@ -219,21 +228,40 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Handle a variable declaration.
-	pub fn declare_var(&mut self, _id: VarDeclRef) {
-		unimplemented!();
-		// self.declare(self.ctx.ast(id).1.name.map_into(), Def::Const(id))
+	pub fn declare_var(&mut self, id: VarDeclRef) {
+		let hir = match self.ctx.existing_hir(id) {
+			Ok(h) => h,
+			Err(()) => { self.failed = true; return; }
+		};
+		self.declare(hir.name.map_into(), Def::Var(id.into()))
 	}
 
 	/// Handle a shared variable declaration.
-	pub fn declare_shared_var(&mut self, _id: SharedVarDeclRef) {
-		unimplemented!();
-		// self.declare(self.ctx.ast(id).1.name.map_into(), Def::Const(id))
+	pub fn declare_shared_var(&mut self, id: SharedVarDeclRef) {
+		let hir = match self.ctx.existing_hir(id) {
+			Ok(h) => h,
+			Err(()) => { self.failed = true; return; }
+		};
+		self.declare(hir.name.map_into(), Def::SharedVar(id.into()))
 	}
 
 	/// Handle a file declaration.
-	pub fn declare_file(&mut self, _id: FileDeclRef) {
-		unimplemented!();
-		// self.declare(self.ctx.ast(id).1.name.map_into(), Def::Const(id))
+	pub fn declare_file(&mut self, id: FileDeclRef) {
+		let hir = match self.ctx.existing_hir(id) {
+			Ok(h) => h,
+			Err(()) => { self.failed = true; return; }
+		};
+		self.declare(hir.name.map_into(), Def::File(id.into()))
+	}
+
+	/// Handle an alias declaration.
+	pub fn declare_alias(&mut self, id: AliasDeclRef) {
+		self.declare_primary_name(&self.ctx.ast(id).1.name, Def::Alias(id))
+	}
+
+	/// Handle a component declaration.
+	pub fn declare_comp(&mut self, id: CompDeclRef) {
+		self.declare(self.ctx.ast(id).1.name.map_into(), Def::Comp(id))
 	}
 
 	/// Handle subprogram declarations.

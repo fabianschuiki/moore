@@ -144,8 +144,32 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 
 		for decl in decls {
 			match *decl {
+				ast::DeclItem::SubprogDecl(ref decl) => {
+					match decl.data {
+						ast::SubprogData::Decl => {
+							let subid = SubprogDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::SubprogData::Body{..} => {
+							let subid = SubprogBodyRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::SubprogData::Inst{..} => {
+							let subid = SubprogInstRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
 				ast::DeclItem::PkgDecl(ref decl) => {
 					let subid = PkgDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgBody(ref decl) => {
+					let subid = PkgBodyRef(NodeId::alloc());
 					self.set_ast(subid, (scope_id, decl));
 					refs.push(subid.into());
 				}
@@ -190,6 +214,16 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 							refs.push(subid.into());
 						}
 					}
+				}
+				ast::DeclItem::AliasDecl(ref decl) => {
+					let subid = AliasDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::CompDecl(ref decl) => {
+					let subid = CompDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
 				}
 				ref wrong => {
 					self.emit(

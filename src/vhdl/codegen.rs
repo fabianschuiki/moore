@@ -167,6 +167,8 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 		DeclInBlockRef::Signal(id)      => self.codegen(id, ctx),
 		DeclInBlockRef::SharedVar(id)   => self.codegen(id, ctx),
 		DeclInBlockRef::File(id)        => self.codegen(id, ctx),
+		DeclInBlockRef::Alias(_id)      => Ok(()),
+		DeclInBlockRef::Comp(id)        => self.codegen(id, &mut ()),
 	}
 });
 
@@ -313,6 +315,10 @@ impl_codegen!(self, id: PkgBodyRef, _ctx: &mut () => {
 });
 
 impl_codegen!(self, id: PkgInstRef, _ctx: &mut () => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: CompDeclRef, _ctx: &mut () => {
 	unimp!(self, id);
 });
 

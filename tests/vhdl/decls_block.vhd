@@ -1,0 +1,63 @@
+-- This file tests block declarative items.
+entity foo is end;
+architecture bar of foo is
+	type BIT is ('0', '1');
+
+	-- subprogram_declaration
+	--procedure proc_a;
+	--function func_a return BIT;
+
+	-- subprogram_body
+	--procedure proc_a is begin
+	--end;
+	--function func_a return BIT is begin
+	--end;
+
+	-- subprogram_instantiation_declaration
+	--procedure proc_b is new proc_a;
+	--function func_b is new func_a;
+
+	-- package_declaration
+	--package pkg_a is end;
+
+	-- package_body
+	--package body pkg_a is end;
+
+	-- package_instantiation_declaration
+	--package pkg_b is new pkg_a;
+
+	-- type_declaration
+	type NUM is range 0 to 100;
+
+	-- subtype_declaration
+	subtype ANS is NUM range 0 to 42;
+
+	-- constant_declaration
+	--constant const_a : BIT;
+
+	-- signal_declaration
+	--signal sig_a : BIT;
+
+	-- shared_variable_declaration
+	--shared variable shvar_a : BIT;
+
+	-- file_declaration
+	--file file_a : BIT;
+
+	-- alias_declaration
+	--alias alias_a is pkg_a;
+
+	-- component_declaration
+	--component comp_a is
+	--end component;
+
+	-- attribute_declaration
+	-- attribute_specification
+	-- configuration_specification
+	-- disconnection_specification
+	-- use_clause
+	-- group_template_declaration
+	-- group_declaration
+begin end;
+
+-- @elab foo

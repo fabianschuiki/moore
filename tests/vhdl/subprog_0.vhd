@@ -28,4 +28,6 @@ entity foo is end;
 architecture bar of foo is
 	-- Currently the architecture is required to trigger typeck of the entire
 	-- library.
+	function F1 return BIT;
+
 begin end;
