@@ -364,9 +364,13 @@ impl_make_scope!(self, id: SubprogBodyRef => {
 	}))
 });
 
-impl_make_defs!(self, _id: ProcessStmtRef => {
-	// TODO: Implement this.
-	Ok(self.sb.arenas.defs.alloc(HashMap::new()))
+impl_make_defs!(self, id: ProcessStmtRef => {
+	let mut ctx = DefsContext::new(self);
+	let hir = self.hir(id)?;
+	for &decl in &hir.decls {
+		ctx.declare_any_in_process(decl);
+	}
+	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
 
 impl_make_scope!(self, id: ProcessStmtRef => {

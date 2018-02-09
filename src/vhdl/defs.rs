@@ -228,6 +228,28 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 		}
 	}
 
+	/// Handle any of the declarations that can appear in a process.
+	pub fn declare_any_in_process(&mut self, id: DeclInProcRef) {
+		match id {
+			DeclInProcRef::Subprog(id)      => self.declare_subprog(id),
+			DeclInProcRef::SubprogInst(id)  => self.declare_subprog_inst(id),
+			DeclInProcRef::SubprogBody(_id) => (),
+			DeclInProcRef::Pkg(id)          => self.declare_pkg(id),
+			DeclInProcRef::PkgInst(id)      => self.declare_pkg_inst(id),
+			DeclInProcRef::PkgBody(_id)     => (),
+			DeclInProcRef::Type(id)         => self.declare_type(id),
+			DeclInProcRef::Subtype(id)      => self.declare_subtype(id),
+			DeclInProcRef::Const(id)        => self.declare_const(id),
+			DeclInProcRef::Var(id)          => self.declare_var(id),
+			DeclInProcRef::File(id)         => self.declare_file(id),
+			DeclInProcRef::Alias(id)        => self.declare_alias(id),
+			DeclInProcRef::Attr(id)         => self.declare_attr(id),
+			DeclInProcRef::AttrSpec(_id)    => (),
+			DeclInProcRef::GroupTemp(id)    => self.declare_group_temp(id),
+			DeclInProcRef::Group(id)        => self.declare_group(id),
+		}
+	}
+
 	/// Handle a constant declaration.
 	pub fn declare_const(&mut self, id: ConstDeclRef) {
 		let hir = match self.ctx.existing_hir(id) {

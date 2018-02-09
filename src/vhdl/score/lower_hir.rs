@@ -282,6 +282,149 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	}
 
 	/// Unpack a slice of AST declarative items into a list of items admissible
+	/// in the declarative part of a process.
+	///
+	/// See IEEE 1076-2008 section 11.3.
+	pub fn unpack_process_decls(
+		&self,
+		scope_id: ScopeRef,
+		decls: &'ast [ast::DeclItem],
+		container_name: &str
+	) -> Result<Vec<DeclInProcRef>> {
+		let mut refs = Vec::new();
+		let mut had_fails = false;
+
+		for decl in decls {
+			match *decl {
+				ast::DeclItem::SubprogDecl(ref decl) => {
+					match decl.data {
+						ast::SubprogData::Decl => {
+							let subid = SubprogDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::SubprogData::Body{..} => {
+							let subid = SubprogBodyRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::SubprogData::Inst{..} => {
+							let subid = SubprogInstRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::PkgDecl(ref decl) => {
+					let subid = PkgDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgBody(ref decl) => {
+					let subid = PkgBodyRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::PkgInst(ref decl) => {
+					let subid = PkgInstRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::TypeDecl(ref decl) => {
+					let subid = TypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::SubtypeDecl(ref decl) => {
+					let subid = SubtypeDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::ObjDecl(ref decl) => {
+					match decl.kind {
+						ast::ObjKind::Const => {
+							let subid = ConstDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::Signal => {
+							self.emit(
+								DiagBuilder2::error(format!("a signal declaration cannot appear in {}", container_name))
+								.span(decl.human_span())
+							);
+							had_fails = true;
+						}
+						ast::ObjKind::SharedVar => {
+							self.emit(
+								DiagBuilder2::error(format!("not a variable; shared variables may not appear in {}", container_name))
+								.span(decl.human_span())
+							);
+							had_fails = true;
+						}
+						ast::ObjKind::Var => {
+							let subid = VarDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::ObjKind::File => {
+							let subid = FileDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::AliasDecl(ref decl) => {
+					let subid = AliasDeclRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::AttrDecl(ref decl) => {
+					match decl.data {
+						ast::AttrData::Decl(..) => {
+							let subid = AttrDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::AttrData::Spec{..} => {
+							let subid = AttrSpecRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::GroupDecl(ref decl) => {
+					match decl.data {
+						ast::GroupData::Decl(..) => {
+							let subid = GroupDeclRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+						ast::GroupData::Temp{..} => {
+							let subid = GroupTempRef(NodeId::alloc());
+							self.set_ast(subid, (scope_id, decl));
+							refs.push(subid.into());
+						}
+					}
+				}
+				ast::DeclItem::UseClause(..) => (),
+				ref wrong => {
+					self.emit(
+						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
+						.span(decl.human_span())
+					);
+					had_fails = true;
+				}
+			}
+		}
+
+		if had_fails {
+			Err(())
+		} else {
+			Ok(refs)
+		}
+	}
+
+	/// Unpack a slice of AST declarative items into a list of items admissible
 	/// in the declarative part of a subprogram.
 	///
 	/// See IEEE 1076-2008 section 4.3.
@@ -1688,20 +1831,20 @@ impl_make!(self, id: ProcessStmtRef => &hir::ProcessStmt {
 	match ast.data {
 		ast::ProcStmt {
 			// ref sensitivity,
-			// ref decls,
+			ref decls,
 			ref stmts,
 			postponed,
 			..
 		} => {
 			// TODO: map sensititivty
-			// TODO: map decls
+			let decls = self.unpack_process_decls(id.into(), decls, "a process")?;
 			let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a process")?;
 			Ok(self.sb.arenas.hir.process_stmt.alloc(hir::ProcessStmt {
 				parent: scope_id,
 				label: ast.label,
 				postponed: postponed,
 				sensitivity: hir::ProcessSensitivity::None,
-				decls: Vec::new(),
+				decls: decls,
 				stmts: stmts,
 			}))
 		}
