@@ -239,6 +239,17 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 						}
 					}
 				}
+				ast::DeclItem::CfgSpec(ref decl) => {
+					let subid = CfgSpecRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::DisconDecl(ref decl) => {
+					let subid = DisconSpecRef(NodeId::alloc());
+					self.set_ast(subid, (scope_id, decl));
+					refs.push(subid.into());
+				}
+				ast::DeclItem::UseClause(..) => (),
 				ref wrong => {
 					self.emit(
 						DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))

@@ -1097,6 +1097,8 @@ node_ref!(AliasDeclRef);
 node_ref!(CompDeclRef);
 node_ref!(AttrDeclRef);
 node_ref!(AttrSpecRef);
+node_ref!(CfgSpecRef);
+node_ref!(DisconSpecRef);
 node_ref!(ArrayTypeIndexRef);
 node_ref!(GenericMapRef);
 node_ref!(PortMapRef);
@@ -1206,7 +1208,7 @@ node_ref_group!(SubprogRef:
 /// [x] component_declaration
 /// [x] attribute_declaration
 /// [x] attribute_specification
-/// [ ] disconnection_specification
+/// [x] disconnection_specification
 /// [ ] use_clause
 /// [ ] group_template_declaration
 /// [ ] group_declaration
@@ -1226,6 +1228,7 @@ node_ref_group!(DeclInPkgRef:
 	Comp(CompDeclRef),
 	Attr(AttrDeclRef),
 	AttrSpec(AttrSpecRef),
+	Discon(DisconSpecRef),
 );
 
 /// All declarations that may possibly appear in a package body. See IEEE
@@ -1326,8 +1329,8 @@ node_ref_group!(DeclInSubprogRef:
 /// [x] component_declaration
 /// [x] attribute_declaration
 /// [x] attribute_specification
-/// [ ] configuration_specification
-/// [ ] disconnection_specification
+/// [x] configuration_specification
+/// [x] disconnection_specification
 /// [ ] use_clause
 /// [ ] group_template_declaration
 /// [ ] group_declaration
@@ -1349,6 +1352,8 @@ node_ref_group!(DeclInBlockRef:
 	Comp(CompDeclRef),
 	Attr(AttrDeclRef),
 	AttrSpec(AttrSpecRef),
+	CfgSpec(CfgSpecRef),
+	Discon(DisconSpecRef),
 );
 
 /// All declarations that may possibly appear in a process statement. See IEEE
@@ -1490,6 +1495,8 @@ node_storage!(AstTable<'ast>,
 	comp_decls:            CompDeclRef           => (ScopeRef, &'ast ast::CompDecl),
 	attr_decls:            AttrDeclRef           => (ScopeRef, &'ast ast::AttrDecl),
 	attr_specs:            AttrSpecRef           => (ScopeRef, &'ast ast::AttrDecl),
+	cfg_specs:             CfgSpecRef            => (ScopeRef, &'ast ast::CfgSpec),
+	discon_specs:          DisconSpecRef         => (ScopeRef, &'ast ast::DisconSpec),
 
 	exprs: ExprRef => (ScopeRef, &'ast ast::Expr),
 

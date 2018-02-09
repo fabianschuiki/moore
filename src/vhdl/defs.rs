@@ -154,6 +154,8 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInBlockRef::Comp(id)         => self.declare_comp(id),
 			DeclInBlockRef::Attr(id)         => self.declare_attr(id),
 			DeclInBlockRef::AttrSpec(_id)    => (),
+			DeclInBlockRef::CfgSpec(_id)     => (),
+			DeclInBlockRef::Discon(_id)      => (),
 		}
 	}
 
@@ -174,6 +176,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
 			DeclInPkgRef::Comp(id)        => self.declare_comp(id),
 			DeclInPkgRef::Attr(id)        => self.declare_attr(id),
 			DeclInPkgRef::AttrSpec(_id)   => (),
+			DeclInPkgRef::Discon(_id)     => (),
 		}
 	}
 

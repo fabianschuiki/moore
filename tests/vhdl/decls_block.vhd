@@ -36,7 +36,7 @@ architecture bar of foo is
 	--constant const_a : BIT;
 
 	-- signal_declaration
-	--signal sig_a : BIT;
+	signal sig_a : BIT;
 
 	-- shared_variable_declaration
 	--shared variable shvar_a : BIT;
@@ -58,8 +58,14 @@ architecture bar of foo is
 	--attribute attr_a of NUM : type is '0';
 
 	-- configuration_specification
+	--for all : comp_a use entity foo;
+
 	-- disconnection_specification
+	--disconnect all : BIT after 0;
+
 	-- use_clause
+	use work.pkg.all;
+
 	-- group_template_declaration
 	-- group_declaration
 begin end;

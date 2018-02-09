@@ -559,6 +559,7 @@ impl_typeck!(self, id: DeclInPkgRef => {
 		DeclInPkgRef::Comp(id)        => self.typeck(id),
 		DeclInPkgRef::Attr(id)        => self.typeck(id),
 		DeclInPkgRef::AttrSpec(id)    => self.typeck(id),
+		DeclInPkgRef::Discon(id)      => self.typeck(id),
 	}
 });
 
@@ -618,6 +619,8 @@ impl_typeck!(self, id: DeclInBlockRef => {
 		DeclInBlockRef::Comp(id)        => self.typeck(id),
 		DeclInBlockRef::Attr(id)        => self.typeck(id),
 		DeclInBlockRef::AttrSpec(id)    => self.typeck(id),
+		DeclInBlockRef::CfgSpec(id)     => self.typeck(id),
+		DeclInBlockRef::Discon(id)      => self.typeck(id),
 	}
 });
 
@@ -721,6 +724,14 @@ impl_typeck!(self, id: AttrDeclRef => {
 });
 
 impl_typeck!(self, id: AttrSpecRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: CfgSpecRef => {
+	unimp!(self, id)
+});
+
+impl_typeck!(self, id: DisconSpecRef => {
 	unimp!(self, id)
 });
 
