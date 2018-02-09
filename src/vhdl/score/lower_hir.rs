@@ -1183,6 +1183,40 @@ impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
 					}
 				}
 			}
+			ast::DeclItem::AliasDecl(ref decl) => {
+				let subid = AliasDeclRef(NodeId::alloc());
+				self.set_ast(subid, (scope_id, decl));
+				decls.push(subid.into());
+			}
+			ast::DeclItem::AttrDecl(ref decl) => {
+				match decl.data {
+					ast::AttrData::Decl(..) => {
+						let subid = AttrDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::AttrData::Spec{..} => {
+						let subid = AttrSpecRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+				}
+			}
+			ast::DeclItem::GroupDecl(ref decl) => {
+				match decl.data {
+					ast::GroupData::Decl(..) => {
+						let subid = GroupDeclRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+					ast::GroupData::Temp{..} => {
+						let subid = GroupTempRef(NodeId::alloc());
+						self.set_ast(subid, (scope_id, decl));
+						decls.push(subid.into());
+					}
+				}
+			}
+			ast::DeclItem::UseClause(..) => (),
 			ref wrong => {
 				self.emit(
 					DiagBuilder2::error(format!("a {} cannot appear in a package body", wrong.desc()))

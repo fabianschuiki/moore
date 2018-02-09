@@ -1,10 +1,17 @@
--- This file tests package declarative items.
-package pkg is
+-- This file tests package body declarative items.
+package pkg is end;
+package body pkg is
 	type BIT is ('0', '1');
 
 	-- subprogram_declaration
 	procedure proc_a;
 	function func_a return BIT;
+
+	-- subprogram_body
+	procedure proc_a is begin
+	end;
+	function func_a return BIT is begin
+	end;
 
 	-- subprogram_instantiation_declaration
 	--procedure proc_b is new proc_a;
@@ -12,6 +19,9 @@ package pkg is
 
 	-- package_declaration
 	package pkg_a is end;
+
+	-- package_body
+	package body pkg_a is end;
 
 	-- package_instantiation_declaration
 	package pkg_b is new pkg_a;
@@ -25,11 +35,8 @@ package pkg is
 	-- constant_declaration
 	--constant const_a : BIT;
 
-	-- signal_declaration
-	--signal sig_a : BIT;
-
 	-- variable_declaration
-	--variable shvar_a : BIT;
+	--variable var_a : BIT;
 
 	-- file_declaration
 	--file file_a : BIT;
@@ -37,18 +44,11 @@ package pkg is
 	-- alias_declaration
 	--alias alias_a is pkg_a;
 
-	-- component_declaration
-	--component comp_a is
-	--end component;
-
 	-- attribute_declaration
 	--attribute attr_a : BIT;
 
 	-- attribute_specification
 	--attribute attr_a of NUM : type is '0';
-
-	-- disconnection_specification
-	--disconnect all : BIT after 0;
 
 	-- use_clause
 	use work.pkg.all;
