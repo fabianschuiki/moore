@@ -735,7 +735,7 @@ pub struct SubprogInst {
 	/// Whether this is a procedure, pure function, or impure function.
 	pub kind: SubprogKind,
 	/// The name of the subprogram.
-	pub name: Spanned<Name>,
+	pub name: Spanned<ResolvableName>,
 	/// The subprogram to be instantiated.
 	pub subprog: Spanned<LatentSubprogRef>,
 	/// The generic map.
@@ -748,7 +748,7 @@ pub struct SubprogInst {
 /// subprogram declaration and body, and must match.
 #[derive(Clone, Debug)]
 pub struct SubprogSpec {
-	/// The name of the subprogram. For functions this must be an identifier.
+	/// The name of the subprogram. For procedures this must be an identifier.
 	pub name: Spanned<ResolvableName>,
 	/// Whether this is a procedure, pure function, or impure function.
 	pub kind: SubprogKind,

@@ -7,8 +7,8 @@ package pkg is
 	function func_a return BIT;
 
 	-- subprogram_instantiation_declaration
-	--procedure proc_b is new proc_a;
-	--function func_b is new func_a;
+	procedure proc_b is new proc_a;
+	function func_b is new func_a;
 
 	-- package_declaration
 	package pkg_a is end;

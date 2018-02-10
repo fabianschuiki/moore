@@ -917,7 +917,6 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		scope_id: ScopeRef,
 		ast: &'ast ast::SubprogSpec
 	) -> Result<hir::SubprogSpec> {
-		let name = self.resolvable_from_primary_name(&ast.name)?;
 		let kind = match (ast.kind, ast.purity) {
 			(ast::SubprogKind::Proc, None) => hir::SubprogKind::Proc,
 			(ast::SubprogKind::Func, None) |
@@ -925,12 +924,13 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			(ast::SubprogKind::Func, Some(ast::SubprogPurity::Impure)) => hir::SubprogKind::ImpureFunc,
 			(ast::SubprogKind::Proc, Some(_)) => {
 				self.emit(
-					DiagBuilder2::error(format!("Procedure `{}` cannot be pure/impure", name.value))
-					.span(name.span)
+					DiagBuilder2::error(format!("Procedure `{}` cannot be pure/impure", ast.name.span.extract()))
+					.span(ast.name.span)
 				);
 				hir::SubprogKind::Proc
 			}
 		};
+		let name = self.lower_subprog_name(kind, &ast.name)?;
 		let mut generics = Vec::new();
 		if let Some(ref gc) = ast.generic_clause {
 			self.unpack_generics(scope_id, gc, &mut generics);
@@ -954,22 +954,6 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			);
 			return Err(());
 		}
-		if name.value.is_bit() {
-			self.emit(
-				DiagBuilder2::error(format!("`{}` is not a valid subprogram name", name.value))
-				.span(name.span)
-				.add_note("Operators. Use a procedure if you want no return type. See IEEE 1076-2008 section 4.2.1.")
-			);
-			return Err(());
-		}
-		if ast.kind == ast::SubprogKind::Proc && !name.value.is_ident() {
-			self.emit(
-				DiagBuilder2::error(format!("`{}` overload must be a function", name.value))
-				.span(name.span)
-				.add_note("Procedures cannot overload operators. Use a function. See IEEE 1076-2008 section 4.2.1.")
-			);
-			return Err(());
-		}
 		Ok(hir::SubprogSpec {
 			name: name,
 			kind: kind,
@@ -978,6 +962,32 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 			params: vec![],
 			return_type: return_type,
 		})
+	}
+
+	/// Lower the name of an AST subprogram to HIR and perform checks.
+	pub fn lower_subprog_name(
+		&self,
+		kind: hir::SubprogKind,
+		name: &'ast ast::PrimaryName,
+	) -> Result<(Spanned<ResolvableName>)> {
+		let name = self.resolvable_from_primary_name(&name)?;
+		if name.value.is_bit() {
+			self.emit(
+				DiagBuilder2::error(format!("`{}` is not a valid subprogram name", name.value))
+				.span(name.span)
+				.add_note("Bit literals cannot be used as subprogram names. See IEEE 1076-2008 section 4.2.1.")
+			);
+			return Err(());
+		}
+		if kind == hir::SubprogKind::Proc && !name.value.is_ident() {
+			self.emit(
+				DiagBuilder2::error(format!("`{}` overload must be a function", name.value))
+				.span(name.span)
+				.add_note("Procedures cannot overload operators. Use a function. See IEEE 1076-2008 section 4.2.1.")
+			);
+			return Err(());
+		}
+		Ok(name)
 	}
 
 	/// Unpack generics from a list of interface declarations.
@@ -2667,16 +2677,33 @@ impl_make!(self, id: SubprogBodyRef => &hir::SubprogBody {
 
 // Lower a subprogram instantiation to HIR.
 impl_make!(self, id: SubprogInstRef => &hir::SubprogInst {
-	let (_scope_id, ast) = self.ast(id);
-	unimp_msg!(self, "subprogram instantiations", ast.span);
-	// let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
-	// Ok(self.sb.arenas.hir.subprog_inst.alloc(hir::SubprogInst {
-	// 	parent: scope_id,
-	// 	kind: ,
-	// 	name: ,
-	// 	subprog: ,
-	// 	generic_map: ,
-	// }))
+	let (scope_id, ast) = self.ast(id);
+	let kind = match ast.spec.kind {
+		ast::SubprogKind::Proc => hir::SubprogKind::Proc,
+		ast::SubprogKind::Func => hir::SubprogKind::PureFunc,
+	};
+	let name = self.lower_subprog_name(kind, &ast.spec.name)?;
+	assert!(ast.spec.purity.is_none());
+	assert!(ast.spec.generic_clause.is_none());
+	assert!(ast.spec.generic_map.is_none());
+	assert!(ast.spec.params.is_none());
+	assert!(ast.spec.retty.is_none());
+	let (target_name, generics) = match ast.data {
+		ast::SubprogData::Inst { ref name, ref generics } => (name, generics),
+		_ => unreachable!(),
+	};
+	let subprog = self.unpack_subprog_name(target_name.into(), scope_id)?;
+	let generics = match *generics {
+		Some(ref g) => self.unpack_generic_map(scope_id, g)?,
+		None => vec![],
+	};
+	Ok(self.sb.arenas.hir.subprog_inst.alloc(hir::SubprogInst {
+		parent: scope_id,
+		kind: kind,
+		name: name,
+		subprog: subprog,
+		generic_map: generics,
+	}))
 });
 
 impl_make!(self, id: LatentTypeMarkRef => Spanned<TypeMarkRef> {
