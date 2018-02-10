@@ -12,6 +12,11 @@ use konst::*;
 pub use syntax::ast::Dir;
 
 
+/// Allocates objects into an arena.
+pub trait Alloc<T> {
+	fn alloc(&self, value: T) -> &mut T;
+}
+
 /// A collection of arenas where HIR nodes may be allocated.
 pub struct Arenas {
 	pub lib: Arena<Lib>,
@@ -36,8 +41,8 @@ pub struct Arenas {
 	pub subprog_body: Arena<SubprogBody>,
 	pub subprog_inst: Arena<SubprogInst>,
 	pub type_mark: Arena<TypeMarkRef>,
+	pub wait_stmt: Arena<Stmt<WaitStmt>>,
 }
-
 
 impl Arenas {
 	/// Create a new set of arenas.
@@ -65,7 +70,14 @@ impl Arenas {
 			subprog_body: Arena::new(),
 			subprog_inst: Arena::new(),
 			type_mark: Arena::new(),
+			wait_stmt: Arena::new(),
 		}
+	}
+}
+
+impl Alloc<Stmt<WaitStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<WaitStmt>) -> &mut Stmt<WaitStmt> {
+		self.wait_stmt.alloc(value)
 	}
 }
 
@@ -773,4 +785,32 @@ pub enum SubprogKind {
 	PureFunc,
 	/// An impure function.
 	ImpureFunc,
+}
+
+/// A statement.
+///
+/// See IEEE 1076-2008 section 10.1.
+#[derive(Clone, Debug)]
+pub struct Stmt<T> {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The span this statement covers.
+	pub span: Span,
+	/// The optional label.
+	pub label: Option<Spanned<Name>>,
+	/// The inner statement.
+	pub stmt: T,
+}
+
+/// A wait statement.
+///
+/// See IEEE 1076-2008 section 10.2.
+#[derive(Clone, Debug)]
+pub struct WaitStmt {
+	/// The sensitivity clause.
+	pub sens: Option<Vec<SignalRef>>,
+	/// The condition clause.
+	pub cond: Option<ExprRef>,
+	/// The timeout clause.
+	pub timeout: Option<ExprRef>,
 }

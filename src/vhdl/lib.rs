@@ -11,6 +11,7 @@ extern crate llhd;
 #[macro_use]
 extern crate lazy_static;
 pub extern crate moore_vhdl_syntax as syntax;
+// extern crate futures;
 
 pub mod symtbl;
 #[macro_use]
@@ -21,3 +22,5 @@ pub mod konst;
 pub mod codegen;
 pub mod defs;
 pub mod typeck;
+pub mod make_ctx;
+pub mod lazy;

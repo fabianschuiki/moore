@@ -23,14 +23,16 @@ use svlog::ast as svlog_ast;
 /// The global context which holds information about the used scoreboards. All
 /// useful operations are defined on this context rather than on the scoreboard
 /// directly, to decouple processing and ownership.
-pub struct ScoreContext<'sb, 'ast: 'sb, 'ctx: 'sb> {
+pub struct ScoreContext<'lazy, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
     /// The compiler session which carries the options and is used to emit
     /// diagnostics.
-    pub sess: &'sb Session,
+    pub sess: &'lazy Session,
     /// The global scoreboard.
     pub sb: &'sb ScoreBoard<'ast, 'ctx>,
     /// The VHDL scoreboard.
     pub vhdl: &'sb vhdl::score::ScoreBoard<'ast, 'ctx>,
+    /// The VHDL lazy phase table.
+    pub vhdl_phases: &'lazy vhdl::lazy::LazyPhaseTable<'sb, 'ast, 'ctx>,
     /// The SystemVerilog scoreboard.
     pub svlog: &'sb (),
 }
@@ -50,7 +52,7 @@ pub struct ScoreBoard<'ast, 'ctx> {
 }
 
 
-impl<'sb, 'ast, 'ctx> GenericContext for ScoreContext<'sb, 'ast, 'ctx> {}
+impl<'lazy, 'sb, 'ast, 'ctx> GenericContext for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {}
 
 
 impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
@@ -84,13 +86,14 @@ impl<'ast, 'ctx> std::fmt::Debug for ScoreBoard<'ast, 'ctx> {
 }
 
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     /// Obtain a reference to the VHDL context.
-    pub fn vhdl(&'sb self) -> vhdl::score::ScoreContext<'sb, 'ast, 'ctx> {
+    pub fn vhdl(&'lazy self) -> vhdl::score::ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         vhdl::score::ScoreContext {
             sess: self.sess,
             global: self,
             sb: self.vhdl,
+            lazy: self.vhdl_phases,
         }
     }
 
@@ -138,7 +141,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 }
 
 
-impl<'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     fn make(&self, id: ScopeRef) -> Result<&'ctx Defs> {
         match id {
             ScopeRef::Root(_) => {

@@ -85,7 +85,7 @@ pub trait NodeStorage<I> {
 	/// Obtains a reference to the node with the given ID.
 	///
 	/// Returns `None` when no node with the given ID exists.
-	fn get(&self, id: &I) -> Option<Self::Node>;
+	fn get(&self, id: &I) -> Option<&Self::Node>;
 
 	/// Store a reference to a node under the given ID.
 	///
@@ -297,35 +297,50 @@ macro_rules! node_ref_group {
 /// ```
 #[macro_export]
 macro_rules! node_storage {
-	($name:ident<$lt:tt>, $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
-		#[derive(Debug)]
-		pub struct $name<$lt> {
+	($name:ident<$($lt:tt),+>: $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
+		pub struct $name<$($lt),*> {
 			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
 		}
 
-		impl<$lt> $name<$lt> {
+		node_storage!(@struct_impl $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+	};
+
+	($name:ident<$($lt:tt),+> where ($($wh:tt)+): $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
+		pub struct $name<$($lt),*> where $($wh)* {
+			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
+		}
+
+		node_storage!(@struct_impl $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+	};
+
+	(@struct_impl $name:ident; $($lt:tt),+; $($node_name:ident, $node_ref:ty, $node:ty;)*) => {
+		impl<$($lt),*> $name<$($lt),*> {
 			/// Create a new empty table.
-			pub fn new() -> $name<$lt> {
+			pub fn new() -> $name<$($lt),*> {
 				$name {
 					$($node_name: std::collections::HashMap::new(),)*
 				}
 			}
 		}
 
-		// Implement the `NodeStorage` trait for each of the node types that
-		// this table will support.
-		$(
-		impl<$lt> $crate::score::NodeStorage<$node_ref> for $name<$lt> {
+		node_storage!(@trait_impl $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+	};
+
+	(@trait_impl $name:ident; $($lt:tt),+; $node_name:ident, $node_ref:ty, $node:ty; $($tail_name:ident, $tail_ref:ty, $tail:ty;)*) => {
+		impl<$($lt),*> $crate::score::NodeStorage<$node_ref> for $name<$($lt),*> {
 			type Node = $node;
 
-			fn get(&self, id: &$node_ref) -> Option<$node> {
-				self.$node_name.get(id).map(|n| *n)
+			fn get(&self, id: &$node_ref) -> Option<&$node> {
+				self.$node_name.get(id)
 			}
 
 			fn set(&mut self, id: $node_ref, node: $node) {
 				self.$node_name.insert(id, node);
 			}
 		}
-		)*
-	}
+
+		node_storage!(@trait_impl $name; $($lt),*; $($tail_name, $tail_ref, $tail;)*);
+	};
+
+	(@trait_impl $name:ident; $($lt:tt),*;) => {}
 }

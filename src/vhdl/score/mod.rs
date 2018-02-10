@@ -28,18 +28,19 @@ use ty::*;
 use konst::*;
 use codegen::Codegen;
 use typeck::{Typeck, TypeckContext};
+use lazy::*;
 
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
 /// identifier and output type.
 macro_rules! impl_make {
 	($slf:tt, $id:ident: $id_ty:ty => &$out_ty:ty $blk:block) => {
-		impl<'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+		impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			fn make(&$slf, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
 		}
 	};
 	($slf:tt, $id:ident: $id_ty:ty => $out_ty:ty $blk:block) => {
-		impl<'sb, 'ast, 'ctx> NodeMaker<$id_ty, $out_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+		impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<$id_ty, $out_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			fn make(&$slf, $id: $id_ty) -> Result<$out_ty> $blk
 		}
 	}
@@ -54,21 +55,23 @@ mod cval;
 /// the global scoreboard in its language-agnostic generic form. All useful
 /// operations are defined on this context rather than on the scoreboard
 /// directly, to decouple processing and ownership.
-pub struct ScoreContext<'sb, 'ast: 'sb, 'ctx: 'sb> {
+pub struct ScoreContext<'lazy, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
 	/// The compiler session which carries the options and is used to emit
 	/// diagnostics.
-	pub sess: &'sb Session,
+	pub sess: &'lazy Session,
 	/// The global context.
-	pub global: &'sb GenericContext,
+	pub global: &'lazy GenericContext,
 	/// The VHDL scoreboard.
 	pub sb: &'sb ScoreBoard<'ast, 'ctx>,
+	/// The table of scheduled operations.
+	pub lazy: &'lazy LazyPhaseTable<'sb, 'ast, 'ctx>,
 }
 
 
 /// The VHDL scoreboard that keeps track of compilation results.
 pub struct ScoreBoard<'ast, 'ctx> {
 	/// A reference to the arenas where the scoreboard allocates nodes.
-	arenas: &'ctx Arenas,
+	pub arenas: &'ctx Arenas,
 	/// A table of library nodes. This is a filtered version of what the global
 	/// scoreboard has, with only the VHDL nodes remaining.
 	libs: RefCell<HashMap<LibRef, Vec<&'ast ast::DesignUnit>>>,
@@ -158,7 +161,7 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 }
 
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Emit a diagnostic message.
 	pub fn emit(&self, diag: DiagBuilder2) {
 		self.sess.emit(diag)
@@ -180,7 +183,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		AstTable<'ast>: NodeStorage<I>,
 		<AstTable<'ast> as NodeStorage<I>>::Node: Copy + Debug {
 		match self.sb.ast_table.borrow().get(&id) {
-			Some(node) => node,
+			Some(&node) => node,
 			None => panic!("AST for {:?} should exist", id),
 		}
 	}
@@ -201,10 +204,10 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node> where
 		I: 'ctx + Copy + Debug,
 		HirTable<'ctx>: NodeStorage<I>,
-		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
+		ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
 		<HirTable<'ctx> as NodeStorage<I>>::Node: Copy + Debug {
 
-		if let Some(node) = self.sb.hir_table.borrow().get(&id) {
+		if let Some(&node) = self.sb.hir_table.borrow().get(&id) {
 			return Ok(node);
 		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make hir for {:?}", id); }
@@ -228,15 +231,29 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn existing_hir<I>(&self, id: I) -> Result<<HirTable<'ctx> as NodeStorage<I>>::Node>
 	where
 		I: Copy + Debug,
-		HirTable<'ctx>: NodeStorage<I>
+		HirTable<'ctx>: NodeStorage<I>,
+		<HirTable<'ctx> as NodeStorage<I>>::Node: Copy + Debug,
 	{
 		match self.sb.hir_table.borrow().get(&id) {
-			Some(node) => Ok(node),
+			Some(&node) => Ok(node),
 			None => {
 				self.emit(DiagBuilder2::bug(format!("hir for {:?} should exist", id)));
 				Err(())
 			}
 		}
+	}
+
+	/// Determine the HIR for a node.
+	pub fn lazy_hir<I>(&self, id: I) -> Result<()>
+	where
+		I: Copy + Debug,
+		LazyHirTable<'sb>: NodeStorage<I>,
+	{
+		// let b = self.lazy_hir_table.borrow();
+		// let f = b.get(&id);
+		// self.sb.lazy_hir_table.borrow().get(&id).unwrap();
+		self.emit(DiagBuilder2::bug(format!("lazy hir for {:?} not implemented", id)));
+		Err(())
 	}
 
 
@@ -271,7 +288,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn lldecl<I>(&self, id: I) -> Result<llhd::ValueRef>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, DeclValueRef>
+		ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, DeclValueRef>
 	{
 		if let Some(node) = self.sb.lldecl_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
@@ -292,7 +309,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn lldef<I>(&self, id: I) -> Result<llhd::ValueRef>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, DefValueRef>
+		ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, DefValueRef>
 	{
 		if let Some(node) = self.sb.lldef_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
@@ -313,7 +330,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn ty<I>(&self, id: I) -> Result<&'ctx Ty>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
+		ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
 	{
 		if let Some(node) = self.sb.ty_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
@@ -348,7 +365,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 	pub fn const_value<I>(&self, id: I) -> Result<&'ctx Const>
 	where
 		I: 'ctx + Copy + Debug + Into<NodeId>,
-		ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Const>
+		ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Const>
 	{
 		if let Some(node) = self.sb.const_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
@@ -404,7 +421,7 @@ pub struct DefValueRef(pub llhd::ValueRef);
 
 
 // Library lowering to HIR.
-impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx hir::Lib> {
 		let mut lib = hir::Lib::new();
 		for du in &self.sb.libs.borrow()[&id] {
@@ -453,7 +470,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'sb, 'a
 }
 
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Convert a primary name as it is present in the AST to a resolvable name
 	/// that can be defined and resolved in a scope.
 	pub fn resolvable_from_primary_name(&self, primary: &ast::PrimaryName) -> Result<Spanned<ResolvableName>> {
@@ -631,7 +648,7 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 }
 
 // Group the architectures declared in a library by entity.
-impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	fn make(&self, id: LibRef) -> Result<&'ctx ArchTable> {
 		let lib = self.hir(id)?;
 		let defs = self.defs(ScopeRef::Lib(id.into()))?;
@@ -707,7 +724,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'sb, '
 
 
 // Generate the prototype for an architecture.
-impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	fn make(&self, _: ArchRef) -> Result<DeclValueRef> {
 		unimplemented!();
 	}
@@ -715,7 +732,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'sb, 'as
 
 
 // Generate the definition for an architecture.
-impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	fn make(&self, id: ArchRef) -> Result<DefValueRef> {
 		// Type check the entire library where the architecture is defined in.
 		let typeck_ctx = TypeckContext::new(self);
@@ -785,7 +802,7 @@ impl<'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'sb, 'ast
 }
 
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Calculate the implicit default value for a type.
 	pub fn default_value_for_type(&self, ty: &Ty) -> Result<&'ctx Const> {
 		match *ty {
@@ -1473,7 +1490,7 @@ node_ref_group!(TypedNodeRef:
 
 
 // Declare the node tables.
-node_storage!(AstTable<'ast>,
+node_storage!(AstTable<'ast>:
 	subtys: SubtypeIndRef => (ScopeRef, &'ast ast::SubtypeInd),
 	ctx_items: CtxItemsRef => (ScopeRef, &'ast [ast::CtxItem]),
 
@@ -1527,7 +1544,7 @@ node_storage!(AstTable<'ast>,
 	subprog_names:      LatentSubprogRef  => (ScopeRef, LatentName<'ast>),
 );
 
-node_storage!(HirTable<'ctx>,
+node_storage!(HirTable<'ctx>:
 	libs:                  LibRef                => &'ctx hir::Lib,
 	entities:              EntityRef             => &'ctx hir::Entity,
 	archs:                 ArchRef               => &'ctx hir::Arch,
@@ -1553,7 +1570,12 @@ node_storage!(HirTable<'ctx>,
 	latent_type_marks:     LatentTypeMarkRef     => Spanned<TypeMarkRef>,
 	latent_pkgs:           LatentPkgRef          => Spanned<PkgRef>,
 	latent_subprogs:       LatentSubprogRef      => Spanned<SubprogRef>,
+	wait_stmts:            WaitStmtRef           => &'ctx hir::Stmt<hir::WaitStmt>,
 );
+
+// node_storage!(LazyHirTable<'ast, 'ctx>:
+// 	wait_stmts: WaitStmtRef => LazyNode<'ctx, hir::Stmt<hir::WaitStmt>, &'ast ()>,
+// );
 
 
 lazy_static! {

@@ -20,13 +20,13 @@ pub trait Codegen<I,C> {
 /// identifier and context types.
 macro_rules! impl_codegen {
 	($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &mut $ctx_ty:ty => $blk:block) => {
-		impl<'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+		impl<'lazy, 'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
 		}
 	};
 
 	($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &$ctx_lt:tt mut $ctx_ty:ty => $blk:block) => {
-		impl<'sb, 'ast, 'ctx, $ctx_lt> Codegen<$id_ty, $ctx_ty> for ScoreContext<'sb, 'ast, 'ctx> {
+		impl<'lazy, 'sb, 'ast, 'ctx, $ctx_lt> Codegen<$id_ty, $ctx_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
 		}
 	}
@@ -39,7 +39,7 @@ macro_rules! unimp {
 	}}
 }
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Map a VHDL type to the corresponding LLHD type.
 	pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
 		let ty = self.deref_named_type(ty)?;

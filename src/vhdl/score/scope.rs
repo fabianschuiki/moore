@@ -212,7 +212,7 @@ impl_make_scope!(self, id: LibRef => {
 });
 
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	// Populate the scope of the context items that appear before a design unit. The
 	// scope of the design unit itself is a subscope of the context items.
 	pub fn make_ctx_items_scope(&self, id: CtxItemsRef, parent: Option<ScopeRef>) -> Result<CtxItemsRef> {

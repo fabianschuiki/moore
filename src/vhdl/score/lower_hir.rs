@@ -8,6 +8,7 @@
 
 use score::*;
 use syntax::lexer::token::Literal;
+use make_ctx::MakeContext;
 
 /// Emit a compiler bug and return `Err`.
 macro_rules! unimp {
@@ -42,7 +43,7 @@ macro_rules! unimp_msg {
 	}}
 }
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Unpack an AST expression.
 	pub fn unpack_expr(&self, ast: &'ast ast::Expr, scope_id: ScopeRef) -> Result<ExprRef> {
 		let id = ExprRef::new(NodeId::alloc());
@@ -632,7 +633,31 @@ impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
 		);
 		for stmt in stmts {
 			match stmt.data {
-				ast::WaitStmt{..} => { unimp(stmt); had_fails = true; }
+				ast::WaitStmt { ref on, ref until, ref time } => {
+					let mk = MakeContext::new(self, stmt.span, WaitStmtRef(NodeId::alloc()));
+					if on.is_some() || until.is_some() || time.is_some() {
+						unimp(stmt);
+						had_fails = true;
+					}
+					// mk.lower_to_hir(move |_ctx|{
+					// 	debugln!("wait_stmt.hir");
+					// 	Ok(hir::Stmt {
+					// 		parent: scope_id,
+					// 		span: stmt.span,
+					// 		label: stmt.label,
+					// 		stmt: hir::WaitStmt {
+					// 			sens: None,
+					// 			cond: None,
+					// 			timeout: None,
+					// 		}
+					// 	})
+					// });
+					// mk.typeck(move |ctx|{
+					// 	debugln!("wait_stmt.typeck");
+					// 	Ok(())
+					// });
+					// refs.push(mk.finish().into());
+				}
 				ast::AssertStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::ReportStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::AssignStmt{kind: ast::AssignKind::Signal,..} => {
@@ -1943,7 +1968,7 @@ impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
 	Ok(self.sb.arenas.hir.subtype_ind.alloc(ctx.term_to_subtype_ind(term)?.value))
 });
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1996,22 +2021,22 @@ pub enum Term {
 pub type Subterm = Box<Spanned<Term>>;
 
 /// A context within which termification can occur.
-pub struct TermContext<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb> {
+pub struct TermContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
 	/// The underlying scoreboard context.
-	pub ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>,
+	pub ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
 	/// The scope within which the terms will resolve their names.
 	pub scope: ScopeRef,
 }
 
-impl<'sbc, 'sb, 'ast, 'ctx> DiagEmitter for TermContext<'sbc, 'sb, 'ast, 'ctx> {
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DiagEmitter for TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	fn emit(&self, diag: DiagBuilder2) {
 		self.ctx.emit(diag)
 	}
 }
 
-impl<'sbc, 'sb, 'ast, 'ctx> TermContext<'sbc, 'sb, 'ast, 'ctx> {
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	/// Create a new termification context.
-	pub fn new(ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>, scope: ScopeRef) -> TermContext<'sbc, 'sb, 'ast, 'ctx> {
+	pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, scope: ScopeRef) -> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		TermContext {
 			ctx: ctx,
 			scope: scope,

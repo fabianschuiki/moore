@@ -324,10 +324,12 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
     // Elaborate the requested entities or modules.
     if let Some(names) = matches.values_of("elaborate") {
+        let vhdl_phases = vhdl::lazy::LazyPhaseTable::new(&vhdl_sb);
         let ctx = ScoreContext{
             sess: sess,
             sb: &sb,
             vhdl: &vhdl_sb,
+            vhdl_phases: &vhdl_phases,
             svlog: &(),
         };
         let lib_id = ctx.add_library(lib, &asts);

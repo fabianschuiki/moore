@@ -17,18 +17,18 @@ use hir;
 /// This context helps gather the definitions in a scope. It accepts definitions
 /// and keeps track of errors that occurred. Once done the context can be
 /// converted into the actual definitions, which fails in case of errors.
-pub struct DefsContext<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb> {
+pub struct DefsContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
 	/// The parent context.
-	ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>,
+	ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
 	/// The definitions made.
 	defs: Defs,
 	/// Whether any of the declarations caused an error.
 	failed: bool,
 }
 
-impl<'sbc, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	/// Create a new definition context.
-	pub fn new(ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>) -> DefsContext<'sbc, 'sb, 'ast, 'ctx> {
+	pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>) -> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		DefsContext {
 			ctx: ctx,
 			defs: HashMap::new(),

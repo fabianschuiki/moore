@@ -19,16 +19,16 @@ use hir;
 /// A context to typecheck things in.
 ///
 /// This context helps checking the types of things and keeping track of errors.
-pub struct TypeckContext<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb> {
+pub struct TypeckContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
 	/// The parent context.
-	ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>,
+	ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
 	/// Whether any of the type checking failed.
 	failed: Cell<bool>,
 }
 
-impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	/// Create a new type checking context.
-	pub fn new(ctx: &'sbc ScoreContext<'sb, 'ast, 'ctx>) -> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+	pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>) -> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		TypeckContext {
 			ctx: ctx,
 			failed: Cell::new(false),
@@ -85,7 +85,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 	pub fn typeck_node<I>(&self, id: I, exp: &'ctx Ty)
 		where
 			I: 'ctx + Copy + Debug + Into<NodeId>,
-			ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
+			ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
 	{
 		if let Ok(act) = self.ctx.ty(id) {
 			if act != exp {
@@ -104,7 +104,7 @@ impl<'sbc, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
 		where
 			T: AsRef<[I]>,
 			I: Copy,
-			TypeckContext<'sbc, 'sb, 'ast, 'ctx>: Typeck<I>,
+			TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>: Typeck<I>,
 	{
 		for &id in ids.as_ref() {
 			self.typeck(id);
@@ -362,7 +362,7 @@ pub trait Typeck<I> {
 /// A macro to implement the `Typeck` trait.
 macro_rules! impl_typeck {
 	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl<'sbc, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+		impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 			fn typeck(&$slf, $id: $id_ty) $blk
 		}
 	}
@@ -371,7 +371,7 @@ macro_rules! impl_typeck {
 /// A macro to implement the `Typeck` trait.
 macro_rules! impl_typeck_err {
 	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl<'sbc, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'sb, 'ast, 'ctx> {
+		impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 			fn typeck(&$slf, $id: $id_ty) {
 				use std;
 				let res = (move || -> Result<()> { $blk })();
@@ -382,7 +382,7 @@ macro_rules! impl_typeck_err {
 }
 
 // Implement the `Typeck` trait for everything that supports type calculation.
-impl<'sbc, 'sb: 'sbc, 'ast: 'sb, 'ctx: 'sb, I> Typeck<I> for TypeckContext<'sbc, 'sb, 'ast, 'ctx> where ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
+impl<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb, I> Typeck<I> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> where ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
 	fn typeck(&self, id: I) {
 		match ScoreContext::make(self.ctx, id) {
 			Ok(_) => (),
@@ -398,7 +398,7 @@ pub trait TypeckNode<'ctx, I> {
 
 // Implement the `TypeckNode` trait for everything that supports type
 // calculation.
-impl<'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'sb, 'ast, 'ctx> where ScoreContext<'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
+impl<'lazy, 'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> where ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
 	fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()> {
 		let actual = self.make(id)?;
 		if actual != expected {
@@ -796,8 +796,11 @@ impl_typeck!(self, id: CaseGenStmtRef => {
 	unimp!(self, id)
 });
 
-impl_typeck!(self, id: WaitStmtRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: WaitStmtRef => {
+	debugln!("query hir of {:?}", id);
+	let hir = self.ctx.lazy_hir(id)?;
+	debugln!("got {:?}", hir);
+	unimp_err!(self, id)
 });
 
 impl_typeck!(self, id: AssertStmtRef => {
@@ -883,7 +886,7 @@ impl_typeck!(self, _id: NullStmtRef => {
 	// The null statement always typechecks.
 });
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Replace `Ty::Named` by the actual type definition recursively.
 	pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty> where 'ctx: 'a {
 		match ty {
@@ -1017,7 +1020,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 });
 
 
-impl<'sb, 'ast, 'ctx> ScoreContext<'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	pub fn make_range_ty(&self, dir: hir::Dir, lb_id: ExprRef, rb_id: ExprRef, span: Span) -> Result<&'ctx Ty> {
 		let lb = self.const_value(lb_id)?;
 		let rb = self.const_value(rb_id)?;
