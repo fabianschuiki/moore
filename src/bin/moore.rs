@@ -24,7 +24,10 @@ enum Language {
 
 
 fn main() {
-    let matches = App::new("moore")
+    let matches = App::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about("A compiler for hardware description languages.")
         .arg(Arg::with_name("trace_scoreboard")
             .long("trace-scoreboard"))
         .subcommand(SubCommand::with_name("compile")
