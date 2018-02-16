@@ -103,6 +103,10 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	const_table: RefCell<HashMap<NodeId, &'ctx Const>>,
 	/// A table of type contexts for expressions.
 	tyctx_table: RefCell<HashMap<NodeId, TypeCtx<'ctx>>>,
+	/// A table of typeck results.
+	typeck_table: RefCell<HashMap<NodeId, Result<()>>>,
+	/// A table of typeval results.
+	typeval_table: RefCell<HashMap<NodeId, Result<&'ctx Ty>>>,
 	/// Emit note for each AST node converted to a term.
 	trace_termification: bool,
 }
@@ -156,6 +160,8 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 			scope_table: RefCell::new(HashMap::new()),
 			const_table: RefCell::new(HashMap::new()),
 			tyctx_table: RefCell::new(HashMap::new()),
+			typeck_table: RefCell::new(HashMap::new()),
+			typeval_table: RefCell::new(HashMap::new()),
 			trace_termification: false,
 		}
 	}
@@ -362,6 +368,35 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		Ok(node)
 	}
 
+	/// Check the type of a node.
+	///
+	/// If the HIR is already in the scoreboard, returns it immediately.
+	/// Otherwise the lazy HIR table is triggered which will compute the HIR via
+	/// the corresponding closure.
+	pub fn lazy_typeck<I>(&self, id: I) -> Result<()>
+	where
+		I: Into<NodeId>,
+	{
+		let id = id.into();
+
+		// If the typeck has already been performed, return its result.
+		if let Some(&node) = self.sb.typeck_table.borrow().get(&id) {
+			return node;
+		}
+
+		// Otherwise run the task scheduled in the lazy typeck table, then store
+		// the result.
+		let ctx = TypeckContext::new(self);
+		let task = self.lazy.typeck.borrow_mut().set(id, LazyNode::Running);
+		let result = match task {
+			Some(LazyNode::Pending(f)) => f(&ctx),
+			Some(LazyNode::Running) => panic!("recursion on typeck of {:?}", id),
+			None => panic!("no typeck scheduled for {:?}", id),
+		};
+		self.sb.typeck_table.borrow_mut().insert(id, result);
+
+		result
+	}
 
 	pub fn scope(&self, id: ScopeRef) -> Result<&'ctx Scope> {
 		if let Some(node) = self.sb.scope_table.borrow().get(&id.into()).cloned() {

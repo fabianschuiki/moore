@@ -21,7 +21,7 @@ use hir;
 /// This context helps checking the types of things and keeping track of errors.
 pub struct TypeckContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
 	/// The parent context.
-	ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
+	pub ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
 	/// Whether any of the type checking failed.
 	failed: Cell<bool>,
 }
@@ -797,10 +797,11 @@ impl_typeck!(self, id: CaseGenStmtRef => {
 });
 
 impl_typeck_err!(self, id: WaitStmtRef => {
-	debugln!("query hir of {:?}", id);
-	let hir = self.ctx.lazy_hir(id)?;
-	debugln!("got {:?}", hir);
-	unimp_err!(self, id)
+	// debugln!("query hir of {:?}", id);
+	// let hir = self.ctx.lazy_hir(id)?;
+	// debugln!("got {:?}", hir);
+	self.ctx.lazy_typeck(id)
+	// unimp_err!(self, id)
 });
 
 impl_typeck!(self, id: AssertStmtRef => {

@@ -7,12 +7,13 @@
 use std;
 use std::fmt;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
+use moore_common::NodeId;
 use moore_common::score::{NodeStorage, Result};
 use score::{ScoreBoard, ScoreContext};
-use std::collections::HashMap;
-// use futures::Future;
 use hir;
+use typeck::TypeckContext;
 use score::WaitStmtRef;
 
 /// A lazily evaluated node.
@@ -38,6 +39,8 @@ pub struct LazyPhaseTable<'sb, 'ast: 'sb, 'ctx: 'sb> {
 	pub sb: &'sb ScoreBoard<'ast, 'ctx>,
 	/// The lazy HIR table.
 	pub hir: LazyPhase<LazyHirTable<'sb, 'ast, 'ctx>>,
+	/// The lazy typeck table.
+	pub typeck: RefCell<LazyTypeckTable<'sb, 'ast, 'ctx>>,
 }
 
 impl <'sb, 'ast, 'ctx> LazyPhaseTable<'sb, 'ast, 'ctx> {
@@ -46,6 +49,7 @@ impl <'sb, 'ast, 'ctx> LazyPhaseTable<'sb, 'ast, 'ctx> {
         LazyPhaseTable {
             sb: sb,
             hir: LazyPhase::new(),
+            typeck: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -85,8 +89,10 @@ impl<T: Default> LazyPhase<T> where T: Default {
 	}
 }
 
+pub type LazyHir<'sb, 'ast, 'ctx, R> = Box<for<'a,'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb>;
+
 node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
-	wait_stmts: WaitStmtRef => LazyNode<Box<for<'a,'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<hir::Stmt<hir::WaitStmt>> + 'sb>>,
+	wait_stmts: WaitStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
 );
 
 impl<'sb, 'ast, 'ctx> Default for LazyHirTable<'sb, 'ast, 'ctx> {
@@ -94,3 +100,6 @@ impl<'sb, 'ast, 'ctx> Default for LazyHirTable<'sb, 'ast, 'ctx> {
 		LazyHirTable::new()
 	}
 }
+
+pub type LazyTypeck<'sb, 'ast, 'ctx> = Box<for<'a,'b,'c> Fn(&'a TypeckContext<'b, 'c, 'sb, 'ast, 'ctx>) -> Result<()> + 'sb>;
+pub type LazyTypeckTable<'sb, 'ast, 'ctx> = HashMap<NodeId, LazyNode<LazyTypeck<'sb, 'ast ,'ctx>>>;

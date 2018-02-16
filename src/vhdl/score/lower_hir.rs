@@ -654,11 +654,12 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 							}
 						})
 					}));
-					// })));
-					// mk.typeck(move |ctx|{
-					// 	debugln!("wait_stmt.typeck");
-					// 	Ok(())
-					// });
+					mk.typeck(Box::new(move |ctx|{
+						debugln!("wait_stmt.typeck");
+						let hir = ctx.ctx.lazy_hir(id)?;
+						debugln!("- found my hir again: {:?}", hir);
+						Ok(())
+					}));
 					refs.push(mk.finish().into());
 				}
 				ast::AssertStmt{..} => { unimp(stmt); had_fails = true; }

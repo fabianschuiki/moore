@@ -6,6 +6,8 @@
 //! type safe manner by its ID.
 
 use std;
+use std::collections::{HashMap, BTreeMap};
+use std::hash::Hash;
 
 
 /// A context which provides a language-agnostic scoreboard. This is used by
@@ -93,6 +95,33 @@ pub trait NodeStorage<I> {
 	/// the `get` function. Returns the previously stored entry, if any.
 	fn set(&mut self, id: I, node: Self::Node) -> Option<Self::Node>;
 }
+
+// Implement the NodeStorage trait for HashMaps.
+impl<K,V> NodeStorage<K> for HashMap<K,V> where K: Hash + Eq {
+	type Node = V;
+
+	fn get(&self, id: &K) -> Option<&V> {
+		HashMap::get(self, id)
+	}
+
+	fn set(&mut self, id: K, node: V) -> Option<V> {
+		HashMap::insert(self, id, node)
+	}
+}
+
+// Implement the NodeStorage trait for BTreeMaps.
+impl<K,V> NodeStorage<K> for BTreeMap<K,V> where K: Ord {
+	type Node = V;
+
+	fn get(&self, id: &K) -> Option<&V> {
+		BTreeMap::get(self, id)
+	}
+
+	fn set(&mut self, id: K, node: V) -> Option<V> {
+		BTreeMap::insert(self, id, node)
+	}
+}
+
 
 
 /// The `NodeMaker` trait allows for nodes to be generated from an ID.

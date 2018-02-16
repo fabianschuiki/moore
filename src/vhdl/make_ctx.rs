@@ -8,13 +8,12 @@
 
 #[deny(missing_docs)]
 
-// use futures::{self, Future, IntoFuture};
-
+use moore_common::NodeId;
 use moore_common::score::{NodeStorage, Result};
 use moore_common::source::Span;
 use score::ScoreContext;
 use typeck::TypeckContext;
-use lazy::{LazyNode, LazyPhaseTable, LazyHirTable};
+use lazy::{LazyNode, LazyPhaseTable, LazyHirTable, LazyTypeckTable};
 use hir::{self, Alloc};
 
 /// A context within which compiler passes can be described.
@@ -30,7 +29,9 @@ pub struct MakeContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb, I: C
 	pub id: I,
 }
 
-impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I: Copy> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> {
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I>
+	where I: Copy + Into<NodeId>
+{
 	/// Create a new context.
 	pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, span: Span, id: I) -> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> {
 		MakeContext {
@@ -50,37 +51,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I: Copy> MakeContext<'sbc, 'lazy, 'sb, 'ast, 
 	/// Schedule a callback that lowers the node to HIR.
 	pub fn lower_to_hir<F>(self, f: F)
 	where
-		// F: Fn(&ScoreContext) -> Result<R> + 'sb,
 		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<F>>,
-		// LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<F>>,
-		// LazyHirTable<'ast, 'ctx>: NodeStorage<I, Node=LazyNode<'ctx, R, ScoreContext<'lazy, 'sb, 'ast, 'ctx>>>,
-		// R: IntoFuture<Error=()> + 'sb,
-		// R::Item: 'ctx,
-		// hir::Arenas: Alloc<R::Item>,
-		// // R: IntoFuture<Item=<LazyHirTable<'ctx> as NodeStorage<I>>::Node, Error=()>,
-		// LazyHirTable<'sb, 'ctx>: LazyTable<'sb, I, Item=&'ctx R::Item>,
-		// hir::Arenas: Alloc<<LazyHirTable<'ctx> as NodeStorage<I>>::Node>,
 	{
 		debugln!("make.hir");
-		// let arenas = self.ctx.sb.arenas;
-		// let lazy = futures::lazy(f)
-		// 	.map(move |v: R::Item| -> &'ctx R::Item { arenas.hir.alloc(v) })
-		// 	.shared()
-		// 	.map(|v| *v)
-		// 	.map_err(|e| *e);
-		// // let allocd = lazy.and_then(|h| self.ctx.sb.arenas.hir.alloc(h));
-		// // .shared().map(|v| *v).map_err(|_| ());
-
-		// let b = Box::new(f);
-		// self.ctx.lazy.dummy.borrow_mut().insert(self.id, b);
 		self.ctx.lazy.hir.schedule(self.id, f);
-		// self.ctx.lazy_hir_table.borrow_mut().set(self.id, node);
 	}
 
 	/// Schedule a callback that type checks the node.
-	pub fn typeck<F>(self, f: F)
-		where F: FnOnce(&TypeckContext) -> Result<()>
-	{
+	pub fn typeck(self, f: Box<for<'a,'b,'c> Fn(&'a TypeckContext<'b, 'c, 'sb, 'ast, 'ctx>) -> Result<()> + 'sb>) {
 		debugln!("make.typeck");
+		self.ctx.lazy.typeck.borrow_mut().insert(self.id.into(), LazyNode::Pending(f));
 	}
 }
