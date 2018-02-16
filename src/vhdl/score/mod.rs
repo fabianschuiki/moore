@@ -29,6 +29,7 @@ use konst::*;
 use codegen::Codegen;
 use typeck::{Typeck, TypeckContext};
 use lazy::*;
+use hir::Alloc;
 
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
@@ -244,16 +245,30 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Determine the HIR for a node.
-	pub fn lazy_hir<I>(&self, id: I) -> Result<()>
+	///
+	/// If the HIR is already in the scoreboard, returns it immediately.
+	/// Otherwise the lazy HIR table is triggered which will compute the HIR via
+	/// the corresponding closure.
+	pub fn lazy_hir<I,R>(&self, id: I) -> Result<&'ctx R>
 	where
 		I: Copy + Debug,
-		LazyHirTable<'sb>: NodeStorage<I>,
+		R: Debug + 'ctx,
+		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<Box<for<'a,'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb>>>,
+		HirTable<'ctx>: NodeStorage<I, Node=&'ctx R>,
+		hir::Arenas: Alloc<R>,
 	{
-		// let b = self.lazy_hir_table.borrow();
-		// let f = b.get(&id);
-		// self.sb.lazy_hir_table.borrow().get(&id).unwrap();
-		self.emit(DiagBuilder2::bug(format!("lazy hir for {:?} not implemented", id)));
-		Err(())
+		// If the HIR has already been determined, return it immediately.
+		if let Some(&node) = self.sb.hir_table.borrow().get(&id) {
+			return Ok(node);
+		}
+
+		// Otherwise run the task scheduled in the lazy HIR table, then store
+		// the result.
+		let hir = self.lazy.hir.run(id, self)?;
+		let allocd = self.sb.arenas.hir.alloc(hir);
+		self.sb.hir_table.borrow_mut().set(id, allocd);
+
+		Ok(allocd)
 	}
 
 

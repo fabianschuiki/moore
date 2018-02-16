@@ -90,8 +90,8 @@ pub trait NodeStorage<I> {
 	/// Store a reference to a node under the given ID.
 	///
 	/// Later that reference can be retrieved again by presenting the same ID to
-	/// the `get` function.
-	fn set(&mut self, id: I, node: Self::Node);
+	/// the `get` function. Returns the previously stored entry, if any.
+	fn set(&mut self, id: I, node: Self::Node) -> Option<Self::Node>;
 }
 
 
@@ -334,8 +334,8 @@ macro_rules! node_storage {
 				self.$node_name.get(id)
 			}
 
-			fn set(&mut self, id: $node_ref, node: $node) {
-				self.$node_name.insert(id, node);
+			fn set(&mut self, id: $node_ref, node: $node) -> Option<$node> {
+				self.$node_name.insert(id, node)
 			}
 		}
 

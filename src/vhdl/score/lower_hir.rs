@@ -634,29 +634,32 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		for stmt in stmts {
 			match stmt.data {
 				ast::WaitStmt { ref on, ref until, ref time } => {
-					let mk = MakeContext::new(self, stmt.span, WaitStmtRef(NodeId::alloc()));
+					let id = WaitStmtRef(NodeId::alloc());
+					let mk = MakeContext::new(self, stmt.span, id);
 					if on.is_some() || until.is_some() || time.is_some() {
 						unimp(stmt);
 						had_fails = true;
 					}
-					// mk.lower_to_hir(move |_ctx|{
-					// 	debugln!("wait_stmt.hir");
-					// 	Ok(hir::Stmt {
-					// 		parent: scope_id,
-					// 		span: stmt.span,
-					// 		label: stmt.label,
-					// 		stmt: hir::WaitStmt {
-					// 			sens: None,
-					// 			cond: None,
-					// 			timeout: None,
-					// 		}
-					// 	})
-					// });
+					mk.lower_to_hir(Box::new(move |ctx|{
+						debugln!("wait_stmt.hir");
+						debugln!("- my ast was: on={:?}, until={:?}, time={:?}", on, until, time);
+						Ok(hir::Stmt {
+							parent: scope_id,
+							span: stmt.span,
+							label: stmt.label,
+							stmt: hir::WaitStmt {
+								sens: None,
+								cond: None,
+								timeout: None,
+							}
+						})
+					}));
+					// })));
 					// mk.typeck(move |ctx|{
 					// 	debugln!("wait_stmt.typeck");
 					// 	Ok(())
 					// });
-					// refs.push(mk.finish().into());
+					refs.push(mk.finish().into());
 				}
 				ast::AssertStmt{..} => { unimp(stmt); had_fails = true; }
 				ast::ReportStmt{..} => { unimp(stmt); had_fails = true; }

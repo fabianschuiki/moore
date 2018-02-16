@@ -14,7 +14,7 @@ use moore_common::score::{NodeStorage, Result};
 use moore_common::source::Span;
 use score::ScoreContext;
 use typeck::TypeckContext;
-use lazy::{LazyNode, LazyPhaseTable};
+use lazy::{LazyNode, LazyPhaseTable, LazyHirTable};
 use hir::{self, Alloc};
 
 /// A context within which compiler passes can be described.
@@ -48,9 +48,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I: Copy> MakeContext<'sbc, 'lazy, 'sb, 'ast, 
 	}
 
 	/// Schedule a callback that lowers the node to HIR.
-	pub fn lower_to_hir<F,R>(self, f: F)
+	pub fn lower_to_hir<F>(self, f: F)
 	where
-		F: FnOnce(&ScoreContext<'lazy, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb,
+		// F: Fn(&ScoreContext) -> Result<R> + 'sb,
+		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<F>>,
+		// LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<F>>,
 		// LazyHirTable<'ast, 'ctx>: NodeStorage<I, Node=LazyNode<'ctx, R, ScoreContext<'lazy, 'sb, 'ast, 'ctx>>>,
 		// R: IntoFuture<Error=()> + 'sb,
 		// R::Item: 'ctx,
@@ -69,7 +71,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I: Copy> MakeContext<'sbc, 'lazy, 'sb, 'ast, 
 		// // let allocd = lazy.and_then(|h| self.ctx.sb.arenas.hir.alloc(h));
 		// // .shared().map(|v| *v).map_err(|_| ());
 
-		// let node = LazyNode::Pending(Box::new(f));
+		// let b = Box::new(f);
+		// self.ctx.lazy.dummy.borrow_mut().insert(self.id, b);
+		self.ctx.lazy.hir.schedule(self.id, f);
 		// self.ctx.lazy_hir_table.borrow_mut().set(self.id, node);
 	}
 

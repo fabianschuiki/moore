@@ -8,19 +8,19 @@ use std;
 use std::fmt;
 use std::cell::RefCell;
 
-use moore_common::score::Result;
+use moore_common::score::{NodeStorage, Result};
 use score::{ScoreBoard, ScoreContext};
-// use std::collections::HashMap;
+use std::collections::HashMap;
 // use futures::Future;
 use hir;
 use score::WaitStmtRef;
 
 /// A lazily evaluated node.
-pub enum LazyNode<F: ?Sized> {
+pub enum LazyNode<F> {
 	/// Evaluation is currently running.
 	Running,
 	/// The callback which will provide the desired output.
-	Pending(Box<F>),
+	Pending(F),
 }
 
 impl<F> fmt::Debug for LazyNode<F> {
@@ -37,7 +37,7 @@ pub struct LazyPhaseTable<'sb, 'ast: 'sb, 'ctx: 'sb> {
 	/// The score board.
 	pub sb: &'sb ScoreBoard<'ast, 'ctx>,
 	/// The lazy HIR table.
-	pub hir: RefCell<LazyHirTable<'sb>>,
+	pub hir: LazyPhase<LazyHirTable<'sb, 'ast, 'ctx>>,
 }
 
 impl <'sb, 'ast, 'ctx> LazyPhaseTable<'sb, 'ast, 'ctx> {
@@ -45,85 +45,52 @@ impl <'sb, 'ast, 'ctx> LazyPhaseTable<'sb, 'ast, 'ctx> {
     pub fn new(sb: &'sb ScoreBoard<'ast, 'ctx>) -> LazyPhaseTable<'sb, 'ast, 'ctx> {
         LazyPhaseTable {
             sb: sb,
-            hir: RefCell::new(LazyHirTable::new()),
+            hir: LazyPhase::new(),
         }
     }
 }
 
-node_storage!(LazyHirTable<'sb>:
-	wait_stmts: WaitStmtRef => LazyNode<Fn(&ScoreContext) -> Result<hir::Stmt<hir::WaitStmt>> + 'sb>,
+/// A table of tasks needed to perform a compiler phase.
+pub struct LazyPhase<T> {
+	pub table: RefCell<T>,
+}
+
+impl<T: Default> LazyPhase<T> where T: Default {
+	/// Create a new lazy phase.
+	pub fn new() -> LazyPhase<T> {
+		LazyPhase {
+			table: RefCell::new(Default::default()),
+		}
+	}
+
+	/// Schedule a task to be lazily executed.
+	pub fn schedule<I,F>(&self, id: I, f: F)
+		where T: NodeStorage<I, Node=LazyNode<F>>
+	{
+		self.table.borrow_mut().set(id, LazyNode::Pending(f));
+	}
+
+	/// Run a task.
+	pub fn run<'lazy, 'sb, 'ast, 'ctx, I, R>(&self, id: I, ctx: &ScoreContext<'lazy, 'sb, 'ast, 'ctx>) -> Result<R>
+	where
+		I: Copy + fmt::Debug,
+		T: NodeStorage<I, Node=LazyNode<Box<for<'a,'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb>>>
+	{
+		let task = self.table.borrow_mut().set(id, LazyNode::Running);
+		match task {
+			Some(LazyNode::Pending(f)) => f(ctx),
+			Some(LazyNode::Running) => panic!("recursion when running task for {:?}", id),
+			None => panic!("no task scheduled for {:?}", id),
+		}
+	}
+}
+
+node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
+	wait_stmts: WaitStmtRef => LazyNode<Box<for<'a,'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<hir::Stmt<hir::WaitStmt>> + 'sb>>,
 );
 
-// /// A lazy table generator.
-// #[macro_export]
-// macro_rules! lazy_table {
-// 	($name:ident<$lt:tt>: $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
-// 		pub struct $name<$lt> {
-// 			$($node_name: std::collections::HashMap<$node_ref, Box<Future<Item=$node, Error=()> + $lt>>,)*
-// 		}
-
-// 		impl<$lt> $name<$lt> {
-// 			/// Create a new empty table.
-// 			pub fn new() -> $name<$lt> {
-// 				$name {
-// 					$($node_name: std::collections::HashMap::new(),)*
-// 				}
-// 			}
-// 		}
-
-// 		$(
-// 		impl<$lt> $crate::lazy::LazyTable<$lt, $node_ref> for $name<$lt> {
-// 			type Item = $node;
-
-// 			fn get(&self, id: &$node_ref) -> &Future<Item=$node, Error=()> {
-// 				self.$node_name.get(id).unwrap()
-// 			}
-
-// 			fn set(&mut self, id: $node_ref, node: Box<Future<Item=$node, Error=()> + $lt>) {
-// 				self.$node_name.insert(id, node);
-// 			}
-// 		}
-// 		)*
-// 	}
-// }
-
-// /// A lazy table.
-// ///
-// /// Entries are described as callbacks which upon first query are used to
-// /// determine the actual value of the entry. Further queries will return the
-// /// value directly.
-// pub trait LazyTable<'a, I> {
-// 	type Item;
-// 	fn get(&self, id: &I) -> &Future<Item=Self::Item, Error=()>;
-// 	fn set(&mut self, id: I, node: Box<Future<Item=Self::Item, Error=()> + 'a>);
-// }
-
-// /// A lazy HIR table.
-// pub struct LazyHirTable<'sb, 'ctx> {
-// 	wait_stmt: HashMap<WaitStmtRef, Box<Future<Item=&'ctx hir::Stmt<hir::WaitStmt>, Error=()> + 'sb>>,
-// }
-
-// impl<'sb, 'ctx> LazyHirTable<'sb, 'ctx> {
-// 	/// Create a new lazy HIR table.
-// 	pub fn new() -> LazyHirTable<'sb, 'ctx> {
-// 		LazyHirTable {
-// 			wait_stmt: HashMap::new(),
-// 		}
-// 	}
-// }
-
-// impl<'sb, 'ctx> LazyTable<'sb, WaitStmtRef> for LazyHirTable<'sb, 'ctx> {
-// 	type Item = &'ctx hir::Stmt<hir::WaitStmt>;
-
-// 	fn get(&self, id: &WaitStmtRef) -> &Future<Item=Self::Item, Error=()> {
-// 		self.wait_stmt.get(id).unwrap().as_ref()
-// 	}
-
-// 	fn set(&mut self, id: WaitStmtRef, node: Box<Future<Item=Self::Item, Error=()> + 'sb>) {
-// 		self.wait_stmt.insert(id, node);
-// 	}
-// }
-
-// lazy_table!(LazyHirTable<'ctx>:
-// 	wait_stmts: WaitStmtRef => &'ctx hir::Stmt<hir::WaitStmt>,
-// );
+impl<'sb, 'ast, 'ctx> Default for LazyHirTable<'sb, 'ast, 'ctx> {
+	fn default() -> LazyHirTable<'sb, 'ast, 'ctx> {
+		LazyHirTable::new()
+	}
+}
