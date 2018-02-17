@@ -331,7 +331,7 @@ macro_rules! node_storage {
 			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
 		}
 
-		node_storage!(@struct_impl $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+		node_storage!(STRUCT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
 	};
 
 	($name:ident<$($lt:tt),+> where ($($wh:tt)+): $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
@@ -339,10 +339,10 @@ macro_rules! node_storage {
 			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
 		}
 
-		node_storage!(@struct_impl $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+		node_storage!(STRUCT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
 	};
 
-	(@struct_impl $name:ident; $($lt:tt),+; $($node_name:ident, $node_ref:ty, $node:ty;)*) => {
+	(STRUCT_IMPL $name:ident; $($lt:tt),+; $($node_name:ident, $node_ref:ty, $node:ty;)*) => {
 		impl<$($lt),*> $name<$($lt),*> {
 			/// Create a new empty table.
 			pub fn new() -> $name<$($lt),*> {
@@ -352,10 +352,10 @@ macro_rules! node_storage {
 			}
 		}
 
-		node_storage!(@trait_impl $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+		node_storage!(TRAIT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
 	};
 
-	(@trait_impl $name:ident; $($lt:tt),+; $node_name:ident, $node_ref:ty, $node:ty; $($tail_name:ident, $tail_ref:ty, $tail:ty;)*) => {
+	(TRAIT_IMPL $name:ident; $($lt:tt),+; $node_name:ident, $node_ref:ty, $node:ty; $($tail_name:ident, $tail_ref:ty, $tail:ty;)*) => {
 		impl<$($lt),*> $crate::score::NodeStorage<$node_ref> for $name<$($lt),*> {
 			type Node = $node;
 
@@ -368,8 +368,8 @@ macro_rules! node_storage {
 			}
 		}
 
-		node_storage!(@trait_impl $name; $($lt),*; $($tail_name, $tail_ref, $tail;)*);
+		node_storage!(TRAIT_IMPL $name; $($lt),*; $($tail_name, $tail_ref, $tail;)*);
 	};
 
-	(@trait_impl $name:ident; $($lt:tt),*;) => {}
+	(TRAIT_IMPL $name:ident; $($lt:tt),*;) => {}
 }
