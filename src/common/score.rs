@@ -52,14 +52,14 @@ pub trait GenericContext {
 ///
 /// impl<'tn> NodeStorage<FooId> for Table<'tn> {
 ///     type Node = &'tn Foo;
-///     fn get(&self, id: &FooId) -> Option<&'tn Foo> { self.foos.get(id).map(|n| *n) }
-///     fn set(&mut self, id: FooId, node: &'tn Foo) { self.foos.insert(id, node); }
+///     fn get(&self, id: &FooId) -> Option<&&'tn Foo> { self.foos.get(id) }
+///     fn set(&mut self, id: FooId, node: &'tn Foo) -> Option<&'tn Foo> { self.foos.insert(id, node) }
 /// }
 ///
 /// impl<'tn> NodeStorage<BarId> for Table<'tn> {
 ///     type Node = &'tn Bar;
-///     fn get(&self, id: &BarId) -> Option<&'tn Bar> { self.bars.get(id).map(|n| *n) }
-///     fn set(&mut self, id: BarId, node: &'tn Bar) { self.bars.insert(id, node); }
+///     fn get(&self, id: &BarId) -> Option<&&'tn Bar> { self.bars.get(id) }
+///     fn set(&mut self, id: BarId, node: &'tn Bar) -> Option<&'tn Bar> { self.bars.insert(id, node) }
 /// }
 ///
 /// // Store node refs in table:
@@ -70,14 +70,14 @@ pub trait GenericContext {
 /// tbl.set(BarId(2), &bar);
 ///
 /// // Retrieve node refs again:
-/// assert_eq!(tbl.get(&FooId(1)), Some(&foo));
-/// assert_eq!(tbl.get(&BarId(2)), Some(&bar));
+/// assert_eq!(tbl.get(&FooId(1)), Some(&&foo));
+/// assert_eq!(tbl.get(&BarId(2)), Some(&&bar));
 /// assert_eq!(tbl.get(&BarId(1)), None);
 /// assert_eq!(tbl.get(&FooId(2)), None);
 ///
 /// // The following would produce a compiler error due to type mismatch:
-/// // let _: &Foo = tbl.get(&BarId(1)).unwrap();
-/// // let _: &Bar = tbl.get(&FooId(2)).unwrap();
+/// // let _: &Foo = *tbl.get(&BarId(1)).unwrap();
+/// // let _: &Bar = *tbl.get(&FooId(2)).unwrap();
 /// ```
 pub trait NodeStorage<I> {
 	/// The type of the node that is returned when presented with an ID of type
@@ -303,7 +303,7 @@ macro_rules! node_ref_group {
 /// #[derive(PartialEq, Eq, Debug)]
 /// struct Bar;
 ///
-/// node_storage!(NodeTable<'tn>,
+/// node_storage!(NodeTable<'tn>:
 ///     foos: FooRef => &'tn Foo,
 ///     bars: BarRef => &'tn Bar,
 /// );
@@ -316,12 +316,12 @@ macro_rules! node_ref_group {
 /// tbl.set(FooRef(0), foo);
 /// tbl.set(BarRef(1), bar);
 ///
-/// assert_eq!(tbl.get(&FooRef(0)), Some(foo));
-/// assert_eq!(tbl.get(&BarRef(1)), Some(bar));
+/// assert_eq!(tbl.get(&FooRef(0)), Some(&foo));
+/// assert_eq!(tbl.get(&BarRef(1)), Some(&bar));
 ///
 /// // The following would produce a compiler error due to the type mismatch:
-/// // assert_eq!(tbl.get(&BarRef(0)), Some(foo));
-/// // assert_eq!(tbl.get(&FooRef(1)), Some(bar));
+/// // assert_eq!(tbl.get(&BarRef(0)), Some(&foo));
+/// // assert_eq!(tbl.get(&FooRef(1)), Some(&bar));
 /// # }
 /// ```
 #[macro_export]
