@@ -321,6 +321,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
     let arenas = score::Arenas::new();
     let sb = ScoreBoard::new(&arenas);
     let vhdl_sb = vhdl::score::ScoreBoard::new(&arenas.vhdl);
+    let svlog_sb = ();
 
     // Elaborate the requested entities or modules.
     if let Some(names) = matches.values_of("elaborate") {
@@ -330,7 +331,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
             sb: &sb,
             vhdl: &vhdl_sb,
             vhdl_phases: &vhdl_phases,
-            svlog: &(),
+            svlog: &svlog_sb,
         };
         let lib_id = ctx.add_library(lib, &asts);
         println!("lib_id = {:?}", lib_id);
