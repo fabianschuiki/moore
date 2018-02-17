@@ -640,7 +640,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 						unimp(stmt);
 						had_fails = true;
 					}
-					mk.lower_to_hir(Box::new(move |ctx|{
+					mk.lower_to_hir(Box::new(move |_ctx|{
 						debugln!("wait_stmt.hir");
 						debugln!("- my ast was: on={:?}, until={:?}, time={:?}", on, until, time);
 						Ok(hir::Stmt {

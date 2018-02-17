@@ -8,13 +8,13 @@
 
 #[deny(missing_docs)]
 
+use std::fmt::Debug;
+
 use moore_common::NodeId;
-use moore_common::score::{NodeStorage, Result};
+use moore_common::score::NodeStorage;
 use moore_common::source::Span;
 use score::ScoreContext;
-use typeck::TypeckContext;
-use lazy::{LazyNode, LazyPhaseTable, LazyHirTable, LazyTypeckTable};
-use hir::{self, Alloc};
+use lazy::*;
 
 /// A context within which compiler passes can be described.
 ///
@@ -30,7 +30,7 @@ pub struct MakeContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb, I: C
 }
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I>
-	where I: Copy + Into<NodeId>
+	where I: Copy + Into<NodeId> + Debug
 {
 	/// Create a new context.
 	pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, span: Span, id: I) -> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> {
@@ -53,13 +53,19 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 	where
 		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<F>>,
 	{
-		debugln!("make.hir");
+		debugln!("make.hir {:?}", self.id);
 		self.ctx.lazy.hir.schedule(self.id, f);
 	}
 
 	/// Schedule a callback that type checks the node.
-	pub fn typeck(self, f: Box<for<'a,'b,'c> Fn(&'a TypeckContext<'b, 'c, 'sb, 'ast, 'ctx>) -> Result<()> + 'sb>) {
-		debugln!("make.typeck");
+	pub fn typeck(self, f: LazyTypeck<'sb, 'ast, 'ctx>) {
+		debugln!("make.typeck {:?}", self.id);
 		self.ctx.lazy.typeck.borrow_mut().insert(self.id.into(), LazyNode::Pending(f));
+	}
+
+	/// Schedule a callback that evaluates the type of the node.
+	pub fn typeval(self, f: LazyTypeval<'sb, 'ast, 'ctx>) {
+		debugln!("make.typeval {:?}", self.id);
+		self.ctx.lazy.typeval.borrow_mut().insert(self.id.into(), LazyNode::Pending(f));
 	}
 }

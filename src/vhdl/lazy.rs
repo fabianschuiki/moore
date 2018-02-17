@@ -15,6 +15,7 @@ use score::{ScoreBoard, ScoreContext};
 use hir;
 use typeck::TypeckContext;
 use score::WaitStmtRef;
+use ty::Ty;
 
 /// A lazily evaluated node.
 pub enum LazyNode<F> {
@@ -41,6 +42,8 @@ pub struct LazyPhaseTable<'sb, 'ast: 'sb, 'ctx: 'sb> {
 	pub hir: LazyPhase<LazyHirTable<'sb, 'ast, 'ctx>>,
 	/// The lazy typeck table.
 	pub typeck: RefCell<LazyTypeckTable<'sb, 'ast, 'ctx>>,
+	/// The lazy typeval table.
+	pub typeval: RefCell<LazyTypevalTable<'sb, 'ast, 'ctx>>,
 }
 
 impl <'sb, 'ast, 'ctx> LazyPhaseTable<'sb, 'ast, 'ctx> {
@@ -50,6 +53,7 @@ impl <'sb, 'ast, 'ctx> LazyPhaseTable<'sb, 'ast, 'ctx> {
             sb: sb,
             hir: LazyPhase::new(),
             typeck: RefCell::new(HashMap::new()),
+            typeval: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -89,8 +93,16 @@ impl<T: Default> LazyPhase<T> where T: Default {
 	}
 }
 
+/// A callback to lazily lower a node to HIR.
 pub type LazyHir<'sb, 'ast, 'ctx, R> = Box<for<'a,'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb>;
 
+/// A callback to lazily typeck a node.
+pub type LazyTypeck<'sb, 'ast, 'ctx> = Box<for<'a,'b,'c> Fn(&'a TypeckContext<'b, 'c, 'sb, 'ast, 'ctx>) -> Result<()> + 'sb>;
+
+/// A callback to lazily evaluate the type of a node.
+pub type LazyTypeval<'sb, 'ast, 'ctx> = Box<for<'a,'b,'c> Fn(&'a TypeckContext<'b, 'c, 'sb, 'ast, 'ctx>) -> Result<&'ctx Ty> + 'sb>;
+
+/// A table of pending or running HIR lowerings.
 node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
 	wait_stmts: WaitStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
 );
@@ -101,5 +113,12 @@ impl<'sb, 'ast, 'ctx> Default for LazyHirTable<'sb, 'ast, 'ctx> {
 	}
 }
 
-pub type LazyTypeck<'sb, 'ast, 'ctx> = Box<for<'a,'b,'c> Fn(&'a TypeckContext<'b, 'c, 'sb, 'ast, 'ctx>) -> Result<()> + 'sb>;
-pub type LazyTypeckTable<'sb, 'ast, 'ctx> = HashMap<NodeId, LazyNode<LazyTypeck<'sb, 'ast ,'ctx>>>;
+/// A table of pending or running type checks.
+pub type LazyTypeckTable<'sb, 'ast, 'ctx> = HashMap<
+	NodeId, LazyNode<LazyTypeck<'sb, 'ast ,'ctx>>
+>;
+
+/// A table of pending or running type evaluations.
+pub type LazyTypevalTable<'sb, 'ast, 'ctx> = HashMap<
+	NodeId, LazyNode<LazyTypeval<'sb, 'ast ,'ctx>>
+>;

@@ -370,9 +370,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Check the type of a node.
 	///
-	/// If the HIR is already in the scoreboard, returns it immediately.
-	/// Otherwise the lazy HIR table is triggered which will compute the HIR via
-	/// the corresponding closure.
+	/// If the node already had its type checked, immediately returns the result
+	/// of that operation. Otherwise runs the task scheduled in the lazy table.
 	pub fn lazy_typeck<I>(&self, id: I) -> Result<()>
 	where
 		I: Into<NodeId>,
@@ -394,6 +393,36 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			None => panic!("no typeck scheduled for {:?}", id),
 		};
 		self.sb.typeck_table.borrow_mut().insert(id, result);
+
+		result
+	}
+
+	/// Determine the type of a node.
+	///
+	/// If the node already had its type determined, immediately returns the
+	/// result of that operation. Otherwise runs the task scheduled in the lazy
+	/// table.
+	pub fn lazy_typeval<I>(&self, id: I) -> Result<&'ctx Ty>
+	where
+		I: Into<NodeId>,
+	{
+		let id = id.into();
+
+		// If the typeval has already been performed, return its result.
+		if let Some(&node) = self.sb.typeval_table.borrow().get(&id) {
+			return node;
+		}
+
+		// Otherwise run the task scheduled in the lazy typeval table, then store
+		// the result.
+		let ctx = TypeckContext::new(self);
+		let task = self.lazy.typeval.borrow_mut().set(id, LazyNode::Running);
+		let result = match task {
+			Some(LazyNode::Pending(f)) => f(&ctx),
+			Some(LazyNode::Running) => panic!("recursion on typeval of {:?}", id),
+			None => panic!("no typeval scheduled for {:?}", id),
+		};
+		self.sb.typeval_table.borrow_mut().insert(id, result);
 
 		result
 	}
