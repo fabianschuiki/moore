@@ -8,6 +8,9 @@
 use std;
 use std::collections::{HashMap, BTreeMap};
 use std::hash::Hash;
+use std::fmt::Debug;
+
+use id::NodeId;
 
 
 /// A context which provides a language-agnostic scoreboard. This is used by
@@ -191,6 +194,23 @@ pub trait NodeMaker<I, N> {
 pub type Result<T> = std::result::Result<T, ()>;
 
 
+/// A reference to a node.
+///
+/// Newtypes around `NodeId` should implement this trait to offer functionality
+/// common to all node references.
+pub trait NodeRef: Copy + Eq + Ord + Hash + Debug + Into<NodeId> {
+	/// Allocate a new reference.
+	///
+	/// Creates a new unique reference. Calls `NodeId::alloc()` under the hood.
+	fn alloc() -> Self {
+		Self::new(NodeId::alloc())
+	}
+
+	/// Create a new reference from an existing node ID.
+	fn new(id: NodeId) -> Self;
+}
+
+
 /// Create a new node reference.
 ///
 /// This is merely a wrapper around `NodeId` to provide a type safe
@@ -217,13 +237,6 @@ macro_rules! node_ref {
 		#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
 		pub struct $name($crate::NodeId);
 
-		impl $name {
-			/// Create a new reference.
-			pub fn new(id: $crate::NodeId) -> $name {
-				$name(id)
-			}
-		}
-
 		impl std::fmt::Debug for $name {
 			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 				write!(f, "{}({})", stringify!($name), self.0)
@@ -233,6 +246,12 @@ macro_rules! node_ref {
 		impl Into<$crate::NodeId> for $name {
 			fn into(self) -> $crate::NodeId {
 				self.0
+			}
+		}
+
+		impl $crate::score::NodeRef for $name {
+			fn new(id: $crate::NodeId) -> $name {
+				$name(id)
 			}
 		}
 	}

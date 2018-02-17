@@ -12,6 +12,7 @@ use moore::*;
 use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
+use moore::common::score::NodeRef;
 use clap::{Arg, App, SubCommand, ArgMatches};
 
 

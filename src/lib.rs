@@ -12,7 +12,7 @@ extern crate llhd;
 
 // Re-export everything from the common crate.
 #[macro_use]
-extern crate moore_common as common;
+pub extern crate moore_common as common;
 pub use common::*;
 
 // Pull in subcrates. We might want to feature-gate this at some point.

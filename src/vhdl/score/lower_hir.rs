@@ -6,6 +6,7 @@
 //! AST node, creating an ID for it, and adding it to the AST table for later
 //! lowering to HIR.
 
+use common::score::NodeRef;
 use score::*;
 use syntax::lexer::token::Literal;
 use make_ctx::MakeContext;

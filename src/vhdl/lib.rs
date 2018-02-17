@@ -13,6 +13,9 @@ extern crate lazy_static;
 pub extern crate moore_vhdl_syntax as syntax;
 // extern crate futures;
 
+// TODO: Merge this into the `extern crate` above.
+pub(crate) use moore_common as common;
+
 pub mod symtbl;
 #[macro_use]
 pub mod score;
@@ -24,3 +27,6 @@ pub mod defs;
 pub mod typeck;
 pub mod make_ctx;
 pub mod lazy;
+pub mod add_ctx;
+
+mod seq_stmt;

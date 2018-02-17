@@ -14,7 +14,7 @@ use common::Session;
 use common::name::Name;
 use common::errors::*;
 use common::NodeId;
-use common::score::{GenericContext, NodeMaker, Result};
+use common::score::{GenericContext, NodeMaker, Result, NodeRef};
 use vhdl;
 use vhdl::syntax::ast as vhdl_ast;
 use svlog::ast as svlog_ast;
