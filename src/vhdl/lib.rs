@@ -28,5 +28,7 @@ pub mod typeck;
 pub mod make_ctx;
 pub mod lazy;
 pub mod add_ctx;
+pub mod term;
 
 mod seq_stmt;
+mod expr;

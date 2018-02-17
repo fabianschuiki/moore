@@ -14,7 +14,7 @@ use moore_common::score::{NodeStorage, Result};
 use score::{ScoreBoard, ScoreContext};
 use hir;
 use typeck::TypeckContext;
-use score::WaitStmtRef;
+use score::*;
 use ty::Ty;
 
 /// A lazily evaluated node.
@@ -104,7 +104,23 @@ pub type LazyTypeval<'sb, 'ast, 'ctx> = Box<for<'a,'b,'c> Fn(&'a TypeckContext<'
 
 /// A table of pending or running HIR lowerings.
 node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
-	wait_stmts: WaitStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
+	// Expressions
+	exprs:            ExprRef          => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Expr>>,
+
+	// Sequential statements
+	wait_stmts:       WaitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
+	assert_stmts:     AssertStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::AssertStmt>>>,
+	report_stmts:     ReportStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReportStmt>>>,
+	sig_assign_stmts: SigAssignStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::SigAssignStmt>>>,
+	var_assign_stmts: VarAssignStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::VarAssignStmt>>>,
+	call_stmt:        CallStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CallStmt>>>,
+	if_stmt:          IfStmtRef        => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::IfStmt>>>,
+	case_stmt:        CaseStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CaseStmt>>>,
+	loop_stmt:        LoopStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::LoopStmt>>>,
+	next_stmt:        NextStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NextStmt>>>,
+	exit_stmt:        ExitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ExitStmt>>>,
+	return_stmt:      ReturnStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReturnStmt>>>,
+	null_stmt:        NullStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NullStmt>>>,
 );
 
 impl<'sb, 'ast, 'ctx> Default for LazyHirTable<'sb, 'ast, 'ctx> {

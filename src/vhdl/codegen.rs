@@ -268,7 +268,7 @@ impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
 	Ok(())
 });
 
-impl_codegen!(self, id: ConcProcCallStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ConcCallStmtRef, _ctx: &mut llhd::Entity => {
 	unimp!(self, id);
 });
 

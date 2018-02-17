@@ -42,6 +42,18 @@ pub struct Arenas {
 	pub subprog_inst: Arena<SubprogInst>,
 	pub type_mark: Arena<TypeMarkRef>,
 	pub wait_stmt: Arena<Stmt<WaitStmt>>,
+	pub assert_stmt: Arena<Stmt<AssertStmt>>,
+	pub report_stmt: Arena<Stmt<ReportStmt>>,
+	// pub sig_assign_stmt: Arena<Stmt<SigAssignStmt>>,
+	pub var_assign_stmt: Arena<Stmt<VarAssignStmt>>,
+	pub call_stmt: Arena<Stmt<CallStmt>>,
+	pub if_stmt: Arena<Stmt<IfStmt>>,
+	pub case_stmt: Arena<Stmt<CaseStmt>>,
+	pub loop_stmt: Arena<Stmt<LoopStmt>>,
+	pub next_stmt: Arena<Stmt<NextStmt>>,
+	pub exit_stmt: Arena<Stmt<ExitStmt>>,
+	pub return_stmt: Arena<Stmt<ReturnStmt>>,
+	pub null_stmt: Arena<Stmt<NullStmt>>,
 }
 
 impl Arenas {
@@ -71,6 +83,18 @@ impl Arenas {
 			subprog_inst: Arena::new(),
 			type_mark: Arena::new(),
 			wait_stmt: Arena::new(),
+			assert_stmt: Arena::new(),
+			report_stmt: Arena::new(),
+			// sig_assign_stmt: Arena::new(),
+			var_assign_stmt: Arena::new(),
+			call_stmt: Arena::new(),
+			if_stmt: Arena::new(),
+			case_stmt: Arena::new(),
+			loop_stmt: Arena::new(),
+			next_stmt: Arena::new(),
+			exit_stmt: Arena::new(),
+			return_stmt: Arena::new(),
+			null_stmt: Arena::new(),
 		}
 	}
 }
@@ -78,6 +102,78 @@ impl Arenas {
 impl Alloc<Stmt<WaitStmt>> for Arenas {
 	fn alloc(&self, value: Stmt<WaitStmt>) -> &mut Stmt<WaitStmt> {
 		self.wait_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<AssertStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<AssertStmt>) -> &mut Stmt<AssertStmt> {
+		self.assert_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<ReportStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<ReportStmt>) -> &mut Stmt<ReportStmt> {
+		self.report_stmt.alloc(value)
+	}
+}
+
+// impl Alloc<Stmt<SigAssignStmt>> for Arenas {
+// 	fn alloc(&self, value: Stmt<SigAssignStmt>) -> &mut Stmt<SigAssignStmt> {
+// 		self.sig_assign_stmt.alloc(value)
+// 	}
+// }
+
+impl Alloc<Stmt<VarAssignStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<VarAssignStmt>) -> &mut Stmt<VarAssignStmt> {
+		self.var_assign_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<CallStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<CallStmt>) -> &mut Stmt<CallStmt> {
+		self.call_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<IfStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<IfStmt>) -> &mut Stmt<IfStmt> {
+		self.if_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<CaseStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<CaseStmt>) -> &mut Stmt<CaseStmt> {
+		self.case_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<LoopStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<LoopStmt>) -> &mut Stmt<LoopStmt> {
+		self.loop_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<NextStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<NextStmt>) -> &mut Stmt<NextStmt> {
+		self.next_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<ExitStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<ExitStmt>) -> &mut Stmt<ExitStmt> {
+		self.exit_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<ReturnStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<ReturnStmt>) -> &mut Stmt<ReturnStmt> {
+		self.return_stmt.alloc(value)
+	}
+}
+
+impl Alloc<Stmt<NullStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<NullStmt>) -> &mut Stmt<NullStmt> {
+		self.null_stmt.alloc(value)
 	}
 }
 
@@ -790,7 +886,7 @@ pub enum SubprogKind {
 /// A statement.
 ///
 /// See IEEE 1076-2008 section 10.1.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Stmt<T> {
 	/// The parent scope.
 	pub parent: ScopeRef,
@@ -805,12 +901,114 @@ pub struct Stmt<T> {
 /// A wait statement.
 ///
 /// See IEEE 1076-2008 section 10.2.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct WaitStmt {
 	/// The sensitivity clause.
-	pub sens: Option<Vec<SignalRef>>,
+	pub sens: Option<SensitivityList>,
 	/// The condition clause.
 	pub cond: Option<ExprRef>,
 	/// The timeout clause.
 	pub timeout: Option<ExprRef>,
+}
+
+/// An assertion statement.
+///
+/// See IEEE 1076-2008 section 10.3.
+#[derive(Debug)]
+pub struct AssertStmt {
+	/// The condition to be asserted.
+	pub cond: ExprRef,
+	/// The report message.
+	pub report: Option<ExprRef>,
+	/// The severity level.
+	pub severity: Option<ExprRef>,
+}
+
+/// A report statement.
+///
+/// See IEEE 1076-2008 section 10.4.
+#[derive(Debug)]
+pub struct ReportStmt {
+	/// The report message.
+	pub report: ExprRef,
+	/// The severity level.
+	pub severity: Option<ExprRef>,
+}
+
+// pub struct SigAssignStmt;
+pub struct VarAssignStmt;
+
+/// A procedure call statement.
+///
+/// See IEEE 1076-2008 section 10.7.
+#[derive(Debug)]
+pub struct CallStmt {
+	/// The target subprogram.
+	pub subprog: SubprogRef,
+	/// The optional call parameters.
+	pub params: (),
+}
+
+/// An if statement.
+///
+/// See IEEE 1076-2008 section 10.8.
+#[derive(Debug)]
+pub struct IfStmt {
+	/// The condition and statements of each branch.
+	pub branches: Vec<(ExprRef, Vec<SeqStmtRef>)>,
+	/// The optional else branch.
+	pub otherwise: Option<Vec<SeqStmtRef>>,
+}
+
+/// A case statement.
+///
+/// See IEEE 1076-2008 section 10.9.
+#[derive(Debug)]
+pub struct CaseStmt {
+	/// Whether this is a matching case statement (indicated by `?`).
+	pub matching: bool,
+	/// The expression being switched over.
+	pub switch: ExprRef,
+	/// The cases.
+	pub cases: Vec<(Choices, Vec<SeqStmtRef>)>,
+}
+
+/// A loop statement.
+///
+/// See IEEE 1076-2008 section 10.10.
+#[derive(Debug)]
+pub struct LoopStmt {
+	/// The loop scheme.
+	pub scheme: LoopScheme,
+	/// The loop statements.
+	pub stmts: Vec<SeqStmtRef>,
+}
+
+/// A loop scheme.
+///
+/// See IEEE 1076-2008 section 10.10.
+#[derive(Debug)]
+pub enum LoopScheme {
+	/// An infinite loop.
+	Loop,
+	/// A while loop.
+	While(ExprRef),
+	/// A for loop.
+	For(Spanned<Name>, Spanned<DiscreteRange>),
+}
+
+pub struct NextStmt;
+pub struct ExitStmt;
+pub struct ReturnStmt;
+pub struct NullStmt;
+
+/// A sensitivity list.
+///
+/// See IEEE 1076-2008 section 10.2.
+#[derive(Debug)]
+pub struct SensitivityList {
+	/// The span of the entire list.
+	pub span: Span,
+	/// The signals in the list.
+	pub signals: Vec<SignalRef>,
 }

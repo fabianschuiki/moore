@@ -738,6 +738,18 @@ pub struct Expr {
 	pub data: ExprData,
 }
 
+impl HasSpan for Expr {
+	fn span(&self) -> Span {
+		self.span
+	}
+}
+
+impl HasDesc for Expr {
+	fn desc(&self) -> &'static str {
+		self.data.desc()
+	}
+}
+
 /// The data associated with a specific expression.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ExprData {
@@ -757,6 +769,16 @@ pub enum ExprData {
 	BinaryExpr(BinaryOp, Box<Expr>, Box<Expr>),
 }
 
+impl HasDesc for ExprData {
+	fn desc(&self) -> &'static str {
+		match *self {
+			NullExpr => "null expression",
+			UnaryExpr(..) => "unary expression",
+			BinaryExpr(..) => "binary expression",
+			_ => "expression",
+		}
+	}
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum UnaryOp {

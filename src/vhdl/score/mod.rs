@@ -104,9 +104,9 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	/// A table of type contexts for expressions.
 	tyctx_table: RefCell<HashMap<NodeId, TypeCtx<'ctx>>>,
 	/// A table of typeck results.
-	typeck_table: RefCell<HashMap<NodeId, Result<()>>>,
+	pub typeck_table: RefCell<HashMap<NodeId, Result<()>>>,
 	/// A table of typeval results.
-	typeval_table: RefCell<HashMap<NodeId, Result<&'ctx Ty>>>,
+	pub typeval_table: RefCell<HashMap<NodeId, Result<&'ctx Ty>>>,
 	/// Emit note for each AST node converted to a term.
 	trace_termification: bool,
 }
@@ -372,29 +372,14 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	///
 	/// If the node already had its type checked, immediately returns the result
 	/// of that operation. Otherwise runs the task scheduled in the lazy table.
-	pub fn lazy_typeck<I>(&self, id: I) -> Result<()>
-	where
-		I: Into<NodeId>,
-	{
-		let id = id.into();
-
-		// If the typeck has already been performed, return its result.
-		if let Some(&node) = self.sb.typeck_table.borrow().get(&id) {
-			return node;
-		}
-
-		// Otherwise run the task scheduled in the lazy typeck table, then store
-		// the result.
+	pub fn lazy_typeck<I>(&self, id: I) -> Result<()> where I: Into<NodeId> {
 		let ctx = TypeckContext::new(self);
-		let task = self.lazy.typeck.borrow_mut().set(id, LazyNode::Running);
-		let result = match task {
-			Some(LazyNode::Pending(f)) => f(&ctx),
-			Some(LazyNode::Running) => panic!("recursion on typeck of {:?}", id),
-			None => panic!("no typeck scheduled for {:?}", id),
-		};
-		self.sb.typeck_table.borrow_mut().insert(id, result);
-
-		result
+		ctx.lazy_typeck(id);
+		if ctx.finish() {
+			Ok(())
+		} else {
+			Err(())
+		}
 	}
 
 	/// Determine the type of a node.
@@ -402,29 +387,14 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// If the node already had its type determined, immediately returns the
 	/// result of that operation. Otherwise runs the task scheduled in the lazy
 	/// table.
-	pub fn lazy_typeval<I>(&self, id: I) -> Result<&'ctx Ty>
-	where
-		I: Into<NodeId>,
-	{
-		let id = id.into();
-
-		// If the typeval has already been performed, return its result.
-		if let Some(&node) = self.sb.typeval_table.borrow().get(&id) {
-			return node;
-		}
-
-		// Otherwise run the task scheduled in the lazy typeval table, then store
-		// the result.
+	pub fn lazy_typeval<I>(&self, id: I) -> Result<&'ctx Ty> where I: Into<NodeId> {
 		let ctx = TypeckContext::new(self);
-		let task = self.lazy.typeval.borrow_mut().set(id, LazyNode::Running);
-		let result = match task {
-			Some(LazyNode::Pending(f)) => f(&ctx),
-			Some(LazyNode::Running) => panic!("recursion on typeval of {:?}", id),
-			None => panic!("no typeval scheduled for {:?}", id),
-		};
-		self.sb.typeval_table.borrow_mut().insert(id, result);
-
-		result
+		let result = ctx.lazy_typeval(id);
+		if ctx.finish() {
+			result
+		} else {
+			Err(())
+		}
 	}
 
 	pub fn scope(&self, id: ScopeRef) -> Result<&'ctx Scope> {
@@ -459,16 +429,18 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	}
 
 
-	/// Obtain the type context for an expression. Returns `None` if no context
-	/// information is available.
+	/// Obtain the type context for an expression.
+	///
+	/// Returns `None` if no context information is available.
 	pub fn type_context<I>(&self, id: I) -> Option<TypeCtx<'ctx>>
 	where I: Copy + Debug + Into<NodeId>
 	{
 		self.sb.tyctx_table.borrow().get(&id.into()).map(|&t| t)
 	}
 
-	/// Obtain the type indicated by the type context for an expression. Returns
-	/// `None` if no context information is available.
+	/// Obtain the type indicated by the type context for an expression.
+	///
+	/// Returns `None` if no context information is available.
 	pub fn type_context_resolved<I>(&self, id: I) -> Result<Option<&'ctx Ty>>
 	where I: Copy + Debug + Into<NodeId>
 	{
@@ -479,13 +451,27 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		})
 	}
 
-
-	/// Store a type context for an expression. Upon type checking, the
-	/// expression is likely to consult this context to determine its type.
-	pub fn set_type_context<I>(&self, id: I, tyctx: TypeCtx<'ctx>)
-	where I: Copy + Debug + Into<NodeId>
+	/// Store a type context for an expression.
+	///
+	/// Upon type checking, the expression is likely to consult this context to
+	/// determine its type.
+	pub fn set_type_context<I,T>(&self, id: I, tyctx: T)
+		where I: Copy + Debug + Into<NodeId>, TypeCtx<'ctx>: From<T>
 	{
-		self.sb.tyctx_table.borrow_mut().insert(id.into(), tyctx);
+		self.sb.tyctx_table.borrow_mut().insert(id.into(), tyctx.into());
+	}
+
+	/// Store a type context for an optional expression.
+	///
+	/// Upon type checking, the expression is likely to consult this context to
+	/// determine its type. Does nothing if `id.is_none()`.
+	pub fn set_type_context_optional<I,T>(&self, id: Option<I>, tyctx: T)
+		where I: Copy + Debug + Into<NodeId>, TypeCtx<'ctx>: From<T>
+	{
+		match id {
+			Some(id) => self.set_type_context(id, tyctx),
+			None => (),
+		}
 	}
 }
 
@@ -723,6 +709,26 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		// simply return the definitions found and an empty slice of remaining
 		// parts.
 		Ok((res_name.value, defs, seen_span, &[]))
+	}
+
+	/// Get the builtin type `standard.boolean`.
+	pub fn builtin_boolean_type(&self) -> &'ctx Ty {
+		self.intern_ty(Ty::Null)
+	}
+
+	/// Get the builtin type `standard.time`.
+	pub fn builtin_time_type(&self) -> &'ctx Ty {
+		self.intern_ty(Ty::Null)
+	}
+
+	/// Get the builtin type `standard.string`.
+	pub fn builtin_string_type(&self) -> &'ctx Ty {
+		self.intern_ty(Ty::Null)
+	}
+
+	/// Get the builtin type `standard.severity`.
+	pub fn builtin_severity_type(&self) -> &'ctx Ty {
+		self.intern_ty(Ty::Null)
 	}
 }
 
@@ -1135,6 +1141,18 @@ pub enum TypeCtx<'ctx> {
 	TypeOf(TypedNodeRef),
 }
 
+impl<'ctx> From<&'ctx Ty> for TypeCtx<'ctx> {
+	fn from(ty: &'ctx Ty) -> TypeCtx<'ctx> {
+		TypeCtx::Type(ty)
+	}
+}
+
+impl<'ctx, T> From<T> for TypeCtx<'ctx> where TypedNodeRef: From<T> {
+	fn from(id: T) -> TypeCtx<'ctx> {
+		TypeCtx::TypeOf(id.into())
+	}
+}
+
 
 // Declare the node references.
 node_ref!(ArchRef);
@@ -1167,7 +1185,7 @@ node_ref!(AssertStmtRef);
 node_ref!(ReportStmtRef);
 node_ref!(SigAssignStmtRef);
 node_ref!(VarAssignStmtRef);
-node_ref!(ProcCallStmtRef);
+node_ref!(CallStmtRef);
 node_ref!(IfStmtRef);
 node_ref!(CaseStmtRef);
 node_ref!(LoopStmtRef);
@@ -1177,7 +1195,7 @@ node_ref!(ReturnStmtRef);
 node_ref!(NullStmtRef);
 node_ref!(BlockStmtRef);
 node_ref!(ProcessStmtRef);
-node_ref!(ConcProcCallStmtRef);
+node_ref!(ConcCallStmtRef);
 node_ref!(ConcAssertStmtRef);
 node_ref!(ConcSigAssignStmtRef);
 node_ref!(CompInstStmtRef);
@@ -1519,7 +1537,7 @@ node_ref_group!(DeclInProcRef:
 node_ref_group!(ConcStmtRef:
 	Block(BlockStmtRef),
 	Process(ProcessStmtRef),
-	ConcProcCall(ConcProcCallStmtRef),
+	ConcProcCall(ConcCallStmtRef),
 	ConcAssert(ConcAssertStmtRef),
 	ConcSigAssign(ConcSigAssignStmtRef),
 	CompInst(CompInstStmtRef),
@@ -1551,7 +1569,7 @@ node_ref_group!(SeqStmtRef:
 	Report(ReportStmtRef),
 	SigAssign(SigAssignStmtRef),
 	VarAssign(VarAssignStmtRef),
-	ProcCall(ProcCallStmtRef),
+	ProcCall(CallStmtRef),
 	If(IfStmtRef),
 	Case(CaseStmtRef),
 	Loop(LoopStmtRef),
@@ -1649,7 +1667,20 @@ node_storage!(HirTable<'ctx>:
 	latent_type_marks:     LatentTypeMarkRef     => Spanned<TypeMarkRef>,
 	latent_pkgs:           LatentPkgRef          => Spanned<PkgRef>,
 	latent_subprogs:       LatentSubprogRef      => Spanned<SubprogRef>,
+	// Sequential statements
 	wait_stmts:            WaitStmtRef           => &'ctx hir::Stmt<hir::WaitStmt>,
+	assert_stmts:          AssertStmtRef         => &'ctx hir::Stmt<hir::AssertStmt>,
+	report_stmts:          ReportStmtRef         => &'ctx hir::Stmt<hir::ReportStmt>,
+	// sig_assign_stmts:      SigAssignStmtRef      => &'ctx hir::Stmt<hir::SigAssignStmt>,
+	var_assign_stmts:      VarAssignStmtRef      => &'ctx hir::Stmt<hir::VarAssignStmt>,
+	call_stmt:             CallStmtRef           => &'ctx hir::Stmt<hir::CallStmt>,
+	if_stmt:               IfStmtRef             => &'ctx hir::Stmt<hir::IfStmt>,
+	case_stmt:             CaseStmtRef           => &'ctx hir::Stmt<hir::CaseStmt>,
+	loop_stmt:             LoopStmtRef           => &'ctx hir::Stmt<hir::LoopStmt>,
+	next_stmt:             NextStmtRef           => &'ctx hir::Stmt<hir::NextStmt>,
+	exit_stmt:             ExitStmtRef           => &'ctx hir::Stmt<hir::ExitStmt>,
+	return_stmt:           ReturnStmtRef         => &'ctx hir::Stmt<hir::ReturnStmt>,
+	null_stmt:             NullStmtRef           => &'ctx hir::Stmt<hir::NullStmt>,
 );
 
 // node_storage!(LazyHirTable<'ast, 'ctx>:

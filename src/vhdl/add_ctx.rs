@@ -10,7 +10,9 @@
 #![deny(missing_docs)]
 
 use common::source::Span;
-use common::score::NodeRef;
+use common::score::{NodeRef, Result};
+use common::errors::*;
+use common::util::{HasSpan, HasDesc};
 use make_ctx::MakeContext;
 use score::ScoreContext;
 use score::ScopeRef;
@@ -44,7 +46,43 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Create a new context for describing a node.
-    pub fn make<I>(&self, span: Span) -> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> where I: NodeRef {
-        MakeContext::new(self.ctx, span, I::alloc())
+    pub fn make<I>(
+        &self,
+        span: Span
+    ) -> (MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I>, I, ScopeRef)
+        where I: NodeRef
+    {
+        let id = I::alloc();
+        (MakeContext::new(self.ctx, span, id), id, self.scope)
+    }
+
+    /// Emit a diagnostic that a node is not implemented.
+    pub fn unimp<T,R>(&self, node: &T) -> Result<R> where T: HasSpan + HasDesc {
+        self.emit(
+            DiagBuilder2::bug(format!("{} not implemented", node.desc()))
+            .span(node.human_span())
+        );
+        Err(())
+    }
+
+    /// Add an optional node.
+    ///
+    /// This convenience function performs a few things at a time. First it
+    /// applies a closure `f` to the value of an option, returning an error if
+    /// the closure returns one. Otherwise it wraps the result in an option and
+    /// returns it.
+    pub fn add_optional<T,F,R>(&self, node: &'ast Option<T>, f: F) -> Result<Option<R>>
+        where F: FnOnce(&Self, &'ast T) -> Result<R>
+    {
+        Ok(match *node {
+            Some(ref ast) => Some(f(self, ast)?),
+            None => None,
+        })
+    }
+}
+
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DiagEmitter for AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
+    fn emit(&self, diag: DiagBuilder2) {
+        self.ctx.emit(diag)
     }
 }

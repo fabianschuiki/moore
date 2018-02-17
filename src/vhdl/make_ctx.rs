@@ -49,12 +49,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 	}
 
 	/// Schedule a callback that lowers the node to HIR.
-	pub fn lower_to_hir<F>(self, f: F)
+	pub fn lower_to_hir<R>(self, f: LazyHir<'sb, 'ast, 'ctx, R>)
 	where
-		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<F>>,
+		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<LazyHir<'sb, 'ast, 'ctx, R>>>,
 	{
 		debugln!("make.hir {:?}", self.id);
-		self.ctx.lazy.hir.schedule(self.id, f);
+		// self.ctx.lazy.hir.schedule(self.id, f);
+		self.ctx.lazy.hir.table.borrow_mut().set(self.id, LazyNode::Pending(f));
 	}
 
 	/// Schedule a callback that type checks the node.

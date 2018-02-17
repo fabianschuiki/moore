@@ -6,15 +6,15 @@ use std::fmt::Debug;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use moore_common::NodeId;
-use moore_common::errors::*;
-use moore_common::source::{Span, Spanned};
-use moore_common::score::{NodeMaker, Result};
-
+use common::NodeId;
+use common::errors::*;
+use common::source::{Span, Spanned};
+use common::score::{NodeMaker, NodeStorage, Result};
 use score::*;
 use ty::*;
 use konst::*;
 use hir;
+use lazy::LazyNode;
 
 /// A context to typecheck things in.
 ///
@@ -46,6 +46,61 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 			self.failed.set(true);
 		}
 		self.ctx.sess.emit(diag)
+	}
+
+	/// Check the type of a node.
+	///
+	/// If the node already had its type checked, immediately returns the result
+	/// of that operation. Otherwise runs the task scheduled in the lazy table.
+	pub fn lazy_typeck<I>(&self, id: I) where I: Into<NodeId> {
+		let id = id.into();
+
+		// If the typeck has already been performed, return its result.
+		if let Some(&node) = self.ctx.sb.typeck_table.borrow().get(&id) {
+			if node.is_err() {
+				self.failed.set(true);
+			}
+			return;
+		}
+
+		// Otherwise run the task scheduled in the lazy typeck table, then store
+		// the result.
+		let task = self.ctx.lazy.typeck.borrow_mut().set(id, LazyNode::Running);
+		let result = match task {
+			Some(LazyNode::Pending(f)) => f(self),
+			Some(LazyNode::Running) => panic!("recursion on typeck of {:?}", id),
+			None => panic!("no typeck scheduled for {:?}", id),
+		};
+		if result.is_err() {
+			self.failed.set(true);
+		}
+		self.ctx.sb.typeck_table.borrow_mut().insert(id, result);
+	}
+
+	/// Determine the type of a node.
+	///
+	/// If the node already had its type determined, immediately returns the
+	/// result of that operation. Otherwise runs the task scheduled in the lazy
+	/// table.
+	pub fn lazy_typeval<I>(&self, id: I) -> Result<&'ctx Ty> where I: Into<NodeId> {
+		let id = id.into();
+
+		// If the typeval has already been performed, return its result.
+		if let Some(&node) = self.ctx.sb.typeval_table.borrow().get(&id) {
+			return node;
+		}
+
+		// Otherwise run the task scheduled in the lazy typeval table, then store
+		// the result.
+		let task = self.ctx.lazy.typeval.borrow_mut().set(id, LazyNode::Running);
+		let result = match task {
+			Some(LazyNode::Pending(f)) => f(self),
+			Some(LazyNode::Running) => panic!("recursion on typeval of {:?}", id),
+			None => panic!("no typeval scheduled for {:?}", id),
+		};
+		self.ctx.sb.typeval_table.borrow_mut().insert(id, result);
+
+		result
 	}
 
 	/// Type check the time expression in a delay mechanism.
@@ -669,19 +724,19 @@ impl_typeck!(self, id: ConcStmtRef => {
 
 impl_typeck!(self, id: SeqStmtRef => {
 	match id {
-		SeqStmtRef::Wait(id)      => self.typeck(id),
-		SeqStmtRef::Assert(id)    => self.typeck(id),
-		SeqStmtRef::Report(id)    => self.typeck(id),
-		SeqStmtRef::SigAssign(id) => self.typeck(id),
-		SeqStmtRef::VarAssign(id) => self.typeck(id),
-		SeqStmtRef::ProcCall(id)  => self.typeck(id),
-		SeqStmtRef::If(id)        => self.typeck(id),
-		SeqStmtRef::Case(id)      => self.typeck(id),
-		SeqStmtRef::Loop(id)      => self.typeck(id),
-		SeqStmtRef::Next(id)      => self.typeck(id),
-		SeqStmtRef::Exit(id)      => self.typeck(id),
-		SeqStmtRef::Return(id)    => self.typeck(id),
-		SeqStmtRef::Null(id)      => self.typeck(id),
+		SeqStmtRef::Wait(id)      => self.lazy_typeck(id),
+		SeqStmtRef::Assert(id)    => self.lazy_typeck(id),
+		SeqStmtRef::Report(id)    => self.lazy_typeck(id),
+		SeqStmtRef::SigAssign(id) => self.lazy_typeck(id),
+		SeqStmtRef::VarAssign(id) => self.lazy_typeck(id),
+		SeqStmtRef::ProcCall(id)  => self.lazy_typeck(id),
+		SeqStmtRef::If(id)        => self.lazy_typeck(id),
+		SeqStmtRef::Case(id)      => self.lazy_typeck(id),
+		SeqStmtRef::Loop(id)      => self.lazy_typeck(id),
+		SeqStmtRef::Next(id)      => self.lazy_typeck(id),
+		SeqStmtRef::Exit(id)      => self.lazy_typeck(id),
+		SeqStmtRef::Return(id)    => self.lazy_typeck(id),
+		SeqStmtRef::Null(id)      => self.lazy_typeck(id),
 	}
 });
 
@@ -768,7 +823,7 @@ impl_typeck_err!(self, id: ProcessStmtRef => {
 	Ok(())
 });
 
-impl_typeck!(self, id: ConcProcCallStmtRef => {
+impl_typeck!(self, id: ConcCallStmtRef => {
 	unimp!(self, id)
 });
 
@@ -793,22 +848,6 @@ impl_typeck!(self, id: IfGenStmtRef => {
 });
 
 impl_typeck!(self, id: CaseGenStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck_err!(self, id: WaitStmtRef => {
-	// debugln!("query hir of {:?}", id);
-	// let hir = self.ctx.lazy_hir(id)?;
-	// debugln!("got {:?}", hir);
-	self.ctx.lazy_typeck(id)
-	// unimp_err!(self, id)
-});
-
-impl_typeck!(self, id: AssertStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: ReportStmtRef => {
 	unimp!(self, id)
 });
 
@@ -849,42 +888,6 @@ impl_typeck_err!(self, id: SigAssignStmtRef => {
 		}
 	}
 	Ok(())
-});
-
-impl_typeck!(self, id: VarAssignStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: ProcCallStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: IfStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: CaseStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: LoopStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: NextStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: ExitStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: ReturnStmtRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, _id: NullStmtRef => {
-	// The null statement always typechecks.
 });
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
