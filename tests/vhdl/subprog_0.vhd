@@ -60,8 +60,10 @@ architecture bar of foo is
 			--exit l1 when true;
 		end loop;
 
-		--X := '0';
-		--return X;
+		return;
+		return 1234;
+
+		null;
 	end;
 
 begin end;

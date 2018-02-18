@@ -374,18 +374,46 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add a return statement.
-    #[allow(unused_variables)]
     pub fn add_return_stmt(&self, stmt: &'ast ast::Stmt) -> Result<ReturnStmtRef> {
-        let (mk, id, scope) = self.make(stmt.span);
-        self.unimp(stmt)?;
+        let (mk, id, scope) = self.make::<ReturnStmtRef>(stmt.span);
+        let expr = match stmt.data {
+            ast::ReturnStmt(ref expr) => expr,
+            _ => unreachable!(),
+        };
+        mk.lower_to_hir(Box::new(move |sbc|{
+            let ctx = AddContext::new(sbc, scope);
+            let expr = ctx.add_optional(expr, AddContext::add_expr)?;
+            // TODO: Set a type context for the expression based on the outer
+            // function signature.
+            Ok(hir::Stmt {
+                parent: scope,
+                span: stmt.span,
+                label: stmt.label,
+                stmt: hir::ReturnStmt {
+                    expr: expr,
+                }
+            })
+        }));
+        mk.typeck(Box::new(move |tyc|{
+            let _hir = tyc.ctx.lazy_hir(id)?;
+            // TODO: Check the type of the expression.
+            Ok(())
+        }));
         Ok(mk.finish())
     }
 
     /// Add a null statement.
-    #[allow(unused_variables)]
     pub fn add_null_stmt(&self, stmt: &'ast ast::Stmt) -> Result<NullStmtRef> {
-        let (mk, id, scope) = self.make(stmt.span);
-        self.unimp(stmt)?;
+        let (mk, _id, scope) = self.make::<NullStmtRef>(stmt.span);
+        mk.lower_to_hir(Box::new(move |_|{
+            Ok(hir::Stmt {
+                parent: scope,
+                span: stmt.span,
+                label: stmt.label,
+                stmt: hir::NullStmt,
+            })
+        }));
+        mk.typeck(Box::new(|_| Ok(())));
         Ok(mk.finish())
     }
 
@@ -396,6 +424,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add a label.
+    ///
+    /// Immediately resolves the label name and returns the corresponding
+    /// statement.
     pub fn add_label(&self, ast: &'ast Spanned<Name>) -> Result<Spanned<StmtRef>> {
         let ctx = TermContext::new(self.ctx, self.scope);
         let term = ctx.termify_name(ast.map_into())?;

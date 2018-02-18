@@ -1012,7 +1012,19 @@ pub enum NexitMode {
 	Exit,
 }
 
-pub struct ReturnStmt;
+/// A return statement.
+///
+/// See IEEE 1076-2008 section 10.13.
+#[derive(Debug)]
+pub struct ReturnStmt {
+	/// The optional return value.
+	pub expr: Option<ExprRef>,
+}
+
+/// A null statement.
+///
+/// See IEEE 1076-2008 section 10.14.
+#[derive(Debug)]
 pub struct NullStmt;
 
 /// A sensitivity list.
