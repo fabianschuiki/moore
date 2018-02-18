@@ -753,6 +753,8 @@ pub struct Cond<T> {
 /// See IEEE 1076-2008 section 10.5.4.
 #[derive(Debug)]
 pub struct Sel<T> {
+	/// Whether matching comparisons are to be used.
+	pub matching: bool,
 	/// The discriminant expression that is used to select among the choices.
 	pub disc: ExprRef,
 	/// The selected values, represented as (value, choices) tuples.

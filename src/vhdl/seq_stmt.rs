@@ -197,7 +197,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         enum Kind<'ast> {
             Simple(&'ast ast::Expr),
             Cond(Vec<(&'ast ast::Expr, &'ast ast::Expr)>, Option<&'ast ast::Expr>),
-            Sel(&'ast ast::Expr, Vec<(&'ast ast::Expr, Spanned<Vec<&'ast ast::Expr>>)>),
+            Sel {
+                matching: bool,
+                disc: &'ast ast::Expr,
+                exprs: Vec<(&'ast ast::Expr, &'ast Spanned<Vec<ast::Expr>>)>,
+            },
         };
         let (target, kind) = match stmt.data {
             ast::AssignStmt {
@@ -207,22 +211,31 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                     ..
                 },
                 ..
-            } => {
-                (target, match self.unpack_cond_or_uncond_waves(waves)? {
-                    CondOrUncond::Cond(conds, None) => Kind::Cond(
-                        self.unpack_cond_waves_as_exprs(conds)?,
-                        None,
-                    ),
-                    CondOrUncond::Cond(conds, Some(otherwise)) => Kind::Cond(
-                        self.unpack_cond_waves_as_exprs(conds)?,
-                        Some(self.unpack_wave_as_expr(otherwise)?),
-                    ),
-                    CondOrUncond::Uncond(wave) => Kind::Simple(
-                        self.unpack_wave_as_expr(wave)?,
-                    ),
-                })
-            }
-            // ast::SelectAssignStmt { ref target, ..} => target,
+            } => (target, match self.unpack_cond_or_uncond_waves(waves)? {
+                CondOrUncond::Cond(conds, None) => Kind::Cond(
+                    self.unpack_cond_waves_as_exprs(conds)?,
+                    None,
+                ),
+                CondOrUncond::Cond(conds, Some(otherwise)) => Kind::Cond(
+                    self.unpack_cond_waves_as_exprs(conds)?,
+                    Some(self.unpack_wave_as_expr(otherwise)?),
+                ),
+                CondOrUncond::Uncond(wave) => Kind::Simple(
+                    self.unpack_wave_as_expr(wave)?,
+                ),
+            }),
+            ast::SelectAssignStmt {
+                ref select,
+                qm,
+                ref target,
+                mode: ast::SelectAssignMode::Normal(None),
+                ref waves,
+                ..
+            } => (target, Kind::Sel {
+                matching: qm,
+                disc: select,
+                exprs: self.unpack_sel_waves_as_exprs(waves)?
+            }),
             _ => {
                 self.emit(
                     DiagBuilder2::error(format!("invalid variable assignment"))
@@ -258,20 +271,21 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                         other: otherwise,
                     })
                 },
-                Kind::Sel(ref disc, ref sels) => {
+                Kind::Sel { matching, ref disc, ref exprs } => {
                     let disc = ctx.add_expr(disc);
-                    let sels = sels.into_iter()
+                    let exprs = exprs.into_iter()
                         .map(|&(e, ref c)|{
                             let e = ctx.add_expr(e);
-                            let c = ctx.add_choices(c.as_ref().map(|i| i.into_iter().map(|n| *n)));
+                            let c = ctx.add_choices(c.as_ref().map(|i| i.iter()));
                             Ok((e?, c?))
                         })
                         .collect::<Vec<Result<_>>>()
                         .into_iter()
                         .collect::<Result<Vec<_>>>();
                     hir::VarAssignKind::Sel(hir::Sel{
+                        matching: matching,
                         disc: disc?,
-                        when: sels?,
+                        when: exprs?,
                     })
                 }
             };
@@ -623,6 +637,16 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             .span(ast.span)
         );
         Err(())
+    }
+
+    /// Unpack a sequence of selected waves as expressions.
+    fn unpack_sel_waves_as_exprs<I>(&self, ast: I) -> Result<Vec<(&'ast ast::Expr, &'ast Spanned<Vec<ast::Expr>>)>>
+        where I: IntoIterator<Item=&'ast ast::SelectWave>
+    {
+        ast.into_iter().map(|sw| Ok((self.unpack_wave_as_expr(&sw.0)?, &sw.1)))
+            .collect::<Vec<Result<_>>>()
+            .into_iter()
+            .collect::<Result<Vec<_>>>()
     }
 }
 
