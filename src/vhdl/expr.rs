@@ -28,8 +28,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add a list of choices.
-    pub fn add_choices(&self, _ast: &'ast Vec<ast::Expr>) -> Result<hir::Choices> {
-        self.emit(DiagBuilder2::bug("choices not implemented"));
+    pub fn add_choices<I>(
+        &self,
+        ast: Spanned<I>
+    ) -> Result<hir::Choices>
+        where I: IntoIterator<Item=&'ast ast::Expr>
+    {
+        self.emit(DiagBuilder2::bug("choices not implemented").span(ast.span));
         Err(())
     }
 

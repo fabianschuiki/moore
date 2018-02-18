@@ -723,7 +723,7 @@ pub enum GroupData {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ParenElem {
 	pub span: Span,
-	pub choices: Vec<Expr>,
+	pub choices: Spanned<Vec<Expr>>,
 	pub expr: Expr,
 }
 
@@ -967,7 +967,7 @@ pub enum StmtData {
 	CaseStmt {
 		qm: bool,
 		switch: Expr,
-		cases: Vec<(Vec<Expr>, StmtBody)>,
+		cases: Vec<(Spanned<Vec<Expr>>, StmtBody)>,
 	},
 	LoopStmt {
 		scheme: LoopScheme,
@@ -986,7 +986,7 @@ pub enum StmtData {
 	},
 	CaseGenStmt {
 		switch: Expr,
-		cases: Vec<(Vec<Expr>, GenBody)>,
+		cases: Vec<(Spanned<Vec<Expr>>, GenBody)>,
 	},
 	ForGenStmt {
 		param: Spanned<Name>,
@@ -1145,7 +1145,7 @@ pub struct CondWave(pub Wave, pub Option<Expr>);
 /// A selected wave. The second element of the tuple represents the choices for
 /// which this wave would be selected.
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
-pub struct SelectWave(pub Wave, pub Vec<Expr>);
+pub struct SelectWave(pub Wave, pub Spanned<Vec<Expr>>);
 
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]

@@ -932,7 +932,9 @@ pub fn try_paren_expr<P: Parser>(p: &mut P) -> ReportedResult<Option<ast::ParenE
 pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::ParenElem>> {
 	separated(p, Comma, CloseDelim(Paren), "expression", |p|{
 		// Parse a list of choices, i.e. expressions separated by `|`.
+		let mut choices_span = p.peek(0).span;
 		let mut choices = separated_nonempty(p, Pipe, token_predicate!(Arrow, Comma, CloseDelim(Paren)), "expression", parse_expr)?;
+		choices_span.expand(p.last_span());
 
 		// If the expressions are followed by a "=>", what we have parsed is a
 		// list of choices. Otherwise, ensure that there is only one expression
@@ -940,10 +942,10 @@ pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Par
 		if accept(p, Arrow) {
 			let q = p.last_span();
 			let actual = parse_expr(p)?;
-			let span = Span::union(choices[0].span, actual.span);
+			let span = Span::union(choices_span, actual.span);
 			Ok(ast::ParenElem{
 				span: span,
-				choices: choices,
+				choices: Spanned::new(choices, choices_span),
 				expr: actual,
 			})
 		} else {
@@ -965,7 +967,7 @@ pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Par
 			let span = first.span;
 			Ok(ast::ParenElem{
 				span: span,
-				choices: vec![],
+				choices: Spanned::new(vec![], INVALID_SPAN),
 				expr: first,
 			})
 		}
@@ -2582,10 +2584,12 @@ pub fn parse_case_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name>>) -> Re
 	// Parse the cases.
 	let cases = repeat(p, |p| -> ReportedResult<Option<(_,_)>> {
 		if accept(p, Keyword(Kw::When)) {
+			let mut choices_span = p.peek(0).span;
 			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
+			choices_span.expand(p.last_span());
 			require(p, Arrow)?;
 			let stmts = repeat_until(p, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)), parse_stmt)?;
-			Ok(Some((choices, ast::StmtBody{
+			Ok(Some((Spanned::new(choices, choices_span), ast::StmtBody{
 				id: Default::default(),
 				stmts: stmts,
 			})))
@@ -2773,13 +2777,15 @@ pub fn parse_case_generate_stmt<P: Parser>(p: &mut P, label: Option<Spanned<Name
 	require(p, Keyword(Kw::Generate))?;
 
 	// Parse the cases.
-	let cases = repeat(p, |p| -> ReportedResult<Option<(Vec<ast::Expr>, ast::GenBody)>> {
+	let cases = repeat(p, |p| -> ReportedResult<Option<(Spanned<Vec<ast::Expr>>, ast::GenBody)>> {
 		if accept(p, Keyword(Kw::When)) {
 			let label = try_label(p);
+			let mut choices_span = p.peek(0).span;
 			let choices = separated_nonempty(p, Pipe, Arrow, "choice", parse_expr)?;
+			choices_span.expand(p.last_span());
 			require(p, Arrow)?;
 			let body = parse_generate_body(p, label, token_predicate!(Keyword(Kw::When), Keyword(Kw::End)))?;
-			Ok(Some((choices, body)))
+			Ok(Some((Spanned::new(choices, choices_span), body)))
 		} else {
 			Ok(None)
 		}
@@ -3163,8 +3169,10 @@ pub fn parse_selected_waves<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Sel
 	separated_nonempty(p, Comma, Semicolon, "waveform", |p|{
 		let wave = parse_wave(p)?;
 		require(p, Keyword(Kw::When))?;
+		let mut choices_span = p.peek(0).span;
 		let choices = separated_nonempty(p, Pipe, token_predicate!(Comma, Semicolon), "choice", parse_expr)?;
-		Ok(ast::SelectWave(wave, choices))
+		choices_span.expand(p.last_span());
+		Ok(ast::SelectWave(wave, Spanned::new(choices, choices_span)))
 	}).map_err(|e| e.into())
 }
 

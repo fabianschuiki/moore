@@ -355,10 +355,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
     /// Map multiple parenthesis elements to a term.
     pub fn termify_paren_elems(&self, elems: &'ast ast::ParenElems) -> Result<Spanned<Term>> {
-        let is_aggregate = elems.value.iter().any(|e| !e.choices.is_empty());
+        let is_aggregate = elems.value.iter().any(|e| !e.choices.value.is_empty());
         let term = if is_aggregate {
             Term::Aggregate(elems.value.iter().map(|e| Ok((
-                e.choices.iter().map(|c| self.termify_expr(c)).collect::<Result<Vec<_>>>()?,
+                e.choices.value.iter().map(|c| self.termify_expr(c)).collect::<Result<Vec<_>>>()?,
                 self.termify_expr(&e.expr)?
             ))).collect::<Result<Vec<_>>>()?)
         } else {

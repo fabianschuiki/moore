@@ -806,8 +806,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// parenthesized expression and ensures it is of the latter form.
 	pub fn sanitize_paren_elems_as_exprs(&self, elems: &'ast [ast::ParenElem], context: &str) -> Vec<&'ast ast::Expr> {
 		elems.iter().map(|elem|{
-			if !elem.choices.is_empty() {
-				let span = Span::union(elem.choices[0].span, elem.choices.last().unwrap().span);
+			if !elem.choices.value.is_empty() {
+				let span = Span::union(elem.choices.value[0].span, elem.choices.value.last().unwrap().span);
 				self.emit(
 					DiagBuilder2::error(format!("`=>` not applicable in {}", context))
 					.span(span)
@@ -1695,7 +1695,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					// Unpack the element. Make sure it only consists of an
 					// expression that is either an identifier or a character
 					// literal.
-					let lit = if !elem.choices.is_empty() {
+					let lit = if !elem.choices.value.is_empty() {
 						None
 					} else {
 						match elem.expr.data {

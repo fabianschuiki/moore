@@ -248,7 +248,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             let ctx = AddContext::new(sbc, scope);
             let switch = ctx.add_expr(switch);
             let cases = cases.iter().map(|&(ref choices, ref body)|{
-                let choices = ctx.add_choices(choices);
+                let choices = ctx.add_choices(choices.as_ref().map(|c| c.iter()));
                 let stmts = ctx.add_seq_stmts(&body.stmts, "a case branch");
                 Ok((choices?, stmts?))
             }).collect::<Vec<Result<_>>>().into_iter().collect::<Result<Vec<_>>>();
