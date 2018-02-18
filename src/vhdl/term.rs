@@ -847,9 +847,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     ///
     /// See IEEE 1076-2008 section 9.3.3.1.
     pub fn term_to_aggregate(&self, term: Spanned<Term>) -> Result<Spanned<AggregateRef>> {
-        Ok(Spanned::new(match term.value {
+        let fields = match term.value {
             Term::Aggregate(fields) => {
-                let fields = fields
+                fields
                     .into_iter()
                     .map(|(choices, expr)|{
                         let choices = choices
@@ -863,16 +863,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                     })
                     .collect::<Vec<Result<_>>>()
                     .into_iter()
-                    .collect::<Result<Vec<_>>>()?;
-
-                let hir = hir::Aggregate {
-                    parent: self.scope,
-                    span: term.span,
-                    fields: fields,
-                };
-                let id = AggregateRef::new(NodeId::alloc());
-                self.ctx.set_hir(id, self.ctx.sb.arenas.hir.aggregate.alloc(hir));
-                id
+                    .collect::<Result<Vec<_>>>()?
+            }
+            Term::Paren(fields) => {
+                fields
+                    .into_iter()
+                    .map(|expr| Ok((vec![], self.term_to_expr(expr)?)))
+                    .collect::<Vec<Result<_>>>()
+                    .into_iter()
+                    .collect::<Result<Vec<_>>>()?
             }
             _ => {
                 self.emit(
@@ -883,6 +882,14 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 debugln!("It is a {:#?}", term);
                 return Err(());
             }
-        }, term.span))
+        };
+        let hir = hir::Aggregate {
+            parent: self.scope,
+            span: term.span,
+            fields: fields,
+        };
+        let id = AggregateRef::new(NodeId::alloc());
+        self.ctx.set_hir(id, self.ctx.sb.arenas.hir.aggregate.alloc(hir));
+        Ok(Spanned::new(id, term.span))
     }
 }
