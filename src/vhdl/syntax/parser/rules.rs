@@ -2424,6 +2424,7 @@ pub fn parse_wait_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData> {
 
 	// Parse the optional "on" part.
 	let on = if accept(p, Keyword(Kw::On)) {
+		let mut names_span = p.peek(0).span;
 		let names = separated_nonempty(
 			p,
 			Comma,
@@ -2431,7 +2432,8 @@ pub fn parse_wait_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData> {
 			"signal name",
 			parse_name
 		)?;
-		Some(names)
+		names_span.expand(p.last_span());
+		Some(Spanned::new(names, names_span))
 	} else {
 		None
 	};

@@ -913,7 +913,7 @@ pub struct Stmt<T> {
 #[derive(Debug)]
 pub struct WaitStmt {
 	/// The sensitivity clause.
-	pub sens: Option<SensitivityList>,
+	pub sens: Option<Spanned<SensitivityList>>,
 	/// The condition clause.
 	pub cond: Option<ExprRef>,
 	/// The timeout clause.
@@ -1047,10 +1047,4 @@ pub struct NullStmt;
 /// A sensitivity list.
 ///
 /// See IEEE 1076-2008 section 10.2.
-#[derive(Debug)]
-pub struct SensitivityList {
-	/// The span of the entire list.
-	pub span: Span,
-	/// The signals in the list.
-	pub signals: Vec<SignalRef>,
-}
+pub type SensitivityList = Vec<Spanned<SignalRef>>;

@@ -89,7 +89,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
-            let sens = ctx.add_optional(on, AddContext::add_sensitivity_list);
+            let sens = ctx.add_optional(on, |ctx, sens| ctx.add_sensitivity_list(sens.as_ref().map(|s| s.iter())));
             let cond = ctx.add_optional(until, AddContext::add_expr);
             let timeout = ctx.add_optional(time, AddContext::add_expr);
             let (sens, cond, timeout) = (sens?, cond?, timeout?);
@@ -418,8 +418,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add a sensitivity list.
-    pub fn add_sensitivity_list(&self, _ast: &'ast Vec<ast::CompoundName>) -> Result<hir::SensitivityList> {
-        self.emit(DiagBuilder2::bug("sensitivity lists not implemented"));
+    pub fn add_sensitivity_list<I>(
+        &self,
+        ast: Spanned<I>,
+    ) -> Result<Spanned<hir::SensitivityList>>
+        where I: IntoIterator<Item=&'ast ast::CompoundName>
+    {
+        self.emit(DiagBuilder2::bug("sensitivity lists not implemented").span(ast.span));
         Err(())
     }
 

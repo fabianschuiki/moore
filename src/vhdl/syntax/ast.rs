@@ -947,7 +947,7 @@ impl HasDesc for Stmt {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum StmtData {
 	WaitStmt {
-		on: Option<Vec<CompoundName>>,
+		on: Option<Spanned<Vec<CompoundName>>>,
 		until: Option<Expr>,
 		time: Option<Expr>,
 	},

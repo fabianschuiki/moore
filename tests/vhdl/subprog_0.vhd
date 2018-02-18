@@ -7,6 +7,7 @@ architecture bar of foo is
 		--variable X : BIT;
 	begin
 		wait;
+		wait on nonen;
 		wait for blah;
 		wait until false;
 		wait for 10 ns;
