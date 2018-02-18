@@ -3039,9 +3039,11 @@ pub fn parse_select_assign<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData
 	// Parse the assignment target, which is either a signal name or an
 	// aggregate.
 	let target = if let Some(name) = try_name(p)? {
-		ast::AssignTarget::Name(name)
+		let span = name.span;
+		Spanned::new(ast::AssignTarget::Name(name), span)
 	} else if let Some(exprs) = try_paren_expr(p)? {
-		ast::AssignTarget::Aggregate(exprs)
+		let span = exprs.span;
+		Spanned::new(ast::AssignTarget::Aggregate(exprs), span)
 	} else {
 		let pk = p.peek(0);
 		p.emit(

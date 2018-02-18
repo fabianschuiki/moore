@@ -738,6 +738,8 @@ pub enum SigAssignKind {
 }
 
 /// A conditional waveform or expression.
+///
+/// See IEEE 1076-2008 section 10.5.3.
 #[derive(Debug)]
 pub struct Cond<T> {
 	/// The conditional values, represented as (value, cond) tuples.
@@ -747,6 +749,8 @@ pub struct Cond<T> {
 }
 
 /// A selected waveform or expression.
+///
+/// See IEEE 1076-2008 section 10.5.4.
 #[derive(Debug)]
 pub struct Sel<T> {
 	/// The discriminant expression that is used to select among the choices.
@@ -945,7 +949,28 @@ pub struct ReportStmt {
 }
 
 // pub struct SigAssignStmt;
-pub struct VarAssignStmt;
+
+/// A variable assignment statement.
+///
+/// See IEEE 1076-2008 section 10.6.
+#[derive(Debug)]
+pub struct VarAssignStmt {
+	/// The target variable.
+	pub target: Spanned<AssignTarget<()>>,
+	/// The assignment kind.
+	pub kind: VarAssignKind,
+}
+
+/// A variable assignment kind.
+#[derive(Debug)]
+pub enum VarAssignKind {
+	/// A simple assignment.
+	Simple(ExprRef),
+	/// A conditional assignment.
+	Cond(Cond<ExprRef>),
+	/// A selected assignment.
+	Sel(Sel<ExprRef>),
+}
 
 /// A procedure call statement.
 ///
@@ -1048,3 +1073,10 @@ pub struct NullStmt;
 ///
 /// See IEEE 1076-2008 section 10.2.
 pub type SensitivityList = Vec<Spanned<SignalRef>>;
+
+/// An assignment target.
+#[derive(Debug)]
+pub enum AssignTarget<T> {
+	Ident(T),
+	Aggregate(()),
+}

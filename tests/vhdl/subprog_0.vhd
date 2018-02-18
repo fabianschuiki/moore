@@ -21,6 +21,15 @@ architecture bar of foo is
 		report "hello";
 		report "hello" severity warning;
 
+		X := '0';
+		X := '0' when true else '1';
+		with 123 select X :=
+			'0' when 1,
+			'0' when 2|3,
+			'0' when 4 to 10,
+			'0' when asdf,
+			'1' when others;
+
 		--F1(x);
 		--Image(x);
 

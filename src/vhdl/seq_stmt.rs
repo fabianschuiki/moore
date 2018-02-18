@@ -50,11 +50,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 self.add_assert_stmt(stmt).map(Into::into),
             ast::ReportStmt {..} =>
                 self.add_report_stmt(stmt).map(Into::into),
-            ast::AssignStmt {kind: ast::AssignKind::Signal, ..} =>
+            ast::AssignStmt {kind: ast::AssignKind::Signal, ..} |
+            ast::SelectAssignStmt {kind: ast::AssignKind::Signal, ..} =>
                 self.add_sig_assign_stmt(stmt).map(Into::into),
-            ast::AssignStmt {kind: ast::AssignKind::Var, ..} =>
+            ast::AssignStmt {kind: ast::AssignKind::Var, ..} |
+            ast::SelectAssignStmt {kind: ast::AssignKind::Var, ..} =>
                 self.add_var_assign_stmt(stmt).map(Into::into),
-            ast::SelectAssignStmt {..} => { self.unimp(stmt) }
             ast::InstOrCallStmt {..} =>
                 self.add_call_stmt(stmt).map(Into::into),
             ast::IfStmt {..} =>
@@ -192,7 +193,103 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
     /// Add a var_assign statement.
     pub fn add_var_assign_stmt(&self, stmt: &'ast ast::Stmt) -> Result<VarAssignStmtRef> {
-        self.unimp(stmt)
+        let (mk, id, scope) = self.make::<VarAssignStmtRef>(stmt.span);
+        enum Kind<'ast> {
+            Simple(&'ast ast::Expr),
+            Cond(Vec<(&'ast ast::Expr, &'ast ast::Expr)>, Option<&'ast ast::Expr>),
+            Sel(&'ast ast::Expr, Vec<(&'ast ast::Expr, Spanned<Vec<&'ast ast::Expr>>)>),
+        };
+        let (target, kind) = match stmt.data {
+            ast::AssignStmt {
+                ref target,
+                mode: Spanned {
+                    value: ast::AssignMode::Normal(None, ref waves),
+                    ..
+                },
+                ..
+            } => {
+                (target, match self.unpack_cond_or_uncond_waves(waves)? {
+                    CondOrUncond::Cond(conds, None) => Kind::Cond(
+                        self.unpack_cond_waves_as_exprs(conds)?,
+                        None,
+                    ),
+                    CondOrUncond::Cond(conds, Some(otherwise)) => Kind::Cond(
+                        self.unpack_cond_waves_as_exprs(conds)?,
+                        Some(self.unpack_wave_as_expr(otherwise)?),
+                    ),
+                    CondOrUncond::Uncond(wave) => Kind::Simple(
+                        self.unpack_wave_as_expr(wave)?,
+                    ),
+                })
+            }
+            // ast::SelectAssignStmt { ref target, ..} => target,
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("invalid variable assignment"))
+                    .span(stmt.span)
+                );
+                return Err(());
+            }
+        };
+        mk.lower_to_hir(Box::new(move |sbc|{
+            let ctx = AddContext::new(sbc, scope);
+            let target = ctx.add_target_var(target);
+            let kind = match kind {
+                Kind::Simple(expr) => {
+                    let expr = ctx.add_expr(expr);
+                    hir::VarAssignKind::Simple(expr?)
+                },
+                Kind::Cond(ref conds, ref otherwise) => {
+                    let conds = conds.into_iter()
+                        .map(|&(e,c)|{
+                            let e = ctx.add_expr(e);
+                            let c = ctx.add_expr(c);
+                            Ok((e?, c?))
+                        })
+                        .collect::<Vec<Result<_>>>()
+                        .into_iter()
+                        .collect::<Result<Vec<_>>>();
+                    let otherwise = match *otherwise {
+                        Some(o) => Some(ctx.add_expr(o)?),
+                        None => None,
+                    };
+                    hir::VarAssignKind::Cond(hir::Cond{
+                        when: conds?,
+                        other: otherwise,
+                    })
+                },
+                Kind::Sel(ref disc, ref sels) => {
+                    let disc = ctx.add_expr(disc);
+                    let sels = sels.into_iter()
+                        .map(|&(e, ref c)|{
+                            let e = ctx.add_expr(e);
+                            let c = ctx.add_choices(c.as_ref().map(|i| i.into_iter().map(|n| *n)));
+                            Ok((e?, c?))
+                        })
+                        .collect::<Vec<Result<_>>>()
+                        .into_iter()
+                        .collect::<Result<Vec<_>>>();
+                    hir::VarAssignKind::Sel(hir::Sel{
+                        disc: disc?,
+                        when: sels?,
+                    })
+                }
+            };
+            Ok(hir::Stmt {
+                parent: scope,
+                span: stmt.span,
+                label: stmt.label,
+                stmt: hir::VarAssignStmt {
+                    target: target?,
+                    kind: kind,
+                }
+            })
+        }));
+        mk.typeck(Box::new(move |tyc|{
+            let _hir = tyc.ctx.lazy_hir(id)?;
+            Ok(())
+        }));
+        Ok(mk.finish())
     }
 
     /// Add a call statement.
@@ -446,4 +543,98 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let term = ctx.termify_name(ast.map_into())?;
         ctx.term_to_label(term)
     }
+
+    /// Add a target variable.
+    ///
+    /// This is an target for a variable assignment.
+    pub fn add_target_var(&self, ast: &'ast Spanned<ast::AssignTarget>) -> Result<Spanned<hir::AssignTarget<()>>> {
+        self.emit(DiagBuilder2::bug("variable assignment targets not implemented").span(ast.span));
+        Err(())
+    }
+
+    /// Unpack a slice of waves.
+    ///
+    /// Ensures that either the waves are all unconditional, or all have a
+    /// condition except for the optional last one.
+    fn unpack_cond_or_uncond_waves(&self, ast: &'ast [ast::CondWave]) -> Result<CondOrUncond<'ast>> {
+        assert!(!ast.is_empty());
+        let any_cond = ast.iter().any(|w| w.1.is_some());
+        if any_cond {
+            // Cut away the optional trailing else without condition.
+            let (slice, otherwise) = match *ast.last().unwrap() {
+                ast::CondWave(ref wave, None) => (&ast[..ast.len()-2], Some(wave)),
+                _ => (&ast[..], None),
+            };
+            let conds = slice
+                .into_iter()
+                .map(|&ast::CondWave(ref wave, ref cond)|{
+                    match *cond {
+                        Some(ref cond) => Ok((wave, cond)),
+                        None => {
+                            self.emit(
+                                DiagBuilder2::error(format!("`{}` missing a `when` condition", wave.span.extract()))
+                                .span(wave.span)
+                                .add_note("Either all or none of the waveforms or expressions in the assignment can have a `when` condition.")
+                            );
+                            Err(())
+                        }
+                    }
+                })
+                .collect::<Vec<Result<_>>>()
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?;
+            Ok(CondOrUncond::Cond(conds, otherwise))
+        } else {
+            if ast.len() != 1 {
+                self.emit(
+                    DiagBuilder2::error(format!("more than one waveform or expression"))
+                    .span(ast[0].0.span)
+                    .add_note("An unconditional assignment must have exactly one waveform or expression.")
+                );
+                Err(())
+            } else {
+                Ok(CondOrUncond::Uncond(&ast[0].0))
+            }
+        }
+    }
+
+    /// Unpack a sequence of conditional waves as expressions.
+    fn unpack_cond_waves_as_exprs<I>(&self, ast: I) -> Result<Vec<(&'ast ast::Expr, &'ast ast::Expr)>>
+        where I: IntoIterator<Item=(&'ast ast::Wave, &'ast ast::Expr)>
+    {
+        ast.into_iter().map(|(w,c)| Ok((self.unpack_wave_as_expr(w)?, c)))
+            .collect::<Vec<Result<_>>>()
+            .into_iter()
+            .collect::<Result<Vec<_>>>()
+    }
+
+    /// Unpack a wave as expression.
+    ///
+    /// This is useful for variable assignments to ensure that the right hand
+    /// side is not a signal waveform.
+    fn unpack_wave_as_expr(&self, ast: &'ast ast::Wave) -> Result<&'ast ast::Expr> {
+        if let Some(ref v) = ast.elems {
+            if v.len() == 1 && v[0].1.is_none() {
+                return Ok(&v[0].0);
+            }
+        }
+        self.emit(
+            DiagBuilder2::error(format!("`{}` is not a valid expression", ast.span.extract()))
+            .span(ast.span)
+        );
+        Err(())
+    }
+}
+
+/// A conditional or unconditional slice of waves.
+///
+/// These are used for signal and variable assignments. Note that for variables
+/// further checking needs to be performed to ensure that the wave is actually
+/// just an expression.
+enum CondOrUncond<'ast> {
+    /// A conditional slice of waves. Consists of wave-condition pairs, and an
+    /// optional unconditional wave.
+    Cond(Vec<(&'ast ast::Wave, &'ast ast::Expr)>, Option<&'ast ast::Wave>),
+    /// An unconditional wave.
+    Uncond(&'ast ast::Wave),
 }
