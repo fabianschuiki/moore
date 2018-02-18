@@ -791,4 +791,36 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }
         }, span))
     }
+
+    /// Map a term to a choice.
+    ///
+    /// See IEEE 1076-2008 section 9.3.3.1. A choice can be a simple expression,
+    /// a discrete range, an identifier, or the keyword `others`.
+    pub fn term_to_choice(&self, term: Spanned<Term>) -> Result<Spanned<hir::Choice>> {
+        let term_span = term.span;
+        Ok(Spanned::new(match term.value {
+            Term::Unresolved(ResolvableName::Ident(name)) => hir::Choice::Element(name),
+            Term::Others => hir::Choice::Others,
+            Term::SubtypeInd(..) |
+            Term::TypeMark(..) |
+            Term::Range(..) => hir::Choice::DiscreteRange(self.term_to_discrete_range(term)?.value),
+            Term::IntLit(..) |
+            Term::Unary(..) |
+            Term::Binary(..) => hir::Choice::Expr(self.term_to_expr(term)?),
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not a valid choice", term.span.extract()))
+                    .span(term.span)
+                    .add_note("A choice can be one of the following:")
+                    .add_note("- an expression")
+                    .add_note("- a discrete range")
+                    .add_note("- an element name")
+                    .add_note("- the `others` keyword")
+                    .add_note("See IEEE 1076-2008 section 9.3.3.1.")
+                );
+                debugln!("It is a {:#?}", term);
+                return Err(());
+            }
+        }, term_span))
+    }
 }

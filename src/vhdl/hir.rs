@@ -752,7 +752,7 @@ pub struct Sel<T> {
 	/// The discriminant expression that is used to select among the choices.
 	pub disc: ExprRef,
 	/// The selected values, represented as (value, choices) tuples.
-	pub when: Vec<(T, Choices)>,
+	pub when: Vec<(T, Spanned<Choices>)>,
 }
 
 /// The mode of a signal force/release statement.
@@ -795,7 +795,24 @@ pub struct WaveElem {
 
 /// A list of choices used in aggregates, selected assignments, and case
 /// statements.
-pub type Choices = Vec<ExprRef>;
+///
+/// See IEEE 1076-2008 section 9.3.3.1.
+pub type Choices = Vec<Spanned<Choice>>;
+
+/// A choice in an aggregate.
+///
+/// See IEEE 1076-2008 section 9.3.3.1.
+#[derive(Debug)]
+pub enum Choice {
+	/// An expression.
+	Expr(ExprRef),
+	/// A discrete range.
+	DiscreteRange(DiscreteRange),
+	/// A record element.
+	Element(Name),
+	/// The keyword `others`.
+	Others
+}
 
 /// A subprogram.
 ///
@@ -962,7 +979,7 @@ pub struct CaseStmt {
 	/// The expression being switched over.
 	pub switch: ExprRef,
 	/// The cases.
-	pub cases: Vec<(Choices, Vec<SeqStmtRef>)>,
+	pub cases: Vec<(Spanned<Choices>, Vec<SeqStmtRef>)>,
 }
 
 /// A loop statement.
