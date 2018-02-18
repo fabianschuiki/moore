@@ -2,12 +2,13 @@ entity foo is end;
 architecture bar of foo is
 
 	type BIT is ('0', '1');
+	signal A : BIT;
 
 	function F1 return BIT is
 		--variable X : BIT;
 	begin
 		wait;
-		wait on nonen;
+		wait on A;
 		wait for blah;
 		wait until false;
 		wait for 10 ns;

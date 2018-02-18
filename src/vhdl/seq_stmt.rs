@@ -424,8 +424,17 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     ) -> Result<Spanned<hir::SensitivityList>>
         where I: IntoIterator<Item=&'ast ast::CompoundName>
     {
-        self.emit(DiagBuilder2::bug("sensitivity lists not implemented").span(ast.span));
-        Err(())
+        let ctx = TermContext::new(self.ctx, self.scope);
+        let signals = ast.value
+            .into_iter()
+            .map(|ast|{
+                let term = ctx.termify_compound_name(ast)?;
+                ctx.term_to_signal(term)
+            })
+            .collect::<Vec<Result<_>>>()
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Spanned::new(signals, ast.span))
     }
 
     /// Add a label.

@@ -792,6 +792,25 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         }, span))
     }
 
+    /// Map a term to a signal.
+    pub fn term_to_signal(&self, term: Spanned<Term>) -> Result<Spanned<SignalRef>> {
+        let span = term.span;
+        let def = self.term_to_ident(term)?;
+        Ok(Spanned::new(match def.value {
+            Def::Signal(id) => id,
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not a signal", span.extract()))
+                    .span(span)
+                    .add_note(format!("`{}` was defined here:", span.extract()))
+                    .span(def.span)
+                );
+                debugln!("The definition is a {:?}", def.value);
+                return Err(());
+            }
+        }, span))
+    }
+
     /// Map a term to a choice.
     ///
     /// See IEEE 1076-2008 section 9.3.3.1. A choice can be a simple expression,
