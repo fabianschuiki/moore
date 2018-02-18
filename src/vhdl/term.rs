@@ -842,4 +842,47 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }
         }, term_span))
     }
+
+    /// Map a term to an aggregate.
+    ///
+    /// See IEEE 1076-2008 section 9.3.3.1.
+    pub fn term_to_aggregate(&self, term: Spanned<Term>) -> Result<Spanned<AggregateRef>> {
+        Ok(Spanned::new(match term.value {
+            Term::Aggregate(fields) => {
+                let fields = fields
+                    .into_iter()
+                    .map(|(choices, expr)|{
+                        let choices = choices
+                            .into_iter()
+                            .map(|choice| self.term_to_choice(choice))
+                            .collect::<Vec<Result<_>>>()
+                            .into_iter()
+                            .collect::<Result<Vec<_>>>();
+                        let expr = self.term_to_expr(expr);
+                        Ok((choices?, expr?))
+                    })
+                    .collect::<Vec<Result<_>>>()
+                    .into_iter()
+                    .collect::<Result<Vec<_>>>()?;
+
+                let hir = hir::Aggregate {
+                    parent: self.scope,
+                    span: term.span,
+                    fields: fields,
+                };
+                let id = AggregateRef::new(NodeId::alloc());
+                self.ctx.set_hir(id, self.ctx.sb.arenas.hir.aggregate.alloc(hir));
+                id
+            }
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not a valid aggregate", term.span.extract()))
+                    .span(term.span)
+                    .add_note("See IEEE 1076-2008 section 9.3.3.1.")
+                );
+                debugln!("It is a {:#?}", term);
+                return Err(());
+            }
+        }, term.span))
+    }
 }

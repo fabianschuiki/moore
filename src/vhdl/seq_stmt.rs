@@ -246,7 +246,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
-            let target = ctx.add_target_var(target);
+            let target = ctx.add_target(target);
             let kind = match kind {
                 Kind::Simple(expr) => {
                     let expr = ctx.add_expr(expr);
@@ -561,9 +561,18 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a target variable.
     ///
     /// This is an target for a variable assignment.
-    pub fn add_target_var(&self, ast: &'ast Spanned<ast::AssignTarget>) -> Result<Spanned<hir::AssignTarget<()>>> {
-        self.emit(DiagBuilder2::bug("variable assignment targets not implemented").span(ast.span));
-        Err(())
+    pub fn add_target(&self, ast: &'ast Spanned<ast::AssignTarget>) -> Result<Spanned<hir::Target>> {
+        let ctx = TermContext::new(self.ctx, self.scope);
+        Ok(Spanned::new(match ast.value {
+            ast::AssignTarget::Name(ref name) => {
+                let term = ctx.termify_compound_name(name)?;
+                hir::Target::Name(ctx.term_to_expr(term)?)
+            }
+            ast::AssignTarget::Aggregate(ref agg) => {
+                let term = ctx.termify_paren_elems(agg)?;
+                hir::Target::Aggregate(ctx.term_to_aggregate(term)?.value)
+            }
+        }, ast.span))
     }
 
     /// Unpack a slice of waves.

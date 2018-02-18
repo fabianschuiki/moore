@@ -30,6 +30,7 @@ pub struct Arenas {
 	pub type_decl: Arena<TypeDecl>,
 	pub subtype_decl: Arena<SubtypeDecl>,
 	pub expr: Arena<Expr>,
+	pub aggregate: Arena<Aggregate>,
 	pub const_decl: Arena<ConstDecl>,
 	pub signal_decl: Arena<SignalDecl>,
 	pub variable_decl: Arena<VarDecl>,
@@ -70,6 +71,7 @@ impl Arenas {
 			type_decl: Arena::new(),
 			subtype_decl: Arena::new(),
 			expr: Arena::new(),
+			aggregate: Arena::new(),
 			const_decl: Arena::new(),
 			signal_decl: Arena::new(),
 			variable_decl: Arena::new(),
@@ -958,7 +960,7 @@ pub struct ReportStmt {
 #[derive(Debug)]
 pub struct VarAssignStmt {
 	/// The target variable.
-	pub target: Spanned<AssignTarget<()>>,
+	pub target: Spanned<Target>,
 	/// The assignment kind.
 	pub kind: VarAssignKind,
 }
@@ -1076,9 +1078,24 @@ pub struct NullStmt;
 /// See IEEE 1076-2008 section 10.2.
 pub type SensitivityList = Vec<Spanned<SignalRef>>;
 
-/// An assignment target.
+/// A target.
+///
+/// See IEEE 1076-2008 section 10.5.2.1.
 #[derive(Debug)]
-pub enum AssignTarget<T> {
-	Ident(T),
-	Aggregate(()),
+pub enum Target {
+	Name(ExprRef),
+	Aggregate(AggregateRef),
+}
+
+/// An aggregate.
+///
+/// See IEEE 1076-2008 section 9.3.3.1.
+#[derive(Debug)]
+pub struct Aggregate {
+	/// The parent scope.
+	pub parent: ScopeRef,
+	/// The span the aggregate covers in the source file.
+	pub span: Span,
+	/// The fields of the aggregate.
+	pub fields: Vec<(Choices, ExprRef)>,
 }

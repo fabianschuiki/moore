@@ -1163,6 +1163,7 @@ node_ref!(CtxRef);
 node_ref!(DesignUnitRef);
 node_ref!(EntityRef);
 node_ref!(ExprRef);
+node_ref!(AggregateRef);
 node_ref!(IntfConstRef);
 node_ref!(IntfSignalRef);
 node_ref!(IntfVarRef);
@@ -1667,6 +1668,7 @@ node_storage!(HirTable<'ctx>:
 	type_decls:            TypeDeclRef           => &'ctx hir::TypeDecl,
 	subtype_decls:         SubtypeDeclRef        => &'ctx hir::SubtypeDecl,
 	exprs:                 ExprRef               => &'ctx hir::Expr,
+	aggregate:             AggregateRef          => &'ctx hir::Aggregate,
 	const_decls:           ConstDeclRef          => &'ctx hir::ConstDecl,
 	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
 	variable_decls:        VarDeclRef            => &'ctx hir::VarDecl,
