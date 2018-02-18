@@ -50,8 +50,7 @@ pub struct Arenas {
 	pub if_stmt: Arena<Stmt<IfStmt>>,
 	pub case_stmt: Arena<Stmt<CaseStmt>>,
 	pub loop_stmt: Arena<Stmt<LoopStmt>>,
-	pub next_stmt: Arena<Stmt<NextStmt>>,
-	pub exit_stmt: Arena<Stmt<ExitStmt>>,
+	pub nexit_stmt: Arena<Stmt<NexitStmt>>,
 	pub return_stmt: Arena<Stmt<ReturnStmt>>,
 	pub null_stmt: Arena<Stmt<NullStmt>>,
 }
@@ -91,8 +90,7 @@ impl Arenas {
 			if_stmt: Arena::new(),
 			case_stmt: Arena::new(),
 			loop_stmt: Arena::new(),
-			next_stmt: Arena::new(),
-			exit_stmt: Arena::new(),
+			nexit_stmt: Arena::new(),
 			return_stmt: Arena::new(),
 			null_stmt: Arena::new(),
 		}
@@ -153,15 +151,9 @@ impl Alloc<Stmt<LoopStmt>> for Arenas {
 	}
 }
 
-impl Alloc<Stmt<NextStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<NextStmt>) -> &mut Stmt<NextStmt> {
-		self.next_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<ExitStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<ExitStmt>) -> &mut Stmt<ExitStmt> {
-		self.exit_stmt.alloc(value)
+impl Alloc<Stmt<NexitStmt>> for Arenas {
+	fn alloc(&self, value: Stmt<NexitStmt>) -> &mut Stmt<NexitStmt> {
+		self.nexit_stmt.alloc(value)
 	}
 }
 
@@ -997,8 +989,29 @@ pub enum LoopScheme {
 	For(Spanned<Name>, Spanned<DiscreteRange>),
 }
 
-pub struct NextStmt;
-pub struct ExitStmt;
+/// A next or exit statement.
+///
+/// See IEEE 1076-2008 section 10.11 and 10.12.
+#[derive(Debug)]
+pub struct NexitStmt {
+	/// Whether this is a next or exit statement.
+	pub mode: NexitMode,
+	/// The optional loop the statement operates on. If omitted the statement
+	/// applies to the innermost loop.
+	pub target: Option<Spanned<LoopStmtRef>>,
+	/// The optional condition.
+	pub cond: Option<ExprRef>,
+}
+
+/// A discriminant for next/exit statements.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum NexitMode {
+	/// A next statement.
+	Next,
+	/// An exit statement.
+	Exit,
+}
+
 pub struct ReturnStmt;
 pub struct NullStmt;
 

@@ -1189,8 +1189,7 @@ node_ref!(CallStmtRef);
 node_ref!(IfStmtRef);
 node_ref!(CaseStmtRef);
 node_ref!(LoopStmtRef);
-node_ref!(NextStmtRef);
-node_ref!(ExitStmtRef);
+node_ref!(NexitStmtRef);
 node_ref!(ReturnStmtRef);
 node_ref!(NullStmtRef);
 node_ref!(BlockStmtRef);
@@ -1258,6 +1257,7 @@ node_ref_group!(Def:
 	Group(GroupDeclRef),
 	Subprog(SubprogDeclRef),
 	SubprogInst(SubprogInstRef),
+	Stmt(StmtRef),
 );
 
 node_ref_group!(ScopeRef:
@@ -1292,6 +1292,15 @@ node_ref_group!(TypeMarkRef:
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
 );
+
+impl From<TypeMarkRef> for Def {
+	fn from(tm: TypeMarkRef) -> Def {
+		match tm {
+			TypeMarkRef::Type(id) => id.into(),
+			TypeMarkRef::Subtype(id) => id.into(),
+		}
+	}
+}
 
 node_ref_group!(SignalRef:
 	Intf(IntfSignalRef),
@@ -1523,7 +1532,7 @@ node_ref_group!(DeclInProcRef:
 	Group(GroupDeclRef),
 );
 
-/// All concurrent statements. See IEEE 1076-2008 section 11.1.
+/// All concurrent statements. See IEEE 1076-2008 section 11.
 ///
 /// ```text
 /// block_statement
@@ -1546,7 +1555,7 @@ node_ref_group!(ConcStmtRef:
 	CaseGen(CaseGenStmtRef),
 );
 
-/// All sequential statements. See IEEE 1076-2008 section 10.1.
+/// All sequential statements. See IEEE 1076-2008 section 10.
 ///
 /// ```text
 /// wait_statement
@@ -1573,10 +1582,15 @@ node_ref_group!(SeqStmtRef:
 	If(IfStmtRef),
 	Case(CaseStmtRef),
 	Loop(LoopStmtRef),
-	Next(NextStmtRef),
-	Exit(ExitStmtRef),
+	Nexit(NexitStmtRef),
 	Return(ReturnStmtRef),
 	Null(NullStmtRef),
+);
+
+/// All statements. See IEEE 1076-2008 section 10 and 11.
+node_ref_group!(StmtRef:
+	Conc(ConcStmtRef),
+	Seq(SeqStmtRef),
 );
 
 /// A reference to a node which has a type.
@@ -1677,8 +1691,7 @@ node_storage!(HirTable<'ctx>:
 	if_stmt:               IfStmtRef             => &'ctx hir::Stmt<hir::IfStmt>,
 	case_stmt:             CaseStmtRef           => &'ctx hir::Stmt<hir::CaseStmt>,
 	loop_stmt:             LoopStmtRef           => &'ctx hir::Stmt<hir::LoopStmt>,
-	next_stmt:             NextStmtRef           => &'ctx hir::Stmt<hir::NextStmt>,
-	exit_stmt:             ExitStmtRef           => &'ctx hir::Stmt<hir::ExitStmt>,
+	nexit_stmt:            NexitStmtRef          => &'ctx hir::Stmt<hir::NexitStmt>,
 	return_stmt:           ReturnStmtRef         => &'ctx hir::Stmt<hir::ReturnStmt>,
 	null_stmt:             NullStmtRef           => &'ctx hir::Stmt<hir::NullStmt>,
 );

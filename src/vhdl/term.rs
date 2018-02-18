@@ -732,4 +732,63 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }
         }, term.span))
     }
+
+    /// Map a term to a definition.
+    ///
+    /// This works for terms that are actually identifiers.
+    pub fn term_to_ident(&self, term: Spanned<Term>) -> Result<Spanned<Def>> {
+        Ok(match term.value {
+            Term::Unresolved(name) => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is unknown", name))
+                    .span(term.span)
+                );
+                return Err(());
+            }
+            Term::Ident(def) => def,
+            Term::TypeMark(tm) => tm.map_into(),
+            Term::Enum(defs) => {
+                if defs.len() == 1 {
+                    let e = defs.into_iter().next().unwrap();
+                    e.map(|e| e.0.into())
+                } else {
+                    self.emit(
+                        DiagBuilder2::error(format!("`{}` is ambiguous", term.span.extract()))
+                        .span(term.span)
+                    );
+                    debugln!("Its definitions are {:#?}", defs);
+                    return Err(());
+                }
+            }
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not an identifier", term.span.extract()))
+                    .span(term.span)
+                );
+                debugln!("It is a {:#?}", term);
+                return Err(());
+            }
+        })
+    }
+
+    /// Map a term to a label.
+    ///
+    /// Returns the statement the label refers to.
+    pub fn term_to_label(&self, term: Spanned<Term>) -> Result<Spanned<StmtRef>> {
+        let span = term.span;
+        let def = self.term_to_ident(term)?;
+        Ok(Spanned::new(match def.value {
+            Def::Stmt(id) => id,
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not a statement label", span.extract()))
+                    .span(span)
+                    .add_note(format!("`{}` was defined here:", span.extract()))
+                    .span(def.span)
+                );
+                debugln!("The definition is a {:?}", def.value);
+                return Err(());
+            }
+        }, span))
+    }
 }

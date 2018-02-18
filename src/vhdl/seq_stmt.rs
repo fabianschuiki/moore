@@ -9,10 +9,14 @@ use std::iter::FromIterator;
 use common::errors::*;
 use common::util::{HasSpan, HasDesc};
 use common::score::Result;
+use common::source::Spanned;
+use common::name::Name;
+
 use add_ctx::AddContext;
 use syntax::ast;
 use hir;
 use score::*;
+use term::TermContext;
 
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
@@ -59,10 +63,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 self.add_case_stmt(stmt).map(Into::into),
             ast::LoopStmt {..} =>
                 self.add_loop_stmt(stmt).map(Into::into),
-            ast::NexitStmt {mode: ast::NexitMode::Next, ..} =>
-                self.add_next_stmt(stmt).map(Into::into),
-            ast::NexitStmt {mode: ast::NexitMode::Exit, ..} =>
-                self.add_exit_stmt(stmt).map(Into::into),
+            ast::NexitStmt {..} =>
+                self.add_nexit_stmt(stmt).map(Into::into),
             ast::ReturnStmt {..} =>
                 self.add_return_stmt(stmt).map(Into::into),
             ast::NullStmt =>
@@ -87,9 +89,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
-            let sens = ctx.add_optional(on, AddContext::add_sensitivity_list)?;
-            let cond = ctx.add_optional(until, AddContext::add_expr)?;
-            let timeout = ctx.add_optional(time, AddContext::add_expr)?;
+            let sens = ctx.add_optional(on, AddContext::add_sensitivity_list);
+            let cond = ctx.add_optional(until, AddContext::add_expr);
+            let timeout = ctx.add_optional(time, AddContext::add_expr);
+            let (sens, cond, timeout) = (sens?, cond?, timeout?);
             sbc.set_type_context_optional(cond, sbc.builtin_boolean_type());
             sbc.set_type_context_optional(timeout, sbc.builtin_time_type());
             Ok(hir::Stmt {
@@ -121,9 +124,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
-            let cond = ctx.add_expr(cond)?;
-            let report = ctx.add_optional(report, AddContext::add_expr)?;
-            let severity = ctx.add_optional(severity, AddContext::add_expr)?;
+            let cond = ctx.add_expr(cond);
+            let report = ctx.add_optional(report, AddContext::add_expr);
+            let severity = ctx.add_optional(severity, AddContext::add_expr);
+            let (cond, report, severity) = (cond?, report?, severity?);
             sbc.set_type_context(cond, TypeCtx::Type(sbc.builtin_boolean_type()));
             sbc.set_type_context_optional(report, sbc.builtin_string_type());
             sbc.set_type_context_optional(severity, sbc.builtin_severity_type());
@@ -157,8 +161,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
-            let report = ctx.add_expr(report)?;
-            let severity = ctx.add_optional(severity, AddContext::add_expr)?;
+            let report = ctx.add_expr(report);
+            let severity = ctx.add_optional(severity, AddContext::add_expr);
+            let (report, severity) = (report?, severity?);
             sbc.set_type_context(report, sbc.builtin_string_type());
             sbc.set_type_context_optional(severity, sbc.builtin_severity_type());
             Ok(hir::Stmt {
@@ -206,8 +211,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             let ctx = AddContext::new(sbc, scope);
             let branches = branches.iter().map(|&(ref expr, ref body)|
                 Ok((ctx.add_expr(expr)?, ctx.add_seq_stmts(&body.stmts, "an if branch")?))
-            ).collect::<Result<Vec<_>>>()?;
-            let otherwise = ctx.add_optional(otherwise, |ctx, ast| ctx.add_seq_stmts(&ast.stmts, "an if branch"))?;
+            ).collect::<Result<Vec<_>>>();
+            let otherwise = ctx.add_optional(otherwise, |ctx, ast| ctx.add_seq_stmts(&ast.stmts, "an if branch"));
+            let (branches, otherwise) = (branches?, otherwise?);
             for &(cond, _) in &branches {
                 sbc.set_type_context(cond, sbc.builtin_boolean_type());
             }
@@ -240,10 +246,18 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
-            let switch = ctx.add_expr(switch)?;
-            let cases = cases.iter().map(|&(ref choices, ref body)|
-                Ok((ctx.add_choices(choices)?, ctx.add_seq_stmts(&body.stmts, "a case branch")?))
-            ).collect::<Result<Vec<_>>>()?;
+            let switch = ctx.add_expr(switch);
+            let cases = cases.iter().map(|&(ref choices, ref body)|{
+                let choices = ctx.add_choices(choices);
+                let stmts = ctx.add_seq_stmts(&body.stmts, "a case branch");
+                Ok((choices?, stmts?))
+            }).collect::<Vec<Result<_>>>().into_iter().collect::<Result<Vec<_>>>();
+            // The above trick of calling collect() twice achieves the
+            // following: On the first pass, the results are collected into a
+            // vector. This ensures that diagnostics for all cases are emitted.
+            // Then we re-collect the vector, but this time into a result, which
+            // will stop at the first `Err`.
+            let (switch, cases) = (switch?, cases?);
             for &(ref _choices, _) in &cases {
                 // TODO: Set the type context for each choice.
                 // for choice in choices {
@@ -284,15 +298,16 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         mk.lower_to_hir(Box::new(move |sbc|{
             // TODO: Make a subscope here! No clue how...
             let ctx = AddContext::new(sbc, scope);
-            let scheme = match *scheme {
+            let scheme = (|| match *scheme {
                 ast::LoopScheme::Loop =>
-                    hir::LoopScheme::Loop,
+                    Ok(hir::LoopScheme::Loop),
                 ast::LoopScheme::While(ref cond) =>
-                    hir::LoopScheme::While(ctx.add_expr(cond)?),
+                    Ok(hir::LoopScheme::While(ctx.add_expr(cond)?)),
                 ast::LoopScheme::For(name, ref range) =>
-                    hir::LoopScheme::For(name.into(), ctx.add_discrete_range(range)?),
-            };
-            let stmts = ctx.add_seq_stmts(&body.stmts, "a loop body")?;
+                    Ok(hir::LoopScheme::For(name.into(), ctx.add_discrete_range(range)?)),
+            })();
+            let stmts = ctx.add_seq_stmts(&body.stmts, "a loop body");
+            let (scheme, stmts) = (scheme?, stmts?);
             Ok(hir::Stmt {
                 parent: scope,
                 span: stmt.span,
@@ -313,18 +328,48 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add a next statement.
-    #[allow(unused_variables)]
-    pub fn add_next_stmt(&self, stmt: &'ast ast::Stmt) -> Result<NextStmtRef> {
-        let (mk, id, scope) = self.make(stmt.span);
-        self.unimp(stmt)?;
-        Ok(mk.finish())
-    }
-
-    /// Add a exit statement.
-    #[allow(unused_variables)]
-    pub fn add_exit_stmt(&self, stmt: &'ast ast::Stmt) -> Result<ExitStmtRef> {
-        let (mk, id, scope) = self.make(stmt.span);
-        self.unimp(stmt)?;
+    pub fn add_nexit_stmt(&self, stmt: &'ast ast::Stmt) -> Result<NexitStmtRef> {
+        let (mk, id, scope) = self.make::<NexitStmtRef>(stmt.span);
+        let (mode, target, cond) = match stmt.data {
+            ast::NexitStmt { mode, ref target, ref cond } => (mode, target, cond),
+            _ => unreachable!(),
+        };
+        mk.lower_to_hir(Box::new(move |sbc|{
+            let ctx = AddContext::new(sbc, scope);
+            let mode = match mode {
+                ast::NexitMode::Next => hir::NexitMode::Next,
+                ast::NexitMode::Exit => hir::NexitMode::Exit,
+            };
+            let target = ctx.add_optional(target, AddContext::add_label);
+            let cond = ctx.add_optional(cond, AddContext::add_expr);
+            let (target, cond) = (target?, cond?);
+            let target = match target {
+                Some(Spanned{ value: StmtRef::Seq(SeqStmtRef::Loop(id)), span }) => Some(Spanned::new(id, span)),
+                Some(Spanned{ span, .. }) => {
+                    sbc.emit(
+                        DiagBuilder2::error(format!("`{}` is not a loop", span.extract()))
+                        .span(span)
+                    );
+                    return Err(());
+                },
+                None => None
+            };
+            Ok(hir::Stmt {
+                parent: scope,
+                span: stmt.span,
+                label: stmt.label,
+                stmt: hir::NexitStmt {
+                    mode: mode,
+                    target: target,
+                    cond: cond,
+                }
+            })
+        }));
+        mk.typeck(Box::new(move |tyc|{
+            let _hir = tyc.ctx.lazy_hir(id)?;
+            // tyc.must_match(tyc.lazy_typeval(hir.stmt.cond), tyc.ctx.builtin_boolean_type());
+            Ok(())
+        }));
         Ok(mk.finish())
     }
 
@@ -348,5 +393,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     pub fn add_sensitivity_list(&self, _ast: &'ast Vec<ast::CompoundName>) -> Result<hir::SensitivityList> {
         self.emit(DiagBuilder2::bug("sensitivity lists not implemented"));
         Err(())
+    }
+
+    /// Add a label.
+    pub fn add_label(&self, ast: &'ast Spanned<Name>) -> Result<Spanned<StmtRef>> {
+        let ctx = TermContext::new(self.ctx, self.scope);
+        let term = ctx.termify_name(ast.map_into())?;
+        ctx.term_to_label(term)
     }
 }

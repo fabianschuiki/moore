@@ -117,8 +117,7 @@ node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
 	if_stmt:          IfStmtRef        => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::IfStmt>>>,
 	case_stmt:        CaseStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CaseStmt>>>,
 	loop_stmt:        LoopStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::LoopStmt>>>,
-	next_stmt:        NextStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NextStmt>>>,
-	exit_stmt:        ExitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ExitStmt>>>,
+	nexit_stmt:       NexitStmtRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NexitStmt>>>,
 	return_stmt:      ReturnStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReturnStmt>>>,
 	null_stmt:        NullStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NullStmt>>>,
 );

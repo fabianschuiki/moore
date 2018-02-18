@@ -46,6 +46,20 @@ architecture bar of foo is
 			wait;
 		end loop;
 
+		l0: for x in 0 to 31 loop
+			next;
+			next when false;
+			--next l0;
+			--next l0 when false;
+		end loop;
+
+		l1: for x in 0 to 31 loop
+			exit;
+			exit when true;
+			--exit l1;
+			--exit l1 when true;
+		end loop;
+
 		--X := '0';
 		--return X;
 	end;

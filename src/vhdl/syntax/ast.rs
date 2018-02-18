@@ -90,6 +90,7 @@ pub enum CtxItem {
 
 /// An identifier. Has a node ID such that it may be referenced later on.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+// #[deprecated(note="use `Spanned<Name>` instead of `Ident`")]
 pub struct Ident {
 	pub id: NodeId,
 	pub span: Span,
@@ -974,7 +975,7 @@ pub enum StmtData {
 	},
 	NexitStmt {
 		mode: NexitMode,
-		target: Option<Ident>,
+		target: Option<Spanned<Name>>,
 		cond: Option<Expr>,
 	},
 	ReturnStmt(Option<Expr>),
@@ -988,7 +989,7 @@ pub enum StmtData {
 		cases: Vec<(Vec<Expr>, GenBody)>,
 	},
 	ForGenStmt {
-		param: Ident,
+		param: Spanned<Name>,
 		range: Expr,
 		body: GenBody,
 	},
@@ -1060,7 +1061,7 @@ pub struct StmtBody {
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum LoopScheme {
 	While(Expr),
-	For(Ident, Expr),
+	For(Spanned<Name>, Expr),
 	Loop,
 }
 

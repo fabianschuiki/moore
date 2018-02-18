@@ -733,8 +733,7 @@ impl_typeck!(self, id: SeqStmtRef => {
 		SeqStmtRef::If(id)        => self.lazy_typeck(id),
 		SeqStmtRef::Case(id)      => self.lazy_typeck(id),
 		SeqStmtRef::Loop(id)      => self.lazy_typeck(id),
-		SeqStmtRef::Next(id)      => self.lazy_typeck(id),
-		SeqStmtRef::Exit(id)      => self.lazy_typeck(id),
+		SeqStmtRef::Nexit(id)     => self.lazy_typeck(id),
 		SeqStmtRef::Return(id)    => self.lazy_typeck(id),
 		SeqStmtRef::Null(id)      => self.lazy_typeck(id),
 	}
