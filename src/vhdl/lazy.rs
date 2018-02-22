@@ -107,6 +107,12 @@ node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
 	// Expressions
 	exprs:            ExprRef          => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Expr>>,
 
+	// Declarations
+	const_decls:      ConstDeclRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::ConstDecl>>>,
+	signal_decls:     SignalDeclRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::SignalDecl>>>,
+	var_decls:        VarDeclRef       => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::VarDecl>>>,
+	file_decls:       FileDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::FileDecl>>>,
+
 	// Sequential statements
 	wait_stmts:       WaitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
 	assert_stmts:     AssertStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::AssertStmt>>>,

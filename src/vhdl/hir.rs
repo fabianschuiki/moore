@@ -18,156 +18,50 @@ pub trait Alloc<T> {
 }
 
 /// A collection of arenas where HIR nodes may be allocated.
-pub struct Arenas {
-	pub lib: Arena<Lib>,
-	pub entity: Arena<Entity>,
-	pub arch: Arena<Arch>,
-	pub intf_sig: Arena<IntfSignal>,
-	pub subtype_ind: Arena<SubtypeInd>,
-	pub package: Arena<Package>,
-	pub package_body: Arena<PackageBody>,
-	pub package_inst: Arena<PackageInst>,
-	pub type_decl: Arena<TypeDecl>,
-	pub subtype_decl: Arena<SubtypeDecl>,
-	pub expr: Arena<Expr>,
-	pub aggregate: Arena<Aggregate>,
-	pub const_decl: Arena<ConstDecl>,
-	pub signal_decl: Arena<SignalDecl>,
-	pub variable_decl: Arena<VarDecl>,
-	pub file_decl: Arena<FileDecl>,
-	pub process_stmt: Arena<ProcessStmt>,
-	pub sig_assign_stmt: Arena<SigAssignStmt>,
-	pub array_type_index: Arena<Spanned<ArrayTypeIndex>>,
-	pub subprog: Arena<Subprog>,
-	pub subprog_body: Arena<SubprogBody>,
-	pub subprog_inst: Arena<SubprogInst>,
-	pub type_mark: Arena<TypeMarkRef>,
-	pub wait_stmt: Arena<Stmt<WaitStmt>>,
-	pub assert_stmt: Arena<Stmt<AssertStmt>>,
-	pub report_stmt: Arena<Stmt<ReportStmt>>,
-	// pub sig_assign_stmt: Arena<Stmt<SigAssignStmt>>,
-	pub var_assign_stmt: Arena<Stmt<VarAssignStmt>>,
-	pub call_stmt: Arena<Stmt<CallStmt>>,
-	pub if_stmt: Arena<Stmt<IfStmt>>,
-	pub case_stmt: Arena<Stmt<CaseStmt>>,
-	pub loop_stmt: Arena<Stmt<LoopStmt>>,
-	pub nexit_stmt: Arena<Stmt<NexitStmt>>,
-	pub return_stmt: Arena<Stmt<ReturnStmt>>,
-	pub null_stmt: Arena<Stmt<NullStmt>>,
-}
+make_arenas!(
+	pub struct Arenas {
+		lib:                 Lib,
+		entity:              Entity,
+		arch:                Arch,
+		intf_sig:            IntfSignal,
+		subtype_ind:         SubtypeInd,
+		package:             Package,
+		package_body:        PackageBody,
+		package_inst:        PackageInst,
+		type_decl:           TypeDecl,
+		subtype_decl:        SubtypeDecl,
+		expr:                Expr,
+		aggregate:           Aggregate,
+		const_decl:          Decl<ConstDecl>,
+		signal_decl:         SignalDecl,
+		variable_decl:       VarDecl,
+		file_decl:           FileDecl,
+		process_stmt:        ProcessStmt,
+		sig_assign_stmt:     SigAssignStmt,
+		array_type_index:    Spanned<ArrayTypeIndex>,
+		subprog:             Subprog,
+		subprog_body:        SubprogBody,
+		subprog_inst:        SubprogInst,
+		type_mark:           TypeMarkRef,
+		wait_stmt:           Stmt<WaitStmt>,
+		assert_stmt:         Stmt<AssertStmt>,
+		report_stmt:         Stmt<ReportStmt>,
+		// sig_assign_stmt:     Stmt<SigAssignStmt>,
+		var_assign_stmt:     Stmt<VarAssignStmt>,
+		call_stmt:           Stmt<CallStmt>,
+		if_stmt:             Stmt<IfStmt>,
+		case_stmt:           Stmt<CaseStmt>,
+		loop_stmt:           Stmt<LoopStmt>,
+		nexit_stmt:          Stmt<NexitStmt>,
+		return_stmt:         Stmt<ReturnStmt>,
+		null_stmt:           Stmt<NullStmt>,
+	}
+);
 
 impl Arenas {
 	/// Create a new set of arenas.
 	pub fn new() -> Arenas {
-		Arenas {
-			lib: Arena::new(),
-			entity: Arena::new(),
-			arch: Arena::new(),
-			intf_sig: Arena::new(),
-			subtype_ind: Arena::new(),
-			package: Arena::new(),
-			package_body: Arena::new(),
-			package_inst: Arena::new(),
-			type_decl: Arena::new(),
-			subtype_decl: Arena::new(),
-			expr: Arena::new(),
-			aggregate: Arena::new(),
-			const_decl: Arena::new(),
-			signal_decl: Arena::new(),
-			variable_decl: Arena::new(),
-			file_decl: Arena::new(),
-			process_stmt: Arena::new(),
-			sig_assign_stmt: Arena::new(),
-			array_type_index: Arena::new(),
-			subprog: Arena::new(),
-			subprog_body: Arena::new(),
-			subprog_inst: Arena::new(),
-			type_mark: Arena::new(),
-			wait_stmt: Arena::new(),
-			assert_stmt: Arena::new(),
-			report_stmt: Arena::new(),
-			// sig_assign_stmt: Arena::new(),
-			var_assign_stmt: Arena::new(),
-			call_stmt: Arena::new(),
-			if_stmt: Arena::new(),
-			case_stmt: Arena::new(),
-			loop_stmt: Arena::new(),
-			nexit_stmt: Arena::new(),
-			return_stmt: Arena::new(),
-			null_stmt: Arena::new(),
-		}
-	}
-}
-
-impl Alloc<Stmt<WaitStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<WaitStmt>) -> &mut Stmt<WaitStmt> {
-		self.wait_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<AssertStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<AssertStmt>) -> &mut Stmt<AssertStmt> {
-		self.assert_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<ReportStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<ReportStmt>) -> &mut Stmt<ReportStmt> {
-		self.report_stmt.alloc(value)
-	}
-}
-
-// impl Alloc<Stmt<SigAssignStmt>> for Arenas {
-// 	fn alloc(&self, value: Stmt<SigAssignStmt>) -> &mut Stmt<SigAssignStmt> {
-// 		self.sig_assign_stmt.alloc(value)
-// 	}
-// }
-
-impl Alloc<Stmt<VarAssignStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<VarAssignStmt>) -> &mut Stmt<VarAssignStmt> {
-		self.var_assign_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<CallStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<CallStmt>) -> &mut Stmt<CallStmt> {
-		self.call_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<IfStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<IfStmt>) -> &mut Stmt<IfStmt> {
-		self.if_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<CaseStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<CaseStmt>) -> &mut Stmt<CaseStmt> {
-		self.case_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<LoopStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<LoopStmt>) -> &mut Stmt<LoopStmt> {
-		self.loop_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<NexitStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<NexitStmt>) -> &mut Stmt<NexitStmt> {
-		self.nexit_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<ReturnStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<ReturnStmt>) -> &mut Stmt<ReturnStmt> {
-		self.return_stmt.alloc(value)
-	}
-}
-
-impl Alloc<Stmt<NullStmt>> for Arenas {
-	fn alloc(&self, value: Stmt<NullStmt>) -> &mut Stmt<NullStmt> {
-		self.null_stmt.alloc(value)
+		Default::default()
 	}
 }
 
@@ -514,6 +408,9 @@ pub struct SubtypeDecl {
 }
 
 
+/// An expression.
+///
+/// See IEEE 1076-2008 section 9.
 #[derive(Debug)]
 pub struct Expr {
 	/// The parent scope.
@@ -524,7 +421,7 @@ pub struct Expr {
 	pub data: ExprData,
 }
 
-
+/// An expression variant.
 #[derive(Debug)]
 pub enum ExprData {
 	/// A resolved name. Consists of the definition and the definition's span.
@@ -594,15 +491,28 @@ pub enum BinaryOp {
 	Pow,
 }
 
+/// An object declaration.
+///
+/// See IEEE 1076-2008 section 6.4.2.1/
+#[derive(Debug)]
+pub struct Decl<T> {
+	/// The scope within which the declaration is made.
+	pub parent: ScopeRef,
+	/// The span this declaration covers.
+	pub span: Span,
+	/// The name of the declared object.
+	pub name: Spanned<Name>,
+	/// The actual declaration.
+	pub decl: T,
+}
 
+/// A constant declaration.
+///
+/// See IEEE 1076-2008 section 6.4.2.2.
 #[derive(Debug)]
 pub struct ConstDecl {
-	/// The scope within which the constant is declared.
-	pub parent: ScopeRef,
-	/// The name of the constant.
-	pub name: Spanned<Name>,
-	/// The subtype of the constant.
-	pub subty: SubtypeIndRef,
+	/// The type of the constant.
+	pub ty: SubtypeIndRef,
 	/// The optional initial value for the constant.
 	pub init: Option<ExprRef>,
 }

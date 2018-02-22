@@ -195,9 +195,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				ast::DeclItem::ObjDecl(ref decl) => {
 					match decl.kind {
 						ast::ObjKind::Const => {
-							let subid = ConstDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							let ctx = AddContext::new(self, scope_id);
+							refs.extend(ctx.add_const_decl::<DeclInBlockRef>(decl)?);
 						}
 						ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut refs)?,
 						ast::ObjKind::Var => {
@@ -347,9 +346,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				ast::DeclItem::ObjDecl(ref decl) => {
 					match decl.kind {
 						ast::ObjKind::Const => {
-							let subid = ConstDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							let ctx = AddContext::new(self, scope_id);
+							refs.extend(ctx.add_const_decl::<DeclInProcRef>(decl)?);
 						}
 						ast::ObjKind::Signal => {
 							self.emit(
@@ -489,9 +487,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				ast::DeclItem::ObjDecl(ref decl) => {
 					match decl.kind {
 						ast::ObjKind::Const => {
-							let subid = ConstDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							let ctx = AddContext::new(self, scope_id);
+							refs.extend(ctx.add_const_decl::<DeclInSubprogRef>(decl)?);
 						}
 						ast::ObjKind::Signal => {
 							self.emit(
@@ -1156,9 +1153,8 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 			ast::DeclItem::ObjDecl(ref decl) => {
 				match decl.kind {
 					ast::ObjKind::Const => {
-						let subid = ConstDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
+						let ctx = AddContext::new(self, scope_id);
+						decls.extend(ctx.add_const_decl::<DeclInPkgRef>(decl)?);
 					}
 					ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut decls)?,
 					ast::ObjKind::SharedVar => {
@@ -1302,9 +1298,8 @@ impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
 			ast::DeclItem::ObjDecl(ref decl) => {
 				match decl.kind {
 					ast::ObjKind::Const => {
-						let subid = ConstDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
+						let ctx = AddContext::new(self, scope_id);
+						decls.extend(ctx.add_const_decl::<DeclInPkgBodyRef>(decl)?);
 					}
 					ast::ObjKind::Signal => {
 						self.emit(

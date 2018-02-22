@@ -252,7 +252,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Handle a constant declaration.
 	pub fn declare_const(&mut self, id: ConstDeclRef) {
-		let hir = match self.ctx.existing_hir(id) {
+		let hir = match self.ctx.lazy_hir(id) {
 			Ok(h) => h,
 			Err(()) => { self.failed = true; return; }
 		};

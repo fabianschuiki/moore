@@ -16,6 +16,8 @@ pub extern crate moore_vhdl_syntax as syntax;
 // TODO: Merge this into the `extern crate` above.
 pub(crate) use moore_common as common;
 
+#[macro_use]
+pub mod arenas;
 pub mod symtbl;
 #[macro_use]
 pub mod score;
@@ -32,3 +34,4 @@ pub mod term;
 
 mod seq_stmt;
 mod expr;
+mod obj_decl;

@@ -512,6 +512,18 @@ pub struct SubtypeInd {
 	pub name: CompoundName,
 }
 
+impl HasSpan for SubtypeInd {
+	fn span(&self) -> Span {
+		self.span
+	}
+}
+
+impl HasDesc for SubtypeInd {
+	fn desc(&self) -> &'static str {
+		"subtype indication"
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct SubtypeDecl {
 	pub id: NodeId,

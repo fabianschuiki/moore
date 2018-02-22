@@ -1669,7 +1669,9 @@ node_storage!(HirTable<'ctx>:
 	subtype_decls:         SubtypeDeclRef        => &'ctx hir::SubtypeDecl,
 	exprs:                 ExprRef               => &'ctx hir::Expr,
 	aggregate:             AggregateRef          => &'ctx hir::Aggregate,
-	const_decls:           ConstDeclRef          => &'ctx hir::ConstDecl,
+
+	// Declarations
+	const_decls:           ConstDeclRef          => &'ctx hir::Decl<hir::ConstDecl>,
 	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
 	variable_decls:        VarDeclRef            => &'ctx hir::VarDecl,
 	shared_variable_decls: SharedVarDeclRef      => &'ctx hir::VarDecl,
