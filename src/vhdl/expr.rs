@@ -11,20 +11,24 @@ use add_ctx::AddContext;
 use syntax::ast;
 use score::*;
 use term::TermContext;
+use make_ctx::MakeContext;
 use hir;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add an expression.
     pub fn add_expr(&self, expr: &'ast ast::Expr) -> Result<ExprRef> {
-        self.emit(DiagBuilder2::bug("expressions not implemented").span(expr.span));
-        Err(())
-        // let (mk, id, scope) = self.make::<ExprRef>(expr.span);
-        // mk.lower_to_hir(Box::new(move |sbc|{
-        //     let ctx = TermContext::new(sbc, scope);
-        //     let term = ctx.termify_expr(expr)?;
-        //     ctx.term_to_expr(term)
-        // }));
-        // Ok(mk.finish())
+        let (mk, id, scope) = self.make::<ExprRef>(expr.span);
+        mk.lower_to_hir(Box::new(move |sbc|{
+            let ctx = TermContext::new(sbc, scope);
+            let term = ctx.termify_expr(expr)?;
+            ctx.term_to_expr_raw(term)
+        }));
+        self.schedule_expr(mk);
+        Ok(mk.finish())
+    }
+
+    /// Add an expression term.
+    pub fn schedule_expr(&self, mk: MakeContext<ExprRef>) {
     }
 
     /// Add a list of choices.

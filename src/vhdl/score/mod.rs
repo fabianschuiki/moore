@@ -29,7 +29,7 @@ use konst::*;
 use codegen::Codegen;
 use typeck::{Typeck, TypeckContext};
 use lazy::*;
-use hir::Alloc;
+use arenas::Alloc;
 
 
 /// This macro implements the `NodeMaker` trait for a specific combination of

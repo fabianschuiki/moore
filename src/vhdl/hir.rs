@@ -11,12 +11,6 @@ use syntax::ast;
 use konst::*;
 pub use syntax::ast::Dir;
 
-
-/// Allocates objects into an arena.
-pub trait Alloc<T> {
-	fn alloc(&self, value: T) -> &mut T;
-}
-
 /// A collection of arenas where HIR nodes may be allocated.
 make_arenas!(
 	pub struct Arenas {

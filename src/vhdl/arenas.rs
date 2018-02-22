@@ -27,7 +27,7 @@ macro_rules! make_arenas {
         }
 
         $(
-            impl Alloc<$type> for $arena_name {
+            impl $crate::arenas::Alloc<$type> for $arena_name {
                 fn alloc(&self, value: $type) -> &mut $type {
                     self.$name.alloc(value)
                 }

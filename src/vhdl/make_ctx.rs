@@ -13,8 +13,10 @@ use std::fmt::Debug;
 use moore_common::NodeId;
 use moore_common::score::NodeStorage;
 use moore_common::source::Span;
-use score::ScoreContext;
+use score::{ScoreContext, HirTable};
 use lazy::*;
+use hir;
+use arenas::Alloc;
 
 /// A context within which compiler passes can be described.
 ///
@@ -56,6 +58,17 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 		debugln!("make.hir {:?}", self.id);
 		// self.ctx.lazy.hir.schedule(self.id, f);
 		self.ctx.lazy.hir.table.borrow_mut().set(self.id, LazyNode::Pending(f));
+	}
+
+	/// Store a preconstructed HIR for the node.
+	pub fn set_hir<T>(self, hir: T)
+	where
+		T: 'ctx,
+		HirTable<'ctx>: NodeStorage<I, Node=&'ctx T>,
+		hir::Arenas: Alloc<T>,
+	{
+		debugln!("make.set_hir {:?}", self.id);
+		self.ctx.set_hir(self.id, self.ctx.sb.arenas.hir.alloc(hir));
 	}
 
 	/// Schedule a callback that type checks the node.

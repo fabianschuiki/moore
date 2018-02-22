@@ -19,6 +19,7 @@ use syntax::ast::{self, Dir};
 use score::*;
 use hir;
 use konst::ConstInt;
+use add_ctx::AddContext;
 
 /// A term.
 ///
@@ -380,8 +381,17 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         }
     }
 
-    /// Map a term to an expression.
+    /// Map a term to an expression and schedule the necessary tasks.
     pub fn term_to_expr(&self, term: Spanned<Term>) -> Result<ExprRef> {
+        let ctx = AddContext::new(self.ctx, self.scope);
+        let (mk, _, _) = ctx.make(term.span);
+        mk.set_hir(self.term_to_expr_raw(term)?);
+        ctx.schedule_expr(mk);
+        Ok(mk.finish())
+    }
+
+    /// Map a term to an expression.
+    pub fn term_to_expr_raw(&self, term: Spanned<Term>) -> Result<hir::Expr> {
         let data = match term.value {
             Term::IntLit(value) => {
                 hir::ExprData::IntegerLiteral(ConstInt::new(None, value))
@@ -402,14 +412,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 return Err(());
             }
         };
-        let hir = hir::Expr {
+        Ok(hir::Expr {
             parent: self.scope,
             span: term.span,
             data: data
-        };
-        let id = ExprRef::new(NodeId::alloc());
-        self.ctx.set_hir(id, self.ctx.sb.arenas.hir.expr.alloc(hir));
-        Ok(id)
+        })
     }
 
     /// Map a term to a type mark.
