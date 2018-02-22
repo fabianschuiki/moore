@@ -74,11 +74,15 @@ impl<T> Grinder for Bundler<T> where T: Grinder<Item=Option<(usize, char, u8, Ca
 
 		// Handle bit string literals.
 		if c == '\'' {
-			if let Some((offset, '\'', sz, _)) = *self.inner.lookahead(1) {
-				let (_, b, _, _) = self.inner.next().unwrap();
-				self.inner.next();
-				sp.end = offset + sz as usize;
-				return Some(Spanned::new(Bundle::BitLiteral(b), sp));
+			if let Some((_, c, _, _)) = *self.inner.lookahead(0) {
+				if c != '(' && c != ')' {
+					if let Some((offset, '\'', sz, _)) = *self.inner.lookahead(1) {
+						self.inner.next();
+						self.inner.next();
+						sp.end = offset + sz as usize;
+						return Some(Spanned::new(Bundle::BitLiteral(c), sp));
+					}
+				}
 			}
 		}
 
