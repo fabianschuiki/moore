@@ -43,8 +43,16 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }));
             mk.typeval(Box::new(move |tyc|{
                 let hir = tyc.ctx.lazy_hir(id)?;
-                // TODO: Check that the type of the init expression matches.
-                tyc.ctx.lazy_typeval(hir.decl.ty)
+                let ty = tyc.lazy_typeval(hir.decl.ty)?;
+                if let Some(init) = hir.decl.init {
+                    let init_ty = tyc.lazy_typeval(init)?;
+                    // TODO: Check that the type of the init expression matches.
+                    tyc.emit(
+                        DiagBuilder2::note(format!("const has type `{}`, init has type `{}`", ty, init_ty))
+                        .span(hir.span)
+                    );
+                }
+                Ok(ty)
             }));
             Ok(mk.finish().into())
         }).collect()
