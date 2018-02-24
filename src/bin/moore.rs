@@ -30,7 +30,16 @@ fn main() {
         .author(env!("CARGO_PKG_AUTHORS"))
         .about("A compiler for hardware description languages.")
         .arg(Arg::with_name("trace_scoreboard")
-            .long("trace-scoreboard"))
+            .long("trace-scoreboard")
+            .global(true))
+        .arg(Arg::with_name("verbosity")
+            .short("V")
+            .help("Sets verbosity settings")
+            .takes_value(true)
+            .multiple(true)
+            .number_of_values(1)
+            .possible_values(&["types", "expr-types"])
+            .global(true))
         .subcommand(SubCommand::with_name("compile")
             .arg(Arg::with_name("inc")
                 .short("I")
@@ -91,6 +100,13 @@ fn main() {
 
     let mut session = Session::new();
     session.opts.trace_scoreboard = matches.is_present("trace_scoreboard");
+    for v in matches.values_of("verbosity").into_iter().flat_map(|v| v) {
+        session.opts.verbosity |= match v {
+            "types"      => Verbosity::TYPES,
+            "expr-types" => Verbosity::EXPR_TYPES,
+            _ => unreachable!(),
+        };
+    }
 
     if let Some(m) = matches.subcommand_matches("compile") {
         compile(m);

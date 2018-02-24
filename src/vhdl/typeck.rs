@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use common::NodeId;
+use common::{NodeId, Verbosity};
 use common::errors::*;
 use common::source::{Span, Spanned};
 use common::score::{NodeMaker, NodeStorage, Result};
@@ -101,8 +101,22 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		if result.is_err() {
 			self.failed.set(true);
 		}
-		self.ctx.sb.typeval_table.borrow_mut().insert(id, result);
 
+		// Emit a diagnostic for the determined type if the corresponding flag
+		// is active.
+		if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPES) {
+			match (result, self.ctx.span(id)) {
+				(Ok(ty), Some(span)) => {
+					self.emit(
+						DiagBuilder2::note(format!("type of `{}` is {}", span.extract(), ty))
+						.span(span)
+					);
+				}
+				_ => ()
+			}
+		}
+
+		self.ctx.sb.typeval_table.borrow_mut().insert(id, result);
 		result
 	}
 

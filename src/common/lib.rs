@@ -5,6 +5,8 @@
 
 extern crate rustc_serialize;
 extern crate memmap;
+#[macro_use]
+extern crate bitflags;
 
 pub mod errors;
 pub mod lexer;
@@ -18,7 +20,6 @@ pub mod util;
 pub use self::id::NodeId;
 use errors::DiagBuilder2;
 
-
 pub struct Session {
 	pub opts: SessionOptions,
 }
@@ -27,10 +28,7 @@ impl Session {
 	/// Create a new session.
 	pub fn new() -> Session {
 		Session {
-			opts: SessionOptions {
-				ignore_duplicate_defs: false,
-				trace_scoreboard: false,
-			}
+			opts: Default::default(),
 		}
 	}
 
@@ -40,9 +38,26 @@ impl Session {
 	}
 }
 
-#[derive(Debug)]
+/// A set of options for a session.
+///
+/// The arguments passed on the command line are intended to modify these values
+/// in order to configure the execution of the program.
+#[derive(Debug, Default)]
 pub struct SessionOptions {
 	pub ignore_duplicate_defs: bool,
 	/// Print a trace of scoreboard invocations for debugging purposes.
 	pub trace_scoreboard: bool,
+	/// The verbosity options.
+	pub verbosity: Verbosity,
+}
+
+bitflags! {
+	/// A set of verbosity options for a session.
+	///
+	/// These flags control how much information the compiler emits.
+	#[derive(Default)]
+	pub struct Verbosity: u8 {
+		const TYPES      = 0b01;
+		const EXPR_TYPES = 0b10;
+	}
 }
