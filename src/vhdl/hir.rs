@@ -426,6 +426,8 @@ pub enum ExprData {
 	Select(ExprRef, Spanned<ResolvableName>),
 	/// An attribute selection, e.g. `a'b`.
 	Attr(ExprRef, Spanned<ResolvableName>),
+	/// A bit string literal.
+	StringLiteral(Name),
 	/// An integer literal.
 	IntegerLiteral(ConstInt),
 	/// A float literal.

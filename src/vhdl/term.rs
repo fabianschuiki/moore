@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use num::BigInt;
 
+use common::name::Name;
 use common::errors::*;
 use common::source::*;
 use common::util::*;
@@ -39,6 +40,8 @@ pub enum Term {
     Default,
     /// An integer literal.
     IntLit(BigInt),
+    /// A bit string literal.
+    StrLit(Name),
     /// An unresolved name.
     Unresolved(ResolvableName),
     /// A term that refers to a definition.
@@ -251,9 +254,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Map an AST compound name to a term.
     pub fn termify_compound_name(&self, ast: &'ast ast::CompoundName) -> Result<Spanned<Term>> {
         // Map the primary name.
-        let mut term = self.fold(self.termify_name(
-            self.ctx.resolvable_from_primary_name(&ast.primary)?
-        )?);
+        let mut term = self.fold(match ast.primary.kind {
+            ast::PrimaryNameKind::String(s) => Spanned::new(Term::StrLit(s), ast.primary.span),
+            _ => self.termify_name(self.ctx.resolvable_from_primary_name(&ast.primary)?)?,
+        });
 
         // For each name part, wrap the term in another layer. Like an onion.
         for part in &ast.parts {
@@ -410,6 +414,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }
             Term::IntLit(value) => {
                 hir::ExprData::IntegerLiteral(ConstInt::new(None, value))
+            }
+            Term::StrLit(value) => {
+                hir::ExprData::StringLiteral(value)
             }
             Term::Unary(op, arg) => {
                 hir::ExprData::Unary(op, self.term_to_expr(*arg)?)
