@@ -165,7 +165,7 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 		DeclInBlockRef::Subtype(_id)    => Ok(()),
 		DeclInBlockRef::Const(id)       => self.codegen(id, ctx),
 		DeclInBlockRef::Signal(id)      => self.codegen(id, ctx),
-		DeclInBlockRef::SharedVar(id)   => self.codegen(id, ctx),
+		DeclInBlockRef::Var(id)         => self.codegen(id, ctx),
 		DeclInBlockRef::File(id)        => self.codegen(id, ctx),
 		DeclInBlockRef::Alias(_id)      => Ok(()),
 		DeclInBlockRef::Comp(id)        => self.codegen(id, &mut ()),
@@ -180,6 +180,10 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 
 
 impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::Entity => {
+	unimp!(self, id);
+});
+
+impl_codegen!(self, id: VarDeclRef, _ctx: &mut llhd::Entity => {
 	unimp!(self, id);
 });
 
@@ -205,11 +209,6 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 	);
 	ctx.add_inst(inst, llhd::InstPosition::End);
 	Ok(())
-});
-
-
-impl_codegen!(self, id: SharedVarDeclRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
 });
 
 

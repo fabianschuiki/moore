@@ -60,9 +60,11 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		// let term = ctx.termify_subtype_ind(ast)?;
 		// let id = ctx.term_to_subtype_ind(term)?.value;
 		// Ok(id)
-		let id = SubtypeIndRef::new(NodeId::alloc());
-		self.set_ast(id, (scope_id, ast));
-		Ok(id)
+		// let id = SubtypeIndRef::new(NodeId::alloc());
+		// self.set_ast(id, (scope_id, ast));
+		// Ok(id)
+		let ctx = AddContext::new(self, scope_id);
+		ctx.add_subtype_ind(ast)
 	}
 
 	/// Unpack a compound name as a type mark.
@@ -146,6 +148,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
 
+		let ctx = AddContext::new(self, scope_id);
 		for decl in decls {
 			match *decl {
 				ast::DeclItem::SubprogDecl(ref decl) => {
@@ -195,7 +198,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				ast::DeclItem::ObjDecl(ref decl) => {
 					match decl.kind {
 						ast::ObjKind::Const => {
-							let ctx = AddContext::new(self, scope_id);
 							refs.extend(ctx.add_const_decl::<DeclInBlockRef>(decl)?);
 						}
 						ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut refs)?,
@@ -207,14 +209,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 							had_fails = true;
 						}
 						ast::ObjKind::SharedVar => {
-							let subid = SharedVarDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							refs.extend(ctx.add_var_decl::<DeclInBlockRef>(decl)?);
 						}
 						ast::ObjKind::File => {
-							let subid = FileDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							refs.extend(ctx.add_file_decl::<DeclInBlockRef>(decl)?);
 						}
 					}
 				}
@@ -297,6 +295,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
 
+		let ctx = AddContext::new(self, scope_id);
 		for decl in decls {
 			match *decl {
 				ast::DeclItem::SubprogDecl(ref decl) => {
@@ -346,7 +345,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				ast::DeclItem::ObjDecl(ref decl) => {
 					match decl.kind {
 						ast::ObjKind::Const => {
-							let ctx = AddContext::new(self, scope_id);
 							refs.extend(ctx.add_const_decl::<DeclInProcRef>(decl)?);
 						}
 						ast::ObjKind::Signal => {
@@ -364,14 +362,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 							had_fails = true;
 						}
 						ast::ObjKind::Var => {
-							let subid = VarDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							refs.extend(ctx.add_var_decl::<DeclInProcRef>(decl)?);
 						}
 						ast::ObjKind::File => {
-							let subid = FileDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							refs.extend(ctx.add_file_decl::<DeclInProcRef>(decl)?);
 						}
 					}
 				}
@@ -438,6 +432,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let mut refs = Vec::new();
 		let mut had_fails = false;
 
+		let ctx = AddContext::new(self, scope_id);
 		for decl in decls {
 			match *decl {
 				ast::DeclItem::SubprogDecl(ref decl) => {
@@ -487,7 +482,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				ast::DeclItem::ObjDecl(ref decl) => {
 					match decl.kind {
 						ast::ObjKind::Const => {
-							let ctx = AddContext::new(self, scope_id);
 							refs.extend(ctx.add_const_decl::<DeclInSubprogRef>(decl)?);
 						}
 						ast::ObjKind::Signal => {
@@ -505,14 +499,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 							had_fails = true;
 						}
 						ast::ObjKind::Var => {
-							let subid = VarDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							refs.extend(ctx.add_var_decl::<DeclInSubprogRef>(decl)?);
 						}
 						ast::ObjKind::File => {
-							let subid = FileDeclRef(NodeId::alloc());
-							self.set_ast(subid, (scope_id, decl));
-							refs.push(subid.into());
+							refs.extend(ctx.add_file_decl::<DeclInSubprogRef>(decl)?);
 						}
 					}
 				}
@@ -814,13 +804,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		}).collect()
 	}
 
-	/// Internalize a subtype indication.
-	pub fn intern_subtype_ind(&self, hir: hir::SubtypeInd) -> SubtypeIndRef {
-		let id = SubtypeIndRef::new(NodeId::alloc());
-		self.set_hir(id, self.sb.arenas.hir.subtype_ind.alloc(hir));
-		id
-	}
-
 	/// Lower an AST unary operator to a HIR unary operator.
 	///
 	/// Emits an error if the operator is not a valid unary operator.
@@ -892,7 +875,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let name = self.lower_subprog_name(kind, &ast.name)?;
 		let mut generics = Vec::new();
 		if let Some(ref gc) = ast.generic_clause {
-			self.unpack_generics(scope_id, gc, &mut generics);
+			self.unpack_generics(scope_id, gc, &mut generics)?;
 		}
 		if let Some(ref gm) = ast.generic_map {
 			unimp_msg!(self, "lowering of generic maps in subprogram specifications", gm.span);
@@ -952,7 +935,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Unpack generics from a list of interface declarations.
 	///
 	/// See IEEE 1076-2008 section 6.5.6.1.
-	pub fn unpack_generics(&self, scope_id: ScopeRef, decls: &'ast [ast::IntfDecl], into: &mut Vec<GenericRef>) {
+	pub fn unpack_generics(&self, scope_id: ScopeRef, decls: &'ast [ast::IntfDecl], into: &mut Vec<GenericRef>) -> Result<()> {
+		let ctx = AddContext::new(self, scope_id);
+		let mut had_fails = false;
 		for decl in decls {
 			match *decl {
 				ast::IntfDecl::TypeDecl(ref decl) => {
@@ -971,8 +956,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 					into.push(id.into());
 				}
 				ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Const, .. }) => {
-					let ty = SubtypeIndRef(NodeId::alloc());
-					self.set_ast(ty, (scope_id, &decl.ty));
+					let ty = ctx.add_subtype_ind(&decl.ty)?;
+					// let ty = SubtypeIndRef(NodeId::alloc());
+					// self.set_ast(ty, (scope_id, &decl.ty));
 					for name in &decl.names {
 						let id = IntfConstRef(NodeId::alloc());
 						self.set_ast(id, (scope_id, decl, ty, name));
@@ -984,8 +970,14 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 						DiagBuilder2::error(format!("a {} cannot appear in a generic clause", wrong.desc()))
 						.span(wrong.human_span())
 					);
+					had_fails = true;
 				}
 			}
+		}
+		if had_fails {
+			Err(())
+		} else {
+			Ok(())
 		}
 	}
 
@@ -1017,6 +1009,7 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 	};
 	let mut port_spans = Vec::new();
 	let mut generic_spans = Vec::new();
+	let ctx = AddContext::new(self, id.into());
 	for decl in &ast.decls {
 		match *decl {
 			// Port clauses
@@ -1026,8 +1019,9 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 				for decl in &decls.value {
 					match *decl {
 						ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
-							let ty = SubtypeIndRef(NodeId::alloc());
-							self.set_ast(ty, (id.into(), &decl.ty));
+							let ty = ctx.add_subtype_ind(&decl.ty)?;
+							// let ty = SubtypeIndRef(NodeId::alloc());
+							// self.set_ast(ty, (id.into(), &decl.ty));
 							for name in &decl.names {
 								let subid = IntfSignalRef(NodeId::alloc());
 								self.set_ast(subid, (id.into(), decl, ty, name));
@@ -1048,7 +1042,7 @@ impl_make!(self, id: EntityRef => &hir::Entity {
 			// Generic clauses
 			ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Generic, span }, ref decls) => {
 				generic_spans.push(span);
-				self.unpack_generics(id.into(), &decls.value, &mut entity.generics);
+				self.unpack_generics(id.into(), &decls.value, &mut entity.generics)?;
 			}
 
 			ref wrong => {
@@ -1105,6 +1099,7 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 
 	// Filter the declarations in the package to only those that we actually
 	// support, and separate the generic clauses and maps.
+	let ctx = AddContext::new(self, scope_id);
 	for decl in &ast.decls {
 		match *decl {
 			ast::DeclItem::SubprogDecl(ref decl) => {
@@ -1153,7 +1148,6 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 			ast::DeclItem::ObjDecl(ref decl) => {
 				match decl.kind {
 					ast::ObjKind::Const => {
-						let ctx = AddContext::new(self, scope_id);
 						decls.extend(ctx.add_const_decl::<DeclInPkgRef>(decl)?);
 					}
 					ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut decls)?,
@@ -1165,14 +1159,10 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 						had_fails = true;
 					}
 					ast::ObjKind::Var => {
-						let subid = VarDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
+						decls.extend(ctx.add_var_decl::<DeclInPkgRef>(decl)?);
 					}
 					ast::ObjKind::File => {
-						let subid = FileDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
+						decls.extend(ctx.add_file_decl::<DeclInPkgRef>(decl)?);
 					}
 				}
 			}
@@ -1249,6 +1239,7 @@ impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
 	let pkg = self.unpack_package_name((&ast.name).into(), scope_id)?;
 	let mut decls = Vec::new();
 	let mut had_fails = false;
+	let ctx = AddContext::new(self, scope_id);
 	for decl in &ast.decls {
 		match *decl {
 			ast::DeclItem::SubprogDecl(ref decl) => {
@@ -1298,7 +1289,6 @@ impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
 			ast::DeclItem::ObjDecl(ref decl) => {
 				match decl.kind {
 					ast::ObjKind::Const => {
-						let ctx = AddContext::new(self, scope_id);
 						decls.extend(ctx.add_const_decl::<DeclInPkgBodyRef>(decl)?);
 					}
 					ast::ObjKind::Signal => {
@@ -1316,14 +1306,10 @@ impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
 						had_fails = true;
 					}
 					ast::ObjKind::Var => {
-						let subid = VarDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
+						decls.extend(ctx.add_var_decl::<DeclInPkgBodyRef>(decl)?);
 					}
 					ast::ObjKind::File => {
-						let subid = FileDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
+						decls.extend(ctx.add_file_decl::<DeclInPkgBodyRef>(decl)?);
 					}
 				}
 			}
@@ -1746,8 +1732,10 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 					.collect();
 				let ctx = TermContext::new(self, scope_id);
 				let subty = ctx.termify_subtype_ind(elem_subty)?;
-				let elem_subty = ctx.term_to_subtype_ind(subty)?.map(|i| self.intern_subtype_ind(i));
-				hir::TypeData::Array(indices, elem_subty.value)
+				let elem_subty = ctx.term_to_subtype_ind(subty)?.value;
+				let add_ctx = AddContext::new(self, scope_id);
+				let elem_subty = add_ctx.add_subtype_ind_hir(elem_subty)?;
+				hir::TypeData::Array(indices, elem_subty)
 			}
 
 			ast::FileType(ref name) => {
@@ -1878,8 +1866,10 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 			hir::ArrayTypeIndex::Unbounded(tm)
 		}
 		Term::TypeMark(..) | Term::SubtypeInd(..) => {
-			let subty = ctx.term_to_subtype_ind(term)?.map(|i| self.intern_subtype_ind(i));
-			hir::ArrayTypeIndex::Subtype(subty.value)
+			let subty = ctx.term_to_subtype_ind(term)?.value;
+			let add_ctx = AddContext::new(self, scope_id);
+			let subty = add_ctx.add_subtype_ind_hir(subty)?;
+			hir::ArrayTypeIndex::Subtype(subty)
 		}
 		_ => {
 			self.emit(
@@ -1893,12 +1883,12 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 	Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
 });
 
-impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
-	let (scope_id, ast) = self.ast(id);
-	let ctx = TermContext::new(self, scope_id);
-	let term = ctx.termify_subtype_ind(ast)?;
-	Ok(self.sb.arenas.hir.subtype_ind.alloc(ctx.term_to_subtype_ind(term)?.value))
-});
+// impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
+// 	let (scope_id, ast) = self.ast(id);
+// 	let ctx = TermContext::new(self, scope_id);
+// 	let term = ctx.termify_subtype_ind(ast)?;
+// 	Ok(self.sb.arenas.hir.subtype_ind.alloc(ctx.term_to_subtype_ind(term)?.value))
+// });
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 }

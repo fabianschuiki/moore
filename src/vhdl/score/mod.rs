@@ -1205,7 +1205,6 @@ node_ref!(CaseGenStmtRef);
 node_ref!(ConstDeclRef);
 node_ref!(SignalDeclRef);
 node_ref!(VarDeclRef);
-node_ref!(SharedVarDeclRef);
 node_ref!(FileDeclRef);
 node_ref!(AliasDeclRef);
 node_ref!(CompDeclRef);
@@ -1250,7 +1249,6 @@ node_ref_group!(Def:
 	Signal(SignalRef),
 	File(FileDeclRef),
 	Var(VarDeclRef),
-	SharedVar(SharedVarDeclRef),
 	Alias(AliasDeclRef),
 	Comp(CompDeclRef),
 	Attr(AttrDeclRef),
@@ -1480,7 +1478,7 @@ node_ref_group!(DeclInBlockRef:
 	Subtype(SubtypeDeclRef),
 	Const(ConstDeclRef),
 	Signal(SignalDeclRef),
-	SharedVar(SharedVarDeclRef),
+	Var(VarDeclRef),
 	File(FileDeclRef),
 	Alias(AliasDeclRef),
 	Comp(CompDeclRef),
@@ -1603,7 +1601,7 @@ node_ref_group!(TypedNodeRef:
 
 // Declare the node tables.
 node_storage!(AstTable<'ast>:
-	subtys: SubtypeIndRef => (ScopeRef, &'ast ast::SubtypeInd),
+	// subtys: SubtypeIndRef => (ScopeRef, &'ast ast::SubtypeInd),
 	ctx_items: CtxItemsRef => (ScopeRef, &'ast [ast::CtxItem]),
 
 	// The design units are tuples that also carry the list of context items
@@ -1626,11 +1624,10 @@ node_storage!(AstTable<'ast>:
 	// Declarations
 	type_decls:            TypeDeclRef           => (ScopeRef, &'ast ast::TypeDecl),
 	subtype_decls:         SubtypeDeclRef        => (ScopeRef, &'ast ast::SubtypeDecl),
-	const_decls:           ConstDeclRef          => (ScopeRef, &'ast ast::ObjDecl),
+	// const_decls:           ConstDeclRef          => (ScopeRef, &'ast ast::ObjDecl),
 	signal_decls:          SignalDeclRef         => (ScopeRef, &'ast ast::ObjDecl),
-	variable_decls:        VarDeclRef            => (ScopeRef, &'ast ast::ObjDecl),
-	shared_variable_decls: SharedVarDeclRef      => (ScopeRef, &'ast ast::ObjDecl),
-	file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
+	// variable_decls:        VarDeclRef            => (ScopeRef, &'ast ast::ObjDecl),
+	// file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
 	subprog_bodies:        SubprogBodyRef        => (ScopeRef, &'ast ast::Subprog),
 	subprog_decls:         SubprogDeclRef        => (ScopeRef, &'ast ast::Subprog),
 	subprog_insts:         SubprogInstRef        => (ScopeRef, &'ast ast::Subprog),
@@ -1673,9 +1670,8 @@ node_storage!(HirTable<'ctx>:
 	// Declarations
 	const_decls:           ConstDeclRef          => &'ctx hir::Decl<hir::ConstDecl>,
 	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
-	variable_decls:        VarDeclRef            => &'ctx hir::VarDecl,
-	shared_variable_decls: SharedVarDeclRef      => &'ctx hir::VarDecl,
-	file_decls:            FileDeclRef           => &'ctx hir::FileDecl,
+	variable_decls:        VarDeclRef            => &'ctx hir::Decl<hir::VarDecl>,
+	file_decls:            FileDeclRef           => &'ctx hir::Decl<hir::FileDecl>,
 	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,
 	sig_assign_stmts:      SigAssignStmtRef      => &'ctx hir::SigAssignStmt,
 	array_type_indices:    ArrayTypeIndexRef     => &'ctx Spanned<hir::ArrayTypeIndex>,

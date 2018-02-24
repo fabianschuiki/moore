@@ -37,7 +37,7 @@ impl_make_defs!(self, id: ScopeRef => {
 impl_make_scope!(self, id: ScopeRef => {
 	match id {
 		ScopeRef::Lib(id)         => self.make(id),
-		ScopeRef::CtxItems(_)     => unreachable!(),
+		ScopeRef::CtxItems(id)    => self.make(id),
 		ScopeRef::Entity(id)      => self.make(id),
 		ScopeRef::BuiltinPkg(id)  => Ok(&(*BUILTIN_PKG_SCOPES)[&id]),
 		ScopeRef::Pkg(id)         => self.make(id),
@@ -140,6 +140,14 @@ impl_make_defs!(self, id: CtxItemsRef => {
 	} else {
 		Ok(self.sb.arenas.defs.alloc(defs))
 	}
+});
+
+impl_make_scope!(self, _id: CtxItemsRef => {
+	Ok(self.sb.arenas.scope.alloc(Scope{
+		parent: None,
+		defs: Vec::new(),
+		explicit_defs: HashMap::new(),
+	}))
 });
 
 

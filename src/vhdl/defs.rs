@@ -148,7 +148,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 			DeclInBlockRef::Subtype(id)      => self.declare_subtype(id),
 			DeclInBlockRef::Const(id)        => self.declare_const(id),
 			DeclInBlockRef::Signal(id)       => self.declare_signal(id),
-			DeclInBlockRef::SharedVar(id)    => self.declare_shared_var(id),
+			DeclInBlockRef::Var(id)          => self.declare_var(id),
 			DeclInBlockRef::File(id)         => self.declare_file(id),
 			DeclInBlockRef::Alias(id)        => self.declare_alias(id),
 			DeclInBlockRef::Comp(id)         => self.declare_comp(id),
@@ -275,15 +275,6 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 			Err(()) => { self.failed = true; return; }
 		};
 		self.declare(hir.name.map_into(), Def::Var(id.into()))
-	}
-
-	/// Handle a shared variable declaration.
-	pub fn declare_shared_var(&mut self, id: SharedVarDeclRef) {
-		let hir = match self.ctx.existing_hir(id) {
-			Ok(h) => h,
-			Err(()) => { self.failed = true; return; }
-		};
-		self.declare(hir.name.map_into(), Def::SharedVar(id.into()))
 	}
 
 	/// Handle a file declaration.

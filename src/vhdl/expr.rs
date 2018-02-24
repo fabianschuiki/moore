@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-use common::errors::*;
+// use common::errors::*;
 use common::source::Spanned;
 use common::score::Result;
 use add_ctx::AddContext;
@@ -17,7 +17,7 @@ use hir;
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add an expression.
     pub fn add_expr(&self, expr: &'ast ast::Expr) -> Result<ExprRef> {
-        let (mk, id, scope) = self.make::<ExprRef>(expr.span);
+        let (mk, _id, scope) = self.make::<ExprRef>(expr.span);
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = TermContext::new(sbc, scope);
             let term = ctx.termify_expr(expr)?;
@@ -28,7 +28,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add an expression term.
-    pub fn schedule_expr(&self, mk: MakeContext<ExprRef>) {
+    pub fn schedule_expr(&self, _mk: MakeContext<ExprRef>) {
     }
 
     /// Add a list of choices.

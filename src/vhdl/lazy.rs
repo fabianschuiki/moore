@@ -104,6 +104,9 @@ pub type LazyTypeval<'sb, 'ast, 'ctx> = Box<for<'a,'b,'c> Fn(&'a TypeckContext<'
 
 /// A table of pending or running HIR lowerings.
 node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
+	// Miscellaneous
+	subtype_inds:     SubtypeIndRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::SubtypeInd>>,
+
 	// Expressions
 	exprs:            ExprRef          => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Expr>>,
 

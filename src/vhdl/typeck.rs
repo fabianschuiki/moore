@@ -674,7 +674,7 @@ impl_typeck!(self, id: DeclInBlockRef => {
 		DeclInBlockRef::Subtype(id)     => self.typeck(id),
 		DeclInBlockRef::Const(id)       => self.typeck(id),
 		DeclInBlockRef::Signal(id)      => self.typeck(id),
-		DeclInBlockRef::SharedVar(id)   => self.typeck(id),
+		DeclInBlockRef::Var(id)         => self.typeck(id),
 		DeclInBlockRef::File(id)        => self.typeck(id),
 		DeclInBlockRef::Alias(id)       => self.typeck(id),
 		DeclInBlockRef::Comp(id)        => self.typeck(id),
@@ -759,20 +759,19 @@ impl_typeck_err!(self, id: SubprogInstRef => {
 	Ok(())
 });
 
-impl_typeck!(self, id: ConstDeclRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: ConstDeclRef => {
+	self.ctx.lazy_typeval(id)?;
+	Ok(())
 });
 
-impl_typeck!(self, id: SharedVarDeclRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: VarDeclRef => {
+	self.ctx.lazy_typeval(id)?;
+	Ok(())
 });
 
-impl_typeck!(self, id: VarDeclRef => {
-	unimp!(self, id)
-});
-
-impl_typeck!(self, id: FileDeclRef => {
-	unimp!(self, id)
+impl_typeck_err!(self, id: FileDeclRef => {
+	self.ctx.lazy_typeval(id)?;
+	Ok(())
 });
 
 impl_typeck!(self, id: AliasDeclRef => {
@@ -913,22 +912,24 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 
 
 /// Determine the type of a subtype indication.
+#[deprecated]
 impl_make!(self, id: SubtypeIndRef => &Ty {
-	let hir = self.hir(id)?;
-	let ctx = TypeckContext::new(self);
-	let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
-	match hir.constraint {
-		None => Ok(inner),
-		Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
-			ctx.apply_range_constraint(inner, Spanned::new(con, span))
-		}
-		Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
-			ctx.apply_array_constraint(inner, Spanned::new(ac, span))
-		}
-		Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
-			ctx.apply_record_constraint(inner, Spanned::new(rc, span))
-		}
-	}
+	self.lazy_typeval(id)
+	// let hir = self.hir(id)?;
+	// let ctx = TypeckContext::new(self);
+	// let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
+	// match hir.constraint {
+	// 	None => Ok(inner),
+	// 	Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
+	// 		ctx.apply_range_constraint(inner, Spanned::new(con, span))
+	// 	}
+	// 	Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
+	// 		ctx.apply_array_constraint(inner, Spanned::new(ac, span))
+	// 	}
+	// 	Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
+	// 		ctx.apply_record_constraint(inner, Spanned::new(rc, span))
+	// 	}
+	// }
 });
 
 

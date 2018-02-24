@@ -697,7 +697,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     pub fn term_to_discrete_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::DiscreteRange>> {
         let term = self.fold_term_as_type(term)?;
         Ok(match term.value {
-            Term::SubtypeInd(..) | Term::TypeMark(..) => self.term_to_subtype_ind(term)?.map(|i| self.ctx.intern_subtype_ind(i)).map_into(),
+            Term::SubtypeInd(..) | Term::TypeMark(..) => {
+                let hir = self.term_to_subtype_ind(term)?;
+                let add_ctx = AddContext::new(self.ctx, self.scope);
+                Spanned::new(add_ctx.add_subtype_ind_hir(hir.value)?.into(), hir.span)
+            }
             Term::Range(..) => self.term_to_range(term)?.map_into(),
             _ => {
                 self.emit(

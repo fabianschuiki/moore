@@ -28,8 +28,8 @@ make_arenas!(
 		aggregate:           Aggregate,
 		const_decl:          Decl<ConstDecl>,
 		signal_decl:         SignalDecl,
-		variable_decl:       VarDecl,
-		file_decl:           FileDecl,
+		variable_decl:       Decl<VarDecl>,
+		file_decl:           Decl<FileDecl>,
 		process_stmt:        ProcessStmt,
 		sig_assign_stmt:     SigAssignStmt,
 		array_type_index:    Spanned<ArrayTypeIndex>,
@@ -511,6 +511,32 @@ pub struct ConstDecl {
 	pub init: Option<ExprRef>,
 }
 
+/// A variable declaration.
+///
+/// See IEEE 1076-2008 section 6.4.2.4.
+#[derive(Debug)]
+pub struct VarDecl {
+	/// Whether the variable was declared as shared or not.
+	pub shared: bool,
+	/// The subtype of the variable.
+	pub ty: SubtypeIndRef,
+	/// The optional initial value for the variable.
+	pub init: Option<ExprRef>,
+}
+
+/// A file declaration.
+///
+/// See IEEE 1076-2008 section 6.4.2.5.
+#[derive(Debug)]
+pub struct FileDecl {
+	/// The subtype of the file.
+	pub ty: SubtypeIndRef,
+	/// The expression evaluating to the file name.
+	pub filename: Option<ExprRef>,
+	/// The expression evaluating to the opening mode.
+	pub mode: Option<ExprRef>,
+}
+
 
 #[derive(Debug)]
 pub struct SignalDecl {
@@ -532,36 +558,6 @@ pub enum SignalKind {
 	Normal,
 	Register,
 	Bus,
-}
-
-
-#[derive(Debug)]
-pub struct VarDecl {
-	/// The scope within which the variable is declared.
-	pub parent: ScopeRef,
-	/// Whether the variable was declared as shared or not.
-	pub shared: bool,
-	/// The name of the variable.
-	pub name: Spanned<Name>,
-	/// The subtype of the variable.
-	pub subty: SubtypeIndRef,
-	/// The optional initial value for the variable.
-	pub init: Option<ExprRef>,
-}
-
-
-#[derive(Debug)]
-pub struct FileDecl {
-	/// The scope within which the file is declared.
-	pub parent: ScopeRef,
-	/// The name of the file.
-	pub name: Spanned<Name>,
-	/// The subtype of the file.
-	pub subty: SubtypeIndRef,
-	/// Additional file opening information. The first expression evaluates to a
-	/// string containing the file name. The second expression evaluates to a
-	/// file open kind.
-	pub open: Option<(ExprRef, Option<ExprRef>)>,
 }
 
 /// A process statement.
