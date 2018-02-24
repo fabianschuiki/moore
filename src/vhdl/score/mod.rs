@@ -73,6 +73,9 @@ pub struct ScoreContext<'lazy, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
 pub struct ScoreBoard<'ast, 'ctx> {
 	/// A reference to the arenas where the scoreboard allocates nodes.
 	pub arenas: &'ctx Arenas,
+	/// A table of spans for each node ID. Not all nodes will have a span, but
+	/// this table can be used as a way of augmenting error messages.
+	span_table: RefCell<HashMap<NodeId, Span>>,
 	/// A table of library nodes. This is a filtered version of what the global
 	/// scoreboard has, with only the VHDL nodes remaining.
 	libs: RefCell<HashMap<LibRef, Vec<&'ast ast::DesignUnit>>>,
@@ -147,6 +150,7 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 		// Assemble the scoreboard.
 		ScoreBoard {
 			arenas: arenas,
+			span_table: RefCell::new(HashMap::new()),
 			libs: RefCell::new(HashMap::new()),
 			lib_names: RefCell::new(lib_names),
 			ast_table: RefCell::new(AstTable::new()),
@@ -181,6 +185,24 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		self.sb.lib_names.borrow_mut().insert(name, id);
 	}
 
+	/// Obtain the span associated with a node ID.
+	pub fn span<I>(&self, id: I) -> Option<Span> where I: Into<NodeId> {
+		self.sb.span_table.borrow().get(&id.into()).map(|v| *v)
+	}
+
+	/// Associate a span with a node ID.
+	pub fn set_span<I>(&self, id: I, span: Span) where I: Into<NodeId> {
+		self.sb.span_table.borrow_mut().set(id.into(), span);
+	}
+
+	/// Report a compiler bug associate with a node.
+	pub fn bug<I>(&self, id: I, msg: String) where I: Into<NodeId> {
+		let mut d = DiagBuilder2::bug(msg);
+		if let Some(span) = self.span(id) {
+			d = d.span(span);
+		}
+		self.emit(d);
+	}
 
 	/// Obtain the AST node corresponding to a node reference. The AST node must
 	/// have previously been added to the `ast_table`, otherwise this function

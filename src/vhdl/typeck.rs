@@ -68,8 +68,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		let task = self.ctx.lazy.typeck.borrow_mut().set(id, LazyNode::Running);
 		let result = match task {
 			Some(LazyNode::Pending(f)) => f(self),
-			Some(LazyNode::Running) => panic!("recursion on typeck of {:?}", id),
-			None => panic!("no typeck scheduled for {:?}", id),
+			Some(LazyNode::Running) => { self.ctx.bug(id, format!("recursion on typeck of {:?}", id)); Err(()) }
+			None => { self.ctx.bug(id, format!("no typeck scheduled for {:?}", id)); Err(()) }
 		};
 		if result.is_err() {
 			self.failed.set(true);
@@ -95,9 +95,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		let task = self.ctx.lazy.typeval.borrow_mut().set(id, LazyNode::Running);
 		let result = match task {
 			Some(LazyNode::Pending(f)) => f(self),
-			Some(LazyNode::Running) => panic!("recursion on typeval of {:?}", id),
-			None => panic!("no typeval scheduled for {:?}", id),
+			Some(LazyNode::Running) => { self.ctx.bug(id, format!("recursion on typeval of {:?}", id)); Err(()) }
+			None => { self.ctx.bug(id, format!("no typeval scheduled for {:?}", id)); Err(()) }
 		};
+		if result.is_err() {
+			self.failed.set(true);
+		}
 		self.ctx.sb.typeval_table.borrow_mut().insert(id, result);
 
 		result

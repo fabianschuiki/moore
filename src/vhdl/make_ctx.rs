@@ -51,6 +51,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 			}
 			extract
 		});
+		ctx.set_span(id, span);
 		MakeContext {
 			ctx: ctx,
 			span: span,
