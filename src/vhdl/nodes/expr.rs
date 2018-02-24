@@ -2,17 +2,18 @@
 
 //! Expressions
 
-#![deny(missing_docs)]
-
-// use common::errors::*;
+use common::errors::*;
 use common::source::Spanned;
 use common::score::Result;
+
 use add_ctx::AddContext;
 use syntax::ast;
 use score::*;
 use term::TermContext;
 use make_ctx::MakeContext;
 use hir;
+use typeck::TypeckContext;
+use ty::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add an expression.
@@ -36,7 +37,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add an expression term.
-    pub fn schedule_expr(&self, _mk: &MakeContext<ExprRef>) {
+    pub fn schedule_expr(&self, mk: &MakeContext<ExprRef>) {
+        let id = mk.id;
+        mk.typeval(Box::new(move |tyc|{
+            let hir = tyc.ctx.lazy_hir(id)?;
+            let tyctx = tyc.ctx.type_context(id);
+            typeval_expr(tyc, id, hir, tyctx)
+        }));
     }
 
     /// Add a list of choices.
@@ -64,5 +71,24 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let ctx = TermContext::new(self.ctx, self.scope);
         let term = ctx.termify_expr(ast)?;
         ctx.term_to_discrete_range(term)
+    }
+}
+
+/// Evaluate the type of an expression.
+pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
+    tyc: &TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>,
+    id: ExprRef,
+    hir: &hir::Expr,
+    tyctx: Option<TypeCtx<'ctx>>,
+) -> Result<&'ctx Ty> {
+    match hir.data {
+        _ => {
+            tyc.emit(
+                DiagBuilder2::bug(format!("typeval for expression `{}` not implemented", hir.span.extract()))
+                .span(hir.span)
+            );
+            debugln!("It is a {:#?}", hir.data);
+            Err(())
+        }
     }
 }

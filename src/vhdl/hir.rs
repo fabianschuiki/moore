@@ -420,6 +420,8 @@ pub struct Expr {
 pub enum ExprData {
 	/// A resolved name. Consists of the definition and the definition's span.
 	Name(Def, Span),
+	/// An overloaded resolved name.
+	OverloadedName(Vec<Spanned<Def>>),
 	/// A selection, e.g. `a.b`.
 	Select(ExprRef, Spanned<ResolvableName>),
 	/// An attribute selection, e.g. `a'b`.
@@ -432,8 +434,18 @@ pub enum ExprData {
 	Unary(Spanned<UnaryOp>, ExprRef),
 	/// A binary operator expression.
 	Binary(Operator, ExprRef, ExprRef),
-	// A range expression.
+	/// A range expression.
 	Range(Dir, ExprRef, ExprRef),
+	/// An aggregate expression.
+	Aggregate(AggregateRef),
+	/// A qualified expression.
+	Qualified(Spanned<TypeMarkRef>, ExprRef),
+	/// An allocator expression, i.e. `new`.
+	Allocator(Spanned<TypeMarkRef>, Option<ExprRef>),
+	/// A cast expression.
+	Cast(Spanned<TypeMarkRef>, ExprRef),
+	/// A function call expression.
+	Call(ExprRef, Spanned<AssocList>),
 }
 
 /// A unary operator.
@@ -996,4 +1008,33 @@ pub struct Aggregate {
 	pub span: Span,
 	/// The fields of the aggregate.
 	pub fields: Vec<(Choices, ExprRef)>,
+}
+
+/// An association list.
+///
+/// See IEEE 1076-2008 section 6.5.7.
+pub type AssocList = Vec<AssocElement>;
+
+/// An association element.
+#[derive(Debug)]
+pub struct AssocElement {
+	/// The span the element covers in the source file.
+	pub span: Span,
+	/// The optional formal part.
+	pub formal: Option<Spanned<ExprRef>>,
+	/// The actual part.
+	pub actual: Spanned<AssocActual>,
+}
+
+/// An actual part of an association element.
+#[derive(Debug)]
+pub enum AssocActual {
+	/// An expression or name.
+	Expr(ExprRef),
+	/// An expression with leading `inertial` keyword.
+	InertialExpr(ExprRef),
+	/// A subtype indication.
+	Subtype(SubtypeIndRef),
+	/// An open association.
+	Open,
 }

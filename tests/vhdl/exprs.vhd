@@ -3,6 +3,7 @@ package pkg is
 	constant two : SMALLINT := 2;
 end;
 
+library work;
 use work.pkg;
 entity foo is end;
 architecture bar of foo is

@@ -995,6 +995,7 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 		Keyword(Kw::New) => {
 			p.bump();
 			let expr = parse_primary_expr(p)?;
+			span.expand(p.last_span());
 			Some(ast::NewExpr(Box::new(expr)))
 			// let mut expr_span = p.peek(0).span;
 

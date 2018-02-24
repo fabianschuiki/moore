@@ -72,6 +72,10 @@ pub enum Term {
     Unary(Spanned<hir::UnaryOp>, Subterm),
     /// A term of the form `T op T`.
     Binary(Spanned<hir::BinaryOp>, Subterm, Subterm),
+    /// A term of the form `T'T`.
+    Qual(Subterm, Subterm),
+    /// A term of the form `new T`.
+    New(Subterm),
 }
 
 /// A subterm.
@@ -176,6 +180,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             ast::OpenExpr => Term::Open,
             ast::OthersExpr => Term::Others,
             ast::DefaultExpr => Term::Default,
+            ast::ParenExpr(ref elems) => self.termify_paren_elems(elems)?.value,
+            ast::QualExpr(ref name, ref arg) => Term::Qual(
+                self.termify_compound_name(name)?.into(),
+                self.termify_paren_elems(arg)?.into(),
+            ),
+            ast::NewExpr(ref expr) => Term::New(self.termify_expr(expr)?.into()),
             ref wrong => {
                 self.emit(
                     DiagBuilder2::bug(format!("termification of expression `{}` not implemented", ast.span.extract()))
@@ -385,15 +395,19 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     pub fn term_to_expr(&self, term: Spanned<Term>) -> Result<ExprRef> {
         let ctx = AddContext::new(self.ctx, self.scope);
         ctx.add_expr_hir(self.term_to_expr_raw(term)?)
-        // let (mk, _, _) = ctx.make(term.span);
-        // mk.set_hir(self.term_to_expr_raw(term)?);
-        // ctx.schedule_expr(&mk);
-        // Ok(mk.finish())
     }
 
     /// Map a term to an expression.
     pub fn term_to_expr_raw(&self, term: Spanned<Term>) -> Result<hir::Expr> {
+        let term_span = term.span;
         let data = match term.value {
+            Term::Unresolved(name) => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is unknown", name))
+                    .span(term.span)
+                );
+                return Err(());
+            }
             Term::IntLit(value) => {
                 hir::ExprData::IntegerLiteral(ConstInt::new(None, value))
             }
@@ -404,6 +418,98 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             // Term::Binary(op, lhs, rhs) => {
             //  hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
             // }
+            Term::Ident(def) => {
+                // TODO: If the definition is a subprogram, turn this into a
+                // call expression.
+                hir::ExprData::Name(def.value, def.span)
+            }
+            Term::Enum(defs) => {
+                hir::ExprData::OverloadedName(defs.into_iter().map(|d| d.map_into()).collect())
+            }
+            Term::Select(term, name) => {
+                hir::ExprData::Select(self.term_to_expr(*term)?, name)
+            }
+            Term::Paren(subterm) => {
+                // A parenthesis with only one element is just a parenthesized
+                // expression. If there's more than one element, this is a
+                // purely positional aggregate.
+                if subterm.len() == 1 {
+                    return self.term_to_expr_raw(subterm.into_iter().next().unwrap());
+                } else {
+                    hir::ExprData::Aggregate(self.term_to_aggregate(
+                        Spanned::new(Term::Paren(subterm), term.span)
+                    )?.value)
+                }
+            }
+            Term::Aggregate(..) => {
+                hir::ExprData::Aggregate(self.term_to_aggregate(term)?.value)
+            }
+            Term::Qual(tm, term) => {
+                hir::ExprData::Qualified(
+                    self.term_to_type_mark(*tm)?,
+                    self.term_to_expr(*term)?,
+                )
+            }
+
+            // Allocators (`new` expressions) either have a type mark as their
+            // argument, or a qualified expression which also provides the value
+            // of the thing to allocate.
+            Term::New(arg) => {
+                let arg = *arg;
+                match arg.value {
+                    Term::Qual(tm, value) => hir::ExprData::Allocator(
+                        self.term_to_type_mark(*tm)?,
+                        Some(self.term_to_expr(*value)?),
+                    ),
+                    other => hir::ExprData::Allocator(
+                        self.term_to_type_mark(Spanned::new(other, arg.span))?,
+                        None,
+                    ),
+                }
+            }
+
+            // Function calls and cast expression look almost the same. The only
+            // way to differentiate them is to look at the kind of the callee.
+            Term::SuffixParen(callee, args) => {
+                let callee = *callee;
+                let args = self.term_to_assoc_list(*args)?;
+                match callee.value {
+                    Term::TypeMark(tm) => {
+                        if args.value.len() != 1 {
+                            self.emit(
+                                DiagBuilder2::error(format!("cast `{}` must have exactly one argument", term_span.extract()))
+                                .span(args.span)
+                            );
+                            return Err(());
+                        }
+                        let arg = args.value.into_iter().next().unwrap();
+                        if let Some(formal) = arg.formal {
+                            self.emit(
+                                DiagBuilder2::error(format!("cast argument `{}` cannot have a formal part", arg.span.extract()))
+                                .span(formal.span)
+                            );
+                        }
+                        let arg = match arg.actual.value {
+                            hir::AssocActual::Expr(id) => id,
+                            _ => {
+                                self.emit(
+                                    DiagBuilder2::error(format!("`{}` is not a valid cast argument", arg.actual.span.extract()))
+                                    .span(arg.actual.span)
+                                );
+                                return Err(());
+                            }
+                        };
+                        hir::ExprData::Cast(tm, arg)
+                    }
+                    other => {
+                        hir::ExprData::Call(
+                            self.term_to_expr(Spanned::new(other, callee.span))?,
+                            args,
+                        )
+                    }
+                }
+            }
+
             _ => {
                 self.emit(
                     DiagBuilder2::error(format!("`{}` is not a valid expression", term.span.extract()))
@@ -415,7 +521,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         };
         Ok(hir::Expr {
             parent: self.scope,
-            span: term.span,
+            span: term_span,
             data: data
         })
     }
@@ -903,5 +1009,69 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let id = AggregateRef::new(NodeId::alloc());
         self.ctx.set_hir(id, self.ctx.sb.arenas.hir.aggregate.alloc(hir));
         Ok(Spanned::new(id, term.span))
+    }
+
+    /// Map a term to an association list.
+    ///
+    /// See IEEE 1076-2008 section 6.5.7.
+    pub fn term_to_assoc_list(&self, term: Spanned<Term>) -> Result<Spanned<hir::AssocList>> {
+        let term_span = term.span;
+        Ok(Spanned::new(match term.value {
+            Term::Paren(fields) => fields
+                .into_iter()
+                .map(|term|{
+                    let actual = self.term_to_assoc_actual(term)?;
+                    Ok(hir::AssocElement {
+                        span: actual.span,
+                        formal: None,
+                        actual: actual,
+                    })
+                })
+                .collect::<Vec<Result<_>>>()
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?,
+            Term::Aggregate(fields) => fields
+                .into_iter()
+                .map(|(formal, actual)|{
+                    if formal.len() != 1 {
+                        self.emit(
+                            DiagBuilder2::error("formal part of association element must be exactly one expression")
+                            .span(term_span)
+                        );
+                        return Err(());
+                    }
+                    let formal = formal.into_iter().next().unwrap();
+                    let formal_span = formal.span;
+                    let span = Span::union(formal.span, actual.span);
+                    let formal = self.term_to_expr(formal)?;
+                    let actual = self.term_to_assoc_actual(actual)?;
+                    Ok(hir::AssocElement {
+                        span: span,
+                        formal: Some(Spanned::new(formal, formal_span)),
+                        actual: actual,
+                    })
+                })
+                .collect::<Vec<Result<_>>>()
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?,
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not a valid association list", term.span.extract()))
+                    .span(term.span)
+                    .add_note("See IEEE 1076-2008 section 6.5.7.")
+                );
+                debugln!("It is a {:#?}", term);
+                return Err(());
+            }
+        }, term_span))
+    }
+
+    /// Map a term to an association actual.
+    pub fn term_to_assoc_actual(&self, term: Spanned<Term>) -> Result<Spanned<hir::AssocActual>> {
+        let term_span = term.span;
+        // TODO: Don't just treat this as an expression, but rather
+        // differentiate properly between the different designators.
+        let expr = self.term_to_expr(term)?;
+        Ok(Spanned::new(hir::AssocActual::Expr(expr), term_span))
     }
 }
