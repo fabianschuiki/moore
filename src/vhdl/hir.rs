@@ -420,6 +420,14 @@ pub struct Expr {
 pub enum ExprData {
 	/// A resolved name. Consists of the definition and the definition's span.
 	Name(Def, Span),
+	/// A resolved constant name.
+	ConstName(ConstDeclRef),
+	/// A resolved signal name.
+	SignalName(SignalRef),
+	/// A resolved variable name.
+	VarName(VarDeclRef),
+	/// A resolved file name.
+	FileName(FileDeclRef),
 	/// An overloaded resolved name.
 	OverloadedName(Vec<Spanned<Def>>),
 	/// A selection, e.g. `a.b`.

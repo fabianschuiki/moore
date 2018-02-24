@@ -21,6 +21,7 @@ use score::*;
 use hir;
 use konst::ConstInt;
 use add_ctx::AddContext;
+use ty::*;
 
 /// A term.
 ///
@@ -426,9 +427,21 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             //  hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
             // }
             Term::Ident(def) => {
-                // TODO: If the definition is a subprogram, turn this into a
-                // call expression.
-                hir::ExprData::Name(def.value, def.span)
+                match def.value {
+                    Def::Const(id)  => hir::ExprData::ConstName(id),
+                    Def::Signal(id) => hir::ExprData::SignalName(id),
+                    Def::Var(id)    => hir::ExprData::VarName(id),
+                    Def::File(id)   => hir::ExprData::FileName(id),
+                    _ => {
+                        self.emit(
+                            DiagBuilder2::error(format!("`{}` cannot be used in an expression", term_span.extract()))
+                            .span(term_span)
+                            .add_note(format!("`{}` was declared here:", term_span.extract()))
+                            .span(def.span)
+                        );
+                        return Err(());
+                    }
+                }
             }
             Term::Enum(defs) => {
                 hir::ExprData::OverloadedName(defs.into_iter().map(|d| d.map_into()).collect())
@@ -452,10 +465,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 hir::ExprData::Aggregate(self.term_to_aggregate(term)?.value)
             }
             Term::Qual(tm, term) => {
-                hir::ExprData::Qualified(
-                    self.term_to_type_mark(*tm)?,
-                    self.term_to_expr(*term)?,
-                )
+                let tm = self.term_to_type_mark(*tm)?;
+                let expr = self.term_to_expr(*term)?;
+                self.ctx.set_type_context(expr, self.ctx.intern_ty(Ty::Named(tm.span, tm.value)));
+                hir::ExprData::Qualified(tm, expr)
             }
 
             // Allocators (`new` expressions) either have a type mark as their
@@ -464,10 +477,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             Term::New(arg) => {
                 let arg = *arg;
                 match arg.value {
-                    Term::Qual(tm, value) => hir::ExprData::Allocator(
-                        self.term_to_type_mark(*tm)?,
-                        Some(self.term_to_expr(*value)?),
-                    ),
+                    Term::Qual(tm, value) => {
+                        let tm = self.term_to_type_mark(*tm)?;
+                        let expr = self.term_to_expr(*value)?;
+                        self.ctx.set_type_context(expr, self.ctx.intern_ty(Ty::Named(tm.span, tm.value)));
+                        hir::ExprData::Allocator(tm, Some(expr))
+                    }
                     other => hir::ExprData::Allocator(
                         self.term_to_type_mark(Spanned::new(other, arg.span))?,
                         None,
@@ -506,6 +521,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                 return Err(());
                             }
                         };
+                        self.ctx.set_type_context(arg, self.ctx.intern_ty(Ty::Named(tm.span, tm.value)));
                         hir::ExprData::Cast(tm, arg)
                     }
                     other => {

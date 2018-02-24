@@ -2,6 +2,7 @@
 
 //! Expressions
 
+use common::Verbosity;
 use common::errors::*;
 use common::source::Spanned;
 use common::score::Result;
@@ -41,8 +42,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let id = mk.id;
         mk.typeval(Box::new(move |tyc|{
             let hir = tyc.ctx.lazy_hir(id)?;
-            let tyctx = tyc.ctx.type_context(id);
-            typeval_expr(tyc, id, hir, tyctx)
+            let tyctx = tyc.ctx.type_context_resolved(id)?;
+            let ty = typeval_expr(tyc, id, hir, tyctx)?;
+            if tyc.ctx.sess.opts.verbosity.contains(Verbosity::EXPR_TYPES) {
+                tyc.emit(
+                    DiagBuilder2::note(format!("type of expression `{}` is {}", hir.span.extract(), ty))
+                    .span(hir.span)
+                );
+            }
+            Ok(ty)
         }));
     }
 
@@ -79,9 +87,51 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
     tyc: &TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>,
     id: ExprRef,
     hir: &hir::Expr,
-    tyctx: Option<TypeCtx<'ctx>>,
+    tyctx: Option<&'ctx Ty>,
 ) -> Result<&'ctx Ty> {
     match hir.data {
+        hir::ExprData::ConstName(id)  => tyc.ctx.lazy_typeval(id),
+        hir::ExprData::SignalName(id) => tyc.ctx.ty(id),
+        hir::ExprData::VarName(id)    => tyc.ctx.lazy_typeval(id),
+        hir::ExprData::FileName(id)   => tyc.ctx.lazy_typeval(id),
+        hir::ExprData::IntegerLiteral(ref value) => {
+            // Integer literals either have a type attached, or they inherit
+            // their type from the context.
+            if let Some(ref ty) = value.ty {
+                return Ok(tyc.ctx.intern_ty(ty.clone()));
+            }
+            if let Some(ty) = tyctx {
+                if let &Ty::Int(_) = tyc.ctx.deref_named_type(ty)? {
+                    return Ok(ty);
+                }
+            }
+            tyc.emit(
+                DiagBuilder2::error(format!("cannot infer type of `{}` from context", hir.span.extract()))
+                .span(hir.span)
+            );
+            Err(())
+        }
+        hir::ExprData::Qualified(ref tm, expr) => {
+            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
+            let _expr_ty = tyc.lazy_typeval(expr)?;
+            // TODO: Check types.
+            Ok(ty)
+        }
+        hir::ExprData::Allocator(ref tm, expr) => {
+            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
+            if let Some(expr) = expr {
+                let _expr_ty = tyc.lazy_typeval(expr)?;
+                // TODO: Check types.
+            }
+            Ok(ty)
+        }
+        hir::ExprData::Cast(ref tm, expr) => {
+            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
+            let _expr_ty = tyc.lazy_typeval(expr)?;
+            // TODO: Check that the cast is actually possible.
+            Ok(ty)
+        }
+        hir::ExprData::Aggregate(id) => tyc.ctx.lazy_typeval(id),
         _ => {
             tyc.emit(
                 DiagBuilder2::bug(format!("typeval for expression `{}` not implemented", hir.span.extract()))

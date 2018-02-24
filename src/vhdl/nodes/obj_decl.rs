@@ -45,12 +45,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 let hir = tyc.ctx.lazy_hir(id)?;
                 let ty = tyc.lazy_typeval(hir.decl.ty)?;
                 if let Some(init) = hir.decl.init {
-                    let init_ty = tyc.lazy_typeval(init)?;
+                    let _init_ty = tyc.lazy_typeval(init)?;
                     // TODO: Check that the type of the init expression matches.
-                    tyc.emit(
-                        DiagBuilder2::note(format!("const has type `{}`, init has type `{}`", ty, init_ty))
-                        .span(hir.span)
-                    );
+                    // tyc.emit(
+                    //     DiagBuilder2::note(format!("const has type `{}`, init has type `{}`", ty, init_ty))
+                    //     .span(hir.span)
+                    // );
                 }
                 Ok(ty)
             }));
