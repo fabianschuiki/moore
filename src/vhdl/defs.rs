@@ -261,7 +261,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Handle a signal declaration.
 	pub fn declare_signal(&mut self, id: SignalDeclRef) {
-		let hir = match self.ctx.existing_hir(id) {
+		let hir = match self.ctx.lazy_hir(id) {
 			Ok(h) => h,
 			Err(()) => { self.failed = true; return; }
 		};
@@ -270,7 +270,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Handle a variable declaration.
 	pub fn declare_var(&mut self, id: VarDeclRef) {
-		let hir = match self.ctx.existing_hir(id) {
+		let hir = match self.ctx.lazy_hir(id) {
 			Ok(h) => h,
 			Err(()) => { self.failed = true; return; }
 		};
@@ -279,7 +279,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Handle a file declaration.
 	pub fn declare_file(&mut self, id: FileDeclRef) {
-		let hir = match self.ctx.existing_hir(id) {
+		let hir = match self.ctx.lazy_hir(id) {
 			Ok(h) => h,
 			Err(()) => { self.failed = true; return; }
 		};
