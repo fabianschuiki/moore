@@ -12,8 +12,7 @@ use common::name::Name;
 use common::errors::*;
 use common::source::*;
 use common::util::*;
-use common::score::{Result, NodeRef};
-use common::NodeId;
+use common::score::Result;
 
 use syntax::lexer::token::Literal;
 use syntax::ast::{self, Dir};
@@ -1029,9 +1028,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             span: term.span,
             fields: fields,
         };
-        let id = AggregateRef::new(NodeId::alloc());
-        self.ctx.set_hir(id, self.ctx.sb.arenas.hir.aggregate.alloc(hir));
-        Ok(Spanned::new(id, term.span))
+        let ctx = AddContext::new(self.ctx, self.scope);
+        Ok(Spanned::new(ctx.add_aggregate_hir(hir)?, term.span))
     }
 
     /// Map a term to an association list.

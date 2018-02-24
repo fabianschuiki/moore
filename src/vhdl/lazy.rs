@@ -109,6 +109,7 @@ node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
 
 	// Expressions
 	exprs:            ExprRef          => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Expr>>,
+	aggregates:       AggregateRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Aggregate>>,
 
 	// Declarations
 	const_decls:      ConstDeclRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::ConstDecl>>>,

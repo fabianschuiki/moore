@@ -37,7 +37,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         Ok(mk.finish())
     }
 
-    /// Add an expression term.
+    /// Schedule expression tasks.
     pub fn schedule_expr(&self, mk: &MakeContext<ExprRef>) {
         let id = mk.id;
         mk.typeval(Box::new(move |tyc|{
@@ -79,6 +79,27 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let ctx = TermContext::new(self.ctx, self.scope);
         let term = ctx.termify_expr(ast)?;
         ctx.term_to_discrete_range(term)
+    }
+
+    /// Add an aggregate already lowered to HIR.
+    pub fn add_aggregate_hir(&self, hir: hir::Aggregate) -> Result<AggregateRef> {
+        let (mk, _, _) = self.make::<AggregateRef>(hir.span);
+        mk.set_hir(hir);
+        self.schedule_aggregate(&mk);
+        Ok(mk.finish())
+    }
+
+    /// Schedule aggregate tasks.
+    pub fn schedule_aggregate(&self, mk: &MakeContext<AggregateRef>) {
+        let id = mk.id;
+        mk.typeval(Box::new(move |tyc|{
+            let hir = tyc.ctx.lazy_hir(id)?;
+            tyc.emit(
+                DiagBuilder2::bug(format!("typeval for aggregate `{}` not implemented", hir.span.extract()))
+                .span(hir.span)
+            );
+            Err(())
+        }));
     }
 }
 
