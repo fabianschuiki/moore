@@ -190,12 +190,12 @@ impl_codegen!(self, id: VarDeclRef, _ctx: &mut llhd::Entity => {
 
 impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 	// Determine the type of the signal.
-	let hir = self.existing_hir(id)?;
-	let ty = self.ty(id)?;
+	let hir = self.lazy_hir(id)?;
+	let ty = self.lazy_typeval(id)?;
 
 	// Calculate the initial value for the signal, either from the provided
 	// expression or implicitly.
-	let init = if let Some(init_id) = hir.init {
+	let init = if let Some(init_id) = hir.decl.init {
 		self.const_value(init_id)?
 	} else {
 		self.default_value_for_type(&ty)?

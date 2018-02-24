@@ -764,6 +764,11 @@ impl_typeck_err!(self, id: ConstDeclRef => {
 	Ok(())
 });
 
+impl_typeck_err!(self, id: SignalDeclRef => {
+	self.ctx.lazy_typeval(id)?;
+	Ok(())
+});
+
 impl_typeck_err!(self, id: VarDeclRef => {
 	self.ctx.lazy_typeval(id)?;
 	Ok(())
@@ -1061,10 +1066,10 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 
 
 /// Determine the type of a signal declaration.
-impl_make!(self, id: SignalDeclRef => &Ty {
-	let hir = self.existing_hir(id)?;
-	self.ty(hir.subty)
-});
+// impl_make!(self, id: SignalDeclRef => &Ty {
+// 	let hir = self.lazy_hir(id)?;
+// 	self.lazy_typeval(hir.decl.ty)
+// });
 
 
 /// Determine the type of an expression.
@@ -1124,7 +1129,7 @@ impl_make!(self, id: TypedNodeRef => &Ty {
 impl_make!(self, id: SignalRef => &Ty {
 	match id {
 		SignalRef::Intf(id) => self.make(id),
-		SignalRef::Decl(id) => self.make(id),
+		SignalRef::Decl(id) => self.lazy_typeval(id),
 	}
 });
 

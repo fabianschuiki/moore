@@ -88,58 +88,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		Ok(Spanned::new(id, ast.span()))
 	}
 
-	/// Unpack an AST signal declaration into individual HIR signal
-	/// declarations, one for each name.
-	pub fn unpack_signal_decl<I>(&self, ast: &'ast ast::ObjDecl, scope_id: ScopeRef, refs: &mut Vec<I>) -> Result<()>
-	where
-		I: From<SignalDeclRef>
-	{
-		assert_eq!(ast.kind, ast::ObjKind::Signal);
-
-		// Unpack the subtype indication.
-		let ty = self.unpack_subtype_ind(&ast.subtype, scope_id)?;
-
-		// Unpack the signal kind.
-		let kind = match ast.detail {
-			Some(Spanned{value: ast::ObjDetail::Register, ..}) => hir::SignalKind::Register,
-			Some(Spanned{value: ast::ObjDetail::Bus, ..}) => hir::SignalKind::Bus,
-			Some(Spanned{span, ..}) => {
-				self.emit(
-					DiagBuilder2::error("expected `:=` or `;`")
-					.span(span)
-				);
-				hir::SignalKind::Normal
-			}
-			None => hir::SignalKind::Normal,
-		};
-
-		// Unpack the expression indicating the initial value.
-		let init = if let Some(ref expr) = ast.init {
-			let id = ExprRef::new(NodeId::alloc());
-			self.set_ast(id, (scope_id, expr));
-			self.set_type_context(id, TypeCtx::TypeOf(ty.into()));
-			Some(id)
-		} else {
-			None
-		};
-
-		// Create a new SignalDecl for each name.
-		for &name in &ast.names {
-			let id = SignalDeclRef::new(NodeId::alloc());
-			let hir = self.sb.arenas.hir.signal_decl.alloc(hir::SignalDecl{
-				parent: scope_id,
-				name: name.into(),
-				subty: ty,
-				kind: kind,
-				init: init,
-			});
-			self.set_hir(id, hir);
-			refs.push(id.into());
-		}
-
-		Ok(())
-	}
-
 	/// Unpack a slice of AST declarative items into a list of items admissible
 	/// in the declarative part of a block.
 	///
@@ -200,7 +148,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 						ast::ObjKind::Const => {
 							refs.extend(ctx.add_const_decl::<DeclInBlockRef>(decl)?);
 						}
-						ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut refs)?,
+						ast::ObjKind::Signal => {
+							refs.extend(ctx.add_signal_decl::<DeclInBlockRef>(decl)?);
+						}
 						ast::ObjKind::Var => {
 							self.emit(
 								DiagBuilder2::error(format!("not a shared variable; only shared variables may appear in {}", container_name))
@@ -1150,7 +1100,9 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 					ast::ObjKind::Const => {
 						decls.extend(ctx.add_const_decl::<DeclInPkgRef>(decl)?);
 					}
-					ast::ObjKind::Signal => self.unpack_signal_decl(decl, scope_id, &mut decls)?,
+					ast::ObjKind::Signal => {
+						decls.extend(ctx.add_signal_decl::<DeclInPkgRef>(decl)?);
+					}
 					ast::ObjKind::SharedVar => {
 						self.emit(
 							DiagBuilder2::error("not a variable; shared variables may not appear in a package declaration")

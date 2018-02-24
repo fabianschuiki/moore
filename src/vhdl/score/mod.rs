@@ -1624,10 +1624,6 @@ node_storage!(AstTable<'ast>:
 	// Declarations
 	type_decls:            TypeDeclRef           => (ScopeRef, &'ast ast::TypeDecl),
 	subtype_decls:         SubtypeDeclRef        => (ScopeRef, &'ast ast::SubtypeDecl),
-	// const_decls:           ConstDeclRef          => (ScopeRef, &'ast ast::ObjDecl),
-	signal_decls:          SignalDeclRef         => (ScopeRef, &'ast ast::ObjDecl),
-	// variable_decls:        VarDeclRef            => (ScopeRef, &'ast ast::ObjDecl),
-	// file_decls:            FileDeclRef           => (ScopeRef, &'ast ast::ObjDecl),
 	subprog_bodies:        SubprogBodyRef        => (ScopeRef, &'ast ast::Subprog),
 	subprog_decls:         SubprogDeclRef        => (ScopeRef, &'ast ast::Subprog),
 	subprog_insts:         SubprogInstRef        => (ScopeRef, &'ast ast::Subprog),
@@ -1669,7 +1665,7 @@ node_storage!(HirTable<'ctx>:
 
 	// Declarations
 	const_decls:           ConstDeclRef          => &'ctx hir::Decl<hir::ConstDecl>,
-	signal_decls:          SignalDeclRef         => &'ctx hir::SignalDecl,
+	signal_decls:          SignalDeclRef         => &'ctx hir::Decl<hir::SignalDecl>,
 	variable_decls:        VarDeclRef            => &'ctx hir::Decl<hir::VarDecl>,
 	file_decls:            FileDeclRef           => &'ctx hir::Decl<hir::FileDecl>,
 	process_stmts:         ProcessStmtRef        => &'ctx hir::ProcessStmt,

@@ -55,6 +55,48 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         }).collect()
     }
 
+    /// Add a signal declaration.
+    pub fn add_signal_decl<I>(&self, decl: &'ast ast::ObjDecl) -> Result<Vec<I>>
+        where I: From<SignalDeclRef>
+    {
+        let ty = self.add_subtype_ind(&decl.subtype)?;
+        let init = self.add_optional(&decl.init, AddContext::add_expr)?;
+        self.ctx.set_type_context_optional(init, TypeCtx::TypeOf(ty.into()));
+        let kind = match decl.detail {
+            Some(Spanned{value: ast::ObjDetail::Register, ..}) => hir::SignalKind::Register,
+            Some(Spanned{value: ast::ObjDetail::Bus, ..}) => hir::SignalKind::Bus,
+            Some(Spanned{span, ..}) => {
+                self.emit(
+                    DiagBuilder2::error("expected `:=` or `;`")
+                    .span(span)
+                );
+                hir::SignalKind::Normal
+            }
+            None => hir::SignalKind::Normal,
+        };
+        decl.names.iter().map(|dn|{
+            let (mk, id, scope) = self.make::<SignalDeclRef>(dn.span);
+            mk.lower_to_hir(Box::new(move |_sbc|{
+                Ok(hir::Decl {
+                    parent: scope,
+                    span: dn.span,
+                    name: (*dn).into(),
+                    decl: hir::SignalDecl {
+                        ty: ty,
+                        kind: kind,
+                        init: init,
+                    }
+                })
+            }));
+            mk.typeval(Box::new(move |tyc|{
+                let hir = tyc.ctx.lazy_hir(id)?;
+                // TODO: Check that the type of the init expression matches.
+                tyc.ctx.lazy_typeval(hir.decl.ty)
+            }));
+            Ok(mk.finish().into())
+        }).collect()
+    }
+
     /// Add a variable declaration.
     pub fn add_var_decl<I>(&self, decl: &'ast ast::ObjDecl) -> Result<Vec<I>>
         where I: From<VarDeclRef>

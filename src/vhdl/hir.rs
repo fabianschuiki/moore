@@ -27,7 +27,7 @@ make_arenas!(
 		expr:                Expr,
 		aggregate:           Aggregate,
 		const_decl:          Decl<ConstDecl>,
-		signal_decl:         SignalDecl,
+		signal_decl:         Decl<SignalDecl>,
 		variable_decl:       Decl<VarDecl>,
 		file_decl:           Decl<FileDecl>,
 		process_stmt:        ProcessStmt,
@@ -511,6 +511,27 @@ pub struct ConstDecl {
 	pub init: Option<ExprRef>,
 }
 
+/// A signal declaration.
+///
+/// See IEEE 1076-2008 section 6.4.2.3.
+#[derive(Debug)]
+pub struct SignalDecl {
+	/// The subtype of the signal.
+	pub ty: SubtypeIndRef,
+	/// The signal kind.
+	pub kind: SignalKind,
+	/// The optional initial value for the signals.
+	pub init: Option<ExprRef>,
+}
+
+/// A signal kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalKind {
+	Normal,
+	Register,
+	Bus,
+}
+
 /// A variable declaration.
 ///
 /// See IEEE 1076-2008 section 6.4.2.4.
@@ -535,29 +556,6 @@ pub struct FileDecl {
 	pub filename: Option<ExprRef>,
 	/// The expression evaluating to the opening mode.
 	pub mode: Option<ExprRef>,
-}
-
-
-#[derive(Debug)]
-pub struct SignalDecl {
-	/// The scope within which the signal is declared.
-	pub parent: ScopeRef,
-	/// The name of the signal.
-	pub name: Spanned<Name>,
-	/// The subtype of the signal.
-	pub subty: SubtypeIndRef,
-	/// The signal kind.
-	pub kind: SignalKind,
-	/// The optional initial value for the signals.
-	pub init: Option<ExprRef>,
-}
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SignalKind {
-	Normal,
-	Register,
-	Bus,
 }
 
 /// A process statement.
