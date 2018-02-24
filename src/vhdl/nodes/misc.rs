@@ -22,7 +22,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             let term = ctx.termify_subtype_ind(ind)?;
             Ok(ctx.term_to_subtype_ind(term)?.value)
         }));
-        self.schedule_subtype_ind(mk);
+        self.schedule_subtype_ind(&mk);
         Ok(mk.finish())
     }
 
@@ -30,12 +30,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     pub fn add_subtype_ind_hir(&self, hir: hir::SubtypeInd) -> Result<SubtypeIndRef> {
         let (mk, _, _) = self.make::<SubtypeIndRef>(hir.span);
         mk.set_hir(hir);
-        self.schedule_subtype_ind(mk);
+        self.schedule_subtype_ind(&mk);
         Ok(mk.finish())
     }
 
     /// Schedule subtype indication tasks.
-    pub fn schedule_subtype_ind(&self, mk: MakeContext<SubtypeIndRef>) {
+    pub fn schedule_subtype_ind(&self, mk: &MakeContext<SubtypeIndRef>) {
         let id = mk.id;
         mk.typeval(Box::new(move |tyc|{
             let hir = tyc.ctx.lazy_hir(id)?;

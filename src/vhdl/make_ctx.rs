@@ -21,7 +21,6 @@ use arenas::Alloc;
 /// A context within which compiler passes can be described.
 ///
 /// See the module documentation for details.
-#[derive(Copy, Clone)]
 pub struct MakeContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb, I: Copy> {
 	/// The outer context.
 	pub ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
@@ -67,7 +66,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 	}
 
 	/// Schedule a callback that lowers the node to HIR.
-	pub fn lower_to_hir<R>(self, f: LazyHir<'sb, 'ast, 'ctx, R>)
+	pub fn lower_to_hir<R>(&self, f: LazyHir<'sb, 'ast, 'ctx, R>)
 	where
 		LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node=LazyNode<LazyHir<'sb, 'ast, 'ctx, R>>>,
 	{
@@ -75,7 +74,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 	}
 
 	/// Store a preconstructed HIR for the node.
-	pub fn set_hir<T>(self, hir: T)
+	pub fn set_hir<T>(&self, hir: T)
 	where
 		T: 'ctx,
 		HirTable<'ctx>: NodeStorage<I, Node=&'ctx T>,
@@ -85,12 +84,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, 
 	}
 
 	/// Schedule a callback that type checks the node.
-	pub fn typeck(self, f: LazyTypeck<'sb, 'ast, 'ctx>) {
+	pub fn typeck(&self, f: LazyTypeck<'sb, 'ast, 'ctx>) {
 		self.ctx.lazy.typeck.borrow_mut().insert(self.id.into(), LazyNode::Pending(f));
 	}
 
 	/// Schedule a callback that evaluates the type of the node.
-	pub fn typeval(self, f: LazyTypeval<'sb, 'ast, 'ctx>) {
+	pub fn typeval(&self, f: LazyTypeval<'sb, 'ast, 'ctx>) {
 		self.ctx.lazy.typeval.borrow_mut().insert(self.id.into(), LazyNode::Pending(f));
 	}
 }

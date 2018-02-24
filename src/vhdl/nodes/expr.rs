@@ -23,12 +23,20 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             let term = ctx.termify_expr(expr)?;
             ctx.term_to_expr_raw(term)
         }));
-        self.schedule_expr(mk);
+        self.schedule_expr(&mk);
+        Ok(mk.finish())
+    }
+
+    /// Add an expression already lowered to HIR.
+    pub fn add_expr_hir(&self, hir: hir::Expr) -> Result<ExprRef> {
+        let (mk, _, _) = self.make::<ExprRef>(hir.span);
+        mk.set_hir(hir);
+        self.schedule_expr(&mk);
         Ok(mk.finish())
     }
 
     /// Add an expression term.
-    pub fn schedule_expr(&self, _mk: MakeContext<ExprRef>) {
+    pub fn schedule_expr(&self, _mk: &MakeContext<ExprRef>) {
     }
 
     /// Add a list of choices.

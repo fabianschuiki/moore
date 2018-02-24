@@ -384,10 +384,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Map a term to an expression and schedule the necessary tasks.
     pub fn term_to_expr(&self, term: Spanned<Term>) -> Result<ExprRef> {
         let ctx = AddContext::new(self.ctx, self.scope);
-        let (mk, _, _) = ctx.make(term.span);
-        mk.set_hir(self.term_to_expr_raw(term)?);
-        ctx.schedule_expr(mk);
-        Ok(mk.finish())
+        ctx.add_expr_hir(self.term_to_expr_raw(term)?)
+        // let (mk, _, _) = ctx.make(term.span);
+        // mk.set_hir(self.term_to_expr_raw(term)?);
+        // ctx.schedule_expr(&mk);
+        // Ok(mk.finish())
     }
 
     /// Map a term to an expression.
