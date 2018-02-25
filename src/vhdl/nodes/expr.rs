@@ -94,6 +94,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let id = mk.id;
         mk.typeval(Box::new(move |tyc|{
             let hir = tyc.ctx.lazy_hir(id)?;
+            let tyctx = tyc.ctx.type_context_resolved(id)?;
+            // let tyctx_flat = tyc.ctx.deref_named_type(tyctx)?;
+
+            // Determine the type of the aggregate. This is either evident from
+            // the part before the `=>`, or otherwise has to be determined from
+            // context.
+            enum AggregateKind { Record, Array, Both };
+
+
             tyc.emit(
                 DiagBuilder2::bug(format!("typeval for aggregate `{}` not implemented", hir.span.extract()))
                 .span(hir.span)

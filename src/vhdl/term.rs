@@ -401,6 +401,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         ctx.add_expr_hir(self.term_to_expr_raw(term)?)
     }
 
+    /// Same as `term_to_expr`, but the result is spanned.
+    pub fn term_to_expr_spanned(&self, term: Spanned<Term>) -> Result<Spanned<ExprRef>> {
+        let sp = term.span;
+        Ok(Spanned::new(self.term_to_expr(term)?, sp))
+    }
+
     /// Map a term to an expression.
     pub fn term_to_expr_raw(&self, term: Spanned<Term>) -> Result<hir::Expr> {
         let term_span = term.span;
@@ -987,6 +993,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     ///
     /// See IEEE 1076-2008 section 9.3.3.1.
     pub fn term_to_aggregate(&self, term: Spanned<Term>) -> Result<Spanned<AggregateRef>> {
+        // Determine the fields of the aggregate.
         let fields = match term.value {
             Term::Aggregate(fields) => {
                 fields
@@ -998,8 +1005,14 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                             .collect::<Vec<Result<_>>>()
                             .into_iter()
                             .collect::<Result<Vec<_>>>();
-                        let expr = self.term_to_expr(expr);
-                        Ok((choices?, expr?))
+                        let expr = self.term_to_expr_spanned(expr);
+                        let choices = choices?;
+                        let expr = expr?;
+                        let mut span = expr.span;
+                        if !choices.is_empty() {
+                            span.expand(choices[0].span);
+                        }
+                        Ok(Spanned::new((choices, expr), span))
                     })
                     .collect::<Vec<Result<_>>>()
                     .into_iter()
@@ -1008,7 +1021,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             Term::Paren(fields) => {
                 fields
                     .into_iter()
-                    .map(|expr| Ok((vec![], self.term_to_expr(expr)?)))
+                    .map(|expr|{
+                        let expr = self.term_to_expr_spanned(expr)?;
+                        Ok(Spanned::new((vec![], expr), expr.span))
+                    })
                     .collect::<Vec<Result<_>>>()
                     .into_iter()
                     .collect::<Result<Vec<_>>>()?
@@ -1023,10 +1039,66 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 return Err(());
             }
         };
+
+        // Split the fields into positional, named, and `others`.
+        let mut positional = Vec::new();
+        let mut named = Vec::new();
+        let mut others = None;
+
+        #[derive(PartialOrd, Ord, PartialEq, Eq)]
+        enum Mode { Positional = 0, Named = 1, Others = 2 }
+        let mut mode = Mode::Positional;
+
+        for field in fields {
+            if mode == Mode::Others {
+                self.emit(
+                    DiagBuilder2::error(format!("aggregate element `{}` appears after `others`", field.span.extract()))
+                    .span(field.span)
+                    .add_note("The `others` element must be the last in an aggregate. See IEEE 1076-2008 section 9.3.3.1.")
+                );
+                return Err(());
+            }
+
+            // Handle positional elements.
+            if field.value.0.is_empty() {
+                if mode > Mode::Positional {
+                    self.emit(
+                        DiagBuilder2::error(format!("positional element `{}` must appear before all named elements in aggregate", field.value.1.span.extract()))
+                        .span(field.value.1.span)
+                        .add_note("See IEEE 1076-2008 section 9.3.3.1.")
+                    );
+                    return Err(());
+                }
+                positional.push(field.value.1);
+            }
+
+            // Handle `others`.
+            else if field.value.0.iter().any(|i| i.value.is_others()) {
+                if field.value.0.len() != 1 {
+                    self.emit(
+                        DiagBuilder2::error("`others` must be the only thing left of `=>`")
+                        .span(field.value.1.span)
+                        .add_note("See IEEE 1076-2008 section 9.3.3.1.")
+                    );
+                    return Err(());
+                }
+                others = Some(field.value.1);
+                mode = Mode::Others;
+            }
+
+            // Handle named elements.
+            else {
+                named.push(field);
+                mode = Mode::Named;
+            }
+        }
+
         let hir = hir::Aggregate {
             parent: self.scope,
             span: term.span,
-            fields: fields,
+            positional: positional,
+            named: named,
+            others: others,
         };
         let ctx = AddContext::new(self.ctx, self.scope);
         Ok(Spanned::new(ctx.add_aggregate_hir(hir)?, term.span))

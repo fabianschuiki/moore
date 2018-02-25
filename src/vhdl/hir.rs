@@ -742,6 +742,16 @@ pub enum Choice {
 	Others
 }
 
+impl Choice {
+	/// Check if the choice is `others`.
+	pub fn is_others(&self) -> bool {
+		match *self {
+			Choice::Others => true,
+			_ => false,
+		}
+	}
+}
+
 /// A subprogram.
 ///
 /// See IEEE 1076-2008 section 4.2.
@@ -1016,8 +1026,12 @@ pub struct Aggregate {
 	pub parent: ScopeRef,
 	/// The span the aggregate covers in the source file.
 	pub span: Span,
-	/// The fields of the aggregate.
-	pub fields: Vec<(Choices, ExprRef)>,
+	/// The positional fields of the aggregate.
+	pub positional: Vec<Spanned<ExprRef>>,
+	/// The named fields of the aggregate.
+	pub named: Vec<Spanned<(Choices, Spanned<ExprRef>)>>,
+	/// The `others` field of the aggregate.
+	pub others: Option<Spanned<ExprRef>>,
 }
 
 /// An association list.
