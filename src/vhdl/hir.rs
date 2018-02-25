@@ -1071,6 +1071,19 @@ pub enum AggregateKind {
 	Array(Vec<Spanned<(ArrayChoices, Spanned<ExprRef>)>>),
 }
 
+impl AggregateKind {
+	/// Get a reference to a named field.
+	///
+	/// Panics if called on `Both`.
+	pub fn get(&self, index: usize) -> Spanned<ExprRef> {
+		match *self {
+			AggregateKind::Both => panic!("get() called on `AggregateKind::Both`"),
+			AggregateKind::Record(ref fields) => fields[index].value.1,
+			AggregateKind::Array(ref fields) => fields[index].value.1,
+		}
+	}
+}
+
 /// An association list.
 ///
 /// See IEEE 1076-2008 section 6.5.7.

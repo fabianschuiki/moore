@@ -469,6 +469,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		Ok(match self.type_context(id) {
 			Some(TypeCtx::Type(t)) => Some(t),
 			Some(TypeCtx::TypeOf(id)) => Some(self.ty(id)?),
+			Some(TypeCtx::Inherit(id)) => self.type_context_resolved(id)?,
 			None => None,
 		})
 	}
@@ -1161,6 +1162,8 @@ pub enum TypeCtx<'ctx> {
 	Type(&'ctx Ty),
 	/// The node whose type the expression must match.
 	TypeOf(TypedNodeRef),
+	/// The node whose type context the expression must inherit.
+	Inherit(NodeId),
 }
 
 impl<'ctx> From<&'ctx Ty> for TypeCtx<'ctx> {

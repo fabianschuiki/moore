@@ -38,7 +38,7 @@ fn main() {
             .takes_value(true)
             .multiple(true)
             .number_of_values(1)
-            .possible_values(&["types", "expr-types"])
+            .possible_values(&["types", "expr-types", "type-contexts"])
             .global(true))
         .subcommand(SubCommand::with_name("compile")
             .arg(Arg::with_name("inc")
@@ -102,8 +102,9 @@ fn main() {
     session.opts.trace_scoreboard = matches.is_present("trace_scoreboard");
     for v in matches.values_of("verbosity").into_iter().flat_map(|v| v) {
         session.opts.verbosity |= match v {
-            "types"      => Verbosity::TYPES,
-            "expr-types" => Verbosity::EXPR_TYPES,
+            "types"         => Verbosity::TYPES,
+            "expr-types"    => Verbosity::EXPR_TYPES,
+            "type-contexts" => Verbosity::TYPE_CONTEXTS,
             _ => unreachable!(),
         };
     }

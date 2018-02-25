@@ -1430,11 +1430,8 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 			// If there are multiple definitions, perform overload resolution by
 			// consulting the type context for the expression.
 			let defs: Vec<_> = if defs.len() > 1 {
-				if let Some(tyctx) = self.type_context(id) {
-					let ty = self.deref_named_type(match tyctx {
-						TypeCtx::Type(t) => t,
-						TypeCtx::TypeOf(id) => self.ty(id)?,
-					})?;
+				if let Some(tyctx) = self.type_context_resolved(id)? {
+					let ty = self.deref_named_type(tyctx)?;
 					if self.sess.opts.trace_scoreboard {
 						println!("[SB][VHDL][OVLD] resolve overloaded `{}`", matched_span.extract());
 						println!("[SB][VHDL][OVLD] context requires {:?}", ty);

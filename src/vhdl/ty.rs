@@ -220,6 +220,16 @@ impl fmt::Display for ArrayIndex {
 	}
 }
 
+impl ArrayIndex {
+	/// Get the type of the array index, regardless of its boundedness.
+	pub fn ty(&self) -> &Ty {
+		match *self {
+			ArrayIndex::Unbounded(ref ty) => ty.as_ref(),
+			ArrayIndex::Constrained(ref ty) => ty.as_ref(),
+		}
+	}
+}
+
 /// A record type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordTy {
