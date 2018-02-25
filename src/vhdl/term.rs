@@ -1044,11 +1044,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let mut positional = Vec::new();
         let mut named = Vec::new();
         let mut others = None;
-
         #[derive(PartialOrd, Ord, PartialEq, Eq)]
         enum Mode { Positional = 0, Named = 1, Others = 2 }
         let mut mode = Mode::Positional;
-
         for field in fields {
             if mode == Mode::Others {
                 self.emit(
@@ -1092,6 +1090,70 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 mode = Mode::Named;
             }
         }
+
+        // For the named elements, decide whether they describe a record or an
+        // array aggregate. If no named elements exist, the aggregate can be
+        // both and its type must be determined from context.
+        let named = if named.is_empty() {
+            hir::AggregateKind::Both
+        } else if named.iter().any(|n| n.value.0.iter().any(|c| c.value.is_element())) {
+            hir::AggregateKind::Record(named
+                .into_iter()
+                .map(|Spanned{ value: (choices, expr), span }|{
+                    let choices = choices
+                        .into_iter()
+                        .map(|Spanned{ value: choice, span }|{
+                            let choice = match choice {
+                                hir::Choice::Element(n) => n,
+                                _ => {
+                                    self.emit(
+                                        DiagBuilder2::error(format!("choice `{}` is not a record element", span.extract()))
+                                        .span(span)
+                                        .add_note("An aggregate must either be a record or array aggregate. It cannot contain both record elements and array elements. See IEEE 1076-2008 section 9.3.3.1.")
+                                    );
+                                    return Err(());
+                                }
+                            };
+                            Ok(Spanned::new(choice, span))
+                        })
+                        .collect::<Vec<Result<_>>>()
+                        .into_iter()
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(Spanned::new((choices, expr), span))
+                })
+                .collect::<Vec<Result<_>>>()
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?)
+        } else {
+            hir::AggregateKind::Array(named
+                .into_iter()
+                .map(|Spanned{ value: (choices, expr), span }|{
+                    let choices = choices
+                        .into_iter()
+                        .map(|Spanned{ value: choice, span }|{
+                            let choice = match choice {
+                                hir::Choice::Expr(e) => hir::ArrayChoice::Expr(e),
+                                hir::Choice::DiscreteRange(e) => hir::ArrayChoice::DiscreteRange(e),
+                                _ => {
+                                    self.emit(
+                                        DiagBuilder2::error(format!("choice `{}` is not an array element", span.extract()))
+                                        .span(span)
+                                        .add_note("An aggregate must either be a record or array aggregate. It cannot contain both record elements and array elements. See IEEE 1076-2008 section 9.3.3.1.")
+                                    );
+                                    return Err(());
+                                }
+                            };
+                            Ok(Spanned::new(choice, span))
+                        })
+                        .collect::<Vec<Result<_>>>()
+                        .into_iter()
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(Spanned::new((choices, expr), span))
+                })
+                .collect::<Vec<Result<_>>>()
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?)
+        };
 
         let hir = hir::Aggregate {
             parent: self.scope,

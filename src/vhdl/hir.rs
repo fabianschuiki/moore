@@ -721,37 +721,6 @@ pub struct WaveElem {
 	pub after: Option<ExprRef>,
 }
 
-/// A list of choices used in aggregates, selected assignments, and case
-/// statements.
-///
-/// See IEEE 1076-2008 section 9.3.3.1.
-pub type Choices = Vec<Spanned<Choice>>;
-
-/// A choice in an aggregate.
-///
-/// See IEEE 1076-2008 section 9.3.3.1.
-#[derive(Debug)]
-pub enum Choice {
-	/// An expression.
-	Expr(ExprRef),
-	/// A discrete range.
-	DiscreteRange(DiscreteRange),
-	/// A record element.
-	Element(Name),
-	/// The keyword `others`.
-	Others
-}
-
-impl Choice {
-	/// Check if the choice is `others`.
-	pub fn is_others(&self) -> bool {
-		match *self {
-			Choice::Others => true,
-			_ => false,
-		}
-	}
-}
-
 /// A subprogram.
 ///
 /// See IEEE 1076-2008 section 4.2.
@@ -1029,9 +998,77 @@ pub struct Aggregate {
 	/// The positional fields of the aggregate.
 	pub positional: Vec<Spanned<ExprRef>>,
 	/// The named fields of the aggregate.
-	pub named: Vec<Spanned<(Choices, Spanned<ExprRef>)>>,
+	pub named: AggregateKind,
 	/// The `others` field of the aggregate.
 	pub others: Option<Spanned<ExprRef>>,
+}
+
+/// A list of choices used in aggregates, selected assignments, and case
+/// statements.
+///
+/// See IEEE 1076-2008 section 9.3.3.1.
+pub type Choices = Vec<Spanned<Choice>>;
+
+/// A choice in an aggregate.
+///
+/// See IEEE 1076-2008 section 9.3.3.1.
+#[derive(Debug)]
+pub enum Choice {
+	/// An expression.
+	Expr(ExprRef),
+	/// A discrete range.
+	DiscreteRange(DiscreteRange),
+	/// A record element.
+	Element(Name),
+	/// The keyword `others`.
+	Others
+}
+
+impl Choice {
+	/// Check if the choice is `others`.
+	pub fn is_others(&self) -> bool {
+		match *self {
+			Choice::Others => true,
+			_ => false,
+		}
+	}
+
+	/// Check if the choice is a record element.
+	pub fn is_element(&self) -> bool {
+		match *self {
+			Choice::Element(_) => true,
+			_ => false,
+		}
+	}
+}
+
+/// A list of choices used in record aggregates.
+pub type RecordChoices = Vec<Spanned<Name>>;
+
+/// A list of choices used in array aggregates.
+pub type ArrayChoices = Vec<Spanned<ArrayChoice>>;
+
+/// A choice in an array aggregate.
+#[derive(Debug)]
+pub enum ArrayChoice {
+	/// An expression.
+	Expr(ExprRef),
+	/// A discrete range.
+	DiscreteRange(DiscreteRange),
+}
+
+/// An aggregate kind.
+///
+/// This determines whether the named elements make the aggregate a record or an
+/// array aggregate.
+#[derive(Debug)]
+pub enum AggregateKind {
+	/// The aggregate has no named elements and can be both.
+	Both,
+	/// A record aggregate.
+	Record(Vec<Spanned<(RecordChoices, Spanned<ExprRef>)>>),
+	/// An array aggregate.
+	Array(Vec<Spanned<(ArrayChoices, Spanned<ExprRef>)>>),
 }
 
 /// An association list.
