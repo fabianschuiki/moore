@@ -3,16 +3,18 @@ name = "moore-vhdl"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 
+description = "The VHDL implementation of the moore compiler framework."
+license = "MIT"
+
 [lib]
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../common" }
-moore-vhdl-syntax = { path = "syntax" }
-# moore-vhdl-hir = { path = "hir" }
+moore-common = { path = "../common", version = "0.1" }
+moore-vhdl-syntax = { path = "syntax", version = "0.1" }
 bincode = "0.6"
 lazy_static = "0.2"
-llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "b88f18f" }
+llhd = "0.1"
 num = "0.1"
 rustc-serialize = "0.3"
 slog = "2.0.12"

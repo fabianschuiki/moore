@@ -3,15 +3,24 @@ name = "moore"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 
+description = "A compiler for hardware description languages."
+documentation = "https://fabianschuiki.github.io/moore"
+repository = "https://github.com/fabianschuiki/moore"
+readme = "README.md"
+license = "MIT"
+
+[badges]
+travis-ci = { repository = "fabianschuiki/moore", branch = "master" }
+
 [workspace]
 
 [dependencies]
-moore-common = { path = "src/common" }
-moore-svlog = { path = "src/svlog" }
-moore-vhdl = { path = "src/vhdl" }
+moore-common = { path = "src/common", version = "0.1" }
+moore-svlog = { path = "src/svlog", version = "0.1" }
+moore-vhdl = { path = "src/vhdl", version = "0.1" }
 bincode = "0.6.1"
 clap = "2"
-llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "b88f18f" }
+llhd = "0.1"
 num = "0.1"
 rustc-serialize = "0.3.22"
 serde = "1"

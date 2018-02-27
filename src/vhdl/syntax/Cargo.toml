@@ -3,11 +3,14 @@ name = "moore-vhdl-syntax"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 
+description = "The VHDL parser implementation of the moore compiler framework."
+license = "MIT"
+
 [lib]
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../../common" }
+moore-common = { path = "../../common", version = "0.1" }
 bincode = "0.6.1"
 rustc-serialize = "0.3"
 slog = "2.0.12"

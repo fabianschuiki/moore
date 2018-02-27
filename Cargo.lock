@@ -121,7 +121,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "llhd"
 version = "0.1.0"
-source = "git+https://github.com/fabianschuiki/llhd?rev=b88f18f#b88f18fb5909bc10eb22f17b25a1551ea00ba3c0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "combine 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -144,7 +144,7 @@ version = "0.1.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.27.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "llhd 0.1.0 (git+https://github.com/fabianschuiki/llhd?rev=b88f18f)",
+ "llhd 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.1.0",
  "moore-svlog 0.1.0",
  "moore-vhdl 0.1.0",
@@ -204,7 +204,7 @@ version = "0.1.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "llhd 0.1.0 (git+https://github.com/fabianschuiki/llhd?rev=b88f18f)",
+ "llhd 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.1.0",
  "moore-vhdl-syntax 0.1.0",
  "num 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -401,7 +401,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum lazy_static 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)" = "236eb37a62591d4a41a89b7763d7de3e06ca02d5ab2815446a8bae5d2f8c2d57"
 "checksum libc 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)" = "5ba3df4dcb460b9dfbd070d41c94c19209620c191b0340b929ce748a2bcd42d2"
-"checksum llhd 0.1.0 (git+https://github.com/fabianschuiki/llhd?rev=b88f18f)" = "<none>"
+"checksum llhd 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8adf63d84de8c8b4602bfbf3c14e69b1b8a15f22cc4cbb620b0b77cc1d02c62b"
 "checksum memmap 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "46f3c7359028b31999287dae4e5047ddfe90a23b7dca2282ce759b491080c99b"
 "checksum num 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)" = "a311b77ebdc5dd4cf6449d81e4135d9f0e3b153839ac90e648a8ef538f923525"
 "checksum num-bigint 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)" = "8fd0f8dbb4c0960998958a796281d88c16fbe68d87b1baa6f31e2979e81fd0bd"

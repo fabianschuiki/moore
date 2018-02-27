@@ -3,6 +3,9 @@ name = "moore-common"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 
+description = "The common core of the moore compiler framework."
+license = "MIT"
+
 [lib]
 path = "lib.rs"
 

@@ -3,13 +3,16 @@ name = "moore-svlog"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 
+description = "The SystemVerilog implementation of the moore compiler framework."
+license = "MIT"
+
 [lib]
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../common" }
-moore-svlog-syntax = { path = "syntax" }
-moore-svlog-hir = { path = "hir" }
+moore-common = { path = "../common", version = "0.1" }
+moore-svlog-syntax = { path = "syntax", version = "0.1" }
+moore-svlog-hir = { path = "hir", version = "0.1" }
 bincode = "0.6"
 rustc-serialize = "0.3"
 slog = "2.0.12"

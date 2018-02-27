@@ -9,19 +9,10 @@ matrix:
   allow_failures:
     - rust: nightly
 
-# addons:
-#   apt:
-#     packages:
-#       - python-yaml
-
-# before_script:
-#   - ci/clone-pulpino.sh
-
 script:
   - cargo build
   - cargo test --all
   - tests/run.sh
-  # - ./compile_pulpino.sh
 
 after_success:
   - |
