@@ -11,7 +11,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::rc::Rc;
 use rustc_serialize::{Encodable, Encoder, Decodable, Decoder};
@@ -496,6 +496,12 @@ impl<T> Clone for Spanned<T> where T: Clone {
 			value: self.value.clone(),
 			span: self.span,
 		}
+	}
+}
+
+impl<T> Hash for Spanned<T> where T: Hash {
+	fn hash<H>(&self, state: &mut H) where H: Hasher {
+		self.value.hash(state)
 	}
 }
 

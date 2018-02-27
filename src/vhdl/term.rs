@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use num::BigInt;
 
@@ -351,8 +351,19 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         name: Spanned<ResolvableName>,
         scope: ScopeRef
     ) -> Result<Spanned<Term>> {
-        // First resolve the name to a list of definitions.
-        let mut defs = self.ctx.resolve_name(name, scope, false, true)?;
+        let defs = self.ctx.resolve_name(name, scope, false, true)?;
+        self.termify_defs(name, defs)
+    }
+
+    /// Termify the result of a name resolution.
+    ///
+    /// This ensures that there is only one definition, or in case of something
+    /// overloadable, that all definitions are of the same kind.
+    pub fn termify_defs(
+        &self,
+        name: Spanned<ResolvableName>,
+        mut defs: Vec<Spanned<Def>>,
+    ) -> Result<Spanned<Term>> {
         if defs.is_empty() {
             return Ok(name.map(Term::Unresolved));
         }
@@ -446,7 +457,84 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 hir::ExprData::IntegerLiteral(ConstInt::new(None, value))
             }
             Term::StrLit(value) => {
-                hir::ExprData::StringLiteral(value)
+                // Create a set of characters used in the literal. Then resolve
+                // each as an individual bit literal. This yields multiple enums
+                // per bit, the intersection of all of them being the possible
+                // enums for this literal.
+                let set: HashSet<_> = value.as_str().chars().collect();
+                debugln!("string literal `{}` contains characters {:?}", value, set);
+                let char_defs = set
+                    .into_iter()
+                    .map(|chr|{
+                        let rn = Spanned::new(ResolvableName::Bit(chr), term_span);
+                        let defs = self.ctx.resolve_name(rn, self.scope, false, true)?;
+                        if defs.is_empty() {
+                        }
+                        let term = self.termify_defs(rn, defs)?;
+                        match term.value {
+                            Term::Unresolved(name) => {
+                                self.emit(
+                                    DiagBuilder2::error(format!("`{}` is unknown", name))
+                                    .span(term.span)
+                                );
+                                Err(())
+                            }
+                            Term::Enum(ids) => Ok((chr, ids.into_iter().collect())),
+                            _ => {
+                                self.emit(
+                                    DiagBuilder2::error(format!("`{}` is not a bit literal", chr))
+                                    .span(term_span)
+                                    .add_note(format!("`{}` has been defined here:", rn.value))
+                                    .span(term.span)
+                                );
+                                Err(())
+                            }
+                        }
+                    })
+                    .collect::<Vec<Result<(_, HashSet<_>)>>>()
+                    .into_iter()
+                    .collect::<Result<Vec<(_, HashSet<_>)>>>()?
+                    .into_iter()
+                    .collect::<HashMap<_, HashSet<_>>>();
+                debugln!("string literal `{}` has def sets {:?}", value, char_defs);
+
+                // Find the intersection of all available enums.
+                let mut decl_sets = char_defs
+                    .iter()
+                    .map(|(_, defs)| defs
+                        .iter()
+                        .map(|d| d.value.0)
+                        .collect::<HashSet<_>>()
+                    );
+                let valid_decls: HashSet<_> = decl_sets
+                    .next()
+                    .map(|set| decl_sets.fold(set, |a, b|
+                        a.intersection(&b).map(|v| *v).collect()
+                    ))
+                    .unwrap_or_else(|| HashSet::new());
+                debugln!("string literal `{}` has available decls {:?}", value, valid_decls);
+
+                // Assemble the possible enum decls and bit strings.
+                let maps: Vec<(_, Vec<_>)> = valid_decls
+                    .into_iter()
+                    .map(|decl| (decl, value
+                        .as_str()
+                        .chars()
+                        .map(|chr| char_defs[&chr]
+                            .iter()
+                            .filter_map(|enum_def| if enum_def.value.0 == decl {
+                                Some(enum_def.value.1)
+                            } else {
+                                None
+                            })
+                            .next()
+                            .unwrap()
+                        )
+                        .collect())
+                    )
+                    .collect();
+                debugln!("string literal `{}` has maps {:?}", value, maps);
+                hir::ExprData::StringLiteral(maps)
             }
             Term::Unary(op, arg) => {
                 hir::ExprData::Unary(op, self.term_to_expr(*arg)?)
