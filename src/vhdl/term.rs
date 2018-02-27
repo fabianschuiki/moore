@@ -449,7 +449,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 }
             }
             Term::Enum(defs) => {
-                hir::ExprData::OverloadedName(defs.into_iter().map(|d| d.map_into()).collect())
+                hir::ExprData::EnumName(defs)
             }
             Term::Select(term, name) => {
                 hir::ExprData::Select(self.term_to_expr(*term)?, name)

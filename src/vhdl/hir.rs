@@ -419,6 +419,7 @@ pub struct Expr {
 #[derive(Debug)]
 pub enum ExprData {
 	/// A resolved name. Consists of the definition and the definition's span.
+	// #[deprecated]
 	Name(Def, Span),
 	/// A resolved constant name.
 	ConstName(ConstDeclRef),
@@ -428,7 +429,10 @@ pub enum ExprData {
 	VarName(VarDeclRef),
 	/// A resolved file name.
 	FileName(FileDeclRef),
+	/// An overloaded enum name.
+	EnumName(Vec<Spanned<EnumRef>>),
 	/// An overloaded resolved name.
+	#[deprecated]
 	OverloadedName(Vec<Spanned<Def>>),
 	/// A selection, e.g. `a.b`.
 	Select(ExprRef, Spanned<ResolvableName>),

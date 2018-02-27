@@ -169,6 +169,42 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
         hir::ExprData::SignalName(id) => tyc.ctx.ty(id),
         hir::ExprData::VarName(id)    => tyc.ctx.lazy_typeval(id),
         hir::ExprData::FileName(id)   => tyc.ctx.lazy_typeval(id),
+        hir::ExprData::EnumName(ref defs) => {
+            // Enums are generally overloaded. The type context is needed to
+            // pick one of the available variants.
+            assert!(!defs.is_empty());
+            if defs.len() == 1 {
+                Ok(tyc.ctx.intern_ty(EnumTy::new(defs[0].value.0)))
+            } else {
+                let filtered: Vec<_> = if let Some(tyctx) = tyctx {
+                    let tyctx_flat = tyc.ctx.deref_named_type(tyctx)?;
+                    match *tyctx_flat {
+                        Ty::Enum(ref et) => defs
+                            .iter()
+                            .filter_map(|def|
+                                if def.value.0 == et.decl {
+                                    Some(def.value.0)
+                                } else {
+                                    None
+                                }
+                            ).collect(),
+                        _ => vec![],
+                    }
+                } else {
+                    vec![]
+                };
+                if filtered.len() != 1 {
+                    tyc.emit(
+                        DiagBuilder2::error(format!("`{}` is ambiguous", hir.span.extract()))
+                        .span(hir.span)
+                        // TODO: Show which definitions are available.
+                    );
+                    Err(())
+                } else {
+                    Ok(tyc.ctx.intern_ty(EnumTy::new(filtered[0])))
+                }
+            }
+        }
         hir::ExprData::IntegerLiteral(ref value) => {
             // Integer literals either have a type attached, or they inherit
             // their type from the context.
