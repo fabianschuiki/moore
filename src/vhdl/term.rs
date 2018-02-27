@@ -265,7 +265,22 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 ast::NamePart::Select(ref primary) => {
                     let n = self.ctx.resolvable_from_primary_name(primary)?;
                     let sp = Span::union(term.span, n.span);
-                    Spanned::new(Term::Select(Box::new(term), n), sp)
+                    match term.value {
+                        Term::Ident(Spanned{ value: Def::Pkg(id), .. }) => {
+                            let t = self.termify_name_in_scope(n, id.into())?;
+                            if let Term::Unresolved(name) = t.value {
+                                self.emit(
+                                    DiagBuilder2::error(format!("`{}` is unknown", name))
+                                    .span(t.span)
+                                );
+                                return Err(());
+                            }
+                            Spanned::new(t.value, sp)
+                        }
+                        _ => {
+                            Spanned::new(Term::Select(Box::new(term), n), sp)
+                        }
+                    }
                 }
                 ast::NamePart::SelectAll(span) => {
                     let sp = Span::union(term.span, span);
@@ -327,8 +342,17 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// handle the term as they see fit, usually inspecting what exact kind the
     /// term is of.
     pub fn termify_name(&self, name: Spanned<ResolvableName>) -> Result<Spanned<Term>> {
+        self.termify_name_in_scope(name, self.scope)
+    }
+
+    /// Map a resolvable name to a term, resolving it within a scope.
+    pub fn termify_name_in_scope(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope: ScopeRef
+    ) -> Result<Spanned<Term>> {
         // First resolve the name to a list of definitions.
-        let mut defs = self.ctx.resolve_name(name, self.scope, false, true)?;
+        let mut defs = self.ctx.resolve_name(name, scope, false, true)?;
         if defs.is_empty() {
             return Ok(name.map(Term::Unresolved));
         }

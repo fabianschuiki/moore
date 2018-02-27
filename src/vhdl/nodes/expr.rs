@@ -341,7 +341,7 @@ pub fn typeval_record_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 
             mapping.insert(type_index, FieldIndex::Others);
         }
     }
-    debugln!("aggregate: record type mapping {:#?}", mapping);
+    debugln!("aggregate: record type mapping {:?}", mapping);
 
     // Forward the type context and check the type of elements.
     for (&type_index, &agg_index) in &mapping {
@@ -405,7 +405,6 @@ pub fn typeval_array_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: '
     } else {
         unreachable!();
     };
-    debugln!("aggregate: index = {}, element = {}", index, element);
 
     // Forward the type context and check the index and element types.
     let mut had_fails = false;
