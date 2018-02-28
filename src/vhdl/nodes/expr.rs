@@ -205,6 +205,57 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
                 }
             }
         }
+        hir::ExprData::StringLiteral(ref defs) => {
+            // String literals work pretty much the same as enums. This overload
+            // resolution code can probably be shared, but I'm too lazy to do
+            // that now.
+            assert!(!defs.is_empty());
+            if defs.len() == 1 {
+                let index_ty = IntTy::new(Dir::To, 0.into(), (defs[0].1.len()-1).into()).into();
+                let index = ArrayIndex::Constrained(Box::new(index_ty));
+                Ok(tyc.ctx.intern_ty(ArrayTy::new(vec![index], Box::new(EnumTy::new(defs[0].0).into()))))
+            } else {
+                let (index_ty, filtered): (Option<_>, Vec<_>) = if let Some(tyctx) = tyctx {
+                    let tyctx_flat = tyc.ctx.deref_named_type(tyctx)?;
+                    match *tyctx_flat {
+                        Ty::Array(ref at) if at.indices.len() == 1 => {
+                            let index_ty = match *at.indices[0].ty() {
+                                Ty::Int(ref it) => Some(it.clone()),
+                                _ => None,
+                            };
+                            match *at.element.as_ref() {
+                                Ty::Enum(ref et) => (index_ty, defs
+                                    .iter()
+                                    .filter_map(|def|
+                                        if def.0 == et.decl {
+                                            Some(def.0)
+                                        } else {
+                                            None
+                                        }
+                                    ).collect()),
+                                _ => (index_ty, vec![]),
+                            }
+                        }
+                        _ => (None, vec![]),
+                    }
+                } else {
+                    (None, vec![])
+                };
+                let index_ty = index_ty.unwrap_or_else(||
+                    IntTy::new(Dir::To, 0.into(), (defs[0].1.len()-1).into())).into();
+                if filtered.len() != 1 {
+                    tyc.emit(
+                        DiagBuilder2::error(format!("`{}` is ambiguous", hir.span.extract()))
+                        .span(hir.span)
+                        // TODO: Show which definitions are available.
+                    );
+                    return Err(());
+                } else {
+                    let index = ArrayIndex::Constrained(Box::new(index_ty));
+                    Ok(tyc.ctx.intern_ty(ArrayTy::new(vec![index], Box::new(EnumTy::new(filtered[0]).into()))))
+                }
+            }
+        }
         hir::ExprData::IntegerLiteral(ref value) => {
             // Integer literals either have a type attached, or they inherit
             // their type from the context.
