@@ -147,6 +147,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		false
 	}
 
+	/// Ensure that one type can be cast into the other.
+	pub fn must_cast(&self, into: &'ctx Ty, from: &'ctx Ty, span: Span) -> bool {
+		self.must_match(into, from, span)
+	}
+
 	/// Type check the time expression in a delay mechanism.
 	pub fn typeck_delay_mechanism(&self, _node: &'ctx hir::DelayMechanism) {
 		// TODO: implement this

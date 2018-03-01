@@ -275,22 +275,22 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
         }
         hir::ExprData::Qualified(ref tm, expr) => {
             let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
-            let _expr_ty = tyc.lazy_typeval(expr)?;
-            // TODO: Check types.
+            let expr_ty = tyc.lazy_typeval(expr)?;
+            tyc.must_match(ty, expr_ty, tyc.ctx.span(expr).unwrap());
             Ok(ty)
         }
         hir::ExprData::Allocator(ref tm, expr) => {
             let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
             if let Some(expr) = expr {
-                let _expr_ty = tyc.lazy_typeval(expr)?;
-                // TODO: Check types.
+                let expr_ty = tyc.lazy_typeval(expr)?;
+                tyc.must_match(ty, expr_ty, tyc.ctx.span(expr).unwrap());
             }
             Ok(ty)
         }
         hir::ExprData::Cast(ref tm, expr) => {
             let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
-            let _expr_ty = tyc.lazy_typeval(expr)?;
-            // TODO: Check that the cast is actually possible.
+            let expr_ty = tyc.lazy_typeval(expr)?;
+            tyc.must_cast(ty, expr_ty, tyc.ctx.span(expr).unwrap());
             Ok(ty)
         }
         hir::ExprData::Aggregate(id) => {
@@ -311,7 +311,7 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
 /// Evaluate the type of a record aggregate.
 pub fn typeval_record_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
     tyc: &TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>,
-    id: AggregateRef,
+    _id: AggregateRef,
     hir: &hir::Aggregate,
     tyctx: &'ctx Ty,
 ) -> Result<&'ctx Ty> {
@@ -384,7 +384,7 @@ pub fn typeval_record_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 
             return Err(());
         }
     }
-    if let Some(others) = hir.others {
+    if let Some(_others) = hir.others {
         let indices: Vec<_> = (0..record_ty.fields.len())
             .filter(|i| !mapping.contains_key(i))
             .collect();
@@ -400,22 +400,22 @@ pub fn typeval_record_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 
             let ty = record_ty.fields[type_index].1.as_ref();
             match agg_index {
                 FieldIndex::Pos(index) => {
-                    let id = hir.positional[index].value;
+                    let Spanned{ value: id, span } = hir.positional[index];
                     tyc.ctx.set_type_context(id, ty);
-                    let _ty = tyc.lazy_typeval(id)?;
-                    // TODO: Check type.
+                    let field_ty = tyc.lazy_typeval(id)?;
+                    tyc.must_match(ty, field_ty, span);
                 }
                 FieldIndex::Named(index) => {
-                    let id = hir.named.get(index).value;
+                    let Spanned{ value: id, span } = hir.named.get(index);
                     tyc.ctx.set_type_context(id, ty);
-                    let _ty = tyc.lazy_typeval(id)?;
-                    // TODO: Check type.
+                    let field_ty = tyc.lazy_typeval(id)?;
+                    tyc.must_match(ty, field_ty, span);
                 }
                 FieldIndex::Others => {
-                    let id = hir.others.unwrap().value;
+                    let Spanned{ value: id, span } = hir.others.unwrap();
                     tyc.ctx.set_type_context(id, ty);
-                    let _ty = tyc.lazy_typeval(id)?;
-                    // TODO: Check type.
+                    let field_ty = tyc.lazy_typeval(id)?;
+                    tyc.must_match(ty, field_ty, span);
                 }
             }
             Ok(())
@@ -435,7 +435,7 @@ pub fn typeval_record_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 
 /// Evaluate the type of an array aggregate.
 pub fn typeval_array_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
     tyc: &TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>,
-    id: AggregateRef,
+    _id: AggregateRef,
     hir: &hir::Aggregate,
     tyctx: &'ctx Ty,
 ) -> Result<&'ctx Ty> {
@@ -462,8 +462,8 @@ pub fn typeval_array_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: '
     for &pos in &hir.positional {
         match (||{
             tyc.ctx.set_type_context(pos.value, element);
-            let _ty = tyc.lazy_typeval(pos.value)?;
-            // TODO: Check type.
+            let ty = tyc.lazy_typeval(pos.value)?;
+            tyc.must_match(element, ty, pos.span);
             Ok(())
         })() {
             Ok(()) => (),
@@ -492,7 +492,7 @@ pub fn typeval_array_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: '
         match (||{
             tyc.ctx.set_type_context(others.value, element);
             let ty = tyc.lazy_typeval(others.value)?;
-            // TODO: Check type.
+            tyc.must_match(element, ty, others.span);
             Ok(())
         })() {
             Ok(()) => (),
@@ -521,8 +521,8 @@ pub fn typeck_array_aggregate_element<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 
         }
     }
     tyc.ctx.set_type_context(hir.value.1.value, element_ty);
-    let _ty = tyc.lazy_typeval(hir.value.1.value)?;
-    // TODO: Check type.
+    let ty = tyc.lazy_typeval(hir.value.1.value)?;
+    tyc.must_match(ty, element_ty, hir.span);
     if had_fails {
         Err(())
     } else {
@@ -539,14 +539,14 @@ pub fn typeck_array_aggregate_choice<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, '
     match hir.value {
         hir::ArrayChoice::Expr(expr_id) => {
             tyc.ctx.set_type_context(expr_id, index_ty);
-            let _ty = tyc.lazy_typeval(expr_id)?;
-            // TODO: Check type.
+            let ty = tyc.lazy_typeval(expr_id)?;
+            tyc.must_match(ty, index_ty, hir.span);
         }
         hir::ArrayChoice::DiscreteRange(hir::DiscreteRange::Subtype(subtype_id)) => {
-            let _ty = tyc.lazy_typeval(subtype_id)?;
-            // TODO: Check type.
+            let ty = tyc.lazy_typeval(subtype_id)?;
+            tyc.must_match(ty, index_ty, hir.span);
         }
-        hir::ArrayChoice::DiscreteRange(hir::DiscreteRange::Range(ref range)) => {
+        hir::ArrayChoice::DiscreteRange(hir::DiscreteRange::Range(ref _range)) => {
             // TODO: Check type.
         }
     }

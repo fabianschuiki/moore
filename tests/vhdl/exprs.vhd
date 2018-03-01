@@ -53,7 +53,7 @@ architecture bar of foo is
 	constant s46 : TRIBITS := TRIBITS'('0', 2 => '1', 1 => '0');
 
 	-- primary type conversion
-	constant s50 : INTEGER := INTEGER('0');
+	--constant s50 : INTEGER := INTEGER('0');
 	constant s51 : INTEGER := INTEGER(123);
 
 	-- primary allocator
