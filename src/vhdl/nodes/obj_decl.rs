@@ -13,6 +13,7 @@ use add_ctx::AddContext;
 use syntax::ast;
 use hir;
 use score::*;
+use ty::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a constant declaration.
@@ -45,12 +46,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 let hir = tyc.ctx.lazy_hir(id)?;
                 let ty = tyc.lazy_typeval(hir.decl.ty)?;
                 if let Some(init) = hir.decl.init {
-                    let _init_ty = tyc.lazy_typeval(init)?;
-                    // TODO: Check that the type of the init expression matches.
-                    // tyc.emit(
-                    //     DiagBuilder2::note(format!("const has type `{}`, init has type `{}`", ty, init_ty))
-                    //     .span(hir.span)
-                    // );
+                    let init_ty = tyc.lazy_typeval(init)?;
+                    tyc.must_match(ty, init_ty, tyc.ctx.span(init).unwrap());
                 }
                 Ok(ty)
             }));
@@ -93,8 +90,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }));
             mk.typeval(Box::new(move |tyc|{
                 let hir = tyc.ctx.lazy_hir(id)?;
-                // TODO: Check that the type of the init expression matches.
-                tyc.ctx.lazy_typeval(hir.decl.ty)
+                let ty = tyc.lazy_typeval(hir.decl.ty)?;
+                if let Some(init) = hir.decl.init {
+                    let init_ty = tyc.lazy_typeval(init)?;
+                    tyc.must_match(ty, init_ty, tyc.ctx.span(init).unwrap());
+                }
+                Ok(ty)
             }));
             Ok(mk.finish().into())
         }).collect()
@@ -129,8 +130,12 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }));
             mk.typeval(Box::new(move |tyc|{
                 let hir = tyc.ctx.lazy_hir(id)?;
-                // TODO: Check that the type of the init expression matches.
-                tyc.ctx.lazy_typeval(hir.decl.ty)
+                let ty = tyc.lazy_typeval(hir.decl.ty)?;
+                if let Some(init) = hir.decl.init {
+                    let init_ty = tyc.lazy_typeval(init)?;
+                    tyc.must_match(ty, init_ty, tyc.ctx.span(init).unwrap());
+                }
+                Ok(ty)
             }));
             Ok(mk.finish().into())
         }).collect()
@@ -179,8 +184,10 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             }));
             mk.typeval(Box::new(move |tyc|{
                 let hir = tyc.ctx.lazy_hir(id)?;
+                let ty = tyc.ctx.lazy_typeval(hir.decl.ty)?;
                 // TODO: Check that the type of expressions are okay.
-                tyc.ctx.lazy_typeval(hir.decl.ty)
+                let file_ty = tyc.ctx.intern_ty(Ty::File(Box::new(ty.clone())));
+                Ok(file_ty)
             }));
             Ok(mk.finish().into())
         }).collect()

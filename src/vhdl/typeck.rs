@@ -120,6 +120,33 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 		result
 	}
 
+	/// Ensure that two types are compatible.
+	pub fn must_match(&self, exp: &'ctx Ty, act: &'ctx Ty, span: Span) -> bool {
+		if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPECK) {
+			self.emit(
+				DiagBuilder2::note(format!("typeck expected {} and actual {}", exp, act))
+				.span(span)
+			);
+		}
+		if exp == act {
+			return true;
+		}
+		let (exp_flat, act_flat) = match (self.ctx.deref_named_type(exp), self.ctx.deref_named_type(act)) {
+			(Ok(e), Ok(a)) => (e, a),
+			_ => return false,
+		};
+		if exp_flat == act_flat {
+			return true;
+		}
+		self.emit(
+			DiagBuilder2::error(format!("expected type {}, but `{}` has type {}", exp, span.extract(), act))
+			.span(span)
+			.add_note(format!("expected type: {}", exp_flat))
+			.add_note(format!("  actual type: {}", act_flat))
+		);
+		false
+	}
+
 	/// Type check the time expression in a delay mechanism.
 	pub fn typeck_delay_mechanism(&self, _node: &'ctx hir::DelayMechanism) {
 		// TODO: implement this

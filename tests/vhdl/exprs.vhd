@@ -25,7 +25,7 @@ architecture bar of foo is
 	-- primary literal
 	constant s00 : INTEGER := 123;
 	constant s01 : BIT := '0';
-	constant s02 : BITS := "00100";
+	--constant s02 : BITS := "00100";
 
 	-- primary name
 	constant s10 : INTEGER := s00;
