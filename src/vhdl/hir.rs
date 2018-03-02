@@ -447,7 +447,7 @@ pub enum ExprData {
 	/// A unary operator expression.
 	Unary(Spanned<UnaryOp>, ExprRef),
 	/// A binary operator expression.
-	Binary(Operator, ExprRef, ExprRef),
+	Binary(Spanned<BinaryOp>, ExprRef, ExprRef),
 	/// A range expression.
 	Range(Dir, ExprRef, ExprRef),
 	/// An aggregate expression.
@@ -477,6 +477,8 @@ pub enum UnaryOp {
 	Neg,
 	/// A logical operator.
 	Logical(ast::LogicalOp),
+	/// The `??` operator.
+	Cond,
 }
 
 /// A binary operator.

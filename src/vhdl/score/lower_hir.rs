@@ -764,6 +764,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			ast::UnaryOp::Sign(ast::Sign::Pos) => hir::UnaryOp::Pos,
 			ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
 			ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
+			ast::UnaryOp::Condition => hir::UnaryOp::Cond,
 			_ => {
 				self.emit(
 					DiagBuilder2::error("invalid unary operator")

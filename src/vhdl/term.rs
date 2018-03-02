@@ -539,10 +539,9 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             Term::Unary(op, arg) => {
                 hir::ExprData::Unary(op, self.term_to_expr(*arg)?)
             }
-            // TODO: Enable this as soon as the HIR accepts BinaryOp.
-            // Term::Binary(op, lhs, rhs) => {
-            //  hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
-            // }
+            Term::Binary(op, lhs, rhs) => {
+                hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
+            }
             Term::Ident(def) => {
                 match def.value {
                     Def::Const(id)  => hir::ExprData::ConstName(id),
