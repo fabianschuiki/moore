@@ -38,7 +38,7 @@ fn main() {
             .takes_value(true)
             .multiple(true)
             .number_of_values(1)
-            .possible_values(&["types", "expr-types", "type-contexts", "typeck"])
+            .possible_values(&["types", "expr-types", "type-contexts", "typeck", "names"])
             .global(true))
         .subcommand(SubCommand::with_name("compile")
             .arg(Arg::with_name("inc")
@@ -106,6 +106,7 @@ fn main() {
             "expr-types"    => Verbosity::EXPR_TYPES,
             "type-contexts" => Verbosity::TYPE_CONTEXTS,
             "typeck"        => Verbosity::TYPECK,
+            "names"         => Verbosity::NAMES,
             _ => unreachable!(),
         };
     }

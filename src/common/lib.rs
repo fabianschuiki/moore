@@ -57,9 +57,10 @@ bitflags! {
 	/// These flags control how much information the compiler emits.
 	#[derive(Default)]
 	pub struct Verbosity: u8 {
-		const TYPES         = 0b0001;
-		const EXPR_TYPES    = 0b0010;
-		const TYPE_CONTEXTS = 0b0100;
-		const TYPECK        = 0b1000;
+		const TYPES         = 0b00001;
+		const EXPR_TYPES    = 0b00010;
+		const TYPE_CONTEXTS = 0b00100;
+		const TYPECK        = 0b01000;
+		const NAMES         = 0b10000;
 	}
 }

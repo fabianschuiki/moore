@@ -251,6 +251,23 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         }, ast.span))
     }
 
+    /// Make sure the term is not an unresolved name.
+    ///
+    /// This function emits a diagnostic if the term is `Term::Unresolved(..)`.
+    /// It is non-recursive.
+    pub fn ensure_resolved(&self, term: Spanned<Term>) -> Result<Spanned<Term>> {
+        match term.value {
+            Term::Unresolved(name) => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is unknown", name))
+                    .span(term.span)
+                );
+                Err(())
+            },
+            _ => Ok(term)
+        }
+    }
+
     /// Map an AST compound name to a term.
     pub fn termify_compound_name(&self, ast: &'ast ast::CompoundName) -> Result<Spanned<Term>> {
         // Map the primary name.
@@ -265,21 +282,24 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 ast::NamePart::Select(ref primary) => {
                     let n = self.ctx.resolvable_from_primary_name(primary)?;
                     let sp = Span::union(term.span, n.span);
-                    match term.value {
-                        Term::Ident(Spanned{ value: Def::Pkg(id), .. }) => {
-                            let t = self.termify_name_in_scope(n, id.into())?;
-                            if let Term::Unresolved(name) = t.value {
-                                self.emit(
-                                    DiagBuilder2::error(format!("`{}` is unknown", name))
-                                    .span(t.span)
-                                );
-                                return Err(());
-                            }
+                    let selectable_scope = if let Term::Ident(Spanned{ value: def, .. }) = term.value {
+                        match def {
+                            Def::Pkg(id) => Some(id.into()),
+                            Def::BuiltinPkg(id) => Some(id.into()),
+                            Def::Lib(id) => Some(id.into()),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    match selectable_scope {
+                        Some(id) => {
+                            let t = self.ensure_resolved(
+                                self.termify_name_in_scope(n, id)?
+                            )?;
                             Spanned::new(t.value, sp)
                         }
-                        _ => {
-                            Spanned::new(Term::Select(Box::new(term), n), sp)
-                        }
+                        None => Spanned::new(Term::Select(Box::new(term), n), sp),
                     }
                 }
                 ast::NamePart::SelectAll(span) => {

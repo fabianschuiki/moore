@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use std::collections::HashMap;
 use std::cell::{RefCell, Cell};
 
-use moore_common::Session;
+use moore_common::{Session, Verbosity};
 use moore_common::name::*;
 use moore_common::source::*;
 use moore_common::errors::*;
@@ -644,26 +644,33 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Resolve a name within a scope. Traverses to the parent scopes if nothing
 	/// matching the name is found.
 	pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef, only_defs: bool, allow_fail: bool) -> Result<Vec<Spanned<Def>>> {
+		if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
+			debugln!("resolving `{}` in scope {:?}", name.value, scope_id);
+		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
 		let mut found_defs = Vec::new();
-		let parent_id = if only_defs {
-			let defs = self.defs(scope_id)?;
-			if let Some(d) = defs.get(&name.value) {
-				found_defs.extend(d);
-			}
-			None
-		} else {
-			let scope = self.scope(scope_id)?;
-			for &defs_id in &scope.defs {
-				let defs = self.defs(defs_id)?;
+		let parent_id = if scope_id != *ROOT_SCOPE_REF {
+			if only_defs {
+				let defs = self.defs(scope_id)?;
 				if let Some(d) = defs.get(&name.value) {
 					found_defs.extend(d);
 				}
+				None
+			} else {
+				let scope = self.scope(scope_id)?;
+				for &defs_id in &scope.defs {
+					let defs = self.defs(defs_id)?;
+					if let Some(d) = defs.get(&name.value) {
+						found_defs.extend(d);
+					}
+				}
+				if let Some(d) = scope.explicit_defs.get(&name.value) {
+					found_defs.extend(d.iter());
+				}
+				scope.parent
 			}
-			if let Some(d) = scope.explicit_defs.get(&name.value) {
-				found_defs.extend(d.iter());
-			}
-			scope.parent
+		} else {
+			None
 		};
 
 		// Check the revised scoping mechanism for definitions.
@@ -701,6 +708,12 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			}
 		} else {
 			if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs); }
+			if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
+				self.emit(
+					DiagBuilder2::note(format!("resolved `{}` to {:?}", name.value, found_defs))
+					.span(name.span)
+				);
+			}
 			Ok(found_defs)
 		}
 	}
