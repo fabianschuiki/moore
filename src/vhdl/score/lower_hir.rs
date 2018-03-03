@@ -1692,7 +1692,7 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 				let ctx = TermContext::new(self, scope_id);
 				let term = ctx.termify_compound_name(name)?;
 				let tm = ctx.term_to_type_mark(term)?;
-				hir::TypeData::File(tm.value)
+				hir::TypeData::File(tm)
 			}
 
 			ast::RecordType(ref fields) => {
@@ -1797,13 +1797,6 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 	let (scope_id, ast) = self.ast(id);
 	let ctx = TermContext::new(self, scope_id);
 	let term = ctx.termify_expr(ast)?;
-	if self.sb.trace_termification {
-		self.emit(
-			DiagBuilder2::note(format!("termified expr `{}`", ast.span.extract()))
-			.span(ast.span)
-			.add_note(format!("{:?}", term))
-		);
-	}
 	let term = ctx.fold_term_as_type(term)?;
 	let index = match term.value {
 		Term::Range(dir, lb, rb) => {

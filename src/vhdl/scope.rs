@@ -13,6 +13,7 @@ use common::source::Spanned;
 use score::{ScoreContext, ScopeRef, Def, ResolvableName};
 
 /// A scope.
+#[derive(Clone, Debug)]
 pub struct Scope {
     /// The parent scope.
     pub parent: Option<ScopeRef>,

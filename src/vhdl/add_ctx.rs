@@ -9,7 +9,7 @@
 
 #![deny(missing_docs)]
 
-use common::source::Span;
+use common::source::{Span, INVALID_SPAN};
 use common::score::{NodeRef, Result};
 use common::errors::*;
 use common::util::{HasSpan, HasDesc};
@@ -52,6 +52,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     ) -> (MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I>, I, ScopeRef)
         where I: NodeRef
     {
+        assert!(span != INVALID_SPAN);
         let id = I::alloc();
         (MakeContext::new(self.ctx, span, id), id, self.scope)
     }

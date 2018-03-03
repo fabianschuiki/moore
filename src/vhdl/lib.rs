@@ -32,5 +32,6 @@ pub mod lazy;
 pub mod add_ctx;
 pub mod term;
 pub mod scope;
+pub mod builtin;
 
 mod nodes;

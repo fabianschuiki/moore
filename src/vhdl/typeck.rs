@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use common::{NodeId, Verbosity};
 use common::errors::*;
-use common::source::{Span, Spanned};
+use common::source::{Span, Spanned, INVALID_SPAN};
 use common::score::{NodeMaker, NodeStorage, Result};
 use score::*;
 use ty::*;
@@ -122,6 +122,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Ensure that two types are compatible.
 	pub fn must_match(&self, exp: &'ctx Ty, act: &'ctx Ty, span: Span) -> bool {
+		assert!(span != INVALID_SPAN);
 		if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPECK) {
 			self.emit(
 				DiagBuilder2::note(format!("typeck expected {} and actual {}", exp, act))
@@ -1047,7 +1048,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		}
 
 		hir::TypeData::File(tm) => {
-			let inner = self.ty(tm)?.clone();
+			let inner = self.ty(tm.value)?.clone();
 			Ok(self.intern_ty(Ty::File(Box::new(inner))))
 		}
 

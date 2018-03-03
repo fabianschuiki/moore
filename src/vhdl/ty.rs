@@ -7,9 +7,9 @@ use std::collections::HashMap;
 
 use num::{BigInt, One};
 
+use common::source::Span;
+use common::name::Name;
 use score::*;
-use moore_common::source::Span;
-use moore_common::name::Name;
 pub use hir::Dir;
 
 

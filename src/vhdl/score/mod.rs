@@ -30,6 +30,8 @@ use codegen::Codegen;
 use typeck::{Typeck, TypeckContext};
 use lazy::*;
 use arenas::Alloc;
+use builtin;
+pub use builtin::*;
 
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
@@ -99,7 +101,7 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	/// A table of LLHD definitions.
 	lldef_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
 	/// A table of types.
-	ty_table: RefCell<HashMap<NodeId, &'ctx Ty>>,
+	pub ty_table: RefCell<HashMap<NodeId, &'ctx Ty>>,
 	/// A table of scopes.
 	scope_table: RefCell<HashMap<ScopeRef, &'ctx Scope>>,
 	/// A table of nodes' constant values.
@@ -110,66 +112,22 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	pub typeck_table: RefCell<HashMap<NodeId, Result<()>>>,
 	/// A table of typeval results.
 	pub typeval_table: RefCell<HashMap<NodeId, Result<&'ctx Ty>>>,
-	/// Emit note for each AST node converted to a term.
-	trace_termification: bool,
-	/// A table of scopes. Revised; will repalce `scope_table` and `def_table`.
+	/// A table of scopes. Revised; will replace `scope_table` and `def_table`.
 	pub scope2_table: RefCell<HashMap<ScopeRef, ::scope::Scope>>,
-}
-
-
-lazy_static! {
-	static ref ROOT_SCOPE_REF: ScopeRef = LibRef(NodeId::alloc()).into();
-	static ref STD_LIB_REF: LibRef = LibRef(NodeId::alloc());
-	static ref STANDARD_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
-	static ref TEXTIO_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
-	static ref ENV_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
 }
 
 
 impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 	/// Creates a new empty VHDL scoreboard.
 	pub fn new(arenas: &'ctx Arenas) -> ScoreBoard<'ast, 'ctx> {
-		let nt = get_name_table();
-		let mut pkg_defs = HashMap::new();
-		let mut lib_names = HashMap::new();
-		let mut def_table = HashMap::new();
-
-		// Declare the builtin libraries and packages.
-		let name_standard = nt.intern("standard", false);
-		let name_textio = nt.intern("textio", false);
-		let name_env = nt.intern("env", false);
-		let name_std = nt.intern("std", false);
-		pkg_defs.insert(
-			name_standard.into(),
-			vec![Spanned::new(Def::BuiltinPkg(*STANDARD_PKG_REF), INVALID_SPAN)]
-		);
-		pkg_defs.insert(
-			name_textio.into(),
-			vec![Spanned::new(Def::BuiltinPkg(*TEXTIO_PKG_REF), INVALID_SPAN)]
-		);
-		pkg_defs.insert(
-			name_env.into(),
-			vec![Spanned::new(Def::BuiltinPkg(*ENV_PKG_REF), INVALID_SPAN)]
-		);
-		lib_names.insert(name_std, *STD_LIB_REF);
-		def_table.insert((*STD_LIB_REF).into(), &*arenas.defs.alloc(pkg_defs));
-
-		// Create the root scope.
-		let mut scopes = HashMap::new();
-		let mut root_scope = ::scope::Scope::new(None);
-		root_scope.defs.insert(name_std.into(), vec![Spanned::new(Def::Lib(*STD_LIB_REF), INVALID_SPAN)]);
-		root_scope.imported_scopes.insert((*STANDARD_PKG_REF).into());
-		scopes.insert(*ROOT_SCOPE_REF, root_scope);
-
-		// Assemble the scoreboard.
-		ScoreBoard {
+		let sb = ScoreBoard {
 			arenas: arenas,
 			span_table: RefCell::new(HashMap::new()),
 			libs: RefCell::new(HashMap::new()),
-			lib_names: RefCell::new(lib_names),
+			lib_names: RefCell::new(HashMap::new()),
 			ast_table: RefCell::new(AstTable::new()),
 			hir_table: RefCell::new(HirTable::new()),
-			def_table: RefCell::new(def_table),
+			def_table: RefCell::new(HashMap::new()),
 			arch_table: RefCell::new(HashMap::new()),
 			llmod: RefCell::new(llhd::Module::new()),
 			lldecl_table: RefCell::new(HashMap::new()),
@@ -180,9 +138,26 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 			tyctx_table: RefCell::new(HashMap::new()),
 			typeck_table: RefCell::new(HashMap::new()),
 			typeval_table: RefCell::new(HashMap::new()),
-			trace_termification: false,
-			scope2_table: RefCell::new(scopes),
-		}
+			scope2_table: RefCell::new(HashMap::new()),
+		};
+		builtin::register_builtins(&sb);
+		sb
+	}
+
+	/// Internalize a constant.
+	///
+	/// Returns a reference to the constant whose lifetime is bound to that of
+	/// the arenas associated with the scoreboard.
+	pub fn intern_const<T>(&self, konst: T) -> &'ctx Const where T: Into<Const> {
+		self.arenas.konst.alloc(konst.into())
+	}
+
+	/// Internalize a type.
+	///
+	/// Returns a reference to the constant whose lifetime is bound to that of
+	/// the arenas associated with the scoreboard.
+	pub fn intern_ty<T>(&self, ty: T) -> &'ctx Ty where T: Into<Ty> {
+		self.arenas.ty.alloc(ty.into())
 	}
 }
 
@@ -649,7 +624,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
 		let mut found_defs = Vec::new();
-		let parent_id = if scope_id != *ROOT_SCOPE_REF {
+		let parent_id = if !(*BUILTIN_SCOPE_REFS).contains(&scope_id) {
 			if only_defs {
 				let defs = self.defs(scope_id)?;
 				if let Some(d) = defs.get(&name.value) {
@@ -990,18 +965,18 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		}
 	}
 
-
-	/// Internalize the given constant and return a reference to it whose
-	/// lifetime is bound to the arenas associated with the scoreboard.
+	/// Internalize a constant.
+	///
+	/// See `ScoreBoard::intern_const`.
 	pub fn intern_const<T>(&self, konst: T) -> &'ctx Const where T: Into<Const> {
-		self.sb.arenas.konst.alloc(konst.into())
+		self.sb.intern_const(konst)
 	}
 
-
-	/// Internalize the given type and return a reference to it whose lifetime
-	/// is bound to the arenas associated with the scoreboard.
+	/// Internalize a type.
+	///
+	/// See `ScoreBoard::intern_ty`.
 	pub fn intern_ty<T>(&self, ty: T) -> &'ctx Ty where T: Into<Ty> {
-		self.sb.arenas.ty.alloc(ty.into())
+		self.sb.intern_ty(ty)
 	}
 }
 

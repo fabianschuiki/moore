@@ -115,11 +115,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// constraints where appropriate.
     pub fn fold(&self, term: Spanned<Term>) -> Spanned<Term> {
         let new = match term.value {
-            Term::Ident(Spanned{ value: Def::Type(id), span }) => {
-                Term::TypeMark(Spanned::new(id.into(), span))
+            Term::Ident(Spanned{ value: Def::Type(id), .. }) => {
+                Term::TypeMark(Spanned::new(id.into(), term.span))
             }
-            Term::Ident(Spanned{ value: Def::Subtype(id), span }) => {
-                Term::TypeMark(Spanned::new(id.into(), span))
+            Term::Ident(Spanned{ value: Def::Subtype(id), .. }) => {
+                Term::TypeMark(Spanned::new(id.into(), term.span))
             }
             other => other
         };
@@ -410,9 +410,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             _ if !defs.is_empty() => {
                 let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", name.value)).span(name.span);
                 d = d.add_note("Found the following definitions:");
-                d = d.span(first_def.span());
+                if first_def.span() != INVALID_SPAN {
+                    d = d.span(first_def.span());
+                }
                 for def in defs {
-                    d = d.span(def.span());
+                    if def.span() != INVALID_SPAN {
+                        d = d.span(def.span());
+                    }
                 }
                 self.emit(d);
                 return Err(());
