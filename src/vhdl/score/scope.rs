@@ -272,7 +272,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			}
 		}
 		self.sb.scope_table.borrow_mut().insert(id.into(), self.sb.arenas.scope.alloc(Scope{
-			parent: parent,
+			parent: Some(parent.unwrap_or(*ROOT_SCOPE_REF)),
 			defs: defs,
 			explicit_defs: explicit_defs,
 		}));

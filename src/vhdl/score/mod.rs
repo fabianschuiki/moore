@@ -112,10 +112,13 @@ pub struct ScoreBoard<'ast, 'ctx> {
 	pub typeval_table: RefCell<HashMap<NodeId, Result<&'ctx Ty>>>,
 	/// Emit note for each AST node converted to a term.
 	trace_termification: bool,
+	/// A table of scopes. Revised; will repalce `scope_table` and `def_table`.
+	pub scope2_table: RefCell<HashMap<ScopeRef, ::scope::Scope>>,
 }
 
 
 lazy_static! {
+	static ref ROOT_SCOPE_REF: ScopeRef = LibRef(NodeId::alloc()).into();
 	static ref STD_LIB_REF: LibRef = LibRef(NodeId::alloc());
 	static ref STANDARD_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
 	static ref TEXTIO_PKG_REF: BuiltinPkgRef = BuiltinPkgRef(NodeId::alloc());
@@ -132,20 +135,31 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 		let mut def_table = HashMap::new();
 
 		// Declare the builtin libraries and packages.
+		let name_standard = nt.intern("standard", false);
+		let name_textio = nt.intern("textio", false);
+		let name_env = nt.intern("env", false);
+		let name_std = nt.intern("std", false);
 		pkg_defs.insert(
-			nt.intern("standard", false).into(),
+			name_standard.into(),
 			vec![Spanned::new(Def::BuiltinPkg(*STANDARD_PKG_REF), INVALID_SPAN)]
 		);
 		pkg_defs.insert(
-			nt.intern("textio", false).into(),
+			name_textio.into(),
 			vec![Spanned::new(Def::BuiltinPkg(*TEXTIO_PKG_REF), INVALID_SPAN)]
 		);
 		pkg_defs.insert(
-			nt.intern("env", false).into(),
+			name_env.into(),
 			vec![Spanned::new(Def::BuiltinPkg(*ENV_PKG_REF), INVALID_SPAN)]
 		);
-		lib_names.insert(nt.intern("std", false), *STD_LIB_REF);
+		lib_names.insert(name_std, *STD_LIB_REF);
 		def_table.insert((*STD_LIB_REF).into(), &*arenas.defs.alloc(pkg_defs));
+
+		// Create the root scope.
+		let mut scopes = HashMap::new();
+		let mut root_scope = ::scope::Scope::new(None);
+		root_scope.defs.insert(name_std.into(), vec![Spanned::new(Def::Lib(*STD_LIB_REF), INVALID_SPAN)]);
+		root_scope.imported_scopes.insert((*STANDARD_PKG_REF).into());
+		scopes.insert(*ROOT_SCOPE_REF, root_scope);
 
 		// Assemble the scoreboard.
 		ScoreBoard {
@@ -167,6 +181,7 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 			typeck_table: RefCell::new(HashMap::new()),
 			typeval_table: RefCell::new(HashMap::new()),
 			trace_termification: false,
+			scope2_table: RefCell::new(scopes),
 		}
 	}
 }
@@ -650,6 +665,27 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			}
 			scope.parent
 		};
+
+		// Check the revised scoping mechanism for definitions.
+		// TODO: Remove everything else once this becomes the main approach.
+		{
+			let tbl = self.sb.scope2_table.borrow();
+			if let Some(scope) = tbl.get(&scope_id) {
+				if let Some(d) = scope.defs.get(&name.value) {
+					found_defs.extend(d);
+				}
+				if let Some(d) = scope.imported_defs.get(&name.value) {
+					found_defs.extend(d);
+				}
+				for &id in &scope.imported_scopes {
+					if let Some(scope) = tbl.get(&id) {
+						if let Some(d) = scope.defs.get(&name.value) {
+							found_defs.extend(d);
+						}
+					}
+				}
+			}
+		}
 
 		// If nothing matched the definition, try to escalate to the parent
 		// scope. If there is no parent scope, i.e. we're the parent, fail with
