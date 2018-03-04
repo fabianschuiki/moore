@@ -944,6 +944,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				// TODO: Replace with the first literal in the enum.
 				Ok(self.intern_const(Const::Null))
 			}
+			Ty::Physical(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.base.clone()), ty.base.left_bound.clone()))),
 			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
 			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
 			Ty::Access(_) => Ok(self.intern_const(Const::Null)),
@@ -1281,6 +1282,17 @@ impl Into<NodeId> for EnumRef {
 	}
 }
 
+/// A reference to a physical unit, expressed as the type declaration which
+/// defines the unit and the index of it.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug)]
+pub struct UnitRef(pub TypeDeclRef, pub usize);
+
+impl Into<NodeId> for UnitRef {
+	fn into(self) -> NodeId {
+		panic!("UnitRef cannot be converted into a NodeId");
+	}
+}
+
 // Declare the node reference groups.
 node_ref_group!(Def:
 	Arch(ArchRef),
@@ -1294,6 +1306,7 @@ node_ref_group!(Def:
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
 	Enum(EnumRef),
+	Unit(UnitRef),
 	Const(ConstDeclRef),
 	Signal(SignalRef),
 	File(FileDeclRef),

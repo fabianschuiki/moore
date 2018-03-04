@@ -995,7 +995,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		Some(ref d) => d,
 		None => {
 			self.emit(
-				DiagBuilder2::error(format!("Declaration of type `{}` is incomplete", hir.name.value))
+				DiagBuilder2::error(format!("declaration of type `{}` is incomplete", hir.name.value))
 				.span(hir.name.span)
 			);
 			return Err(());
@@ -1004,6 +1004,18 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 	match data.value {
 		hir::TypeData::Range(dir, lb_id, rb_id) => {
 			self.make_range_ty(dir, lb_id, rb_id, data.span)
+		}
+
+		hir::TypeData::Physical(dir, lb_id, rb_id, ref units, primary_index) => {
+			let base = self.make_range_ty(dir, lb_id, rb_id, data.span)?;
+			let base = match *base {
+				Ty::Int(ref it) => it.clone(),
+				_ => unreachable!(),
+			};
+			let units = units.iter().map(|&(name, ref abs, ref rel)|
+				PhysicalUnit::new(name.value, abs.clone(), rel.clone())
+			).collect();
+			Ok(self.intern_ty(PhysicalTy::new(base, units, primary_index)))
 		}
 
 		hir::TypeData::Enum(..) => {

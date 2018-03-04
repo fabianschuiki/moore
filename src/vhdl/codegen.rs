@@ -64,6 +64,12 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 					_ => unreachable!()
 				}
 			}
+			Ty::Physical(ref ty) => {
+				self.emit(
+					DiagBuilder2::error(format!("cannot generate code for physical type `{}`", ty))
+				);
+				return Err(());
+			}
 			Ty::Access(ref ty) => {
 				llhd::pointer_ty(self.map_type(ty)?)
 			}

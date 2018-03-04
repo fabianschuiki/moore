@@ -772,7 +772,7 @@ pub enum ExprData {
 	DefaultExpr,
 	BoxExpr,
 	NewExpr(Box<Expr>),
-	LitExpr(Literal, Option<CompoundName>),
+	LitExpr(Literal, Option<Spanned<Name>>),
 	ResolExpr(ParenElems, CompoundName),
 	ParenExpr(ParenElems),
 	DoubleNameExpr(CompoundName, CompoundName),

@@ -1028,7 +1028,7 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
 
 		Lit(l @ Literal::Abstract(_, _, _, _)) => {
 			p.bump();
-			let unit = try_name(p)?;
+			let unit = try_ident(p);
 			span.expand(p.last_span());
 			Some(ast::LitExpr(l, unit))
 		}

@@ -126,6 +126,14 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 					}
 				}
 			}
+			Some(Spanned{ value: ast::RangeType(_, Some(ref units)), .. }) => {
+				for (i, unit) in units.iter().enumerate() {
+					self.declare(
+						Spanned::new(unit.0.name.into(), unit.0.span),
+						Def::Unit(UnitRef(id, i))
+					);
+				}
+			}
 			_ => ()
 		}
 	}

@@ -14,7 +14,7 @@ use common::source::*;
 use common::util::*;
 use common::score::Result;
 
-use syntax::lexer::token::Literal;
+use syntax::lexer::token::{Literal, Exponent, ExponentSign};
 use syntax::ast::{self, Dir};
 use score::*;
 use hir;
@@ -40,6 +40,8 @@ pub enum Term {
     Default,
     /// An integer literal.
     IntLit(BigInt),
+    /// A physical literal.
+    PhysLit(BigInt, Spanned<UnitRef>),
     /// A bit string literal.
     StrLit(Name),
     /// An unresolved name.
@@ -146,20 +148,39 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     pub fn termify_expr(&self, ast: &'ast ast::Expr) -> Result<Spanned<Term>> {
         let term = match ast.data {
             // Literals with optional unit.
-            ast::LitExpr(ref lit, ref unit) => {
+            ast::LitExpr(ref lit, unit) => {
                 let lit = self.termify_literal(Spanned::new(lit, ast.span))?;
-                let unit = match *unit {
-                    Some(ref unit_name) => Some(self.termify_compound_name(unit_name)?),
+                let unit = match unit {
+                    Some(unit_name) => Some(self.termify_name(unit_name.map_into())?),
                     None => None,
                 };
                 if let Some(unit) = unit {
-                    self.emit(
-                        DiagBuilder2::bug(format!("termification of physical type `{}` not implemented", unit.span().extract()))
-                        .span(unit.span())
-                    );
-                    return Err(());
+                    let unit = self.ensure_resolved(unit)?;
+                    let unit = match unit.value {
+                        Term::Ident(Spanned{ value: Def::Unit(u), span }) => Spanned::new(u, span),
+                        _ => {
+                            self.emit(
+                                DiagBuilder2::error(format!("`{}` is not a valid physical unit", unit.span.extract()))
+                                .span(unit.span)
+                            );
+                            debugln!("It is a {:#?}", unit.value);
+                            return Err(());
+                        }
+                    };
+                    let lit = match lit.value {
+                        Term::IntLit(v) => v,
+                        _ => {
+                            self.emit(
+                                DiagBuilder2::error(format!("`{}` is not a valid value for a physical literal", lit.span.extract()))
+                                .span(lit.span)
+                            );
+                            debugln!("It is a {:#?}", lit.value);
+                            return Err(());
+                        }
+                    };
+                    Term::PhysLit(lit, unit)
                 } else {
-                    return Ok(lit);
+                    lit.value
                 }
             }
             ast::NameExpr(ref name) => return self.termify_compound_name(name),
@@ -228,10 +249,35 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                         return Err(());
                     }
                 };
+                let exp: isize = match exp {
+                    Some(Exponent(sign, exp)) => match exp.as_str().parse() {
+                        Ok(v) => if sign == ExponentSign::Positive { v } else { -v },
+                        Err(_) => {
+                            self.emit(
+                                DiagBuilder2::error(format!("`{}` is not a valid exponent for a number literal", exp))
+                                .span(ast.span)
+                            );
+                            return Err(());
+                        }
+                    }
+                    None => 0,
+                };
 
                 // Parse the rest of the number.
-                if frac.is_none() && exp.is_none() {
-                    Term::IntLit(int)
+                if frac.is_none() {
+                    if exp < 0 {
+                        self.emit(
+                            DiagBuilder2::error(format!("integer literal `{}` has negative exponent", ast.span.extract()))
+                            .span(ast.span)
+                        );
+                        return Err(());
+                    }
+                    if exp > 0 {
+                        use num::pow;
+                        Term::IntLit(int * pow(BigInt::from(base), exp as usize))
+                    } else {
+                        Term::IntLit(int)
+                    }
                 } else {
                     self.emit(
                         DiagBuilder2::bug("Float literals not yet supported")

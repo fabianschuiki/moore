@@ -1356,53 +1356,10 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 	let (scope_id, ast) = self.ast(id);
 	let data = match ast.data {
 		// Literals
-		ast::LitExpr(ref lit, ref _unit) => {
-			use syntax::lexer::token::Literal;
-			match *lit {
-				Literal::Abstract(base, int, frac, exp) => {
-					// Parse the base.
-					let base = match base {
-						Some(base) => match base.as_str().parse() {
-							Ok(base) => base,
-							Err(_) => {
-								self.emit(
-									DiagBuilder2::error(format!("`{}` is not a valid base for a number literal", base))
-									.span(ast.span)
-								);
-								return Err(());
-							}
-						},
-						None => 10,
-					};
-
-					// Parse the rest of the number.
-					if frac.is_none() && exp.is_none() {
-						match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
-							Some(v) => hir::ExprData::IntegerLiteral(ConstInt::new(None, v)),
-							None => {
-								self.emit(
-									DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base))
-									.span(ast.span)
-								);
-								return Err(());
-							}
-						}
-					} else {
-						self.emit(
-							DiagBuilder2::error("Float literals not yet supported")
-							.span(ast.span)
-						);
-						return Err(());
-					}
-				}
-				_ => {
-					self.emit(
-						DiagBuilder2::error("Literal not yet supported")
-						.span(ast.span)
-					);
-					return Err(());
-				}
-			}
+		ast::LitExpr(..) => {
+			let term_ctx = TermContext::new(self, scope_id);
+			let term = term_ctx.termify_expr(ast)?;
+			term_ctx.term_to_expr_raw(term)?.data
 		}
 
 		// Unary operators.
@@ -1594,6 +1551,9 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 			ast::RangeType(ref range_expr, ref units) => {
 				let (dir, lb, rb) = match range_expr.data {
 					ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
+						// let ctx = AddContext::new(self, scope_id);
+						// let lb = ctx.add_expr(lb_expr)?;
+						// let rb = ctx.add_expr(rb_expr)?;
 						let lb = ExprRef(NodeId::alloc());
 						let rb = ExprRef(NodeId::alloc());
 						self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
@@ -1608,15 +1568,94 @@ impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
 						return Err(());
 					}
 				};
-				// TODO: Handle units
-				if let Some(ref _units) = *units {
-					self.emit(
-						DiagBuilder2::bug("Units not yet supported")
-						.span(spanned_data.span)
-					);
-					return Err(());
+				if let Some(ref units) = *units {
+					// Determine the primary unit.
+					let mut prim_iter = units
+						.iter()
+						.enumerate()
+						.filter(|&(_, &(_, ref expr))| expr.is_none())
+						.map(|(index, &(name, _))| (index, name));
+					let primary = match prim_iter.next() {
+						Some(u) => u,
+						None => {
+							self.emit(
+								DiagBuilder2::error(format!("physical type `{}` has no primary unit", ast.name.value))
+								.span(ast.span)
+								.add_note("A physical type must have a primary unit of the form `<name>;`. See IEEE 1076-2008 section 5.2.4.")
+							);
+							return Err(());
+						}
+					};
+					let mut had_fails = false;
+					for (_, name) in prim_iter {
+						self.emit(
+							DiagBuilder2::error(format!("physical type `{}` has multiple primary units", ast.name.value))
+							.span(name.span)
+							.add_note("A physical type cannot have multiple primary units. See IEEE 1076-2008 section 5.2.4.")
+						);
+						had_fails = true;
+					}
+					if had_fails {
+						return Err(());
+					}
+					debugln!("primary unit {:#?}", primary);
+
+					// Determine the units and how they are defined with respect
+					// to each other.
+					let term_ctx = TermContext::new(self, scope_id);
+					let table = units
+						.iter()
+						.map(|&(name, ref expr)|{
+							let rel = if let Some(ref expr) = *expr {
+								let term = term_ctx.termify_expr(expr)?;
+								let (value, unit) = match term.value {
+									Term::PhysLit(value, unit) => (value, unit),
+									_ => {
+										self.emit(
+											DiagBuilder2::error(format!("`{}` is not a valid secondary unit", term.span.extract()))
+											.span(term.span)
+										);
+										debugln!("It is a {:#?}", term.value);
+										return Err(());
+									}
+								};
+								if unit.value.0 != id {
+									self.emit(
+										DiagBuilder2::error(format!("`{}` is not a unit in the physical type `{}`", term.span.extract(), ast.name.value))
+										.span(term.span)
+										.add_note(format!("`{}` has been declared here:", term.span.extract()))
+										.span(unit.span)
+									);
+								}
+								Some((value, unit.value.1))
+							} else {
+								None
+							};
+							Ok((Spanned::new(name.name, name.span), rel))
+						})
+						.collect::<Vec<Result<_>>>()
+						.into_iter()
+						.collect::<Result<Vec<_>>>()?;
+
+					// Determine the scale of each unit with respect to the
+					// primary unit.
+					let scale_table = table
+						.iter()
+						.map(|&(name, ref rel)|{
+							let mut abs = BigInt::from(1);
+							let mut rel_to = rel.as_ref();
+							while let Some(&(ref scale, index)) = rel_to {
+								abs = abs * scale;
+								rel_to = table[index].1.as_ref();
+							}
+							(name, abs, rel.clone())
+						})
+						.collect::<Vec<_>>();
+
+					hir::TypeData::Physical(dir, lb, rb, scale_table, primary.0)
+				} else {
+					hir::TypeData::Range(dir, lb, rb)
 				}
-				hir::TypeData::Range(dir, lb, rb)
 			}
 
 			// Enumeration types.

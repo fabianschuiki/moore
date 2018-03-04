@@ -2,11 +2,14 @@
 
 //! The High-level Intermediate Representation of a VHDL design.
 
-use moore_common::source::*;
-use moore_common::name::*;
-use moore_common::util::HasSpan;
-use score::*;
 use typed_arena::Arena;
+use num::BigInt;
+
+use common::source::*;
+use common::name::*;
+use common::util::HasSpan;
+
+use score::*;
 use syntax::ast;
 use konst::*;
 pub use syntax::ast::Dir;
@@ -359,8 +362,15 @@ pub struct TypeDecl {
 pub enum TypeData {
 	/// An enumeration type.
 	Enum(Vec<EnumLit>),
-	/// An integer, float, or physical type with optional units.
+	/// An integer or float type.
 	Range(Dir, ExprRef, ExprRef),
+	/// A physical type. The fields are as follows:
+	/// 1. Direction
+	/// 2. Left bound
+	/// 3. Right bound
+	/// 4. Table of units
+	/// 5. Index of the primary unit in the table
+	Physical(Dir, ExprRef, ExprRef, UnitTable, usize),
 	/// An access type.
 	Access(SubtypeIndRef),
 	/// An array type.
@@ -377,6 +387,14 @@ pub enum EnumLit {
 	Ident(Spanned<Name>),
 	Char(Spanned<char>),
 }
+
+/// A table of units for a physical type.
+///
+/// The tuple elements are as follows:
+/// 1. The name of the unit.
+/// 2. The unit expressed in multiples of the primary unit.
+/// 3. The unit expressed relative to another unit, as given in the source code.
+pub type UnitTable = Vec<(Spanned<Name>, BigInt, Option<(BigInt, usize)>)>;
 
 /// An index of an array type.
 #[derive(Debug)]

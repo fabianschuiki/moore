@@ -4,6 +4,7 @@
 
 use std::fmt;
 use std::collections::HashMap;
+use std::cell::RefCell;
 
 use num::{BigInt, One};
 
@@ -32,6 +33,8 @@ pub enum Ty {
 	UnboundedInt,
 	/// An enumeration type.
 	Enum(EnumTy),
+	/// A physical type.
+	Physical(PhysicalTy),
 	/// An access type.
 	Access(Box<Ty>),
 	/// An array type.
@@ -52,6 +55,7 @@ impl Ty {
 			Ty::Null => "null type",
 			Ty::Int(_) | Ty::UnboundedInt => "integer type",
 			Ty::Enum(_) => "enumeration type",
+			Ty::Physical(_) => "physical type",
 			Ty::Access(_) => "access type",
 			Ty::Array(_) => "array type",
 			Ty::File(..) => "file type",
@@ -69,6 +73,12 @@ impl From<IntTy> for Ty {
 impl From<EnumTy> for Ty {
 	fn from(t: EnumTy) -> Ty {
 		Ty::Enum(t)
+	}
+}
+
+impl From<PhysicalTy> for Ty {
+	fn from(t: PhysicalTy) -> Ty {
+		Ty::Physical(t)
 	}
 }
 
@@ -92,6 +102,7 @@ impl fmt::Display for Ty {
 			Ty::Int(ref ty) => write!(f, "{}", ty),
 			Ty::UnboundedInt => write!(f, "{{integer}}"),
 			Ty::Enum(ref ty) => write!(f, "{}", ty),
+			Ty::Physical(ref ty) => write!(f, "{}", ty),
 			Ty::Access(ref ty) => write!(f, "access {}", ty),
 			Ty::Array(ref ty) => write!(f, "{}", ty),
 			Ty::File(ref ty) => write!(f, "file of {}", ty),
@@ -205,6 +216,59 @@ impl fmt::Display for EnumTy {
 	}
 }
 
+/// A physical type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhysicalTy {
+	/// The underlying integer type.
+	pub base: IntTy,
+	/// The table of units.
+	pub units: Vec<PhysicalUnit>,
+	/// The index of the primary unit.
+	pub primary: usize,
+}
+
+impl PhysicalTy {
+	/// Create a new physical type.
+	pub fn new(base: IntTy, units: Vec<PhysicalUnit>, primary: usize) -> PhysicalTy {
+		PhysicalTy {
+			base: base,
+			units: units,
+			primary: primary,
+		}
+	}
+}
+
+impl fmt::Display for PhysicalTy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{} units ({})",
+			self.base,
+			DisplayList(RefCell::new(self.units.iter().map(|u| u.name)), Some(&","), Some(&", "), Some(&", ")),
+		)
+	}
+}
+
+/// A unit of a physical type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhysicalUnit {
+	/// The name of the unit.
+	pub name: Name,
+	/// The scale of the unit with respect to the physical type's primary unit.
+	pub abs: BigInt,
+	/// The scale of the unit with respect to another unit.
+	pub rel: Option<(BigInt, usize)>,
+}
+
+impl PhysicalUnit {
+	/// Create a new unit for a physical type.
+	pub fn new(name: Name, abs: BigInt, rel: Option<(BigInt, usize)>) -> PhysicalUnit {
+		PhysicalUnit {
+			name: name,
+			abs: abs,
+			rel: rel,
+		}
+	}
+}
+
 
 /// An array type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,7 +293,7 @@ impl ArrayTy {
 impl fmt::Display for ArrayTy {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "array ({}) of {}",
-			DisplayList(self.indices.iter(), Some(&","), Some(&", "), Some(&", ")),
+			DisplayList(RefCell::new(self.indices.iter()), Some(&","), Some(&", "), Some(&", ")),
 			self.element
 		)
 	}
@@ -299,13 +363,13 @@ impl fmt::Display for RecordTy {
 	}
 }
 
-pub struct DisplayList<'a, T> (T, Option<&'a fmt::Display>, Option<&'a fmt::Display>, Option<&'a fmt::Display>);
+pub struct DisplayList<'a, T: 'a> (RefCell<T>, Option<&'a fmt::Display>, Option<&'a fmt::Display>, Option<&'a fmt::Display>);
 
 impl<'a, T, I> fmt::Display for DisplayList<'a, T>
-	where T: Iterator<Item=I> + Clone, I: fmt::Display
+	where T: Iterator<Item=I>, I: fmt::Display
 {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let mut iter = self.0.clone();
+		let mut iter = self.0.borrow_mut();
 		match iter.next() {
 			Some(x) => write!(f, "{}", x)?,
 			None => return Ok(()),
