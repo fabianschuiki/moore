@@ -274,13 +274,13 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
             Err(())
         }
         hir::ExprData::Qualified(ref tm, expr) => {
-            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
+            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value));
             let expr_ty = tyc.lazy_typeval(expr)?;
             tyc.must_match(ty, expr_ty, tyc.ctx.span(expr).unwrap());
             Ok(ty)
         }
         hir::ExprData::Allocator(ref tm, expr) => {
-            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
+            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value));
             if let Some(expr) = expr {
                 let expr_ty = tyc.lazy_typeval(expr)?;
                 tyc.must_match(ty, expr_ty, tyc.ctx.span(expr).unwrap());
@@ -288,7 +288,7 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
             Ok(ty)
         }
         hir::ExprData::Cast(ref tm, expr) => {
-            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span, tm.value));
+            let ty = tyc.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value));
             let expr_ty = tyc.lazy_typeval(expr)?;
             tyc.must_cast(ty, expr_ty, tyc.ctx.span(expr).unwrap());
             Ok(ty)

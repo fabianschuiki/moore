@@ -13,4 +13,7 @@ architecture bar of foo is
 	constant zB : POSITIVE := 1;
 	constant zC : POSITIVE := 127;
 
+	constant uA : std.standard.INTEGER_VECTOR;
+	constant uB : INTEGER_VECTOR(0 to 1) := (-42, 42);
+
 begin end;

@@ -607,7 +607,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             Term::Qual(tm, term) => {
                 let tm = self.term_to_type_mark(*tm)?;
                 let expr = self.term_to_expr(*term)?;
-                self.ctx.set_type_context(expr, self.ctx.intern_ty(Ty::Named(tm.span, tm.value)));
+                self.ctx.set_type_context(expr, self.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value)));
                 hir::ExprData::Qualified(tm, expr)
             }
 
@@ -620,7 +620,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                     Term::Qual(tm, value) => {
                         let tm = self.term_to_type_mark(*tm)?;
                         let expr = self.term_to_expr(*value)?;
-                        self.ctx.set_type_context(expr, self.ctx.intern_ty(Ty::Named(tm.span, tm.value)));
+                        self.ctx.set_type_context(expr, self.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value)));
                         hir::ExprData::Allocator(tm, Some(expr))
                     }
                     other => hir::ExprData::Allocator(
@@ -661,7 +661,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                 return Err(());
                             }
                         };
-                        self.ctx.set_type_context(arg, self.ctx.intern_ty(Ty::Named(tm.span, tm.value)));
+                        self.ctx.set_type_context(arg, self.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value)));
                         hir::ExprData::Cast(tm, arg)
                     }
                     other => {

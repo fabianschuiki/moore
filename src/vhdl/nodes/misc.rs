@@ -39,7 +39,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
         let id = mk.id;
         mk.typeval(Box::new(move |tyc|{
             let hir = tyc.ctx.lazy_hir(id)?;
-            let inner = tyc.ctx.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
+            let inner = tyc.ctx.intern_ty(Ty::Named(hir.type_mark.span.into(), hir.type_mark.value));
             match hir.constraint {
                 None => Ok(inner),
                 Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {

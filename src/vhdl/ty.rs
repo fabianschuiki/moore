@@ -21,7 +21,7 @@ pub enum Ty {
 	/// acts as a sort of "pointer" to a type, together with information on how
 	/// the source code referred to that type. This helps make error messages
 	/// easier to read for the user.
-	Named(Span, TypeMarkRef),
+	Named(TyName, TypeMarkRef),
 	/// The null type.
 	Null,
 	/// An integer type.
@@ -87,7 +87,7 @@ impl From<RecordTy> for Ty {
 impl fmt::Display for Ty {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
-			Ty::Named(span, _) => write!(f, "{}", span.extract()),
+			Ty::Named(name, _) => write!(f, "{}", name),
 			Ty::Null => write!(f, "null"),
 			Ty::Int(ref ty) => write!(f, "{}", ty),
 			Ty::UnboundedInt => write!(f, "{{integer}}"),
@@ -97,6 +97,39 @@ impl fmt::Display for Ty {
 			Ty::File(ref ty) => write!(f, "file of {}", ty),
 			Ty::Record(ref ty) => write!(f, "{}", ty),
 		}
+	}
+}
+
+/// A type name.
+///
+/// Generally types are named by the source file. Builtin types on the other
+/// hand have no span, but rather have an explicit name.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum TyName {
+	/// A type name given by a section of a source file.
+	Span(Span),
+	/// A type name given by an explicit name.
+	Name(Name),
+}
+
+impl fmt::Display for TyName {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			TyName::Span(span) => write!(f, "{}", span.extract()),
+			TyName::Name(name) => write!(f, "{}", name),
+		}
+	}
+}
+
+impl From<Span> for TyName {
+	fn from(span: Span) -> TyName {
+		TyName::Span(span)
+	}
+}
+
+impl From<Name> for TyName {
+	fn from(name: Name) -> TyName {
+		TyName::Name(name)
 	}
 }
 
