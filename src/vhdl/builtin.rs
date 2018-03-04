@@ -37,6 +37,8 @@ lazy_static! {
 	pub static ref INTEGER_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `TIME`.
 	pub static ref TIME_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
+	// A reference to the type `DELAY_LENGTH`.
+	pub static ref DELAY_LENGTH_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `NATURAL`.
 	pub static ref NATURAL_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `POSITIVE`.
@@ -47,6 +49,8 @@ lazy_static! {
 	pub static ref BIT_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `INTEGER_VECTOR`.
 	pub static ref INTEGER_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
+	// A reference to the type `TIME_VECTOR`.
+	pub static ref TIME_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `FILE_OPEN_KIND`.
 	pub static ref FILE_OPEN_KIND_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `FILE_OPEN_STATUS`.
@@ -139,10 +143,13 @@ lazy_static! {
 		define_builtin_ident(&mut scope, "min", Def::Unit(UnitRef(*TIME_TYPE_REF, 6)));
 		define_builtin_ident(&mut scope, "hr", Def::Unit(UnitRef(*TIME_TYPE_REF, 7)));
 
-		// `subtype NATURAL is range 0 to ...`
+		// `subtype DELAY_LENGTH is TIME range 0 to TIME'HIGH`
+		define_builtin_ident(&mut scope, "DELAY_LENGTH", Def::Type(*DELAY_LENGTH_TYPE_REF));
+
+		// `subtype NATURAL is INTEGER range 0 to INTEGER'HIGH`
 		define_builtin_ident(&mut scope, "NATURAL", Def::Type(*NATURAL_TYPE_REF));
 
-		// `subtype POSITIVE is range 1 to ...`
+		// `subtype POSITIVE is INTEGER range 1 to INTEGER'HIGH`
 		define_builtin_ident(&mut scope, "POSITIVE", Def::Type(*POSITIVE_TYPE_REF));
 
 		// `type BOOLEAN_VECTOR is array (NATURAL range <>) of BOOLEAN`
@@ -153,6 +160,9 @@ lazy_static! {
 
 		// `type INTEGER_VECTOR is array (NATURAL range <>) of INTEGER`
 		define_builtin_ident(&mut scope, "INTEGER_VECTOR", Def::Type(*INTEGER_VECTOR_TYPE_REF));
+
+		// `type TIME_VECTOR is array (NATURAL range <>) of TIME`
+		define_builtin_ident(&mut scope, "TIME_VECTOR", Def::Type(*TIME_VECTOR_TYPE_REF));
 
 		// `type FILE_OPEN_KIND is (READ_MODE, WRITE_MODE, APPEND_MODE)`
 		define_builtin_ident(&mut scope, "FILE_OPEN_KIND", Def::Type(*FILE_OPEN_KIND_TYPE_REF));
@@ -191,24 +201,21 @@ lazy_static! {
 			i32::min_value().into(),
 			i32::max_value().into()
 		).into()),
-		(*TIME_TYPE_REF, PhysicalTy::new(
+		(*TIME_TYPE_REF, make_time_type(
 			*TIME_TYPE_REF,
 			IntTy::new(
 				Dir::To,
 				i64::min_value().into(),
 				i64::max_value().into(),
-			),
-			vec![
-				named_unit("fs",  1,                        None            ),
-				named_unit("ps",  1_000,                    Some((1000, 0)) ),
-				named_unit("ns",  1_000_000,                Some((1000, 1)) ),
-				named_unit("us",  1_000_000_000,            Some((1000, 2)) ),
-				named_unit("ms",  1_000_000_000_000,        Some((1000, 3)) ),
-				named_unit("sec", 1_000_000_000_000_000,    Some((1000, 4)) ),
-				named_unit("min", 60_000_000_000_000_000,   Some((60, 5))   ),
-				named_unit("hr",  3600_000_000_000_000_000, Some((60, 6))   ),
-			],
-			0
+			)
+		).into()),
+		(*DELAY_LENGTH_TYPE_REF, make_time_type(
+			*DELAY_LENGTH_TYPE_REF,
+			IntTy::new(
+				Dir::To,
+				0.into(),
+				i64::max_value().into(),
+			)
 		).into()),
 		(*NATURAL_TYPE_REF, IntTy::new(
 			Dir::To,
@@ -231,6 +238,10 @@ lazy_static! {
 		(*INTEGER_VECTOR_TYPE_REF, ArrayTy::new(
 			vec![ArrayIndex::Unbounded(Box::new(named_builtin_type("NATURAL", *NATURAL_TYPE_REF)))],
 			Box::new(named_builtin_type("INTEGER", *INTEGER_TYPE_REF))
+		).into()),
+		(*TIME_VECTOR_TYPE_REF, ArrayTy::new(
+			vec![ArrayIndex::Unbounded(Box::new(named_builtin_type("NATURAL", *NATURAL_TYPE_REF)))],
+			Box::new(named_builtin_type("TIME", *TIME_TYPE_REF))
 		).into()),
 		(*FILE_OPEN_KIND_TYPE_REF, EnumTy::new(*FILE_OPEN_KIND_TYPE_REF).into()),
 		(*FILE_OPEN_STATUS_TYPE_REF, EnumTy::new(*FILE_OPEN_STATUS_TYPE_REF).into()),
@@ -258,4 +269,23 @@ pub fn register_builtins<'ast, 'ctx>(sb: &ScoreBoard<'ast, 'ctx>) {
 		.iter()
 		.map(|&(id, ref ty)| (id.into(), sb.intern_ty(ty.clone())))
 	);
+}
+
+/// Create a physical type with time units.
+fn make_time_type(decl: TypeDeclRef, base: IntTy) -> PhysicalTy {
+	PhysicalTy::new(
+		decl,
+		base,
+		vec![
+			named_unit("fs",  1,                        None            ),
+			named_unit("ps",  1_000,                    Some((1000, 0)) ),
+			named_unit("ns",  1_000_000,                Some((1000, 1)) ),
+			named_unit("us",  1_000_000_000,            Some((1000, 2)) ),
+			named_unit("ms",  1_000_000_000_000,        Some((1000, 3)) ),
+			named_unit("sec", 1_000_000_000_000_000,    Some((1000, 4)) ),
+			named_unit("min", 60_000_000_000_000_000,   Some((60, 5))   ),
+			named_unit("hr",  3600_000_000_000_000_000, Some((60, 6))   ),
+		],
+		0
+	)
 }
