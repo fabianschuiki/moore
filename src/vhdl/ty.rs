@@ -219,6 +219,8 @@ impl fmt::Display for EnumTy {
 /// A physical type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhysicalTy {
+	/// The declaration of the physical type.
+	pub decl: TypeDeclRef,
 	/// The underlying integer type.
 	pub base: IntTy,
 	/// The table of units.
@@ -229,8 +231,9 @@ pub struct PhysicalTy {
 
 impl PhysicalTy {
 	/// Create a new physical type.
-	pub fn new(base: IntTy, units: Vec<PhysicalUnit>, primary: usize) -> PhysicalTy {
+	pub fn new(decl: TypeDeclRef, base: IntTy, units: Vec<PhysicalUnit>, primary: usize) -> PhysicalTy {
 		PhysicalTy {
+			decl: decl,
 			base: base,
 			units: units,
 			primary: primary,

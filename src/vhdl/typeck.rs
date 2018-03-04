@@ -1015,7 +1015,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			let units = units.iter().map(|&(name, ref abs, ref rel)|
 				PhysicalUnit::new(name.value, abs.clone(), rel.clone())
 			).collect();
-			Ok(self.intern_ty(PhysicalTy::new(base, units, primary_index)))
+			Ok(self.intern_ty(PhysicalTy::new(id, base, units, primary_index)))
 		}
 
 		hir::TypeData::Enum(..) => {

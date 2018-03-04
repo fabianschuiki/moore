@@ -4,11 +4,13 @@
 
 use std::collections::HashSet;
 
+use num::BigInt;
+
 use common::score::NodeRef;
 use common::source::*;
 use common::name::*;
 
-use score::{ResolvableName, ScoreBoard, ScopeRef, LibRef, BuiltinPkgRef, Def, TypeMarkRef, TypeDeclRef, EnumRef};
+use score::{ResolvableName, ScoreBoard, ScopeRef, LibRef, BuiltinPkgRef, Def, TypeMarkRef, TypeDeclRef, EnumRef, UnitRef};
 use scope::Scope;
 use ty::*;
 
@@ -33,6 +35,8 @@ lazy_static! {
 	pub static ref SEVERITY_LEVEL_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `INTEGER`.
 	pub static ref INTEGER_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
+	// A reference to the type `TIME`.
+	pub static ref TIME_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `NATURAL`.
 	pub static ref NATURAL_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	// A reference to the type `POSITIVE`.
@@ -69,6 +73,14 @@ fn define_builtin_bit(scope: &mut Scope, bit: char, def: Def) {
 fn named_builtin_type<T: Into<TypeMarkRef>>(name: &str, type_ref: T) -> Ty {
 	let name = get_name_table().intern(name, false);
 	Ty::Named(name.into(), type_ref.into())
+}
+
+/// Create a named physical unit.
+fn named_unit(name: &str, abs: usize, rel: Option<(usize, usize)>) -> PhysicalUnit {
+	let name = get_name_table().intern(name, false);
+	let abs = BigInt::from(abs);
+	let rel = rel.map(|(scale, index)| (BigInt::from(scale), index));
+	PhysicalUnit::new(name, abs, rel)
 }
 
 // Define the scopes of the builtins.
@@ -115,6 +127,17 @@ lazy_static! {
 
 		// `type INTEGER is range ... to ...`
 		define_builtin_ident(&mut scope, "INTEGER", Def::Type(*INTEGER_TYPE_REF));
+
+		// `type TIME is range ... to ... units ... end units`
+		define_builtin_ident(&mut scope, "TIME", Def::Type(*TIME_TYPE_REF));
+		define_builtin_ident(&mut scope, "fs", Def::Unit(UnitRef(*TIME_TYPE_REF, 0)));
+		define_builtin_ident(&mut scope, "ps", Def::Unit(UnitRef(*TIME_TYPE_REF, 1)));
+		define_builtin_ident(&mut scope, "ns", Def::Unit(UnitRef(*TIME_TYPE_REF, 2)));
+		define_builtin_ident(&mut scope, "us", Def::Unit(UnitRef(*TIME_TYPE_REF, 3)));
+		define_builtin_ident(&mut scope, "ms", Def::Unit(UnitRef(*TIME_TYPE_REF, 4)));
+		define_builtin_ident(&mut scope, "sec", Def::Unit(UnitRef(*TIME_TYPE_REF, 5)));
+		define_builtin_ident(&mut scope, "min", Def::Unit(UnitRef(*TIME_TYPE_REF, 6)));
+		define_builtin_ident(&mut scope, "hr", Def::Unit(UnitRef(*TIME_TYPE_REF, 7)));
 
 		// `subtype NATURAL is range 0 to ...`
 		define_builtin_ident(&mut scope, "NATURAL", Def::Type(*NATURAL_TYPE_REF));
@@ -167,6 +190,25 @@ lazy_static! {
 			Dir::To,
 			i32::min_value().into(),
 			i32::max_value().into()
+		).into()),
+		(*TIME_TYPE_REF, PhysicalTy::new(
+			*TIME_TYPE_REF,
+			IntTy::new(
+				Dir::To,
+				i64::min_value().into(),
+				i64::max_value().into(),
+			),
+			vec![
+				named_unit("fs",  1,                        None            ),
+				named_unit("ps",  1_000,                    Some((1000, 0)) ),
+				named_unit("ns",  1_000_000,                Some((1000, 1)) ),
+				named_unit("us",  1_000_000_000,            Some((1000, 2)) ),
+				named_unit("ms",  1_000_000_000_000,        Some((1000, 3)) ),
+				named_unit("sec", 1_000_000_000_000_000,    Some((1000, 4)) ),
+				named_unit("min", 60_000_000_000_000_000,   Some((60, 5))   ),
+				named_unit("hr",  3600_000_000_000_000_000, Some((60, 6))   ),
+			],
+			0
 		).into()),
 		(*NATURAL_TYPE_REF, IntTy::new(
 			Dir::To,
