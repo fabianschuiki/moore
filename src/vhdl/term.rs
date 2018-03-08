@@ -21,6 +21,7 @@ use hir;
 use konst::ConstInt;
 use add_ctx::AddContext;
 use ty::*;
+use op::*;
 
 /// A term.
 ///
@@ -74,9 +75,9 @@ pub enum Term {
     /// A term of the form `(T|T|… => T, T|T|… => T, …)`.
     Aggregate(Vec<(Vec<Spanned<Term>>, Spanned<Term>)>),
     /// A term of the form `op T`.
-    Unary(Spanned<hir::UnaryOp>, Subterm),
+    Unary(Spanned<UnaryOp>, Subterm),
     /// A term of the form `T op T`.
-    Binary(Spanned<hir::BinaryOp>, Subterm, Subterm),
+    Binary(Spanned<BinaryOp>, Subterm, Subterm),
     /// A term of the form `T'T`.
     Qual(Subterm, Subterm),
     /// A term of the form `new T`.
@@ -607,9 +608,17 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 hir::ExprData::StringLiteral(maps)
             }
             Term::Unary(op, arg) => {
+                // Look for implementations of this operator.
+                let name: Spanned<ResolvableName> = op.map_into();
+                let defs = self.ctx.resolve_name(name, self.scope, false, false)?;
+                debugln!("resolved unary op `{}` to {:?}", name.value, defs);
                 hir::ExprData::Unary(op, self.term_to_expr(*arg)?)
             }
             Term::Binary(op, lhs, rhs) => {
+                // Look for implementations of this operator.
+                let name: Spanned<ResolvableName> = op.map_into();
+                let defs = self.ctx.resolve_name(name, self.scope, false, false)?;
+                debugln!("resolved unary op `{}` to {:?}", name.value, defs);
                 hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
             }
             Term::Ident(def) => {

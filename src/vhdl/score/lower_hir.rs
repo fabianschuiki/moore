@@ -12,6 +12,7 @@ use syntax::lexer::token::Literal;
 use make_ctx::MakeContext;
 use add_ctx::AddContext;
 use term::*;
+use op::*;
 
 /// Emit a compiler bug and return `Err`.
 macro_rules! unimp {
@@ -757,14 +758,14 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Lower an AST unary operator to a HIR unary operator.
 	///
 	/// Emits an error if the operator is not a valid unary operator.
-	pub fn lower_unary_op(&self, ast: Spanned<ast::UnaryOp>) -> Result<Spanned<hir::UnaryOp>> {
+	pub fn lower_unary_op(&self, ast: Spanned<ast::UnaryOp>) -> Result<Spanned<UnaryOp>> {
 		let op = match ast.value {
-			ast::UnaryOp::Not => hir::UnaryOp::Not,
-			ast::UnaryOp::Abs => hir::UnaryOp::Abs,
-			ast::UnaryOp::Sign(ast::Sign::Pos) => hir::UnaryOp::Pos,
-			ast::UnaryOp::Sign(ast::Sign::Neg) => hir::UnaryOp::Neg,
-			ast::UnaryOp::Logical(op) => hir::UnaryOp::Logical(op),
-			ast::UnaryOp::Condition => hir::UnaryOp::Cond,
+			ast::UnaryOp::Not => UnaryOp::Not,
+			ast::UnaryOp::Abs => UnaryOp::Abs,
+			ast::UnaryOp::Sign(ast::Sign::Pos) => UnaryOp::Pos,
+			ast::UnaryOp::Sign(ast::Sign::Neg) => UnaryOp::Neg,
+			ast::UnaryOp::Logical(op) => UnaryOp::Logical(op),
+			ast::UnaryOp::Condition => UnaryOp::Cond,
 			_ => {
 				self.emit(
 					DiagBuilder2::error("invalid unary operator")
@@ -779,20 +780,20 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Lower an AST binary operator to a HIR binary operator.
 	///
 	/// Emits an error if the operator is not a valid binary operator.
-	pub fn lower_binary_op(&self, ast: Spanned<ast::BinaryOp>) -> Result<Spanned<hir::BinaryOp>> {
+	pub fn lower_binary_op(&self, ast: Spanned<ast::BinaryOp>) -> Result<Spanned<BinaryOp>> {
 		let op = match ast.value {
-			ast::BinaryOp::Logical(op) => hir::BinaryOp::Logical(op),
-			ast::BinaryOp::Rel(op) => hir::BinaryOp::Rel(op),
-			ast::BinaryOp::Match(op) => hir::BinaryOp::Match(op),
-			ast::BinaryOp::Shift(op) => hir::BinaryOp::Shift(op),
-			ast::BinaryOp::Add => hir::BinaryOp::Add,
-			ast::BinaryOp::Sub => hir::BinaryOp::Sub,
-			ast::BinaryOp::Concat => hir::BinaryOp::Concat,
-			ast::BinaryOp::Mul => hir::BinaryOp::Mul,
-			ast::BinaryOp::Div => hir::BinaryOp::Div,
-			ast::BinaryOp::Mod => hir::BinaryOp::Mod,
-			ast::BinaryOp::Rem => hir::BinaryOp::Rem,
-			ast::BinaryOp::Pow => hir::BinaryOp::Pow,
+			ast::BinaryOp::Logical(op) => BinaryOp::Logical(op),
+			ast::BinaryOp::Rel(op) => BinaryOp::Rel(op),
+			ast::BinaryOp::Match(op) => BinaryOp::Match(op),
+			ast::BinaryOp::Shift(op) => BinaryOp::Shift(op),
+			ast::BinaryOp::Add => BinaryOp::Add,
+			ast::BinaryOp::Sub => BinaryOp::Sub,
+			ast::BinaryOp::Concat => BinaryOp::Concat,
+			ast::BinaryOp::Mul => BinaryOp::Mul,
+			ast::BinaryOp::Div => BinaryOp::Div,
+			ast::BinaryOp::Mod => BinaryOp::Mod,
+			ast::BinaryOp::Rem => BinaryOp::Rem,
+			ast::BinaryOp::Pow => BinaryOp::Pow,
 			_ => {
 				self.emit(
 					DiagBuilder2::error("invalid binary operator")

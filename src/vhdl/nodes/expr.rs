@@ -18,6 +18,7 @@ use make_ctx::MakeContext;
 use hir;
 use typeck::TypeckContext;
 use ty::*;
+use op::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add an expression.
@@ -296,6 +297,45 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
         hir::ExprData::Aggregate(id) => {
             tyc.ctx.set_type_context(id, TypeCtx::Inherit(expr_id.into()));
             tyc.ctx.lazy_typeval(id)
+        }
+        hir::ExprData::Unary(op, arg) => {
+            tyc.ctx.set_type_context(arg, TypeCtx::Inherit(expr_id.into()));
+            let ty = tyc.ctx.lazy_typeval(arg)?;
+            let ty_flat = tyc.ctx.deref_named_type(ty)?;
+            match op.value {
+                UnaryOp::Pos | UnaryOp::Neg => {
+                    if !ty_flat.is_int() {
+                        tyc.emit(
+                            DiagBuilder2::error(format!("`{}` is only defined on integers", op))
+                            .span(hir.span)
+                        );
+                        Err(())
+                    } else {
+                        Ok(ty)
+                    }
+                }
+                UnaryOp::Abs => {
+                    if !ty_flat.is_int() && !ty_flat.is_real() {
+                        tyc.emit(
+                            DiagBuilder2::error(format!("`{}` is only defined on numeric types", op))
+                            .span(hir.span)
+                        );
+                        Err(())
+                    } else {
+                        Ok(ty)
+                    }
+                }
+                UnaryOp::Cond => {
+                    Ok(tyc.ctx.builtin_boolean_type())
+                }
+                op => {
+                    tyc.emit(
+                        DiagBuilder2::bug(format!("typeval for unary operator `{}` not implemented", op))
+                        .span(hir.span)
+                    );
+                    Err(())
+                }
+            }
         }
         _ => {
             tyc.emit(

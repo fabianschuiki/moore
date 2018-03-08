@@ -4,6 +4,8 @@
 //! the parser.
 
 use std;
+use std::fmt;
+
 use moore_common::source::{Span, Spanned};
 use moore_common::name::Name;
 use moore_common::util::{HasSpan, HasDesc};
@@ -851,6 +853,19 @@ pub enum LogicalOp {
 	Nor,
 	Xor,
 	Xnor,
+}
+
+impl fmt::Display for LogicalOp {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			LogicalOp::And  => write!(f, "and"),
+			LogicalOp::Or   => write!(f, "or"),
+			LogicalOp::Nand => write!(f, "nand"),
+			LogicalOp::Nor  => write!(f, "nor"),
+			LogicalOp::Xor  => write!(f, "xor"),
+			LogicalOp::Xnor => write!(f, "xnor"),
+		}
+	}
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]

@@ -31,6 +31,7 @@ use typeck::{Typeck, TypeckContext};
 use lazy::*;
 use arenas::Alloc;
 use builtin;
+use op::*;
 pub use builtin::*;
 
 
@@ -556,52 +557,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			ast::PrimaryNameKind::Ident(n) => Ok(Spanned::new(ResolvableName::Ident(n), primary.span)),
 			ast::PrimaryNameKind::Char(c) => Ok(Spanned::new(ResolvableName::Bit(c), primary.span)),
 			ast::PrimaryNameKind::String(s) => {
-				// Declare a static table that maps operator symbols to the
-				// actual operator.
-				lazy_static!(static ref TBL: HashMap<Name, Operator> = {
-					let mut tbl = HashMap::new();
-					let nt = get_name_table();
-					tbl.insert(nt.intern("and",  false), Operator::Logical(ast::LogicalOp::And));
-					tbl.insert(nt.intern("or",   false), Operator::Logical(ast::LogicalOp::Or));
-					tbl.insert(nt.intern("nand", false), Operator::Logical(ast::LogicalOp::Nand));
-					tbl.insert(nt.intern("nor",  false), Operator::Logical(ast::LogicalOp::Nor));
-					tbl.insert(nt.intern("xor",  false), Operator::Logical(ast::LogicalOp::Xor));
-					tbl.insert(nt.intern("xnor", false), Operator::Logical(ast::LogicalOp::Xnor));
-					tbl.insert(nt.intern("=",    false), Operator::Rel(ast::RelationalOp::Eq));
-					tbl.insert(nt.intern("/=",   false), Operator::Rel(ast::RelationalOp::Neq));
-					tbl.insert(nt.intern("<",    false), Operator::Rel(ast::RelationalOp::Lt));
-					tbl.insert(nt.intern("<=",   false), Operator::Rel(ast::RelationalOp::Leq));
-					tbl.insert(nt.intern(">",    false), Operator::Rel(ast::RelationalOp::Gt));
-					tbl.insert(nt.intern(">=",   false), Operator::Rel(ast::RelationalOp::Geq));
-					tbl.insert(nt.intern("?=",   false), Operator::Match(ast::RelationalOp::Eq));
-					tbl.insert(nt.intern("?/=",  false), Operator::Match(ast::RelationalOp::Neq));
-					tbl.insert(nt.intern("?<",   false), Operator::Match(ast::RelationalOp::Lt));
-					tbl.insert(nt.intern("?<=",  false), Operator::Match(ast::RelationalOp::Leq));
-					tbl.insert(nt.intern("?>",   false), Operator::Match(ast::RelationalOp::Gt));
-					tbl.insert(nt.intern("?>=",  false), Operator::Match(ast::RelationalOp::Geq));
-					tbl.insert(nt.intern("sll",  false), Operator::Shift(ast::ShiftOp::Sll));
-					tbl.insert(nt.intern("srl",  false), Operator::Shift(ast::ShiftOp::Srl));
-					tbl.insert(nt.intern("sla",  false), Operator::Shift(ast::ShiftOp::Sla));
-					tbl.insert(nt.intern("sra",  false), Operator::Shift(ast::ShiftOp::Sra));
-					tbl.insert(nt.intern("rol",  false), Operator::Shift(ast::ShiftOp::Rol));
-					tbl.insert(nt.intern("ror",  false), Operator::Shift(ast::ShiftOp::Ror));
-					tbl.insert(nt.intern("+",    false), Operator::Add);
-					tbl.insert(nt.intern("-",    false), Operator::Sub);
-					tbl.insert(nt.intern("&",    false), Operator::Concat);
-					tbl.insert(nt.intern("*",    false), Operator::Mul);
-					tbl.insert(nt.intern("/",    false), Operator::Div);
-					tbl.insert(nt.intern("mod",  false), Operator::Mod);
-					tbl.insert(nt.intern("rem",  false), Operator::Rem);
-					tbl.insert(nt.intern("**",   false), Operator::Pow);
-					tbl.insert(nt.intern("abs",  false), Operator::Abs);
-					tbl.insert(nt.intern("not",  false), Operator::Not);
-					tbl
-				};);
-
-				// Try to find an operator for the provided name. If none is in
-				// the above table, emit an error.
-				match TBL.get(&s) {
-					Some(&op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
+				match Operator::from_name(s) {
+					Some(op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
 					None => {
 						self.emit(
 							DiagBuilder2::error(format!("`{}` is not a valid operator symbol", s))
@@ -1116,64 +1073,9 @@ impl From<char> for ResolvableName {
 	}
 }
 
-
-/// An operator as defined in IEEE 1076-2008 section 9.2.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Operator {
-	Logical(ast::LogicalOp),
-	Rel(ast::RelationalOp),
-	Match(ast::RelationalOp),
-	Shift(ast::ShiftOp),
-	Add,
-	Sub,
-	Concat,
-	Mul,
-	Div,
-	Mod,
-	Rem,
-	Pow,
-	Abs,
-	Not
-}
-
-impl std::fmt::Display for Operator {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		match *self {
-			Operator::Logical(ast::LogicalOp::And)  => write!(f, "and"),
-			Operator::Logical(ast::LogicalOp::Or)   => write!(f, "or"),
-			Operator::Logical(ast::LogicalOp::Nand) => write!(f, "nand"),
-			Operator::Logical(ast::LogicalOp::Nor)  => write!(f, "nor"),
-			Operator::Logical(ast::LogicalOp::Xor)  => write!(f, "xor"),
-			Operator::Logical(ast::LogicalOp::Xnor) => write!(f, "xnor"),
-			Operator::Rel(ast::RelationalOp::Eq)    => write!(f, "="),
-			Operator::Rel(ast::RelationalOp::Neq)   => write!(f, "/="),
-			Operator::Rel(ast::RelationalOp::Lt)    => write!(f, "<"),
-			Operator::Rel(ast::RelationalOp::Leq)   => write!(f, "<="),
-			Operator::Rel(ast::RelationalOp::Gt)    => write!(f, ">"),
-			Operator::Rel(ast::RelationalOp::Geq)   => write!(f, ">="),
-			Operator::Match(ast::RelationalOp::Eq)  => write!(f, "?="),
-			Operator::Match(ast::RelationalOp::Neq) => write!(f, "?/="),
-			Operator::Match(ast::RelationalOp::Lt)  => write!(f, "?<"),
-			Operator::Match(ast::RelationalOp::Leq) => write!(f, "?<="),
-			Operator::Match(ast::RelationalOp::Gt)  => write!(f, "?>"),
-			Operator::Match(ast::RelationalOp::Geq) => write!(f, "?>="),
-			Operator::Shift(ast::ShiftOp::Sll)      => write!(f, "sll"),
-			Operator::Shift(ast::ShiftOp::Srl)      => write!(f, "srl"),
-			Operator::Shift(ast::ShiftOp::Sla)      => write!(f, "sla"),
-			Operator::Shift(ast::ShiftOp::Sra)      => write!(f, "sra"),
-			Operator::Shift(ast::ShiftOp::Rol)      => write!(f, "rol"),
-			Operator::Shift(ast::ShiftOp::Ror)      => write!(f, "ror"),
-			Operator::Add                           => write!(f, "+"),
-			Operator::Sub                           => write!(f, "-"),
-			Operator::Concat                        => write!(f, "&"),
-			Operator::Mul                           => write!(f, "*"),
-			Operator::Div                           => write!(f, "/"),
-			Operator::Mod                           => write!(f, "mod"),
-			Operator::Rem                           => write!(f, "rem"),
-			Operator::Pow                           => write!(f, "**"),
-			Operator::Abs                           => write!(f, "abs"),
-			Operator::Not                           => write!(f, "not"),
-		}
+impl From<Operator> for ResolvableName {
+	fn from(op: Operator) -> ResolvableName {
+		ResolvableName::Operator(op)
 	}
 }
 

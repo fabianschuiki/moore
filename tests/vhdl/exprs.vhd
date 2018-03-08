@@ -3,7 +3,7 @@ package pkg is
 	constant two : SMALLINT := 2;
 end;
 
---library work;
+library work;
 use work.pkg;
 entity foo is end;
 architecture bar of foo is
@@ -84,9 +84,10 @@ architecture bar of foo is
 
 	-- simple expression
 	constant s100 : INTEGER := -2;
-	constant s101 : INTEGER := 2 + 2;
-	constant s102 : INTEGER := 4 + 2;
-	constant s103 : BITS := "00" & "100";
+	constant s101 : INTEGER := +2;
+	constant s102 : INTEGER := 2 + 2;
+	constant s103 : INTEGER := 4 + 2;
+	constant s104 : BITS := "00" & "100";
 
 	-- shift expression
 	constant s110 : INTEGER := 16 sll 4;

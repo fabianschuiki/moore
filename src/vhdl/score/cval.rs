@@ -21,8 +21,8 @@ impl_make!(self, id: ExprRef => &Const {
 			// TODO: Lookup the type of the current expression and perform
 			// the operation accordingly.
 			match op.value {
-				hir::UnaryOp::Pos => arg,
-				hir::UnaryOp::Neg => self.intern_const(arg.clone().negate()),
+				UnaryOp::Pos => arg,
+				UnaryOp::Neg => self.intern_const(arg.clone().negate()),
 				_ => {
 					self.emit(
 						DiagBuilder2::bug(format!("constant unary operator {:?} not yet implemented", op.value))

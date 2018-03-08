@@ -488,6 +488,12 @@ impl<T> std::fmt::Debug for Spanned<T> where T: std::fmt::Debug {
 	}
 }
 
+impl<T> std::fmt::Display for Spanned<T> where T: std::fmt::Display {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		self.value.fmt(f)
+	}
+}
+
 impl<T> Copy for Spanned<T> where T: Copy {}
 
 impl<T> Clone for Spanned<T> where T: Clone {

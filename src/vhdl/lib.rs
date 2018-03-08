@@ -33,5 +33,6 @@ pub mod add_ctx;
 pub mod term;
 pub mod scope;
 pub mod builtin;
+pub mod op;
 
 mod nodes;

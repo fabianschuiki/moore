@@ -62,6 +62,21 @@ impl Ty {
 			Ty::Record(_) => "record type",
 		}
 	}
+
+	/// Check if this type is an integer.
+	pub fn is_int(&self) -> bool {
+		match *self {
+			Ty::Int(..) | Ty::UnboundedInt => true,
+			_ => false,
+		}
+	}
+
+	/// Check if this type is a real.
+	pub fn is_real(&self) -> bool {
+		match *self {
+			_ => false,
+		}
+	}
 }
 
 impl From<IntTy> for Ty {

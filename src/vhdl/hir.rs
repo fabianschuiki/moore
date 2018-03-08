@@ -10,8 +10,8 @@ use common::name::*;
 use common::util::HasSpan;
 
 use score::*;
-use syntax::ast;
 use konst::*;
+use op::*;
 pub use syntax::ast::Dir;
 
 /// A collection of arenas where HIR nodes may be allocated.
@@ -478,57 +478,6 @@ pub enum ExprData {
 	Cast(Spanned<TypeMarkRef>, ExprRef),
 	/// A function call expression.
 	Call(ExprRef, Spanned<AssocList>),
-}
-
-/// A unary operator.
-///
-/// See IEEE 1076-2008 section 9.2.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum UnaryOp {
-	/// The `not` operator.
-	Not,
-	/// The `abs` operator.
-	Abs,
-	/// The `+` sign operator.
-	Pos,
-	/// The `-` sign operator.
-	Neg,
-	/// A logical operator.
-	Logical(ast::LogicalOp),
-	/// The `??` operator.
-	Cond,
-}
-
-/// A binary operator.
-///
-/// See IEEE 1076-2008 section 9.2.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum BinaryOp {
-	/// A logical operator.
-	Logical(ast::LogicalOp),
-	/// A relational operator.
-	Rel(ast::RelationalOp),
-	/// A matching relational operator. These are the relational operators
-	/// prefixed with a `?`.
-	Match(ast::RelationalOp),
-	/// A shift operator.
-	Shift(ast::ShiftOp),
-	/// The `+` operator.
-	Add,
-	/// The `-` operator.
-	Sub,
-	/// The `&` operator.
-	Concat,
-	/// The `*` operator.
-	Mul,
-	/// The `/` operator.
-	Div,
-	/// The `mod` operator.
-	Mod,
-	/// The `rem` operator.
-	Rem,
-	/// The `**` operator.
-	Pow,
 }
 
 /// An object declaration.
