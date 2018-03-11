@@ -16,7 +16,7 @@ impl_make!(self, id: ExprRef => &Const {
 		hir::ExprData::FloatLiteral(ref c) => self.intern_const(c.clone()),
 
 		// Unary operators.
-		hir::ExprData::Unary(op, arg_id) => {
+		hir::ExprData::Unary(op, _, arg_id) => {
 			let arg = self.const_value(arg_id)?;
 			// TODO: Lookup the type of the current expression and perform
 			// the operation accordingly.

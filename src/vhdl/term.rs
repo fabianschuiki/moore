@@ -612,14 +612,14 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 let name: Spanned<ResolvableName> = op.map_into();
                 let defs = self.ctx.resolve_name(name, self.scope, false, false)?;
                 debugln!("resolved unary op `{}` to {:?}", name.value, defs);
-                hir::ExprData::Unary(op, self.term_to_expr(*arg)?)
+                hir::ExprData::Unary(op, defs, self.term_to_expr(*arg)?)
             }
             Term::Binary(op, lhs, rhs) => {
                 // Look for implementations of this operator.
                 let name: Spanned<ResolvableName> = op.map_into();
                 let defs = self.ctx.resolve_name(name, self.scope, false, false)?;
-                debugln!("resolved unary op `{}` to {:?}", name.value, defs);
-                hir::ExprData::Binary(op, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
+                debugln!("resolved binary op `{}` to {:?}", name.value, defs);
+                hir::ExprData::Binary(op, defs, self.term_to_expr(*lhs)?, self.term_to_expr(*rhs)?)
             }
             Term::Ident(def) => {
                 match def.value {

@@ -463,9 +463,9 @@ pub enum ExprData {
 	/// A float literal.
 	FloatLiteral(ConstFloat),
 	/// A unary operator expression.
-	Unary(Spanned<UnaryOp>, ExprRef),
+	Unary(Spanned<UnaryOp>, Vec<Spanned<Def>>, ExprRef),
 	/// A binary operator expression.
-	Binary(Spanned<BinaryOp>, ExprRef, ExprRef),
+	Binary(Spanned<BinaryOp>, Vec<Spanned<Def>>, ExprRef, ExprRef),
 	/// A range expression.
 	Range(Dir, ExprRef, ExprRef),
 	/// An aggregate expression.

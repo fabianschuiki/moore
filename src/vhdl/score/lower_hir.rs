@@ -1368,7 +1368,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 			let op = self.lower_unary_op(Spanned::new(op, ast.span))?;
 			let subid = ExprRef(NodeId::alloc());
 			self.set_ast(subid, (scope_id, arg.as_ref()));
-			hir::ExprData::Unary(op, subid)
+			hir::ExprData::Unary(op, vec![], subid)
 		}
 
 		// Ranges.

@@ -11,7 +11,7 @@ architecture bar of foo is
 	type BIT is ('0', '1');
 	type BIT2 is ('1', '2');
 	--type BIT3 is ('X', '0');
-	type INTEGER is range -256 to 255;
+	--type INTEGER is range -256 to 255;
 	type BITS is array (INTEGER range <>) of BIT;
 	subtype TRIBITS is BITS (0 to 2);
 	type REC is record

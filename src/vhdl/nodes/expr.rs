@@ -19,6 +19,7 @@ use hir;
 use typeck::TypeckContext;
 use ty::*;
 use op::*;
+use overload_resolver::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add an expression.
@@ -298,44 +299,56 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
             tyc.ctx.set_type_context(id, TypeCtx::Inherit(expr_id.into()));
             tyc.ctx.lazy_typeval(id)
         }
-        hir::ExprData::Unary(op, arg) => {
-            tyc.ctx.set_type_context(arg, TypeCtx::Inherit(expr_id.into()));
-            let ty = tyc.ctx.lazy_typeval(arg)?;
-            let ty_flat = tyc.ctx.deref_named_type(ty)?;
-            match op.value {
-                UnaryOp::Pos | UnaryOp::Neg => {
-                    if !ty_flat.is_int() {
-                        tyc.emit(
-                            DiagBuilder2::error(format!("`{}` is only defined on integers", op))
-                            .span(hir.span)
-                        );
-                        Err(())
-                    } else {
-                        Ok(ty)
-                    }
-                }
-                UnaryOp::Abs => {
-                    if !ty_flat.is_int() && !ty_flat.is_real() {
-                        tyc.emit(
-                            DiagBuilder2::error(format!("`{}` is only defined on numeric types", op))
-                            .span(hir.span)
-                        );
-                        Err(())
-                    } else {
-                        Ok(ty)
-                    }
-                }
-                UnaryOp::Cond => {
-                    Ok(tyc.ctx.builtin_boolean_type())
-                }
-                op => {
-                    tyc.emit(
-                        DiagBuilder2::bug(format!("typeval for unary operator `{}` not implemented", op))
-                        .span(hir.span)
-                    );
-                    Err(())
-                }
-            }
+        hir::ExprData::Unary(op, ref defs, arg) => {
+            // Assemble an overload resolution requirement based on the
+            // operator's types.
+            let req = OverloadReq::Subprog(SignatureReq {
+                return_type: match tyctx {
+                    Some(tyctx) => TypeReq::One(tyctx),
+                    None => TypeReq::Any,
+                },
+                positional: vec![
+                    TypeReq::One(tyc.lazy_typeval(arg)?),
+                ],
+                named: HashMap::new(),
+            });
+
+            // Resolve the overload.
+            let def = resolve_overloads(tyc.ctx, defs, &req, hir.span)?;
+            debugln!("unary operator `{}` resolved to {:?}", op.value, def);
+
+            tyc.emit(
+                DiagBuilder2::bug(format!("typeval for unary operation `{}` not implemented", hir.span.extract()))
+                .span(hir.span)
+            );
+            debugln!("Defs are {:?}", defs);
+            Err(())
+        }
+        hir::ExprData::Binary(op, ref defs, lhs, rhs) => {
+            // Assemble an overload resolution requirement based on the
+            // operator's types.
+            let req = OverloadReq::Subprog(SignatureReq {
+                return_type: match tyctx {
+                    Some(tyctx) => TypeReq::One(tyctx),
+                    None => TypeReq::Any,
+                },
+                positional: vec![
+                    TypeReq::One(tyc.lazy_typeval(lhs)?),
+                    TypeReq::One(tyc.lazy_typeval(rhs)?),
+                ],
+                named: HashMap::new(),
+            });
+
+            // Resolve the overload.
+            let def = resolve_overloads(tyc.ctx, defs, &req, hir.span)?;
+            debugln!("binary operator `{}` resolved to {:?}", op.value, def);
+
+            tyc.emit(
+                DiagBuilder2::bug(format!("typeval for binary operation `{}` not implemented", hir.span.extract()))
+                .span(hir.span)
+            );
+            debugln!("Defs are {:?}", defs);
+            Err(())
         }
         _ => {
             tyc.emit(
