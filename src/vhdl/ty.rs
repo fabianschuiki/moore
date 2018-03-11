@@ -27,6 +27,8 @@ pub enum Ty {
 	Null,
 	/// An integer type.
 	Int(IntTy),
+	/// A universal integer type.
+	UniversalInt,
 	/// An unbounded integer type. This is the type integers have that are
 	/// evaluated at compile time, e.g. as part of a range expression. Cannot be
 	/// mapped to LLHD.
@@ -53,7 +55,7 @@ impl Ty {
 		match *self {
 			Ty::Named(..) => "named type",
 			Ty::Null => "null type",
-			Ty::Int(_) | Ty::UnboundedInt => "integer type",
+			Ty::Int(_) | Ty::UnboundedInt | Ty::UniversalInt => "integer type",
 			Ty::Enum(_) => "enumeration type",
 			Ty::Physical(_) => "physical type",
 			Ty::Access(_) => "access type",
@@ -66,7 +68,7 @@ impl Ty {
 	/// Check if this type is an integer.
 	pub fn is_int(&self) -> bool {
 		match *self {
-			Ty::Int(..) | Ty::UnboundedInt => true,
+			Ty::Int(..) | Ty::UnboundedInt | Ty::UniversalInt => true,
 			_ => false,
 		}
 	}
@@ -115,6 +117,7 @@ impl fmt::Display for Ty {
 			Ty::Named(name, _) => write!(f, "{}", name),
 			Ty::Null => write!(f, "null"),
 			Ty::Int(ref ty) => write!(f, "{}", ty),
+			Ty::UniversalInt => write!(f, "{{universal integer}}"),
 			Ty::UnboundedInt => write!(f, "{{integer}}"),
 			Ty::Enum(ref ty) => write!(f, "{}", ty),
 			Ty::Physical(ref ty) => write!(f, "{}", ty),

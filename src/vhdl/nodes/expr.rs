@@ -258,21 +258,21 @@ pub fn typeval_expr<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb>(
             }
         }
         hir::ExprData::IntegerLiteral(ref value) => {
-            // Integer literals either have a type attached, or they inherit
-            // their type from the context.
             if let Some(ref ty) = value.ty {
                 return Ok(tyc.ctx.intern_ty(ty.clone()));
+            } else {
+                return Ok(tyc.ctx.intern_ty(Ty::UniversalInt));
             }
-            if let Some(ty) = tyctx {
-                if let &Ty::Int(_) = tyc.ctx.deref_named_type(ty)? {
-                    return Ok(ty);
-                }
-            }
-            tyc.emit(
-                DiagBuilder2::error(format!("type of expression `{}` cannot be inferred from context", hir.span.extract()))
-                .span(hir.span)
-            );
-            Err(())
+            // if let Some(ty) = tyctx {
+            //     if let &Ty::Int(_) = tyc.ctx.deref_named_type(ty)? {
+            //         return Ok(ty);
+            //     }
+            // }
+            // tyc.emit(
+            //     DiagBuilder2::error(format!("type of expression `{}` cannot be inferred from context", hir.span.extract()))
+            //     .span(hir.span)
+            // );
+            // Err(())
         }
         hir::ExprData::Qualified(ref tm, expr) => {
             let ty = tyc.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value));
@@ -562,7 +562,7 @@ pub fn typeck_array_aggregate_element<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 
     }
     tyc.ctx.set_type_context(hir.value.1.value, element_ty);
     let ty = tyc.lazy_typeval(hir.value.1.value)?;
-    tyc.must_match(ty, element_ty, hir.span);
+    tyc.must_match(element_ty, ty, hir.span);
     if had_fails {
         Err(())
     } else {
@@ -580,11 +580,11 @@ pub fn typeck_array_aggregate_choice<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, '
         hir::ArrayChoice::Expr(expr_id) => {
             tyc.ctx.set_type_context(expr_id, index_ty);
             let ty = tyc.lazy_typeval(expr_id)?;
-            tyc.must_match(ty, index_ty, hir.span);
+            tyc.must_match(index_ty, ty, hir.span);
         }
         hir::ArrayChoice::DiscreteRange(hir::DiscreteRange::Subtype(subtype_id)) => {
             let ty = tyc.lazy_typeval(subtype_id)?;
-            tyc.must_match(ty, index_ty, hir.span);
+            tyc.must_match(index_ty, ty, hir.span);
         }
         hir::ArrayChoice::DiscreteRange(hir::DiscreteRange::Range(ref _range)) => {
             // TODO: Check type.

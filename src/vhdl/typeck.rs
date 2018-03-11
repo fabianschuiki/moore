@@ -136,8 +136,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 			(Ok(e), Ok(a)) => (e, a),
 			_ => return false,
 		};
-		if exp_flat == act_flat {
-			return true;
+		match (exp_flat, act_flat) {
+			(e,a) if e == a => return true,
+			// (e,a) if a.is_subtype_of(e) => return true,
+			(&Ty::Int(..), &Ty::UniversalInt) => return true,
+			_ => ()
 		}
 		self.emit(
 			DiagBuilder2::error(format!("expected type {}, but `{}` has type {}", exp, span.extract(), act))

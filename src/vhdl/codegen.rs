@@ -135,7 +135,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			// Unbounded integers cannot be mapped to LLHD. All cases where
 			// such an int can leak through to codegen should actually be caught
 			// beforehand in the type check.
-			Ty::UnboundedInt => unreachable!(),
+			Ty::UnboundedInt | Ty::UniversalInt => unreachable!(),
 		})
 	}
 
