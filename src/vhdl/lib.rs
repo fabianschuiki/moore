@@ -34,5 +34,6 @@ pub mod term;
 pub mod scope;
 pub mod builtin;
 pub mod op;
+pub mod overload_resolver;
 
 mod nodes;
