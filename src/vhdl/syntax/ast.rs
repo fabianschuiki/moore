@@ -878,6 +878,19 @@ pub enum RelationalOp {
 	Geq,
 }
 
+impl fmt::Display for RelationalOp {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			RelationalOp::Eq  => write!(f, "="),
+			RelationalOp::Neq => write!(f, "/="),
+			RelationalOp::Lt  => write!(f, "<"),
+			RelationalOp::Leq => write!(f, "<="),
+			RelationalOp::Gt  => write!(f, ">"),
+			RelationalOp::Geq => write!(f, ">="),
+		}
+	}
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
 pub enum ShiftOp {
 	Sll,
@@ -886,6 +899,19 @@ pub enum ShiftOp {
 	Sra,
 	Rol,
 	Ror,
+}
+
+impl fmt::Display for ShiftOp {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			ShiftOp::Sll => write!(f, "sll"),
+			ShiftOp::Srl => write!(f, "srl"),
+			ShiftOp::Sla => write!(f, "sla"),
+			ShiftOp::Sra => write!(f, "sra"),
+			ShiftOp::Rol => write!(f, "rol"),
+			ShiftOp::Ror => write!(f, "ror"),
+		}
+	}
 }
 
 

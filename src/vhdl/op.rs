@@ -54,41 +54,21 @@ pub enum Operator {
 impl fmt::Display for Operator {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
-			Operator::Logical(LogicalOp::And)  => write!(f, "and"),
-			Operator::Logical(LogicalOp::Or)   => write!(f, "or"),
-			Operator::Logical(LogicalOp::Nand) => write!(f, "nand"),
-			Operator::Logical(LogicalOp::Nor)  => write!(f, "nor"),
-			Operator::Logical(LogicalOp::Xor)  => write!(f, "xor"),
-			Operator::Logical(LogicalOp::Xnor) => write!(f, "xnor"),
-			Operator::Rel(RelationalOp::Eq)    => write!(f, "="),
-			Operator::Rel(RelationalOp::Neq)   => write!(f, "/="),
-			Operator::Rel(RelationalOp::Lt)    => write!(f, "<"),
-			Operator::Rel(RelationalOp::Leq)   => write!(f, "<="),
-			Operator::Rel(RelationalOp::Gt)    => write!(f, ">"),
-			Operator::Rel(RelationalOp::Geq)   => write!(f, ">="),
-			Operator::Match(RelationalOp::Eq)  => write!(f, "?="),
-			Operator::Match(RelationalOp::Neq) => write!(f, "?/="),
-			Operator::Match(RelationalOp::Lt)  => write!(f, "?<"),
-			Operator::Match(RelationalOp::Leq) => write!(f, "?<="),
-			Operator::Match(RelationalOp::Gt)  => write!(f, "?>"),
-			Operator::Match(RelationalOp::Geq) => write!(f, "?>="),
-			Operator::Shift(ShiftOp::Sll)      => write!(f, "sll"),
-			Operator::Shift(ShiftOp::Srl)      => write!(f, "srl"),
-			Operator::Shift(ShiftOp::Sla)      => write!(f, "sla"),
-			Operator::Shift(ShiftOp::Sra)      => write!(f, "sra"),
-			Operator::Shift(ShiftOp::Rol)      => write!(f, "rol"),
-			Operator::Shift(ShiftOp::Ror)      => write!(f, "ror"),
-			Operator::Add                      => write!(f, "+"),
-			Operator::Sub                      => write!(f, "-"),
-			Operator::Concat                   => write!(f, "&"),
-			Operator::Mul                      => write!(f, "*"),
-			Operator::Div                      => write!(f, "/"),
-			Operator::Mod                      => write!(f, "mod"),
-			Operator::Rem                      => write!(f, "rem"),
-			Operator::Pow                      => write!(f, "**"),
-			Operator::Abs                      => write!(f, "abs"),
-			Operator::Not                      => write!(f, "not"),
-			Operator::Cond                     => write!(f, "??"),
+			Operator::Logical(op) => write!(f, "{}", op),
+			Operator::Rel(op)     => write!(f, "{}", op),
+			Operator::Match(op)   => write!(f, "?{}", op),
+			Operator::Shift(op)   => write!(f, "{}", op),
+			Operator::Add         => write!(f, "+"),
+			Operator::Sub         => write!(f, "-"),
+			Operator::Concat      => write!(f, "&"),
+			Operator::Mul         => write!(f, "*"),
+			Operator::Div         => write!(f, "/"),
+			Operator::Mod         => write!(f, "mod"),
+			Operator::Rem         => write!(f, "rem"),
+			Operator::Pow         => write!(f, "**"),
+			Operator::Abs         => write!(f, "abs"),
+			Operator::Not         => write!(f, "not"),
+			Operator::Cond        => write!(f, "??"),
 		}
 	}
 }
@@ -226,6 +206,25 @@ pub enum BinaryOp {
 	Rem,
 	/// The `**` operator.
 	Pow,
+}
+
+impl fmt::Display for BinaryOp {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			BinaryOp::Logical(op) => write!(f, "{}", op),
+			BinaryOp::Rel(op)     => write!(f, "{}", op),
+			BinaryOp::Match(op)   => write!(f, "?{}", op),
+			BinaryOp::Shift(op)   => write!(f, "{}", op),
+			BinaryOp::Add         => write!(f, "+"),
+			BinaryOp::Sub         => write!(f, "-"),
+			BinaryOp::Concat      => write!(f, "&"),
+			BinaryOp::Mul         => write!(f, "*"),
+			BinaryOp::Div         => write!(f, "/"),
+			BinaryOp::Mod         => write!(f, "mod"),
+			BinaryOp::Rem         => write!(f, "rem"),
+			BinaryOp::Pow         => write!(f, "**"),
+		}
+	}
 }
 
 impl From<BinaryOp> for Operator {
