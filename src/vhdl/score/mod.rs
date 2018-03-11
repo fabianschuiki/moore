@@ -1173,6 +1173,7 @@ node_ref!(PortMapRef);
 node_ref!(LatentTypeMarkRef);
 node_ref!(LatentPkgRef);
 node_ref!(LatentSubprogRef);
+node_ref!(BuiltinOpRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
 /// which defines the enumeration and the index of the literal.
@@ -1206,6 +1207,7 @@ node_ref_group!(Def:
 	Pkg(PkgDeclRef),
 	PkgInst(PkgInstRef),
 	BuiltinPkg(BuiltinPkgRef),
+	BuiltinOp(BuiltinOpRef),
 	Type(TypeDeclRef),
 	Subtype(SubtypeDeclRef),
 	Enum(EnumRef),

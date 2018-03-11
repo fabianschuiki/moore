@@ -10,9 +10,10 @@ use common::score::NodeRef;
 use common::source::*;
 use common::name::*;
 
-use score::{ResolvableName, ScoreBoard, ScopeRef, LibRef, BuiltinPkgRef, Def, TypeMarkRef, TypeDeclRef, EnumRef, UnitRef};
+use score::{ResolvableName, ScoreBoard, ScopeRef, LibRef, BuiltinPkgRef, Def, TypeMarkRef, TypeDeclRef, EnumRef, UnitRef, BuiltinOpRef};
 use scope::Scope;
 use ty::*;
+use op::*;
 
 // Define some global references for the builtins.
 lazy_static! {
@@ -27,34 +28,85 @@ lazy_static! {
 	/// A reference to the package `ENV`.
 	pub static ref ENV_PKG_REF: BuiltinPkgRef = BuiltinPkgRef::alloc();
 
-	// A reference to the type `BOOLEAN`.
+	/// A reference to the type `BOOLEAN`.
 	pub static ref BOOLEAN_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `BIT`.
+	/// A reference to the type `BIT`.
 	pub static ref BIT_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `SEVERITY_LEVEL`.
+	/// A reference to the type `SEVERITY_LEVEL`.
 	pub static ref SEVERITY_LEVEL_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `INTEGER`.
+	/// A reference to the type `INTEGER`.
 	pub static ref INTEGER_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `TIME`.
+	/// A reference to the type `TIME`.
 	pub static ref TIME_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `DELAY_LENGTH`.
+	/// A reference to the type `DELAY_LENGTH`.
 	pub static ref DELAY_LENGTH_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `NATURAL`.
+	/// A reference to the type `NATURAL`.
 	pub static ref NATURAL_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `POSITIVE`.
+	/// A reference to the type `POSITIVE`.
 	pub static ref POSITIVE_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `BOOLEAN_VECTOR`.
+	/// A reference to the type `BOOLEAN_VECTOR`.
 	pub static ref BOOLEAN_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `BIT_VECTOR`.
+	/// A reference to the type `BIT_VECTOR`.
 	pub static ref BIT_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `INTEGER_VECTOR`.
+	/// A reference to the type `INTEGER_VECTOR`.
 	pub static ref INTEGER_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `TIME_VECTOR`.
+	/// A reference to the type `TIME_VECTOR`.
 	pub static ref TIME_VECTOR_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `FILE_OPEN_KIND`.
+	/// A reference to the type `FILE_OPEN_KIND`.
 	pub static ref FILE_OPEN_KIND_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
-	// A reference to the type `FILE_OPEN_STATUS`.
+	/// A reference to the type `FILE_OPEN_STATUS`.
 	pub static ref FILE_OPEN_STATUS_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
+
+	// A list of builtin unary operators.
+	static ref BUILTIN_UNARY_OPS: Vec<BuiltinUnaryOp> = vec![
+		BuiltinUnaryOp::new(UnaryOp::Pos),
+		BuiltinUnaryOp::new(UnaryOp::Neg),
+		BuiltinUnaryOp::new(UnaryOp::Abs),
+		BuiltinUnaryOp::new(UnaryOp::Cond),
+		BuiltinUnaryOp::new(UnaryOp::Not),
+		BuiltinUnaryOp::new(UnaryOp::Logical(LogicalOp::And)),
+		BuiltinUnaryOp::new(UnaryOp::Logical(LogicalOp::Or)),
+		BuiltinUnaryOp::new(UnaryOp::Logical(LogicalOp::Nand)),
+		BuiltinUnaryOp::new(UnaryOp::Logical(LogicalOp::Nor)),
+		BuiltinUnaryOp::new(UnaryOp::Logical(LogicalOp::Xor)),
+		BuiltinUnaryOp::new(UnaryOp::Logical(LogicalOp::Xnor)),
+	];
+
+	// A list of builtin binary operators.
+	static ref BUILTIN_BINARY_OPS: Vec<BuiltinBinaryOp> = vec![
+		BuiltinBinaryOp::new(BinaryOp::Logical(LogicalOp::And)),
+		BuiltinBinaryOp::new(BinaryOp::Logical(LogicalOp::Or)),
+		BuiltinBinaryOp::new(BinaryOp::Logical(LogicalOp::Nand)),
+		BuiltinBinaryOp::new(BinaryOp::Logical(LogicalOp::Nor)),
+		BuiltinBinaryOp::new(BinaryOp::Logical(LogicalOp::Xor)),
+		BuiltinBinaryOp::new(BinaryOp::Logical(LogicalOp::Xnor)),
+		BuiltinBinaryOp::new(BinaryOp::Rel(RelationalOp::Eq)),
+		BuiltinBinaryOp::new(BinaryOp::Rel(RelationalOp::Neq)),
+		BuiltinBinaryOp::new(BinaryOp::Rel(RelationalOp::Lt)),
+		BuiltinBinaryOp::new(BinaryOp::Rel(RelationalOp::Leq)),
+		BuiltinBinaryOp::new(BinaryOp::Rel(RelationalOp::Gt)),
+		BuiltinBinaryOp::new(BinaryOp::Rel(RelationalOp::Geq)),
+		BuiltinBinaryOp::new(BinaryOp::Match(RelationalOp::Eq)),
+		BuiltinBinaryOp::new(BinaryOp::Match(RelationalOp::Neq)),
+		BuiltinBinaryOp::new(BinaryOp::Match(RelationalOp::Lt)),
+		BuiltinBinaryOp::new(BinaryOp::Match(RelationalOp::Leq)),
+		BuiltinBinaryOp::new(BinaryOp::Match(RelationalOp::Gt)),
+		BuiltinBinaryOp::new(BinaryOp::Match(RelationalOp::Geq)),
+		BuiltinBinaryOp::new(BinaryOp::Shift(ShiftOp::Sll)),
+		BuiltinBinaryOp::new(BinaryOp::Shift(ShiftOp::Srl)),
+		BuiltinBinaryOp::new(BinaryOp::Shift(ShiftOp::Sla)),
+		BuiltinBinaryOp::new(BinaryOp::Shift(ShiftOp::Sra)),
+		BuiltinBinaryOp::new(BinaryOp::Shift(ShiftOp::Rol)),
+		BuiltinBinaryOp::new(BinaryOp::Shift(ShiftOp::Ror)),
+		BuiltinBinaryOp::new(BinaryOp::Add),
+		BuiltinBinaryOp::new(BinaryOp::Sub),
+		BuiltinBinaryOp::new(BinaryOp::Concat),
+		BuiltinBinaryOp::new(BinaryOp::Mul),
+		BuiltinBinaryOp::new(BinaryOp::Div),
+		BuiltinBinaryOp::new(BinaryOp::Mod),
+		BuiltinBinaryOp::new(BinaryOp::Rem),
+		BuiltinBinaryOp::new(BinaryOp::Pow),
+	];
 }
 
 /// Add the definition for a builtin resolvable name to a scope.
@@ -87,6 +139,16 @@ fn named_unit(name: &str, abs: usize, rel: Option<(usize, usize)>) -> PhysicalUn
 	PhysicalUnit::new(name, abs, rel)
 }
 
+/// Add the definition for a builtin operator to a scope.
+fn define_builtin_op<O>(scope: &mut Scope, op: O, id: BuiltinOpRef)
+	where O: Into<Operator>
+{
+	scope.defs
+		.entry(ResolvableName::Operator(op.into()))
+		.or_insert_with(|| Vec::new())
+		.push(Spanned::new(Def::BuiltinOp(id), INVALID_SPAN));
+}
+
 // Define the scopes of the builtins.
 lazy_static! {
 	/// The root scope.
@@ -96,6 +158,15 @@ lazy_static! {
 		let mut scope = Scope::new(None);
 		define_builtin_ident(&mut scope, "STD", Def::Lib(*STD_LIB_REF));
 		scope.imported_scopes.insert((*STANDARD_PKG_REF).into());
+
+		// Define the default operator implementations.
+		for op in BUILTIN_UNARY_OPS.iter() {
+			define_builtin_op(&mut scope, op.op, op.id);
+		}
+		for op in BUILTIN_BINARY_OPS.iter() {
+			define_builtin_op(&mut scope, op.op, op.id);
+		}
+
 		scope
 	};
 
@@ -288,4 +359,40 @@ fn make_time_type(decl: TypeDeclRef, base: IntTy) -> PhysicalTy {
 		],
 		0
 	)
+}
+
+/// A builtin unary operator.
+struct BuiltinUnaryOp {
+	/// The unique ID.
+	id: BuiltinOpRef,
+	/// The operator symbol.
+	op: UnaryOp,
+}
+
+impl BuiltinUnaryOp {
+	/// Create a new unart operator.
+	fn new(op: UnaryOp) -> BuiltinUnaryOp {
+		BuiltinUnaryOp {
+			id: BuiltinOpRef::alloc(),
+			op: op,
+		}
+	}
+}
+
+/// A builtin binary operator.
+struct BuiltinBinaryOp {
+	/// The unique ID.
+	id: BuiltinOpRef,
+	/// The operator symbol.
+	op: BinaryOp,
+}
+
+impl BuiltinBinaryOp {
+	/// Create a new unart operator.
+	fn new(op: BinaryOp) -> BuiltinBinaryOp {
+		BuiltinBinaryOp {
+			id: BuiltinOpRef::alloc(),
+			op: op,
+		}
+	}
 }
