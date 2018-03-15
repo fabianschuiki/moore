@@ -905,6 +905,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
 			Ty::UniversalInt => panic!("universal integer has no default value"),
 			Ty::UnboundedInt => panic!("unbounded integer has no default value"),
+			Ty::Subprog(..) => panic!("subprogram type has no default value"),
 			Ty::Access(_) => Ok(self.intern_const(Const::Null)),
 			Ty::Array(ref ty) => {
 				self.emit(DiagBuilder2::bug(format!("default value for type `{}` not implemented", ty)));

@@ -45,6 +45,8 @@ pub enum Ty {
 	File(Box<Ty>),
 	/// A record type.
 	Record(RecordTy),
+	/// A subprogram type.
+	Subprog(SubprogTy),
 }
 
 impl Ty {
@@ -62,6 +64,7 @@ impl Ty {
 			Ty::Array(_) => "array type",
 			Ty::File(..) => "file type",
 			Ty::Record(_) => "record type",
+			Ty::Subprog(_) => "subprogram type",
 		}
 	}
 
@@ -111,6 +114,12 @@ impl From<RecordTy> for Ty {
 	}
 }
 
+impl From<SubprogTy> for Ty {
+	fn from(t: SubprogTy) -> Ty {
+		Ty::Subprog(t)
+	}
+}
+
 impl fmt::Display for Ty {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
@@ -125,6 +134,7 @@ impl fmt::Display for Ty {
 			Ty::Array(ref ty) => write!(f, "{}", ty),
 			Ty::File(ref ty) => write!(f, "file of {}", ty),
 			Ty::Record(ref ty) => write!(f, "{}", ty),
+			Ty::Subprog(ref ty) => write!(f, "{}", ty),
 		}
 	}
 }
@@ -162,7 +172,6 @@ impl From<Name> for TyName {
 	}
 }
 
-
 /// An integer type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntTy {
@@ -180,7 +189,6 @@ impl IntTy {
 			right_bound: right_bound,
 		}
 	}
-
 
 	/// Map the type to itself if the range has a positive length, or to `null`
 	/// if the range has a negative or zero length.
@@ -206,7 +214,6 @@ impl fmt::Display for IntTy {
 		write!(f, "{} {} {}", self.left_bound, self.dir, self.right_bound)
 	}
 }
-
 
 /// An enumeration type. Rather than keeping track of each enumeration value in
 /// here, we simply point at the type declaration.
@@ -289,7 +296,6 @@ impl PhysicalUnit {
 		}
 	}
 }
-
 
 /// An array type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -381,6 +387,73 @@ impl fmt::Display for RecordTy {
 		}
 		write!(f, "end record")?;
 		Ok(())
+	}
+}
+
+/// A subprogram type.
+///
+/// This is the type assigned to function and procedure declarations, as well as
+/// builtin operators.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubprogTy {
+	/// The argument names and types.
+	pub args: Vec<SubprogTyArg>,
+	/// The return type. May be `None` in case of a procedure type.
+	pub ret: Option<Box<Ty>>,
+}
+
+impl SubprogTy {
+	/// Create a new subprogram type.
+	pub fn new(args: Vec<SubprogTyArg>, ret: Option<Ty>) -> SubprogTy {
+		SubprogTy {
+			args: args,
+			ret: ret.map(|t| Box::new(t)),
+		}
+	}
+}
+
+impl fmt::Display for SubprogTy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "({})", DisplayList(RefCell::new(self.args.iter()),
+			Some(&","), Some(&", "), Some(&", ")))?;
+		if let Some(ref ret) = self.ret {
+			write!(f, " return {}", ret)?;
+		}
+		Ok(())
+	}
+}
+
+/// A subprogram argument type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubprogTyArg {
+	/// The type of the argument.
+	pub ty: Ty,
+	/// The name of the argument. May be omitted for positional arguments.
+	pub name: Option<Name>,
+}
+
+impl SubprogTyArg {
+	pub fn named(ty: Ty, name: Name) -> SubprogTyArg {
+		SubprogTyArg {
+			ty: ty,
+			name: Some(name),
+		}
+	}
+
+	pub fn positional(ty: Ty) -> SubprogTyArg {
+		SubprogTyArg {
+			ty: ty,
+			name: None,
+		}
+	}
+}
+
+impl fmt::Display for SubprogTyArg {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		if let Some(name) = self.name {
+			write!(f, "{}: ", name)?;
+		}
+		write!(f, "{}", self.ty)
 	}
 }
 
