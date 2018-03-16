@@ -2,6 +2,8 @@
 
 //! Builtin libraries, packages, types, and functions.
 
+#![allow(dead_code)]
+
 use std::collections::HashSet;
 
 use num::BigInt;
@@ -52,7 +54,6 @@ lazy_static! {
 			)
 		))
 	};
-	pub static ref TIME_TYPE_REF: TypeDeclRef = TypeDeclRef::alloc();
 	/// The builtin `DELAY_LENGTH` type.
 	pub static ref DELAY_LENGTH_TYPE: BuiltinType = {
 		let id = TypeDeclRef::alloc();
@@ -95,7 +96,7 @@ lazy_static! {
 	/// The builtin `TIME_VECTOR` type.
 	pub static ref TIME_VECTOR_TYPE: BuiltinType = BuiltinType::new("TIME_VECTOR", ArrayTy::new(
 		vec![ArrayIndex::Unbounded(Box::new(NATURAL_TYPE.named_ty()))],
-		Box::new(named_builtin_type("TIME", *TIME_TYPE_REF))
+		Box::new(TIME_TYPE.named_ty())
 	));
 	/// The builtin `FILE_OPEN_KIND` type.
 	pub static ref FILE_OPEN_KIND_TYPE: BuiltinType = BuiltinType::new_enum("FILE_OPEN_KIND");
