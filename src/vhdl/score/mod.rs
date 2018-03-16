@@ -369,6 +369,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(node) = self.sb.ty_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
+		if let Some(&node) = self.sb.typeval_table.borrow().get(&id.into()) {
+			return node;
+		}
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make ty for {:?}", id); }
 		let node = self.make(id)?;
 		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] ty for {:?} is {:?}", id, node); }

@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+use std::fmt;
 use std::collections::HashSet;
 
 use num::BigInt;
@@ -153,11 +154,32 @@ lazy_static! {
 		BuiltinBinaryOp::new(BinaryOp::Rem),
 		BuiltinBinaryOp::new(BinaryOp::Pow),
 	];
+
+	/// The builtins of package `STD`.
+	static ref STANDARD_BUILTINS: Vec<(Builtin, Vec<Builtin>)> = {
+		let mut bi = Vec::new();
+		bi.push(wrapup_type_builtin(&BOOLEAN_TYPE));
+		bi.push(wrapup_type_builtin(&BIT_TYPE));
+		bi.push(wrapup_type_builtin(&SEVERITY_LEVEL_TYPE));
+		bi.push(wrapup_type_builtin(&INTEGER_TYPE));
+		bi.push(wrapup_type_builtin(&TIME_TYPE));
+		bi.push(wrapup_type_builtin(&DELAY_LENGTH_TYPE));
+		bi.push(wrapup_type_builtin(&NATURAL_TYPE));
+		bi.push(wrapup_type_builtin(&POSITIVE_TYPE));
+		bi.push(wrapup_type_builtin(&BOOLEAN_VECTOR_TYPE));
+		bi.push(wrapup_type_builtin(&BIT_VECTOR_TYPE));
+		bi.push(wrapup_type_builtin(&INTEGER_VECTOR_TYPE));
+		bi.push(wrapup_type_builtin(&TIME_VECTOR_TYPE));
+		bi.push(wrapup_type_builtin(&FILE_OPEN_KIND_TYPE));
+		bi.push(wrapup_type_builtin(&FILE_OPEN_STATUS_TYPE));
+		debugln!("builtins of package `STD` {:#?}", bi);
+		bi
+	};
 }
 
 /// Add the definition for a builtin resolvable name to a scope.
 fn define_builtin(scope: &mut Scope, name: ResolvableName, def: Def) {
-	scope.defs.insert(name, vec![Spanned::new(def, INVALID_SPAN)]);
+	scope.defs.entry(name).or_insert_with(|| Vec::new()).push(Spanned::new(def, INVALID_SPAN));
 }
 
 /// Add the definition for a builtin identifier to a scope.
@@ -195,6 +217,21 @@ fn define_builtin_op<O>(scope: &mut Scope, op: O, id: BuiltinOpRef)
 		.push(Spanned::new(Def::BuiltinOp(id), INVALID_SPAN));
 }
 
+/// Takes a builtin type and produces the builtin and its auxiliary defs.
+fn wrapup_type_builtin(bt: &BuiltinType) -> (Builtin, Vec<Builtin>) {
+	let bi = Builtin::new(
+		Def::Type(bt.id),
+		bt.name
+	).ty(bt.ty.clone());
+	let mut aux = Vec::new();
+	match bt.ty {
+		Ty::Enum(_) => enum_type_builtins(&bt.named_ty(), &mut aux),
+		Ty::Int(_) => integer_type_builtins(&bt.named_ty(), &mut aux),
+		_ => ()
+	}
+	(bi, aux)
+}
+
 // Define the scopes of the builtins.
 lazy_static! {
 	/// The root scope.
@@ -205,13 +242,13 @@ lazy_static! {
 		define_builtin_ident(&mut scope, "STD", Def::Lib(*STD_LIB_REF));
 		scope.imported_scopes.insert((*STANDARD_PKG_REF).into());
 
-		// Define the default operator implementations.
-		for op in BUILTIN_UNARY_OPS.iter() {
-			define_builtin_op(&mut scope, op.op, op.id);
-		}
-		for op in BUILTIN_BINARY_OPS.iter() {
-			define_builtin_op(&mut scope, op.op, op.id);
-		}
+		// // Define the default operator implementations.
+		// for op in BUILTIN_UNARY_OPS.iter() {
+		// 	define_builtin_op(&mut scope, op.op, op.id);
+		// }
+		// for op in BUILTIN_BINARY_OPS.iter() {
+		// 	define_builtin_op(&mut scope, op.op, op.id);
+		// }
 
 		scope
 	};
@@ -228,29 +265,35 @@ lazy_static! {
 	/// The scope of the package `STANDARD`.
 	pub static ref STANDARD_PKG_SCOPE: Scope = {
 		let mut scope = Scope::new(Some((*STD_LIB_REF).into()));
+		for &(ref bt, ref aux) in &*STANDARD_BUILTINS {
+			define_builtin(&mut scope, bt.name, bt.def);
+			for a in aux {
+				define_builtin(&mut scope, a.name, a.def);
+			}
+		}
 
 		// `type BOOLEAN is (FALSE, TRUE)`
-		define_builtin_ident(&mut scope, "BOOLEAN", Def::Type(BOOLEAN_TYPE.id));
+		// define_builtin_ident(&mut scope, "BOOLEAN", Def::Type(BOOLEAN_TYPE.id));
 		define_builtin_ident(&mut scope, "FALSE", Def::Enum(EnumRef(BOOLEAN_TYPE.id, 0)));
 		define_builtin_ident(&mut scope, "TRUE", Def::Enum(EnumRef(BOOLEAN_TYPE.id, 1)));
 
 		// `type BIT is ('0', '1')`
-		define_builtin_ident(&mut scope, "BIT", Def::Type(BIT_TYPE.id));
+		// define_builtin_ident(&mut scope, "BIT", Def::Type(BIT_TYPE.id));
 		define_builtin_bit(&mut scope, '0', Def::Enum(EnumRef(BIT_TYPE.id, 0)));
 		define_builtin_bit(&mut scope, '1', Def::Enum(EnumRef(BIT_TYPE.id, 1)));
 
 		// `type SEVERITY_LEVEL is (NOTE, WARNING, ERROR, FAILURE)`
-		define_builtin_ident(&mut scope, "SEVERITY_LEVEL", Def::Type(SEVERITY_LEVEL_TYPE.id));
+		// define_builtin_ident(&mut scope, "SEVERITY_LEVEL", Def::Type(SEVERITY_LEVEL_TYPE.id));
 		define_builtin_ident(&mut scope, "NOTE", Def::Enum(EnumRef(SEVERITY_LEVEL_TYPE.id, 0)));
 		define_builtin_ident(&mut scope, "WARNING", Def::Enum(EnumRef(SEVERITY_LEVEL_TYPE.id, 1)));
 		define_builtin_ident(&mut scope, "ERROR", Def::Enum(EnumRef(SEVERITY_LEVEL_TYPE.id, 2)));
 		define_builtin_ident(&mut scope, "FAILURE", Def::Enum(EnumRef(SEVERITY_LEVEL_TYPE.id, 3)));
 
 		// `type INTEGER is range ... to ...`
-		define_builtin_ident(&mut scope, "INTEGER", Def::Type(INTEGER_TYPE.id));
+		// define_builtin_ident(&mut scope, "INTEGER", Def::Type(INTEGER_TYPE.id));
 
 		// `type TIME is range ... to ... units ... end units`
-		define_builtin_ident(&mut scope, "TIME", Def::Type(TIME_TYPE.id));
+		// define_builtin_ident(&mut scope, "TIME", Def::Type(TIME_TYPE.id));
 		define_builtin_ident(&mut scope, "fs", Def::Unit(UnitRef(TIME_TYPE.id, 0)));
 		define_builtin_ident(&mut scope, "ps", Def::Unit(UnitRef(TIME_TYPE.id, 1)));
 		define_builtin_ident(&mut scope, "ns", Def::Unit(UnitRef(TIME_TYPE.id, 2)));
@@ -261,34 +304,34 @@ lazy_static! {
 		define_builtin_ident(&mut scope, "hr", Def::Unit(UnitRef(TIME_TYPE.id, 7)));
 
 		// `subtype DELAY_LENGTH is TIME range 0 to TIME'HIGH`
-		define_builtin_ident(&mut scope, "DELAY_LENGTH", Def::Type(DELAY_LENGTH_TYPE.id));
+		// define_builtin_ident(&mut scope, "DELAY_LENGTH", Def::Type(DELAY_LENGTH_TYPE.id));
 
 		// `subtype NATURAL is INTEGER range 0 to INTEGER'HIGH`
-		define_builtin_ident(&mut scope, "NATURAL", Def::Type(NATURAL_TYPE.id));
+		// define_builtin_ident(&mut scope, "NATURAL", Def::Type(NATURAL_TYPE.id));
 
 		// `subtype POSITIVE is INTEGER range 1 to INTEGER'HIGH`
-		define_builtin_ident(&mut scope, "POSITIVE", Def::Type(POSITIVE_TYPE.id));
+		// define_builtin_ident(&mut scope, "POSITIVE", Def::Type(POSITIVE_TYPE.id));
 
 		// `type BOOLEAN_VECTOR is array (NATURAL range <>) of BOOLEAN`
-		define_builtin_ident(&mut scope, "BOOLEAN_VECTOR", Def::Type(BOOLEAN_VECTOR_TYPE.id));
+		// define_builtin_ident(&mut scope, "BOOLEAN_VECTOR", Def::Type(BOOLEAN_VECTOR_TYPE.id));
 
 		// `type BIT_VECTOR is array (NATURAL range <>) of BIT`
-		define_builtin_ident(&mut scope, "BIT_VECTOR", Def::Type(BIT_VECTOR_TYPE.id));
+		// define_builtin_ident(&mut scope, "BIT_VECTOR", Def::Type(BIT_VECTOR_TYPE.id));
 
 		// `type INTEGER_VECTOR is array (NATURAL range <>) of INTEGER`
-		define_builtin_ident(&mut scope, "INTEGER_VECTOR", Def::Type(INTEGER_VECTOR_TYPE.id));
+		// define_builtin_ident(&mut scope, "INTEGER_VECTOR", Def::Type(INTEGER_VECTOR_TYPE.id));
 
 		// `type TIME_VECTOR is array (NATURAL range <>) of TIME`
-		define_builtin_ident(&mut scope, "TIME_VECTOR", Def::Type(TIME_VECTOR_TYPE.id));
+		// define_builtin_ident(&mut scope, "TIME_VECTOR", Def::Type(TIME_VECTOR_TYPE.id));
 
 		// `type FILE_OPEN_KIND is (READ_MODE, WRITE_MODE, APPEND_MODE)`
-		define_builtin_ident(&mut scope, "FILE_OPEN_KIND", Def::Type(FILE_OPEN_KIND_TYPE.id));
+		// define_builtin_ident(&mut scope, "FILE_OPEN_KIND", Def::Type(FILE_OPEN_KIND_TYPE.id));
 		define_builtin_ident(&mut scope, "READ_MODE", Def::Enum(EnumRef(FILE_OPEN_KIND_TYPE.id, 0)));
 		define_builtin_ident(&mut scope, "WRITE_MODE", Def::Enum(EnumRef(FILE_OPEN_KIND_TYPE.id, 1)));
 		define_builtin_ident(&mut scope, "APPEND_MODE", Def::Enum(EnumRef(FILE_OPEN_KIND_TYPE.id, 2)));
 
 		// `type FILE_OPEN_STATUS is (OPEN_OK, STATUS_ERROR, NAME_ERROR, MODE_ERROR)`
-		define_builtin_ident(&mut scope, "FILE_OPEN_STATUS", Def::Type(FILE_OPEN_STATUS_TYPE.id));
+		// define_builtin_ident(&mut scope, "FILE_OPEN_STATUS", Def::Type(FILE_OPEN_STATUS_TYPE.id));
 		define_builtin_ident(&mut scope, "OPEN_OK", Def::Enum(EnumRef(FILE_OPEN_STATUS_TYPE.id, 0)));
 		define_builtin_ident(&mut scope, "STATUS_ERROR", Def::Enum(EnumRef(FILE_OPEN_STATUS_TYPE.id, 1)));
 		define_builtin_ident(&mut scope, "NAME_ERROR", Def::Enum(EnumRef(FILE_OPEN_STATUS_TYPE.id, 2)));
@@ -306,26 +349,6 @@ lazy_static! {
 		((*STANDARD_PKG_REF).into(), &*STANDARD_PKG_SCOPE),
 	];
 
-	/// All builtin types.
-	///
-	/// These are added to the scoreboard upon construction.
-	pub static ref BUILTIN_TYPES: Vec<(TypeDeclRef, Ty)> = vec![
-		(BOOLEAN_TYPE.id, BOOLEAN_TYPE.ty.clone()),
-		(BIT_TYPE.id, BIT_TYPE.ty.clone()),
-		(SEVERITY_LEVEL_TYPE.id, SEVERITY_LEVEL_TYPE.ty.clone()),
-		(INTEGER_TYPE.id, INTEGER_TYPE.ty.clone()),
-		(TIME_TYPE.id, TIME_TYPE.ty.clone()),
-		(DELAY_LENGTH_TYPE.id, DELAY_LENGTH_TYPE.ty.clone()),
-		(NATURAL_TYPE.id, NATURAL_TYPE.ty.clone()),
-		(POSITIVE_TYPE.id, POSITIVE_TYPE.ty.clone()),
-		(BOOLEAN_VECTOR_TYPE.id, BOOLEAN_VECTOR_TYPE.ty.clone()),
-		(BIT_VECTOR_TYPE.id, BIT_VECTOR_TYPE.ty.clone()),
-		(INTEGER_VECTOR_TYPE.id, INTEGER_VECTOR_TYPE.ty.clone()),
-		(TIME_VECTOR_TYPE.id, TIME_VECTOR_TYPE.ty.clone()),
-		(FILE_OPEN_KIND_TYPE.id, FILE_OPEN_KIND_TYPE.ty.clone()),
-		(FILE_OPEN_STATUS_TYPE.id, FILE_OPEN_STATUS_TYPE.ty.clone()),
-	];
-
 	/// All builtin scope references.
 	pub static ref BUILTIN_SCOPE_REFS: HashSet<ScopeRef> = (*BUILTIN_SCOPES)
 		.iter()
@@ -335,6 +358,7 @@ lazy_static! {
 
 /// Add the builtins to a scoreboard.
 pub fn register_builtins<'ast, 'ctx>(sb: &ScoreBoard<'ast, 'ctx>) {
+	use std::iter::once;
 	debugln!("registering builtins");
 
 	// Add the builtin scopes.
@@ -344,9 +368,13 @@ pub fn register_builtins<'ast, 'ctx>(sb: &ScoreBoard<'ast, 'ctx>) {
 	);
 
 	// Add the builtin types.
-	sb.ty_table.borrow_mut().extend((*BUILTIN_TYPES)
+	sb.typeval_table.borrow_mut().extend((*STANDARD_BUILTINS)
 		.iter()
-		.map(|&(id, ref ty)| (id.into(), sb.intern_ty(ty.clone())))
+		.flat_map(|&(ref bi, ref aux)| once(bi).chain(aux.iter()))
+		.filter_map(|bi| match bi.ty {
+			Some(ref ty) => Some((bi.def.into(), Ok(sb.intern_ty(ty.clone())))),
+			None => None
+		})
 	);
 }
 
@@ -439,6 +467,17 @@ impl Builtin {
 			ty: Some(ty.into()),
 			..self
 		}
+	}
+}
+
+impl fmt::Debug for Builtin {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Builtin(`{}`, {:?}", self.name, self.def)?;
+		if let Some(ref ty) = self.ty {
+			write!(f, ", {}", ty)?;
+		}
+		write!(f, ")")?;
+		Ok(())
 	}
 }
 

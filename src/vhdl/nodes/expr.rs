@@ -18,7 +18,6 @@ use make_ctx::MakeContext;
 use hir;
 use typeck::TypeckContext;
 use ty::*;
-use op::*;
 use overload_resolver::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
