@@ -224,11 +224,47 @@ fn wrapup_type_builtin(bt: &BuiltinType) -> (Builtin, Vec<Builtin>) {
 		bt.name
 	).ty(bt.ty.clone());
 	let mut aux = Vec::new();
+
+	// Add the usual predefined operators that all types get.
 	match bt.ty {
 		Ty::Enum(_) => enum_type_builtins(&bt.named_ty(), &mut aux),
 		Ty::Int(_) => integer_type_builtins(&bt.named_ty(), &mut aux),
+		Ty::Physical(_) => physical_type_builtins(&bt.named_ty(), &mut aux),
+		Ty::Array(ref at) => array_type_builtins(&bt.named_ty(), at, &mut aux),
 		_ => ()
 	}
+
+	// Add the predefined operators for BIT and BOOLEAN.
+	if bt.id == BOOLEAN_TYPE.id || bt.id == BIT_TYPE.id {
+		// The type `(T) return T`.
+		let unary_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(bt.named_ty()),
+		], Some(bt.named_ty()));
+
+		// The type `(T, T) return T`.
+		let binary_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(bt.named_ty()),
+			SubprogTyArg::positional(bt.named_ty()),
+		], Some(bt.named_ty()));
+
+		aux.push(Builtin::operator(UnaryOp::Not).ty(unary_ty.clone()));
+		aux.push(Builtin::operator(BinaryOp::Logical(LogicalOp::And)).ty(binary_ty.clone()));
+		aux.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Or)).ty(binary_ty.clone()));
+		aux.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nand)).ty(binary_ty.clone()));
+		aux.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nor)).ty(binary_ty.clone()));
+		aux.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xor)).ty(binary_ty.clone()));
+		aux.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xnor)).ty(binary_ty.clone()));
+	}
+
+	// Add the predefined `??` operator for BIT.
+	if bt.id == BIT_TYPE.id {
+		// The type `(T) return BOOLEAN`.
+		let op_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(bt.named_ty()),
+		], Some(BOOLEAN_TYPE.named_ty()));
+		aux.push(Builtin::operator(UnaryOp::Cond).ty(op_ty.clone()));
+	}
+
 	(bi, aux)
 }
 
@@ -485,11 +521,176 @@ fn integer_type_builtins(ty: &Ty, into: &mut Vec<Builtin>) {
 	numerical_type_builtins(ty, into);
 	equality_builtins(ty, into);
 	ordering_builtins(ty, into);
+
+	// `T * T -> T`
+	// `T / T -> T`
+	// `T mod T -> T`
+	// `T rem T -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Mul).ty(op_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Div).ty(op_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Mod).ty(op_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Rem).ty(op_ty.clone()));
+
+	// `T ** INTEGER -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(INTEGER_TYPE.named_ty()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Pow).ty(op_ty.clone()));
+}
+
+fn real_type_builtins(ty: &Ty, into: &mut Vec<Builtin>) {
+	numerical_type_builtins(ty, into);
+	equality_builtins(ty, into);
+	ordering_builtins(ty, into);
+
+	// `T * T -> T`
+	// `T / T -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Mul).ty(op_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Div).ty(op_ty.clone()));
+
+	// `T ** INTEGER -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(INTEGER_TYPE.named_ty()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Pow).ty(op_ty.clone()));
+}
+
+fn physical_type_builtins(ty: &Ty, into: &mut Vec<Builtin>) {
+	numerical_type_builtins(ty, into);
+	equality_builtins(ty, into);
+	ordering_builtins(ty, into);
+
+	// `T mod T -> T`
+	// `T rem T -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Mod).ty(op_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Rem).ty(op_ty.clone()));
+
+	// `T * INTEGER -> T`
+	// `T / INTEGER -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(INTEGER_TYPE.named_ty()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Mul).ty(op_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Div).ty(op_ty.clone()));
+
+	// `INTEGER * T -> T`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(INTEGER_TYPE.named_ty()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Mul).ty(op_ty.clone()));
+
+	// `T / T -> {integer}`
+	let op_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(Ty::UniversalInt));
+	into.push(Builtin::operator(BinaryOp::Div).ty(op_ty.clone()));
 }
 
 fn enum_type_builtins(ty: &Ty, into: &mut Vec<Builtin>) {
 	equality_builtins(ty, into);
 	ordering_builtins(ty, into);
+}
+
+fn array_type_builtins(ty: &Ty, aty: &ArrayTy, into: &mut Vec<Builtin>) {
+	// Get the ID of the element type.
+	let eid = match *aty.element {
+		Ty::Named(_, id) => Some(id),
+		_ => None,
+	};
+
+	// Add concatenation.
+	let concat_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(ty.clone()));
+	let concat_right_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(ty.clone()),
+		SubprogTyArg::positional(aty.element.as_ref().clone()),
+	], Some(ty.clone()));
+	let concat_left_ty = SubprogTy::new(vec![
+		SubprogTyArg::positional(aty.element.as_ref().clone()),
+		SubprogTyArg::positional(ty.clone()),
+	], Some(ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Concat).ty(concat_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Concat).ty(concat_right_ty.clone()));
+	into.push(Builtin::operator(BinaryOp::Concat).ty(concat_left_ty.clone()));
+
+	// Add additional builtins for arrays of BIT and BOOLEAN.
+	if aty.indices.len() == 1 && (eid == Some(BOOLEAN_TYPE.id.into()) || eid == Some(BIT_TYPE.id.into())) {
+		// The type `(A) return T`.
+		let reduce_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(ty.clone()),
+		], Some(aty.element.as_ref().clone()));
+		into.push(Builtin::operator(UnaryOp::Logical(LogicalOp::And)).ty(reduce_ty.clone()));
+		into.push(Builtin::operator(UnaryOp::Logical(LogicalOp::Or)).ty(reduce_ty.clone()));
+		into.push(Builtin::operator(UnaryOp::Logical(LogicalOp::Nand)).ty(reduce_ty.clone()));
+		into.push(Builtin::operator(UnaryOp::Logical(LogicalOp::Nor)).ty(reduce_ty.clone()));
+		into.push(Builtin::operator(UnaryOp::Logical(LogicalOp::Xor)).ty(reduce_ty.clone()));
+		into.push(Builtin::operator(UnaryOp::Logical(LogicalOp::Xnor)).ty(reduce_ty.clone()));
+
+		// The type `(A,T) return A` and `(T,A) return A`.
+		let scalar_right_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(ty.clone()),
+			SubprogTyArg::positional(aty.element.as_ref().clone()),
+		], Some(ty.clone()));
+		let scalar_left_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(aty.element.as_ref().clone()),
+			SubprogTyArg::positional(ty.clone()),
+		], Some(ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::And)).ty(scalar_right_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Or)).ty(scalar_right_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nand)).ty(scalar_right_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nor)).ty(scalar_right_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xor)).ty(scalar_right_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xnor)).ty(scalar_right_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::And)).ty(scalar_left_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Or)).ty(scalar_left_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nand)).ty(scalar_left_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nor)).ty(scalar_left_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xor)).ty(scalar_left_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xnor)).ty(scalar_left_ty.clone()));
+
+		// The type `(A,A) return A`.
+		let array_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(ty.clone()),
+			SubprogTyArg::positional(ty.clone()),
+		], Some(ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::And)).ty(array_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Or)).ty(array_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nand)).ty(array_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Nor)).ty(array_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xor)).ty(array_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Logical(LogicalOp::Xnor)).ty(array_ty.clone()));
+
+		// The type `(A,INTEGER) return A`.
+		let shift_ty = SubprogTy::new(vec![
+			SubprogTyArg::positional(ty.clone()),
+			SubprogTyArg::positional(INTEGER_TYPE.named_ty()),
+		], Some(ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Shift(ShiftOp::Sll)).ty(shift_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Shift(ShiftOp::Srl)).ty(shift_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Shift(ShiftOp::Sla)).ty(shift_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Shift(ShiftOp::Sra)).ty(shift_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Shift(ShiftOp::Rol)).ty(shift_ty.clone()));
+		into.push(Builtin::operator(BinaryOp::Shift(ShiftOp::Ror)).ty(shift_ty.clone()));
+	}
 }
 
 fn equality_builtins(ty: &Ty, into: &mut Vec<Builtin>) {
