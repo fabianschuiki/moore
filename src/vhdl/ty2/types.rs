@@ -46,7 +46,7 @@ pub trait Type: Debug + Display {
 pub enum AnyType<'t> {
     Enum(&'t EnumType),
     Integer(&'t IntegerType),
-    // float
+    Floating(&'t FloatingType),
     // physical
     // array
     // record
@@ -66,6 +66,7 @@ impl<'t> Type for AnyType<'t> {
         match *self {
             AnyType::Enum(t)          => t.is_scalar(),
             AnyType::Integer(t)       => t.is_scalar(),
+            AnyType::Floating(t)      => t.is_scalar(),
             AnyType::Null             => NullType.is_scalar(),
             AnyType::UniversalInteger => UniversalIntegerType.is_scalar(),
             AnyType::UniversalReal    => UniversalRealType.is_scalar(),
@@ -76,6 +77,7 @@ impl<'t> Type for AnyType<'t> {
         match *self {
             AnyType::Enum(t)          => t.is_discrete(),
             AnyType::Integer(t)       => t.is_discrete(),
+            AnyType::Floating(t)      => t.is_discrete(),
             AnyType::Null             => NullType.is_discrete(),
             AnyType::UniversalInteger => UniversalIntegerType.is_discrete(),
             AnyType::UniversalReal    => UniversalRealType.is_discrete(),
@@ -86,6 +88,7 @@ impl<'t> Type for AnyType<'t> {
         match *self {
             AnyType::Enum(t)          => t.is_numeric(),
             AnyType::Integer(t)       => t.is_numeric(),
+            AnyType::Floating(t)      => t.is_numeric(),
             AnyType::Null             => NullType.is_numeric(),
             AnyType::UniversalInteger => UniversalIntegerType.is_numeric(),
             AnyType::UniversalReal    => UniversalRealType.is_numeric(),
@@ -102,6 +105,7 @@ impl<'t> Display for AnyType<'t> {
         match *self {
             AnyType::Enum(t)          => Display::fmt(t, f),
             AnyType::Integer(t)       => Display::fmt(t, f),
+            AnyType::Floating(t)      => Display::fmt(t, f),
             AnyType::Null             => Display::fmt(&NullType, f),
             AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
             AnyType::UniversalReal    => Display::fmt(&UniversalRealType, f),
@@ -114,6 +118,7 @@ impl<'t> Debug for AnyType<'t> {
         match *self {
             AnyType::Enum(t)          => Debug::fmt(t, f),
             AnyType::Integer(t)       => Debug::fmt(t, f),
+            AnyType::Floating(t)      => Debug::fmt(t, f),
             AnyType::Null             => Debug::fmt(&NullType, f),
             AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
             AnyType::UniversalReal    => Debug::fmt(&UniversalRealType, f),
@@ -273,6 +278,58 @@ impl Deref for IntegerType {
     }
 }
 
+/// A floating-point type.
+#[derive(Debug)]
+pub struct FloatingType {
+    /// The range of values.
+    range: Range<f64>,
+}
+
+impl FloatingType {
+    /// Create a new floating-point type.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use moore_vhdl::ty2::{Type, FloatingType, Range, RangeDir};
+    ///
+    /// let a = FloatingType::new(Range::ascending(0, 42));
+    /// let b = FloatingType::new(Range::descending(42, 0));
+    ///
+    /// assert_eq!(format!("{}", a), "0 to 42");
+    /// assert_eq!(format!("{}", b), "42 downto 0");
+    /// assert_eq!(a.dir(), RangeDir::To);
+    /// assert_eq!(b.dir(), RangeDir::Downto);
+    /// assert_eq!(a.len(), f64::from(43));
+    /// assert_eq!(b.len(), f64::from(43));
+    /// ```
+    pub fn new(range: Range<f64>) -> FloatingType {
+        FloatingType {
+            range: range,
+        }
+    }
+}
+
+impl Type for FloatingType {
+    fn is_scalar(&self) -> bool { true }
+    fn is_discrete(&self) -> bool { true }
+    fn is_numeric(&self) -> bool { true }
+    fn as_any(&self) -> AnyType { AnyType::Floating(self) }
+}
+
+impl Display for FloatingType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.range)
+    }
+}
+
+impl Deref for FloatingType {
+    type Target = Range<f64>;
+    fn deref(&self) -> &Range<f64> {
+        &self.range
+    }
+}
+
 /// A directed range of values.
 ///
 /// `Range<T>` has the same semantics as ranges in VHDL. They have a direction
@@ -288,7 +345,7 @@ pub struct Range<T> {
     right: T,
 }
 
-impl<T: Ord + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Output=T> {
+impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Output=T> {
     /// Create an ascending range.
     ///
     /// # Example
@@ -469,7 +526,7 @@ impl<T: Display> Display for Range<T> {
 pub type IntegerRange = Range<BigInt>;
 
 /// A range of real values.
-pub type RealRange = Range<BigRational>;
+pub type RealRange = Range<f64>;
 
 /// A range direction.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -560,8 +617,7 @@ impl Display for UniversalIntegerType {
 /// A universal real.
 ///
 /// This is not strictly a separate type, but rather defined by the standard as
-/// the floating-point type with the largest range. However since we can
-/// represent arbitrary numbers as `BigRational`, we use this special marker
+/// the floating-point type with the largest range. We use this special marker
 /// type.
 ///
 /// # Example
