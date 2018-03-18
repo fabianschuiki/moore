@@ -159,7 +159,7 @@ pub struct SubtypeInd {
 ///
 /// See IEEE 1076-2008 section 6.3.
 ///
-/// ```ignore
+/// ```text
 /// constraint := range_constraint | array_constraint | record_constraint
 /// ```
 #[derive(Debug)]
@@ -188,7 +188,7 @@ impl From<RecordConstraint> for Constraint {
 ///
 /// See IEEE 1076-2008 section 6.3.
 ///
-/// ```ignore
+/// ```text
 /// element_constraint := array_constraint | record_constraint
 /// ```
 #[derive(Debug)]
@@ -222,7 +222,7 @@ impl From<RecordConstraint> for ElementConstraint {
 ///
 /// See IEEE 1076-2008 section 5.3.2.
 ///
-/// ```ignore
+/// ```text
 /// array_constraint :=
 ///     index_constraint [array.element_constraint] |
 ///     "(" "open" ")" [array.element_constraint]
@@ -248,7 +248,7 @@ impl HasSpan for ArrayConstraint {
 ///
 /// See IEEE 1076-2008 section 5.3.2.1.
 ///
-/// ```ignore
+/// ```text
 /// discrete_range := discrete.subtype_indication | range
 /// ```
 #[derive(Debug)]
@@ -275,7 +275,7 @@ impl From<Range> for DiscreteRange {
 ///
 /// See IEEE 1076-2008 section 5.2.1.
 ///
-/// ```ignore
+/// ```text
 /// range := range.attribute_name | simple_expression direction simple_expression
 /// ```
 #[derive(Debug)]
