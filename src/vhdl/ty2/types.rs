@@ -42,10 +42,9 @@ pub trait Type: Debug + Display {
 /// declares a type, this enum carries the information as to which type was
 /// declared.
 #[derive(Copy, Clone)]
+#[allow(missing_docs)]
 pub enum AnyType<'t> {
-    /// An enumeration type.
     Enum(&'t EnumType),
-    /// An integer type.
     Integer(&'t IntegerType),
     // float
     // physical
@@ -56,31 +55,40 @@ pub enum AnyType<'t> {
     // protected
 
     // Non-standard types.
-    // null
-    // universal integer
-    // universal real
+    Null,
+    UniversalInteger,
+    UniversalReal,
     // subprogram
 }
 
 impl<'t> Type for AnyType<'t> {
     fn is_scalar(&self) -> bool {
         match *self {
-            AnyType::Enum(t)    => t.is_scalar(),
-            AnyType::Integer(t) => t.is_scalar(),
+            AnyType::Enum(t)          => t.is_scalar(),
+            AnyType::Integer(t)       => t.is_scalar(),
+            AnyType::Null             => NullType.is_scalar(),
+            AnyType::UniversalInteger => UniversalIntegerType.is_scalar(),
+            AnyType::UniversalReal    => UniversalRealType.is_scalar(),
         }
     }
 
     fn is_discrete(&self) -> bool {
         match *self {
-            AnyType::Enum(t)    => t.is_discrete(),
-            AnyType::Integer(t) => t.is_discrete(),
+            AnyType::Enum(t)          => t.is_discrete(),
+            AnyType::Integer(t)       => t.is_discrete(),
+            AnyType::Null             => NullType.is_discrete(),
+            AnyType::UniversalInteger => UniversalIntegerType.is_discrete(),
+            AnyType::UniversalReal    => UniversalRealType.is_discrete(),
         }
     }
 
     fn is_numeric(&self) -> bool {
         match *self {
-            AnyType::Enum(t)    => t.is_numeric(),
-            AnyType::Integer(t) => t.is_numeric(),
+            AnyType::Enum(t)          => t.is_numeric(),
+            AnyType::Integer(t)       => t.is_numeric(),
+            AnyType::Null             => NullType.is_numeric(),
+            AnyType::UniversalInteger => UniversalIntegerType.is_numeric(),
+            AnyType::UniversalReal    => UniversalRealType.is_numeric(),
         }
     }
 
@@ -92,8 +100,11 @@ impl<'t> Type for AnyType<'t> {
 impl<'t> Display for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            AnyType::Enum(t)    => Display::fmt(t, f),
-            AnyType::Integer(t) => Display::fmt(t, f),
+            AnyType::Enum(t)          => Display::fmt(t, f),
+            AnyType::Integer(t)       => Display::fmt(t, f),
+            AnyType::Null             => Display::fmt(&NullType, f),
+            AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
+            AnyType::UniversalReal    => Display::fmt(&UniversalRealType, f),
         }
     }
 }
@@ -101,8 +112,11 @@ impl<'t> Display for AnyType<'t> {
 impl<'t> Debug for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            AnyType::Enum(t)    => Debug::fmt(t, f),
-            AnyType::Integer(t) => Debug::fmt(t, f),
+            AnyType::Enum(t)          => Debug::fmt(t, f),
+            AnyType::Integer(t)       => Debug::fmt(t, f),
+            AnyType::Null             => Debug::fmt(&NullType, f),
+            AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
+            AnyType::UniversalReal    => Debug::fmt(&UniversalRealType, f),
         }
     }
 }
@@ -136,7 +150,6 @@ impl EnumType {
     /// ]);
     ///
     /// assert_eq!(format!("{}", ty), "(first, second, '0', '1')");
-    /// assert_eq!(format!("{}", ty.as_any()), "(first, second, '0', '1')");
     /// ```
     pub fn new<I: IntoIterator<Item=EnumLiteral>>(lits: I) -> EnumType {
         EnumType {
@@ -227,9 +240,7 @@ impl IntegerType {
     /// let b = IntegerType::new(Range::descending(42, 0));
     ///
     /// assert_eq!(format!("{}", a), "0 to 42");
-    /// assert_eq!(format!("{}", a.as_any()), "0 to 42");
     /// assert_eq!(format!("{}", b), "42 downto 0");
-    /// assert_eq!(format!("{}", b.as_any()), "42 downto 0");
     /// assert_eq!(a.dir(), RangeDir::To);
     /// assert_eq!(b.dir(), RangeDir::Downto);
     /// assert_eq!(a.len(), BigInt::from(43));
@@ -483,4 +494,100 @@ impl Display for RangeDir {
 /// This type is not strictly part of the VHDL type system. Rather, arrays that
 /// have negative length degenerate into null arrays. We handle these types
 /// explicitly, since they significantly change how types match.
+///
+/// # Example
+///
+/// ```
+/// use moore_vhdl::ty2::{Type, NullType};
+///
+/// let ty = NullType;
+///
+/// assert_eq!(format!("{}", ty), "null");
+/// assert_eq!(ty.is_scalar(), false);
+/// assert_eq!(ty.is_discrete(), false);
+/// assert_eq!(ty.is_numeric(), false);
+/// ```
+#[derive(Debug, Clone, Copy)]
 pub struct NullType;
+
+impl Type for NullType {
+    fn is_scalar(&self) -> bool { false }
+    fn is_discrete(&self) -> bool { false }
+    fn is_numeric(&self) -> bool { false }
+    fn as_any(&self) -> AnyType { AnyType::Null }
+}
+
+impl Display for NullType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "null")
+    }
+}
+
+/// A universal integer.
+///
+/// This is not strictly a separate type, but rather defined by the standard as
+/// the integer type with the largest range. However since we can represent
+/// arbitrary numbers as `BigInt`, we use this special marker type.
+///
+/// # Example
+///
+/// ```
+/// use moore_vhdl::ty2::{Type, UniversalIntegerType};
+///
+/// let ty = UniversalIntegerType;
+///
+/// assert_eq!(format!("{}", ty), "{universal integer}");
+/// assert_eq!(ty.is_scalar(), true);
+/// assert_eq!(ty.is_discrete(), true);
+/// assert_eq!(ty.is_numeric(), true);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct UniversalIntegerType;
+
+impl Type for UniversalIntegerType {
+    fn is_scalar(&self) -> bool { true }
+    fn is_discrete(&self) -> bool { true }
+    fn is_numeric(&self) -> bool { true }
+    fn as_any(&self) -> AnyType { AnyType::UniversalInteger }
+}
+
+impl Display for UniversalIntegerType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{universal integer}}")
+    }
+}
+
+/// A universal real.
+///
+/// This is not strictly a separate type, but rather defined by the standard as
+/// the floating-point type with the largest range. However since we can
+/// represent arbitrary numbers as `BigRational`, we use this special marker
+/// type.
+///
+/// # Example
+///
+/// ```
+/// use moore_vhdl::ty2::{Type, UniversalRealType};
+///
+/// let ty = UniversalRealType;
+///
+/// assert_eq!(format!("{}", ty), "{universal real}");
+/// assert_eq!(ty.is_scalar(), true);
+/// assert_eq!(ty.is_discrete(), false);
+/// assert_eq!(ty.is_numeric(), true);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct UniversalRealType;
+
+impl Type for UniversalRealType {
+    fn is_scalar(&self) -> bool { true }
+    fn is_discrete(&self) -> bool { false }
+    fn is_numeric(&self) -> bool { true }
+    fn as_any(&self) -> AnyType { AnyType::UniversalReal }
+}
+
+impl Display for UniversalRealType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{universal real}}")
+    }
+}
