@@ -30,6 +30,11 @@ pub trait Type: Debug + Display {
     /// Integer, floating-point, and physical types are numeric.
     fn is_numeric(&self) -> bool;
 
+    /// Check if this is a composite type.
+    ///
+    /// Array and record types are composite.
+    fn is_composite(&self) -> bool;
+
     /// Converts from `&Type` to `AnyType`.
     fn as_any(&self) -> AnyType;
 }
@@ -48,7 +53,7 @@ pub enum AnyType<'t> {
     Integer(&'t IntegerType),
     Floating(&'t FloatingType),
     Physical(&'t PhysicalType),
-    // array
+    Array(&'t ArrayType<'t>),
     // record
     // access
     // file
@@ -68,6 +73,7 @@ impl<'t> Type for AnyType<'t> {
             AnyType::Integer(t)       => t.is_scalar(),
             AnyType::Floating(t)      => t.is_scalar(),
             AnyType::Physical(t)      => t.is_scalar(),
+            AnyType::Array(t)         => t.is_scalar(),
             AnyType::Null             => NullType.is_scalar(),
             AnyType::UniversalInteger => UniversalIntegerType.is_scalar(),
             AnyType::UniversalReal    => UniversalRealType.is_scalar(),
@@ -80,6 +86,7 @@ impl<'t> Type for AnyType<'t> {
             AnyType::Integer(t)       => t.is_discrete(),
             AnyType::Floating(t)      => t.is_discrete(),
             AnyType::Physical(t)      => t.is_discrete(),
+            AnyType::Array(t)         => t.is_discrete(),
             AnyType::Null             => NullType.is_discrete(),
             AnyType::UniversalInteger => UniversalIntegerType.is_discrete(),
             AnyType::UniversalReal    => UniversalRealType.is_discrete(),
@@ -92,9 +99,23 @@ impl<'t> Type for AnyType<'t> {
             AnyType::Integer(t)       => t.is_numeric(),
             AnyType::Floating(t)      => t.is_numeric(),
             AnyType::Physical(t)      => t.is_numeric(),
+            AnyType::Array(t)         => t.is_numeric(),
             AnyType::Null             => NullType.is_numeric(),
             AnyType::UniversalInteger => UniversalIntegerType.is_numeric(),
             AnyType::UniversalReal    => UniversalRealType.is_numeric(),
+        }
+    }
+
+    fn is_composite(&self) -> bool {
+        match *self {
+            AnyType::Enum(t)          => t.is_composite(),
+            AnyType::Integer(t)       => t.is_composite(),
+            AnyType::Floating(t)      => t.is_composite(),
+            AnyType::Physical(t)      => t.is_composite(),
+            AnyType::Array(t)         => t.is_composite(),
+            AnyType::Null             => NullType.is_composite(),
+            AnyType::UniversalInteger => UniversalIntegerType.is_composite(),
+            AnyType::UniversalReal    => UniversalRealType.is_composite(),
         }
     }
 
@@ -110,6 +131,7 @@ impl<'t> Display for AnyType<'t> {
             AnyType::Integer(t)       => Display::fmt(t, f),
             AnyType::Floating(t)      => Display::fmt(t, f),
             AnyType::Physical(t)      => Display::fmt(t, f),
+            AnyType::Array(t)         => Display::fmt(t, f),
             AnyType::Null             => Display::fmt(&NullType, f),
             AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
             AnyType::UniversalReal    => Display::fmt(&UniversalRealType, f),
@@ -124,6 +146,7 @@ impl<'t> Debug for AnyType<'t> {
             AnyType::Integer(t)       => Debug::fmt(t, f),
             AnyType::Floating(t)      => Debug::fmt(t, f),
             AnyType::Physical(t)      => Debug::fmt(t, f),
+            AnyType::Array(t)         => Debug::fmt(t, f),
             AnyType::Null             => Debug::fmt(&NullType, f),
             AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
             AnyType::UniversalReal    => Debug::fmt(&UniversalRealType, f),
@@ -177,6 +200,7 @@ impl Type for EnumType {
     fn is_scalar(&self) -> bool { true }
     fn is_discrete(&self) -> bool { true }
     fn is_numeric(&self) -> bool { false }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::Enum(self) }
 }
 
@@ -267,6 +291,7 @@ impl Type for IntegerType {
     fn is_scalar(&self) -> bool { true }
     fn is_discrete(&self) -> bool { true }
     fn is_numeric(&self) -> bool { true }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::Integer(self) }
 }
 
@@ -317,8 +342,9 @@ impl FloatingType {
 
 impl Type for FloatingType {
     fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { true }
+    fn is_discrete(&self) -> bool { false }
     fn is_numeric(&self) -> bool { true }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::Floating(self) }
 }
 
@@ -608,6 +634,7 @@ impl Type for PhysicalType {
     fn is_scalar(&self) -> bool { true }
     fn is_discrete(&self) -> bool { false }
     fn is_numeric(&self) -> bool { true }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::Physical(self) }
 }
 
@@ -692,6 +719,30 @@ impl PhysicalUnit {
     }
 }
 
+/// An array type.
+#[derive(Debug)]
+pub struct ArrayType<'t> {
+    /// The index subtypes.
+    indices: Vec<&'t Type>,
+    /// The element subtype.
+    element: &'t Type,
+}
+
+impl<'t> Type for ArrayType<'t> {
+    fn is_scalar(&self) -> bool { false }
+    fn is_discrete(&self) -> bool { false }
+    fn is_numeric(&self) -> bool { false }
+    fn is_composite(&self) -> bool { true }
+    fn as_any(&self) -> AnyType { AnyType::Array(self) }
+}
+
+impl<'t> Display for ArrayType<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "array")?;
+        Ok(())
+    }
+}
+
 /// A null type.
 ///
 /// This type is not strictly part of the VHDL type system. Rather, arrays that
@@ -717,6 +768,7 @@ impl Type for NullType {
     fn is_scalar(&self) -> bool { false }
     fn is_discrete(&self) -> bool { false }
     fn is_numeric(&self) -> bool { false }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::Null }
 }
 
@@ -751,6 +803,7 @@ impl Type for UniversalIntegerType {
     fn is_scalar(&self) -> bool { true }
     fn is_discrete(&self) -> bool { true }
     fn is_numeric(&self) -> bool { true }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::UniversalInteger }
 }
 
@@ -785,6 +838,7 @@ impl Type for UniversalRealType {
     fn is_scalar(&self) -> bool { true }
     fn is_discrete(&self) -> bool { false }
     fn is_numeric(&self) -> bool { true }
+    fn is_composite(&self) -> bool { false }
     fn as_any(&self) -> AnyType { AnyType::UniversalReal }
 }
 
