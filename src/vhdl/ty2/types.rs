@@ -454,6 +454,29 @@ pub struct Range<T> {
 }
 
 impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Output=T> {
+    /// Create a range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use moore_vhdl::ty2::{IntegerRange, RangeDir};
+    ///
+    /// let a = IntegerRange::new(RangeDir::To, 0, 42);
+    /// let b = IntegerRange::new(RangeDir::Downto, 42, 0);
+    ///
+    /// assert_eq!(format!("{}", a), "0 to 42");
+    /// assert_eq!(format!("{}", b), "42 downto 0");
+    /// ```
+    pub fn new<D,L,R>(dir: D, left: L, right: R) -> Range<T>
+        where RangeDir: From<D>, T: From<L> + From<R>
+    {
+        Range {
+            dir: dir.into(),
+            left: left.into(),
+            right: right.into(),
+        }
+    }
+
     /// Create an ascending range.
     ///
     /// # Example
