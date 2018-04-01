@@ -143,7 +143,70 @@ impl<'t> Display for TypeDecl<'t> {
 ///
 /// A `SubtypeDecl` associates a name with a subtype. It is useful as a tracker
 /// of how a subtype was called upon its definition, and where it was defined.
+#[derive(Clone, Copy, Debug)]
 pub struct SubtypeDecl<'t> {
 	name: TypeName,
 	ty: &'t Subtype, // TODO: Actually make this a subtype indication.
+}
+
+/// A type mark.
+///
+/// A `TypeMark` associates a name with a type or subtype, but in a different
+/// manner than `TypeDecl` and `SubtypeDecl`. It is useful as a tracker of how a
+/// type was referred to in the source code. A `TypeMark` represents a way of
+/// naming a type that is familiar to the user and can be presented as is in a
+/// diagnostic message.
+///
+/// # Examples
+///
+/// ```
+/// use moore_vhdl::ty2::{Type, TypeMark, NullType};
+/// use moore_vhdl::common::name::get_name_table;
+///
+/// let ta = NullType;
+/// let a = TypeMark::new(
+///     get_name_table().intern("DATA", false),
+///     &ta,
+/// );
+///
+/// assert_eq!(format!("{}", a), "DATA");
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TypeMark<'t> {
+	name: TypeName,
+	ty: &'t Type,
+}
+
+impl<'t> TypeMark<'t> {
+	/// Create a new type mark from a name and a type.
+	pub fn new<N: Into<TypeName>>(name: N, ty: &'t Type) -> TypeMark<'t> {
+		TypeMark {
+			name: name.into(),
+			ty: ty,
+		}
+	}
+
+	/// Get the name of the mark.
+	pub fn name(&self) -> TypeName {
+		self.name
+	}
+
+	/// Get the type of the mark.
+	pub fn ty(&self) -> &'t Type {
+		self.ty
+	}
+}
+
+impl<'t> Type for TypeMark<'t> {
+    fn is_scalar(&self) -> bool { self.ty.is_scalar() }
+    fn is_discrete(&self) -> bool { self.ty.is_discrete() }
+    fn is_numeric(&self) -> bool { self.ty.is_numeric() }
+    fn is_composite(&self) -> bool { self.ty.is_composite() }
+    fn as_any(&self) -> AnyType { self.ty.as_any() }
+}
+
+impl<'t> Display for TypeMark<'t> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.name)
+	}
 }
