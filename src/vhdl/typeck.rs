@@ -462,6 +462,16 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	}
 }
 
+use ty2::RangeDir;
+impl From<Dir> for RangeDir {
+	fn from(d: Dir) -> RangeDir {
+		match d {
+			Dir::To => RangeDir::To,
+			Dir::Downto => RangeDir::Downto,
+		}
+	}
+}
+
 /// Performs a type check.
 pub trait Typeck<I> {
 	fn typeck(&self, id: I);
@@ -1021,7 +1031,13 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 			Ok(self.intern_ty(PhysicalTy::new(id, base, units, primary_index)))
 		}
 
-		hir::TypeData::Enum(..) => {
+		hir::TypeData::Enum(ref lits) => {
+			use ty2::{EnumType, EnumLiteral};
+			let ty = EnumType::new(lits.iter().map(|l| match *l {
+				hir::EnumLit::Ident(sp) => EnumLiteral::from(sp.value),
+				hir::EnumLit::Char(sp)  => EnumLiteral::from(sp.value),
+			}));
+			debugln!("type from enum `{}` = {}", hir.name, ty);
 			Ok(self.intern_ty(EnumTy::new(id)))
 		}
 
@@ -1100,6 +1116,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let rb = self.const_value(rb_id)?;
 		Ok(match (lb, rb) {
 			(&Const::Int(ref lb), &Const::Int(ref rb)) => {
+				use ty2::{IntegerType, Range};
+				let ty = IntegerType::new(Range::new(dir, lb.value.clone(), rb.value.clone()));
+				debugln!("type from range `{}` = {}", span.extract(), ty);
 				self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
 			}
 
