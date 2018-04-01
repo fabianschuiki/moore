@@ -160,6 +160,73 @@ impl<'t, T: Type> From<&'t T> for AnyType<'t> {
     }
 }
 
+impl<'t> AnyType<'t> {
+    /// Returns `Some(t)` if the type is `Enum(t)`, `None` otherwise.
+    pub fn as_enum(self) -> Option<&'t EnumType> {
+        match self { AnyType::Enum(t) => Some(t), _ => None }
+    }
+
+    /// Returns `Some(t)` if the type is `Integer(t)`, `None` otherwise.
+    pub fn as_integer(self) -> Option<&'t IntegerType> {
+        match self { AnyType::Integer(t) => Some(t), _ => None }
+    }
+
+    /// Returns `Some(t)` if the type is `Floating(t)`, `None` otherwise.
+    pub fn as_floating(self) -> Option<&'t FloatingType> {
+        match self { AnyType::Floating(t) => Some(t), _ => None }
+    }
+
+    /// Returns `Some(t)` if the type is `Physical(t)`, `None` otherwise.
+    pub fn as_physical(self) -> Option<&'t PhysicalType> {
+        match self { AnyType::Physical(t) => Some(t), _ => None }
+    }
+
+    /// Returns `Some(t)` if the type is `Array(t)`, `None` otherwise.
+    pub fn as_array(self) -> Option<&'t ArrayType<'t>> {
+        match self { AnyType::Array(t) => Some(t), _ => None }
+    }
+
+    /// Checks if the type is `Null`.
+    pub fn is_null(self) -> bool {
+        match self { AnyType::Null => true, _ => false }
+    }
+
+    /// Checks if the type is `UniversalInteger`.
+    pub fn is_universal_integer(self) -> bool {
+        match self { AnyType::UniversalInteger => true, _ => false }
+    }
+
+    /// Checks if the type is `UniversalReal`.
+    pub fn is_universal_real(self) -> bool {
+        match self { AnyType::UniversalReal => true, _ => false }
+    }
+
+    /// Returns an `&EnumType` or panics if the type is not `Enum`.
+    pub fn unwrap_enum(self) -> &'t EnumType {
+        self.as_enum().expect("type is not an enum")
+    }
+
+    /// Returns an `&IntegerType` or panics if the type is not `Integer`.
+    pub fn unwrap_integer(self) -> &'t IntegerType {
+        self.as_integer().expect("type is not an integer")
+    }
+
+    /// Returns an `&FloatingType` or panics if the type is not `Floating`.
+    pub fn unwrap_floating(self) -> &'t FloatingType {
+        self.as_floating().expect("type is not an floating")
+    }
+
+    /// Returns an `&PhysicalType` or panics if the type is not `Physical`.
+    pub fn unwrap_physical(self) -> &'t PhysicalType {
+        self.as_physical().expect("type is not an physical")
+    }
+
+    /// Returns an `&ArrayType` or panics if the type is not `Array`.
+    pub fn unwrap_array(self) -> &'t ArrayType<'t> {
+        self.as_array().expect("type is not an array")
+    }
+}
+
 /// An enumeration type.
 #[derive(Debug)]
 pub struct EnumType {
@@ -188,6 +255,16 @@ impl EnumType {
         EnumType {
             lits: lits.into_iter().collect(),
         }
+    }
+
+    /// The number of literals.
+    pub fn len(&self) -> usize {
+        self.lits.len()
+    }
+
+    /// A literal by position.
+    pub fn literal(&self, pos: usize) -> &EnumLiteral {
+        &self.lits[pos]
     }
 
     /// Return the literals.
