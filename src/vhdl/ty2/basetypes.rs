@@ -48,6 +48,7 @@ impl IntegerType {
 
 impl IntegerType for IntegerBasetype {
     fn range(&self) -> &Range<BigInt> { &self.range }
+    fn base_type(&self) -> &Type { self }
 }
 
 impl Deref for IntegerBasetype {

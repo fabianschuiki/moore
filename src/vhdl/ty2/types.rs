@@ -338,6 +338,12 @@ impl Display for EnumLiteral {
 pub trait IntegerType: Type {
     /// The range of values this integer can assume.
     fn range(&self) -> &Range<BigInt>;
+
+    /// The base type of this integer.
+    fn base_type(&self) -> &Type;
+
+    /// The resolution function associated with this type.
+    fn resolution_func(&self) -> Option<usize> { None }
 }
 
 impl<'t, T> Type for T where T: IntegerType + 't {
@@ -424,26 +430,54 @@ pub struct Range<T> {
 }
 
 impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Output=T> {
-    /// Create a range.
+    /// Create a range from left and right bounds.
     ///
     /// # Example
     ///
     /// ```
     /// use moore_vhdl::ty2::{IntegerRange, RangeDir};
     ///
-    /// let a = IntegerRange::new(RangeDir::To, 0, 42);
-    /// let b = IntegerRange::new(RangeDir::Downto, 42, 0);
+    /// let a = IntegerRange::with_left_right(RangeDir::To, 0, 42);
+    /// let b = IntegerRange::with_left_right(RangeDir::Downto, 42, 0);
     ///
     /// assert_eq!(format!("{}", a), "0 to 42");
     /// assert_eq!(format!("{}", b), "42 downto 0");
     /// ```
-    pub fn new<D,L,R>(dir: D, left: L, right: R) -> Range<T>
+    pub fn with_left_right<D,L,R>(dir: D, left: L, right: R) -> Range<T>
         where RangeDir: From<D>, T: From<L> + From<R>
     {
         Range {
             dir: dir.into(),
             left: left.into(),
             right: right.into(),
+        }
+    }
+
+    /// Create a range from lower and upper bounds.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use moore_vhdl::ty2::{IntegerRange, RangeDir};
+    ///
+    /// let a = IntegerRange::with_lower_upper(RangeDir::To, 0, 42);
+    /// let b = IntegerRange::with_lower_upper(RangeDir::Downto, 0, 42);
+    ///
+    /// assert_eq!(format!("{}", a), "0 to 42");
+    /// assert_eq!(format!("{}", b), "42 downto 0");
+    /// ```
+    pub fn with_lower_upper<D,L,U>(dir: D, lower: L, upper: U) -> Range<T>
+        where RangeDir: From<D>, T: From<L> + From<U>
+    {
+        let dir = dir.into();
+        let (left, right) = match dir {
+            RangeDir::To => (lower.into(), upper.into()),
+            RangeDir::Downto => (upper.into(), lower.into()),
+        };
+        Range {
+            dir: dir,
+            left: left,
+            right: right,
         }
     }
 
@@ -614,6 +648,32 @@ impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Outp
     /// ```
     pub fn len(&self) -> T {
         &(self.upper() + &One::one()) - self.lower()
+    }
+
+    /// Check if another range is a subrange of this range.
+    ///
+    /// This function checks if `self.lower()` is less than or equal to, and
+    /// `self.upper()` is larger than or equal to, the corresponding bounds of
+    /// the subrange.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use moore_vhdl::ty2::{IntegerRange, BigInt};
+    ///
+    /// let a = IntegerRange::ascending(0, 42);
+    /// let b = IntegerRange::ascending(4, 16);
+    /// let c = IntegerRange::descending(16, 4);
+    ///
+    /// assert_eq!(a.has_subrange(&b), true);
+    /// assert_eq!(a.has_subrange(&c), true);
+    /// assert_eq!(b.has_subrange(&a), false);
+    /// assert_eq!(c.has_subrange(&a), false);
+    /// assert_eq!(b.has_subrange(&c), true);
+    /// assert_eq!(c.has_subrange(&b), true);
+    /// ```
+    pub fn has_subrange(&self, subrange: &Self) -> bool {
+        self.lower() <= subrange.lower() && self.upper() >= subrange.upper()
     }
 }
 
