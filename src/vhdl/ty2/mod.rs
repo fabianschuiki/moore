@@ -11,9 +11,11 @@
 #![deny(missing_docs)]
 
 mod types;
+mod basetypes;
 mod subtypes;
 mod marks;
 
 pub use self::types::*;
+pub use self::basetypes::*;
 pub use self::subtypes::*;
 pub use self::marks::*;

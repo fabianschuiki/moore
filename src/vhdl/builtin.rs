@@ -172,7 +172,6 @@ lazy_static! {
 		bi.push(wrapup_type_builtin(&TIME_VECTOR_TYPE));
 		bi.push(wrapup_type_builtin(&FILE_OPEN_KIND_TYPE));
 		bi.push(wrapup_type_builtin(&FILE_OPEN_STATUS_TYPE));
-		debugln!("builtins of package `STD` {:#?}", bi);
 		bi
 	};
 }
@@ -395,7 +394,6 @@ lazy_static! {
 /// Add the builtins to a scoreboard.
 pub fn register_builtins<'ast, 'ctx>(sb: &ScoreBoard<'ast, 'ctx>) {
 	use std::iter::once;
-	debugln!("registering builtins");
 
 	// Add the builtin scopes.
 	sb.scope2_table.borrow_mut().extend((*BUILTIN_SCOPES)

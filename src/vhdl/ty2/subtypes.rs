@@ -14,7 +14,7 @@ pub trait Subtype: Debug + Display {
 ///
 /// Scalar types may be subtyped by a range constraint.
 #[derive(Debug)]
-pub struct ScalarSubtype<'t, T: Type + 't, C> {
+pub struct ScalarSubtype<'t, T: Type + ?Sized + 't, C> {
     #[allow(dead_code)]
     resfn: Option<usize>,
     mark: &'t TypeMark<'t>,
@@ -76,6 +76,16 @@ impl<'t> Display for EnumSubtype<'t> {
 
 /// A subtype of an integer type.
 pub type IntegerSubtype<'t> = ScalarSubtype<'t, IntegerType, BigInt>;
+
+impl<'t> IntegerType for IntegerSubtype<'t> {
+    fn range(&self) -> &Range<BigInt> { &self.con }
+}
+
+impl<'t> Display for IntegerSubtype<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} range {}", self.mark, self.con)
+    }
+}
 
 /// A subtype of a floating-point type.
 pub type FloatingSubtype<'t> = ScalarSubtype<'t, FloatingType, f64>;

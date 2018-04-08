@@ -1,6 +1,6 @@
 // Copyright (c) 2017-2018 Fabian Schuiki
 
-//! The fundamental types.
+//! Dealing with types in an abstract manner.
 
 use std::fmt::{self, Debug, Display};
 use std::iter::{once, repeat};
@@ -333,38 +333,14 @@ impl Display for EnumLiteral {
 }
 
 /// An integer type.
-#[derive(Debug)]
-pub struct IntegerType {
-    /// The range of values.
-    range: Range<BigInt>,
+///
+/// This can either be an `IntegerBasetype` or an `IntegerSubtype`.
+pub trait IntegerType: Type {
+    /// The range of values this integer can assume.
+    fn range(&self) -> &Range<BigInt>;
 }
 
-impl IntegerType {
-    /// Create a new integer type.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{Type, IntegerType, Range, RangeDir, BigInt};
-    ///
-    /// let a = IntegerType::new(Range::ascending(0, 42));
-    /// let b = IntegerType::new(Range::descending(42, 0));
-    ///
-    /// assert_eq!(format!("{}", a), "0 to 42");
-    /// assert_eq!(format!("{}", b), "42 downto 0");
-    /// assert_eq!(a.dir(), RangeDir::To);
-    /// assert_eq!(b.dir(), RangeDir::Downto);
-    /// assert_eq!(a.len(), BigInt::from(43));
-    /// assert_eq!(b.len(), BigInt::from(43));
-    /// ```
-    pub fn new(range: Range<BigInt>) -> IntegerType {
-        IntegerType {
-            range: range,
-        }
-    }
-}
-
-impl Type for IntegerType {
+impl<'t, T> Type for T where T: IntegerType + 't {
     fn is_scalar(&self) -> bool { true }
     fn is_discrete(&self) -> bool { true }
     fn is_numeric(&self) -> bool { true }
@@ -372,16 +348,10 @@ impl Type for IntegerType {
     fn as_any(&self) -> AnyType { AnyType::Integer(self) }
 }
 
-impl Display for IntegerType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.range)
-    }
-}
-
-impl Deref for IntegerType {
+impl<'t> Deref for IntegerType + 't {
     type Target = Range<BigInt>;
     fn deref(&self) -> &Range<BigInt> {
-        &self.range
+        self.range()
     }
 }
 
