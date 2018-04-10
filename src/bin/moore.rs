@@ -414,37 +414,14 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
     // TODO: Make sure that the thing we resolve to actually is a VHDL entity or
     // a SystemVerilog module. Right we happily accept packages as well.
     #[derive(Debug)]
-    enum Entity {
-        Vhdl(vhdl::score::EntityRef),
+    enum Elaborate {
+        VhdlEntity(vhdl::score::EntityRef, vhdl::score::ArchRef),
+        VhdlPkg(vhdl::score::PkgDeclRef),
         Svlog(NodeId), // TODO: handle svlog case
     };
     let defs = ctx.defs(lib.into())?;
-    let entity = match defs.get(&name) {
-        Some(&score::Def::Vhdl(vhdl::score::Def::Entity(e))) => Entity::Vhdl(e),
-        Some(&score::Def::Svlog(e)) => Entity::Svlog(e),
-        _ => {
-            let mut d = DiagBuilder2::error(format!("Entity or module `{}` does not exist", name))
-                .add_note("The following items are defined:");
-            let mut names: Vec<_> = defs.iter().map(|(&k,_)| k).collect();
-            names.sort(); // sorts by name ID, roughly equivalent to order of declaration
-            for name in names {
-                d = d.add_note(format!("- {}", name));
-            }
-            ctx.sess.emit(d);
-            return Err(());
-        }
-    };
-    debugln!("using entity {:?}", entity);
-
-    // In case we're elaborating a VHDL entity, resolve the architecture name if
-    // one was provided, or find a default architecture to use.
-    #[derive(Debug)]
-    enum Elaborate {
-        Vhdl(vhdl::score::EntityRef, vhdl::score::ArchRef),
-        Svlog(NodeId),
-    }
-    let elab = match entity {
-        Entity::Vhdl(entity) => {
+    let elab = match defs.get(&name) {
+        Some(&score::Def::Vhdl(vhdl::score::Def::Entity(entity))) => {
             let archs = ctx.vhdl().archs(vhdl::score::LibRef::new(lib.into()))?.by_entity.get(&entity).unwrap();
             let arch_ref = if let Some(arch) = arch {
                 match archs.by_name.get(&arch) {
@@ -463,21 +440,42 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
                     }
                 }
             };
-            Elaborate::Vhdl(entity, arch_ref)
-        }
-        Entity::Svlog(module) => {
-            Elaborate::Svlog(module)
+            Elaborate::VhdlEntity(entity, arch_ref)
+        },
+        Some(&score::Def::Vhdl(vhdl::score::Def::Pkg(p))) => Elaborate::VhdlPkg(p),
+        Some(&score::Def::Svlog(e)) => Elaborate::Svlog(e),
+        _ => {
+            let mut d = DiagBuilder2::error(format!("Item `{}` does not exist", name))
+                .add_note("The following items are defined:");
+            let mut names: Vec<_> = defs.iter().map(|(&k,_)| k).collect();
+            names.sort(); // sorts by name ID, roughly equivalent to order of declaration
+            for name in names {
+                d = d.add_note(format!("- {}", name));
+            }
+            ctx.sess.emit(d);
+            return Err(());
         }
     };
     debugln!("elaborating {:?}", elab);
 
     // Generate the LLHD definition for whatever we're elaborating.
     match elab {
-        Elaborate::Vhdl(_entity, arch) => {
+        Elaborate::VhdlEntity(_entity, arch) => {
             // let decl = ctx.vhdl.lldecl(arch);
             // println!("Architecture declared as {:?}", decl);
             let def = ctx.vhdl().lldef(arch)?;
-            println!("Architecture declared as {:?}", def);
+            eprintln!("Architecture declared as {:?}", def);
+        }
+        Elaborate::VhdlPkg(pkg) => {
+            use moore::vhdl::typeck::{TypeckContext, Typeck};
+            let sbc = ctx.vhdl();
+            let ctx = TypeckContext::new(&sbc);
+            ctx.typeck(pkg);
+            if !ctx.finish() {
+                return Err(());
+            }
+            // use moore::vhdl::codegen::Codegen;
+            // ctx.vhdl().codegen(pkg, &mut ())?;
         }
         Elaborate::Svlog(_module) => {
             // TODO: Implement this.
