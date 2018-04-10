@@ -63,7 +63,7 @@ mod test {
 	fn lex(src: Source) -> Vec<Token> {
 		let content = src.get_content();
 		let bytes = grind::from_iter(content.bytes().iter().map(|x| *x))
-			.vent(|err: DiagBuilder2| println!("{}", err));
+			.vent(|err: DiagBuilder2| eprintln!("{}", err));
 		let mut tokens = Lexer::new(bytes, src);
 		let mut v = Vec::new();
 		while let Some(Spanned{ value, .. }) = tokens.next() {

@@ -233,7 +233,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				for name in names {
 					// TODO: This creates an infinite loop, since the name lookup requires the context items to be ready.
 					let (res_name, mut out_defs, valid_span, mut tail) = self.resolve_compound_name(name, id.into(), true)?;
-					println!("resolving use clause {:?}", name);
 
 					// Resolve the optional `all`.
 					match tail.first() {
@@ -257,7 +256,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 							explicit_defs.entry(res_name).or_insert_with(|| Vec::new()).extend(out_defs);
 						}
 					}
-					println!("yields explicit_defs {:?}", explicit_defs);
 
 					// Ensure that there is no garbage.
 					if tail.len() > 0 {

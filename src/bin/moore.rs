@@ -239,7 +239,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
     let nameres = match svlog::resolve::resolve(session, &asts) {
         Ok(x) => x,
         Err(_) => {
-            println!("{}", DiagBuilder2::fatal("name resolution failed"));
+            eprintln!("{}", DiagBuilder2::fatal("name resolution failed"));
             std::process::exit(1);
         }
     };
@@ -260,7 +260,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
     })() {
         Some(id) => id,
         None => {
-            println!("{}", DiagBuilder2::fatal(format!("unable to find top module `{}`", top_name)));
+            eprintln!("{}", DiagBuilder2::fatal(format!("unable to find top module `{}`", top_name)));
             std::process::exit(1);
         }
     };
@@ -269,11 +269,11 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
     let hir = match svlog::hir::lower(session, &nameres, top, asts) {
         Ok(x) => x,
         Err(_) => {
-            println!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
+            eprintln!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
             std::process::exit(1);
         },
     };
-    println!("lowered {} modules", hir.mods.len());
+    debugln!("lowered {} modules", hir.mods.len());
 }
 
 
@@ -354,8 +354,8 @@ fn score(sess: &Session, matches: &ArgMatches) {
             svlog: &svlog_sb,
         };
         let lib_id = ctx.add_library(lib, &asts);
-        println!("lib_id = {:?}", lib_id);
-        println!("{:?}", sb);
+        debugln!("lib_id = {:?}", lib_id);
+        debugln!("{:?}", sb);
         for name in names {
             match elaborate_name(&ctx, lib_id, name) {
                 Ok(_) => (),
@@ -383,7 +383,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
 /// elaboration.
 fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -> Result<(),()> {
     let (lib, name, arch) = parse_elaborate_name(input_name)?;
-    println!("parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})", input_name, lib, name, arch);
+    debugln!("parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})", input_name, lib, name, arch);
 
     // Resolve the library name if one was provided.
     let lib = {
@@ -408,7 +408,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             lib_id
         }
     };
-    println!("using library {:?}", lib);
+    debugln!("using library {:?}", lib);
 
     // Resolve the entity name.
     // TODO: Make sure that the thing we resolve to actually is a VHDL entity or
@@ -434,7 +434,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             return Err(());
         }
     };
-    println!("using entity {:?}", entity);
+    debugln!("using entity {:?}", entity);
 
     // In case we're elaborating a VHDL entity, resolve the architecture name if
     // one was provided, or find a default architecture to use.
@@ -469,7 +469,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             Elaborate::Svlog(module)
         }
     };
-    println!("elaborating {:?}", elab);
+    debugln!("elaborating {:?}", elab);
 
     // Generate the LLHD definition for whatever we're elaborating.
     match elab {

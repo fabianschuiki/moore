@@ -230,9 +230,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(&node) = self.sb.hir_table.borrow().get(&id) {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make hir for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make hir for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] hir for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] hir for {:?} is {:?}", id, node); }
 		self.set_hir(id, node);
 		Ok(node)
 	}
@@ -295,9 +295,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(&node) = self.sb.def_table.borrow().get(&id) {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make defs for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make defs for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] defs for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] defs for {:?} is {:?}", id, node); }
 		if self.sb.def_table.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
@@ -309,9 +309,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(&node) = self.sb.arch_table.borrow().get(&id) {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make arch for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make arch for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] arch for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] arch for {:?} is {:?}", id, node); }
 		if self.sb.arch_table.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
@@ -330,9 +330,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(node) = self.sb.lldef_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make lldecl for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make lldecl for {:?}", id); }
 		let node = self.make(id)?.0;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] lldecl for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] lldecl for {:?} is {:?}", id, node); }
 		if self.sb.lldecl_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
 			panic!("node should not exist");
 		}
@@ -348,9 +348,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(node) = self.sb.lldef_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make lldef for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make lldef for {:?}", id); }
 		let node = self.make(id)?.0;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] lldef for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] lldef for {:?} is {:?}", id, node); }
 		if self.sb.lldef_table.borrow_mut().insert(id.into(), node.clone()).is_some() {
 			panic!("node should not exist");
 		}
@@ -372,9 +372,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(&node) = self.sb.typeval_table.borrow().get(&id.into()) {
 			return node;
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make ty for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make ty for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] ty for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] ty for {:?} is {:?}", id, node); }
 		if self.sb.ty_table.borrow_mut().insert(id.into(), node).is_some() {
 			self.emit(
 				DiagBuilder2::bug(format!("type for {:?} already in the scoreboard", id))
@@ -417,9 +417,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(node) = self.sb.scope_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make scope for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make scope for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] scope for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] scope for {:?} is {:?}", id, node); }
 		if self.sb.scope_table.borrow_mut().insert(id, node).is_some() {
 			panic!("node should not exist");
 		}
@@ -435,9 +435,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if let Some(node) = self.sb.const_table.borrow().get(&id.into()).cloned() {
 			return Ok(node);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] make const for {:?}", id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] make const for {:?}", id); }
 		let node = self.make(id)?;
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] const for {:?} is {:?}", id, node); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] const for {:?} is {:?}", id, node); }
 		if self.sb.const_table.borrow_mut().insert(id.into(), node).is_some() {
 			panic!("node should not exist");
 		}
@@ -582,7 +582,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
 			debugln!("resolving `{}` in scope {:?}", name.value, scope_id);
 		}
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] resolve {:?} in scope {:?}", name.value, scope_id); }
 		let mut found_defs = Vec::new();
 		let parent_id = if !(*BUILTIN_SCOPE_REFS).contains(&scope_id) {
 			if only_defs {
@@ -642,7 +642,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				Err(())
 			}
 		} else {
-			if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs); }
+			if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs); }
 			if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
 				self.emit(
 					DiagBuilder2::note(format!("resolved `{}` to {:?}", name.value, found_defs))
@@ -655,7 +655,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Resolve a compound name within a scope.
 	pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef, only_defs: bool) -> Result<(ResolvableName, Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
-		if self.sess.opts.trace_scoreboard { println!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id); }
+		if self.sess.opts.trace_scoreboard { debugln!("[SB][VHDL] resolve compound {:?} in scope {:?}", name, scope_id); }
 
 		// First resolve the primary name.
 		let mut seen_span = name.primary.span;
@@ -839,7 +839,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'l
 		let entity = self.hir(hir.entity)?;
 
 		// Assemble the types and names for the entity.
-		println!("entity ports: {:?}", entity.ports);
+		debugln!("entity ports: {:?}", entity.ports);
 		let mut in_tys    = Vec::new();
 		let mut out_tys   = Vec::new();
 		let mut in_names  = Vec::new();

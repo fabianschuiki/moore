@@ -21,7 +21,7 @@ pub fn parse(src: Source) -> Result<Vec<ast::DesignUnit>,()> {
 	// Get a grinder on the bytes of the source file.
 	let content = src.get_content();
 	let bytes = grind::from_iter(content.bytes().iter().map(|x| *x))
-		.vent(|err: DiagBuilder2| println!("{}", err));
+		.vent(|err: DiagBuilder2| eprintln!("{}", err));
 
 	// Perform lexical analysis on the bytes.
 	let tokens = lexer::Lexer::new(bytes, src);

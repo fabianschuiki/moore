@@ -50,7 +50,6 @@ impl AccumulatingReader {
 		// Move the buffer contents to the beginning to make more space at the
 		// end.
 		if self.base > 0 {
-			// println!("    Rebasing {} to 0 ({} bytes)", self.base, self.tail-self.base);
 			for i in 0..(self.tail-self.base) {
 				self.buf[i] = self.buf[self.base+i]
 			}
@@ -66,7 +65,6 @@ impl AccumulatingReader {
 		let cur_len = self.buf.len();
 		if min_len > cur_len {
 			let new_len = max(cur_len*2, 32);
-			// println!("    Resizing buffer to {} bytes", new_len);
 			self.buf.resize(new_len, 0);
 		}
 		assert!(self.buf.len() >= min_len);
@@ -77,15 +75,12 @@ impl AccumulatingReader {
 			let nread = {
 				let dst = &mut self.buf[self.tail..];
 				let nread = self.rd.read(dst).unwrap();
-				// println!("    Read {} out of a max of {} bytes", nread, dst.len());
 				nread
 			};
 			if nread == 0 {
-				// println!("    Seems like we've hit EOF");
 				break;
 			}
 			self.tail += nread;
-			// println!("      {:?}", &self.buf[self.base..self.tail]);
 		}
 	}
 

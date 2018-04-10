@@ -208,7 +208,7 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 		self.default_value_for_type(&ty)?
 	};
 
-	println!("signal {:?}, type {:?}, init {:?}", id, ty, init);
+	debugln!("signal {:?}, type {:?}, init {:?}", id, ty, init);
 	// Create the signal instance.
 	let inst = llhd::Inst::new(
 		Some(hir.name.value.into()),
@@ -247,7 +247,7 @@ impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
 		Some(n) => format!("{}_{}", ctx.name(), n.value),
 		None => format!("{}_proc", ctx.name()),
 	};
-	println!("generating process `{}`", name);
+	debugln!("generating process `{}`", name);
 	// TODO: Check which signals are actually read and written.
 	let ty = llhd::entity_ty(vec![], vec![]);
 	let mut prok = llhd::Process::new(name, ty.clone());

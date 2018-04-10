@@ -58,7 +58,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Declare a name in the scope.
 	pub fn declare(&mut self, name: Spanned<ResolvableName>, def: Def) {
-		if self.ctx.sess.opts.trace_scoreboard { println!("[SB][VHDL][SCOPE] declaring `{}` as {:?}", name.value, def); }
+		if self.ctx.sess.opts.trace_scoreboard { debugln!("[SB][VHDL][SCOPE] declaring `{}` as {:?}", name.value, def); }
 		match def {
 			// Handle overloadable cases.
 			Def::Enum(_) => {

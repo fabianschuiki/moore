@@ -1384,7 +1384,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 		// Names.
 		ast::NameExpr(ref name) => {
 			let (_, defs, matched_span, tail_parts) = self.resolve_compound_name(name, scope_id, false)?;
-			println!("name {} matched {:?}, tail {:?}", name.span.extract(), defs, tail_parts);
+			debugln!("name {} matched {:?}, tail {:?}", name.span.extract(), defs, tail_parts);
 
 			// If there are multiple definitions, perform overload resolution by
 			// consulting the type context for the expression.
@@ -1392,8 +1392,8 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 				if let Some(tyctx) = self.type_context_resolved(id)? {
 					let ty = self.deref_named_type(tyctx)?;
 					if self.sess.opts.trace_scoreboard {
-						println!("[SB][VHDL][OVLD] resolve overloaded `{}`", matched_span.extract());
-						println!("[SB][VHDL][OVLD] context requires {:?}", ty);
+						debugln!("[SB][VHDL][OVLD] resolve overloaded `{}`", matched_span.extract());
+						debugln!("[SB][VHDL][OVLD] context requires {:?}", ty);
 					}
 
 					// Filter out the defs that are typed and that match the
@@ -1406,7 +1406,7 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 							// can match here.
 							_ => {
 								if self.sess.opts.trace_scoreboard {
-									println!("[SB][VHDL][OVLD] discarding irrelevant {:?}", def.value);
+									debugln!("[SB][VHDL][OVLD] discarding irrelevant {:?}", def.value);
 								}
 								continue;
 							}
@@ -1414,11 +1414,11 @@ impl_make!(self, id: ExprRef => &hir::Expr {
 						if defty == ty {
 							filtered.push(def);
 							if self.sess.opts.trace_scoreboard {
-								println!("[SB][VHDL][OVLD] accepting {:?}", def.value);
+								debugln!("[SB][VHDL][OVLD] accepting {:?}", def.value);
 							}
 						} else {
 							if self.sess.opts.trace_scoreboard {
-								println!("[SB][VHDL][OVLD] discarding {:?} because mismatching type {:?}", def.value, defty);
+								debugln!("[SB][VHDL][OVLD] discarding {:?} because mismatching type {:?}", def.value, defty);
 							}
 						}
 					}

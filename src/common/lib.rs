@@ -18,7 +18,7 @@ pub mod score;
 pub mod util;
 
 pub use self::id::NodeId;
-use errors::DiagBuilder2;
+use errors::{DiagBuilder2, DiagEmitter};
 
 pub struct Session {
 	pub opts: SessionOptions,
@@ -31,10 +31,11 @@ impl Session {
 			opts: Default::default(),
 		}
 	}
+}
 
-	/// Emit a diagnostic.
-	pub fn emit(&self, err: DiagBuilder2) {
-		println!("{}", err);
+impl DiagEmitter for Session {
+	fn emit(&self, diag: DiagBuilder2) {
+		eprintln!("{}", diag);
 	}
 }
 
