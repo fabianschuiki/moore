@@ -18,10 +18,13 @@ pub mod score;
 pub mod util;
 
 pub use self::id::NodeId;
-use errors::{DiagBuilder2, DiagEmitter};
+use errors::{DiagBuilder2, DiagEmitter, Severity};
+use std::cell::Cell;
 
 pub struct Session {
 	pub opts: SessionOptions,
+	/// Whether any error diagnostics were produced.
+	pub failed: Cell<bool>,
 }
 
 impl Session {
@@ -29,12 +32,16 @@ impl Session {
 	pub fn new() -> Session {
 		Session {
 			opts: Default::default(),
+			failed: Cell::new(false),
 		}
 	}
 }
 
 impl DiagEmitter for Session {
 	fn emit(&self, diag: DiagBuilder2) {
+		if diag.severity >= Severity::Error {
+			self.failed.set(true);
+		}
 		eprintln!("{}", diag);
 	}
 }

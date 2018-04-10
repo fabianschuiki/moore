@@ -33,7 +33,7 @@ architecture bar of foo is
 	signal f0 : TWOS_COMPLEMENT_INTEGER range 8 to 7;
 begin end;
 
--- @elab foo(bar)
+-- @ elab foo(bar)
 
 --| entity @foo_bar () () {
 --|     %a0 = sig i16 -32768

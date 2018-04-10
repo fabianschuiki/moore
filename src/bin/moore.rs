@@ -362,6 +362,9 @@ fn score(sess: &Session, matches: &ArgMatches) {
                 Err(_) => failed = true,
             };
         }
+        if sess.failed.get() {
+            failed = true;
+        }
     }
     if failed {
         std::process::exit(1);
@@ -469,11 +472,8 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Elaborate::VhdlPkg(pkg) => {
             use moore::vhdl::typeck::{TypeckContext, Typeck};
             let sbc = ctx.vhdl();
-            let ctx = TypeckContext::new(&sbc);
-            ctx.typeck(pkg);
-            if !ctx.finish() {
-                return Err(());
-            }
+            let tyc = TypeckContext::new(&sbc);
+            tyc.typeck(pkg);
             // use moore::vhdl::codegen::Codegen;
             // ctx.vhdl().codegen(pkg, &mut ())?;
         }
