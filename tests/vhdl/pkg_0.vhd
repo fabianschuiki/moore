@@ -1,13 +1,9 @@
-package pkg is
-	type small is range 0 to 7;
-end;
+-- @elab pkg_a
+package pkg_a is
+end package;
 
-library work; -- should be optional
-
-entity foo is
-	port(A: work.pkg.small);
-end;
-
-architecture bar of foo is
-begin
-end;
+-- @ elab pkg_b
+package pkg_b is
+	type BYTE is range 0 to 255;
+	constant K : BYTE;
+end package;

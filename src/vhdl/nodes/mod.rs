@@ -8,3 +8,4 @@ mod misc;
 mod expr;
 mod seq_stmt;
 mod obj_decl;
+mod type_decl;

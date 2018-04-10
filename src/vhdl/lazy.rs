@@ -116,6 +116,7 @@ node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
 	signal_decls:     SignalDeclRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::SignalDecl>>>,
 	var_decls:        VarDeclRef       => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::VarDecl>>>,
 	file_decls:       FileDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::FileDecl>>>,
+	type_decls:       TypeDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::TypeDecl>>,
 
 	// Sequential statements
 	wait_stmts:       WaitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,

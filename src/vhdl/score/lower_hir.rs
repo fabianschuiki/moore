@@ -1088,6 +1088,7 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 				decls.push(subid.into());
 			}
 			ast::DeclItem::TypeDecl(ref decl) => {
+				// decls.push(ctx.add_type_decl(decl)?.into());
 				let subid = TypeDeclRef(NodeId::alloc());
 				self.set_ast(subid, (id.into(), decl));
 				decls.push(subid.into());

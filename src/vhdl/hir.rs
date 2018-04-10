@@ -33,6 +33,7 @@ make_arenas!(
 		signal_decl:         Decl<SignalDecl>,
 		variable_decl:       Decl<VarDecl>,
 		file_decl:           Decl<FileDecl>,
+		type_decl2:          Decl<Option<TypeData>>,
 		process_stmt:        ProcessStmt,
 		sig_assign_stmt:     SigAssignStmt,
 		array_type_index:    Spanned<ArrayTypeIndex>,
@@ -482,7 +483,7 @@ pub enum ExprData {
 
 /// An object declaration.
 ///
-/// See IEEE 1076-2008 section 6.4.2.1/
+/// See IEEE 1076-2008 section 6.4.2.1.
 #[derive(Debug)]
 pub struct Decl<T> {
 	/// The scope within which the declaration is made.

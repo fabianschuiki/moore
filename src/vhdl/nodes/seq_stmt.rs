@@ -2,8 +2,6 @@
 
 //! Sequential statements
 
-#![deny(missing_docs)]
-
 use std::iter::FromIterator;
 
 use common::errors::*;
