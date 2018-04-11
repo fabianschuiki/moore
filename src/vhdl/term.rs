@@ -260,7 +260,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                             );
                             return Err(());
                         }
-                    }
+                    },
                     None => 0,
                 };
 
