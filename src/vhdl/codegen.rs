@@ -58,7 +58,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 				}
 			}
 			Ty::Enum(ref ty) => {
-				let hir = self.hir(ty.decl)?;
+				let hir = self.lazy_hir(ty.decl)?;
 				match hir.data.as_ref().unwrap().value {
 					hir::TypeData::Enum(ref lits) => llhd::enum_ty(lits.len()),
 					_ => unreachable!()
@@ -103,7 +103,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 									}
 								}
 								Ty::Enum(ref ty) => {
-									match self.hir(ty.decl)?.data.as_ref().unwrap().value {
+									match self.lazy_hir(ty.decl)?.data.as_ref().unwrap().value {
 										hir::TypeData::Enum(ref lits) => lits.len(),
 										_ => unreachable!()
 									}
@@ -147,7 +147,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 			Const::Null => llhd::const_int(0, 0.into()),
 			Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
 			Const::Enum(ref k) => {
-				let size = match self.hir(k.decl)?.data.as_ref().unwrap().value {
+				let size = match self.lazy_hir(k.decl)?.data.as_ref().unwrap().value {
 					hir::TypeData::Enum(ref lits) => lits.len(),
 					_ => unreachable!(),
 				};

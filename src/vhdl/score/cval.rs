@@ -7,7 +7,7 @@ use score::*;
 
 // Calculate the constant value of an expression.
 impl_make!(self, id: ExprRef => &Const {
-	let hir = self.hir(id)?;
+	let hir = self.lazy_hir(id)?;
 	Ok(match hir.data {
 		// Integer literals.
 		hir::ExprData::IntegerLiteral(ref c) => self.intern_const(c.clone()),

@@ -19,6 +19,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a type declaration.
     pub fn add_type_decl(&self, decl: &'ast ast::TypeDecl) -> Result<TypeDeclRef> {
         let (mk, id, scope) = self.make(decl.span);
+        self.ctx.define(scope, decl.name.map_into(), Def::Type(id))?;
         mk.lower_to_hir(Box::new(move |sbc|{
             let ctx = AddContext::new(sbc, scope);
             Ok(hir::TypeDecl {

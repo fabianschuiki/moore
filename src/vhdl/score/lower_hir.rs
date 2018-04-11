@@ -1043,7 +1043,9 @@ impl_make!(self, id: IntfSignalRef => &hir::IntfSignal {
 
 // Lower a package declaration to HIR.
 impl_make!(self, id: PkgDeclRef => &hir::Package {
-	let (scope_id, ast) = self.ast(id);
+	let (outer_scope, ast) = self.ast(id);
+    let scope = id.into();
+    self.subscope(scope, outer_scope);
 	let generics = Vec::new();
 	// let generic_maps = Vec::new();
 	let mut decls = Vec::new();
@@ -1051,14 +1053,14 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 
 	// Filter the declarations in the package to only those that we actually
 	// support, and separate the generic clauses and maps.
-	let ctx = AddContext::new(self, scope_id);
+	let ctx = AddContext::new(self, scope);
 	for decl in &ast.decls {
 		match *decl {
 			ast::DeclItem::SubprogDecl(ref decl) => {
 				match decl.data {
 					ast::SubprogData::Decl => {
 						let subid = SubprogDeclRef(NodeId::alloc());
-						self.set_ast(subid, (id.into(), decl));
+						self.set_ast(subid, (scope, decl));
 						decls.push(subid.into());
 					}
 					ast::SubprogData::Body{..} => {
@@ -1072,30 +1074,30 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 					}
 					ast::SubprogData::Inst{..} => {
 						let subid = SubprogInstRef(NodeId::alloc());
-						self.set_ast(subid, (id.into(), decl));
+						self.set_ast(subid, (scope, decl));
 						decls.push(subid.into());
 					}
 				}
 			}
 			ast::DeclItem::PkgDecl(ref decl) => {
 				let subid = PkgDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
+				self.set_ast(subid, (scope, decl));
 				decls.push(subid.into());
 			}
 			ast::DeclItem::PkgInst(ref decl) => {
 				let subid = PkgInstRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
+				self.set_ast(subid, (scope, decl));
 				decls.push(subid.into());
 			}
 			ast::DeclItem::TypeDecl(ref decl) => {
-				// decls.push(ctx.add_type_decl(decl)?.into());
-				let subid = TypeDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
+				decls.push(ctx.add_type_decl(decl)?.into());
+				// let subid = TypeDeclRef(NodeId::alloc());
+				// self.set_ast(subid, (scope, decl));
+				// decls.push(subid.into());
 			}
 			ast::DeclItem::SubtypeDecl(ref decl) => {
 				let subid = SubtypeDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
+				self.set_ast(subid, (scope, decl));
 				decls.push(subid.into());
 			}
 			ast::DeclItem::ObjDecl(ref decl) => {
@@ -1123,43 +1125,43 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 			}
 			ast::DeclItem::AliasDecl(ref decl) => {
 				let subid = AliasDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope_id, decl));
+				self.set_ast(subid, (scope, decl));
 				decls.push(subid.into());
 			}
 			ast::DeclItem::CompDecl(ref decl) => {
 				let subid = CompDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope_id, decl));
+				self.set_ast(subid, (scope, decl));
 				decls.push(subid.into());
 			}
 			ast::DeclItem::AttrDecl(ref decl) => {
 				match decl.data {
 					ast::AttrData::Decl(..) => {
 						let subid = AttrDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
+						self.set_ast(subid, (scope, decl));
 						decls.push(subid.into());
 					}
 					ast::AttrData::Spec{..} => {
 						let subid = AttrSpecRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
+						self.set_ast(subid, (scope, decl));
 						decls.push(subid.into());
 					}
 				}
 			}
 			ast::DeclItem::DisconDecl(ref decl) => {
 				let subid = DisconSpecRef(NodeId::alloc());
-				self.set_ast(subid, (scope_id, decl));
+				self.set_ast(subid, (scope, decl));
 				decls.push(subid.into());
 			}
 			ast::DeclItem::GroupDecl(ref decl) => {
 				match decl.data {
 					ast::GroupData::Decl(..) => {
 						let subid = GroupDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
+						self.set_ast(subid, (scope, decl));
 						decls.push(subid.into());
 					}
 					ast::GroupData::Temp{..} => {
 						let subid = GroupTempRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
+						self.set_ast(subid, (scope, decl));
 						decls.push(subid.into());
 					}
 				}
@@ -1180,7 +1182,7 @@ impl_make!(self, id: PkgDeclRef => &hir::Package {
 		Err(())
 	} else {
 		Ok(self.sb.arenas.hir.package.alloc(hir::Package{
-			parent: scope_id,
+			parent: outer_scope,
 			name: ast.name,
 			generics: generics,
 			decls: decls,
@@ -1353,409 +1355,409 @@ impl_make!(self, id: SubtypeDeclRef => &hir::SubtypeDecl {
 });
 
 
-// Lower an expression to HIR.
-impl_make!(self, id: ExprRef => &hir::Expr {
-	let (scope_id, ast) = self.ast(id);
-	let data = match ast.data {
-		// Literals
-		ast::LitExpr(..) => {
-			let term_ctx = TermContext::new(self, scope_id);
-			let term = term_ctx.termify_expr(ast)?;
-			term_ctx.term_to_expr_raw(term)?.data
-		}
+// // Lower an expression to HIR.
+// impl_make!(self, id: ExprRef => &hir::Expr {
+// 	let (scope_id, ast) = self.ast(id);
+// 	let data = match ast.data {
+// 		// Literals
+// 		ast::LitExpr(..) => {
+// 			let term_ctx = TermContext::new(self, scope_id);
+// 			let term = term_ctx.termify_expr(ast)?;
+// 			term_ctx.term_to_expr_raw(term)?.data
+// 		}
 
-		// Unary operators.
-		ast::UnaryExpr(op, ref arg) => {
-			let op = self.lower_unary_op(Spanned::new(op, ast.span))?;
-			let subid = ExprRef(NodeId::alloc());
-			self.set_ast(subid, (scope_id, arg.as_ref()));
-			hir::ExprData::Unary(op, vec![], subid)
-		}
+// 		// Unary operators.
+// 		ast::UnaryExpr(op, ref arg) => {
+// 			let op = self.lower_unary_op(Spanned::new(op, ast.span))?;
+// 			let subid = ExprRef(NodeId::alloc());
+// 			self.set_ast(subid, (scope_id, arg.as_ref()));
+// 			hir::ExprData::Unary(op, vec![], subid)
+// 		}
 
-		// Ranges.
-		ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => {
-			hir::ExprData::Range(d, self.unpack_expr(lb, scope_id)?, self.unpack_expr(rb, scope_id)?)
-		}
+// 		// Ranges.
+// 		ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => {
+// 			hir::ExprData::Range(d, self.unpack_expr(lb, scope_id)?, self.unpack_expr(rb, scope_id)?)
+// 		}
 
-		// Binary operators.
-		// ast::BinaryExpr(op, ref lhs, ref rhs) => {
+// 		// Binary operators.
+// 		// ast::BinaryExpr(op, ref lhs, ref rhs) => {
 
-		// }
+// 		// }
 
-		// Names.
-		ast::NameExpr(ref name) => {
-			let (_, defs, matched_span, tail_parts) = self.resolve_compound_name(name, scope_id, false)?;
-			debugln!("name {} matched {:?}, tail {:?}", name.span.extract(), defs, tail_parts);
+// 		// Names.
+// 		ast::NameExpr(ref name) => {
+// 			let (_, defs, matched_span, tail_parts) = self.resolve_compound_name(name, scope_id, false)?;
+// 			debugln!("name {} matched {:?}, tail {:?}", name.span.extract(), defs, tail_parts);
 
-			// If there are multiple definitions, perform overload resolution by
-			// consulting the type context for the expression.
-			let defs: Vec<_> = if defs.len() > 1 {
-				if let Some(tyctx) = self.type_context_resolved(id)? {
-					let ty = self.deref_named_type(tyctx)?;
-					if self.sess.opts.trace_scoreboard {
-						debugln!("[SB][VHDL][OVLD] resolve overloaded `{}`", matched_span.extract());
-						debugln!("[SB][VHDL][OVLD] context requires {:?}", ty);
-					}
+// 			// If there are multiple definitions, perform overload resolution by
+// 			// consulting the type context for the expression.
+// 			let defs: Vec<_> = if defs.len() > 1 {
+// 				if let Some(tyctx) = self.type_context_resolved(id)? {
+// 					let ty = self.deref_named_type(tyctx)?;
+// 					if self.sess.opts.trace_scoreboard {
+// 						debugln!("[SB][VHDL][OVLD] resolve overloaded `{}`", matched_span.extract());
+// 						debugln!("[SB][VHDL][OVLD] context requires {:?}", ty);
+// 					}
 
-					// Filter out the defs that are typed and that match the
-					// type imposed by the expression context.
-					let mut filtered = Vec::new();
-					for def in defs {
-						let defty = self.deref_named_type(match def.value {
-							Def::Enum(EnumRef(id,_)) => self.ty(id)?,
-							// TODO: Add subprograms and everything else that
-							// can match here.
-							_ => {
-								if self.sess.opts.trace_scoreboard {
-									debugln!("[SB][VHDL][OVLD] discarding irrelevant {:?}", def.value);
-								}
-								continue;
-							}
-						})?;
-						if defty == ty {
-							filtered.push(def);
-							if self.sess.opts.trace_scoreboard {
-								debugln!("[SB][VHDL][OVLD] accepting {:?}", def.value);
-							}
-						} else {
-							if self.sess.opts.trace_scoreboard {
-								debugln!("[SB][VHDL][OVLD] discarding {:?} because mismatching type {:?}", def.value, defty);
-							}
-						}
-					}
+// 					// Filter out the defs that are typed and that match the
+// 					// type imposed by the expression context.
+// 					let mut filtered = Vec::new();
+// 					for def in defs {
+// 						let defty = self.deref_named_type(match def.value {
+// 							Def::Enum(EnumRef(id,_)) => self.ty(id)?,
+// 							// TODO: Add subprograms and everything else that
+// 							// can match here.
+// 							_ => {
+// 								if self.sess.opts.trace_scoreboard {
+// 									debugln!("[SB][VHDL][OVLD] discarding irrelevant {:?}", def.value);
+// 								}
+// 								continue;
+// 							}
+// 						})?;
+// 						if defty == ty {
+// 							filtered.push(def);
+// 							if self.sess.opts.trace_scoreboard {
+// 								debugln!("[SB][VHDL][OVLD] accepting {:?}", def.value);
+// 							}
+// 						} else {
+// 							if self.sess.opts.trace_scoreboard {
+// 								debugln!("[SB][VHDL][OVLD] discarding {:?} because mismatching type {:?}", def.value, defty);
+// 							}
+// 						}
+// 					}
 
-					// If the filtering left no overloads, emit an error.
-					if filtered.is_empty() {
-						self.emit(
-							DiagBuilder2::error(format!("no overload of `{}` applicable", matched_span.extract()))
-							.span(matched_span)
-						);
-						// TODO: Print the required type and the type of what
-						// has been found.
-						return Err(());
-					}
-					filtered
-				} else {
-					defs
-				}
-			} else {
-				defs
-			};
+// 					// If the filtering left no overloads, emit an error.
+// 					if filtered.is_empty() {
+// 						self.emit(
+// 							DiagBuilder2::error(format!("no overload of `{}` applicable", matched_span.extract()))
+// 							.span(matched_span)
+// 						);
+// 						// TODO: Print the required type and the type of what
+// 						// has been found.
+// 						return Err(());
+// 					}
+// 					filtered
+// 				} else {
+// 					defs
+// 				}
+// 			} else {
+// 				defs
+// 			};
 
-			// Make sure we only have one definition. If we have more than one,
-			// perform overload resolution by consulting the type context for
-			// the expression.
-			let def = if defs.len() == 1 {
-				*defs.last().unwrap()
-			} else {
-				self.emit(
-					DiagBuilder2::error(format!("`{}` is ambiguous", matched_span.extract()))
-					.span(matched_span)
-				);
-				return Err(());
-			};
+// 			// Make sure we only have one definition. If we have more than one,
+// 			// perform overload resolution by consulting the type context for
+// 			// the expression.
+// 			let def = if defs.len() == 1 {
+// 				*defs.last().unwrap()
+// 			} else {
+// 				self.emit(
+// 					DiagBuilder2::error(format!("`{}` is ambiguous", matched_span.extract()))
+// 					.span(matched_span)
+// 				);
+// 				return Err(());
+// 			};
 
-			// Create the expression representation of the definition.
-			let mut expr: &'ctx hir::Expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
-				parent: scope_id,
-				span: matched_span,
-				data: hir::ExprData::Name(def.value, def.span),
-			});
+// 			// Create the expression representation of the definition.
+// 			let mut expr: &'ctx hir::Expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+// 				parent: scope_id,
+// 				span: matched_span,
+// 				data: hir::ExprData::Name(def.value, def.span),
+// 			});
 
-			// Unpack the remaining parts of the name.
-			for part in tail_parts {
-				// Allocate a node ID for the inner expression and store it away in
-				// the HIR table.
-				let inner = ExprRef::new(NodeId::alloc());
-				let inner_span = expr.span;
-				self.set_hir(inner, expr);
+// 			// Unpack the remaining parts of the name.
+// 			for part in tail_parts {
+// 				// Allocate a node ID for the inner expression and store it away in
+// 				// the HIR table.
+// 				let inner = ExprRef::new(NodeId::alloc());
+// 				let inner_span = expr.span;
+// 				self.set_hir(inner, expr);
 
-				match *part {
-					ast::NamePart::Select(name) => {
-						let rn = self.resolvable_from_primary_name(&name)?;
-						expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
-							parent: scope_id,
-							span: Span::union(inner_span, rn.span),
-							data: hir::ExprData::Select(inner, rn),
-						});
-					}
+// 				match *part {
+// 					ast::NamePart::Select(name) => {
+// 						let rn = self.resolvable_from_primary_name(&name)?;
+// 						expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+// 							parent: scope_id,
+// 							span: Span::union(inner_span, rn.span),
+// 							data: hir::ExprData::Select(inner, rn),
+// 						});
+// 					}
 
-					ast::NamePart::Signature(ref _sig) => unimplemented!(),
+// 					ast::NamePart::Signature(ref _sig) => unimplemented!(),
 
-					ast::NamePart::Attribute(ident) => {
-						expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
-							parent: scope_id,
-							span: Span::union(inner_span, ident.span),
-							data: hir::ExprData::Attr(inner, Spanned::new(ident.name.into(), ident.span)),
-						});
-					}
+// 					ast::NamePart::Attribute(ident) => {
+// 						expr = self.sb.arenas.hir.expr.alloc(hir::Expr{
+// 							parent: scope_id,
+// 							span: Span::union(inner_span, ident.span),
+// 							data: hir::ExprData::Attr(inner, Spanned::new(ident.name.into(), ident.span)),
+// 						});
+// 					}
 
-					// Call expressions can map to different things. First we need
-					// to know what type the callee has. Based on this, the list of
-					// arguments can be associated with the correct ports. Or in
-					// case the callee is a type, we perform a type conversion.
-					ast::NamePart::Call(ref _elems) => {
-						let callee_ty = self.ty(inner)?;
-						panic!("call to {:?} not implemented", callee_ty);
-						// let mut had_named = false;
-						// for i in 0..elems.len() {
+// 					// Call expressions can map to different things. First we need
+// 					// to know what type the callee has. Based on this, the list of
+// 					// arguments can be associated with the correct ports. Or in
+// 					// case the callee is a type, we perform a type conversion.
+// 					ast::NamePart::Call(ref _elems) => {
+// 						let callee_ty = self.ty(inner)?;
+// 						panic!("call to {:?} not implemented", callee_ty);
+// 						// let mut had_named = false;
+// 						// for i in 0..elems.len() {
 
-						// }
-					}
+// 						// }
+// 					}
 
-					// Disallow `.all` in expressions.
-					ast::NamePart::SelectAll(span) => {
-						self.emit(
-							DiagBuilder2::error("`.all` in an expression")
-							.span(span)
-						);
-						return Err(());
-					}
+// 					// Disallow `.all` in expressions.
+// 					ast::NamePart::SelectAll(span) => {
+// 						self.emit(
+// 							DiagBuilder2::error("`.all` in an expression")
+// 							.span(span)
+// 						);
+// 						return Err(());
+// 					}
 
-					// Disallow ranges in expressions.
-					ast::NamePart::Range(ref expr) => {
-						self.emit(
-							DiagBuilder2::error("range in an expression")
-							.span(expr.span)
-						);
-						return Err(());
-					}
-				}
-			}
+// 					// Disallow ranges in expressions.
+// 					ast::NamePart::Range(ref expr) => {
+// 						self.emit(
+// 							DiagBuilder2::error("range in an expression")
+// 							.span(expr.span)
+// 						);
+// 						return Err(());
+// 					}
+// 				}
+// 			}
 
-			// return self.compound_name_to_expr(name, scope_id);
-			return Ok(expr);
-		}
+// 			// return self.compound_name_to_expr(name, scope_id);
+// 			return Ok(expr);
+// 		}
 
-		// All other expressions we simply do not support.
-		_ => {
-			self.emit(
-				DiagBuilder2::error("invalid expression")
-				.span(ast.span)
-			);
-			return Err(());
-		}
-	};
-	Ok(self.sb.arenas.hir.expr.alloc(hir::Expr{
-		parent: scope_id,
-		span: ast.span,
-		data: data,
-	}))
-});
+// 		// All other expressions we simply do not support.
+// 		_ => {
+// 			self.emit(
+// 				DiagBuilder2::error("invalid expression")
+// 				.span(ast.span)
+// 			);
+// 			return Err(());
+// 		}
+// 	};
+// 	Ok(self.sb.arenas.hir.expr.alloc(hir::Expr{
+// 		parent: scope_id,
+// 		span: ast.span,
+// 		data: data,
+// 	}))
+// });
 
 
-// Lower a type declaration to HIR.
-impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
-	let (scope_id, ast) = self.ast(id);
-	let data = if let Some(ref spanned_data) = ast.data {
-		Some(Spanned::new(match spanned_data.value {
-			// Integer, real, and physical types.
-			ast::RangeType(ref range_expr, ref units) => {
-				let (dir, lb, rb) = match range_expr.data {
-					ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
-						// let ctx = AddContext::new(self, scope_id);
-						// let lb = ctx.add_expr(lb_expr)?;
-						// let rb = ctx.add_expr(rb_expr)?;
-						let lb = ExprRef(NodeId::alloc());
-						let rb = ExprRef(NodeId::alloc());
-						self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
-						self.set_ast(rb, (scope_id.into(), rb_expr.as_ref()));
-						(dir, lb, rb)
-					}
-					_ => {
-						self.emit(
-							DiagBuilder2::error("Invalid range expression")
-							.span(range_expr.span)
-						);
-						return Err(());
-					}
-				};
-				if let Some(ref units) = *units {
-					// Determine the primary unit.
-					let mut prim_iter = units
-						.iter()
-						.enumerate()
-						.filter(|&(_, &(_, ref expr))| expr.is_none())
-						.map(|(index, &(name, _))| (index, name));
-					let primary = match prim_iter.next() {
-						Some(u) => u,
-						None => {
-							self.emit(
-								DiagBuilder2::error(format!("physical type `{}` has no primary unit", ast.name.value))
-								.span(ast.span)
-								.add_note("A physical type must have a primary unit of the form `<name>;`. See IEEE 1076-2008 section 5.2.4.")
-							);
-							return Err(());
-						}
-					};
-					let mut had_fails = false;
-					for (_, name) in prim_iter {
-						self.emit(
-							DiagBuilder2::error(format!("physical type `{}` has multiple primary units", ast.name.value))
-							.span(name.span)
-							.add_note("A physical type cannot have multiple primary units. See IEEE 1076-2008 section 5.2.4.")
-						);
-						had_fails = true;
-					}
-					if had_fails {
-						return Err(());
-					}
-					debugln!("primary unit {:#?}", primary);
+// // Lower a type declaration to HIR.
+// impl_make!(self, id: TypeDeclRef => &hir::TypeDecl {
+// 	let (scope_id, ast) = self.ast(id);
+// 	let data = if let Some(ref spanned_data) = ast.data {
+// 		Some(Spanned::new(match spanned_data.value {
+// 			// Integer, real, and physical types.
+// 			ast::RangeType(ref range_expr, ref units) => {
+// 				let (dir, lb, rb) = match range_expr.data {
+// 					ast::BinaryExpr(ast::BinaryOp::Dir(dir), ref lb_expr, ref rb_expr) => {
+// 						// let ctx = AddContext::new(self, scope_id);
+// 						// let lb = ctx.add_expr(lb_expr)?;
+// 						// let rb = ctx.add_expr(rb_expr)?;
+// 						let lb = ExprRef(NodeId::alloc());
+// 						let rb = ExprRef(NodeId::alloc());
+// 						self.set_ast(lb, (scope_id.into(), lb_expr.as_ref()));
+// 						self.set_ast(rb, (scope_id.into(), rb_expr.as_ref()));
+// 						(dir, lb, rb)
+// 					}
+// 					_ => {
+// 						self.emit(
+// 							DiagBuilder2::error("Invalid range expression")
+// 							.span(range_expr.span)
+// 						);
+// 						return Err(());
+// 					}
+// 				};
+// 				if let Some(ref units) = *units {
+// 					// Determine the primary unit.
+// 					let mut prim_iter = units
+// 						.iter()
+// 						.enumerate()
+// 						.filter(|&(_, &(_, ref expr))| expr.is_none())
+// 						.map(|(index, &(name, _))| (index, name));
+// 					let primary = match prim_iter.next() {
+// 						Some(u) => u,
+// 						None => {
+// 							self.emit(
+// 								DiagBuilder2::error(format!("physical type `{}` has no primary unit", ast.name.value))
+// 								.span(ast.span)
+// 								.add_note("A physical type must have a primary unit of the form `<name>;`. See IEEE 1076-2008 section 5.2.4.")
+// 							);
+// 							return Err(());
+// 						}
+// 					};
+// 					let mut had_fails = false;
+// 					for (_, name) in prim_iter {
+// 						self.emit(
+// 							DiagBuilder2::error(format!("physical type `{}` has multiple primary units", ast.name.value))
+// 							.span(name.span)
+// 							.add_note("A physical type cannot have multiple primary units. See IEEE 1076-2008 section 5.2.4.")
+// 						);
+// 						had_fails = true;
+// 					}
+// 					if had_fails {
+// 						return Err(());
+// 					}
+// 					debugln!("primary unit {:#?}", primary);
 
-					// Determine the units and how they are defined with respect
-					// to each other.
-					let term_ctx = TermContext::new(self, scope_id);
-					let table = units
-						.iter()
-						.map(|&(name, ref expr)|{
-							let rel = if let Some(ref expr) = *expr {
-								let term = term_ctx.termify_expr(expr)?;
-								let (value, unit) = match term.value {
-									Term::PhysLit(value, unit) => (value, unit),
-									_ => {
-										self.emit(
-											DiagBuilder2::error(format!("`{}` is not a valid secondary unit", term.span.extract()))
-											.span(term.span)
-										);
-										debugln!("It is a {:#?}", term.value);
-										return Err(());
-									}
-								};
-								if unit.value.0 != id {
-									self.emit(
-										DiagBuilder2::error(format!("`{}` is not a unit in the physical type `{}`", term.span.extract(), ast.name.value))
-										.span(term.span)
-										.add_note(format!("`{}` has been declared here:", term.span.extract()))
-										.span(unit.span)
-									);
-								}
-								Some((value, unit.value.1))
-							} else {
-								None
-							};
-							Ok((Spanned::new(name.name, name.span), rel))
-						})
-						.collect::<Vec<Result<_>>>()
-						.into_iter()
-						.collect::<Result<Vec<_>>>()?;
+// 					// Determine the units and how they are defined with respect
+// 					// to each other.
+// 					let term_ctx = TermContext::new(self, scope_id);
+// 					let table = units
+// 						.iter()
+// 						.map(|&(name, ref expr)|{
+// 							let rel = if let Some(ref expr) = *expr {
+// 								let term = term_ctx.termify_expr(expr)?;
+// 								let (value, unit) = match term.value {
+// 									Term::PhysLit(value, unit) => (value, unit),
+// 									_ => {
+// 										self.emit(
+// 											DiagBuilder2::error(format!("`{}` is not a valid secondary unit", term.span.extract()))
+// 											.span(term.span)
+// 										);
+// 										debugln!("It is a {:#?}", term.value);
+// 										return Err(());
+// 									}
+// 								};
+// 								if unit.value.0 != id {
+// 									self.emit(
+// 										DiagBuilder2::error(format!("`{}` is not a unit in the physical type `{}`", term.span.extract(), ast.name.value))
+// 										.span(term.span)
+// 										.add_note(format!("`{}` has been declared here:", term.span.extract()))
+// 										.span(unit.span)
+// 									);
+// 								}
+// 								Some((value, unit.value.1))
+// 							} else {
+// 								None
+// 							};
+// 							Ok((Spanned::new(name.name, name.span), rel))
+// 						})
+// 						.collect::<Vec<Result<_>>>()
+// 						.into_iter()
+// 						.collect::<Result<Vec<_>>>()?;
 
-					// Determine the scale of each unit with respect to the
-					// primary unit.
-					let scale_table = table
-						.iter()
-						.map(|&(name, ref rel)|{
-							let mut abs = BigInt::from(1);
-							let mut rel_to = rel.as_ref();
-							while let Some(&(ref scale, index)) = rel_to {
-								abs = abs * scale;
-								rel_to = table[index].1.as_ref();
-							}
-							(name, abs, rel.clone())
-						})
-						.collect::<Vec<_>>();
+// 					// Determine the scale of each unit with respect to the
+// 					// primary unit.
+// 					let scale_table = table
+// 						.iter()
+// 						.map(|&(name, ref rel)|{
+// 							let mut abs = BigInt::from(1);
+// 							let mut rel_to = rel.as_ref();
+// 							while let Some(&(ref scale, index)) = rel_to {
+// 								abs = abs * scale;
+// 								rel_to = table[index].1.as_ref();
+// 							}
+// 							(name, abs, rel.clone())
+// 						})
+// 						.collect::<Vec<_>>();
 
-					hir::TypeData::Physical(dir, lb, rb, scale_table, primary.0)
-				} else {
-					hir::TypeData::Range(dir, lb, rb)
-				}
-			}
+// 					hir::TypeData::Physical(dir, lb, rb, scale_table, primary.0)
+// 				} else {
+// 					hir::TypeData::Range(dir, lb, rb)
+// 				}
+// 			}
 
-			// Enumeration types.
-			ast::EnumType(ref elems) => {
-				let mut lits = Vec::new();
-				for elem in &elems.value {
-					// Unpack the element. Make sure it only consists of an
-					// expression that is either an identifier or a character
-					// literal.
-					let lit = if !elem.choices.value.is_empty() {
-						None
-					} else {
-						match elem.expr.data {
-							ast::NameExpr(ast::CompoundName{
-								primary: ast::PrimaryName{ kind, span, .. },
-								ref parts,
-								..
-							}) if parts.is_empty() => {
-								match kind {
-									ast::PrimaryNameKind::Ident(n) => Some(hir::EnumLit::Ident(Spanned::new(n, span))),
-									ast::PrimaryNameKind::Char(c) => Some(hir::EnumLit::Char(Spanned::new(c, span))),
-									_ => None,
-								}
-							}
-							_ => None
-						}
-					};
+// 			// Enumeration types.
+// 			ast::EnumType(ref elems) => {
+// 				let mut lits = Vec::new();
+// 				for elem in &elems.value {
+// 					// Unpack the element. Make sure it only consists of an
+// 					// expression that is either an identifier or a character
+// 					// literal.
+// 					let lit = if !elem.choices.value.is_empty() {
+// 						None
+// 					} else {
+// 						match elem.expr.data {
+// 							ast::NameExpr(ast::CompoundName{
+// 								primary: ast::PrimaryName{ kind, span, .. },
+// 								ref parts,
+// 								..
+// 							}) if parts.is_empty() => {
+// 								match kind {
+// 									ast::PrimaryNameKind::Ident(n) => Some(hir::EnumLit::Ident(Spanned::new(n, span))),
+// 									ast::PrimaryNameKind::Char(c) => Some(hir::EnumLit::Char(Spanned::new(c, span))),
+// 									_ => None,
+// 								}
+// 							}
+// 							_ => None
+// 						}
+// 					};
 
-					// If the unpacking was successful, add the literal to the list
-					// of enumeration literals.
-					if let Some(lit) = lit {
-						lits.push(lit);
-					} else {
-						self.emit(
-							DiagBuilder2::error("not an enumeration literal")
-							.span(elem.span)
-							.add_note("expected an identifier or character literal")
-						);
-						continue;
-					}
-				}
-				hir::TypeData::Enum(lits)
-			}
+// 					// If the unpacking was successful, add the literal to the list
+// 					// of enumeration literals.
+// 					if let Some(lit) = lit {
+// 						lits.push(lit);
+// 					} else {
+// 						self.emit(
+// 							DiagBuilder2::error("not an enumeration literal")
+// 							.span(elem.span)
+// 							.add_note("expected an identifier or character literal")
+// 						);
+// 						continue;
+// 					}
+// 				}
+// 				hir::TypeData::Enum(lits)
+// 			}
 
-			ast::AccessType(ref subty) => {
-				hir::TypeData::Access(self.unpack_subtype_ind(subty, scope_id)?)
-			}
+// 			ast::AccessType(ref subty) => {
+// 				hir::TypeData::Access(self.unpack_subtype_ind(subty, scope_id)?)
+// 			}
 
-			ast::ArrayType(ref indices, ref elem_subty) => {
-				// Ensure that we have at least on index, and ensure that there
-				// are no stray choices (`expr|expr =>`) in the list. Then map
-				// each index into its own node, unpack the element subtype, and
-				// we're done.
-				assert!(indices.value.len() > 0);
-				let indices = self
-					.sanitize_paren_elems_as_exprs(&indices.value, "an array type index")
-					.into_iter()
-					.map(|index|{
-						let id = ArrayTypeIndexRef::new(NodeId::alloc());
-						self.set_ast(id, (scope_id, index));
-						id
-					})
-					.collect();
-				let ctx = TermContext::new(self, scope_id);
-				let subty = ctx.termify_subtype_ind(elem_subty)?;
-				let elem_subty = ctx.term_to_subtype_ind(subty)?.value;
-				let add_ctx = AddContext::new(self, scope_id);
-				let elem_subty = add_ctx.add_subtype_ind_hir(elem_subty)?;
-				hir::TypeData::Array(indices, elem_subty)
-			}
+// 			ast::ArrayType(ref indices, ref elem_subty) => {
+// 				// Ensure that we have at least on index, and ensure that there
+// 				// are no stray choices (`expr|expr =>`) in the list. Then map
+// 				// each index into its own node, unpack the element subtype, and
+// 				// we're done.
+// 				assert!(indices.value.len() > 0);
+// 				let indices = self
+// 					.sanitize_paren_elems_as_exprs(&indices.value, "an array type index")
+// 					.into_iter()
+// 					.map(|index|{
+// 						let id = ArrayTypeIndexRef::new(NodeId::alloc());
+// 						self.set_ast(id, (scope_id, index));
+// 						id
+// 					})
+// 					.collect();
+// 				let ctx = TermContext::new(self, scope_id);
+// 				let subty = ctx.termify_subtype_ind(elem_subty)?;
+// 				let elem_subty = ctx.term_to_subtype_ind(subty)?.value;
+// 				let add_ctx = AddContext::new(self, scope_id);
+// 				let elem_subty = add_ctx.add_subtype_ind_hir(elem_subty)?;
+// 				hir::TypeData::Array(indices, elem_subty)
+// 			}
 
-			ast::FileType(ref name) => {
-				let ctx = TermContext::new(self, scope_id);
-				let term = ctx.termify_compound_name(name)?;
-				let tm = ctx.term_to_type_mark(term)?;
-				hir::TypeData::File(tm)
-			}
+// 			ast::FileType(ref name) => {
+// 				let ctx = TermContext::new(self, scope_id);
+// 				let term = ctx.termify_compound_name(name)?;
+// 				let tm = ctx.term_to_type_mark(term)?;
+// 				hir::TypeData::File(tm)
+// 			}
 
-			ast::RecordType(ref fields) => {
-				let fields = fields.iter().flat_map(|&(ref names, ref subty)|{
-					let subty = self.unpack_subtype_ind(subty, scope_id);
-					names.iter().map(move |name| Ok((Spanned::new(name.name, name.span), subty?)))
-				}).collect::<Result<Vec<_>>>()?;
-				hir::TypeData::Record(fields)
-			}
+// 			ast::RecordType(ref fields) => {
+// 				let fields = fields.iter().flat_map(|&(ref names, ref subty)|{
+// 					let subty = self.unpack_subtype_ind(subty, scope_id);
+// 					names.iter().map(move |name| Ok((Spanned::new(name.name, name.span), subty?)))
+// 				}).collect::<Result<Vec<_>>>()?;
+// 				hir::TypeData::Record(fields)
+// 			}
 
-			ast::ProtectedType(..) => unimp_msg!(self, "protected types", ast.span),
-		}, spanned_data.span))
-	} else {
-		None
-	};
-	let decl = hir::TypeDecl{
-		parent: scope_id,
-		name: ast.name,
-		data: data,
-	};
-	Ok(self.sb.arenas.hir.type_decl.alloc(decl))
-});
+// 			ast::ProtectedType(..) => unimp_msg!(self, "protected types", ast.span),
+// 		}, spanned_data.span))
+// 	} else {
+// 		None
+// 	};
+// 	let decl = hir::TypeDecl{
+// 		parent: scope_id,
+// 		name: ast.name,
+// 		data: data,
+// 	};
+// 	Ok(self.sb.arenas.hir.type_decl.alloc(decl))
+// });
 
 // Lower an architecture to HIR.
 impl_make!(self, id: ArchRef => &hir::Arch {

@@ -171,10 +171,10 @@ impl_make_defs!(self, id: ArchRef => {
 // Definitions in a package declaration.
 impl_make_defs!(self, id: PkgDeclRef => {
 	let mut ctx = DefsContext::new(self);
-	let hir = self.hir(id)?;
-	for &decl in &hir.decls {
-		ctx.declare_any_in_pkg(decl);
-	}
+	// let hir = self.hir(id)?;
+	// for &decl in &hir.decls {
+	// 	ctx.declare_any_in_pkg(decl);
+	// }
 	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
 
@@ -310,7 +310,7 @@ impl_make_scope!(self, id: ArchRef => {
 impl_make_scope!(self, id: PkgDeclRef => {
 	let hir = self.hir(id)?;
 	let mut defs = Vec::new();
-	defs.push(id.into());
+	// defs.push(id.into());
 	let parent = match hir.parent {
 		ScopeRef::CtxItems(id) => self.make_ctx_items_scope(id, None)?.into(),
 		others => others

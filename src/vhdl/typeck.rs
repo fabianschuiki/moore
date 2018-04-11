@@ -169,12 +169,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	}
 
 	/// Type check a waveform element.
-	pub fn typeck_wave_elem(&self, node: &'ctx hir::WaveElem, exp: &'ctx Ty) {
-		if let Some(value) = node.value {
-			self.typeck_node(value, exp);
-		}
-		if let Some(_after) = node.after {
-			// TODO: type check time expression
+	pub fn typeck_wave_elem(&self, node: &'ctx hir::WaveElem, _exp: &'ctx Ty) {
+		if let Some(_value) = node.value {
+			// TODO: type check value expression
+            // self.typeck_node(value, exp);
+            // let ty = self.lazy_typeval(value);
+            // self.must_match(exp, ty, node.span);
+        }
+        if let Some(_after) = node.after {
+            // TODO: type check time expression
 			// self.typeck_node(after, /* time type */);
 		}
 	}
@@ -1003,7 +1006,7 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 
 /// Determine the type of a type declaration.
 impl_make!(self, id: TypeDeclRef => &Ty {
-	let hir = self.hir(id)?;
+	let hir = self.lazy_hir(id)?;
 	let data = match hir.data {
 		Some(ref d) => d,
 		None => {
@@ -1156,50 +1159,50 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 // });
 
 
-/// Determine the type of an expression.
-impl_make!(self, id: ExprRef => &Ty {
-	let hir = self.hir(id)?;
-	match hir.data {
-		hir::ExprData::IntegerLiteral(ref c) => {
-			// Integer literals either have a type attached, or they inherit
-			// their type from the context.
-			if let Some(ref ty) = c.ty {
-				return Ok(self.intern_ty(ty.clone()));
-			}
-			if let Some(ty) = self.type_context_resolved(id)? {
-				if let &Ty::Int(_) = self.deref_named_type(ty)? {
-					return Ok(ty);
-				}
-			}
-			self.emit(
-				DiagBuilder2::error(format!("cannot infer type of `{}` from context", hir.span.extract()))
-				.span(hir.span)
-			);
-			Err(())
-		}
+// /// Determine the type of an expression.
+// impl_make!(self, id: ExprRef => &Ty {
+// 	let hir = self.hir(id)?;
+// 	match hir.data {
+// 		hir::ExprData::IntegerLiteral(ref c) => {
+// 			// Integer literals either have a type attached, or they inherit
+// 			// their type from the context.
+// 			if let Some(ref ty) = c.ty {
+// 				return Ok(self.intern_ty(ty.clone()));
+// 			}
+// 			if let Some(ty) = self.type_context_resolved(id)? {
+// 				if let &Ty::Int(_) = self.deref_named_type(ty)? {
+// 					return Ok(ty);
+// 				}
+// 			}
+// 			self.emit(
+// 				DiagBuilder2::error(format!("cannot infer type of `{}` from context", hir.span.extract()))
+// 				.span(hir.span)
+// 			);
+// 			Err(())
+// 		}
 
-		hir::ExprData::FloatLiteral(ref _c) => {
-			unimp_err!(self, id);
-			// // Float literals either have a type attached, or they inherit their
-			// // type from the context.
-			// if let Some(ref ty) = c.ty {
-			// 	return Ok(self.intern_ty(ty.clone()));
-			// }
-			// if let Some(ty) = self.type_context_resolved(id)? {
-			// 	if let &Ty::Float(_) = self.deref_named_type(ty)? {
-			// 		return Ok(ty);
-			// 	}
-			// }
-			// self.emit(
-			// 	DiagBuilder2::error("cannot infer type of float literal from context")
-			// 	.span(hir.span)
-			// );
-			// Err(())
-		}
+// 		hir::ExprData::FloatLiteral(ref _c) => {
+// 			unimp_err!(self, id);
+// 			// // Float literals either have a type attached, or they inherit their
+// 			// // type from the context.
+// 			// if let Some(ref ty) = c.ty {
+// 			// 	return Ok(self.intern_ty(ty.clone()));
+// 			// }
+// 			// if let Some(ty) = self.type_context_resolved(id)? {
+// 			// 	if let &Ty::Float(_) = self.deref_named_type(ty)? {
+// 			// 		return Ok(ty);
+// 			// 	}
+// 			// }
+// 			// self.emit(
+// 			// 	DiagBuilder2::error("cannot infer type of float literal from context")
+// 			// 	.span(hir.span)
+// 			// );
+// 			// Err(())
+// 		}
 
-		_ => unimp_err!(self, id),
-	}
-});
+// 		_ => unimp_err!(self, id),
+// 	}
+// });
 
 
 /// Determine the type of a typed node.

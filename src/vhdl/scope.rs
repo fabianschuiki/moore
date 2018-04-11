@@ -6,6 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use common::Verbosity;
 use common::errors::*;
 use common::score::Result;
 use common::source::Spanned;
@@ -58,8 +59,16 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         f(scp)
     }
 
+    /// Create a subscope of another scope.
+    pub fn subscope(&self, scope: ScopeRef, parent: ScopeRef) {
+        self.sb.scope2_table.borrow_mut().insert(scope, Scope::new(Some(parent)));
+    }
+
     /// Define a new name in a scope.
     pub fn define(&self, scope: ScopeRef, name: Spanned<ResolvableName>, def: Def) -> Result<()> {
+        if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
+            debugln!("define `{}` as {:?} in scope {:?}", name.value, def, scope);
+        }
         self.with_scope(scope, |scope| match def {
             // Handle overloadable cases.
             Def::Enum(_) => {
