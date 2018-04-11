@@ -169,8 +169,8 @@ impl_make_defs!(self, id: ArchRef => {
 });
 
 // Definitions in a package declaration.
-impl_make_defs!(self, id: PkgDeclRef => {
-	let mut ctx = DefsContext::new(self);
+impl_make_defs!(self, _id: PkgDeclRef => {
+	let ctx = DefsContext::new(self);
 	// let hir = self.hir(id)?;
 	// for &decl in &hir.decls {
 	// 	ctx.declare_any_in_pkg(decl);
@@ -309,7 +309,7 @@ impl_make_scope!(self, id: ArchRef => {
 // Populate the scope of a package declaration.
 impl_make_scope!(self, id: PkgDeclRef => {
 	let hir = self.hir(id)?;
-	let mut defs = Vec::new();
+	let defs = Vec::new();
 	// defs.push(id.into());
 	let parent = match hir.parent {
 		ScopeRef::CtxItems(id) => self.make_ctx_items_scope(id, None)?.into(),
