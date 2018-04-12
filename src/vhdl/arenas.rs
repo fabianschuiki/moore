@@ -27,28 +27,47 @@ impl<'t, T> AllocInto<'t, T> for &'t Alloc<T> {
     }
 }
 
+/// Generate a collection of arenas for different types.
 #[macro_export]
 macro_rules! make_arenas {
-    ($(#[$arena_attr:meta])* pub struct $arena_name:ident { $($name:ident: $type:ty,)* }) => (
+    ($(#[$arena_attr:meta])* pub struct $arena_name:ident { $($name:ident: $type:ty,)* }) => {
+        make_arenas!{ IMPL $($arena_attr),*; $arena_name; []; $($name: $type,)* }
+    };
+
+    ($(#[$arena_attr:meta])* pub struct $arena_name:ident<$($lt:tt),+> { $($name:ident: $type:ty,)* }) => {
+        make_arenas!{ IMPL $($arena_attr),*; $arena_name; [$($lt),+]; $($name: $type,)* }
+    };
+
+    (IMPL $($arena_attr:meta),*; $arena_name:ident; [$($lt:tt),*]; $($name:ident: $type:ty,)*) => {
         $(#[$arena_attr])*
-        pub struct $arena_name {
-            $(pub $name: Arena<$type>,)*
+        pub struct $arena_name<$($lt),*> {
+            $(pub $name: ::typed_arena::Arena<$type>,)*
         }
 
-        impl Default for $arena_name {
-            fn default() -> $arena_name {
+        make_arenas!(STRUCT_IMPL $arena_name; [$($lt),*]; $($name: $type,)*);
+    };
+
+    (STRUCT_IMPL $arena_name:ident; [$($lt:tt),*]; $($name:ident: $type:ty,)*) => {
+        impl<$($lt),*> Default for $arena_name<$($lt),*> {
+            fn default() -> $arena_name<$($lt),*> {
                 $arena_name {
-                    $($name: Arena::new(),)*
+                    $($name: ::typed_arena::Arena::new(),)*
                 }
             }
         }
 
-        $(
-            impl $crate::arenas::Alloc<$type> for $arena_name {
-                fn alloc(&self, value: $type) -> &mut $type {
-                    self.$name.alloc(value)
-                }
+        make_arenas!(TRAIT_IMPL $arena_name; [$($lt),*]; $($name: $type,)*);
+    };
+
+    (TRAIT_IMPL $arena_name:ident; [$($lt:tt),*]; $name:ident: $type:ty, $($tail_name:ident: $tail_type:ty,)*) => {
+        impl<$($lt),*> $crate::arenas::Alloc<$type> for $arena_name<$($lt),*> {
+            fn alloc(&self, value: $type) -> &mut $type {
+                self.$name.alloc(value)
             }
-        )*
-    );
+        }
+
+        make_arenas!(TRAIT_IMPL $arena_name; [$($lt),*]; $($tail_name: $tail_type,)*);
+    };
+
+    (TRAIT_IMPL $arena_name:ident; [$($lt:tt),*];) => {}
 }
