@@ -72,5 +72,3 @@ architecture bar of foo is
 	-- group_declaration
 	--group grp_a : grp_tmp_a (sig_a, sig_a);
 begin end;
-
--- @elab foo

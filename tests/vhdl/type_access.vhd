@@ -19,8 +19,6 @@ architecture bar of foo is
 	--signal c0: BUFFER_PTR;
 begin end;
 
--- @elab foo(bar)
-
 --| entity @foo_bar () () {
 --|     %a0 = sig n2* null
 --|     %b0 = sig [0 x [32 x n2]]* null

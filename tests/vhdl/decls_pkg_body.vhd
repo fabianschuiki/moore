@@ -68,5 +68,3 @@ architecture bar of foo is
 	-- Currently the architecture is required to trigger typeck of the entire
 	-- library.
 begin end;
-
--- @elab foo

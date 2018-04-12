@@ -62,5 +62,3 @@ begin
 		--group grp_a : grp_tmp_a (sig_a, sig_a);
 	begin end process;
 end;
-
--- @elab foo
