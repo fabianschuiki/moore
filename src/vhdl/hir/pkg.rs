@@ -13,6 +13,13 @@ use common::source::{Span, Spanned, INVALID_SPAN};
 use arenas::{Alloc, AllocInto};
 use syntax::ast;
 
+make_arenas!(
+    pub struct Arenas<'t> {
+        package:   Package2<'t>,
+        type_decl: TypeDecl2,
+    }
+);
+
 /// A placeholder for an HIR node.
 pub struct Slot<'t, T>(RefCell<SlotState<'t, T>>)
 where
@@ -78,7 +85,7 @@ pub struct Package2<'t> {
 
 impl<'t> FromAst<'t> for Package2<'t> {
     type Input = &'t ast::PkgDecl;
-    type Arena = &'t Alloc<Self>;
+    type Arena = Context<'t>;
 
     fn alloc_slot(
         scope: &'t AnyScope,
@@ -174,4 +181,18 @@ pub trait FromAst<'t>: Sized {
     ) -> Result<Slot<'t, Self>, ()>;
 
     fn from_ast(scope: &'t AnyScope, ast: Self::Input, arena: Self::Arena) -> Result<Self, ()>;
+}
+
+#[derive(Copy, Clone)]
+pub struct Context<'t> {
+    arenas: &'t Arenas<'t>,
+}
+
+impl<'t, T> AllocInto<'t, T> for Context<'t>
+where
+    Arenas<'t>: Alloc<T>,
+{
+    fn alloc(&self, value: T) -> &'t mut T {
+        self.arenas.alloc(value)
+    }
 }
