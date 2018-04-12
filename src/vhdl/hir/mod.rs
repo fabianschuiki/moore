@@ -2,7 +2,6 @@
 
 //! The High-level Intermediate Representation of a VHDL design.
 
-use typed_arena::Arena;
 use num::BigInt;
 
 use common::source::*;
