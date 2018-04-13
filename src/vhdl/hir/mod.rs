@@ -58,13 +58,6 @@ make_arenas!(
 	}
 );
 
-impl Arenas {
-    /// Create a new set of arenas.
-    pub fn new() -> Arenas {
-        Default::default()
-    }
-}
-
 #[derive(Debug)]
 pub struct Lib {
     pub entities: Vec<EntityRef>,

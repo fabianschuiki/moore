@@ -48,11 +48,17 @@ macro_rules! make_arenas {
     };
 
     (STRUCT_IMPL $arena_name:ident; [$($lt:tt),*]; $($name:ident: $type:ty,)*) => {
-        impl<$($lt),*> Default for $arena_name<$($lt),*> {
-            fn default() -> $arena_name<$($lt),*> {
+        impl<$($lt),*> $arena_name<$($lt),*> {
+            pub fn new() -> $arena_name<$($lt),*> {
                 $arena_name {
                     $($name: ::typed_arena::Arena::new(),)*
                 }
+            }
+        }
+
+        impl<$($lt),*> Default for $arena_name<$($lt),*> {
+            fn default() -> $arena_name<$($lt),*> {
+                $arena_name::new()
             }
         }
 

@@ -3,13 +3,13 @@
 //! This crate implements VHDL for the moore compiler.
 
 #[macro_use]
-pub extern crate moore_common;
-extern crate rustc_serialize;
-extern crate num;
-extern crate typed_arena;
-extern crate llhd;
-#[macro_use]
 extern crate lazy_static;
+extern crate llhd;
+extern crate num;
+extern crate rustc_serialize;
+extern crate typed_arena;
+#[macro_use]
+pub extern crate moore_common;
 pub extern crate moore_vhdl_syntax as syntax;
 // extern crate futures;
 
@@ -36,5 +36,6 @@ pub mod builtin;
 pub mod op;
 pub mod overload_resolver;
 pub mod ty2;
+pub mod debug;
 
 mod nodes;

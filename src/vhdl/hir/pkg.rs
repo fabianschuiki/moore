@@ -14,9 +14,11 @@ use arenas::{Alloc, AllocInto};
 use syntax::ast;
 
 make_arenas!(
-    pub struct Arenas<'t> {
+    pub struct Arenas2<'t> {
         package:   Package2<'t>,
         type_decl: TypeDecl2,
+        package_slot: Slot<'t, Package2<'t>>,
+        type_decl_slot: Slot<'t, TypeDecl2>,
     }
 );
 
@@ -80,7 +82,13 @@ pub struct Package2<'t> {
     span: Span,
     name: Spanned<Name>,
     scope: &'t AnyScope,
-    decls: Vec<Box<Node + 't>>,
+    decls: Vec<&'t Node>,
+}
+
+impl<'t> Package2<'t> {
+    pub fn decls(&self) -> &[&'t Node] {
+        &self.decls
+    }
 }
 
 impl<'t> FromAst<'t> for Package2<'t> {
@@ -97,16 +105,17 @@ impl<'t> FromAst<'t> for Package2<'t> {
     }
 
     fn from_ast(scope: &'t AnyScope, ast: Self::Input, arena: Self::Arena) -> Result<Self, ()> {
+        debugln!("create package decl {}", ast.name.value);
         // TODO: create a new scope for the package
         let decls = ast.decls
             .iter()
-            .flat_map(|decl| -> Option<Box<Node>> {
+            .flat_map(|decl| -> Option<&'t Node> {
                 match *decl {
                     ast::DeclItem::PkgDecl(ref decl) => {
-                        Some(Box::new(Package2::alloc_slot(scope, decl, arena).ok()?))
+                        Some(arena.alloc(Package2::alloc_slot(scope, decl, arena).ok()?))
                     }
                     ast::DeclItem::TypeDecl(ref decl) => {
-                        Some(Box::new(TypeDecl2::alloc_slot(scope, decl, arena).ok()?))
+                        Some(arena.alloc(TypeDecl2::alloc_slot(scope, decl, arena).ok()?))
                     }
                     _ => None,
                 }
@@ -148,6 +157,7 @@ impl<'t> FromAst<'t> for TypeDecl2 {
     }
 
     fn from_ast(_scope: &'t AnyScope, ast: Self::Input, _arena: Self::Arena) -> Result<Self, ()> {
+        debugln!("create type decl {}", ast.name.value);
         Ok(TypeDecl2 {
             id: NodeId::alloc(),
             span: ast.span,
@@ -185,14 +195,25 @@ pub trait FromAst<'t>: Sized {
 
 #[derive(Copy, Clone)]
 pub struct Context<'t> {
-    arenas: &'t Arenas<'t>,
+    pub arenas: &'t Arenas2<'t>,
+}
+
+impl<'t> Context<'t> {
+    pub fn new(arenas: &'t Arenas2<'t>) -> Context<'t> {
+        Context {
+            arenas: arenas,
+        }
+    }
 }
 
 impl<'t, T> AllocInto<'t, T> for Context<'t>
 where
-    Arenas<'t>: Alloc<T>,
+    Arenas2<'t>: Alloc<T>,
 {
     fn alloc(&self, value: T) -> &'t mut T {
         self.arenas.alloc(value)
     }
 }
+
+pub struct DummyScope;
+impl AnyScope for DummyScope {}

@@ -3,8 +3,8 @@
 //! A hardware description language compiler.
 
 extern crate clap;
-extern crate moore;
 extern crate llhd;
+extern crate moore;
 extern crate sha1;
 
 use std::path::Path;
@@ -13,8 +13,7 @@ use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
 use moore::common::score::NodeRef;
-use clap::{Arg, App, SubCommand, ArgMatches};
-
+use clap::{App, Arg, ArgMatches, SubCommand};
 
 #[derive(Debug)]
 enum Language {
@@ -23,90 +22,126 @@ enum Language {
     Vhdl,
 }
 
-
 fn main() {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
         .about("A compiler for hardware description languages.")
-        .arg(Arg::with_name("trace_scoreboard")
-            .long("trace-scoreboard")
-            .global(true))
-        .arg(Arg::with_name("verbosity")
-            .short("V")
-            .help("Sets verbosity settings")
-            .takes_value(true)
-            .multiple(true)
-            .number_of_values(1)
-            .possible_values(&["types", "expr-types", "type-contexts", "typeck", "names"])
-            .global(true))
-        .subcommand(SubCommand::with_name("compile")
-            .arg(Arg::with_name("inc")
-                .short("I")
-                .value_name("DIR")
-                .help("Adds a search path for SystemVerilog includes")
-                .multiple(true)
+        .arg(
+            Arg::with_name("trace_scoreboard")
+                .long("trace-scoreboard")
+                .global(true),
+        )
+        .arg(
+            Arg::with_name("verbosity")
+                .short("V")
+                .help("Sets verbosity settings")
                 .takes_value(true)
-                .number_of_values(1))
-            .arg(Arg::with_name("preproc")
-                .short("E")
-                .help("Only preprocess input files"))
-            .arg(Arg::with_name("dump_ast")
-                .long("dump-ast")
-                .help("Dump the parsed abstract syntax tree"))
-            .arg(Arg::with_name("INPUT")
-                .help("The input file to use")
-                .required(true)
-                .index(1)))
-        .subcommand(SubCommand::with_name("elaborate")
-            .arg(Arg::with_name("NAME")
-                .help("Entity or module to elaborate")
-                .required(true)
-                .index(1))
-            .arg(Arg::with_name("ignore_duplicate_defs")
-                .long("ignore-duplicate-defs")
-                .help("Ignore multiple module/entity definitions")))
-        .subcommand(SubCommand::with_name("score")
-            .arg(Arg::with_name("inc")
-                .short("I")
-                .value_name("DIR")
-                .help("Add a search path for SystemVerilog includes")
                 .multiple(true)
-                .takes_value(true)
-                .number_of_values(1))
-            .arg(Arg::with_name("dump_ast")
-                .long("dump-ast")
-                .help("Dump the parsed abstract syntax tree"))
-            .arg(Arg::with_name("lib")
-                .short("l")
-                .long("lib")
-                .value_name("LIB")
-                .help("Name of the library to compile into")
-                .takes_value(true)
-                .number_of_values(1))
-            .arg(Arg::with_name("elaborate")
-                .short("e")
-                .long("elaborate")
-                .value_name("ENTITY")
-                .help("Elaborate an entity or module")
-                .multiple(true)
-                .takes_value(true)
-                .number_of_values(1))
-            .arg(Arg::with_name("INPUT")
-                .help("The input files to compile")
-                .multiple(true)
-                .required(true)))
+                .number_of_values(1)
+                .possible_values(&["types", "expr-types", "type-contexts", "typeck", "names"])
+                .global(true),
+        )
+        .subcommand(
+            SubCommand::with_name("compile")
+                .arg(
+                    Arg::with_name("inc")
+                        .short("I")
+                        .value_name("DIR")
+                        .help("Adds a search path for SystemVerilog includes")
+                        .multiple(true)
+                        .takes_value(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("preproc")
+                        .short("E")
+                        .help("Only preprocess input files"),
+                )
+                .arg(
+                    Arg::with_name("dump_ast")
+                        .long("dump-ast")
+                        .help("Dump the parsed abstract syntax tree"),
+                )
+                .arg(
+                    Arg::with_name("INPUT")
+                        .help("The input file to use")
+                        .required(true)
+                        .index(1),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("elaborate")
+                .arg(
+                    Arg::with_name("NAME")
+                        .help("Entity or module to elaborate")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    Arg::with_name("ignore_duplicate_defs")
+                        .long("ignore-duplicate-defs")
+                        .help("Ignore multiple module/entity definitions"),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("score")
+                .arg(
+                    Arg::with_name("inc")
+                        .short("I")
+                        .value_name("DIR")
+                        .help("Add a search path for SystemVerilog includes")
+                        .multiple(true)
+                        .takes_value(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("dump_ast")
+                        .long("dump-ast")
+                        .help("Dump the parsed abstract syntax tree"),
+                )
+                .arg(
+                    Arg::with_name("emit_pkgs")
+                        .long("emit-pkgs")
+                        .help("Dump VHDL packages for debugging"),
+                )
+                .arg(
+                    Arg::with_name("lib")
+                        .short("l")
+                        .long("lib")
+                        .value_name("LIB")
+                        .help("Name of the library to compile into")
+                        .takes_value(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("elaborate")
+                        .short("e")
+                        .long("elaborate")
+                        .value_name("ENTITY")
+                        .help("Elaborate an entity or module")
+                        .multiple(true)
+                        .takes_value(true)
+                        .number_of_values(1),
+                )
+                .arg(
+                    Arg::with_name("INPUT")
+                        .help("The input files to compile")
+                        .multiple(true)
+                        .required(true),
+                ),
+        )
         .get_matches();
 
     let mut session = Session::new();
     session.opts.trace_scoreboard = matches.is_present("trace_scoreboard");
     for v in matches.values_of("verbosity").into_iter().flat_map(|v| v) {
         session.opts.verbosity |= match v {
-            "types"         => Verbosity::TYPES,
-            "expr-types"    => Verbosity::EXPR_TYPES,
+            "types" => Verbosity::TYPES,
+            "expr-types" => Verbosity::EXPR_TYPES,
             "type-contexts" => Verbosity::TYPE_CONTEXTS,
-            "typeck"        => Verbosity::TYPECK,
-            "names"         => Verbosity::NAMES,
+            "typeck" => Verbosity::TYPECK,
+            "names" => Verbosity::NAMES,
             _ => unreachable!(),
         };
     }
@@ -121,12 +156,11 @@ fn main() {
     }
 }
 
-
 fn compile(matches: &ArgMatches) {
     // Prepare a list of include paths.
     let include_paths: Vec<_> = match matches.values_of("inc") {
         Some(args) => args.map(|x| std::path::Path::new(x)).collect(),
-        None => Vec::new()
+        None => Vec::new(),
     };
     let filename = matches.value_of("INPUT").unwrap();
 
@@ -227,7 +261,6 @@ fn compile(matches: &ArgMatches) {
     }
 }
 
-
 fn elaborate(matches: &ArgMatches, session: &Session) {
     // Load the syntax trees previously parsed and stored into the library.
     let mut asts = svlog::store::load_items(".moore").unwrap();
@@ -246,7 +279,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 
     // Find the ID of the module we are supposed to be elaborating.
     let top_name = matches.value_of("NAME").unwrap();
-    let top = match (||{
+    let top = match (|| {
         for ast in &asts {
             for item in &ast.items {
                 if let svlog::ast::Item::Module(ref decl) = *item {
@@ -257,10 +290,14 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
             }
         }
         None
-    })() {
+    })()
+    {
         Some(id) => id,
         None => {
-            eprintln!("{}", DiagBuilder2::fatal(format!("unable to find top module `{}`", top_name)));
+            eprintln!(
+                "{}",
+                DiagBuilder2::fatal(format!("unable to find top module `{}`", top_name))
+            );
             std::process::exit(1);
         }
     };
@@ -271,11 +308,10 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
         Err(_) => {
             eprintln!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
             std::process::exit(1);
-        },
+        }
     };
     debugln!("lowered {} modules", hir.mods.len());
 }
-
 
 fn score(sess: &Session, matches: &ArgMatches) {
     use name::get_name_table;
@@ -283,7 +319,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
     // Prepare a list of include paths.
     let include_paths: Vec<_> = match matches.values_of("inc") {
         Some(args) => args.map(|x| std::path::Path::new(x)).collect(),
-        None => Vec::new()
+        None => Vec::new(),
     };
 
     // Establish into which library the entities will be compiled. Later on this
@@ -320,12 +356,10 @@ fn score(sess: &Session, matches: &ArgMatches) {
                     Err(()) => failed = true,
                 }
             }
-            Language::Vhdl => {
-                match vhdl::syntax::parse(source) {
-                    Ok(x) => asts.push(score::Ast::Vhdl(x)),
-                    Err(()) => failed = true,
-                }
-            }
+            Language::Vhdl => match vhdl::syntax::parse(source) {
+                Ok(x) => asts.push(score::Ast::Vhdl(x)),
+                Err(()) => failed = true,
+            },
         }
     }
     if failed {
@@ -337,6 +371,17 @@ fn score(sess: &Session, matches: &ArgMatches) {
         println!("{:#?}", asts);
     }
 
+    if matches.is_present("emit_pkgs") {
+        vhdl::debug::emit_pkgs(
+            asts.iter()
+                .flat_map(|ast| match *ast {
+                    score::Ast::Vhdl(ref x) => x.iter(),
+                    _ => [].iter(),
+                })
+                .collect(),
+        );
+    }
+
     // Create the scoreboard and add the initial map of libraries.
     let arenas = score::Arenas::new();
     let sb = ScoreBoard::new(&arenas);
@@ -346,7 +391,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
     // Elaborate the requested entities or modules.
     if let Some(names) = matches.values_of("elaborate") {
         let vhdl_phases = vhdl::lazy::LazyPhaseTable::new(&vhdl_sb);
-        let ctx = ScoreContext{
+        let ctx = ScoreContext {
             sess: sess,
             sb: &sb,
             vhdl: &vhdl_sb,
@@ -384,9 +429,15 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
 /// Resolve an entity/module specificaiton of the form `[lib.]entity[.arch]` for
 /// elaboration.
-fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -> Result<(),()> {
+fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -> Result<(), ()> {
     let (lib, name, arch) = parse_elaborate_name(input_name)?;
-    debugln!("parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})", input_name, lib, name, arch);
+    debugln!(
+        "parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})",
+        input_name,
+        lib,
+        name,
+        arch
+    );
 
     // Resolve the library name if one was provided.
     let lib = {
@@ -398,14 +449,14 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
                 _ => {
                     let mut d = DiagBuilder2::error(format!("Library `{}` does not exist", lib))
                         .add_note("The following libraries do exist:");
-                    let mut names: Vec<_> = defs.iter().map(|(&k,_)| k).collect();
+                    let mut names: Vec<_> = defs.iter().map(|(&k, _)| k).collect();
                     names.sort(); // sorts by name ID, roughly equivalent to order of declaration
                     for name in names {
                         d = d.add_note(format!("- {}", name));
                     }
                     ctx.sess.emit(d);
                     return Err(());
-                },
+                }
             }
         } else {
             lib_id
@@ -425,12 +476,19 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
     let defs = ctx.defs(lib.into())?;
     let elab = match defs.get(&name) {
         Some(&score::Def::Vhdl(vhdl::score::Def::Entity(entity))) => {
-            let archs = ctx.vhdl().archs(vhdl::score::LibRef::new(lib.into()))?.by_entity.get(&entity).unwrap();
+            let archs = ctx.vhdl()
+                .archs(vhdl::score::LibRef::new(lib.into()))?
+                .by_entity
+                .get(&entity)
+                .unwrap();
             let arch_ref = if let Some(arch) = arch {
                 match archs.by_name.get(&arch) {
                     Some(&id) => id,
                     None => {
-                        ctx.sess.emit(DiagBuilder2::error(format!("`{}` is not an architecture of entity `{}`", arch, name)));
+                        ctx.sess.emit(DiagBuilder2::error(format!(
+                            "`{}` is not an architecture of entity `{}`",
+                            arch, name
+                        )));
                         return Err(());
                     }
                 }
@@ -438,19 +496,22 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
                 match archs.ordered.last() {
                     Some(&id) => id,
                     None => {
-                        ctx.sess.emit(DiagBuilder2::error(format!("Entity `{}` has no architecture defined", name)));
+                        ctx.sess.emit(DiagBuilder2::error(format!(
+                            "Entity `{}` has no architecture defined",
+                            name
+                        )));
                         return Err(());
                     }
                 }
             };
             Elaborate::VhdlEntity(entity, arch_ref)
-        },
+        }
         Some(&score::Def::Vhdl(vhdl::score::Def::Pkg(p))) => Elaborate::VhdlPkg(p),
         Some(&score::Def::Svlog(e)) => Elaborate::Svlog(e),
         _ => {
             let mut d = DiagBuilder2::error(format!("Item `{}` does not exist", name))
                 .add_note("The following items are defined:");
-            let mut names: Vec<_> = defs.iter().map(|(&k,_)| k).collect();
+            let mut names: Vec<_> = defs.iter().map(|(&k, _)| k).collect();
             names.sort(); // sorts by name ID, roughly equivalent to order of declaration
             for name in names {
                 d = d.add_note(format!("- {}", name));
@@ -470,7 +531,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             eprintln!("Architecture declared as {:?}", def);
         }
         Elaborate::VhdlPkg(pkg) => {
-            use moore::vhdl::typeck::{TypeckContext, Typeck};
+            use moore::vhdl::typeck::{Typeck, TypeckContext};
             let sbc = ctx.vhdl();
             let tyc = TypeckContext::new(&sbc);
             tyc.typeck(pkg);
@@ -479,13 +540,14 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         }
         Elaborate::Svlog(_module) => {
             // TODO: Implement this.
-            ctx.sess.emit(DiagBuilder2::error(format!("SystemVerilog elaboration not supported")));
+            ctx.sess.emit(DiagBuilder2::error(format!(
+                "SystemVerilog elaboration not supported"
+            )));
             return Err(());
         }
     }
     Ok(())
 }
-
 
 /// Parse an entity name of the form `(first\.)?second((arch))?` for
 /// elaboration.
@@ -498,7 +560,7 @@ fn parse_elaborate_name<S: AsRef<str>>(name: S) -> Result<(Option<Name>, Name, O
     let x: &[_] = &['.', '('];
     let (first, rest) = {
         if let Some(pos) = name.find(x) {
-            let (a,b) = name.split_at(pos);
+            let (a, b) = name.split_at(pos);
             (a, Some(b))
         } else {
             (name, None)
@@ -512,7 +574,7 @@ fn parse_elaborate_name<S: AsRef<str>>(name: S) -> Result<(Option<Name>, Name, O
             if rest.starts_with('.') {
                 let rest = &rest[1..];
                 if let Some(pos) = rest.find('(') {
-                    let (a,b) = rest.split_at(pos);
+                    let (a, b) = rest.split_at(pos);
                     (Some(a), Some(b))
                 } else {
                     (Some(rest), None)
@@ -530,7 +592,7 @@ fn parse_elaborate_name<S: AsRef<str>>(name: S) -> Result<(Option<Name>, Name, O
     let third = {
         if let Some(rest) = rest {
             if rest.starts_with('(') && rest.ends_with(')') {
-                Some(&rest[1..rest.len()-1])
+                Some(&rest[1..rest.len() - 1])
             } else {
                 None
             }
