@@ -96,18 +96,18 @@ impl<'t> FromAst<'t> for Package2<'t> {
         Ok(Slot::new(scope, ast, arena))
     }
 
-    fn from_ast(scope: &'t AnyScope, ast: Self::Input, _arena: Self::Arena) -> Result<Self, ()> {
+    fn from_ast(scope: &'t AnyScope, ast: Self::Input, arena: Self::Arena) -> Result<Self, ()> {
         // TODO: create a new scope for the package
         let decls = ast.decls
             .iter()
             .flat_map(|decl| -> Option<Box<Node>> {
                 match *decl {
-                    // ast::DeclItem::PkgDecl(ref decl) => {
-                    //     Some(Box::new(Package2::alloc_slot(scope, decl, arena).ok()?))
-                    // }
-                    // ast::DeclItem::TypeDecl(ref decl) => {
-                    //     Some(Box::new(TypeDecl2::alloc_slot(scope, decl, arena).ok()?))
-                    // }
+                    ast::DeclItem::PkgDecl(ref decl) => {
+                        Some(Box::new(Package2::alloc_slot(scope, decl, arena).ok()?))
+                    }
+                    ast::DeclItem::TypeDecl(ref decl) => {
+                        Some(Box::new(TypeDecl2::alloc_slot(scope, decl, arena).ok()?))
+                    }
                     _ => None,
                 }
             })
@@ -136,7 +136,7 @@ pub struct TypeDecl2 {
 
 impl<'t> FromAst<'t> for TypeDecl2 {
     type Input = &'t ast::TypeDecl;
-    type Arena = &'t Alloc<Self>;
+    type Arena = Context<'t>;
 
     fn alloc_slot(
         scope: &'t AnyScope,
