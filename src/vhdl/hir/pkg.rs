@@ -32,7 +32,7 @@ enum SlotState<'t, T>
 where
     T: FromAst<'t> + 't,
 {
-    Fresh(&'t AnyScope, T::Input, T::Arena),
+    Fresh(T::Input, T::Context),
     ReadyOk(&'t T),
     ReadyErr,
 }
@@ -40,11 +40,11 @@ where
 impl<'t, T> Slot<'t, T>
 where
     T: FromAst<'t>,
-    T::Arena: AllocInto<'t, T> + Clone,
+    T::Context: AllocInto<'t, T> + Clone,
 {
     /// Create a new slot.
-    pub fn new(scope: &'t AnyScope, ast: T::Input, arena: T::Arena) -> Slot<'t, T> {
-        Slot(RefCell::new(SlotState::Fresh(scope, ast, arena)))
+    pub fn new(ast: T::Input, context: T::Context) -> Slot<'t, T> {
+        Slot(RefCell::new(SlotState::Fresh(ast, context)))
     }
 
     /// Poll the slot, creating the HIR node from the AST the first time.
@@ -54,11 +54,11 @@ where
             SlotState::ReadyErr => return Err(()),
             _ => (),
         }
-        let (scope, ast, arena) = match self.0.replace(SlotState::ReadyErr) {
-            SlotState::Fresh(scope, ast, arena) => (scope, ast, arena),
+        let (ast, context) = match self.0.replace(SlotState::ReadyErr) {
+            SlotState::Fresh(ast, context) => (ast, context),
             _ => unreachable!(),
         };
-        let node = T::from_ast(scope, ast, arena.clone()).map(|x| arena.alloc(x) as &T);
+        let node = T::from_ast(ast, context.clone()).map(|x| context.alloc(x) as &T);
         self.0.replace(match node {
             Ok(x) => SlotState::ReadyOk(x),
             Err(()) => SlotState::ReadyErr,
@@ -70,7 +70,7 @@ where
 impl<'t, T> Node for Slot<'t, T>
 where
     T: FromAst<'t> + Node,
-    T::Arena: AllocInto<'t, T> + Clone,
+    T::Context: AllocInto<'t, T> + Clone,
 {
     fn span(&self) -> Span {
         self.poll().map(Node::span).unwrap_or(INVALID_SPAN)
@@ -81,7 +81,6 @@ pub struct Package2<'t> {
     id: NodeId,
     span: Span,
     name: Spanned<Name>,
-    scope: &'t AnyScope,
     decls: Vec<&'t Node>,
 }
 
@@ -93,18 +92,14 @@ impl<'t> Package2<'t> {
 
 impl<'t> FromAst<'t> for Package2<'t> {
     type Input = &'t ast::PkgDecl;
-    type Arena = Context<'t>;
+    type Context = Context<'t>;
 
-    fn alloc_slot(
-        scope: &'t AnyScope,
-        ast: Self::Input,
-        arena: Self::Arena,
-    ) -> Result<Slot<'t, Self>, ()> {
+    fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<Slot<'t, Self>, ()> {
         // TODO: register the package name in the scope
-        Ok(Slot::new(scope, ast, arena))
+        Ok(Slot::new(ast, context))
     }
 
-    fn from_ast(scope: &'t AnyScope, ast: Self::Input, arena: Self::Arena) -> Result<Self, ()> {
+    fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self, ()> {
         debugln!("create package decl {}", ast.name.value);
         // TODO: create a new scope for the package
         let decls = ast.decls
@@ -112,10 +107,10 @@ impl<'t> FromAst<'t> for Package2<'t> {
             .flat_map(|decl| -> Option<&'t Node> {
                 match *decl {
                     ast::DeclItem::PkgDecl(ref decl) => {
-                        Some(arena.alloc(Package2::alloc_slot(scope, decl, arena).ok()?))
+                        Some(context.alloc(Package2::alloc_slot(decl, context).ok()?))
                     }
                     ast::DeclItem::TypeDecl(ref decl) => {
-                        Some(arena.alloc(TypeDecl2::alloc_slot(scope, decl, arena).ok()?))
+                        Some(context.alloc(TypeDecl2::alloc_slot(decl, context).ok()?))
                     }
                     _ => None,
                 }
@@ -125,7 +120,6 @@ impl<'t> FromAst<'t> for Package2<'t> {
             id: NodeId::alloc(),
             span: ast.span,
             name: ast.name,
-            scope: scope,
             decls: decls,
         })
     }
@@ -145,18 +139,14 @@ pub struct TypeDecl2 {
 
 impl<'t> FromAst<'t> for TypeDecl2 {
     type Input = &'t ast::TypeDecl;
-    type Arena = Context<'t>;
+    type Context = Context<'t>;
 
-    fn alloc_slot(
-        scope: &'t AnyScope,
-        ast: Self::Input,
-        arena: Self::Arena,
-    ) -> Result<Slot<'t, Self>, ()> {
+    fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<Slot<'t, Self>, ()> {
         // TODO: register the type name in the scope
-        Ok(Slot::new(scope, ast, arena))
+        Ok(Slot::new(ast, context))
     }
 
-    fn from_ast(_scope: &'t AnyScope, ast: Self::Input, _arena: Self::Arena) -> Result<Self, ()> {
+    fn from_ast(ast: Self::Input, _arena: Self::Context) -> Result<Self, ()> {
         debugln!("create type decl {}", ast.name.value);
         Ok(TypeDecl2 {
             id: NodeId::alloc(),
@@ -181,16 +171,12 @@ pub trait Node {
 
 /// Construct something from an AST node.
 pub trait FromAst<'t>: Sized {
-    type Input;
-    type Arena;
+    type Input: 't;
+    type Context: 't;
 
-    fn alloc_slot(
-        scope: &'t AnyScope,
-        ast: Self::Input,
-        arena: Self::Arena,
-    ) -> Result<Slot<'t, Self>, ()>;
+    fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<Slot<'t, Self>, ()>;
 
-    fn from_ast(scope: &'t AnyScope, ast: Self::Input, arena: Self::Arena) -> Result<Self, ()>;
+    fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self, ()>;
 }
 
 #[derive(Copy, Clone)]
@@ -200,9 +186,7 @@ pub struct Context<'t> {
 
 impl<'t> Context<'t> {
     pub fn new(arenas: &'t Arenas2<'t>) -> Context<'t> {
-        Context {
-            arenas: arenas,
-        }
+        Context { arenas: arenas }
     }
 }
 
