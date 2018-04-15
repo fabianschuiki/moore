@@ -71,13 +71,14 @@ where
     }
 }
 
-impl<'t, T> LatentNode<'t> for Slot<'t, T>
+impl<'t, T, L> LatentNode<L> for Slot<'t, T>
 where
-    T: FromAst<'t> + Node,
+    &'t T: Into<L>,
+    T: FromAst<'t>,
     T::Context: AllocInto<'t, T> + Clone,
 {
-    fn poll(&self) -> Result<&'t Node> {
-        Slot::poll(self).map(|n| n as &Node)
+    fn poll(&self) -> Result<L> {
+        Slot::poll(self).map(|n| n.into())
     }
 }
 
@@ -85,11 +86,11 @@ pub struct Package2<'t> {
     id: NodeId,
     span: Span,
     name: Spanned<Name>,
-    decls: Vec<&'t LatentNode<'t>>,
+    decls: Vec<&'t LatentNode<&'t Decl2>>,
 }
 
 impl<'t> Package2<'t> {
-    pub fn decls(&self) -> &[&'t LatentNode<'t>] {
+    pub fn decls(&self) -> &[&'t LatentNode<&'t Decl2>] {
         &self.decls
     }
 }
@@ -110,7 +111,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
         // TODO: create a new scope for the package
         let decls = ast.decls
             .iter()
-            .flat_map(|decl| -> Option<&'t LatentNode> {
+            .flat_map(|decl| -> Option<&'t LatentNode<&'t Decl2>> {
                 match *decl {
                     ast::DeclItem::PkgDecl(ref decl) => {
                         Some(Package2::alloc_slot(decl, context).ok()?)
@@ -145,7 +146,7 @@ impl<'t> Node for Package2<'t> {
     }
 }
 
-impl<'t> Decl for Package2<'t> {
+impl<'t> Decl2 for Package2<'t> {
     fn name(&self) -> Spanned<ResolvableName> {
         self.name.map(Into::into)
     }
@@ -192,7 +193,7 @@ impl Node for TypeDecl2 {
     }
 }
 
-impl Decl for TypeDecl2 {
+impl Decl2 for TypeDecl2 {
     fn name(&self) -> Spanned<ResolvableName> {
         self.name.map(Into::into)
     }
@@ -217,19 +218,27 @@ pub trait Node {
     }
 }
 
+impl<'a, T: Node> From<&'a T> for &'a Node {
+    fn from(t: &'a T) -> &'a Node { t }
+}
+
 /// Lazily resolve to a `Node`.
-pub trait LatentNode<'t> {
+pub trait LatentNode<T> {
     /// Access the underlying node.
     ///
     /// On the first time this function is called, the node is created.
     /// Subsequent calls are guaranteed to return the same node. Node creation
     /// may fail for a variety of reasons, thus the function returns a `Result`.
-    fn poll(&self) -> Result<&'t Node>;
+    fn poll(&self) -> Result<T>;
 }
 
-pub trait Decl: Node {
+pub trait Decl2: Node {
     /// The name of the declared item.
     fn name(&self) -> Spanned<ResolvableName>;
+}
+
+impl<'a, T: Decl2> From<&'a T> for &'a Decl2 {
+    fn from(t: &'a T) -> &'a Decl2 { t }
 }
 
 /// Construct something from an AST node.
