@@ -19,19 +19,21 @@ pub fn emit_pkgs(nodes: Vec<&ast::DesignUnit>) {
     });
 
     // Allocate slots for each package.
+    let scope = hir::DummyScope;
     let arenas = hir::Arenas2::new();
-    let ctx = hir::Context::new(&arenas);
+    let ctx = hir::Context::new(&arenas, &scope);
     let slots: Vec<_> = pkgs.map(|pkg| hir::Package2::alloc_slot(pkg, ctx).unwrap())
         .collect();
     debugln!("slots created");
     for s in &slots {
-        eprintln!("{}", DiagBuilder2::note("package available").span(s.span()));
         let pkg = s.poll().unwrap();
+        eprintln!("{}", DiagBuilder2::note("package available").span(pkg.span()));
         for d in pkg.decls() {
-            eprintln!(
-                "{}",
-                DiagBuilder2::note("declaration available").span(d.span())
-            );
+            let decl = d.poll().unwrap();
+            // eprintln!(
+            //     "{}",
+            //     DiagBuilder2::note("declaration available").span(d.span())
+            // );
         }
     }
 }
