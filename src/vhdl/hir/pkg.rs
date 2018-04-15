@@ -5,15 +5,17 @@
 #![allow(dead_code)]
 
 use std;
+use std::fmt;
 use std::cell::RefCell;
 
-use common::NodeId;
+use common::{NodeId, SessionContext};
 use common::name::Name;
 use common::source::{Span, Spanned};
 
 use arenas::{Alloc, AllocInto};
 use syntax::ast;
 use score::ResolvableName;
+use scope2::{Def2, ScopeContext, ScopeData};
 
 pub type Result<T> = std::result::Result<T, ()>;
 
@@ -23,6 +25,7 @@ make_arenas!(
         type_decl: TypeDecl2,
         package_slot: Slot<'t, Package2<'t>>,
         type_decl_slot: Slot<'t, TypeDecl2>,
+        scope_data: ScopeData<'t>,
     }
 );
 
@@ -82,6 +85,19 @@ where
     }
 }
 
+impl<'t, T> fmt::Debug for Slot<'t, T>
+where
+    T: FromAst<'t>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self.0.borrow() {
+            SlotState::Fresh(..) => write!(f, "Slot(Fresh)"),
+            SlotState::ReadyOk(..) => write!(f, "Slot(ReadyOk)"),
+            SlotState::ReadyErr => write!(f, "Slot(ReadyErr)"),
+        }
+    }
+}
+
 pub struct Package2<'t> {
     id: NodeId,
     span: Span,
@@ -100,7 +116,6 @@ impl<'t> FromAst<'t> for Package2<'t> {
     type Context = Context<'t>;
 
     fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<&'t Slot<'t, Self>> {
-        // TODO: register the package name in the scope
         let slot = context.alloc(Slot::new(ast, context));
         context.define(ast.name.map(Into::into), Def2::Pkg(slot))?;
         Ok(slot)
@@ -108,7 +123,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
 
     fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self> {
         debugln!("create package decl {}", ast.name.value);
-        // TODO: create a new scope for the package
+        let context = context.subscope();
         let decls = ast.decls
             .iter()
             .flat_map(|decl| -> Option<&'t LatentNode<&'t Decl2>> {
@@ -163,7 +178,6 @@ impl<'t> FromAst<'t> for TypeDecl2 {
     type Context = Context<'t>;
 
     fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<&'t Slot<'t, Self>> {
-        // TODO: register the type name in the scope
         let slot = context.alloc(Slot::new(ast, context));
         context.define(ast.name.map(Into::into), Def2::Type(slot))?;
         Ok(slot)
@@ -219,7 +233,9 @@ pub trait Node {
 }
 
 impl<'a, T: Node> From<&'a T> for &'a Node {
-    fn from(t: &'a T) -> &'a Node { t }
+    fn from(t: &'a T) -> &'a Node {
+        t
+    }
 }
 
 /// Lazily resolve to a `Node`.
@@ -238,7 +254,9 @@ pub trait Decl2: Node {
 }
 
 impl<'a, T: Decl2> From<&'a T> for &'a Decl2 {
-    fn from(t: &'a T) -> &'a Decl2 { t }
+    fn from(t: &'a T) -> &'a Decl2 {
+        t
+    }
 }
 
 /// Construct something from an AST node.
@@ -253,15 +271,16 @@ pub trait FromAst<'t>: Sized {
 
 #[derive(Copy, Clone)]
 pub struct Context<'t> {
+    pub sess: &'t SessionContext,
     pub arenas: &'t Arenas2<'t>,
-    pub scope: &'t Scope<'t>,
+    pub scope: &'t ScopeData<'t>,
 }
 
 impl<'t> Context<'t> {
-    pub fn new(arenas: &'t Arenas2<'t>, scope: &'t Scope<'t>) -> Context<'t> {
+    pub fn subscope(&self) -> Context<'t> {
         Context {
-            arenas: arenas,
-            scope: scope,
+            scope: self.arenas.alloc(ScopeData::new(self.scope)),
+            ..*self
         }
     }
 }
@@ -275,26 +294,16 @@ where
     }
 }
 
-impl<'t> Scope<'t> for Context<'t> {
+impl<'t> ScopeContext<'t> for Context<'t> {
     fn define(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()> {
-        self.scope.define(name, def)
+        self.scope.define(name, def, self.sess)
     }
-}
 
-pub trait Scope<'t> {
-    fn define(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()>;
-}
+    fn import_def(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()> {
+        self.scope.import_def(name, def)
+    }
 
-pub enum Def2<'t> {
-    Pkg(&'t Slot<'t, Package2<'t>>),
-    Type(&'t Slot<'t, TypeDecl2>),
-}
-
-pub struct DummyScope;
-
-impl<'t> Scope<'t> for DummyScope {
-    fn define(&self, name: Spanned<ResolvableName>, _def: Def2<'t>) -> Result<()> {
-        debugln!("define `{}`", name.value);
-        Ok(())
+    fn import_scope(&self, scope: &'t ScopeData<'t>) -> Result<()> {
+        self.scope.import_scope(scope)
     }
 }

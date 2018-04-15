@@ -373,6 +373,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
     if matches.is_present("emit_pkgs") {
         vhdl::debug::emit_pkgs(
+            sess,
             asts.iter()
                 .flat_map(|ast| match *ast {
                     score::Ast::Vhdl(ref x) => x.iter(),

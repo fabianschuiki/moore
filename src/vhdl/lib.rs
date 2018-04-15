@@ -5,12 +5,12 @@
 #[macro_use]
 extern crate lazy_static;
 extern crate llhd;
-extern crate num;
-extern crate rustc_serialize;
-extern crate typed_arena;
 #[macro_use]
 pub extern crate moore_common;
 pub extern crate moore_vhdl_syntax as syntax;
+extern crate num;
+extern crate rustc_serialize;
+extern crate typed_arena;
 // extern crate futures;
 
 // TODO: Merge this into the `extern crate` above.
@@ -32,6 +32,7 @@ pub mod lazy;
 pub mod add_ctx;
 pub mod term;
 pub mod scope;
+pub mod scope2;
 pub mod builtin;
 pub mod op;
 pub mod overload_resolver;
