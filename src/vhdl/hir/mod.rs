@@ -14,6 +14,7 @@ use op::*;
 pub use syntax::ast::Dir;
 
 mod pkg;
+pub mod visit;
 pub use self::pkg::*;
 
 /// A collection of arenas where HIR nodes may be allocated.

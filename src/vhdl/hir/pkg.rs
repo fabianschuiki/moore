@@ -16,6 +16,7 @@ use arenas::{Alloc, AllocInto};
 use syntax::ast;
 use score::ResolvableName;
 use scope2::{Def2, ScopeContext, ScopeData};
+use hir::visit::Visitor;
 
 pub type Result<T> = std::result::Result<T, ()>;
 
@@ -102,11 +103,11 @@ pub struct Package2<'t> {
     id: NodeId,
     span: Span,
     name: Spanned<Name>,
-    decls: Vec<&'t LatentNode<&'t Decl2>>,
+    decls: Vec<&'t LatentNode<&'t Decl2<'t>>>,
 }
 
 impl<'t> Package2<'t> {
-    pub fn decls(&self) -> &[&'t LatentNode<&'t Decl2>] {
+    pub fn decls(&self) -> &[&'t LatentNode<&'t Decl2<'t>>] {
         &self.decls
     }
 }
@@ -147,7 +148,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
     }
 }
 
-impl<'t> Node for Package2<'t> {
+impl<'t> Node<'t> for Package2<'t> {
     fn span(&self) -> Span {
         self.span
     }
@@ -159,9 +160,20 @@ impl<'t> Node for Package2<'t> {
     fn desc_name(&self) -> String {
         format!("package `{}`", self.name.value)
     }
+
+    fn accept(&'t self, visitor: &mut Visitor<'t>) {
+        visitor.visit_pkg(self);
+    }
+
+    fn walk(&'t self, visitor: &mut Visitor<'t>) {
+        visitor.visit_name(self.name);
+        for decl in self.decls.iter().flat_map(|d| d.poll().ok()) {
+            decl.accept(visitor);
+        }
+    }
 }
 
-impl<'t> Decl2 for Package2<'t> {
+impl<'t> Decl2<'t> for Package2<'t> {
     fn name(&self) -> Spanned<ResolvableName> {
         self.name.map(Into::into)
     }
@@ -171,6 +183,12 @@ pub struct TypeDecl2 {
     id: NodeId,
     span: Span,
     name: Spanned<Name>,
+}
+
+impl TypeDecl2 {
+    pub fn walk<'a>(&'a self, visitor: &mut Visitor<'a>) {
+        visitor.visit_name(self.name);
+    }
 }
 
 impl<'t> FromAst<'t> for TypeDecl2 {
@@ -193,7 +211,7 @@ impl<'t> FromAst<'t> for TypeDecl2 {
     }
 }
 
-impl Node for TypeDecl2 {
+impl<'t> Node<'t> for TypeDecl2 {
     fn span(&self) -> Span {
         self.span
     }
@@ -205,9 +223,17 @@ impl Node for TypeDecl2 {
     fn desc_name(&self) -> String {
         format!("type declaration `{}`", self.name.value)
     }
+
+    fn accept(&'t self, visitor: &mut Visitor<'t>) {
+        visitor.visit_type_decl(self);
+    }
+
+    fn walk(&'t self, visitor: &mut Visitor<'t>) {
+        visitor.visit_name(self.name);
+    }
 }
 
-impl Decl2 for TypeDecl2 {
+impl<'t> Decl2<'t> for TypeDecl2 {
     fn name(&self) -> Spanned<ResolvableName> {
         self.name.map(Into::into)
     }
@@ -215,7 +241,7 @@ impl Decl2 for TypeDecl2 {
 
 pub trait AnyScope {}
 
-pub trait Node {
+pub trait Node<'t> {
     /// The source file location of this node.
     fn span(&self) -> Span;
 
@@ -230,10 +256,16 @@ pub trait Node {
     fn desc_name(&self) -> String {
         self.desc_kind()
     }
+
+    /// Accept a visitor and call its corresponding `visit_*` function.
+    fn accept(&'t self, visitor: &mut Visitor<'t>);
+
+    /// Walk a visitor over the node's subtree.
+    fn walk(&'t self, visitor: &mut Visitor<'t>);
 }
 
-impl<'a, T: Node> From<&'a T> for &'a Node {
-    fn from(t: &'a T) -> &'a Node {
+impl<'a, T: Node<'a>> From<&'a T> for &'a Node<'a> {
+    fn from(t: &'a T) -> &'a Node<'a> {
         t
     }
 }
@@ -248,13 +280,13 @@ pub trait LatentNode<T> {
     fn poll(&self) -> Result<T>;
 }
 
-pub trait Decl2: Node {
+pub trait Decl2<'t>: Node<'t> {
     /// The name of the declared item.
     fn name(&self) -> Spanned<ResolvableName>;
 }
 
-impl<'a, T: Decl2> From<&'a T> for &'a Decl2 {
-    fn from(t: &'a T) -> &'a Decl2 {
+impl<'a, T: Decl2<'a>> From<&'a T> for &'a Decl2<'a> {
+    fn from(t: &'a T) -> &'a Decl2<'a> {
         t
     }
 }

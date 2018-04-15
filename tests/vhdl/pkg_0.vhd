@@ -17,3 +17,10 @@ package pkg_c is
 	constant K1 : SHORT;
 	constant K2 : INT;
 end package;
+
+package pkg_d is
+	type DOUGLAS is range 0 to 42;
+	package subpkg_a is
+		type BOOL is range 0 to 1;
+	end package;
+end package;
