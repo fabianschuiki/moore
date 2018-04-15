@@ -9,7 +9,7 @@ use common::source::Spanned;
 use common::name::Name;
 
 use syntax::ast;
-use hir::{self, Decl2, FromAst, Node};
+use hir::{self, Decl2, FromAst, LatentNode, Node};
 use hir::visit::Visitor;
 use scope2::ScopeData;
 use arenas::Alloc;
@@ -29,8 +29,9 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
         arenas: &arenas,
         scope: scope,
     };
-    let slots: Vec<_> = pkgs.map(|pkg| hir::Package2::alloc_slot(pkg, ctx).unwrap())
-        .collect();
+    let slots: Vec<_> = pkgs.map(|pkg| {
+        hir::Package2::alloc_slot(pkg, ctx).unwrap() as &LatentNode<Node>
+    }).collect();
     // for s in &slots {
     //     let pkg = s.poll().unwrap();
     //     // eprintln!("{}", DiagBuilder2::note(format!("package {} available", pkg.name().value)).span(pkg.span()));
@@ -47,14 +48,24 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     debugln!("forcing HIR creation");
     let mut v = IdentityVisitor;
     for s in &slots {
-        s.poll().unwrap().accept(&mut v);
+        s.accept(&mut v);
     }
 
-    // Visit the packages.
+    // Visit the names.
     debugln!("names:");
     let mut v = NameVisitor;
     for s in &slots {
-        s.poll().unwrap().accept(&mut v);
+        s.accept(&mut v);
+    }
+
+    // Collect references to all packages.
+    let mut v = PackageGatherer(Vec::new());
+    for s in &slots {
+        s.accept(&mut v);
+    }
+    debugln!("gathered packages:");
+    for pkg in v.0 {
+        debugln!("- {}", pkg.name().value);
     }
 
     // Resolve a name in the scope.
@@ -71,11 +82,24 @@ impl<'t> Visitor<'t> for IdentityVisitor {
 struct NameVisitor;
 
 impl<'t> Visitor<'t> for NameVisitor {
+    fn as_visitor(&mut self) -> &mut Visitor<'t> {
+        self
+    }
+
     fn visit_name(&mut self, name: Spanned<Name>) {
         debugln!("- {}", name.value);
     }
+}
 
+struct PackageGatherer<'t>(Vec<&'t hir::Package2<'t>>);
+
+impl<'t> Visitor<'t> for PackageGatherer<'t> {
     fn as_visitor(&mut self) -> &mut Visitor<'t> {
-        self as _
+        self
+    }
+
+    fn visit_pkg(&mut self, pkg: &'t hir::Package2<'t>) {
+        self.0.push(pkg);
+        pkg.walk(self);
     }
 }

@@ -75,14 +75,29 @@ where
     }
 }
 
-impl<'t, T, L> LatentNode<L> for Slot<'t, T>
+impl<'t, T, L> LatentNode<'t, L> for Slot<'t, T>
 where
-    &'t T: Into<L>,
-    T: FromAst<'t>,
+    &'t T: Into<&'t L>,
+    L: ?Sized + 't,
+    T: FromAst<'t> + Node<'t>,
     T::Context: AllocInto<'t, T> + Clone,
 {
-    fn poll(&self) -> Result<L> {
+    fn poll(&self) -> Result<&'t L> {
         Slot::poll(self).map(|n| n.into())
+    }
+
+    fn accept(&self, visitor: &mut Visitor<'t>) {
+        match self.poll() {
+            Ok(n) => n.accept(visitor),
+            Err(()) => (),
+        }
+    }
+
+    fn walk(&self, visitor: &mut Visitor<'t>) {
+        match self.poll() {
+            Ok(n) => n.walk(visitor),
+            Err(()) => (),
+        }
     }
 }
 
@@ -103,11 +118,11 @@ pub struct Package2<'t> {
     id: NodeId,
     span: Span,
     name: Spanned<Name>,
-    decls: Vec<&'t LatentNode<&'t Decl2<'t>>>,
+    decls: Vec<&'t LatentNode<'t, Decl2<'t>>>,
 }
 
 impl<'t> Package2<'t> {
-    pub fn decls(&self) -> &[&'t LatentNode<&'t Decl2<'t>>] {
+    pub fn decls(&self) -> &[&'t LatentNode<'t, Decl2<'t>>] {
         &self.decls
     }
 }
@@ -127,7 +142,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
         let context = context.subscope();
         let decls = ast.decls
             .iter()
-            .flat_map(|decl| -> Option<&'t LatentNode<&'t Decl2>> {
+            .flat_map(|decl| -> Option<&'t LatentNode<'t, Decl2>> {
                 match *decl {
                     ast::DeclItem::PkgDecl(ref decl) => {
                         Some(Package2::alloc_slot(decl, context).ok()?)
@@ -167,7 +182,7 @@ impl<'t> Node<'t> for Package2<'t> {
 
     fn walk(&'t self, visitor: &mut Visitor<'t>) {
         visitor.visit_name(self.name);
-        for decl in self.decls.iter().flat_map(|d| d.poll().ok()) {
+        for decl in &self.decls {
             decl.accept(visitor);
         }
     }
@@ -271,13 +286,23 @@ impl<'a, T: Node<'a>> From<&'a T> for &'a Node<'a> {
 }
 
 /// Lazily resolve to a `Node`.
-pub trait LatentNode<T> {
+pub trait LatentNode<'t, T: 't + ?Sized> {
     /// Access the underlying node.
     ///
     /// On the first time this function is called, the node is created.
     /// Subsequent calls are guaranteed to return the same node. Node creation
     /// may fail for a variety of reasons, thus the function returns a `Result`.
-    fn poll(&self) -> Result<T>;
+    fn poll(&self) -> Result<&'t T>;
+
+    /// Accept a visitor.
+    ///
+    /// Polls the latent node and if successful calls `accept()` on it.
+    fn accept(&self, visitor: &mut Visitor<'t>);
+
+    /// Walk a visitor over the latent node's subtree.
+    ///
+    /// Polls the latent node and if successful calls `walk()` on it.
+    fn walk(&self, visitor: &mut Visitor<'t>);
 }
 
 pub trait Decl2<'t>: Node<'t> {
