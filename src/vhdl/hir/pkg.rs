@@ -11,18 +11,21 @@ use std::cell::RefCell;
 use common::{NodeId, SessionContext};
 use common::name::Name;
 use common::source::{Span, Spanned};
+use common::errors::*;
 
 use arenas::{Alloc, AllocInto};
 use syntax::ast;
 use score::ResolvableName;
 use scope2::{Def2, ScopeContext, ScopeData};
 use hir::visit::Visitor;
+use hir::Library;
 
 pub type Result<T> = std::result::Result<T, ()>;
 
 make_arenas!(
     pub struct Arenas2<'t> {
-        package:   Package2<'t>,
+        library: Library<'t>,
+        package: Package2<'t>,
         type_decl: TypeDecl2,
         package_slot: Slot<'t, Package2<'t>>,
         type_decl_slot: Slot<'t, TypeDecl2>,
@@ -140,6 +143,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
     fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self> {
         debugln!("create package decl {}", ast.name.value);
         let context = context.subscope();
+        let mut uses = Vec::new();
         let decls = ast.decls
             .iter()
             .flat_map(|decl| -> Option<&'t LatentNode<'t, Decl2>> {
@@ -150,10 +154,15 @@ impl<'t> FromAst<'t> for Package2<'t> {
                     ast::DeclItem::TypeDecl(ref decl) => {
                         Some(TypeDecl2::alloc_slot(decl, context).ok()?)
                     }
+                    ast::DeclItem::UseClause(_, ref clause) => {
+                        uses.extend(clause.value.iter());
+                        None
+                    }
                     _ => None,
                 }
             })
             .collect::<Vec<_>>();
+        apply_use_clauses(uses.into_iter(), context);
         Ok(Package2 {
             id: NodeId::alloc(),
             span: ast.span,
@@ -363,4 +372,35 @@ impl<'t> ScopeContext<'t> for Context<'t> {
     fn import_scope(&self, scope: &'t ScopeData<'t>) -> Result<()> {
         self.scope.import_scope(scope)
     }
+
+    fn resolve(&self, name: ResolvableName, recur: bool) -> Vec<Spanned<Def2<'t>>> {
+        self.scope.resolve(name, recur)
+    }
+}
+
+impl<'t> DiagEmitter for Context<'t> {
+    fn emit(&self, diag: DiagBuilder2) {
+        self.sess.emit(diag)
+    }
+}
+
+pub fn apply_use_clauses<'a, I>(clauses: I, context: Context)
+where
+    I: IntoIterator<Item = &'a ast::CompoundName>,
+{
+    for u in clauses.into_iter() {
+        let e = apply_use_clause(u, context);
+        std::mem::forget(e);
+    }
+}
+
+pub fn apply_use_clause(clause: &ast::CompoundName, context: Context) -> Result<()> {
+    debugln!("apply use {}", clause.span.extract());
+
+    // Lookup the primary name.
+    let pn = ResolvableName::from_primary_name(&clause.primary, context)?;
+    let lookup = context.resolve(pn.value, true);
+    debugln!("`{}` resolved to {:?}", pn.value, lookup);
+
+    Ok(())
 }

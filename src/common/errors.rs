@@ -46,6 +46,12 @@ pub trait DiagEmitter {
 	fn emit(&self, diag: DiagBuilder2);
 }
 
+impl<'a, T> DiagEmitter for &'a T where T: DiagEmitter + ?Sized {
+	fn emit(&self, diag: DiagBuilder2) {
+		(*self).emit(diag)
+	}
+}
+
 #[must_use]
 #[derive(Clone, Debug)]
 pub struct DiagBuilder2 {

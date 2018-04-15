@@ -11,6 +11,10 @@ pub trait Visitor<'t> {
 
     fn visit_name(&mut self, _: Spanned<Name>) {}
 
+    fn visit_library(&mut self, hir: &'t Library<'t>) {
+        hir.walk(self.as_visitor());
+    }
+
     fn visit_pkg(&mut self, hir: &'t Package2<'t>) {
         hir.walk(self.as_visitor());
     }

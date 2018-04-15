@@ -35,6 +35,10 @@ impl Session {
             failed: Cell::new(false),
         }
     }
+
+    pub fn failed(&self) -> bool {
+        self.failed.get()
+    }
 }
 
 impl DiagEmitter for Session {

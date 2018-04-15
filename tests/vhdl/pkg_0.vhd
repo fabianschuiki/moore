@@ -10,7 +10,7 @@ end package;
 
 -- @ elab pkg_c
 package pkg_c is
-	type BYTE is range 0 to 255;
+	use work.pkg_b.BYTE;
 	type SHORT is range 0 to 65535;
 	type INT is range 0 to 4294967295;
 	constant K0 : BYTE;
@@ -19,8 +19,8 @@ package pkg_c is
 end package;
 
 package pkg_d is
-	type DOUGLAS is range 0 to 42;
-	package subpkg_a is
-		type BOOL is range 0 to 1;
-	end package;
+	use work.pkg_b.BYTE;
+	use work.pkg_c.all;
+	constant K0 : SHORT;
+	constant K1 : INT;
 end package;

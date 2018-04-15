@@ -6,22 +6,15 @@
 use common::Session;
 use common::errors::DiagBuilder2;
 use common::source::Spanned;
-use common::name::Name;
+use common::name::{get_name_table, Name};
 
 use syntax::ast;
-use hir::{self, Decl2, FromAst, LatentNode, Node};
+use hir::{self, Decl2, FromAst, LatentNode, Library, Node};
 use hir::visit::Visitor;
 use scope2::ScopeData;
 use arenas::Alloc;
 
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
-    // Filter out all the package declarations.
-    let pkgs = nodes.into_iter().filter_map(|node| match node.data {
-        ast::DesignUnitData::PkgDecl(ref d) => Some(d),
-        _ => None,
-    });
-
-    // Allocate slots for each package.
     let arenas = hir::Arenas2::new();
     let scope = arenas.alloc(ScopeData::root());
     let ctx = hir::Context {
@@ -29,9 +22,24 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
         arenas: &arenas,
         scope: scope,
     };
-    let slots: Vec<_> = pkgs.map(|pkg| {
-        hir::Package2::alloc_slot(pkg, ctx).unwrap() as &LatentNode<Node>
-    }).collect();
+
+    // Allocate the library.
+    let name = get_name_table().intern("magic", true);
+    let lib = arenas.alloc(Library::new(name, &nodes, ctx).unwrap());
+    if sess.failed() {
+        return;
+    }
+
+    // Filter out all the package declarations.
+    // let pkgs = nodes.into_iter().filter_map(|node| match node.data {
+    //     ast::DesignUnitData::PkgDecl(ref d) => Some(d),
+    //     _ => None,
+    // });
+
+    // Allocate slots for each package.
+    // let slots: Vec<_> = pkgs.map(|pkg| {
+    //     hir::Package2::alloc_slot(pkg, ctx).unwrap() as &LatentNode<Node>
+    // }).collect();
     // for s in &slots {
     //     let pkg = s.poll().unwrap();
     //     // eprintln!("{}", DiagBuilder2::note(format!("package {} available", pkg.name().value)).span(pkg.span()));
@@ -47,22 +55,25 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     // Force name resolution and HIR creation.
     debugln!("forcing HIR creation");
     let mut v = IdentityVisitor;
-    for s in &slots {
-        s.accept(&mut v);
-    }
+    lib.accept(&mut v);
+    // for s in &slots {
+    //     s.accept(&mut v);
+    // }
 
     // Visit the names.
     debugln!("names:");
     let mut v = NameVisitor;
-    for s in &slots {
-        s.accept(&mut v);
-    }
+    lib.accept(&mut v);
+    // for s in &slots {
+    //     s.accept(&mut v);
+    // }
 
     // Collect references to all packages.
     let mut v = PackageGatherer(Vec::new());
-    for s in &slots {
-        s.accept(&mut v);
-    }
+    lib.accept(&mut v);
+    // for s in &slots {
+    //     s.accept(&mut v);
+    // }
     debugln!("gathered packages:");
     for pkg in v.0 {
         debugln!("- {}", pkg.name().value);

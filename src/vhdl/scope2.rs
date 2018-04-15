@@ -123,6 +123,42 @@ impl<'t> ScopeData<'t> {
         self.imported_scopes.borrow_mut().insert(scope);
         Ok(())
     }
+
+    /// Find a name in this scope.
+    ///
+    /// This only searches this scope and does not proceed to parent or child
+    /// scopes. Use a dedicated name resolver for that.
+    pub fn resolve(&self, name: ResolvableName, recur: bool) -> Vec<Spanned<Def2<'t>>> {
+        let mut found = Vec::new();
+        found.extend(
+            self.defs
+                .borrow()
+                .get(&name)
+                .into_iter()
+                .flat_map(|d| d.iter()),
+        );
+        found.extend(
+            self.imported_defs
+                .borrow()
+                .get(&name)
+                .into_iter()
+                .flat_map(|d| d.iter()),
+        );
+        for s in self.imported_scopes.borrow().iter() {
+            found.extend(
+                s.defs
+                    .borrow()
+                    .get(&name)
+                    .into_iter()
+                    .flat_map(|d| d.iter()),
+            );
+        }
+        if found.is_empty() && self.parent.is_some() {
+            self.parent.unwrap().resolve(name, recur)
+        } else {
+            found
+        }
+    }
 }
 
 impl<'t> PartialEq for &'t ScopeData<'t> {
@@ -146,4 +182,6 @@ pub trait ScopeContext<'t> {
     fn import_def(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()>;
     /// Import an entire scope into the scope.
     fn import_scope(&self, scope: &'t ScopeData<'t>) -> Result<()>;
+    /// Find a name in this scope.
+    fn resolve(&self, name: ResolvableName, recur: bool) -> Vec<Spanned<Def2<'t>>>;
 }

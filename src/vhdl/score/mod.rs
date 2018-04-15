@@ -555,26 +555,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Convert a primary name as it is present in the AST to a resolvable name
 	/// that can be defined and resolved in a scope.
+	// #[deprecated]
 	pub fn resolvable_from_primary_name(&self, primary: &ast::PrimaryName) -> Result<Spanned<ResolvableName>> {
-		match primary.kind {
-			ast::PrimaryNameKind::Ident(n) => Ok(Spanned::new(ResolvableName::Ident(n), primary.span)),
-			ast::PrimaryNameKind::Char(c) => Ok(Spanned::new(ResolvableName::Bit(c), primary.span)),
-			ast::PrimaryNameKind::String(s) => {
-				match Operator::from_name(s) {
-					Some(op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
-					None => {
-						self.emit(
-							DiagBuilder2::error(format!("`{}` is not a valid operator symbol", s))
-							.span(primary.span)
-							.add_note("see IEEE 1076-2008 section 9.2 for a list of operators")
-						);
-						Err(())
-					}
-				}
-			}
-		}
+		ResolvableName::from_primary_name(primary, self.sess)
 	}
-
 
 	/// Resolve a name within a scope. Traverses to the parent scopes if nothing
 	/// matching the name is found.
@@ -1031,6 +1015,32 @@ pub enum ResolvableName {
 }
 
 impl ResolvableName {
+	/// Convert a primary name to a resolvable name.
+	///
+	/// Primary names are present in the AST as the initial parts of compound
+	/// names, e.g. in use clauses, or as standalone names, e.g. in functions.
+	/// The conversion fails if the primary name is a string literal (`"..."`)
+	/// which does not name a known operator.
+	pub fn from_primary_name<C>(primary: &ast::PrimaryName, context: C) -> Result<Spanned<ResolvableName>> where C: DiagEmitter {
+		match primary.kind {
+			ast::PrimaryNameKind::Ident(n) => Ok(Spanned::new(ResolvableName::Ident(n), primary.span)),
+			ast::PrimaryNameKind::Char(c) => Ok(Spanned::new(ResolvableName::Bit(c), primary.span)),
+			ast::PrimaryNameKind::String(s) => {
+				match Operator::from_name(s) {
+					Some(op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
+					None => {
+						context.emit(
+							DiagBuilder2::error(format!("`{}` is not a valid operator symbol", s))
+							.span(primary.span)
+							.add_note("see IEEE 1076-2008 section 9.2 for a list of operators")
+						);
+						Err(())
+					}
+				}
+			}
+		}
+	}
+
 	/// Check whether this name is an identifier.
 	pub fn is_ident(&self) -> bool {
 		match *self {
