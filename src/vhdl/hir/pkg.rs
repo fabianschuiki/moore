@@ -9,7 +9,7 @@ use std::cell::RefCell;
 
 use common::NodeId;
 use common::name::Name;
-use common::source::{Span, Spanned, INVALID_SPAN};
+use common::source::{Span, Spanned};
 
 use arenas::{Alloc, AllocInto};
 use syntax::ast;
@@ -145,6 +145,12 @@ impl<'t> Node for Package2<'t> {
     }
 }
 
+impl<'t> Decl for Package2<'t> {
+    fn name(&self) -> Spanned<ResolvableName> {
+        self.name.map(Into::into)
+    }
+}
+
 pub struct TypeDecl2 {
     id: NodeId,
     span: Span,
@@ -186,6 +192,12 @@ impl Node for TypeDecl2 {
     }
 }
 
+impl Decl for TypeDecl2 {
+    fn name(&self) -> Spanned<ResolvableName> {
+        self.name.map(Into::into)
+    }
+}
+
 pub trait AnyScope {}
 
 pub trait Node {
@@ -213,6 +225,11 @@ pub trait LatentNode<'t> {
     /// Subsequent calls are guaranteed to return the same node. Node creation
     /// may fail for a variety of reasons, thus the function returns a `Result`.
     fn poll(&self) -> Result<&'t Node>;
+}
+
+pub trait Decl: Node {
+    /// The name of the declared item.
+    fn name(&self) -> Spanned<ResolvableName>;
 }
 
 /// Construct something from an AST node.

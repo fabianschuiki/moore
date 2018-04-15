@@ -1,5 +1,6 @@
 // Copyright (c) 2018 Fabian Schuiki
 
+#![allow(unused_imports)]
 #![allow(unused_variables)]
 
 use common::errors::DiagBuilder2;
@@ -27,12 +28,12 @@ pub fn emit_pkgs(nodes: Vec<&ast::DesignUnit>) {
     debugln!("slots created");
     for s in &slots {
         let pkg = s.poll().unwrap();
-        eprintln!("{}", DiagBuilder2::note("package available").span(pkg.span()));
+        // eprintln!("{}", DiagBuilder2::note(format!("{} available", pkg.desc_name())).span(pkg.span()));
         for d in pkg.decls() {
             let decl = d.poll().unwrap();
             // eprintln!(
             //     "{}",
-            //     DiagBuilder2::note("declaration available").span(d.span())
+            //     DiagBuilder2::note(format!("{} available", decl.desc_name())).span(decl.span())
             // );
         }
     }
