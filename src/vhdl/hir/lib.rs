@@ -1,25 +1,33 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use common::name::Name;
-use common::source::{Span, INVALID_SPAN};
+use common::name::{get_name_table, Name};
+use common::source::{Span, Spanned, INVALID_SPAN};
 use common::score::Result;
 
+use arenas::AllocInto;
 use syntax::ast;
 use hir::visit::Visitor;
 use hir::{Context, FromAst, LatentNode, Node, Package2};
+use scope2::{Def2, ScopeContext};
 
 /// A library.
+#[derive(Debug)]
 pub struct Library<'t> {
     name: Name,
     units: Vec<&'t LatentNode<'t, Node<'t>>>,
 }
 
 impl<'t> Library<'t> {
-    pub fn new(name: Name, units: &[&'t ast::DesignUnit], ctx: Context<'t>) -> Result<Self> {
-        // ctx.define()
+    /// Create a new library of design units.
+    pub fn new(
+        name: Name,
+        units: &[&'t ast::DesignUnit],
+        ctx: Context<'t>,
+    ) -> Result<&'t Library<'t>> {
+        let ctx = ctx.subscope();
         let units = units
             .into_iter()
-            .flat_map(|unit| -> Option<&'t LatentNode<'t, Node>> {
+            .flat_map(|unit| -> Option<&'t LatentNode<'t, Node<'t>>> {
                 match unit.data {
                     ast::DesignUnitData::PkgDecl(ref decl) => {
                         Some(Package2::alloc_slot(decl, ctx).ok()?)
@@ -28,10 +36,15 @@ impl<'t> Library<'t> {
                 }
             })
             .collect();
-        Ok(Library {
+        let lib = ctx.alloc(Library {
             name: name,
             units: units,
-        })
+        });
+        ctx.define(
+            Spanned::new(get_name_table().intern("WORK", false).into(), INVALID_SPAN),
+            Def2::Lib(lib),
+        )?;
+        Ok(lib)
     }
 
     /// Return the name of the library.

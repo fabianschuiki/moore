@@ -25,7 +25,7 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
 
     // Allocate the library.
     let name = get_name_table().intern("magic", true);
-    let lib = arenas.alloc(Library::new(name, &nodes, ctx).unwrap());
+    let lib = Library::new(name, &nodes, ctx).unwrap();
     if sess.failed() {
         return;
     }

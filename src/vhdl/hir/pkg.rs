@@ -44,6 +44,7 @@ where
     T: FromAst<'t> + 't,
 {
     Fresh(T::Input, T::Context),
+    Transient,
     ReadyOk(&'t T),
     ReadyErr,
 }
@@ -63,9 +64,10 @@ where
         match *self.0.borrow() {
             SlotState::ReadyOk(x) => return Ok(x),
             SlotState::ReadyErr => return Err(()),
+            SlotState::Transient => panic!("slot recursion"),
             _ => (),
         }
-        let (ast, context) = match self.0.replace(SlotState::ReadyErr) {
+        let (ast, context) = match self.0.replace(SlotState::Transient) {
             SlotState::Fresh(ast, context) => (ast, context),
             _ => unreachable!(),
         };
@@ -111,12 +113,14 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self.0.borrow() {
             SlotState::Fresh(..) => write!(f, "Slot(Fresh)"),
+            SlotState::Transient => write!(f, "Slot(Transient)"),
             SlotState::ReadyOk(..) => write!(f, "Slot(ReadyOk)"),
             SlotState::ReadyErr => write!(f, "Slot(ReadyErr)"),
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Package2<'t> {
     id: NodeId,
     span: Span,
@@ -203,6 +207,7 @@ impl<'t> Decl2<'t> for Package2<'t> {
     }
 }
 
+#[derive(Debug)]
 pub struct TypeDecl2 {
     id: NodeId,
     span: Span,
@@ -265,7 +270,7 @@ impl<'t> Decl2<'t> for TypeDecl2 {
 
 pub trait AnyScope {}
 
-pub trait Node<'t> {
+pub trait Node<'t>: fmt::Debug {
     /// The source file location of this node.
     fn span(&self) -> Span;
 
@@ -295,7 +300,7 @@ impl<'a, T: Node<'a>> From<&'a T> for &'a Node<'a> {
 }
 
 /// Lazily resolve to a `Node`.
-pub trait LatentNode<'t, T: 't + ?Sized> {
+pub trait LatentNode<'t, T: 't + ?Sized>: fmt::Debug {
     /// Access the underlying node.
     ///
     /// On the first time this function is called, the node is created.

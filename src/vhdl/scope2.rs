@@ -21,6 +21,8 @@ use score::ResolvableName;
 /// A definition.
 #[derive(Copy, Clone, Debug)]
 pub enum Def2<'t> {
+    /// A library.
+    Lib(&'t hir::Library<'t>),
     /// A package.
     Pkg(&'t hir::Slot<'t, hir::Package2<'t>>),
     /// A type declaration.
