@@ -8,13 +8,14 @@ use arenas::AllocInto;
 use syntax::ast;
 use hir::visit::Visitor;
 use hir::{Context, FromAst, LatentNode, Node, Package2};
-use scope2::{Def2, ScopeContext};
+use scope2::{Def2, ScopeContext, ScopeData};
 
 /// A library.
 #[derive(Debug)]
 pub struct Library<'t> {
     name: Name,
     units: Vec<&'t LatentNode<'t, Node<'t>>>,
+    scope: &'t ScopeData<'t>,
 }
 
 impl<'t> Library<'t> {
@@ -24,7 +25,7 @@ impl<'t> Library<'t> {
         units: &[&'t ast::DesignUnit],
         ctx: Context<'t>,
     ) -> Result<&'t Library<'t>> {
-        let ctx = ctx.subscope();
+        let ctx = ctx.create_subscope();
         let units = units
             .into_iter()
             .flat_map(|unit| -> Option<&'t LatentNode<'t, Node<'t>>> {
@@ -39,6 +40,7 @@ impl<'t> Library<'t> {
         let lib = ctx.alloc(Library {
             name: name,
             units: units,
+            scope: ctx.scope(),
         });
         ctx.define(
             Spanned::new(get_name_table().intern("WORK", false).into(), INVALID_SPAN),
@@ -55,6 +57,11 @@ impl<'t> Library<'t> {
     /// Return a slice of the design units in this library.
     pub fn units(&self) -> &[&'t LatentNode<'t, Node<'t>>] {
         &self.units
+    }
+
+    /// Return the scope of the library.
+    pub fn scope(&self) -> &'t ScopeData<'t> {
+        self.scope
     }
 }
 

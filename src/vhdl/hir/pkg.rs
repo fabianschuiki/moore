@@ -126,11 +126,23 @@ pub struct Package2<'t> {
     span: Span,
     name: Spanned<Name>,
     decls: Vec<&'t LatentNode<'t, Decl2<'t>>>,
+    scope: &'t ScopeData<'t>,
 }
 
 impl<'t> Package2<'t> {
+    /// Return the name of this package.
+    pub fn name(&self) -> Spanned<Name> {
+        self.name
+    }
+
+    /// Return the declarations made in this package.
     pub fn decls(&self) -> &[&'t LatentNode<'t, Decl2<'t>>] {
         &self.decls
+    }
+
+    /// Return the scope of the package.
+    pub fn scope(&self) -> &'t ScopeData<'t> {
+        self.scope
     }
 }
 
@@ -146,7 +158,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
 
     fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self> {
         debugln!("create package decl {}", ast.name.value);
-        let context = context.subscope();
+        let context = context.create_subscope();
         let mut uses = Vec::new();
         let decls = ast.decls
             .iter()
@@ -172,6 +184,7 @@ impl<'t> FromAst<'t> for Package2<'t> {
             span: ast.span,
             name: ast.name,
             decls: decls,
+            scope: context.scope(),
         })
     }
 }
@@ -348,11 +361,17 @@ pub struct Context<'t> {
 }
 
 impl<'t> Context<'t> {
-    pub fn subscope(&self) -> Context<'t> {
+    /// Create a subscope and return a new context for that scope.
+    pub fn create_subscope(&self) -> Context<'t> {
         Context {
             scope: self.arenas.alloc(ScopeData::new(self.scope)),
             ..*self
         }
+    }
+
+    /// Return the current scope.
+    pub fn scope(&self) -> &'t ScopeData<'t> {
+        self.scope
     }
 }
 
@@ -370,7 +389,7 @@ impl<'t> ScopeContext<'t> for Context<'t> {
         self.scope.define(name, def, self.sess)
     }
 
-    fn import_def(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()> {
+    fn import_def(&self, name: ResolvableName, def: Spanned<Def2<'t>>) -> Result<()> {
         self.scope.import_def(name, def)
     }
 
@@ -399,13 +418,76 @@ where
     }
 }
 
-pub fn apply_use_clause(clause: &ast::CompoundName, context: Context) -> Result<()> {
+fn apply_use_clause(clause: &ast::CompoundName, context: Context) -> Result<()> {
     debugln!("apply use {}", clause.span.extract());
 
     // Lookup the primary name.
     let pn = ResolvableName::from_primary_name(&clause.primary, context)?;
-    let lookup = context.resolve(pn.value, true);
+    let mut lookup = context.resolve(pn.value, true);
+    let mut lookup_name = pn;
+    if lookup.is_empty() {
+        context.emit(DiagBuilder2::error(format!("`{}` is unknown", pn.value)).span(pn.span));
+        return Err(());
+    }
     debugln!("`{}` resolved to {:?}", pn.value, lookup);
 
+    // Process the name parts.
+    for part in &clause.parts {
+        // Ensure the name is unique.
+        if lookup.len() > 1 {
+            let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", lookup_name.value))
+                .span(lookup_name.span)
+                .add_note("Refers to the following:");
+            for l in lookup {
+                d = d.span(l.span);
+            }
+            context.emit(d);
+            return Err(());
+        }
+        let def = lookup.into_iter().next().unwrap();
+        let scope = match def.value {
+            Def2::Lib(x) => x.scope(),
+            Def2::Pkg(x) => x.poll()?.scope(),
+            _ => {
+                context.emit(
+                    DiagBuilder2::error(format!("cannot select into {}", def.value.desc_kind()))
+                        .span(def.span),
+                );
+                return Err(());
+            }
+        };
+
+        // Perform the operation that the name part requests.
+        match *part {
+            ast::NamePart::Select(ref primary) => {
+                lookup_name = ResolvableName::from_primary_name(primary, context)?;
+                lookup = scope.resolve(lookup_name.value, false);
+                debugln!("`{}` resolved to {:?}", lookup_name.value, lookup);
+                if lookup.is_empty() {
+                    context.emit(
+                        DiagBuilder2::error(format!("`{}` is unknown", lookup_name.value))
+                            .span(lookup_name.span),
+                    );
+                    return Err(());
+                }
+            }
+            ast::NamePart::SelectAll(..) => {
+                context.import_scope(scope)?;
+                return Ok(());
+            }
+            _ => {
+                context.emit(
+                    DiagBuilder2::error(format!("`{}` cannot be used", clause.span.extract()))
+                        .span(clause.span),
+                );
+                return Err(());
+            }
+        }
+    }
+
+    debugln!("`{}` resolved to {:?}", clause.span.extract(), lookup);
+    for l in lookup {
+        context.import_def(lookup_name.value, l)?;
+    }
     Ok(())
 }

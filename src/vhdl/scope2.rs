@@ -6,6 +6,7 @@
 
 #![deny(missing_docs)]
 
+use std::fmt;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -15,11 +16,11 @@ use common::errors::*;
 use common::score::Result;
 use common::source::Spanned;
 
-use hir;
+use hir::{self, Node};
 use score::ResolvableName;
 
 /// A definition.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum Def2<'t> {
     /// A library.
     Lib(&'t hir::Library<'t>),
@@ -29,6 +30,30 @@ pub enum Def2<'t> {
     Type(&'t hir::Slot<'t, hir::TypeDecl2>),
     /// An enumeration type variant.
     Enum(()),
+}
+
+impl<'t> fmt::Debug for Def2<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Def2::Lib(x) => write!(f, "Lib({:?})", x as *const _),
+            Def2::Pkg(x) => write!(f, "Pkg({:?})", x as *const _),
+            Def2::Type(x) => write!(f, "Type({:?})", x as *const _),
+            Def2::Enum(x) => write!(f, "Enum({:?})", x),
+        }
+    }
+}
+
+impl<'t> Def2<'t> {
+    /// Descibre the kind of node the definition points to.
+    // TODO: Implement the entire `Node` trait here.
+    pub fn desc_kind(&self) -> String {
+        match *self {
+            Def2::Lib(x) => x.desc_kind(),
+            Def2::Pkg(x) => x.poll().unwrap().desc_kind(),
+            Def2::Type(x) => x.poll().unwrap().desc_kind(),
+            Def2::Enum(_x) => "enum".into(),
+        }
+    }
 }
 
 /// A scope.
@@ -111,12 +136,12 @@ impl<'t> ScopeData<'t> {
     }
 
     /// Import a definition into the scope.
-    pub fn import_def(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()> {
+    pub fn import_def(&self, name: ResolvableName, def: Spanned<Def2<'t>>) -> Result<()> {
         self.imported_defs
             .borrow_mut()
-            .entry(name.value)
+            .entry(name)
             .or_insert_with(|| Vec::new())
-            .push(Spanned::new(def, name.span));
+            .push(def);
         Ok(())
     }
 
@@ -181,7 +206,7 @@ pub trait ScopeContext<'t> {
     /// Define a new name in the scope.
     fn define(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()>;
     /// Import a definition into the scope.
-    fn import_def(&self, name: Spanned<ResolvableName>, def: Def2<'t>) -> Result<()>;
+    fn import_def(&self, name: ResolvableName, def: Spanned<Def2<'t>>) -> Result<()>;
     /// Import an entire scope into the scope.
     fn import_scope(&self, scope: &'t ScopeData<'t>) -> Result<()>;
     /// Find a name in this scope.
