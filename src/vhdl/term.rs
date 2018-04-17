@@ -88,31 +88,37 @@ pub enum Term {
 pub type Subterm = Box<Spanned<Term>>;
 
 /// A context within which termification can occur.
-pub struct TermContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
+pub struct TermContext<C, S> {
     /// The underlying scoreboard context.
-    pub ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
+    pub ctx: C,
     /// The scope within which the terms will resolve their names.
-    pub scope: ScopeRef,
+    pub scope: S,
 }
 
-impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DiagEmitter for TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
-    fn emit(&self, diag: DiagBuilder2) {
-        self.ctx.emit(diag)
-    }
-}
-
-impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
+impl<C, S> TermContext<C, S> {
     /// Create a new termification context.
-    pub fn new(
-        ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
-        scope: ScopeRef,
-    ) -> TermContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
+    pub fn new(ctx: C, scope: S) -> TermContext<C, S> {
         TermContext {
             ctx: ctx,
             scope: scope,
         }
     }
+}
 
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DiagEmitter
+    for TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef> {
+    fn emit(&self, diag: DiagBuilder2) {
+        self.ctx.emit(diag)
+    }
+}
+
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef>
+where
+    'lazy: 'sbc,
+    'sb: 'lazy,
+    'ast: 'sb,
+    'ctx: 'sb,
+{
     /// Perform term folding.
     ///
     /// This is a post-processing step that should be applied to all terms once
