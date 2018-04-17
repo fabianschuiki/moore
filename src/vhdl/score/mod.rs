@@ -163,12 +163,14 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
 }
 
 
-impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-	/// Emit a diagnostic message.
-	pub fn emit(&self, diag: DiagBuilder2) {
+impl<'lazy, 'sb, 'ast, 'ctx> DiagEmitter for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+	fn emit(&self, diag: DiagBuilder2) {
 		self.sess.emit(diag)
 	}
+}
 
+
+impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 	/// Add a library of AST nodes. This function is called by the global
 	/// scoreboard to add VHDL-specific AST nodes.
 	pub fn add_library(&self, name: Name, id: LibRef, lib: Vec<&'ast ast::DesignUnit>) {

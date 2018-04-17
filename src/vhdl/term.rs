@@ -105,8 +105,7 @@ impl<C, S> TermContext<C, S> {
     }
 }
 
-impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DiagEmitter
-    for TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef> {
+impl<C: DiagEmitter, S> DiagEmitter for TermContext<C, S> {
     fn emit(&self, diag: DiagBuilder2) {
         self.ctx.emit(diag)
     }
