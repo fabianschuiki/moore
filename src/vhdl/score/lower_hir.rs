@@ -755,56 +755,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		}).collect()
 	}
 
-	/// Lower an AST unary operator to a HIR unary operator.
-	///
-	/// Emits an error if the operator is not a valid unary operator.
-	pub fn lower_unary_op(&self, ast: Spanned<ast::UnaryOp>) -> Result<Spanned<UnaryOp>> {
-		let op = match ast.value {
-			ast::UnaryOp::Not => UnaryOp::Not,
-			ast::UnaryOp::Abs => UnaryOp::Abs,
-			ast::UnaryOp::Sign(ast::Sign::Pos) => UnaryOp::Pos,
-			ast::UnaryOp::Sign(ast::Sign::Neg) => UnaryOp::Neg,
-			ast::UnaryOp::Logical(op) => UnaryOp::Logical(op),
-			ast::UnaryOp::Condition => UnaryOp::Cond,
-			_ => {
-				self.emit(
-					DiagBuilder2::error("invalid unary operator")
-					.span(ast.span)
-				);
-				return Err(());
-			}
-		};
-		Ok(Spanned::new(op, ast.span))
-	}
-
-	/// Lower an AST binary operator to a HIR binary operator.
-	///
-	/// Emits an error if the operator is not a valid binary operator.
-	pub fn lower_binary_op(&self, ast: Spanned<ast::BinaryOp>) -> Result<Spanned<BinaryOp>> {
-		let op = match ast.value {
-			ast::BinaryOp::Logical(op) => BinaryOp::Logical(op),
-			ast::BinaryOp::Rel(op) => BinaryOp::Rel(op),
-			ast::BinaryOp::Match(op) => BinaryOp::Match(op),
-			ast::BinaryOp::Shift(op) => BinaryOp::Shift(op),
-			ast::BinaryOp::Add => BinaryOp::Add,
-			ast::BinaryOp::Sub => BinaryOp::Sub,
-			ast::BinaryOp::Concat => BinaryOp::Concat,
-			ast::BinaryOp::Mul => BinaryOp::Mul,
-			ast::BinaryOp::Div => BinaryOp::Div,
-			ast::BinaryOp::Mod => BinaryOp::Mod,
-			ast::BinaryOp::Rem => BinaryOp::Rem,
-			ast::BinaryOp::Pow => BinaryOp::Pow,
-			_ => {
-				self.emit(
-					DiagBuilder2::error("invalid binary operator")
-					.span(ast.span)
-				);
-				return Err(());
-			}
-		};
-		Ok(Spanned::new(op, ast.span))
-	}
-
 	/// Lower an AST subprogram specification to HIR.
 	pub fn lower_subprog_spec(
 		&self,

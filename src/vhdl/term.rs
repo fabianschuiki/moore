@@ -5,6 +5,7 @@
 #![deny(missing_docs)]
 
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
 use num::BigInt;
 
@@ -88,36 +89,21 @@ pub enum Term {
 pub type Subterm = Box<Spanned<Term>>;
 
 /// A context within which termification can occur.
-pub struct TermContext<C, S> {
+pub struct TermContext<C, S, D> {
     /// The underlying scoreboard context.
     pub ctx: C,
     /// The scope within which the terms will resolve their names.
     pub scope: S,
+    marker: PhantomData<D>,
 }
 
-impl<C, S> TermContext<C, S> {
-    /// Create a new termification context.
-    pub fn new(ctx: C, scope: S) -> TermContext<C, S> {
-        TermContext {
-            ctx: ctx,
-            scope: scope,
-        }
-    }
-}
-
-impl<C: DiagEmitter, S> DiagEmitter for TermContext<C, S> {
+impl<C: DiagEmitter, S, D> DiagEmitter for TermContext<C, S, D> {
     fn emit(&self, diag: DiagBuilder2) {
         self.ctx.emit(diag)
     }
 }
 
-impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef>
-where
-    'lazy: 'sbc,
-    'sb: 'lazy,
-    'ast: 'sb,
-    'ctx: 'sb,
-{
+impl<C, S, D> TermContext<C, S, D> {
     /// Perform term folding.
     ///
     /// This is a post-processing step that should be applied to all terms once
@@ -138,119 +124,18 @@ where
         };
         Spanned::new(new, term.span)
     }
+}
 
-    /// Map an AST subtype indication to a term.
-    pub fn termify_subtype_ind(&self, subty: &'ast ast::SubtypeInd) -> Result<Spanned<Term>> {
-        let name = self.termify_compound_name(&subty.name)?;
-        let res = match subty.res {
-            Some(ast::ResolInd::Exprs(ref paren_elems)) => {
-                Some(self.termify_paren_elems(paren_elems)?)
-            }
-            Some(ast::ResolInd::Name(ref name)) => Some(self.termify_compound_name(name)?),
-            None => None,
-        };
-        if let Some(res) = res {
-            let sp = Span::union(name.span, res.span);
-            Ok(Spanned::new(
-                Term::PrefixParen(Box::new(res), Box::new(name)),
-                sp,
-            ))
-        } else {
-            Ok(name)
-        }
-    }
-
-    /// Map an AST expression to a term.
-    pub fn termify_expr(&self, ast: &'ast ast::Expr) -> Result<Spanned<Term>> {
-        let term = match ast.data {
-            // Literals with optional unit.
-            ast::LitExpr(ref lit, unit) => {
-                let lit = self.termify_literal(Spanned::new(lit, ast.span))?;
-                let unit = match unit {
-                    Some(unit_name) => Some(self.termify_name(unit_name.map_into())?),
-                    None => None,
-                };
-                if let Some(unit) = unit {
-                    let unit = self.ensure_resolved(unit)?;
-                    let unit = match unit.value {
-                        Term::Ident(Spanned {
-                            value: Def::Unit(u),
-                            span,
-                        }) => Spanned::new(u, span),
-                        _ => {
-                            self.emit(
-                                DiagBuilder2::error(format!(
-                                    "`{}` is not a valid physical unit",
-                                    unit.span.extract()
-                                )).span(unit.span),
-                            );
-                            debugln!("It is a {:#?}", unit.value);
-                            return Err(());
-                        }
-                    };
-                    let lit = match lit.value {
-                        Term::IntLit(v) => v,
-                        _ => {
-                            self.emit(
-                                DiagBuilder2::error(format!(
-                                    "`{}` is not a valid value for a physical literal",
-                                    lit.span.extract()
-                                )).span(lit.span),
-                            );
-                            debugln!("It is a {:#?}", lit.value);
-                            return Err(());
-                        }
-                    };
-                    Term::PhysLit(lit, unit)
-                } else {
-                    lit.value
-                }
-            }
-            ast::NameExpr(ref name) => return self.termify_compound_name(name),
-            // ast::ResolExpr(ref paren_elems, ref name) => {
-            //  let name = self.termify_compound_name(name)?;
-            // }
-            // Ranges of the form `T to T` and `T downto T`.
-            ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => Term::Range(
-                d,
-                self.termify_expr(lb)?.into(),
-                self.termify_expr(rb)?.into(),
-            ),
-            ast::UnaryExpr(op, ref arg) => Term::Unary(
-                self.ctx.lower_unary_op(Spanned::new(op, ast.span))?,
-                self.termify_expr(arg)?.into(),
-            ),
-            ast::BinaryExpr(op, ref lhs, ref rhs) => Term::Binary(
-                self.ctx.lower_binary_op(Spanned::new(op, ast.span))?,
-                self.termify_expr(lhs)?.into(),
-                self.termify_expr(rhs)?.into(),
-            ),
-            ast::NullExpr => Term::Null,
-            ast::OpenExpr => Term::Open,
-            ast::OthersExpr => Term::Others,
-            ast::DefaultExpr => Term::Default,
-            ast::ParenExpr(ref elems) => self.termify_paren_elems(elems)?.value,
-            ast::QualExpr(ref name, ref arg) => Term::Qual(
-                self.termify_compound_name(name)?.into(),
-                self.termify_paren_elems(arg)?.into(),
-            ),
-            ast::NewExpr(ref expr) => Term::New(self.termify_expr(expr)?.into()),
-            ref wrong => {
-                self.emit(
-                    DiagBuilder2::bug(format!(
-                        "termification of expression `{}` not implemented",
-                        ast.span.extract()
-                    )).span(ast.span)
-                        .add_note(format!("{:?}", wrong)),
-                );
-                return Err(());
-            }
-        };
-        Ok(self.fold(Spanned::new(term, ast.span)))
-    }
-
+impl<C, S, D> TermContext<C, S, D>
+where
+    Self: DefSpecificTermContext<D>,
+    Self: ScopeSpecificTermContext<S, D>,
+    C: DiagEmitter + Copy,
+    S: Copy,
+    D: Copy,
+{
     /// Map an AST literal to a term.
-    pub fn termify_literal(&self, ast: Spanned<&'ast Literal>) -> Result<Spanned<Term>> {
+    pub fn termify_literal(&self, ast: Spanned<&Literal>) -> Result<Spanned<Term>> {
         Ok(Spanned::new(
             match *ast.value {
                 Literal::Abstract(base, int, frac, exp) => {
@@ -355,30 +240,20 @@ where
     }
 
     /// Map an AST compound name to a term.
-    pub fn termify_compound_name(&self, ast: &'ast ast::CompoundName) -> Result<Spanned<Term>> {
+    pub fn termify_compound_name(&self, ast: &ast::CompoundName) -> Result<Spanned<Term>> {
         // Map the primary name.
         let mut term = self.fold(match ast.primary.kind {
             ast::PrimaryNameKind::String(s) => Spanned::new(Term::StrLit(s), ast.primary.span),
-            _ => self.termify_name(self.ctx.resolvable_from_primary_name(&ast.primary)?)?,
+            _ => self.termify_name(ResolvableName::from_primary_name(&ast.primary, self.ctx)?)?,
         });
 
         // For each name part, wrap the term in another layer. Like an onion.
         for part in &ast.parts {
             term = self.fold(match *part {
                 ast::NamePart::Select(ref primary) => {
-                    let n = self.ctx.resolvable_from_primary_name(primary)?;
+                    let n = ResolvableName::from_primary_name(primary, self.ctx)?;
                     let sp = Span::union(term.span, n.span);
-                    let selectable_scope =
-                        if let Term::Ident(Spanned { value: def, .. }) = term.value {
-                            match def {
-                                Def::Pkg(id) => Some(id.into()),
-                                Def::BuiltinPkg(id) => Some(id.into()),
-                                Def::Lib(id) => Some(id.into()),
-                                _ => None,
-                            }
-                        } else {
-                            None
-                        };
+                    let selectable_scope = self.maybe_selectable_scope(&term.value);
                     match selectable_scope {
                         Some(id) => {
                             let t = self.ensure_resolved(self.termify_name_in_scope(n, id)?)?;
@@ -454,21 +329,160 @@ where
         self.termify_name_in_scope(name, self.scope)
     }
 
-    /// Map a resolvable name to a term, resolving it within a scope.
-    pub fn termify_name_in_scope(
-        &self,
-        name: Spanned<ResolvableName>,
-        scope: ScopeRef,
-    ) -> Result<Spanned<Term>> {
-        let defs = self.ctx.resolve_name(name, scope, false, true)?;
-        self.termify_defs(name, defs)
+    /// Map multiple parenthesis elements to a term.
+    pub fn termify_paren_elems(&self, elems: &ast::ParenElems) -> Result<Spanned<Term>> {
+        let is_aggregate = elems.value.iter().any(|e| !e.choices.value.is_empty());
+        let term = if is_aggregate {
+            Term::Aggregate(elems
+                .value
+                .iter()
+                .map(|e| {
+                    Ok((
+                        e.choices
+                            .value
+                            .iter()
+                            .map(|c| self.termify_expr(c))
+                            .collect::<Result<Vec<_>>>()?,
+                        self.termify_expr(&e.expr)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?)
+        } else {
+            Term::Paren(elems
+                .value
+                .iter()
+                .map(|e| self.termify_expr(&e.expr))
+                .collect::<Result<Vec<_>>>()?)
+        };
+        Ok(self.fold(Spanned::new(term, elems.span)))
     }
 
+    /// Map an AST subtype indication to a term.
+    pub fn termify_subtype_ind(&self, subty: &ast::SubtypeInd) -> Result<Spanned<Term>> {
+        let name = self.termify_compound_name(&subty.name)?;
+        let res = match subty.res {
+            Some(ast::ResolInd::Exprs(ref paren_elems)) => {
+                Some(self.termify_paren_elems(paren_elems)?)
+            }
+            Some(ast::ResolInd::Name(ref name)) => Some(self.termify_compound_name(name)?),
+            None => None,
+        };
+        if let Some(res) = res {
+            let sp = Span::union(name.span, res.span);
+            Ok(Spanned::new(
+                Term::PrefixParen(Box::new(res), Box::new(name)),
+                sp,
+            ))
+        } else {
+            Ok(name)
+        }
+    }
+
+    /// Map an AST expression to a term.
+    pub fn termify_expr(&self, ast: &ast::Expr) -> Result<Spanned<Term>> {
+        let term = match ast.data {
+            // Literals with optional unit.
+            ast::LitExpr(ref lit, unit) => {
+                let lit = self.termify_literal(Spanned::new(lit, ast.span))?;
+                let unit = match unit {
+                    Some(unit_name) => Some(self.termify_name(unit_name.map_into())?),
+                    None => None,
+                };
+                if let Some(unit) = unit {
+                    let unit = self.ensure_resolved(unit)?;
+                    let unit = match unit.value {
+                        Term::Ident(Spanned {
+                            value: Def::Unit(u),
+                            span,
+                        }) => Spanned::new(u, span),
+                        _ => {
+                            self.emit(
+                                DiagBuilder2::error(format!(
+                                    "`{}` is not a valid physical unit",
+                                    unit.span.extract()
+                                )).span(unit.span),
+                            );
+                            debugln!("It is a {:#?}", unit.value);
+                            return Err(());
+                        }
+                    };
+                    let lit = match lit.value {
+                        Term::IntLit(v) => v,
+                        _ => {
+                            self.emit(
+                                DiagBuilder2::error(format!(
+                                    "`{}` is not a valid value for a physical literal",
+                                    lit.span.extract()
+                                )).span(lit.span),
+                            );
+                            debugln!("It is a {:#?}", lit.value);
+                            return Err(());
+                        }
+                    };
+                    Term::PhysLit(lit, unit)
+                } else {
+                    lit.value
+                }
+            }
+            ast::NameExpr(ref name) => return self.termify_compound_name(name),
+            // ast::ResolExpr(ref paren_elems, ref name) => {
+            //  let name = self.termify_compound_name(name)?;
+            // }
+            // Ranges of the form `T to T` and `T downto T`.
+            ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => Term::Range(
+                d,
+                self.termify_expr(lb)?.into(),
+                self.termify_expr(rb)?.into(),
+            ),
+            ast::UnaryExpr(op, ref arg) => Term::Unary(
+                UnaryOp::from(Spanned::new(op, ast.span), self.ctx)?,
+                self.termify_expr(arg)?.into(),
+            ),
+            ast::BinaryExpr(op, ref lhs, ref rhs) => Term::Binary(
+                BinaryOp::from(Spanned::new(op, ast.span), self.ctx)?,
+                self.termify_expr(lhs)?.into(),
+                self.termify_expr(rhs)?.into(),
+            ),
+            ast::NullExpr => Term::Null,
+            ast::OpenExpr => Term::Open,
+            ast::OthersExpr => Term::Others,
+            ast::DefaultExpr => Term::Default,
+            ast::ParenExpr(ref elems) => self.termify_paren_elems(elems)?.value,
+            ast::QualExpr(ref name, ref arg) => Term::Qual(
+                self.termify_compound_name(name)?.into(),
+                self.termify_paren_elems(arg)?.into(),
+            ),
+            ast::NewExpr(ref expr) => Term::New(self.termify_expr(expr)?.into()),
+            ref wrong => {
+                self.emit(
+                    DiagBuilder2::bug(format!(
+                        "termification of expression `{}` not implemented",
+                        ast.span.extract()
+                    )).span(ast.span)
+                        .add_note(format!("{:?}", wrong)),
+                );
+                return Err(());
+            }
+        };
+        Ok(self.fold(Spanned::new(term, ast.span)))
+    }
+}
+
+#[allow(missing_docs)]
+pub trait DefSpecificTermContext<D> {
     /// Termify the result of a name resolution.
     ///
     /// This ensures that there is only one definition, or in case of something
     /// overloadable, that all definitions are of the same kind.
-    pub fn termify_defs(
+    fn termify_defs(
+        &self,
+        name: Spanned<ResolvableName>,
+        defs: Vec<Spanned<D>>,
+    ) -> Result<Spanned<Term>>;
+}
+
+impl<C: DiagEmitter, S> DefSpecificTermContext<Def> for TermContext<C, S, Def> {
+    fn termify_defs(
         &self,
         name: Spanned<ResolvableName>,
         mut defs: Vec<Spanned<Def>>,
@@ -521,40 +535,75 @@ where
 
         Ok(self.fold(Spanned::new(term, name.span)))
     }
+}
 
-    /// Map multiple parenthesis elements to a term.
-    pub fn termify_paren_elems(&self, elems: &'ast ast::ParenElems) -> Result<Spanned<Term>> {
-        let is_aggregate = elems.value.iter().any(|e| !e.choices.value.is_empty());
-        let term = if is_aggregate {
-            Term::Aggregate(elems
-                .value
-                .iter()
-                .map(|e| {
-                    Ok((
-                        e.choices
-                            .value
-                            .iter()
-                            .map(|c| self.termify_expr(c))
-                            .collect::<Result<Vec<_>>>()?,
-                        self.termify_expr(&e.expr)?,
-                    ))
-                })
-                .collect::<Result<Vec<_>>>()?)
+#[allow(missing_docs)]
+pub trait ScopeSpecificTermContext<S, D> {
+    fn termify_name_in_scope(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope: S,
+    ) -> Result<Spanned<Term>>;
+
+    fn maybe_selectable_scope(&self, term: &Term) -> Option<S>;
+}
+
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> ScopeSpecificTermContext<ScopeRef, Def>
+    for TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef, Def>
+where
+    'lazy: 'sbc,
+    'sb: 'lazy,
+    'ast: 'sb,
+    'ctx: 'sb,
+{
+    /// Map a resolvable name to a term, resolving it within a scope.
+    fn termify_name_in_scope(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope: ScopeRef,
+    ) -> Result<Spanned<Term>> {
+        let defs = self.ctx.resolve_name(name, scope, false, true)?;
+        self.termify_defs(name, defs)
+    }
+
+    fn maybe_selectable_scope(&self, term: &Term) -> Option<ScopeRef> {
+        if let Term::Ident(Spanned { value: def, .. }) = *term {
+            match def {
+                Def::Pkg(id) => Some(id.into()),
+                Def::BuiltinPkg(id) => Some(id.into()),
+                Def::Lib(id) => Some(id.into()),
+                _ => None,
+            }
         } else {
-            Term::Paren(elems
-                .value
-                .iter()
-                .map(|e| self.termify_expr(&e.expr))
-                .collect::<Result<Vec<_>>>()?)
-        };
-        Ok(self.fold(Spanned::new(term, elems.span)))
+            None
+        }
+    }
+}
+
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx>
+    TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef, Def>
+where
+    'lazy: 'sbc,
+    'sb: 'lazy,
+    'ast: 'sb,
+    'ctx: 'sb,
+{
+    /// Create a new termification context.
+    pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, scope: ScopeRef) -> Self {
+        TermContext {
+            ctx: ctx,
+            scope: scope,
+            marker: PhantomData,
+        }
     }
 
     /// Map a latent name to a term.
     pub fn termify_latent_name(&self, name: LatentName<'ast>) -> Result<Spanned<Term>> {
         match name {
             LatentName::Simple(n) => self.termify_name(n.map_into()),
-            LatentName::Primary(n) => self.termify_name(self.ctx.resolvable_from_primary_name(n)?),
+            LatentName::Primary(n) => {
+                self.termify_name(ResolvableName::from_primary_name(n, self.ctx)?)
+            }
             LatentName::Compound(n) => self.termify_compound_name(n),
         }
     }
