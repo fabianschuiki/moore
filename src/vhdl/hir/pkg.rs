@@ -429,7 +429,7 @@ fn apply_use_clause(clause: &ast::CompoundName, context: Context) -> Result<()> 
         context.emit(DiagBuilder2::error(format!("`{}` is unknown", pn.value)).span(pn.span));
         return Err(());
     }
-    debugln!("`{}` resolved to {:?}", pn.value, lookup);
+    // debugln!("`{}` resolved to {:?}", pn.value, lookup);
 
     // Process the name parts.
     for part in &clause.parts {
@@ -462,7 +462,7 @@ fn apply_use_clause(clause: &ast::CompoundName, context: Context) -> Result<()> 
             ast::NamePart::Select(ref primary) => {
                 lookup_name = ResolvableName::from_primary_name(primary, context)?;
                 lookup = scope.resolve(lookup_name.value, false);
-                debugln!("`{}` resolved to {:?}", lookup_name.value, lookup);
+                // debugln!("`{}` resolved to {:?}", lookup_name.value, lookup);
                 if lookup.is_empty() {
                     context.emit(
                         DiagBuilder2::error(format!("`{}` is unknown", lookup_name.value))

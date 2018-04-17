@@ -17,10 +17,3 @@ package pkg_c is
 	constant K1 : SHORT;
 	constant K2 : INT;
 end package;
-
-package pkg_d is
-	use work.pkg_b.BYTE;
-	use work.pkg_c.all;
-	constant K0 : SHORT;
-	constant K1 : INT;
-end package;
