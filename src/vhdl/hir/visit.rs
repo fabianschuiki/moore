@@ -19,7 +19,7 @@ pub trait Visitor<'t> {
         hir.walk(self.as_visitor());
     }
 
-    fn visit_type_decl(&mut self, hir: &'t TypeDecl2) {
+    fn visit_type_decl(&mut self, hir: &'t TypeDecl2<'t>) {
         hir.walk(self.as_visitor());
     }
 }

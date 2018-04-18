@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 
 use num::BigInt;
 
+use common::SessionContext;
 use common::name::Name;
 use common::errors::*;
 use common::source::*;
@@ -1626,6 +1627,59 @@ impl<'t> TermContext<hir::AllocContext<'t>, &'t ScopeData<'t>, Def2<'t>> {
             ctx: ctx,
             scope: ctx.scope,
             marker: PhantomData,
+        }
+    }
+}
+
+/// Map a term to a range.
+pub fn term_to_range<C>(term: Spanned<Term>, ctx: C) -> Result<Spanned<hir::Range2>>
+where
+    C: SessionContext + Copy,
+{
+    let v = match term.value {
+        // Term::Attr(..) => ...
+        Term::Range(dir, lb, rb) => {
+            let le = term_to_expr(*lb, ctx);
+            let re = term_to_expr(*rb, ctx);
+            hir::Range2::Immediate(dir, le?, re?)
+        }
+        _ => {
+            ctx.emit(
+                DiagBuilder2::error(format!("`{}` is not a valid range", term.span.extract()))
+                    .span(term.span)
+                    .add_note("A range can be one of the following:")
+                    .add_note("- an ascending range of the form `a to b`")
+                    .add_note("- a descending range of the form `a downto b`")
+                    .add_note("- a range attribute of the form `T'range`")
+                    .add_note("See IEEE 1076-2008 section 5.2.1."),
+            );
+            debugln!("It is a {:#?}", term);
+            return Err(());
+        }
+    };
+    Ok(Spanned::new(v, term.span))
+}
+
+/// Map a term to a range.
+pub fn term_to_expr<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<&'t hir::Expr2<'t>>
+where
+    C: SessionContext + Copy,
+{
+    match term.value {
+        Term::Unresolved(name) => {
+            ctx.emit(DiagBuilder2::error(format!("`{}` is unknown", name)).span(term.span));
+            Err(())
+        }
+        // Throw an error for everything that does not look like an expression.
+        _ => {
+            ctx.emit(
+                DiagBuilder2::error(format!(
+                    "`{}` is not a valid expression",
+                    term.span.extract()
+                )).span(term.span),
+            );
+            debugln!("It is a {:#?}", term);
+            Err(())
         }
     }
 }

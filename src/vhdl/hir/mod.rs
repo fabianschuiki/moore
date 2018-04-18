@@ -21,6 +21,7 @@ mod alloc_ctx;
 mod misc;
 mod pkg;
 mod lib;
+mod expr;
 mod obj_decl;
 mod type_decl;
 pub mod visit;
@@ -32,6 +33,7 @@ pub use self::alloc_ctx::*;
 pub use self::misc::*;
 pub use self::pkg::*;
 pub use self::lib::*;
+pub use self::expr::*;
 pub use self::obj_decl::*;
 pub use self::type_decl::*;
 

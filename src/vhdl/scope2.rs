@@ -29,7 +29,7 @@ pub enum Def2<'t> {
     /// A package.
     Pkg(&'t hir::LatentNode<'t, hir::Package2<'t>>),
     /// A type declaration.
-    Type(&'t hir::LatentNode<'t, hir::TypeDecl2>),
+    Type(&'t hir::LatentNode<'t, hir::TypeDecl2<'t>>),
     /// An enumeration type variant.
     Enum(()),
 }

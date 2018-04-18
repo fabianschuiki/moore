@@ -1,6 +1,6 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use common::SessionContext;
+use common::{SessionContext, Verbosity};
 use common::source::Spanned;
 use common::errors::*;
 use common::score::Result;
@@ -63,5 +63,11 @@ impl<'t> ScopeContext<'t> for AllocContext<'t> {
 impl<'t> DiagEmitter for AllocContext<'t> {
     fn emit(&self, diag: DiagBuilder2) {
         self.sess.emit(diag)
+    }
+}
+
+impl<'t> SessionContext for AllocContext<'t> {
+    fn has_verbosity(&self, verb: Verbosity) -> bool {
+        self.sess.has_verbosity(verb)
     }
 }

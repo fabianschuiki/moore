@@ -362,7 +362,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
             },
         }
     }
-    if failed {
+    if failed || sess.failed() {
         std::process::exit(1);
     }
 
@@ -408,11 +408,11 @@ fn score(sess: &Session, matches: &ArgMatches) {
                 Err(_) => failed = true,
             };
         }
-        if sess.failed.get() {
+        if sess.failed() {
             failed = true;
         }
     }
-    if failed {
+    if failed || sess.failed() {
         std::process::exit(1);
     }
 
@@ -425,6 +425,10 @@ fn score(sess: &Session, matches: &ArgMatches) {
         use llhd::visit::Visitor;
         let stdout = std::io::stdout();
         llhd::assembly::Writer::new(&mut stdout.lock()).visit_module(&vhdl_module);
+    }
+
+    if sess.failed() {
+        std::process::exit(1);
     }
 }
 
@@ -448,8 +452,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             match defs.get(&lib) {
                 Some(&score::Def::Lib(d)) => d,
                 _ => {
-                    let mut d = DiagBuilder2::error(format!("Library `{}` does not exist", lib))
-                        .add_note("The following libraries do exist:");
+                    let mut d = DiagBuilder2::error(format!("Library `{}` does not exist", lib)).add_note("The following libraries do exist:");
                     let mut names: Vec<_> = defs.iter().map(|(&k, _)| k).collect();
                     names.sort(); // sorts by name ID, roughly equivalent to order of declaration
                     for name in names {
@@ -510,8 +513,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Some(&score::Def::Vhdl(vhdl::score::Def::Pkg(p))) => Elaborate::VhdlPkg(p),
         Some(&score::Def::Svlog(e)) => Elaborate::Svlog(e),
         _ => {
-            let mut d = DiagBuilder2::error(format!("Item `{}` does not exist", name))
-                .add_note("The following items are defined:");
+            let mut d = DiagBuilder2::error(format!("Item `{}` does not exist", name)).add_note("The following items are defined:");
             let mut names: Vec<_> = defs.iter().map(|(&k, _)| k).collect();
             names.sort(); // sorts by name ID, roughly equivalent to order of declaration
             for name in names {
