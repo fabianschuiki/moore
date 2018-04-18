@@ -1,5 +1,6 @@
 // Copyright (c) 2018 Fabian Schuiki
 
+pub use common::NodeId;
 pub use common::name::Name;
 pub use common::source::{Span, Spanned};
 pub use common::errors::*;
