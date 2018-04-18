@@ -2,19 +2,32 @@
 
 //! Type and subtype declarations
 
-use hir::prelude::*;
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 
+use hir::prelude::*;
+use hir::{EnumLit, Range};
+use term::TermContext;
+
+/// A type declaration.
+///
+/// See IEEE 1076-2008 section 6.2.
 #[derive(Debug)]
 pub struct TypeDecl2 {
-    id: NodeId,
     span: Span,
     name: Spanned<Name>,
+    data: TypeData,
 }
 
-impl TypeDecl2 {
-    pub fn walk<'a>(&'a self, visitor: &mut Visitor<'a>) {
-        visitor.visit_name(self.name);
-    }
+/// The meat of a type declaration.
+#[derive(Debug)]
+enum TypeData {
+    /// An incomplete type declaration.
+    Incomplete,
+    // /// An enumeration type.
+    // Enum(Vec<EnumLit>),
+    // /// An integer or floating point type.
+    // Range(Range),
 }
 
 impl<'t> FromAst<'t> for TypeDecl2 {
@@ -25,16 +38,21 @@ impl<'t> FromAst<'t> for TypeDecl2 {
 
     fn alloc_slot(ast: Self::AllocInput, context: Self::Context) -> Result<Self::Latent> {
         let slot = context.alloc(Slot::new(ast, context));
-        context.define(ast.name.map(Into::into), Def2::Type(slot))?;
+        // TODO: Make the definition weak such that an actual type definition
+        // may override it.
+        context.define(ast.name.map_into(), Def2::Type(slot))?;
         Ok(slot)
     }
 
-    fn from_ast(ast: Self::LatentInput, _context: Self::Context) -> Result<Self> {
-        debugln!("create type decl {}", ast.name.value);
+    fn from_ast(ast: Self::LatentInput, context: Self::Context) -> Result<Self> {
+        let data = match ast.data {
+            Some(ref data) => unpack_type_data(data, ast.name, context)?,
+            None => TypeData::Incomplete,
+        };
         Ok(TypeDecl2 {
-            id: NodeId::alloc(),
             span: ast.span,
             name: ast.name,
+            data: data,
         })
     }
 }
@@ -63,6 +81,26 @@ impl<'t> Node<'t> for TypeDecl2 {
 
 impl<'t> Decl2<'t> for TypeDecl2 {
     fn name(&self) -> Spanned<ResolvableName> {
-        self.name.map(Into::into)
+        self.name.map_into()
+    }
+}
+
+fn unpack_type_data(data: &Spanned<ast::TypeData>, type_name: Spanned<Name>, context: AllocContext) -> Result<TypeData> {
+    match data.value {
+        ast::RangeType(ref range_expr, ref units) => {
+            let termctx = TermContext::new2(context);
+            let range_expr = termctx.termify_expr(range_expr)?;
+            debugln!("termified range expr to {:#?}", range_expr);
+            // TODO:
+            // - termify range expr
+            // - map to range
+            // - handle units
+            panic!("range type not fully implemented");
+        }
+        _ => unimplemented!(
+            "type `{}` unsupported type data {:#?}",
+            type_name.value,
+            data.value
+        ),
     }
 }

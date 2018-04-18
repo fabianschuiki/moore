@@ -60,6 +60,21 @@ impl<'t> Def2<'t> {
     }
 }
 
+impl<'t> PartialEq for Def2<'t> {
+    fn eq(&self, other: &Self) -> bool {
+        match (*self, *other) {
+            (Def2::Node(a), Def2::Node(b)) => (a as *const _ == b as *const _),
+            (Def2::Lib(a), Def2::Lib(b)) => (a as *const _ == b as *const _),
+            (Def2::Pkg(a), Def2::Pkg(b)) => (a as *const _ == b as *const _),
+            (Def2::Type(a), Def2::Type(b)) => (a as *const _ == b as *const _),
+            (Def2::Enum(a), Def2::Enum(b)) => (a == b),
+            _ => false,
+        }
+    }
+}
+
+impl<'t> Eq for Def2<'t> {}
+
 /// A scope.
 #[derive(Clone, Debug)]
 pub struct ScopeData<'t> {
