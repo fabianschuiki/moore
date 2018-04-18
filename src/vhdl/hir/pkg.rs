@@ -17,18 +17,7 @@ use syntax::ast;
 use score::ResolvableName;
 use scope2::{Def2, ScopeContext, ScopeData};
 use hir::visit::Visitor;
-use hir::{Decl2, FromAst, LatentNode, Library, Node, Slot};
-
-make_arenas!(
-    pub struct Arenas2<'t> {
-        library: Library<'t>,
-        package: Package2<'t>,
-        type_decl: TypeDecl2,
-        package_slot: Slot<'t, Package2<'t>>,
-        type_decl_slot: Slot<'t, TypeDecl2>,
-        scope_data: ScopeData<'t>,
-    }
-);
+use hir::{Arenas2, Decl2, FromAst, LatentNode, Node, Slot};
 
 #[derive(Debug)]
 pub struct Package2<'t> {
