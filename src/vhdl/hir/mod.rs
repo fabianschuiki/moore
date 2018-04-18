@@ -13,9 +13,11 @@ use konst::*;
 use op::*;
 pub use syntax::ast::Dir;
 
+mod slot;
 mod pkg;
 mod lib;
 pub mod visit;
+pub use self::slot::*;
 pub use self::pkg::*;
 pub use self::lib::*;
 
