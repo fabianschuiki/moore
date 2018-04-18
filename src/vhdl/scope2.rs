@@ -22,12 +22,14 @@ use score::ResolvableName;
 /// A definition.
 #[derive(Copy, Clone)]
 pub enum Def2<'t> {
+    /// Any node.
+    Node(&'t hir::LatentNode<'t, Node<'t>>),
     /// A library.
     Lib(&'t hir::Library<'t>),
     /// A package.
-    Pkg(&'t hir::Slot<'t, hir::Package2<'t>>),
+    Pkg(&'t hir::LatentNode<'t, hir::Package2<'t>>),
     /// A type declaration.
-    Type(&'t hir::Slot<'t, hir::TypeDecl2>),
+    Type(&'t hir::LatentNode<'t, hir::TypeDecl2>),
     /// An enumeration type variant.
     Enum(()),
 }
@@ -35,6 +37,7 @@ pub enum Def2<'t> {
 impl<'t> fmt::Debug for Def2<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            Def2::Node(x) => write!(f, "Node({:?})", x as *const _),
             Def2::Lib(x) => write!(f, "Lib({:?})", x as *const _),
             Def2::Pkg(x) => write!(f, "Pkg({:?})", x as *const _),
             Def2::Type(x) => write!(f, "Type({:?})", x as *const _),
@@ -44,10 +47,11 @@ impl<'t> fmt::Debug for Def2<'t> {
 }
 
 impl<'t> Def2<'t> {
-    /// Descibre the kind of node the definition points to.
+    /// Describe the kind of node the definition points to.
     // TODO: Implement the entire `Node` trait here.
     pub fn desc_kind(&self) -> String {
         match *self {
+            Def2::Node(x) => x.poll().unwrap().desc_kind(),
             Def2::Lib(x) => x.desc_kind(),
             Def2::Pkg(x) => x.poll().unwrap().desc_kind(),
             Def2::Type(x) => x.poll().unwrap().desc_kind(),
@@ -92,16 +96,9 @@ impl<'t> ScopeData<'t> {
     }
 
     /// Define a new name in the scope.
-    pub fn define(
-        &self,
-        name: Spanned<ResolvableName>,
-        def: Def2<'t>,
-        ctx: &SessionContext,
-    ) -> Result<()> {
+    pub fn define(&self, name: Spanned<ResolvableName>, def: Def2<'t>, ctx: &SessionContext) -> Result<()> {
         if ctx.has_verbosity(Verbosity::NAMES) {
-            ctx.emit(
-                DiagBuilder2::note(format!("define `{}` as {:?}", name.value, def)).span(name.span),
-            );
+            ctx.emit(DiagBuilder2::note(format!("define `{}` as {:?}", name.value, def)).span(name.span));
         }
         debugln!("define `{}` as {:?}", name.value, def);
         match def {

@@ -10,7 +10,7 @@ use common::source::{Span, Spanned};
 use common::score::Result;
 
 use hir::prelude::*;
-use arenas::{Alloc, AllocInto};
+use arenas::AllocInto;
 use syntax::ast;
 use score::ResolvableName;
 use scope2::{Def2, ScopeContext, ScopeData};

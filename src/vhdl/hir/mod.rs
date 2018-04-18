@@ -21,6 +21,7 @@ mod alloc_ctx;
 mod misc;
 mod pkg;
 mod lib;
+mod obj_decl;
 pub mod visit;
 
 pub use self::arena::*;
@@ -30,6 +31,7 @@ pub use self::alloc_ctx::*;
 pub use self::misc::*;
 pub use self::pkg::*;
 pub use self::lib::*;
+pub use self::obj_decl::*;
 
 /// A collection of arenas where HIR nodes may be allocated.
 make_arenas!(
