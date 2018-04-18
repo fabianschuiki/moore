@@ -19,7 +19,7 @@ enum SlotState<'t, T>
 where
     T: FromAst<'t> + 't,
 {
-    Fresh(T::Input, T::Context),
+    Fresh(T::LatentInput, T::Context),
     Transient,
     ReadyOk(&'t T),
     ReadyErr,
@@ -31,7 +31,7 @@ where
     T::Context: AllocInto<'t, T> + Clone,
 {
     /// Create a new slot.
-    pub fn new(ast: T::Input, context: T::Context) -> Slot<'t, T> {
+    pub fn new(ast: T::LatentInput, context: T::Context) -> Slot<'t, T> {
         Slot(RefCell::new(SlotState::Fresh(ast, context)))
     }
 

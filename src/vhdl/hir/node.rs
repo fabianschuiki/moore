@@ -7,22 +7,23 @@ use common::score::Result;
 
 use score::ResolvableName;
 use hir::visit::Visitor;
-use hir::Slot;
 
 /// Construct something from an AST node.
 pub trait FromAst<'t>: Sized {
-    type Input: 't;
+    type AllocInput: 't;
+    type LatentInput: 't;
     type Context: 't;
+    type Latent;
 
     /// Schedule construction of an HIR node from an AST node.
     ///
     /// This function performs initial setup, e.g. name declaration in the
     /// context, and then creates a `Slot` that constructs a ndoe of type `Self`
     /// on demand.
-    fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<&'t Slot<'t, Self>>;
+    fn alloc_slot(input: Self::AllocInput, context: Self::Context) -> Result<Self::Latent>;
 
     /// Construct an HIR node from an AST node.
-    fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self>;
+    fn from_ast(input: Self::LatentInput, context: Self::Context) -> Result<Self>;
 }
 
 /// Common functions of HIR nodes.

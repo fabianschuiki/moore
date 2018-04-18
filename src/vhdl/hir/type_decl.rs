@@ -18,16 +18,18 @@ impl TypeDecl2 {
 }
 
 impl<'t> FromAst<'t> for TypeDecl2 {
-    type Input = &'t ast::TypeDecl;
+    type AllocInput = &'t ast::TypeDecl;
+    type LatentInput = Self::AllocInput;
     type Context = AllocContext<'t>;
+    type Latent = &'t Slot<'t, Self>;
 
-    fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<&'t Slot<'t, Self>> {
+    fn alloc_slot(ast: Self::AllocInput, context: Self::Context) -> Result<Self::Latent> {
         let slot = context.alloc(Slot::new(ast, context));
         context.define(ast.name.map(Into::into), Def2::Type(slot))?;
         Ok(slot)
     }
 
-    fn from_ast(ast: Self::Input, _arena: Self::Context) -> Result<Self> {
+    fn from_ast(ast: Self::LatentInput, _context: Self::Context) -> Result<Self> {
         debugln!("create type decl {}", ast.name.value);
         Ok(TypeDecl2 {
             id: NodeId::alloc(),

@@ -15,8 +15,13 @@ pub struct ConstDecl<'t> {
     init: Option<&'t ()>,
 }
 
-impl<'t> ConstDecl<'t> {
-    pub fn alloc_slots(ast: &'t ast::ObjDecl, context: AllocContext<'t>) -> Result<Vec<&'t Slot<'t, Self>>> {
+impl<'t> FromAst<'t> for ConstDecl<'t> {
+    type AllocInput = &'t ast::ObjDecl;
+    type LatentInput = (Span, Spanned<Name>, &'t (), Option<&'t ()>);
+    type Context = AllocContext<'t>;
+    type Latent = Vec<&'t Slot<'t, Self>>;
+
+    fn alloc_slot(ast: Self::AllocInput, context: Self::Context) -> Result<Self::Latent> {
         let ty = &();
         let init = None;
         ast.names
@@ -31,17 +36,8 @@ impl<'t> ConstDecl<'t> {
             .into_iter()
             .collect()
     }
-}
 
-impl<'t> FromAst<'t> for ConstDecl<'t> {
-    type Input = (Span, Spanned<Name>, &'t (), Option<&'t ()>);
-    type Context = AllocContext<'t>;
-
-    fn alloc_slot(_ast: Self::Input, _context: Self::Context) -> Result<&'t Slot<'t, Self>> {
-        panic!("const decl generates multiple slots");
-    }
-
-    fn from_ast((span, name, ty, init): Self::Input, _context: Self::Context) -> Result<Self> {
+    fn from_ast((span, name, ty, init): Self::LatentInput, _context: Self::Context) -> Result<Self> {
         Ok(ConstDecl {
             span: span,
             name: name,

@@ -33,16 +33,18 @@ impl<'t> Package2<'t> {
 }
 
 impl<'t> FromAst<'t> for Package2<'t> {
-    type Input = &'t ast::PkgDecl;
+    type AllocInput = &'t ast::PkgDecl;
+    type LatentInput = Self::AllocInput;
     type Context = AllocContext<'t>;
+    type Latent = &'t Slot<'t, Self>;
 
-    fn alloc_slot(ast: Self::Input, context: Self::Context) -> Result<&'t Slot<'t, Self>> {
+    fn alloc_slot(ast: Self::AllocInput, context: Self::Context) -> Result<Self::Latent> {
         let slot = context.alloc(Slot::new(ast, context));
         context.define(ast.name.map(Into::into), Def2::Pkg(slot))?;
         Ok(slot)
     }
 
-    fn from_ast(ast: Self::Input, context: Self::Context) -> Result<Self> {
+    fn from_ast(ast: Self::LatentInput, context: Self::Context) -> Result<Self> {
         debugln!("create package decl {}", ast.name.value);
         let context = context.create_subscope();
         let mut uses = Vec::new();
