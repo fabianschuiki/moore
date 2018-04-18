@@ -13,9 +13,12 @@ use konst::*;
 use op::*;
 pub use syntax::ast::Dir;
 
+mod prelude;
 mod arena;
 mod node;
 mod slot;
+mod alloc_ctx;
+mod misc;
 mod pkg;
 mod lib;
 pub mod visit;
@@ -23,6 +26,8 @@ pub mod visit;
 pub use self::arena::*;
 pub use self::node::*;
 pub use self::slot::*;
+pub use self::alloc_ctx::*;
+pub use self::misc::*;
 pub use self::pkg::*;
 pub use self::lib::*;
 

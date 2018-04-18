@@ -17,7 +17,7 @@ use arenas::Alloc;
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     let arenas = hir::Arenas2::new();
     let scope = arenas.alloc(ScopeData::root());
-    let ctx = hir::Context {
+    let ctx = hir::AllocContext {
         sess: sess,
         arenas: &arenas,
         scope: scope,

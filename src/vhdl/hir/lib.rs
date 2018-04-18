@@ -1,5 +1,7 @@
 // Copyright (c) 2018 Fabian Schuiki
 
+use hir::prelude::*;
+
 use common::name::{get_name_table, Name};
 use common::source::{Span, Spanned, INVALID_SPAN};
 use common::score::Result;
@@ -7,7 +9,7 @@ use common::score::Result;
 use arenas::AllocInto;
 use syntax::ast;
 use hir::visit::Visitor;
-use hir::{Context, FromAst, LatentNode, Node, Package2};
+use hir::{FromAst, LatentNode, Node, Package2};
 use scope2::{Def2, ScopeContext, ScopeData};
 
 /// A library.
@@ -20,19 +22,13 @@ pub struct Library<'t> {
 
 impl<'t> Library<'t> {
     /// Create a new library of design units.
-    pub fn new(
-        name: Name,
-        units: &[&'t ast::DesignUnit],
-        ctx: Context<'t>,
-    ) -> Result<&'t Library<'t>> {
+    pub fn new(name: Name, units: &[&'t ast::DesignUnit], ctx: AllocContext<'t>) -> Result<&'t Library<'t>> {
         let ctx = ctx.create_subscope();
         let units = units
             .into_iter()
             .flat_map(|unit| -> Option<&'t LatentNode<'t, Node<'t>>> {
                 match unit.data {
-                    ast::DesignUnitData::PkgDecl(ref decl) => {
-                        Some(Package2::alloc_slot(decl, ctx).ok()?)
-                    }
+                    ast::DesignUnitData::PkgDecl(ref decl) => Some(Package2::alloc_slot(decl, ctx).ok()?),
                     _ => None,
                 }
             })
