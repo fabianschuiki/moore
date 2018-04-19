@@ -40,6 +40,7 @@ macro_rules! make_arenas {
 
     (IMPL $($arena_attr:meta),*; $arena_name:ident; [$($lt:tt),*]; $($name:ident: $type:ty,)*) => {
         $(#[$arena_attr])*
+        #[allow(missing_docs)]
         pub struct $arena_name<$($lt),*> {
             $(pub $name: ::typed_arena::Arena<$type>,)*
         }
@@ -49,6 +50,7 @@ macro_rules! make_arenas {
 
     (STRUCT_IMPL $arena_name:ident; [$($lt:tt),*]; $($name:ident: $type:ty,)*) => {
         impl<$($lt),*> $arena_name<$($lt),*> {
+            /// Create a new arena.
             pub fn new() -> $arena_name<$($lt),*> {
                 $arena_name {
                     $($name: ::typed_arena::Arena::new(),)*

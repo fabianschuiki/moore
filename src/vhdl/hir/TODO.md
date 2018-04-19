@@ -1,4 +1,8 @@
-- map TypeDecl to a type
-- complete TypeDecl
-- map SubtypeDecl to a type
-- complete SubtypeDecl
+- map type decl to a type
+- implement all type data
+- ensure recursive types work
+- map subtype decl to a type
+- implement all subtype constraints
+- implement const decl
+- implement package generics
+- implement package instantiation

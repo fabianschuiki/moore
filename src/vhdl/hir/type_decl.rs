@@ -8,6 +8,7 @@
 use hir::prelude::*;
 use hir::{EnumLit, Range2};
 use term::{self, TermContext};
+use ty2::{IntegerBasetype, UniversalIntegerType};
 
 /// A type declaration.
 ///
@@ -30,6 +31,37 @@ enum TypeData<'t> {
     Range(Spanned<Range2<'t>>),
     // /// A physical type.
     // Physical(Spanned<Range2<'t>>, PhysicalUnits),
+}
+
+impl<'t> TypeDecl2<'t> {
+    /// Return the declared type.
+    ///
+    /// This function maps the type declaration data to an actual `Type`.
+    pub fn declared_type<C>(&self, ctx: C) -> Result<&'t Type>
+    where
+        C: Copy
+            + DiagEmitter
+            + AllocInto<'t, IntegerBasetype>
+            + AllocInto<'t, UniversalIntegerType>,
+    {
+        match self.data.value {
+            TypeData::Incomplete => {
+                ctx.emit(
+                    DiagBuilder2::error(format!("type `{}` is incomplete", self.name.value))
+                        .span(self.span)
+                        .add_note(format!(
+                            "Provide a declaration of the form `type {} is ...` somewhere.",
+                            self.name.value
+                        )),
+                );
+                Err(())
+            }
+            TypeData::Range(ref range) => {
+                let const_range = range.value.constant_value(ctx)?;
+                Err(())
+            }
+        }
+    }
 }
 
 impl<'t> FromAst<'t> for TypeDecl2<'t> {

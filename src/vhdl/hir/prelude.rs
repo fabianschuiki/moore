@@ -14,3 +14,4 @@ pub use hir::visit::Visitor;
 pub use hir::node::*;
 pub use hir::slot::*;
 pub use hir::AllocContext;
+pub use ty2::{self, Type};

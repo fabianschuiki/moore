@@ -6,16 +6,18 @@
 use common::Session;
 use common::errors::DiagBuilder2;
 use common::source::Spanned;
+use common::errors::*;
 use common::name::{get_name_table, Name};
 
 use syntax::ast;
 use hir::{self, Decl2, FromAst, LatentNode, Library, Node};
 use hir::visit::Visitor;
 use scope2::ScopeData;
-use arenas::Alloc;
+use arenas::{Alloc, AllocInto};
+use ty2;
 
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
-    let arenas = hir::Arenas2::new();
+    let (arenas, type_arena) = (hir::Arenas2::new(), ty2::TypeArena::new());
     let scope = arenas.alloc(ScopeData::root());
     let ctx = hir::AllocContext {
         sess: sess,
@@ -30,56 +32,29 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
         return;
     }
 
-    // Filter out all the package declarations.
-    // let pkgs = nodes.into_iter().filter_map(|node| match node.data {
-    //     ast::DesignUnitData::PkgDecl(ref d) => Some(d),
-    //     _ => None,
-    // });
-
-    // Allocate slots for each package.
-    // let slots: Vec<_> = pkgs.map(|pkg| {
-    //     hir::Package2::alloc_slot(pkg, ctx).unwrap() as &LatentNode<Node>
-    // }).collect();
-    // for s in &slots {
-    //     let pkg = s.poll().unwrap();
-    //     // eprintln!("{}", DiagBuilder2::note(format!("package {} available", pkg.name().value)).span(pkg.span()));
-    //     for d in pkg.decls() {
-    //         let decl = d.poll().unwrap();
-    //         // eprintln!(
-    //         //     "{}",
-    //         //     DiagBuilder2::note(format!("declaration {} available", decl.name().value)).span(decl.span())
-    //         // );
-    //     }
-    // }
-
     // Force name resolution and HIR creation.
     debugln!("forcing HIR creation");
-    let mut v = IdentityVisitor;
-    lib.accept(&mut v);
-    // for s in &slots {
-    //     s.accept(&mut v);
-    // }
+    lib.accept(&mut IdentityVisitor);
 
-    // Visit the names.
-    debugln!("names:");
-    let mut v = NameVisitor;
+    // Visit the type declarations.
+    let mut v = TypeVisitor {
+        sess: sess,
+        type_arena: &type_arena,
+    };
     lib.accept(&mut v);
-    // for s in &slots {
-    //     s.accept(&mut v);
-    // }
 
-    // Collect references to all packages.
-    let mut v = PackageGatherer(Vec::new());
-    lib.accept(&mut v);
-    // for s in &slots {
-    //     s.accept(&mut v);
-    // }
-    debugln!("gathered packages:");
-    for pkg in v.0 {
-        debugln!("- {}", pkg.name().value);
-    }
+    // // Visit the names.
+    // debugln!("names:");
+    // let mut v = NameVisitor;
+    // lib.accept(&mut v);
 
-    // Resolve a name in the scope.
+    // // Collect references to all packages.
+    // let mut v = PackageGatherer(Vec::new());
+    // lib.accept(&mut v);
+    // debugln!("gathered packages:");
+    // for pkg in v.0 {
+    //     debugln!("- {}", pkg.name().value);
+    // }
 }
 
 struct IdentityVisitor;
@@ -90,27 +65,62 @@ impl<'t> Visitor<'t> for IdentityVisitor {
     }
 }
 
-struct NameVisitor;
+// struct NameVisitor;
 
-impl<'t> Visitor<'t> for NameVisitor {
-    fn as_visitor(&mut self) -> &mut Visitor<'t> {
-        self
-    }
+// impl<'t> Visitor<'t> for NameVisitor {
+//     fn as_visitor(&mut self) -> &mut Visitor<'t> {
+//         self
+//     }
 
-    fn visit_name(&mut self, name: Spanned<Name>) {
-        debugln!("- {}", name.value);
+//     fn visit_name(&mut self, name: Spanned<Name>) {
+//         debugln!("- {}", name.value);
+//     }
+// }
+
+// struct PackageGatherer<'t>(Vec<&'t hir::Package2<'t>>);
+
+// impl<'t> Visitor<'t> for PackageGatherer<'t> {
+//     fn as_visitor(&mut self) -> &mut Visitor<'t> {
+//         self
+//     }
+
+//     fn visit_pkg(&mut self, pkg: &'t hir::Package2<'t>) {
+//         self.0.push(pkg);
+//         pkg.walk(self);
+//     }
+// }
+
+#[derive(Copy, Clone)]
+struct TypeVisitor<'t> {
+    sess: &'t Session,
+    type_arena: &'t ty2::TypeArena<'t>,
+}
+
+impl<'a, 't: 'a> DiagEmitter for &'a TypeVisitor<'t> {
+    fn emit(&self, diag: DiagBuilder2) {
+        self.sess.emit(diag);
     }
 }
 
-struct PackageGatherer<'t>(Vec<&'t hir::Package2<'t>>);
+impl<'a, 't: 'a, T> AllocInto<'t, T> for &'a TypeVisitor<'t>
+where
+    ty2::TypeArena<'t>: Alloc<T>,
+{
+    fn alloc(&self, value: T) -> &'t mut T {
+        self.type_arena.alloc(value)
+    }
+}
 
-impl<'t> Visitor<'t> for PackageGatherer<'t> {
+impl<'t> Visitor<'t> for TypeVisitor<'t> {
     fn as_visitor(&mut self) -> &mut Visitor<'t> {
         self
     }
 
-    fn visit_pkg(&mut self, pkg: &'t hir::Package2<'t>) {
-        self.0.push(pkg);
-        pkg.walk(self);
+    fn visit_type_decl(&mut self, decl: &'t hir::TypeDecl2<'t>) {
+        debugln!("declared type of {}:", decl.name());
+        if let Ok(t) = decl.declared_type(self as &_) {
+            debugln!("type {} = {}", decl.name(), t);
+        }
+        decl.walk(self);
     }
 }
