@@ -1,0 +1,4 @@
+- map TypeDecl to a type
+- complete TypeDecl
+- map SubtypeDecl to a type
+- complete SubtypeDecl
