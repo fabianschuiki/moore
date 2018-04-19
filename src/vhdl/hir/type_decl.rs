@@ -48,7 +48,9 @@ impl<'t> FromAst<'t> for TypeDecl2<'t> {
 
     fn from_ast(ast: Self::LatentInput, context: Self::Context) -> Result<Self> {
         let data = match ast.data {
-            Some(ref data) => Spanned::new(unpack_type_data(&data.value, ast.name, context)?, data.span),
+            Some(ref data) => {
+                Spanned::new(unpack_type_data(&data.value, ast.name, context)?, data.span)
+            }
             None => Spanned::new(TypeData::Incomplete, ast.span),
         };
         Ok(TypeDecl2 {
@@ -87,23 +89,20 @@ impl<'t> Decl2<'t> for TypeDecl2<'t> {
     }
 }
 
-fn unpack_type_data<'t>(data: &ast::TypeData, type_name: Spanned<Name>, context: AllocContext<'t>) -> Result<TypeData<'t>> {
+fn unpack_type_data<'t>(
+    data: &ast::TypeData,
+    type_name: Spanned<Name>,
+    context: AllocContext<'t>,
+) -> Result<TypeData<'t>> {
     match *data {
         ast::RangeType(ref range_expr, ref units) => {
             let termctx = TermContext::new2(context);
             let range_expr = termctx.termify_expr(range_expr)?;
-            debugln!("termified range expr to {:#?}", range_expr);
             let range = term::term_to_range(range_expr, context)?;
-            debugln!("mapped to {:#?}", range);
             if units.is_some() {
                 panic!("units not yet implemented");
             }
             Ok(TypeData::Range(range))
-            // TODO:
-            // - termify range expr
-            // - map to range
-            // - handle units
-            // panic!("range type not fully implemented");
         }
         _ => unimplemented!(
             "type `{}` unsupported type data {:#?}",

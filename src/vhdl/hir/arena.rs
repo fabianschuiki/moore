@@ -14,6 +14,7 @@ make_arenas!(
         package: Package2<'t>,
         type_decl: TypeDecl2<'t>,
         const_decl: ConstDecl<'t>,
+        int_lit_expr: IntLitExpr,
 
         package_slot: Slot<'t, Package2<'t>>,
         type_decl_slot: Slot<'t, TypeDecl2<'t>>,

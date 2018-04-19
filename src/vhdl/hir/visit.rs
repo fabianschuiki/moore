@@ -22,4 +22,6 @@ pub trait Visitor<'t> {
     fn visit_type_decl(&mut self, hir: &'t TypeDecl2<'t>) {
         hir.walk(self.as_visitor());
     }
+
+    fn visit_integer_literal_expr(&mut self, hir: &'t IntLitExpr) {}
 }

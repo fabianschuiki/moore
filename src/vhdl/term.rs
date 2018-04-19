@@ -16,6 +16,7 @@ use common::source::*;
 use common::util::*;
 use common::score::Result;
 
+use arenas::AllocInto;
 use syntax::lexer::token::{Exponent, ExponentSign, Literal};
 use syntax::ast::{self, Dir};
 use score::*;
@@ -1632,9 +1633,9 @@ impl<'t> TermContext<hir::AllocContext<'t>, &'t ScopeData<'t>, Def2<'t>> {
 }
 
 /// Map a term to a range.
-pub fn term_to_range<C>(term: Spanned<Term>, ctx: C) -> Result<Spanned<hir::Range2>>
+pub fn term_to_range<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<Spanned<hir::Range2<'t>>>
 where
-    C: SessionContext + Copy,
+    C: SessionContext + Copy + AllocInto<'t, hir::IntLitExpr>,
 {
     let v = match term.value {
         // Term::Attr(..) => ...
@@ -1663,13 +1664,14 @@ where
 /// Map a term to a range.
 pub fn term_to_expr<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<&'t hir::Expr2<'t>>
 where
-    C: SessionContext + Copy,
+    C: SessionContext + Copy + AllocInto<'t, hir::IntLitExpr>,
 {
     match term.value {
         Term::Unresolved(name) => {
             ctx.emit(DiagBuilder2::error(format!("`{}` is unknown", name)).span(term.span));
             Err(())
         }
+        Term::IntLit(value) => Ok(ctx.alloc(hir::IntLitExpr::new(term.span, value))),
         // Throw an error for everything that does not look like an expression.
         _ => {
             ctx.emit(
