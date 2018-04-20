@@ -37,6 +37,22 @@ pub trait Type: Debug + Display {
 
     /// Converts from `&Type` to `AnyType`.
     fn as_any(&self) -> AnyType;
+
+    /// Check if two types are equal.
+    fn is_equal(&self, _other: &Type) -> bool {
+        false
+    }
+
+    /// Check if the type can be implicitly cast to another.
+    fn is_implicitly_castable(&self, _into: &Type) -> bool {
+        false
+    }
+}
+
+impl<'a> PartialEq for Type + 'a {
+    fn eq(&self, other: &Type) -> bool {
+        self.is_equal(other)
+    }
 }
 
 /// A type.

@@ -102,11 +102,11 @@ impl<'t> Range2<'t> {
                 } else {
                     ctx.emit(
                         DiagBuilder2::error(format!(
-                            "types of range bounds `{}` and `{}` are incompatible",
+                            "range bounds `{}` and `{}` have incompatible types",
                             l.span().extract(),
                             r.span().extract()
                         )).span(span)
-                            .add_note(format!("left bound type: {}", lt))
+                            .add_note(format!(" left bound type: {}", lt))
                             .add_note(format!("right bound type: {}", rt)),
                     );
                     Err(())
