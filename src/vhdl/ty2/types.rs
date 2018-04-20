@@ -4,7 +4,7 @@
 
 use std::fmt::{self, Debug, Display};
 use std::iter::{once, repeat};
-use std::ops::{Add, Sub, Deref};
+use std::ops::{Add, Deref, Sub};
 
 pub use num::BigInt;
 use num::One;
@@ -69,53 +69,53 @@ pub enum AnyType<'t> {
 impl<'t> Type for AnyType<'t> {
     fn is_scalar(&self) -> bool {
         match *self {
-            AnyType::Enum(t)          => t.is_scalar(),
-            AnyType::Integer(t)       => t.is_scalar(),
-            AnyType::Floating(t)      => t.is_scalar(),
-            AnyType::Physical(t)      => t.is_scalar(),
-            AnyType::Array(t)         => t.is_scalar(),
-            AnyType::Null             => NullType.is_scalar(),
+            AnyType::Enum(t) => t.is_scalar(),
+            AnyType::Integer(t) => t.is_scalar(),
+            AnyType::Floating(t) => t.is_scalar(),
+            AnyType::Physical(t) => t.is_scalar(),
+            AnyType::Array(t) => t.is_scalar(),
+            AnyType::Null => NullType.is_scalar(),
             AnyType::UniversalInteger => UniversalIntegerType.is_scalar(),
-            AnyType::UniversalReal    => UniversalRealType.is_scalar(),
+            AnyType::UniversalReal => UniversalRealType.is_scalar(),
         }
     }
 
     fn is_discrete(&self) -> bool {
         match *self {
-            AnyType::Enum(t)          => t.is_discrete(),
-            AnyType::Integer(t)       => t.is_discrete(),
-            AnyType::Floating(t)      => t.is_discrete(),
-            AnyType::Physical(t)      => t.is_discrete(),
-            AnyType::Array(t)         => t.is_discrete(),
-            AnyType::Null             => NullType.is_discrete(),
+            AnyType::Enum(t) => t.is_discrete(),
+            AnyType::Integer(t) => t.is_discrete(),
+            AnyType::Floating(t) => t.is_discrete(),
+            AnyType::Physical(t) => t.is_discrete(),
+            AnyType::Array(t) => t.is_discrete(),
+            AnyType::Null => NullType.is_discrete(),
             AnyType::UniversalInteger => UniversalIntegerType.is_discrete(),
-            AnyType::UniversalReal    => UniversalRealType.is_discrete(),
+            AnyType::UniversalReal => UniversalRealType.is_discrete(),
         }
     }
 
     fn is_numeric(&self) -> bool {
         match *self {
-            AnyType::Enum(t)          => t.is_numeric(),
-            AnyType::Integer(t)       => t.is_numeric(),
-            AnyType::Floating(t)      => t.is_numeric(),
-            AnyType::Physical(t)      => t.is_numeric(),
-            AnyType::Array(t)         => t.is_numeric(),
-            AnyType::Null             => NullType.is_numeric(),
+            AnyType::Enum(t) => t.is_numeric(),
+            AnyType::Integer(t) => t.is_numeric(),
+            AnyType::Floating(t) => t.is_numeric(),
+            AnyType::Physical(t) => t.is_numeric(),
+            AnyType::Array(t) => t.is_numeric(),
+            AnyType::Null => NullType.is_numeric(),
             AnyType::UniversalInteger => UniversalIntegerType.is_numeric(),
-            AnyType::UniversalReal    => UniversalRealType.is_numeric(),
+            AnyType::UniversalReal => UniversalRealType.is_numeric(),
         }
     }
 
     fn is_composite(&self) -> bool {
         match *self {
-            AnyType::Enum(t)          => t.is_composite(),
-            AnyType::Integer(t)       => t.is_composite(),
-            AnyType::Floating(t)      => t.is_composite(),
-            AnyType::Physical(t)      => t.is_composite(),
-            AnyType::Array(t)         => t.is_composite(),
-            AnyType::Null             => NullType.is_composite(),
+            AnyType::Enum(t) => t.is_composite(),
+            AnyType::Integer(t) => t.is_composite(),
+            AnyType::Floating(t) => t.is_composite(),
+            AnyType::Physical(t) => t.is_composite(),
+            AnyType::Array(t) => t.is_composite(),
+            AnyType::Null => NullType.is_composite(),
             AnyType::UniversalInteger => UniversalIntegerType.is_composite(),
-            AnyType::UniversalReal    => UniversalRealType.is_composite(),
+            AnyType::UniversalReal => UniversalRealType.is_composite(),
         }
     }
 
@@ -127,14 +127,14 @@ impl<'t> Type for AnyType<'t> {
 impl<'t> Display for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            AnyType::Enum(t)          => Display::fmt(t, f),
-            AnyType::Integer(t)       => Display::fmt(t, f),
-            AnyType::Floating(t)      => Display::fmt(t, f),
-            AnyType::Physical(t)      => Display::fmt(t, f),
-            AnyType::Array(t)         => Display::fmt(t, f),
-            AnyType::Null             => Display::fmt(&NullType, f),
+            AnyType::Enum(t) => Display::fmt(t, f),
+            AnyType::Integer(t) => Display::fmt(t, f),
+            AnyType::Floating(t) => Display::fmt(t, f),
+            AnyType::Physical(t) => Display::fmt(t, f),
+            AnyType::Array(t) => Display::fmt(t, f),
+            AnyType::Null => Display::fmt(&NullType, f),
             AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
-            AnyType::UniversalReal    => Display::fmt(&UniversalRealType, f),
+            AnyType::UniversalReal => Display::fmt(&UniversalRealType, f),
         }
     }
 }
@@ -142,14 +142,14 @@ impl<'t> Display for AnyType<'t> {
 impl<'t> Debug for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            AnyType::Enum(t)          => Debug::fmt(t, f),
-            AnyType::Integer(t)       => Debug::fmt(t, f),
-            AnyType::Floating(t)      => Debug::fmt(t, f),
-            AnyType::Physical(t)      => Debug::fmt(t, f),
-            AnyType::Array(t)         => Debug::fmt(t, f),
-            AnyType::Null             => Debug::fmt(&NullType, f),
+            AnyType::Enum(t) => Debug::fmt(t, f),
+            AnyType::Integer(t) => Debug::fmt(t, f),
+            AnyType::Floating(t) => Debug::fmt(t, f),
+            AnyType::Physical(t) => Debug::fmt(t, f),
+            AnyType::Array(t) => Debug::fmt(t, f),
+            AnyType::Null => Debug::fmt(&NullType, f),
             AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
-            AnyType::UniversalReal    => Debug::fmt(&UniversalRealType, f),
+            AnyType::UniversalReal => Debug::fmt(&UniversalRealType, f),
         }
     }
 }
@@ -163,42 +163,66 @@ impl<'t, T: Type> From<&'t T> for AnyType<'t> {
 impl<'t> AnyType<'t> {
     /// Returns `Some(t)` if the type is `Enum(t)`, `None` otherwise.
     pub fn as_enum(self) -> Option<&'t EnumType> {
-        match self { AnyType::Enum(t) => Some(t), _ => None }
+        match self {
+            AnyType::Enum(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// Returns `Some(t)` if the type is `Integer(t)`, `None` otherwise.
     pub fn as_integer(self) -> Option<&'t IntegerType> {
-        match self { AnyType::Integer(t) => Some(t), _ => None }
+        match self {
+            AnyType::Integer(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// Returns `Some(t)` if the type is `Floating(t)`, `None` otherwise.
     pub fn as_floating(self) -> Option<&'t FloatingType> {
-        match self { AnyType::Floating(t) => Some(t), _ => None }
+        match self {
+            AnyType::Floating(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// Returns `Some(t)` if the type is `Physical(t)`, `None` otherwise.
     pub fn as_physical(self) -> Option<&'t PhysicalType> {
-        match self { AnyType::Physical(t) => Some(t), _ => None }
+        match self {
+            AnyType::Physical(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// Returns `Some(t)` if the type is `Array(t)`, `None` otherwise.
     pub fn as_array(self) -> Option<&'t ArrayType<'t>> {
-        match self { AnyType::Array(t) => Some(t), _ => None }
+        match self {
+            AnyType::Array(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// Checks if the type is `Null`.
     pub fn is_null(self) -> bool {
-        match self { AnyType::Null => true, _ => false }
+        match self {
+            AnyType::Null => true,
+            _ => false,
+        }
     }
 
     /// Checks if the type is `UniversalInteger`.
     pub fn is_universal_integer(self) -> bool {
-        match self { AnyType::UniversalInteger => true, _ => false }
+        match self {
+            AnyType::UniversalInteger => true,
+            _ => false,
+        }
     }
 
     /// Checks if the type is `UniversalReal`.
     pub fn is_universal_real(self) -> bool {
-        match self { AnyType::UniversalReal => true, _ => false }
+        match self {
+            AnyType::UniversalReal => true,
+            _ => false,
+        }
     }
 
     /// Returns an `&EnumType` or panics if the type is not `Enum`.
@@ -251,7 +275,7 @@ impl EnumType {
     ///
     /// assert_eq!(format!("{}", ty), "(first, second, '0', '1')");
     /// ```
-    pub fn new<I: IntoIterator<Item=EnumLiteral>>(lits: I) -> EnumType {
+    pub fn new<I: IntoIterator<Item = EnumLiteral>>(lits: I) -> EnumType {
         EnumType {
             lits: lits.into_iter().collect(),
         }
@@ -274,11 +298,21 @@ impl EnumType {
 }
 
 impl Type for EnumType {
-    fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { true }
-    fn is_numeric(&self) -> bool { false }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::Enum(self) }
+    fn is_scalar(&self) -> bool {
+        true
+    }
+    fn is_discrete(&self) -> bool {
+        true
+    }
+    fn is_numeric(&self) -> bool {
+        false
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::Enum(self)
+    }
 }
 
 impl Display for EnumType {
@@ -343,15 +377,30 @@ pub trait IntegerType: Type {
     fn base_type(&self) -> &Type;
 
     /// The resolution function associated with this type.
-    fn resolution_func(&self) -> Option<usize> { None }
+    fn resolution_func(&self) -> Option<usize> {
+        None
+    }
 }
 
-impl<'t, T> Type for T where T: IntegerType + 't {
-    fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { true }
-    fn is_numeric(&self) -> bool { true }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::Integer(self) }
+impl<'t, T> Type for T
+where
+    T: IntegerType + 't,
+{
+    fn is_scalar(&self) -> bool {
+        true
+    }
+    fn is_discrete(&self) -> bool {
+        true
+    }
+    fn is_numeric(&self) -> bool {
+        true
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::Integer(self)
+    }
 }
 
 impl<'t> Deref for IntegerType + 't {
@@ -387,18 +436,26 @@ impl FloatingType {
     /// assert_eq!(b.len(), f64::from(43));
     /// ```
     pub fn new(range: Range<f64>) -> FloatingType {
-        FloatingType {
-            range: range,
-        }
+        FloatingType { range: range }
     }
 }
 
 impl Type for FloatingType {
-    fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { false }
-    fn is_numeric(&self) -> bool { true }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::Floating(self) }
+    fn is_scalar(&self) -> bool {
+        true
+    }
+    fn is_discrete(&self) -> bool {
+        false
+    }
+    fn is_numeric(&self) -> bool {
+        true
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::Floating(self)
+    }
 }
 
 impl Display for FloatingType {
@@ -429,7 +486,10 @@ pub struct Range<T> {
     right: T,
 }
 
-impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Output=T> {
+impl<T: PartialOrd + One> Range<T>
+where
+    for<'a> &'a T: Add<Output = T> + Sub<Output = T>,
+{
     /// Create a range from left and right bounds.
     ///
     /// # Example
@@ -443,8 +503,10 @@ impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Outp
     /// assert_eq!(format!("{}", a), "0 to 42");
     /// assert_eq!(format!("{}", b), "42 downto 0");
     /// ```
-    pub fn with_left_right<D,L,R>(dir: D, left: L, right: R) -> Range<T>
-        where RangeDir: From<D>, T: From<L> + From<R>
+    pub fn with_left_right<D, L, R>(dir: D, left: L, right: R) -> Range<T>
+    where
+        RangeDir: From<D>,
+        T: From<L> + From<R>,
     {
         Range {
             dir: dir.into(),
@@ -466,8 +528,10 @@ impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Outp
     /// assert_eq!(format!("{}", a), "0 to 42");
     /// assert_eq!(format!("{}", b), "42 downto 0");
     /// ```
-    pub fn with_lower_upper<D,L,U>(dir: D, lower: L, upper: U) -> Range<T>
-        where RangeDir: From<D>, T: From<L> + From<U>
+    pub fn with_lower_upper<D, L, U>(dir: D, lower: L, upper: U) -> Range<T>
+    where
+        RangeDir: From<D>,
+        T: From<L> + From<U>,
     {
         let dir = dir.into();
         let (left, right) = match dir {
@@ -492,7 +556,10 @@ impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Outp
     ///
     /// assert_eq!(format!("{}", r), "0 to 42");
     /// ```
-    pub fn ascending<L,R>(left: L, right: R) -> Range<T> where T: From<L> + From<R> {
+    pub fn ascending<L, R>(left: L, right: R) -> Range<T>
+    where
+        T: From<L> + From<R>,
+    {
         Range {
             dir: RangeDir::To,
             left: left.into(),
@@ -511,7 +578,10 @@ impl<T: PartialOrd + One> Range<T> where for<'a> &'a T: Add<Output=T> + Sub<Outp
     ///
     /// assert_eq!(format!("{}", r), "42 downto 0");
     /// ```
-    pub fn descending<L,R>(left: L, right: R) -> Range<T> where T: From<L> + From<R> {
+    pub fn descending<L, R>(left: L, right: R) -> Range<T>
+    where
+        T: From<L> + From<R>,
+    {
         Range {
             dir: RangeDir::Downto,
             left: left.into(),
@@ -740,7 +810,8 @@ impl PhysicalType {
     /// assert_eq!(format!("{}", ty), "0 to 1000000 units (fs, ps, ns)");
     /// ```
     pub fn new<I>(range: Range<BigInt>, units: I, primary: usize) -> PhysicalType
-        where I: IntoIterator<Item=PhysicalUnit>,
+    where
+        I: IntoIterator<Item = PhysicalUnit>,
     {
         PhysicalType {
             range: range,
@@ -761,11 +832,21 @@ impl PhysicalType {
 }
 
 impl Type for PhysicalType {
-    fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { false }
-    fn is_numeric(&self) -> bool { true }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::Physical(self) }
+    fn is_scalar(&self) -> bool {
+        true
+    }
+    fn is_discrete(&self) -> bool {
+        false
+    }
+    fn is_numeric(&self) -> bool {
+        true
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::Physical(self)
+    }
 }
 
 impl Display for PhysicalType {
@@ -814,7 +895,8 @@ impl PhysicalUnit {
     /// assert_eq!(unit.rel, None);
     /// ```
     pub fn primary<A>(name: Name, abs: A) -> PhysicalUnit
-        where BigInt: From<A>
+    where
+        BigInt: From<A>,
     {
         PhysicalUnit {
             name: name,
@@ -838,8 +920,9 @@ impl PhysicalUnit {
     /// assert_eq!(unit.abs, BigInt::from(1));
     /// assert_eq!(unit.rel, Some((BigInt::from(1000), 0)));
     /// ```
-    pub fn secondary<A,R>(name: Name, abs: A, rel: R, rel_to: usize) -> PhysicalUnit
-        where BigInt: From<A> + From<R>
+    pub fn secondary<A, R>(name: Name, abs: A, rel: R, rel_to: usize) -> PhysicalUnit
+    where
+        BigInt: From<A> + From<R>,
     {
         PhysicalUnit {
             name: name,
@@ -859,11 +942,21 @@ pub struct ArrayType<'t> {
 }
 
 impl<'t> Type for ArrayType<'t> {
-    fn is_scalar(&self) -> bool { false }
-    fn is_discrete(&self) -> bool { false }
-    fn is_numeric(&self) -> bool { false }
-    fn is_composite(&self) -> bool { true }
-    fn as_any(&self) -> AnyType { AnyType::Array(self) }
+    fn is_scalar(&self) -> bool {
+        false
+    }
+    fn is_discrete(&self) -> bool {
+        false
+    }
+    fn is_numeric(&self) -> bool {
+        false
+    }
+    fn is_composite(&self) -> bool {
+        true
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::Array(self)
+    }
 }
 
 impl<'t> Display for ArrayType<'t> {
@@ -895,11 +988,21 @@ impl<'t> Display for ArrayType<'t> {
 pub struct NullType;
 
 impl Type for NullType {
-    fn is_scalar(&self) -> bool { false }
-    fn is_discrete(&self) -> bool { false }
-    fn is_numeric(&self) -> bool { false }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::Null }
+    fn is_scalar(&self) -> bool {
+        false
+    }
+    fn is_discrete(&self) -> bool {
+        false
+    }
+    fn is_numeric(&self) -> bool {
+        false
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::Null
+    }
 }
 
 impl Display for NullType {
@@ -930,11 +1033,21 @@ impl Display for NullType {
 pub struct UniversalIntegerType;
 
 impl Type for UniversalIntegerType {
-    fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { true }
-    fn is_numeric(&self) -> bool { true }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::UniversalInteger }
+    fn is_scalar(&self) -> bool {
+        true
+    }
+    fn is_discrete(&self) -> bool {
+        true
+    }
+    fn is_numeric(&self) -> bool {
+        true
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::UniversalInteger
+    }
 }
 
 impl Display for UniversalIntegerType {
@@ -965,11 +1078,21 @@ impl Display for UniversalIntegerType {
 pub struct UniversalRealType;
 
 impl Type for UniversalRealType {
-    fn is_scalar(&self) -> bool { true }
-    fn is_discrete(&self) -> bool { false }
-    fn is_numeric(&self) -> bool { true }
-    fn is_composite(&self) -> bool { false }
-    fn as_any(&self) -> AnyType { AnyType::UniversalReal }
+    fn is_scalar(&self) -> bool {
+        true
+    }
+    fn is_discrete(&self) -> bool {
+        false
+    }
+    fn is_numeric(&self) -> bool {
+        true
+    }
+    fn is_composite(&self) -> bool {
+        false
+    }
+    fn as_any(&self) -> AnyType {
+        AnyType::UniversalReal
+    }
 }
 
 impl Display for UniversalRealType {
