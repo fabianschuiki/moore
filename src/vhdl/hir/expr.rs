@@ -74,7 +74,7 @@ impl<'t> Expr2<'t> for IntLitExpr {
 #[derive(Debug)]
 pub enum Range2<'t> {
     // Attr(AttrRef),
-    Immediate(Dir, &'t Expr2<'t>, &'t Expr2<'t>),
+    Immediate(Span, Spanned<Dir>, &'t Expr2<'t>, &'t Expr2<'t>),
 }
 
 impl<'t> Range2<'t> {
@@ -84,18 +84,33 @@ impl<'t> Range2<'t> {
     /// implicit casts to make them be of the same type.
     pub fn bound_type<C>(&self, ctx: C) -> Result<&'t Type>
     where
-        C: AllocInto<'t, UniversalIntegerType>,
+        C: AllocInto<'t, UniversalIntegerType> + DiagEmitter,
     {
         match *self {
-            Range2::Immediate(_, l, r) => {
+            Range2::Immediate(span, _, l, r) => {
                 let lt = l.typeval(None, &ctx);
                 let rt = r.typeval(None, &ctx);
                 let (lt, rt) = (lt?, rt?);
-                // TODO: Try to unify the types by applying implicit conversions
-                // where applicable.
                 debugln!("lt = {}", lt);
                 debugln!("rt = {}", rt);
-                Err(())
+                if lt == rt {
+                    Ok(lt)
+                } else if lt.is_implicitly_castable(rt) {
+                    Ok(rt)
+                } else if rt.is_implicitly_castable(lt) {
+                    Ok(lt)
+                } else {
+                    ctx.emit(
+                        DiagBuilder2::error(format!(
+                            "types of range bounds `{}` and `{}` are incompatible",
+                            l.span().extract(),
+                            r.span().extract()
+                        )).span(span)
+                            .add_note(format!("left bound type: {}", lt))
+                            .add_note(format!("right bound type: {}", rt)),
+                    );
+                    Err(())
+                }
             }
         }
     }
@@ -103,14 +118,14 @@ impl<'t> Range2<'t> {
     /// Determine the constant value of the range.
     pub fn constant_value<C>(&self, ctx: C) -> Result<(Dir, (), ())>
     where
-        C: AllocInto<'t, UniversalIntegerType>,
+        C: AllocInto<'t, UniversalIntegerType> + DiagEmitter,
     {
         let ty = self.bound_type(ctx)?;
         debugln!("bound type is {}", ty);
         match *self {
-            Range2::Immediate(d, l, r) => {
-                debugln!("const value of range {:?} {} {:?}", l, d, r);
-                Ok((d, (), ()))
+            Range2::Immediate(_, d, l, r) => {
+                debugln!("const value of range {:?} {} {:?}", l, d.value, r);
+                Ok((d.value, (), ()))
             }
         }
     }

@@ -66,7 +66,7 @@ pub enum Term<'t> {
     /// A term of the form `T.all`.
     SelectAll(Subterm<'t>),
     /// A term of the form `T (to|downto) T`.
-    Range(Dir, Subterm<'t>, Subterm<'t>),
+    Range(Spanned<Dir>, Subterm<'t>, Subterm<'t>),
     /// A term of the form `T range T`.
     RangeSuffix(Subterm<'t>, Subterm<'t>),
     /// A term of the form `T range <>`.
@@ -428,21 +428,25 @@ where
             // ast::ResolExpr(ref paren_elems, ref name) => {
             //  let name = self.termify_compound_name(name)?;
             // }
-            // Ranges of the form `T to T` and `T downto T`.
-            ast::BinaryExpr(ast::BinaryOp::Dir(d), ref lb, ref rb) => Term::Range(
-                d,
-                self.termify_expr(lb)?.into(),
-                self.termify_expr(rb)?.into(),
-            ),
             ast::UnaryExpr(op, ref arg) => Term::Unary(
-                UnaryOp::from(Spanned::new(op, ast.span), self.ctx)?,
+                UnaryOp::from(op, self.ctx)?,
                 self.termify_expr(arg)?.into(),
             ),
-            ast::BinaryExpr(op, ref lhs, ref rhs) => Term::Binary(
-                BinaryOp::from(Spanned::new(op, ast.span), self.ctx)?,
-                self.termify_expr(lhs)?.into(),
-                self.termify_expr(rhs)?.into(),
-            ),
+            ast::BinaryExpr(op, ref lhs, ref rhs) => {
+                if let ast::BinaryOp::Dir(d) = op.value {
+                    Term::Range(
+                        Spanned::new(d, op.span),
+                        self.termify_expr(lhs)?.into(),
+                        self.termify_expr(rhs)?.into(),
+                    )
+                } else {
+                    Term::Binary(
+                        BinaryOp::from(op, self.ctx)?,
+                        self.termify_expr(lhs)?.into(),
+                        self.termify_expr(rhs)?.into(),
+                    )
+                }
+            },
             ast::NullExpr => Term::Null,
             ast::OpenExpr => Term::Open,
             ast::OthersExpr => Term::Others,
@@ -1221,7 +1225,7 @@ where
         Ok(Spanned::new(
             match term.value {
                 // Term::Attr(..) => ...
-                Term::Range(dir, lb, rb) => hir::Range::Immediate(dir, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
+                Term::Range(dir, lb, rb) => hir::Range::Immediate(dir.value, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
                 _ => {
                     self.emit(
                         DiagBuilder2::error(format!("`{}` is not a valid range", term.span.extract()))
@@ -1642,7 +1646,7 @@ where
         Term::Range(dir, lb, rb) => {
             let le = term_to_expr(*lb, ctx);
             let re = term_to_expr(*rb, ctx);
-            hir::Range2::Immediate(dir, le?, re?)
+            hir::Range2::Immediate(term.span, dir, le?, re?)
         }
         _ => {
             ctx.emit(

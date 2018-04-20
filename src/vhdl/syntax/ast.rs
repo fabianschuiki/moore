@@ -803,8 +803,8 @@ pub enum ExprData {
     DoubleNameExpr(CompoundName, CompoundName),
     QualExpr(CompoundName, ParenElems),
     NameExpr(CompoundName),
-    UnaryExpr(UnaryOp, Box<Expr>),
-    BinaryExpr(BinaryOp, Box<Expr>, Box<Expr>),
+    UnaryExpr(Spanned<UnaryOp>, Box<Expr>),
+    BinaryExpr(Spanned<BinaryOp>, Box<Expr>, Box<Expr>),
 }
 
 impl HasDesc for ExprData {

@@ -1795,7 +1795,7 @@ impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
 		Term::Range(dir, lb, rb) => {
 			let lb = ctx.term_to_expr(*lb)?;
 			let rb = ctx.term_to_expr(*rb)?;
-			hir::ArrayTypeIndex::Range(dir, lb, rb)
+			hir::ArrayTypeIndex::Range(dir.value, lb, rb)
 		}
 		Term::UnboundedRange(subterm) => {
 			let tm = ctx.term_to_type_mark(*subterm)?;
