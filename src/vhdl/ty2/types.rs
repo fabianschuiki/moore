@@ -39,8 +39,8 @@ pub trait Type: Debug + Display {
     fn as_any(&self) -> AnyType;
 
     /// Check if two types are equal.
-    fn is_equal(&self, _other: &Type) -> bool {
-        false
+    fn is_equal(&self, other: &Type) -> bool {
+        self.as_any() == other.as_any()
     }
 
     /// Check if the type can be implicitly cast to another.
@@ -62,7 +62,7 @@ impl<'a> PartialEq for Type + 'a {
 /// in a match expression. This is the root of the entire type system. If a user
 /// declares a type, this enum carries the information as to which type was
 /// declared.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 #[allow(missing_docs)]
 pub enum AnyType<'t> {
     Enum(&'t EnumType),
@@ -268,7 +268,7 @@ impl<'t> AnyType<'t> {
 }
 
 /// An enumeration type.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct EnumType {
     /// The enumeration literals.
     lits: Vec<EnumLiteral>,
@@ -347,7 +347,7 @@ impl Display for EnumType {
 /// Distinguishes between:
 /// - identifier literals such as `FOO`, and
 /// - character literals such as `'0'`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum EnumLiteral {
     /// An identifier enumeration literal.
     Ident(Name),
@@ -396,6 +396,11 @@ pub trait IntegerType: Type {
     fn resolution_func(&self) -> Option<usize> {
         None
     }
+
+    /// Check if two integer types are equal.
+    fn is_equal(&self, other: &IntegerType) -> bool {
+        false
+    }
 }
 
 impl<'t, T> Type for T
@@ -426,8 +431,14 @@ impl<'t> Deref for IntegerType + 't {
     }
 }
 
+impl<'t> PartialEq for IntegerType + 't {
+    fn eq(&self, other: &IntegerType) -> bool {
+        IntegerType::is_equal(self, other)
+    }
+}
+
 /// A floating-point type.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FloatingType {
     /// The range of values.
     range: Range<f64>,
@@ -798,7 +809,7 @@ impl Display for RangeDir {
 /// In VHDL a physical type is an integer multiple of some measurement unit.
 /// A physical type has exactly one primary unit, and multiple secondary units
 /// defined as multiples of that primary unit.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PhysicalType {
     /// The range of integer multiples of the primary unit.
     range: Range<BigInt>,
@@ -949,7 +960,7 @@ impl PhysicalUnit {
 }
 
 /// An array type.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ArrayType<'t> {
     /// The index subtypes.
     indices: Vec<&'t Type>,
