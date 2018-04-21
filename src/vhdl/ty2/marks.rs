@@ -7,7 +7,7 @@ use std::fmt::{self, Debug, Display};
 use common::name::Name;
 use common::source::Span;
 
-use ty2::{Type, AnyType, Subtype};
+use ty2::{AnyType, Subtype, Type};
 
 /// A type name.
 ///
@@ -17,67 +17,67 @@ use ty2::{Type, AnyType, Subtype};
 /// we must rather keep track of the name directly.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TypeName {
-	/// The name is defined through an internalized name.
-	Name(Name),
-	/// The name is defined through a span.
-	Span(Span),
+    /// The name is defined through an internalized name.
+    Name(Name),
+    /// The name is defined through a span.
+    Span(Span),
 }
 
 impl From<Name> for TypeName {
-	fn from(name: Name) -> TypeName {
-		TypeName::Name(name)
-	}
+    fn from(name: Name) -> TypeName {
+        TypeName::Name(name)
+    }
 }
 
 impl From<Span> for TypeName {
-	fn from(span: Span) -> TypeName {
-		TypeName::Span(span)
-	}
+    fn from(span: Span) -> TypeName {
+        TypeName::Span(span)
+    }
 }
 
 impl TypeName {
-	/// Get the type name as a string.
-	pub fn to_string(self) -> String {
-		match self {
-			TypeName::Name(name) => name.into(),
-			TypeName::Span(span) => span.extract(),
-		}
-	}
+    /// Get the type name as a string.
+    pub fn to_string(self) -> String {
+        match self {
+            TypeName::Name(name) => name.into(),
+            TypeName::Span(span) => span.extract(),
+        }
+    }
 
-	/// Get the type name as a `Name`.
-	///
-	/// Returns `None` if the type name is given through a `Span`.
-	pub fn as_name(self) -> Option<Name> {
-		match self {
-			TypeName::Name(name) => Some(name),
-			_ => None,
-		}
-	}
+    /// Get the type name as a `Name`.
+    ///
+    /// Returns `None` if the type name is given through a `Span`.
+    pub fn as_name(self) -> Option<Name> {
+        match self {
+            TypeName::Name(name) => Some(name),
+            _ => None,
+        }
+    }
 
-	/// Get the type name as a `Span`.
-	///
-	/// Returns `None` if the type name is given as a `Name`.
-	pub fn as_span(self) -> Option<Span> {
-		match self {
-			TypeName::Span(span) => Some(span),
-			_ => None,
-		}
-	}
+    /// Get the type name as a `Span`.
+    ///
+    /// Returns `None` if the type name is given as a `Name`.
+    pub fn as_span(self) -> Option<Span> {
+        match self {
+            TypeName::Span(span) => Some(span),
+            _ => None,
+        }
+    }
 }
 
 impl Display for TypeName {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			TypeName::Name(name) => write!(f, "{}", name),
-			TypeName::Span(span) => write!(f, "{}", span.extract()),
-		}
-	}
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TypeName::Name(name) => write!(f, "{}", name),
+            TypeName::Span(span) => write!(f, "{}", span.extract()),
+        }
+    }
 }
 
 impl Debug for TypeName {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		Display::fmt(self, f)
-	}
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(self, f)
+    }
 }
 
 /// A type declaration.
@@ -101,42 +101,52 @@ impl Debug for TypeName {
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct TypeDecl<'t> {
-	name: TypeName,
-	ty: &'t Type,
+    name: TypeName,
+    ty: &'t Type,
 }
 
 impl<'t> TypeDecl<'t> {
-	/// Create a new type declaration from a name and a type.
-	pub fn new<N: Into<TypeName>>(name: N, ty: &'t Type) -> TypeDecl<'t> {
-		TypeDecl {
-			name: name.into(),
-			ty: ty,
-		}
-	}
+    /// Create a new type declaration from a name and a type.
+    pub fn new<N: Into<TypeName>>(name: N, ty: &'t Type) -> TypeDecl<'t> {
+        TypeDecl {
+            name: name.into(),
+            ty: ty,
+        }
+    }
 
-	/// Get the name of the declared type.
-	pub fn name(&self) -> TypeName {
-		self.name
-	}
+    /// Get the name of the declared type.
+    pub fn name(&self) -> TypeName {
+        self.name
+    }
 
-	/// Get the declared type.
-	pub fn ty(&self) -> &'t Type {
-		self.ty
-	}
+    /// Get the declared type.
+    pub fn ty(&self) -> &'t Type {
+        self.ty
+    }
 }
 
 impl<'t> Type for TypeDecl<'t> {
-    fn is_scalar(&self) -> bool { self.ty.is_scalar() }
-    fn is_discrete(&self) -> bool { self.ty.is_discrete() }
-    fn is_numeric(&self) -> bool { self.ty.is_numeric() }
-    fn is_composite(&self) -> bool { self.ty.is_composite() }
-    fn as_any(&self) -> AnyType { self.ty.as_any() }
+    fn is_scalar(&self) -> bool {
+        self.ty.is_scalar()
+    }
+    fn is_discrete(&self) -> bool {
+        self.ty.is_discrete()
+    }
+    fn is_numeric(&self) -> bool {
+        self.ty.is_numeric()
+    }
+    fn is_composite(&self) -> bool {
+        self.ty.is_composite()
+    }
+    fn as_any(&self) -> AnyType {
+        self.ty.as_any()
+    }
 }
 
 impl<'t> Display for TypeDecl<'t> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "type {} is {}", self.name, self.ty)
-	}
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "type {} is {}", self.name, self.ty)
+    }
 }
 
 /// A subtype declaration.
@@ -145,8 +155,8 @@ impl<'t> Display for TypeDecl<'t> {
 /// of how a subtype was called upon its definition, and where it was defined.
 #[derive(Clone, Copy, Debug)]
 pub struct SubtypeDecl<'t> {
-	name: TypeName,
-	ty: &'t Subtype, // TODO: Actually make this a subtype indication.
+    name: TypeName,
+    ty: &'t Subtype, // TODO: Actually make this a subtype indication.
 }
 
 /// A type mark.
@@ -173,40 +183,50 @@ pub struct SubtypeDecl<'t> {
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct TypeMark<'t> {
-	name: TypeName,
-	ty: &'t Type,
+    name: TypeName,
+    ty: &'t Type,
 }
 
 impl<'t> TypeMark<'t> {
-	/// Create a new type mark from a name and a type.
-	pub fn new<N: Into<TypeName>>(name: N, ty: &'t Type) -> TypeMark<'t> {
-		TypeMark {
-			name: name.into(),
-			ty: ty,
-		}
-	}
+    /// Create a new type mark from a name and a type.
+    pub fn new<N: Into<TypeName>>(name: N, ty: &'t Type) -> TypeMark<'t> {
+        TypeMark {
+            name: name.into(),
+            ty: ty,
+        }
+    }
 
-	/// Get the name of the mark.
-	pub fn name(&self) -> TypeName {
-		self.name
-	}
+    /// Get the name of the mark.
+    pub fn name(&self) -> TypeName {
+        self.name
+    }
 
-	/// Get the type of the mark.
-	pub fn ty(&self) -> &'t Type {
-		self.ty
-	}
+    /// Get the type of the mark.
+    pub fn ty(&self) -> &'t Type {
+        self.ty
+    }
 }
 
 impl<'t> Type for TypeMark<'t> {
-    fn is_scalar(&self) -> bool { self.ty.is_scalar() }
-    fn is_discrete(&self) -> bool { self.ty.is_discrete() }
-    fn is_numeric(&self) -> bool { self.ty.is_numeric() }
-    fn is_composite(&self) -> bool { self.ty.is_composite() }
-    fn as_any(&self) -> AnyType { self.ty.as_any() }
+    fn is_scalar(&self) -> bool {
+        self.ty.is_scalar()
+    }
+    fn is_discrete(&self) -> bool {
+        self.ty.is_discrete()
+    }
+    fn is_numeric(&self) -> bool {
+        self.ty.is_numeric()
+    }
+    fn is_composite(&self) -> bool {
+        self.ty.is_composite()
+    }
+    fn as_any(&self) -> AnyType {
+        self.ty.as_any()
+    }
 }
 
 impl<'t> Display for TypeMark<'t> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}", self.name)
-	}
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
 }

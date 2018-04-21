@@ -4,11 +4,10 @@
 
 use std::fmt::{self, Debug, Display};
 
-use ty2::{Type, TypeMark, Range, BigInt, EnumType, IntegerType, FloatingType, PhysicalType};
+use ty2::{BigInt, EnumType, FloatingType, IntegerType, PhysicalType, Range, Type, TypeMark};
 
 /// An interface for dealing with subtypes.
-pub trait Subtype: Debug + Display {
-}
+pub trait Subtype: Debug + Display {}
 
 /// A subtype of a scalar type.
 ///
@@ -60,18 +59,19 @@ impl<'t> EnumSubtype<'t> {
     }
 }
 
-impl<'t> Subtype for EnumSubtype<'t> {
-}
+impl<'t> Subtype for EnumSubtype<'t> {}
 
 impl<'t> Display for EnumSubtype<'t> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{} range {} {} {}",
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} range {} {} {}",
             self.mark,
             self.base.literal(*self.con.left()),
             self.con.dir(),
             self.base.literal(*self.con.right()),
         )
-	}
+    }
 }
 
 /// A subtype of an integer type.
@@ -117,8 +117,12 @@ impl<'t> IntegerSubtype<'t> {
 }
 
 impl<'t> IntegerType for IntegerSubtype<'t> {
-    fn range(&self) -> &Range<BigInt> { &self.con }
-    fn base_type(&self) -> &Type { self.mark }
+    fn range(&self) -> &Range<BigInt> {
+        &self.con
+    }
+    fn base_type(&self) -> &Type {
+        self.mark
+    }
 }
 
 impl<'t> Display for IntegerSubtype<'t> {

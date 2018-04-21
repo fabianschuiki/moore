@@ -3,7 +3,7 @@
 //! The fundamental base types.
 
 use std::fmt::{self, /*Debug,*/ Display};
-use std::ops::{/*Add, Sub,*/ Deref};
+use std::ops::Deref;
 
 pub use num::BigInt;
 
@@ -40,15 +40,17 @@ impl IntegerType {
     /// # }
     /// ```
     pub fn new(range: Range<BigInt>) -> IntegerBasetype {
-        IntegerBasetype {
-            range: range,
-        }
+        IntegerBasetype { range: range }
     }
 }
 
 impl IntegerType for IntegerBasetype {
-    fn range(&self) -> &Range<BigInt> { &self.range }
-    fn base_type(&self) -> &Type { self }
+    fn range(&self) -> &Range<BigInt> {
+        &self.range
+    }
+    fn base_type(&self) -> &Type {
+        self
+    }
 }
 
 impl Deref for IntegerBasetype {
