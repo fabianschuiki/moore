@@ -15,9 +15,11 @@ mod basetypes;
 mod subtypes;
 mod marks;
 mod arena;
+mod range;
 
 pub use self::types::*;
 pub use self::basetypes::*;
 pub use self::subtypes::*;
 pub use self::marks::*;
 pub use self::arena::*;
+pub use self::range::*;

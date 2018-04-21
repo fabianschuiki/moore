@@ -2,15 +2,16 @@
 
 //! The fundamental base types.
 
-use std::fmt::{self, /*Debug,*/ Display};
+use std::fmt::{self, Display};
 use std::ops::Deref;
 
 pub use num::BigInt;
 
 use ty2::types::*;
+use ty2::range::*;
 
 /// An integer base type.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct IntegerBasetype {
     /// The range of values.
     range: Range<BigInt>,
@@ -48,8 +49,17 @@ impl IntegerType for IntegerBasetype {
     fn range(&self) -> &Range<BigInt> {
         &self.range
     }
+
     fn base_type(&self) -> &Type {
         self
+    }
+
+    fn as_basetype(&self) -> Option<&IntegerBasetype> {
+        Some(self)
+    }
+
+    fn is_equal(&self, other: &IntegerType) -> bool {
+        other.as_basetype().map(|t| self == t).unwrap_or(false)
     }
 }
 

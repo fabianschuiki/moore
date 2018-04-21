@@ -4,7 +4,11 @@
 
 use std::fmt::{self, Debug, Display};
 
-use ty2::{BigInt, EnumType, FloatingType, IntegerType, PhysicalType, Range, Type, TypeMark};
+pub use num::BigInt;
+
+use ty2::types::*;
+use ty2::marks::*;
+use ty2::range::*;
 
 /// An interface for dealing with subtypes.
 pub trait Subtype: Debug + Display {}
@@ -12,7 +16,7 @@ pub trait Subtype: Debug + Display {}
 /// A subtype of a scalar type.
 ///
 /// Scalar types may be subtyped by a range constraint.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ScalarSubtype<'t, T: Type + ?Sized + 't, C> {
     #[allow(dead_code)]
     resfn: Option<usize>,
@@ -120,8 +124,17 @@ impl<'t> IntegerType for IntegerSubtype<'t> {
     fn range(&self) -> &Range<BigInt> {
         &self.con
     }
+
     fn base_type(&self) -> &Type {
         self.mark
+    }
+
+    fn as_subtype(&self) -> Option<&IntegerSubtype> {
+        Some(self)
+    }
+
+    fn is_equal(&self, other: &IntegerType) -> bool {
+        other.as_subtype().map(|t| self == t).unwrap_or(false)
     }
 }
 

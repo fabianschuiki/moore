@@ -15,7 +15,7 @@ use ty2::{AnyType, Subtype, Type};
 /// of a user-defined type we would like to keep track of its `Span` for good
 /// error messages. Builtin types have no location we can refer to however, and
 /// we must rather keep track of the name directly.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
     /// The name is defined through an internalized name.
     Name(Name),
@@ -99,7 +99,7 @@ impl Debug for TypeName {
 ///
 /// assert_eq!(format!("{}", a), "type DATA is 31 downto 0");
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeDecl<'t> {
     name: TypeName,
     ty: &'t Type,
@@ -181,7 +181,7 @@ pub struct SubtypeDecl<'t> {
 ///
 /// assert_eq!(format!("{}", a), "DATA");
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeMark<'t> {
     name: TypeName,
     ty: &'t Type,
