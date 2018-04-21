@@ -1119,8 +1119,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let rb = self.const_value(rb_id)?;
 		Ok(match (lb, rb) {
 			(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-				use ty2::{IntegerType, Range};
-				let ty = IntegerType::new(Range::with_left_right(dir, lb.value.clone(), rb.value.clone()));
+				use ty2::{IntegerBasetype, Range};
+				let ty = IntegerBasetype::new(Range::with_left_right(dir, lb.value.clone(), rb.value.clone()));
 				debugln!("type from range `{}` = {}", span.extract(), ty);
 				self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
 			}

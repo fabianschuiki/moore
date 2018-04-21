@@ -3,7 +3,7 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 
-use common::Session;
+use common::{Session, SessionContext, Verbosity};
 use common::errors::DiagBuilder2;
 use common::source::Spanned;
 use common::errors::*;
@@ -15,9 +15,14 @@ use hir::visit::Visitor;
 use scope2::ScopeData;
 use arenas::{Alloc, AllocInto};
 use ty2;
+use konst2::{self, AllocConst, AllocConstInto, Const2, OwnedConst};
 
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
-    let (arenas, type_arena) = (hir::Arenas2::new(), ty2::TypeArena::new());
+    let (arenas, type_arena, const_arena) = (
+        hir::Arenas2::new(),
+        ty2::TypeArena::new(),
+        konst2::ConstArena::new(),
+    );
     let scope = arenas.alloc(ScopeData::root());
     let ctx = hir::AllocContext {
         sess: sess,
@@ -37,9 +42,11 @@ pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     lib.accept(&mut IdentityVisitor);
 
     // Visit the type declarations.
+    debugln!("listing type declarations");
     let mut v = TypeVisitor {
         sess: sess,
         type_arena: &type_arena,
+        const_arena: &const_arena,
     };
     lib.accept(&mut v);
 
@@ -94,6 +101,13 @@ impl<'t> Visitor<'t> for IdentityVisitor {
 struct TypeVisitor<'t> {
     sess: &'t Session,
     type_arena: &'t ty2::TypeArena<'t>,
+    const_arena: &'t konst2::ConstArena<'t>,
+}
+
+impl<'a, 't: 'a> SessionContext for &'a TypeVisitor<'t> {
+    fn has_verbosity(&self, verb: Verbosity) -> bool {
+        self.sess.has_verbosity(verb)
+    }
 }
 
 impl<'a, 't: 'a> DiagEmitter for &'a TypeVisitor<'t> {
@@ -111,13 +125,24 @@ where
     }
 }
 
+impl<'a, 't: 'a> AllocInto<'t, konst2::IntegerConst<'t>> for &'a TypeVisitor<'t> {
+    fn alloc(&self, value: konst2::IntegerConst<'t>) -> &'t mut konst2::IntegerConst<'t> {
+        self.const_arena.alloc(value)
+    }
+}
+
+impl<'a, 't: 'a> AllocConstInto<'t> for &'a TypeVisitor<'t> {
+    fn alloc_const(&self, value: OwnedConst<'t>) -> &'t Const2<'t> {
+        self.const_arena.alloc_const(value)
+    }
+}
+
 impl<'t> Visitor<'t> for TypeVisitor<'t> {
     fn as_visitor(&mut self) -> &mut Visitor<'t> {
         self
     }
 
     fn visit_type_decl(&mut self, decl: &'t hir::TypeDecl2<'t>) {
-        debugln!("declared type of {}:", decl.name());
         if let Ok(t) = decl.declared_type(self as &_) {
             debugln!("type {} = {}", decl.name(), t);
         }

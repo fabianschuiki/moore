@@ -38,5 +38,6 @@ pub mod op;
 pub mod overload_resolver;
 pub mod ty2;
 pub mod debug;
+pub mod konst2;
 
 mod nodes;

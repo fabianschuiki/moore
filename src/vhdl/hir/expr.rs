@@ -1,24 +1,48 @@
 // Copyright (c) 2018 Fabian Schuiki
 
+#![deny(missing_docs)]
+
 use num::BigInt;
 
+use common::SessionContext;
+use common::errors::*;
+
 use hir::prelude::*;
+use ty2::{IntegerBasetype, UniversalIntegerType};
+use konst2::{AllocConstInto, Const2, IntegerConst};
 pub use syntax::ast::Dir;
-use ty2::UniversalIntegerType;
 
 /// An expression.
 ///
 /// See IEEE 1076-2008 section 9.
 pub trait Expr2<'t>: Node<'t> {
-    fn typeval(
-        &self,
-        tyctx: Option<&'t Type>,
-        ctx: &AllocInto<'t, UniversalIntegerType>,
-    ) -> Result<&'t Type>;
+    /// Determine the type of the expression.
+    fn typeval(&self, tyctx: Option<&'t Type>, ctx: &ExprContext<'t>) -> Result<&'t Type>;
 
-    fn constant_value(&self, ctx: &AllocInto<'t, UniversalIntegerType>) -> Result<()>;
+    /// Determine the constant value of the expression.
+    ///
+    /// Emits diagnostic errors if the expression has no constant value.
+    fn constant_value(&self, ctx: &ExprContext<'t>) -> Result<&'t Const2<'t>>;
 }
 
+/// A context that provides the facilities to operate on expressions.
+pub trait ExprContext<'t>
+    : SessionContext
+    + AllocInto<'t, IntegerConst<'t>>
+    + AllocConstInto<'t>
+    + AllocInto<'t, IntegerBasetype> {
+}
+
+impl<'t, T> ExprContext<'t> for T
+where
+    T: SessionContext
+        + AllocInto<'t, IntegerConst<'t>>
+        + AllocConstInto<'t>
+        + AllocInto<'t, IntegerBasetype>,
+{
+}
+
+/// An integer literal expression.
 #[derive(Debug)]
 pub struct IntLitExpr {
     span: Span,
@@ -57,16 +81,12 @@ impl<'t> Node<'t> for IntLitExpr {
 }
 
 impl<'t> Expr2<'t> for IntLitExpr {
-    fn typeval(
-        &self,
-        _: Option<&'t Type>,
-        ctx: &AllocInto<'t, UniversalIntegerType>,
-    ) -> Result<&'t Type> {
-        Ok(ctx.alloc(UniversalIntegerType))
+    fn typeval(&self, _: Option<&'t Type>, _: &ExprContext<'t>) -> Result<&'t Type> {
+        Ok(&UniversalIntegerType)
     }
 
-    fn constant_value(&self, ctx: &AllocInto<'t, UniversalIntegerType>) -> Result<()> {
-        unimplemented!("constant value of integer literal expr");
+    fn constant_value(&self, ctx: &ExprContext<'t>) -> Result<&'t Const2<'t>> {
+        Ok(ctx.alloc(IntegerConst::try_new(&UniversalIntegerType, self.value.clone()).emit(ctx)?))
     }
 }
 
@@ -80,6 +100,7 @@ impl<'t> Expr2<'t> for IntLitExpr {
 #[derive(Debug)]
 pub enum Range2<'t> {
     // Attr(AttrRef),
+    /// An range given by two immediate values.
     Immediate(Span, Spanned<Dir>, &'t Expr2<'t>, &'t Expr2<'t>),
 }
 
@@ -90,7 +111,7 @@ impl<'t> Range2<'t> {
     /// implicit casts to make them be of the same type.
     pub fn bound_type<C>(&self, ctx: C) -> Result<&'t Type>
     where
-        C: AllocInto<'t, UniversalIntegerType> + DiagEmitter,
+        C: ExprContext<'t> + Copy,
     {
         match *self {
             Range2::Immediate(span, _, l, r) => {
@@ -120,18 +141,20 @@ impl<'t> Range2<'t> {
     }
 
     /// Determine the constant value of the range.
-    pub fn constant_value<C>(&self, ctx: C) -> Result<(Dir, (), ())>
+    pub fn constant_value<C>(&self, ctx: C) -> Result<(Dir, &'t Const2<'t>, &'t Const2<'t>)>
     where
-        C: AllocInto<'t, UniversalIntegerType> + DiagEmitter + Copy,
+        C: ExprContext<'t> + Copy,
     {
         let ty = self.bound_type(ctx)?;
         match *self {
             Range2::Immediate(_, d, l, r) => {
-                let lc = l.constant_value(&ctx);
-                let rc = r.constant_value(&ctx);
-                let (lc, rc) = (lc?, rc?);
-                // TODO: Cast the values to the bound type.
-                Ok((d.value, (), ()))
+                let lc = l.constant_value(&ctx).and_then(|x| x.cast(ty).emit(ctx));
+                let rc = r.constant_value(&ctx).and_then(|x| x.cast(ty).emit(ctx));
+                Ok((
+                    d.value,
+                    ctx.maybe_alloc_const(lc?),
+                    ctx.maybe_alloc_const(rc?),
+                ))
             }
         }
     }

@@ -17,7 +17,7 @@ pub struct IntegerBasetype {
     range: Range<BigInt>,
 }
 
-impl IntegerType {
+impl IntegerBasetype {
     /// Create a new integer type.
     ///
     /// # Example

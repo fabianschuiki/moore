@@ -1,5 +1,5 @@
-- type equality checks
-- map type decl to a type
+- add maybe_alloc/force_alloc into Alloc/AllocInto
+- replace AllocConst/AllocConstInto with Alloc<&Const2>/AllocInto<&Const2>
 - implement all type data
 - type castability checks
 - ensure recursive types work

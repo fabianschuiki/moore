@@ -6,9 +6,9 @@
 #![allow(unused_imports)]
 
 use hir::prelude::*;
-use hir::{EnumLit, Range2};
+use hir::{EnumLit, ExprContext, Range2};
 use term::{self, TermContext};
-use ty2::{IntegerBasetype, UniversalIntegerType};
+use ty2::{AnyType, IntegerBasetype, IntegerRange, UniversalIntegerType};
 
 /// A type declaration.
 ///
@@ -39,10 +39,7 @@ impl<'t> TypeDecl2<'t> {
     /// This function maps the type declaration data to an actual `Type`.
     pub fn declared_type<C>(&self, ctx: C) -> Result<&'t Type>
     where
-        C: Copy
-            + DiagEmitter
-            + AllocInto<'t, IntegerBasetype>
-            + AllocInto<'t, UniversalIntegerType>,
+        C: ExprContext<'t> + Copy,
     {
         match self.data.value {
             TypeData::Incomplete => {
@@ -57,8 +54,31 @@ impl<'t> TypeDecl2<'t> {
                 Err(())
             }
             TypeData::Range(ref range) => {
-                let const_range = range.value.constant_value(ctx)?;
-                Err(())
+                let (dir, lb, rb) = range.value.constant_value(ctx)?;
+                assert_eq!(lb.ty(), rb.ty());
+                let ty = lb.ty();
+                match ty.as_any() {
+                    AnyType::Integer(ty) => {
+                        let lb = lb.as_any().unwrap_integer();
+                        let rb = rb.as_any().unwrap_integer();
+                        let ty = IntegerBasetype::new(IntegerRange::with_left_right(
+                            dir,
+                            lb.value().clone(),
+                            rb.value().clone(),
+                        ));
+                        Ok(ctx.alloc(ty))
+                    }
+                    AnyType::Floating(ty) => unimplemented!(),
+                    _ => {
+                        ctx.emit(
+                            DiagBuilder2::error("bounds must be of integer or floating-point type")
+                                .span(range.span)
+                                .add_note(format!("bounds are of type {}", ty)),
+                        );
+                        Err(())
+                    }
+                }
+                // Err(())
             }
         }
     }
