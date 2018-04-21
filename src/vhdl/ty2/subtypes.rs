@@ -121,6 +121,10 @@ impl<'t> IntegerSubtype<'t> {
 }
 
 impl<'t> IntegerType for IntegerSubtype<'t> {
+    fn as_type(&self) -> &Type {
+        self
+    }
+
     fn range(&self) -> &Range<BigInt> {
         &self.con
     }

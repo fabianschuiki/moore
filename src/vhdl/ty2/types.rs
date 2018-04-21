@@ -181,6 +181,20 @@ impl<'t, T: Type> From<&'t T> for AnyType<'t> {
 }
 
 impl<'t> AnyType<'t> {
+    /// Perform type erasure.
+    pub fn as_type(&self) -> &'t Type {
+        match *self {
+            AnyType::Enum(t) => t,
+            AnyType::Integer(t) => t.as_type(),
+            AnyType::Floating(t) => t,
+            AnyType::Physical(t) => t,
+            AnyType::Array(t) => t,
+            AnyType::Null => &NullType,
+            AnyType::UniversalInteger => &UniversalIntegerType,
+            AnyType::UniversalReal => &UniversalRealType,
+        }
+    }
+
     /// Returns `Some(t)` if the type is `Enum(t)`, `None` otherwise.
     pub fn as_enum(self) -> Option<&'t EnumType> {
         match self {
@@ -390,6 +404,9 @@ impl Display for EnumLiteral {
 ///
 /// This can either be an `IntegerBasetype` or an `IntegerSubtype`.
 pub trait IntegerType: Type {
+    /// Convert to a type.
+    fn as_type(&self) -> &Type;
+
     /// The range of values this integer can assume.
     fn range(&self) -> &Range<BigInt>;
 
