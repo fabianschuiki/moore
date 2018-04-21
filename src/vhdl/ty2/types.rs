@@ -10,6 +10,8 @@ pub use num::BigInt;
 use num::One;
 
 use common::name::{get_name_table, Name};
+use ty2::basetypes::IntegerBasetype;
+use ty2::subtypes::IntegerSubtype;
 
 /// An interface for dealing with types.
 ///
@@ -397,10 +399,24 @@ pub trait IntegerType: Type {
         None
     }
 
-    /// Check if two integer types are equal.
-    fn is_equal(&self, other: &IntegerType) -> bool {
-        unimplemented!();
+    /// Returns `Some` if self is an `IntegerBasetype`, `None` otherwise.
+    fn as_basetype(&self) -> Option<&IntegerBasetype>;
+
+    /// Returns `Some` if self is an `IntegerSubtype`, `None` otherwise.
+    fn as_subtype(&self) -> Option<&IntegerSubtype>;
+
+    /// Returns an `&IntegerBasetype` or panics if the type is not a basetype.
+    fn unwrap_basetype(&self) -> &IntegerBasetype {
+        self.as_basetype().expect("integer type is not a basetype")
     }
+
+    /// Returns an `&IntegerSubtype` or panics if the type is not a subtype.
+    fn unwrap_subtype(&self) -> &IntegerSubtype {
+        self.as_subtype().expect("integer type is not a subtype")
+    }
+
+    /// Check if two integer types are equal.
+    fn is_equal(&self, other: &IntegerType) -> bool;
 }
 
 impl<'t, T> Type for T
