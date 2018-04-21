@@ -399,7 +399,7 @@ pub trait IntegerType: Type {
 
     /// Check if two integer types are equal.
     fn is_equal(&self, other: &IntegerType) -> bool {
-        false
+        unimplemented!();
     }
 }
 

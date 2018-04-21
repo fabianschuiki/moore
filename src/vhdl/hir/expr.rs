@@ -15,6 +15,8 @@ pub trait Expr2<'t>: Node<'t> {
         tyctx: Option<&'t Type>,
         ctx: &AllocInto<'t, UniversalIntegerType>,
     ) -> Result<&'t Type>;
+
+    fn constant_value(&self, ctx: &AllocInto<'t, UniversalIntegerType>) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -62,6 +64,10 @@ impl<'t> Expr2<'t> for IntLitExpr {
     ) -> Result<&'t Type> {
         Ok(ctx.alloc(UniversalIntegerType))
     }
+
+    fn constant_value(&self, ctx: &AllocInto<'t, UniversalIntegerType>) -> Result<()> {
+        unimplemented!("constant value of integer literal expr");
+    }
 }
 
 /// A range.
@@ -91,8 +97,6 @@ impl<'t> Range2<'t> {
                 let lt = l.typeval(None, &ctx);
                 let rt = r.typeval(None, &ctx);
                 let (lt, rt) = (lt?, rt?);
-                debugln!("lt = {}", lt);
-                debugln!("rt = {}", rt);
                 if lt == rt {
                     Ok(lt)
                 } else if lt.is_implicitly_castable(rt) {
@@ -118,13 +122,15 @@ impl<'t> Range2<'t> {
     /// Determine the constant value of the range.
     pub fn constant_value<C>(&self, ctx: C) -> Result<(Dir, (), ())>
     where
-        C: AllocInto<'t, UniversalIntegerType> + DiagEmitter,
+        C: AllocInto<'t, UniversalIntegerType> + DiagEmitter + Copy,
     {
         let ty = self.bound_type(ctx)?;
-        debugln!("bound type is {}", ty);
         match *self {
             Range2::Immediate(_, d, l, r) => {
-                debugln!("const value of range {:?} {} {:?}", l, d.value, r);
+                let lc = l.constant_value(&ctx);
+                let rc = r.constant_value(&ctx);
+                let (lc, rc) = (lc?, rc?);
+                // TODO: Cast the values to the bound type.
                 Ok((d.value, (), ()))
             }
         }

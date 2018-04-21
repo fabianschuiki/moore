@@ -1,5 +1,7 @@
+- type equality checks
 - map type decl to a type
 - implement all type data
+- type castability checks
 - ensure recursive types work
 - map subtype decl to a type
 - implement all subtype constraints
