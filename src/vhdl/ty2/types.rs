@@ -182,8 +182,8 @@ impl<'t, T: Type> From<&'t T> for AnyType<'t> {
 
 impl<'t> AnyType<'t> {
     /// Perform type erasure.
-    pub fn as_type(&self) -> &'t Type {
-        match *self {
+    pub fn as_type(self) -> &'t Type {
+        match self {
             AnyType::Enum(t) => t,
             AnyType::Integer(t) => t.as_type(),
             AnyType::Floating(t) => t,
@@ -408,7 +408,10 @@ pub trait IntegerType: Type {
     fn as_type(&self) -> &Type;
 
     /// The range of values this integer can assume.
-    fn range(&self) -> &Range<BigInt>;
+    ///
+    /// Universal integers return `None` here, as they do not have a value range
+    /// associated with them.
+    fn range(&self) -> Option<&Range<BigInt>>;
 
     /// The base type of this integer.
     fn base_type(&self) -> &Type;
@@ -426,6 +429,11 @@ pub trait IntegerType: Type {
     /// Returns `Some` if self is an `IntegerSubtype`, `None` otherwise.
     fn as_subtype(&self) -> Option<&IntegerSubtype> {
         None
+    }
+
+    /// Checks whether this is a universal integer type.
+    fn is_universal(&self) -> bool {
+        false
     }
 
     /// Returns an `&IntegerBasetype` or panics if the type is not a basetype.
@@ -463,18 +471,13 @@ where
     }
 }
 
-impl<'t> Deref for IntegerType + 't {
-    type Target = Range<BigInt>;
-    fn deref(&self) -> &Range<BigInt> {
-        self.range()
-    }
-}
-
 impl<'t> PartialEq for IntegerType + 't {
     fn eq(&self, other: &IntegerType) -> bool {
         IntegerType::is_equal(self, other)
     }
 }
+
+impl<'t> Eq for IntegerType + 't {}
 
 /// A floating-point type.
 #[derive(Debug, PartialEq)]
@@ -792,21 +795,25 @@ impl Display for NullType {
 #[derive(Debug, Clone, Copy)]
 pub struct UniversalIntegerType;
 
-impl Type for UniversalIntegerType {
-    fn is_scalar(&self) -> bool {
+impl IntegerType for UniversalIntegerType {
+    fn as_type(&self) -> &Type {
+        self
+    }
+
+    fn range(&self) -> Option<&Range<BigInt>> {
+        None
+    }
+
+    fn base_type(&self) -> &Type {
+        self
+    }
+
+    fn is_universal(&self) -> bool {
         true
     }
-    fn is_discrete(&self) -> bool {
-        true
-    }
-    fn is_numeric(&self) -> bool {
-        true
-    }
-    fn is_composite(&self) -> bool {
-        false
-    }
-    fn as_any(&self) -> AnyType {
-        AnyType::UniversalInteger
+
+    fn is_equal(&self, other: &IntegerType) -> bool {
+        other.is_universal()
     }
 }
 

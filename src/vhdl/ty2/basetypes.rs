@@ -50,8 +50,8 @@ impl IntegerType for IntegerBasetype {
         self
     }
 
-    fn range(&self) -> &Range<BigInt> {
-        &self.range
+    fn range(&self) -> Option<&Range<BigInt>> {
+        Some(&self.range)
     }
 
     fn base_type(&self) -> &Type {
@@ -70,7 +70,7 @@ impl IntegerType for IntegerBasetype {
 impl Deref for IntegerBasetype {
     type Target = Range<BigInt>;
     fn deref(&self) -> &Range<BigInt> {
-        self.range()
+        &self.range
     }
 }
 

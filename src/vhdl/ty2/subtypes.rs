@@ -106,7 +106,7 @@ impl<'t> IntegerSubtype<'t> {
     /// ```
     pub fn new(mark: &'t TypeMark, range: Range<BigInt>) -> Option<IntegerSubtype<'t>> {
         let base = mark.as_any().unwrap_integer();
-        let base_range = base.range();
+        let base_range = base.range()?;
         if base_range.has_subrange(&range) {
             Some(IntegerSubtype {
                 resfn: base.resolution_func(),
@@ -125,8 +125,8 @@ impl<'t> IntegerType for IntegerSubtype<'t> {
         self
     }
 
-    fn range(&self) -> &Range<BigInt> {
-        &self.con
+    fn range(&self) -> Option<&Range<BigInt>> {
+        Some(&self.con)
     }
 
     fn base_type(&self) -> &Type {
