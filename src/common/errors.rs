@@ -52,6 +52,23 @@ impl<'a, T> DiagEmitter for &'a T where T: DiagEmitter + ?Sized {
 	}
 }
 
+/// Emit errors as diagnostics.
+///
+/// Useful if implemented on the error types returned from results. Allows these
+/// results to be emitted as diagnostics on-the-fly and converted to a `()`
+/// error type result.
+pub trait EmitError {
+    type Output;
+    fn emit<C: DiagEmitter>(self, ctx: C) -> Self::Output;
+}
+
+impl<T, E: EmitError> EmitError for Result<T, E> {
+    type Output = Result<T, E::Output>;
+    fn emit<C: DiagEmitter>(self, ctx: C) -> Result<T, E::Output> {
+        self.map_err(move |e| e.emit(ctx))
+    }
+}
+
 #[must_use]
 #[derive(Clone, Debug)]
 pub struct DiagBuilder2 {
