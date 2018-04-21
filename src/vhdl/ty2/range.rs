@@ -282,6 +282,14 @@ where
     pub fn has_subrange(&self, subrange: &Self) -> bool {
         self.lower() <= subrange.lower() && self.upper() >= subrange.upper()
     }
+
+    /// Check if a value is within this range.
+    ///
+    /// This function checks if `self.lower()` is less than or equal to, and
+    /// `self.upper()` is larger than or equal to, the given value.
+    pub fn contains(&self, value: &T) -> bool {
+        self.lower() <= value && self.upper() >= value
+    }
 }
 
 impl<T: Display> Display for Range<T> {
