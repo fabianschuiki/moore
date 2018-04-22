@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use arenas::Alloc;
+use arenas::{Alloc, AllocInto};
 use konst2::*;
 
 make_arenas!(
@@ -13,6 +13,16 @@ make_arenas!(
         integer: IntegerConst<'t>,
     }
 );
+
+pub trait DummyAlloc<'s, 't, T> {
+    fn dummy(&'s self, value: T) -> &'t mut T;
+}
+
+impl<'a, 't> DummyAlloc<'a, 'a, IntegerConst<'t>> for ConstArena<'t> {
+    fn dummy(&'a self, value: IntegerConst<'t>) -> &'a mut IntegerConst<'t> {
+        self.alloc(value)
+    }
+}
 
 /// Allocate a constant.
 pub trait AllocConst<'t> {

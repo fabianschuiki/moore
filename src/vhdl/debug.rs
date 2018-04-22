@@ -15,7 +15,7 @@ use hir::visit::Visitor;
 use scope2::ScopeData;
 use arenas::{Alloc, AllocInto};
 use ty2;
-use konst2::{self, AllocConst, AllocConstInto, Const2, OwnedConst};
+use konst2::{self, AllocConst, AllocConstInto, Const2, DummyAlloc, OwnedConst};
 
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     let (arenas, type_arena, const_arena) = (
@@ -122,6 +122,15 @@ where
 {
     fn alloc(&self, value: T) -> &'t mut T {
         self.type_arena.alloc(value)
+    }
+}
+
+impl<'a, 't: 'a, T> DummyAlloc<'a, 't, T> for &'a TypeVisitor<'t>
+where
+    konst2::ConstArena<'t>: for<'s> DummyAlloc<'s, 't, T>,
+{
+    fn dummy(&'a self, value: T) -> &'t mut T {
+        self.const_arena.dummy(value)
     }
 }
 

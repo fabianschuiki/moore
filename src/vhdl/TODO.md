@@ -1,4 +1,5 @@
-- add maybe_alloc/force_alloc into Alloc/AllocInto
+- merge Alloc and AllocInto
+- add AllocCow with maybe_alloc and force_alloc
 - replace AllocConst/AllocConstInto with Alloc<&Const2>/AllocInto<&Const2>
 - implement all type data
 - type castability checks
