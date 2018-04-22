@@ -26,11 +26,11 @@ impl IntegerBasetype {
     /// # extern crate moore_vhdl;
     /// # extern crate num;
     /// # fn main() {
-    /// use moore_vhdl::ty2::{Type, IntegerType, Range, RangeDir};
+    /// use moore_vhdl::ty2::{Type, IntegerBasetype, Range, RangeDir};
     /// use num::BigInt;
     ///
-    /// let a = IntegerType::new(Range::ascending(0, 42));
-    /// let b = IntegerType::new(Range::descending(42, 0));
+    /// let a = IntegerBasetype::new(Range::ascending(0, 42));
+    /// let b = IntegerBasetype::new(Range::descending(42, 0));
     ///
     /// assert_eq!(format!("{}", a), "0 to 42");
     /// assert_eq!(format!("{}", b), "42 downto 0");

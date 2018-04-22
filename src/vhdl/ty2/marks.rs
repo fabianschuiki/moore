@@ -88,10 +88,10 @@ impl Debug for TypeName {
 /// # Examples
 ///
 /// ```
-/// use moore_vhdl::ty2::{Type, TypeDecl, IntegerType, Range};
+/// use moore_vhdl::ty2::{Type, TypeDecl, IntegerBasetype, Range};
 /// use moore_vhdl::common::name::get_name_table;
 ///
-/// let ta = IntegerType::new(Range::descending(31, 0));
+/// let ta = IntegerBasetype::new(Range::descending(31, 0));
 /// let a = TypeDecl::new(
 ///     get_name_table().intern("DATA", false),
 ///     &ta,
