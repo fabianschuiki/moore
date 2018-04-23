@@ -27,13 +27,13 @@ pub trait Expr2<'t>: Node<'t> {
 
 /// A context that provides the facilities to operate on expressions.
 pub trait ExprContext<'t>
-    : SessionContext + AllocInto<'t, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + AllocInto<'t, IntegerBasetype>
+    : SessionContext + for<'a> Alloc<'a, 't, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + for<'a> Alloc<'a, 't, IntegerBasetype>
     {
 }
 
 impl<'t, T> ExprContext<'t> for T
 where
-    T: SessionContext + AllocInto<'t, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + AllocInto<'t, IntegerBasetype>,
+    T: SessionContext + for<'a> Alloc<'a, 't, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + for<'a> Alloc<'a, 't, IntegerBasetype>,
 {
 }
 

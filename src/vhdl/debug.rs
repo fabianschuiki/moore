@@ -13,7 +13,7 @@ use syntax::ast;
 use hir::{self, Decl2, FromAst, LatentNode, Library, Node};
 use hir::visit::Visitor;
 use scope2::ScopeData;
-use arenas::{Alloc, AllocInto};
+use arenas::Alloc;
 use ty2;
 use konst2::{self, AllocConst, Const2, DummyAlloc, OwnedConst};
 
@@ -116,11 +116,11 @@ impl<'a, 't: 'a> DiagEmitter for &'a TypeVisitor<'t> {
     }
 }
 
-impl<'a, 't: 'a, T> AllocInto<'t, T> for &'a TypeVisitor<'t>
+impl<'b, 'a, 't: 'a, T> Alloc<'b, 't, T> for &'a TypeVisitor<'t>
 where
-    ty2::TypeArena<'t>: Alloc<T>,
+    ty2::TypeArena<'t>: Alloc<'t, 't, T>,
 {
-    fn alloc(&self, value: T) -> &'t mut T {
+    fn alloc(&'b self, value: T) -> &'t mut T {
         self.type_arena.alloc(value)
     }
 }
@@ -134,8 +134,8 @@ where
     }
 }
 
-impl<'a, 't: 'a> AllocInto<'t, konst2::IntegerConst<'t>> for &'a TypeVisitor<'t> {
-    fn alloc(&self, value: konst2::IntegerConst<'t>) -> &'t mut konst2::IntegerConst<'t> {
+impl<'b, 'a, 't: 'a> Alloc<'b, 't, konst2::IntegerConst<'t>> for &'a TypeVisitor<'t> {
+    fn alloc(&'b self, value: konst2::IntegerConst<'t>) -> &'t mut konst2::IntegerConst<'t> {
         self.const_arena.alloc(value)
     }
 }

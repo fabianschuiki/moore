@@ -5,7 +5,7 @@ use std::cell::RefCell;
 
 use common::score::Result;
 
-use arenas::AllocInto;
+use arenas::Alloc;
 use hir::visit::Visitor;
 use hir::{FromAst, LatentNode, Node};
 
@@ -28,7 +28,7 @@ where
 impl<'t, T> Slot<'t, T>
 where
     T: FromAst<'t>,
-    T::Context: AllocInto<'t, T> + Clone,
+    T::Context: for<'a> Alloc<'a, 't, T> + Clone,
 {
     /// Create a new slot.
     pub fn new(ast: T::LatentInput, context: T::Context) -> Slot<'t, T> {
@@ -61,7 +61,7 @@ where
     &'t T: Into<&'t L>,
     L: ?Sized + 't,
     T: FromAst<'t> + Node<'t>,
-    T::Context: AllocInto<'t, T> + Clone,
+    T::Context: for<'a> Alloc<'a, 't, T> + Clone,
 {
     fn poll(&self) -> Result<&'t L> {
         Slot::poll(self).map(|n| n.into())

@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use arenas::{Alloc, AllocInto, Allok, AllokOwned};
+use arenas::{Alloc, AllokOwned};
 use konst2::*;
 
 make_arenas!(

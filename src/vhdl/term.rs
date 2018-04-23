@@ -16,7 +16,7 @@ use common::source::*;
 use common::util::*;
 use common::score::Result;
 
-use arenas::AllocInto;
+use arenas::Alloc;
 use syntax::lexer::token::{Exponent, ExponentSign, Literal};
 use syntax::ast::{self, Dir};
 use score::*;
@@ -428,10 +428,7 @@ where
             // ast::ResolExpr(ref paren_elems, ref name) => {
             //  let name = self.termify_compound_name(name)?;
             // }
-            ast::UnaryExpr(op, ref arg) => Term::Unary(
-                UnaryOp::from(op, self.ctx)?,
-                self.termify_expr(arg)?.into(),
-            ),
+            ast::UnaryExpr(op, ref arg) => Term::Unary(UnaryOp::from(op, self.ctx)?, self.termify_expr(arg)?.into()),
             ast::BinaryExpr(op, ref lhs, ref rhs) => {
                 if let ast::BinaryOp::Dir(d) = op.value {
                     Term::Range(
@@ -446,7 +443,7 @@ where
                         self.termify_expr(rhs)?.into(),
                     )
                 }
-            },
+            }
             ast::NullExpr => Term::Null,
             ast::OpenExpr => Term::Open,
             ast::OthersExpr => Term::Others,
@@ -1639,7 +1636,7 @@ impl<'t> TermContext<hir::AllocContext<'t>, &'t ScopeData<'t>, Def2<'t>> {
 /// Map a term to a range.
 pub fn term_to_range<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<Spanned<hir::Range2<'t>>>
 where
-    C: SessionContext + Copy + AllocInto<'t, hir::IntLitExpr>,
+    C: SessionContext + Copy + for<'a> Alloc<'a, 't, hir::IntLitExpr>,
 {
     let v = match term.value {
         // Term::Attr(..) => ...
@@ -1668,7 +1665,7 @@ where
 /// Map a term to a range.
 pub fn term_to_expr<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<&'t hir::Expr2<'t>>
 where
-    C: SessionContext + Copy + AllocInto<'t, hir::IntLitExpr>,
+    C: SessionContext + Copy + for<'a> Alloc<'a, 't, hir::IntLitExpr>,
 {
     match term.value {
         Term::Unresolved(name) => {

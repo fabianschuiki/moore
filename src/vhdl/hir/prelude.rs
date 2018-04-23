@@ -6,7 +6,7 @@ pub use common::source::{Span, Spanned};
 pub use common::errors::*;
 pub use common::score::Result;
 
-pub use arenas::{Alloc, AllocInto};
+pub use arenas::Alloc;
 pub use syntax::ast;
 pub use score::ResolvableName;
 pub use scope2::{Def2, ScopeContext, ScopeData};

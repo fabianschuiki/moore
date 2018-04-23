@@ -6,7 +6,7 @@ use common::name::{get_name_table, Name};
 use common::source::{Span, Spanned, INVALID_SPAN};
 use common::score::Result;
 
-use arenas::AllocInto;
+use arenas::Alloc;
 use syntax::ast;
 use hir::visit::Visitor;
 use hir::{FromAst, LatentNode, Node, Package2};

@@ -5,7 +5,7 @@ use common::source::Spanned;
 use common::errors::*;
 use common::score::Result;
 
-use arenas::{Alloc, AllocInto};
+use arenas::Alloc;
 use score::ResolvableName;
 use scope2::{Def2, ScopeContext, ScopeData};
 use hir::Arenas2;
@@ -33,11 +33,11 @@ impl<'t> AllocContext<'t> {
     }
 }
 
-impl<'t, T> AllocInto<'t, T> for AllocContext<'t>
+impl<'a, 't, T> Alloc<'a, 't, T> for AllocContext<'t>
 where
-    Arenas2<'t>: Alloc<T>,
+    Arenas2<'t>: Alloc<'t, 't, T>,
 {
-    fn alloc(&self, value: T) -> &'t mut T {
+    fn alloc(&'a self, value: T) -> &'t mut T {
         self.arenas.alloc(value)
     }
 }
