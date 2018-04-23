@@ -25,43 +25,26 @@ impl<'a, 't> DummyAlloc<'a, 'a, IntegerConst<'t>> for ConstArena<'t> {
 }
 
 /// Allocate a constant.
-pub trait AllocConst<'t> {
+pub trait AllocConst<'a, 't> {
     /// Allocate a constant.
     ///
     /// The lifetime of the result is tied to `Self`.
-    fn alloc_const<'a>(&'a self, value: OwnedConst<'t>) -> &'a Const2<'t>;
+    fn alloc_const(&'a self, value: OwnedConst<'t>) -> &'t Const2<'t>;
 
-    fn maybe_alloc_const<'a>(&'a self, value: Cow<'a, Const2<'t>>) -> &'a Const2<'t> {
+    fn maybe_alloc_const(&'a self, value: Cow<'t, Const2<'t>>) -> &'t Const2<'t> {
         match value {
             Cow::Borrowed(x) => x,
             Cow::Owned(x) => self.alloc_const(x),
         }
     }
 
-    fn force_alloc_const<'a>(&'a self, value: Cow<Const2<'t>>) -> &'a Const2<'t> {
+    fn force_alloc_const(&'a self, value: Cow<Const2<'t>>) -> &'t Const2<'t> {
         self.alloc_const(value.into_owned())
     }
 }
 
-/// Allocate a constant into an arena.
-pub trait AllocConstInto<'t> {
-    /// Allocate a constant into an arena.
-    fn alloc_const(&self, value: OwnedConst<'t>) -> &'t Const2<'t>;
-
-    fn maybe_alloc_const(&self, value: Cow<'t, Const2<'t>>) -> &'t Const2<'t> {
-        match value {
-            Cow::Borrowed(x) => x,
-            Cow::Owned(x) => self.alloc_const(x),
-        }
-    }
-
-    fn force_alloc_const(&self, value: Cow<Const2<'t>>) -> &'t Const2<'t> {
-        self.alloc_const(value.into_owned())
-    }
-}
-
-impl<'t> AllocConst<'t> for ConstArena<'t> {
-    fn alloc_const(&self, value: OwnedConst<'t>) -> &Const2<'t> {
+impl<'t> AllocConst<'t, 't> for ConstArena<'t> {
+    fn alloc_const(&'t self, value: OwnedConst<'t>) -> &'t Const2<'t> {
         match value {
             OwnedConst::Integer(k) => self.alloc(k),
         }

@@ -9,7 +9,7 @@ use common::errors::*;
 
 use hir::prelude::*;
 use ty2::{IntegerBasetype, UniversalIntegerType};
-use konst2::{AllocConstInto, Const2, IntegerConst};
+use konst2::{AllocConst, Const2, IntegerConst};
 pub use syntax::ast::Dir;
 
 /// An expression.
@@ -27,18 +27,13 @@ pub trait Expr2<'t>: Node<'t> {
 
 /// A context that provides the facilities to operate on expressions.
 pub trait ExprContext<'t>
-    : SessionContext
-    + AllocInto<'t, IntegerConst<'t>>
-    + AllocConstInto<'t>
-    + AllocInto<'t, IntegerBasetype> {
+    : SessionContext + AllocInto<'t, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + AllocInto<'t, IntegerBasetype>
+    {
 }
 
 impl<'t, T> ExprContext<'t> for T
 where
-    T: SessionContext
-        + AllocInto<'t, IntegerConst<'t>>
-        + AllocConstInto<'t>
-        + AllocInto<'t, IntegerBasetype>,
+    T: SessionContext + AllocInto<'t, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + AllocInto<'t, IntegerBasetype>,
 {
 }
 
