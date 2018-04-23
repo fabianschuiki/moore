@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use arenas::{Alloc, AllocInto};
+use arenas::{Alloc, AllocInto, Allok, AllokOwned};
 use konst2::*;
 
 make_arenas!(
@@ -45,6 +45,14 @@ pub trait AllocConst<'a, 't> {
 
 impl<'t> AllocConst<'t, 't> for ConstArena<'t> {
     fn alloc_const(&'t self, value: OwnedConst<'t>) -> &'t Const2<'t> {
+        match value {
+            OwnedConst::Integer(k) => self.alloc(k),
+        }
+    }
+}
+
+impl<'t> AllokOwned<'t, 't, Const2<'t>> for ConstArena<'t> {
+    fn allok_owned(&'t self, value: OwnedConst<'t>) -> &'t mut Const2<'t> {
         match value {
             OwnedConst::Integer(k) => self.alloc(k),
         }
