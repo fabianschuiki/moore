@@ -1,6 +1,3 @@
-- merge Alloc and AllocInto
-- add AllocCow with maybe_alloc and force_alloc
-- replace AllocConst/AllocConstInto with Alloc<&Const2>/AllocInto<&Const2>
 - implement all type data
 - type castability checks
 - ensure recursive types work
