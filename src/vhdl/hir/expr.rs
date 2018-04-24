@@ -9,7 +9,7 @@ use common::errors::*;
 
 use hir::prelude::*;
 use ty2::{IntegerBasetype, UniversalIntegerType};
-use konst2::{AllocConst, Const2, IntegerConst};
+use konst2::{Const2, IntegerConst};
 pub use syntax::ast::Dir;
 
 /// An expression.
@@ -27,13 +27,18 @@ pub trait Expr2<'t>: Node<'t> {
 
 /// A context that provides the facilities to operate on expressions.
 pub trait ExprContext<'t>
-    : SessionContext + for<'a> Alloc<'a, 't, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + for<'a> Alloc<'a, 't, IntegerBasetype>
-    {
+    : SessionContext
+    + AllocInto<'t, IntegerConst<'t>>
+    + AllocOwnedInto<'t, Const2<'t>>
+    + AllocInto<'t, IntegerBasetype> {
 }
 
 impl<'t, T> ExprContext<'t> for T
 where
-    T: SessionContext + for<'a> Alloc<'a, 't, IntegerConst<'t>> + for<'a> AllocConst<'a, 't> + for<'a> Alloc<'a, 't, IntegerBasetype>,
+    T: SessionContext
+        + AllocInto<'t, IntegerConst<'t>>
+        + AllocOwnedInto<'t, Const2<'t>>
+        + AllocInto<'t, IntegerBasetype>,
 {
 }
 
@@ -145,11 +150,7 @@ impl<'t> Range2<'t> {
             Range2::Immediate(_, d, l, r) => {
                 let lc = l.constant_value(&ctx).and_then(|x| x.cast(ty).emit(ctx));
                 let rc = r.constant_value(&ctx).and_then(|x| x.cast(ty).emit(ctx));
-                Ok((
-                    d.value,
-                    ctx.maybe_alloc_const(lc?),
-                    ctx.maybe_alloc_const(rc?),
-                ))
+                Ok((d.value, ctx.maybe_alloc(lc?), ctx.maybe_alloc(rc?)))
             }
         }
     }

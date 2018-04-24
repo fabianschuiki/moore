@@ -26,7 +26,11 @@ impl<'z, 'a, 'p: 'a, 't, T> Alloc<'z, 't, T> for &'p Alloc<'a, 't, T> {
 pub trait AllocSelf<T>: for<'a> Alloc<'a, 'a, T> {}
 
 // Implement `AllocSelf` for anything that supports the proper `Alloc`.
-impl<T, A: for<'a> Alloc<'a, 'a, T>> AllocSelf<T> for A {}
+impl<T, A> AllocSelf<T> for A
+where
+    A: for<'a> Alloc<'a, 'a, T>,
+{
+}
 
 /// Allocates values into some arena.
 ///
@@ -35,8 +39,12 @@ impl<T, A: for<'a> Alloc<'a, 'a, T>> AllocSelf<T> for A {}
 /// any `'a`. The allocated values have the lifetime `'t`.
 pub trait AllocInto<'t, T>: for<'a> Alloc<'a, 't, T> {}
 
-/// Implement `AllocInto` for anything that supports the proper `Alloc`.
-impl<'t, T, A: for<'a> Alloc<'a, 't, T>> AllocInto<'t, T> for A {}
+// Implement `AllocInto` for anything that supports the proper `Alloc`.
+impl<'t, T, A> AllocInto<'t, T> for A
+where
+    A: for<'a> Alloc<'a, 't, T>,
+{
+}
 
 /// Allocates values implementing `ToOwned`.
 ///
@@ -84,42 +92,36 @@ impl<'a, 't, T: ToOwned<Owned = T>> AllocOwned<'a, 't, T> for Alloc<'a, 't, T> {
     }
 }
 
-// /// Conditionally allocates objects.
-// pub trait AllocCow<'a, 't, T: ToOwned + ?Sized>: AllokOwned<'a, 't, T> {
-// }
+/// Allocates values implementing `ToOwned` into itself.
+///
+/// This is merely a marker trait that you should not implement yourself. It is
+/// implemented automatically on anything that supports `AllocOwned<'a, 'a, T>`
+/// for any `'a`. The allocated values have the same lifetime as `&self`.
+pub trait AllocOwnedSelf<T: ToOwned + ?Sized>: for<'a> AllocOwned<'a, 'a, T> {}
 
-/// Allocates objects into an arena.
-pub trait Allok<'a, 't, T> {
-    /// Allocate an object of type `T` into this arena.
-    fn allok(&'a self, value: T) -> &'t mut T;
+// Implement `AllocOwnedSelf` for anything that supports the proper
+// `AllocOwned`.
+impl<T, A> AllocOwnedSelf<T> for A
+where
+    T: ToOwned + ?Sized,
+    A: for<'a> AllocOwned<'a, 'a, T>,
+{
 }
 
-/// Allocates objects into an arena.
-pub trait AllokOwned<'a, 't, T: ToOwned + ?Sized> {
-    /// Allocate an object of type `T` into this arena.
-    fn allok_owned(&'a self, value: <T as ToOwned>::Owned) -> &'t mut T;
-}
+/// Allocates values implementing `ToOwned` into some arena.
+///
+/// This is merely a marker trait that you should not implement yourself. It is
+/// implemented automatically on anything that supports `AllocOwned<'a, 't, T>`
+/// for any `'a`. The allocated values have the lifetime `'t`.
+pub trait AllocOwnedInto<'t, T: ToOwned + ?Sized>: for<'a> AllocOwned<'a, 't, T> {}
 
-impl<'a, 't, T: ToOwned<Owned = T>> AllokOwned<'a, 't, T> for Allok<'a, 't, T> {
-    fn allok_owned(&'a self, value: T) -> &'t mut T {
-        self.allok(value)
-    }
-}
-
-/// Allocates objects into an arena.
-pub trait AllokCow<'a, 't, T: ToOwned + ?Sized>: AllokOwned<'a, 't, T> {
-    /// Conditionally allocate a CoW object of type `T`.
-    fn maybe_allok(&'a self, value: Cow<'t, T>) -> &'t T {
-        match value {
-            Cow::Borrowed(x) => x,
-            Cow::Owned(x) => self.allok_owned(x),
-        }
-    }
-
-    /// Forcefully allocate a CoW object of type `T`.
-    fn force_allok(&'a self, value: Cow<T>) -> &'t T {
-        self.allok_owned(value.into_owned())
-    }
+// Implement `AllocOwnedInto` for anything that supports the proper
+// `AllocOwned`.
+impl<'t, T, A> AllocOwnedInto<'t, T> for A
+where
+    T: ToOwned + ?Sized,
+    A: for<'a> AllocOwned<'a, 't, T>,
+{
 }
 
 /// Generate a collection of arenas for different types.
@@ -165,12 +167,6 @@ macro_rules! make_arenas {
     (TRAIT_IMPL $arena_name:ident; [$($lt:tt),*]; $name:ident: $type:ty, $($tail_name:ident: $tail_type:ty,)*) => {
         impl<'a, $($lt),*> $crate::arenas::Alloc<'a, 'a, $type> for $arena_name<$($lt),*> where $($lt: 'a),* {
             fn alloc(&'a self, value: $type) -> &'a mut $type {
-                self.$name.alloc(value)
-            }
-        }
-
-        impl<'a, $($lt),*> $crate::arenas::Allok<'a, 'a, $type> for $arena_name<$($lt),*> where $($lt: 'a),* {
-            fn allok(&'a self, value: $type) -> &'a mut $type {
                 self.$name.alloc(value)
             }
         }

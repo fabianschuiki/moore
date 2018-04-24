@@ -13,9 +13,9 @@ use syntax::ast;
 use hir::{self, Decl2, FromAst, LatentNode, Library, Node};
 use hir::visit::Visitor;
 use scope2::ScopeData;
-use arenas::Alloc;
+use arenas::{Alloc, AllocOwned};
 use ty2;
-use konst2::{self, AllocConst, Const2, DummyAlloc, OwnedConst};
+use konst2::{self, Const2, OwnedConst};
 
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     let (arenas, type_arena, const_arena) = (
@@ -125,24 +125,15 @@ where
     }
 }
 
-impl<'a, 't: 'a, T> DummyAlloc<'a, 't, T> for &'a TypeVisitor<'t>
-where
-    konst2::ConstArena<'t>: for<'s> DummyAlloc<'s, 't, T>,
-{
-    fn dummy(&'a self, value: T) -> &'t mut T {
-        self.const_arena.dummy(value)
-    }
-}
-
 impl<'b, 'a, 't: 'a> Alloc<'b, 't, konst2::IntegerConst<'t>> for &'a TypeVisitor<'t> {
     fn alloc(&'b self, value: konst2::IntegerConst<'t>) -> &'t mut konst2::IntegerConst<'t> {
         self.const_arena.alloc(value)
     }
 }
 
-impl<'a, 'b, 't: 'a> AllocConst<'b, 't> for &'a TypeVisitor<'t> {
-    fn alloc_const(&self, value: OwnedConst<'t>) -> &'t Const2<'t> {
-        self.const_arena.alloc_const(value)
+impl<'a, 'b, 't: 'a> AllocOwned<'b, 't, konst2::Const2<'t>> for &'a TypeVisitor<'t> {
+    fn alloc_owned(&'b self, value: OwnedConst<'t>) -> &'t mut Const2<'t> {
+        self.const_arena.alloc_owned(value)
     }
 }
 
