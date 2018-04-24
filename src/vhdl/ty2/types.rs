@@ -9,9 +9,8 @@ use std::ops::Deref;
 pub use num::BigInt;
 
 use common::name::{get_name_table, Name};
-use ty2::basetypes::IntegerBasetype;
-use ty2::subtypes::IntegerSubtype;
 use ty2::range::Range;
+use ty2::ints::*;
 
 /// An interface for dealing with types.
 ///
@@ -399,85 +398,6 @@ impl Display for EnumLiteral {
         }
     }
 }
-
-/// An integer type.
-///
-/// This can either be an `IntegerBasetype` or an `IntegerSubtype`.
-pub trait IntegerType: Type {
-    /// Convert to a type.
-    fn as_type(&self) -> &Type;
-
-    /// The range of values this integer can assume.
-    ///
-    /// Universal integers return `None` here, as they do not have a value range
-    /// associated with them.
-    fn range(&self) -> Option<&Range<BigInt>>;
-
-    /// The base type of this integer.
-    fn base_type(&self) -> &Type;
-
-    /// The resolution function associated with this type.
-    fn resolution_func(&self) -> Option<usize> {
-        None
-    }
-
-    /// Returns `Some` if self is an `IntegerBasetype`, `None` otherwise.
-    fn as_basetype(&self) -> Option<&IntegerBasetype> {
-        None
-    }
-
-    /// Returns `Some` if self is an `IntegerSubtype`, `None` otherwise.
-    fn as_subtype(&self) -> Option<&IntegerSubtype> {
-        None
-    }
-
-    /// Checks whether this is a universal integer type.
-    fn is_universal(&self) -> bool {
-        false
-    }
-
-    /// Returns an `&IntegerBasetype` or panics if the type is not a basetype.
-    fn unwrap_basetype(&self) -> &IntegerBasetype {
-        self.as_basetype().expect("integer type is not a basetype")
-    }
-
-    /// Returns an `&IntegerSubtype` or panics if the type is not a subtype.
-    fn unwrap_subtype(&self) -> &IntegerSubtype {
-        self.as_subtype().expect("integer type is not a subtype")
-    }
-
-    /// Check if two integer types are equal.
-    fn is_equal(&self, other: &IntegerType) -> bool;
-}
-
-impl<'t, T> Type for T
-where
-    T: IntegerType + 't,
-{
-    fn is_scalar(&self) -> bool {
-        true
-    }
-    fn is_discrete(&self) -> bool {
-        true
-    }
-    fn is_numeric(&self) -> bool {
-        true
-    }
-    fn is_composite(&self) -> bool {
-        false
-    }
-    fn as_any(&self) -> AnyType {
-        AnyType::Integer(self)
-    }
-}
-
-impl<'t> PartialEq for IntegerType + 't {
-    fn eq(&self, other: &IntegerType) -> bool {
-        IntegerType::is_equal(self, other)
-    }
-}
-
-impl<'t> Eq for IntegerType + 't {}
 
 /// A floating-point type.
 #[derive(Debug, PartialEq)]

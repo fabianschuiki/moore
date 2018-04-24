@@ -11,15 +11,15 @@
 #![deny(missing_docs)]
 
 mod types;
-mod basetypes;
 mod subtypes;
 mod marks;
 mod arena;
 mod range;
+mod ints;
 
 pub use self::types::*;
-pub use self::basetypes::*;
 pub use self::subtypes::*;
 pub use self::marks::*;
 pub use self::arena::*;
 pub use self::range::*;
+pub use self::ints::*;

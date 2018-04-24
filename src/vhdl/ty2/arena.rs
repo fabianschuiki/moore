@@ -1,8 +1,7 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use ty2::basetypes::*;
-use ty2::subtypes::*;
 use ty2::types::*;
+use ty2::ints::*;
 
 make_arenas!(
     /// An arena to allocate types nodes into.

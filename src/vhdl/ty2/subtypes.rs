@@ -19,10 +19,10 @@ pub trait Subtype: Debug + Display {}
 #[derive(Debug, PartialEq, Eq)]
 pub struct ScalarSubtype<'t, T: Type + ?Sized + 't, C> {
     #[allow(dead_code)]
-    resfn: Option<usize>,
-    mark: &'t TypeMark<'t>,
-    base: &'t T,
-    con: Range<C>,
+    pub(crate) resfn: Option<usize>,
+    pub(crate) mark: &'t TypeMark<'t>,
+    pub(crate) base: &'t T,
+    pub(crate) con: Range<C>,
 }
 
 /// A subtype of an enumeration type.
@@ -75,76 +75,6 @@ impl<'t> Display for EnumSubtype<'t> {
             self.con.dir(),
             self.base.literal(*self.con.right()),
         )
-    }
-}
-
-/// A subtype of an integer type.
-pub type IntegerSubtype<'t> = ScalarSubtype<'t, IntegerType, BigInt>;
-
-impl<'t> IntegerSubtype<'t> {
-    /// Create a new integer subtype.
-    ///
-    /// Returns `Some(...)` if `range` is a subrange of the integer, or `None`
-    /// otherwise.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{Type, TypeMark, IntegerBasetype, IntegerSubtype, Range};
-    /// use moore_vhdl::common::name::get_name_table;
-    ///
-    /// let ty = IntegerBasetype::new(Range::ascending(0usize, 255usize));
-    /// let tm = TypeMark::new(
-    ///     get_name_table().intern("BYTE", false),
-    ///     &ty,
-    /// );
-    /// let a = IntegerSubtype::new(&tm, Range::ascending(0usize, 15usize)).unwrap();
-    /// let b = IntegerSubtype::new(&tm, Range::descending(15usize, 0usize)).unwrap();
-    ///
-    /// assert_eq!(format!("{}", a), "BYTE range 0 to 15");
-    /// assert_eq!(format!("{}", b), "BYTE range 15 downto 0");
-    /// ```
-    pub fn new(mark: &'t TypeMark, range: Range<BigInt>) -> Option<IntegerSubtype<'t>> {
-        let base = mark.as_any().unwrap_integer();
-        let base_range = base.range()?;
-        if base_range.has_subrange(&range) {
-            Some(IntegerSubtype {
-                resfn: base.resolution_func(),
-                mark: mark,
-                base: base,
-                con: range,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-impl<'t> IntegerType for IntegerSubtype<'t> {
-    fn as_type(&self) -> &Type {
-        self
-    }
-
-    fn range(&self) -> Option<&Range<BigInt>> {
-        Some(&self.con)
-    }
-
-    fn base_type(&self) -> &Type {
-        self.mark
-    }
-
-    fn as_subtype(&self) -> Option<&IntegerSubtype> {
-        Some(self)
-    }
-
-    fn is_equal(&self, other: &IntegerType) -> bool {
-        other.as_subtype().map(|t| self == t).unwrap_or(false)
-    }
-}
-
-impl<'t> Display for IntegerSubtype<'t> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} range {}", self.mark, self.con)
     }
 }
 
