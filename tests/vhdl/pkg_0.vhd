@@ -5,6 +5,8 @@ end package;
 -- @ elab pkg_b
 package pkg_b is
 	type BYTE is range 0 to 255;
+	type BOOLEAN is (FALSE, TRUE);
+	type LOGIC is ('U', 'X', '0', '1');
 	constant K : BYTE;
 end package;
 

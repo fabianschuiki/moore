@@ -25,8 +25,8 @@ pub struct TypeDecl2<'t> {
 enum TypeData<'t> {
     /// An incomplete type declaration.
     Incomplete,
-    // /// An enumeration type.
-    // Enum(Vec<EnumLit>),
+    /// An enumeration type.
+    Enum(Spanned<Vec<EnumLit>>),
     /// An integer or floating point type.
     Range(Spanned<Range2<'t>>),
     // /// A physical type.
@@ -53,6 +53,7 @@ impl<'t> TypeDecl2<'t> {
                 );
                 Err(())
             }
+            TypeData::Enum(ref literals) => unimplemented!("enum type mapping"),
             TypeData::Range(ref range) => {
                 let (dir, lb, rb) = range.value.constant_value(ctx)?;
                 assert_eq!(lb.ty(), rb.ty());
@@ -78,7 +79,6 @@ impl<'t> TypeDecl2<'t> {
                         Err(())
                     }
                 }
-                // Err(())
             }
         }
     }
@@ -141,12 +141,35 @@ impl<'t> Decl2<'t> for TypeDecl2<'t> {
     }
 }
 
+/// Map an AST type data to the corresponding HIR type data.
 fn unpack_type_data<'t>(
     data: &ast::TypeData,
     type_name: Spanned<Name>,
     context: AllocContext<'t>,
 ) -> Result<TypeData<'t>> {
     match *data {
+        ast::EnumType(ref paren_elems) => {
+            let literals = paren_elems
+                .value
+                .iter()
+                .map(|elem| match paren_elem_to_enum_literal(elem) {
+                    Some(x) => Ok(x),
+                    None => {
+                        context.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` is not an enumeration literal",
+                                elem.span.extract()
+                            )).span(elem.span)
+                                .add_note("expected an identifier or character literal"),
+                        );
+                        Err(())
+                    }
+                })
+                .collect::<Vec<Result<_>>>()
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?;
+            Ok(TypeData::Enum(Spanned::new(literals, paren_elems.span)))
+        }
         ast::RangeType(ref range_expr, ref units) => {
             let termctx = TermContext::new2(context);
             let range_expr = termctx.termify_expr(range_expr)?;
@@ -161,5 +184,28 @@ fn unpack_type_data<'t>(
             type_name.value,
             data
         ),
+    }
+}
+
+/// Unpack a parenthesis element as an enumeration literal.
+fn paren_elem_to_enum_literal(elem: &ast::ParenElem) -> Option<EnumLit> {
+    if !elem.choices.value.is_empty() {
+        None
+    } else {
+        match elem.expr.data {
+            ast::NameExpr(ast::CompoundName {
+                primary: ast::PrimaryName { kind, span, .. },
+                ref parts,
+                ..
+            }) if parts.is_empty() =>
+            {
+                match kind {
+                    ast::PrimaryNameKind::Ident(n) => Some(EnumLit::Ident(Spanned::new(n, span))),
+                    ast::PrimaryNameKind::Char(c) => Some(EnumLit::Char(Spanned::new(c, span))),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 }
