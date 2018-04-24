@@ -6,9 +6,9 @@
 
 use std::borrow::Cow;
 
-/// Allocates objects.
+/// Allocates values.
 pub trait Alloc<'a, 't, T> {
-    /// Allocate an object of type `T`.
+    /// Allocate a value of type `T`.
     fn alloc(&'a self, value: T) -> &'t mut T;
 }
 
@@ -18,22 +18,75 @@ impl<'z, 'a, 'p: 'a, 't, T> Alloc<'z, 't, T> for &'p Alloc<'a, 't, T> {
     }
 }
 
-// /// Allocates objects into itself.
-// pub trait AllocSelf<T>: for<'a> Alloc<'a, 'a, T> {}
+/// Allocates values into itself.
+///
+/// This is merely a marker trait that you should not implement yourself. It is
+/// implemented automatically on anything that supports `Alloc<'a, 'a, T>` for
+/// any `'a`. The allocated values have the same lifetime as `&self`.
+pub trait AllocSelf<T>: for<'a> Alloc<'a, 'a, T> {}
 
-// // Implement `AllocSelf` for anything that supports the proper `Alloc`.
-// impl<T, A: for<'a> Alloc<'a, 'a, T>> AllocSelf<T> for A {}
+// Implement `AllocSelf` for anything that supports the proper `Alloc`.
+impl<T, A: for<'a> Alloc<'a, 'a, T>> AllocSelf<T> for A {}
 
-// /// Allocates objects into some arena.
-// ///
-// /// In contrast to `AllocSelf`, the lifetime of the references returned by this
-// /// trait are not bound to the trait itself. Rather, the lifetime is a parameter
-// /// of the trait itself. This allows context objects to be created that hold a
-// /// reference to an arena, and allow for direct allocation into that arena.
-// pub trait AllocInto<'t, T>: for<'a> Alloc<'a, 't, T> {}
+/// Allocates values into some arena.
+///
+/// This is merely a marker trait that you should not implement yourself. It is
+/// implemented automatically on anything that supports `Alloc<'a, 't, T>` for
+/// any `'a`. The allocated values have the lifetime `'t`.
+pub trait AllocInto<'t, T>: for<'a> Alloc<'a, 't, T> {}
 
-// /// Implement `AllocInto` for anything that supports the proper `Alloc`.
-// impl<'t, T, A: for<'a> Alloc<'a, 't, T>> AllocInto<'t, T> for A {}
+/// Implement `AllocInto` for anything that supports the proper `Alloc`.
+impl<'t, T, A: for<'a> Alloc<'a, 't, T>> AllocInto<'t, T> for A {}
+
+/// Allocates values implementing `ToOwned`.
+///
+/// This is merely a marker trait that you should not implement yourself. It is
+/// implemented automatically on anything that supports `Alloc`.
+pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized> {
+    /// Allocate a value of type `T: ToOwned` into this arena.
+    ///
+    /// This function differs from `Alloc::alloc` in that it takes `T::Owned`
+    /// and returns `&T`.
+    fn alloc_owned(&'a self, value: <T as ToOwned>::Owned) -> &'t mut T;
+
+    /// Conditionally allocate a value of type `Cow<T>`.
+    ///
+    /// If the value is `Cow::Owned`, allocates and returns a reference to it;
+    /// if it is `Cow::Borrowed`, returns the reference without allocation. This
+    /// requires that the borrow in `Cow` has the same lifetime as the allocated
+    /// reference will have, as indicated by the type `Cow<'t, T> -> &'t T`. Use
+    /// `force_alloc` if you don't have such a lifetime guarantee.
+    fn maybe_alloc(&'a self, value: Cow<'t, T>) -> &'t T {
+        match value {
+            Cow::Borrowed(x) => x,
+            Cow::Owned(x) => self.alloc_owned(x),
+        }
+    }
+
+    /// Forcefully allocate a value of type `Cow<T>`.
+    ///
+    /// Regardless of whether the value is `Cow::Owned` or `Cow::Borrowed`, it
+    /// is converted to the owned value via `ToOwned::into_owned()` and
+    /// allocated. This function is useful if you have no guarantee that the
+    /// lifetime of the borrow in `Cow` has the same lifetime as the allocated
+    /// reference, as indicated by the type `Cow<T> -> &'t T'. Use `maybe_alloc`
+    /// if you do have such a lifetime guarantee.
+    fn force_alloc(&'a self, value: Cow<T>) -> &'t T {
+        self.alloc_owned(value.into_owned())
+    }
+}
+
+// Implement `AllocOwned` for anything that supports the proper `Alloc` and for
+// any types that implement `ToOwned` with `Owned` equal to the type.
+impl<'a, 't, T: ToOwned<Owned = T>> AllocOwned<'a, 't, T> for Alloc<'a, 't, T> {
+    fn alloc_owned(&'a self, value: T) -> &'t mut T {
+        self.alloc(value)
+    }
+}
+
+// /// Conditionally allocates objects.
+// pub trait AllocCow<'a, 't, T: ToOwned + ?Sized>: AllokOwned<'a, 't, T> {
+// }
 
 /// Allocates objects into an arena.
 pub trait Allok<'a, 't, T> {
