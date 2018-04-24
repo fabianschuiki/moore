@@ -8,9 +8,10 @@ use std::ops::Deref;
 
 pub use num::BigInt;
 
-use common::name::{get_name_table, Name};
+use common::name::Name;
 use ty2::range::Range;
 use ty2::ints::*;
+use ty2::enums::*;
 
 /// An interface for dealing with types.
 ///
@@ -183,7 +184,7 @@ impl<'t> AnyType<'t> {
     /// Perform type erasure.
     pub fn as_type(self) -> &'t Type {
         match self {
-            AnyType::Enum(t) => t,
+            AnyType::Enum(t) => t.as_type(),
             AnyType::Integer(t) => t.as_type(),
             AnyType::Floating(t) => t,
             AnyType::Physical(t) => t,
@@ -281,121 +282,6 @@ impl<'t> AnyType<'t> {
     /// Returns an `&ArrayType` or panics if the type is not `Array`.
     pub fn unwrap_array(self) -> &'t ArrayType<'t> {
         self.as_array().expect("type is not an array")
-    }
-}
-
-/// An enumeration type.
-#[derive(Debug, PartialEq)]
-pub struct EnumType {
-    /// The enumeration literals.
-    lits: Vec<EnumLiteral>,
-}
-
-impl EnumType {
-    /// Create a new enumeration type.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{Type, EnumType};
-    ///
-    /// let ty = EnumType::new(vec![
-    ///     "first".into(),
-    ///     "second".into(),
-    ///     '0'.into(),
-    ///     '1'.into(),
-    /// ]);
-    ///
-    /// assert_eq!(format!("{}", ty), "(first, second, '0', '1')");
-    /// ```
-    pub fn new<I: IntoIterator<Item = EnumLiteral>>(lits: I) -> EnumType {
-        EnumType {
-            lits: lits.into_iter().collect(),
-        }
-    }
-
-    /// The number of literals.
-    pub fn len(&self) -> usize {
-        self.lits.len()
-    }
-
-    /// A literal by position.
-    pub fn literal(&self, pos: usize) -> &EnumLiteral {
-        &self.lits[pos]
-    }
-
-    /// Return the literals.
-    pub fn literals(&self) -> &[EnumLiteral] {
-        &self.lits
-    }
-}
-
-impl Type for EnumType {
-    fn is_scalar(&self) -> bool {
-        true
-    }
-    fn is_discrete(&self) -> bool {
-        true
-    }
-    fn is_numeric(&self) -> bool {
-        false
-    }
-    fn is_composite(&self) -> bool {
-        false
-    }
-    fn as_any(&self) -> AnyType {
-        AnyType::Enum(self)
-    }
-}
-
-impl Display for EnumType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "(")?;
-        for (sep, lit) in once("").chain(repeat(", ")).zip(self.lits.iter()) {
-            write!(f, "{}{}", sep, lit)?;
-        }
-        write!(f, ")")?;
-        Ok(())
-    }
-}
-
-/// An enumeration literal.
-///
-/// Distinguishes between:
-/// - identifier literals such as `FOO`, and
-/// - character literals such as `'0'`.
-#[derive(Debug, PartialEq, Eq)]
-pub enum EnumLiteral {
-    /// An identifier enumeration literal.
-    Ident(Name),
-    /// A character enumeration ltieral.
-    Char(char),
-}
-
-impl<'a> From<&'a str> for EnumLiteral {
-    fn from(n: &'a str) -> EnumLiteral {
-        EnumLiteral::Ident(get_name_table().intern(n, false))
-    }
-}
-
-impl From<Name> for EnumLiteral {
-    fn from(n: Name) -> EnumLiteral {
-        EnumLiteral::Ident(n)
-    }
-}
-
-impl From<char> for EnumLiteral {
-    fn from(c: char) -> EnumLiteral {
-        EnumLiteral::Char(c)
-    }
-}
-
-impl Display for EnumLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            EnumLiteral::Ident(n) => write!(f, "{}", n),
-            EnumLiteral::Char(c) => write!(f, "'{}'", c),
-        }
     }
 }
 
@@ -691,55 +577,6 @@ impl Type for NullType {
 impl Display for NullType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "null")
-    }
-}
-
-/// A universal integer.
-///
-/// This is not strictly a separate type, but rather defined by the standard as
-/// the integer type with the largest range. However since we can represent
-/// arbitrary numbers as `BigInt`, we use this special marker type.
-///
-/// # Example
-///
-/// ```
-/// use moore_vhdl::ty2::{Type, UniversalIntegerType};
-///
-/// let ty = UniversalIntegerType;
-///
-/// assert_eq!(format!("{}", ty), "{universal integer}");
-/// assert_eq!(ty.is_scalar(), true);
-/// assert_eq!(ty.is_discrete(), true);
-/// assert_eq!(ty.is_numeric(), true);
-/// ```
-#[derive(Debug, Clone, Copy)]
-pub struct UniversalIntegerType;
-
-impl IntegerType for UniversalIntegerType {
-    fn as_type(&self) -> &Type {
-        self
-    }
-
-    fn range(&self) -> Option<&Range<BigInt>> {
-        None
-    }
-
-    fn base_type(&self) -> &Type {
-        self
-    }
-
-    fn is_universal(&self) -> bool {
-        true
-    }
-
-    fn is_equal(&self, other: &IntegerType) -> bool {
-        other.is_universal()
-    }
-}
-
-impl Display for UniversalIntegerType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{universal integer}}")
     }
 }
 

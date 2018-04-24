@@ -298,6 +298,20 @@ impl<T: Display> Display for Range<T> {
     }
 }
 
+// Implement `Clone` for ranges whose type implements it.
+impl<T: Clone> Clone for Range<T> {
+    fn clone(&self) -> Range<T> {
+        Range {
+            dir: self.dir.clone(),
+            left: self.left.clone(),
+            right: self.right.clone(),
+        }
+    }
+}
+
+// Implement `Copt` for ranges whose type implements it.
+impl<T: Copy> Copy for Range<T> {}
+
 /// A range of integer values.
 pub type IntegerRange = Range<BigInt>;
 

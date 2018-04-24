@@ -59,27 +59,6 @@ pub trait IntegerType: Type {
     fn is_equal(&self, other: &IntegerType) -> bool;
 }
 
-impl<'t, T> Type for T
-where
-    T: IntegerType + 't,
-{
-    fn is_scalar(&self) -> bool {
-        true
-    }
-    fn is_discrete(&self) -> bool {
-        true
-    }
-    fn is_numeric(&self) -> bool {
-        true
-    }
-    fn is_composite(&self) -> bool {
-        false
-    }
-    fn as_any(&self) -> AnyType {
-        AnyType::Integer(self)
-    }
-}
-
 impl<'t> PartialEq for IntegerType + 't {
     fn eq(&self, other: &IntegerType) -> bool {
         IntegerType::is_equal(self, other)
@@ -210,7 +189,7 @@ impl<'t> IntegerType for IntegerSubtype<'t> {
     }
 
     fn base_type(&self) -> &Type {
-        self.mark
+        self.base.as_type()
     }
 
     fn as_subtype(&self) -> Option<&IntegerSubtype> {
@@ -227,3 +206,85 @@ impl<'t> Display for IntegerSubtype<'t> {
         write!(f, "{} range {}", self.mark, self.con)
     }
 }
+
+/// A universal integer.
+///
+/// This is not strictly a separate type, but rather defined by the standard as
+/// the integer type with the largest range. However since we can represent
+/// arbitrary numbers as `BigInt`, we use this special marker type.
+///
+/// # Example
+///
+/// ```
+/// use moore_vhdl::ty2::{Type, UniversalIntegerType};
+///
+/// let ty = UniversalIntegerType;
+///
+/// assert_eq!(format!("{}", ty), "{universal integer}");
+/// assert_eq!(ty.is_scalar(), true);
+/// assert_eq!(ty.is_discrete(), true);
+/// assert_eq!(ty.is_numeric(), true);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct UniversalIntegerType;
+
+impl IntegerType for UniversalIntegerType {
+    fn as_type(&self) -> &Type {
+        self
+    }
+
+    fn range(&self) -> Option<&Range<BigInt>> {
+        None
+    }
+
+    fn base_type(&self) -> &Type {
+        self
+    }
+
+    fn is_universal(&self) -> bool {
+        true
+    }
+
+    fn is_equal(&self, other: &IntegerType) -> bool {
+        other.is_universal()
+    }
+}
+
+impl Display for UniversalIntegerType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{universal integer}}")
+    }
+}
+
+macro_rules! impl_type_for_integer {
+    // ($base:ty) => {
+    //     impl_type_for_integer!(<> $base);
+    // };
+    ($({$lifetime:tt})* $base:ty) => {
+        impl<$($lifetime),*> Type for $base {
+            fn is_scalar(&self) -> bool {
+                true
+            }
+
+            fn is_discrete(&self) -> bool {
+                true
+            }
+
+            fn is_numeric(&self) -> bool {
+                true
+            }
+
+            fn is_composite(&self) -> bool {
+                false
+            }
+
+            fn as_any(&self) -> AnyType {
+                AnyType::Integer(self)
+            }
+        }
+    }
+}
+
+impl_type_for_integer!(IntegerBasetype);
+impl_type_for_integer!({'t} IntegerSubtype<'t>);
+impl_type_for_integer!(UniversalIntegerType);

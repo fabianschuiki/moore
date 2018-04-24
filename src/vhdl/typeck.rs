@@ -1035,8 +1035,8 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		}
 
 		hir::TypeData::Enum(ref lits) => {
-			use ty2::{EnumType, EnumLiteral};
-			let ty = EnumType::new(lits.iter().map(|l| match *l {
+			use ty2::{EnumBasetype, EnumLiteral};
+			let ty = EnumBasetype::new(lits.iter().map(|l| match *l {
 				hir::EnumLit::Ident(sp) => EnumLiteral::from(sp.value),
 				hir::EnumLit::Char(sp)  => EnumLiteral::from(sp.value),
 			}));
