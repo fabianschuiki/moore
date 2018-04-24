@@ -2,5 +2,6 @@
 *~
 !.git*
 !.travis.yml
+!.rustfmt.toml
 target
 /pulpino
