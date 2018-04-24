@@ -5,6 +5,7 @@
 use std::fmt::{self, Debug, Display};
 use std::iter::{once, repeat};
 use std::ops::Deref;
+use std::borrow::Borrow;
 
 pub use num::BigInt;
 
@@ -37,6 +38,9 @@ pub trait Type: Debug + Display {
     /// Array and record types are composite.
     fn is_composite(&self) -> bool;
 
+    /// Clone this type.
+    fn to_owned(&self) -> OwnedType;
+
     /// Converts from `&Type` to `AnyType`.
     fn as_any(&self) -> AnyType;
 
@@ -58,6 +62,14 @@ impl<'a> PartialEq for Type + 'a {
 }
 
 impl<'a> Eq for Type + 'a {}
+
+// impl<'t> ToOwned for Type + 't {
+//     type Owned = OwnedType<'t>;
+
+//     fn to_owned(&self) -> OwnedType {
+//         Type::to_owned(self)
+//     }
+// }
 
 /// A type.
 ///
@@ -84,64 +96,6 @@ pub enum AnyType<'t> {
     UniversalInteger,
     UniversalReal,
     // subprogram
-}
-
-impl<'t> Type for AnyType<'t> {
-    fn is_scalar(&self) -> bool {
-        match *self {
-            AnyType::Enum(t) => t.is_scalar(),
-            AnyType::Integer(t) => t.is_scalar(),
-            AnyType::Floating(t) => t.is_scalar(),
-            AnyType::Physical(t) => t.is_scalar(),
-            AnyType::Array(t) => t.is_scalar(),
-            AnyType::Null => NullType.is_scalar(),
-            AnyType::UniversalInteger => UniversalIntegerType.is_scalar(),
-            AnyType::UniversalReal => UniversalRealType.is_scalar(),
-        }
-    }
-
-    fn is_discrete(&self) -> bool {
-        match *self {
-            AnyType::Enum(t) => t.is_discrete(),
-            AnyType::Integer(t) => t.is_discrete(),
-            AnyType::Floating(t) => t.is_discrete(),
-            AnyType::Physical(t) => t.is_discrete(),
-            AnyType::Array(t) => t.is_discrete(),
-            AnyType::Null => NullType.is_discrete(),
-            AnyType::UniversalInteger => UniversalIntegerType.is_discrete(),
-            AnyType::UniversalReal => UniversalRealType.is_discrete(),
-        }
-    }
-
-    fn is_numeric(&self) -> bool {
-        match *self {
-            AnyType::Enum(t) => t.is_numeric(),
-            AnyType::Integer(t) => t.is_numeric(),
-            AnyType::Floating(t) => t.is_numeric(),
-            AnyType::Physical(t) => t.is_numeric(),
-            AnyType::Array(t) => t.is_numeric(),
-            AnyType::Null => NullType.is_numeric(),
-            AnyType::UniversalInteger => UniversalIntegerType.is_numeric(),
-            AnyType::UniversalReal => UniversalRealType.is_numeric(),
-        }
-    }
-
-    fn is_composite(&self) -> bool {
-        match *self {
-            AnyType::Enum(t) => t.is_composite(),
-            AnyType::Integer(t) => t.is_composite(),
-            AnyType::Floating(t) => t.is_composite(),
-            AnyType::Physical(t) => t.is_composite(),
-            AnyType::Array(t) => t.is_composite(),
-            AnyType::Null => NullType.is_composite(),
-            AnyType::UniversalInteger => UniversalIntegerType.is_composite(),
-            AnyType::UniversalReal => UniversalRealType.is_composite(),
-        }
-    }
-
-    fn as_any(&self) -> AnyType {
-        *self
-    }
 }
 
 impl<'t> Display for AnyType<'t> {
@@ -283,7 +237,95 @@ impl<'t> AnyType<'t> {
     pub fn unwrap_array(self) -> &'t ArrayType<'t> {
         self.as_array().expect("type is not an array")
     }
+
+    /// Check if this is a scalar type.
+    pub fn is_scalar(&self) -> bool {
+        self.as_type().is_scalar()
+    }
+
+    /// Check if this is a discrete type.
+    pub fn is_discrete(&self) -> bool {
+        self.as_type().is_discrete()
+    }
+
+    /// Check if this is a numeric type.
+    pub fn is_numeric(&self) -> bool {
+        self.as_type().is_numeric()
+    }
+
+    /// Check if this is a composite type.
+    pub fn is_composite(&self) -> bool {
+        self.as_type().is_composite()
+    }
+
+    /// Clone this type.
+    pub fn to_owned(&self) -> OwnedType {
+        self.as_type().to_owned()
+    }
 }
+
+/// An owned type.
+#[derive(Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum OwnedType<'t> {
+    EnumBasetype(EnumBasetype),
+    EnumSubtype(EnumSubtype<'t>),
+    IntegerBasetype(IntegerBasetype),
+    IntegerSubtype(IntegerSubtype<'t>),
+    Null,
+    UniversalInteger,
+    UniversalReal,
+}
+
+impl<'t> Borrow<Type + 't> for OwnedType<'t> {
+    fn borrow(&self) -> &(Type + 't) {
+        match *self {
+            OwnedType::EnumBasetype(ref k) => k,
+            OwnedType::EnumSubtype(ref k) => k,
+            OwnedType::IntegerBasetype(ref k) => k,
+            OwnedType::IntegerSubtype(ref k) => k,
+            OwnedType::Null => &NullType,
+            OwnedType::UniversalInteger => &UniversalIntegerType,
+            OwnedType::UniversalReal => &UniversalRealType,
+        }
+    }
+}
+
+impl<'t> Display for OwnedType<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <Type as Display>::fmt(self.borrow(), f)
+        // match *self {
+        //     OwnedType::EnumBasetype(ref t) => Display::fmt(t, f),
+        //     OwnedType::EnumSubtype(ref t) => Display::fmt(t, f),
+        //     OwnedType::IntegerBasetype(ref t) => Display::fmt(t, f),
+        //     OwnedType::IntegerSubtype(ref t) => Display::fmt(t, f),
+        //     OwnedType::Null => Display::fmt(&NullType, f),
+        //     OwnedType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
+        //     OwnedType::UniversalReal => Display::fmt(&UniversalRealType, f),
+        // }
+    }
+}
+
+impl<'t> Debug for OwnedType<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <Type as Debug>::fmt(self.borrow(), f)
+        // match *self {
+        //     OwnedType::EnumBasetype(ref t) => Debug::fmt(t, f),
+        //     OwnedType::EnumSubtype(ref t) => Debug::fmt(t, f),
+        //     OwnedType::IntegerBasetype(ref t) => Debug::fmt(t, f),
+        //     OwnedType::IntegerSubtype(ref t) => Debug::fmt(t, f),
+        //     OwnedType::Null => Debug::fmt(&NullType, f),
+        //     OwnedType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
+        //     OwnedType::UniversalReal => Debug::fmt(&UniversalRealType, f),
+        // }
+    }
+}
+
+// impl<'t, T: Type + 't> From<T> for OwnedType<'t> {
+//     fn from(other: T) -> OwnedType<'t> {
+//         other.to_owned()
+//     }
+// }
 
 /// A floating-point type.
 #[derive(Debug, PartialEq)]
@@ -319,15 +361,23 @@ impl Type for FloatingType {
     fn is_scalar(&self) -> bool {
         true
     }
+
     fn is_discrete(&self) -> bool {
         false
     }
+
     fn is_numeric(&self) -> bool {
         true
     }
+
     fn is_composite(&self) -> bool {
         false
     }
+
+    fn to_owned(&self) -> OwnedType {
+        unimplemented!()
+    }
+
     fn as_any(&self) -> AnyType {
         AnyType::Floating(self)
     }
@@ -404,15 +454,23 @@ impl Type for PhysicalType {
     fn is_scalar(&self) -> bool {
         true
     }
+
     fn is_discrete(&self) -> bool {
         false
     }
+
     fn is_numeric(&self) -> bool {
         true
     }
+
     fn is_composite(&self) -> bool {
         false
     }
+
+    fn to_owned(&self) -> OwnedType {
+        unimplemented!()
+    }
+
     fn as_any(&self) -> AnyType {
         AnyType::Physical(self)
     }
@@ -514,15 +572,23 @@ impl<'t> Type for ArrayType<'t> {
     fn is_scalar(&self) -> bool {
         false
     }
+
     fn is_discrete(&self) -> bool {
         false
     }
+
     fn is_numeric(&self) -> bool {
         false
     }
+
     fn is_composite(&self) -> bool {
         true
     }
+
+    fn to_owned(&self) -> OwnedType {
+        unimplemented!()
+    }
+
     fn as_any(&self) -> AnyType {
         AnyType::Array(self)
     }
@@ -560,15 +626,23 @@ impl Type for NullType {
     fn is_scalar(&self) -> bool {
         false
     }
+
     fn is_discrete(&self) -> bool {
         false
     }
+
     fn is_numeric(&self) -> bool {
         false
     }
+
     fn is_composite(&self) -> bool {
         false
     }
+
+    fn to_owned(&self) -> OwnedType {
+        OwnedType::Null
+    }
+
     fn as_any(&self) -> AnyType {
         AnyType::Null
     }
@@ -605,15 +679,23 @@ impl Type for UniversalRealType {
     fn is_scalar(&self) -> bool {
         true
     }
+
     fn is_discrete(&self) -> bool {
         false
     }
+
     fn is_numeric(&self) -> bool {
         true
     }
+
     fn is_composite(&self) -> bool {
         false
     }
+
+    fn to_owned(&self) -> OwnedType {
+        unimplemented!()
+    }
+
     fn as_any(&self) -> AnyType {
         AnyType::UniversalReal
     }

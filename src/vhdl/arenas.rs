@@ -7,12 +7,12 @@
 use std::borrow::Cow;
 
 /// Allocates values.
-pub trait Alloc<'a, 't, T> {
+pub trait Alloc<'a, 't, T: 't> {
     /// Allocate a value of type `T`.
     fn alloc(&'a self, value: T) -> &'t mut T;
 }
 
-impl<'z, 'a, 'p: 'a, 't, T> Alloc<'z, 't, T> for &'p Alloc<'a, 't, T> {
+impl<'z, 'a, 'p: 'a, 't, T: 't> Alloc<'z, 't, T> for &'p Alloc<'a, 't, T> {
     fn alloc(&'z self, value: T) -> &'t mut T {
         Alloc::alloc(*self, value)
     }
@@ -37,11 +37,12 @@ where
 /// This is merely a marker trait that you should not implement yourself. It is
 /// implemented automatically on anything that supports `Alloc<'a, 't, T>` for
 /// any `'a`. The allocated values have the lifetime `'t`.
-pub trait AllocInto<'t, T>: for<'a> Alloc<'a, 't, T> {}
+pub trait AllocInto<'t, T: 't>: for<'a> Alloc<'a, 't, T> {}
 
 // Implement `AllocInto` for anything that supports the proper `Alloc`.
 impl<'t, T, A> AllocInto<'t, T> for A
 where
+    T: 't,
     A: for<'a> Alloc<'a, 't, T>,
 {
 }
@@ -50,7 +51,7 @@ where
 ///
 /// This is merely a marker trait that you should not implement yourself. It is
 /// implemented automatically on anything that supports `Alloc`.
-pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized> {
+pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized + 't> {
     /// Allocate a value of type `T: ToOwned` into this arena.
     ///
     /// This function differs from `Alloc::alloc` in that it takes `T::Owned`
@@ -86,7 +87,7 @@ pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized> {
 
 // Implement `AllocOwned` for anything that supports the proper `Alloc` and for
 // any types that implement `ToOwned` with `Owned` equal to the type.
-impl<'a, 't, T: ToOwned<Owned = T>> AllocOwned<'a, 't, T> for Alloc<'a, 't, T> {
+impl<'a, 't, T: ToOwned<Owned = T> + 't> AllocOwned<'a, 't, T> for Alloc<'a, 't, T> {
     fn alloc_owned(&'a self, value: T) -> &'t mut T {
         self.alloc(value)
     }
@@ -113,13 +114,13 @@ where
 /// This is merely a marker trait that you should not implement yourself. It is
 /// implemented automatically on anything that supports `AllocOwned<'a, 't, T>`
 /// for any `'a`. The allocated values have the lifetime `'t`.
-pub trait AllocOwnedInto<'t, T: ToOwned + ?Sized>: for<'a> AllocOwned<'a, 't, T> {}
+pub trait AllocOwnedInto<'t, T: ToOwned + ?Sized + 't>: for<'a> AllocOwned<'a, 't, T> {}
 
 // Implement `AllocOwnedInto` for anything that supports the proper
 // `AllocOwned`.
 impl<'t, T, A> AllocOwnedInto<'t, T> for A
 where
-    T: ToOwned + ?Sized,
+    T: ToOwned + ?Sized + 't,
     A: for<'a> AllocOwned<'a, 't, T>,
 {
 }

@@ -7,7 +7,8 @@ use std::fmt::{self, Debug, Display};
 use common::name::Name;
 use common::source::Span;
 
-use ty2::{AnyType, Subtype, Type};
+use ty2::prelude::*;
+use ty2::Subtype;
 
 /// A type name.
 ///
@@ -129,15 +130,23 @@ impl<'t> Type for TypeDecl<'t> {
     fn is_scalar(&self) -> bool {
         self.ty.is_scalar()
     }
+
     fn is_discrete(&self) -> bool {
         self.ty.is_discrete()
     }
+
     fn is_numeric(&self) -> bool {
         self.ty.is_numeric()
     }
+
     fn is_composite(&self) -> bool {
         self.ty.is_composite()
     }
+
+    fn to_owned(&self) -> OwnedType {
+        self.ty.to_owned()
+    }
+
     fn as_any(&self) -> AnyType {
         self.ty.as_any()
     }
@@ -211,15 +220,23 @@ impl<'t> Type for TypeMark<'t> {
     fn is_scalar(&self) -> bool {
         self.ty.is_scalar()
     }
+
     fn is_discrete(&self) -> bool {
         self.ty.is_discrete()
     }
+
     fn is_numeric(&self) -> bool {
         self.ty.is_numeric()
     }
+
     fn is_composite(&self) -> bool {
         self.ty.is_composite()
     }
+
+    fn to_owned(&self) -> OwnedType {
+        self.ty.to_owned()
+    }
+
     fn as_any(&self) -> AnyType {
         self.ty.as_any()
     }

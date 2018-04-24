@@ -50,7 +50,7 @@ impl<'t> Const2<'t> for IntegerConst<'t> {
         self.ty.as_type()
     }
 
-    fn as_any(&self) -> AnyConst {
+    fn as_any<'a>(&'a self) -> AnyConst<'a, 't> {
         AnyConst::Integer(self)
     }
 
@@ -58,7 +58,7 @@ impl<'t> Const2<'t> for IntegerConst<'t> {
         OwnedConst::Integer(self.clone())
     }
 
-    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t>>, ConstError> {
+    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t> + 't>, ConstError> {
         if self.ty.as_type() == ty {
             return Ok(Cow::Borrowed(self));
         }

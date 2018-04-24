@@ -116,7 +116,7 @@ impl<'a, 't: 'a> DiagEmitter for &'a TypeVisitor<'t> {
     }
 }
 
-impl<'b, 'a, 't: 'a, T> Alloc<'b, 't, T> for &'a TypeVisitor<'t>
+impl<'b, 'a, 't: 'a, T: 't> Alloc<'b, 't, T> for &'a TypeVisitor<'t>
 where
     ty2::TypeArena<'t>: Alloc<'t, 't, T>,
 {

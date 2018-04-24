@@ -14,7 +14,7 @@ use konst2::integer::IntegerConst;
 /// to provide a convenient interface for inspecting and manipulating values.
 /// Dedicated structs for the specific types (e.g. integers, arrays, etc.) are
 /// expected to be allocated/internalized into an arena for ease of use.
-pub trait Const2<'t>: Debug + Display + 't {
+pub trait Const2<'t>: Debug + Display {
     /// Return the type of the constant.
     fn ty(&self) -> &'t Type;
 
@@ -22,10 +22,10 @@ pub trait Const2<'t>: Debug + Display + 't {
     fn to_owned(&self) -> OwnedConst<'t>;
 
     /// Converts from `&Const2` to `AnyConst`.
-    fn as_any(&self) -> AnyConst;
+    fn as_any<'r>(&'r self) -> AnyConst<'r, 't>;
 
     /// Cast the constant to a different type.
-    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t>>, ConstError>;
+    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t> + 't>, ConstError>;
 }
 
 impl<'t> ToOwned for Const2<'t> + 't {
@@ -56,11 +56,11 @@ impl EmitError for ConstError {
 /// A borrowed constant.
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
-pub enum AnyConst<'t> {
-    Integer(&'t IntegerConst<'t>),
+pub enum AnyConst<'r, 't: 'r> {
+    Integer(&'r IntegerConst<'t>),
 }
 
-impl<'t> Const2<'t> for AnyConst<'t> {
+impl<'r, 't: 't> Const2<'t> for AnyConst<'r, 't> {
     fn ty(&self) -> &'t Type {
         match *self {
             AnyConst::Integer(t) => t.ty(),
@@ -73,18 +73,18 @@ impl<'t> Const2<'t> for AnyConst<'t> {
         }
     }
 
-    fn as_any(&self) -> AnyConst {
+    fn as_any<'a>(&'a self) -> AnyConst<'a, 't> {
         *self
     }
 
-    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t>>, ConstError> {
+    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t> + 't>, ConstError> {
         match *self {
             AnyConst::Integer(t) => t.cast(ty),
         }
     }
 }
 
-impl<'t> Display for AnyConst<'t> {
+impl<'r, 't> Display for AnyConst<'r, 't> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             AnyConst::Integer(t) => Display::fmt(t, f),
@@ -92,7 +92,7 @@ impl<'t> Display for AnyConst<'t> {
     }
 }
 
-impl<'t> Debug for AnyConst<'t> {
+impl<'r, 't> Debug for AnyConst<'r, 't> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             AnyConst::Integer(t) => Debug::fmt(t, f),
@@ -100,23 +100,23 @@ impl<'t> Debug for AnyConst<'t> {
     }
 }
 
-impl<'t, T: Const2<'t>> From<&'t T> for AnyConst<'t> {
-    fn from(konst: &'t T) -> AnyConst<'t> {
+impl<'r, 't, T: Const2<'t>> From<&'r T> for AnyConst<'r, 't> {
+    fn from(konst: &'r T) -> AnyConst<'r, 't> {
         konst.as_any()
     }
 }
 
 #[allow(unreachable_patterns)]
-impl<'t> AnyConst<'t> {
+impl<'r, 't> AnyConst<'r, 't> {
     /// Perform type erasure.
-    pub fn as_const(self) -> &'t Const2<'t> {
+    pub fn as_const(self) -> &'r Const2<'t> {
         match self {
             AnyConst::Integer(k) => k,
         }
     }
 
     /// Returns `Some(k)` if the constant is `Integer(k)`, `None` otherwise.
-    pub fn as_integer(self) -> Option<&'t IntegerConst<'t>> {
+    pub fn as_integer(self) -> Option<&'r IntegerConst<'t>> {
         match self {
             AnyConst::Integer(k) => Some(k),
             _ => None,
@@ -124,7 +124,7 @@ impl<'t> AnyConst<'t> {
     }
 
     /// Returns an `&IntegerConst` or panics if the constant is not `Integer`.
-    pub fn unwrap_integer(self) -> &'t IntegerConst<'t> {
+    pub fn unwrap_integer(self) -> &'r IntegerConst<'t> {
         self.as_integer().expect("constant is not an integer")
     }
 }

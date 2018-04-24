@@ -33,7 +33,7 @@ impl<'t> AllocContext<'t> {
     }
 }
 
-impl<'a, 't, T> Alloc<'a, 't, T> for AllocContext<'t>
+impl<'a, 't, T: 't> Alloc<'a, 't, T> for AllocContext<'t>
 where
     Arenas2<'t>: Alloc<'t, 't, T>,
 {

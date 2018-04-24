@@ -8,7 +8,8 @@ use std::iter::{once, repeat};
 pub use num::BigInt;
 
 use common::name::{get_name_table, Name};
-use ty2::{AnyType, Range, ScalarSubtype, Type, TypeMark};
+use ty2::prelude::*;
+use ty2::ScalarSubtype;
 
 /// An enumeration type.
 ///
@@ -60,28 +61,6 @@ pub trait EnumType: Type {
     fn is_equal(&self, other: &EnumType) -> bool;
 }
 
-impl<T: EnumType> Type for T {
-    fn is_scalar(&self) -> bool {
-        true
-    }
-
-    fn is_discrete(&self) -> bool {
-        true
-    }
-
-    fn is_numeric(&self) -> bool {
-        false
-    }
-
-    fn is_composite(&self) -> bool {
-        false
-    }
-
-    fn as_any(&self) -> AnyType {
-        AnyType::Enum(self)
-    }
-}
-
 impl<'t> PartialEq for EnumType + 't {
     fn eq(&self, other: &EnumType) -> bool {
         EnumType::is_equal(self, other)
@@ -89,6 +68,30 @@ impl<'t> PartialEq for EnumType + 't {
 }
 
 impl<'t> Eq for EnumType + 't {}
+
+macro_rules! common_type_impl {
+    () => {
+        fn is_scalar(&self) -> bool {
+            true
+        }
+
+        fn is_discrete(&self) -> bool {
+            true
+        }
+
+        fn is_numeric(&self) -> bool {
+            false
+        }
+
+        fn is_composite(&self) -> bool {
+            false
+        }
+
+        fn as_any(&self) -> AnyType {
+            AnyType::Enum(self)
+        }
+    }
+}
 
 /// An enumeration base type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +121,14 @@ impl EnumBasetype {
         EnumBasetype {
             lits: lits.into_iter().collect(),
         }
+    }
+}
+
+impl Type for EnumBasetype {
+    common_type_impl!();
+
+    fn to_owned(&self) -> OwnedType {
+        OwnedType::EnumBasetype(self.clone())
     }
 }
 
@@ -184,7 +195,7 @@ impl<'t> EnumSubtype<'t> {
     ///
     /// assert_eq!(format!("{}", subty), "MY_TYPE range second to '0'");
     /// ```
-    pub fn new(mark: &'t TypeMark, range: Range<usize>) -> Option<EnumSubtype<'t>> {
+    pub fn new(mark: &'t TypeMark<'t>, range: Range<usize>) -> Option<EnumSubtype<'t>> {
         let base = mark.as_any().unwrap_enum();
         let base_range = base.range();
         if base_range.has_subrange(&range) {
@@ -197,6 +208,14 @@ impl<'t> EnumSubtype<'t> {
         } else {
             None
         }
+    }
+}
+
+impl<'t> Type for EnumSubtype<'t> {
+    common_type_impl!();
+
+    fn to_owned(&self) -> OwnedType {
+        OwnedType::EnumSubtype(self.clone())
     }
 }
 

@@ -7,7 +7,8 @@ use std::ops::Deref;
 
 pub use num::BigInt;
 
-use ty2::{AnyType, Range, ScalarSubtype, Type, TypeMark};
+use ty2::prelude::*;
+use ty2::ScalarSubtype;
 
 /// An integer type.
 ///
@@ -67,8 +68,32 @@ impl<'t> PartialEq for IntegerType + 't {
 
 impl<'t> Eq for IntegerType + 't {}
 
+macro_rules! common_type_impl {
+    () => {
+        fn is_scalar(&self) -> bool {
+            true
+        }
+
+        fn is_discrete(&self) -> bool {
+            true
+        }
+
+        fn is_numeric(&self) -> bool {
+            true
+        }
+
+        fn is_composite(&self) -> bool {
+            false
+        }
+
+        fn as_any(&self) -> AnyType {
+            AnyType::Integer(self)
+        }
+    }
+}
+
 /// An integer base type.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntegerBasetype {
     /// The range of values.
     range: Range<BigInt>,
@@ -99,6 +124,14 @@ impl IntegerBasetype {
     /// ```
     pub fn new(range: Range<BigInt>) -> IntegerBasetype {
         IntegerBasetype { range: range }
+    }
+}
+
+impl Type for IntegerBasetype {
+    common_type_impl!();
+
+    fn to_owned(&self) -> OwnedType {
+        OwnedType::IntegerBasetype(self.clone())
     }
 }
 
@@ -163,7 +196,7 @@ impl<'t> IntegerSubtype<'t> {
     /// assert_eq!(format!("{}", a), "BYTE range 0 to 15");
     /// assert_eq!(format!("{}", b), "BYTE range 15 downto 0");
     /// ```
-    pub fn new(mark: &'t TypeMark, range: Range<BigInt>) -> Option<IntegerSubtype<'t>> {
+    pub fn new(mark: &'t TypeMark<'t>, range: Range<BigInt>) -> Option<IntegerSubtype<'t>> {
         let base = mark.as_any().unwrap_integer();
         let base_range = base.range()?;
         if base_range.has_subrange(&range) {
@@ -176,6 +209,14 @@ impl<'t> IntegerSubtype<'t> {
         } else {
             None
         }
+    }
+}
+
+impl<'t> Type for IntegerSubtype<'t> {
+    common_type_impl!();
+
+    fn to_owned(&self) -> OwnedType {
+        OwnedType::IntegerSubtype(self.clone())
     }
 }
 
@@ -228,6 +269,14 @@ impl<'t> Display for IntegerSubtype<'t> {
 #[derive(Debug, Clone, Copy)]
 pub struct UniversalIntegerType;
 
+impl Type for UniversalIntegerType {
+    common_type_impl!();
+
+    fn to_owned(&self) -> OwnedType {
+        OwnedType::UniversalInteger
+    }
+}
+
 impl IntegerType for UniversalIntegerType {
     fn as_type(&self) -> &Type {
         self
@@ -256,35 +305,6 @@ impl Display for UniversalIntegerType {
     }
 }
 
-macro_rules! impl_type_for_integer {
-    // ($base:ty) => {
-    //     impl_type_for_integer!(<> $base);
-    // };
-    ($({$lifetime:tt})* $base:ty) => {
-        impl<$($lifetime),*> Type for $base {
-            fn is_scalar(&self) -> bool {
-                true
-            }
-
-            fn is_discrete(&self) -> bool {
-                true
-            }
-
-            fn is_numeric(&self) -> bool {
-                true
-            }
-
-            fn is_composite(&self) -> bool {
-                false
-            }
-
-            fn as_any(&self) -> AnyType {
-                AnyType::Integer(self)
-            }
-        }
-    }
-}
-
-impl_type_for_integer!(IntegerBasetype);
-impl_type_for_integer!({'t} IntegerSubtype<'t>);
-impl_type_for_integer!(UniversalIntegerType);
+// impl_type_for_integer!(IntegerBasetype, IntegerBasetype);
+// impl_type_for_integer!({'t} IntegerSubtype<'t>, IntegerSubtype);
+// impl_type_for_integer!(UniversalIntegerType, UniversalInteger);

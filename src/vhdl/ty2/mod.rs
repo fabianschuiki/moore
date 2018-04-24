@@ -17,6 +17,7 @@ mod arena;
 mod range;
 mod ints;
 mod enums;
+mod prelude;
 
 pub use self::types::*;
 pub use self::subtypes::*;
