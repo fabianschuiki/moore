@@ -38,8 +38,15 @@ pub trait Type: Debug + Display {
     /// Array and record types are composite.
     fn is_composite(&self) -> bool;
 
+    /// Convert into an owned type.
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a;
+
     /// Clone this type.
-    fn to_owned(&self) -> OwnedType;
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a;
 
     /// Converts from `&Type` to `AnyType`.
     fn as_any(&self) -> AnyType;
@@ -100,39 +107,41 @@ pub enum AnyType<'t> {
 
 impl<'t> Display for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            AnyType::Enum(t) => Display::fmt(t, f),
-            AnyType::Integer(t) => Display::fmt(t, f),
-            AnyType::Floating(t) => Display::fmt(t, f),
-            AnyType::Physical(t) => Display::fmt(t, f),
-            AnyType::Array(t) => Display::fmt(t, f),
-            AnyType::Null => Display::fmt(&NullType, f),
-            AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
-            AnyType::UniversalReal => Display::fmt(&UniversalRealType, f),
-        }
+        Display::fmt(self.as_type(), f)
+        // match *self {
+        //     AnyType::Enum(t) => Display::fmt(t, f),
+        //     AnyType::Integer(t) => Display::fmt(t, f),
+        //     AnyType::Floating(t) => Display::fmt(t, f),
+        //     AnyType::Physical(t) => Display::fmt(t, f),
+        //     AnyType::Array(t) => Display::fmt(t, f),
+        //     AnyType::Null => Display::fmt(&NullType, f),
+        //     AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
+        //     AnyType::UniversalReal => Display::fmt(&UniversalRealType, f),
+        // }
     }
 }
 
 impl<'t> Debug for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            AnyType::Enum(t) => Debug::fmt(t, f),
-            AnyType::Integer(t) => Debug::fmt(t, f),
-            AnyType::Floating(t) => Debug::fmt(t, f),
-            AnyType::Physical(t) => Debug::fmt(t, f),
-            AnyType::Array(t) => Debug::fmt(t, f),
-            AnyType::Null => Debug::fmt(&NullType, f),
-            AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
-            AnyType::UniversalReal => Debug::fmt(&UniversalRealType, f),
-        }
+        Debug::fmt(self.as_type(), f)
+        // match *self {
+        //     AnyType::Enum(t) => Debug::fmt(t, f),
+        //     AnyType::Integer(t) => Debug::fmt(t, f),
+        //     AnyType::Floating(t) => Debug::fmt(t, f),
+        //     AnyType::Physical(t) => Debug::fmt(t, f),
+        //     AnyType::Array(t) => Debug::fmt(t, f),
+        //     AnyType::Null => Debug::fmt(&NullType, f),
+        //     AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
+        //     AnyType::UniversalReal => Debug::fmt(&UniversalRealType, f),
+        // }
     }
 }
 
-impl<'t, T: Type> From<&'t T> for AnyType<'t> {
-    fn from(ty: &'t T) -> AnyType<'t> {
-        ty.as_any()
-    }
-}
+// impl<'t, T: Type> From<&'t T> for AnyType<'t> {
+//     fn from(ty: &'t T) -> AnyType<'t> {
+//         ty.as_any()
+//     }
+// }
 
 impl<'t> AnyType<'t> {
     /// Perform type erasure.
@@ -259,7 +268,7 @@ impl<'t> AnyType<'t> {
     }
 
     /// Clone this type.
-    pub fn to_owned(&self) -> OwnedType {
+    pub fn to_owned(&self) -> OwnedType<'t> {
         self.as_type().to_owned()
     }
 }
@@ -321,14 +330,14 @@ impl<'t> Debug for OwnedType<'t> {
     }
 }
 
-// impl<'t, T: Type + 't> From<T> for OwnedType<'t> {
+// impl<'t, T: Type> From<T> for OwnedType<'t> {
 //     fn from(other: T) -> OwnedType<'t> {
-//         other.to_owned()
+//         other.into_owned()
 //     }
 // }
 
 /// A floating-point type.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FloatingType {
     /// The range of values.
     range: Range<f64>,
@@ -374,7 +383,17 @@ impl Type for FloatingType {
         false
     }
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        unimplemented!()
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         unimplemented!()
     }
 
@@ -401,7 +420,7 @@ impl Deref for FloatingType {
 /// In VHDL a physical type is an integer multiple of some measurement unit.
 /// A physical type has exactly one primary unit, and multiple secondary units
 /// defined as multiples of that primary unit.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PhysicalType {
     /// The range of integer multiples of the primary unit.
     range: Range<BigInt>,
@@ -467,7 +486,17 @@ impl Type for PhysicalType {
         false
     }
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        unimplemented!()
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         unimplemented!()
     }
 
@@ -495,7 +524,7 @@ impl Deref for PhysicalType {
 }
 
 /// A unit of a physical type.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhysicalUnit {
     /// The name of the unit.
     pub name: Name,
@@ -560,7 +589,7 @@ impl PhysicalUnit {
 }
 
 /// An array type.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArrayType<'t> {
     /// The index subtypes.
     indices: Vec<&'t Type>,
@@ -585,7 +614,17 @@ impl<'t> Type for ArrayType<'t> {
         true
     }
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        unimplemented!()
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         unimplemented!()
     }
 
@@ -639,7 +678,17 @@ impl Type for NullType {
         false
     }
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::Null
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         OwnedType::Null
     }
 
@@ -692,8 +741,18 @@ impl Type for UniversalRealType {
         false
     }
 
-    fn to_owned(&self) -> OwnedType {
-        unimplemented!()
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::UniversalReal
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::UniversalReal
     }
 
     fn as_any(&self) -> AnyType {

@@ -130,7 +130,17 @@ impl IntegerBasetype {
 impl Type for IntegerBasetype {
     common_type_impl!();
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::IntegerBasetype(self)
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         OwnedType::IntegerBasetype(self.clone())
     }
 }
@@ -215,7 +225,17 @@ impl<'t> IntegerSubtype<'t> {
 impl<'t> Type for IntegerSubtype<'t> {
     common_type_impl!();
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::IntegerSubtype(self)
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         OwnedType::IntegerSubtype(self.clone())
     }
 }
@@ -272,7 +292,17 @@ pub struct UniversalIntegerType;
 impl Type for UniversalIntegerType {
     common_type_impl!();
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::UniversalInteger
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         OwnedType::UniversalInteger
     }
 }

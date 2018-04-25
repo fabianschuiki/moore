@@ -143,7 +143,17 @@ impl<'t> Type for TypeDecl<'t> {
         self.ty.is_composite()
     }
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        self.ty.to_owned()
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         self.ty.to_owned()
     }
 
@@ -233,7 +243,17 @@ impl<'t> Type for TypeMark<'t> {
         self.ty.is_composite()
     }
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        self.ty.to_owned()
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         self.ty.to_owned()
     }
 

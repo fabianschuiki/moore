@@ -127,7 +127,17 @@ impl EnumBasetype {
 impl Type for EnumBasetype {
     common_type_impl!();
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::EnumBasetype(self)
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         OwnedType::EnumBasetype(self.clone())
     }
 }
@@ -214,7 +224,17 @@ impl<'t> EnumSubtype<'t> {
 impl<'t> Type for EnumSubtype<'t> {
     common_type_impl!();
 
-    fn to_owned(&self) -> OwnedType {
+    fn into_owned<'a>(self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
+        OwnedType::EnumSubtype(self)
+    }
+
+    fn to_owned<'a>(&self) -> OwnedType<'a>
+    where
+        Self: 'a,
+    {
         OwnedType::EnumSubtype(self.clone())
     }
 }
