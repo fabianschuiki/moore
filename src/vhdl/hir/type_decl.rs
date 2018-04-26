@@ -67,7 +67,7 @@ impl<'t> TypeDecl2<'t> {
                             lb.value().clone(),
                             rb.value().clone(),
                         ));
-                        Ok(ctx.alloc(ty))
+                        Ok(ctx.alloc_owned(ty.into_owned()))
                     }
                     AnyType::Floating(ty) => unimplemented!(),
                     _ => {

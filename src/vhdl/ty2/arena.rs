@@ -1,5 +1,8 @@
 // Copyright (c) 2018 Fabian Schuiki
 
+use arenas::{Alloc, AllocOwned};
+use ty2::prelude::*;
+use ty2::types::{NullType, UniversalRealType};
 use ty2::ints::*;
 use ty2::enums::*;
 
@@ -12,3 +15,17 @@ make_arenas!(
         enum_subtype: EnumSubtype<'t>,
     }
 );
+
+impl<'t> AllocOwned<'t, 't, Type> for TypeArena<'t> {
+    fn alloc_owned(&'t self, value: OwnedType<'t>) -> &'t Type {
+        match value {
+            OwnedType::IntegerBasetype(t) => self.alloc(t),
+            OwnedType::IntegerSubtype(t) => self.alloc(t),
+            OwnedType::EnumBasetype(t) => self.alloc(t),
+            OwnedType::EnumSubtype(t) => self.alloc(t),
+            OwnedType::Null => &NullType,
+            OwnedType::UniversalInteger => &UniversalIntegerType,
+            OwnedType::UniversalReal => &UniversalRealType,
+        }
+    }
+}

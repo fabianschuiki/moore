@@ -137,6 +137,12 @@ impl<'a, 'b, 't: 'a> AllocOwned<'b, 't, konst2::Const2<'t>> for &'a TypeVisitor<
     }
 }
 
+impl<'a, 'b, 't: 'a> AllocOwned<'b, 't, ty2::Type> for &'a TypeVisitor<'t> {
+    fn alloc_owned(&'b self, value: ty2::OwnedType<'t>) -> &'t ty2::Type {
+        self.type_arena.alloc_owned(value)
+    }
+}
+
 impl<'t> Visitor<'t> for TypeVisitor<'t> {
     fn as_visitor(&mut self) -> &mut Visitor<'t> {
         self

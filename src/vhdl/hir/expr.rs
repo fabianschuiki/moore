@@ -8,7 +8,7 @@ use common::SessionContext;
 use common::errors::*;
 
 use hir::prelude::*;
-use ty2::{IntegerBasetype, UniversalIntegerType};
+use ty2::UniversalIntegerType;
 use konst2::{Const2, IntegerConst};
 pub use syntax::ast::Dir;
 
@@ -30,7 +30,7 @@ pub trait ExprContext<'t>
     : SessionContext
     + AllocInto<'t, IntegerConst<'t>>
     + AllocOwnedInto<'t, Const2<'t>>
-    + AllocInto<'t, IntegerBasetype> {
+    + AllocOwnedInto<'t, Type> {
 }
 
 impl<'t, T> ExprContext<'t> for T
@@ -38,7 +38,7 @@ where
     T: SessionContext
         + AllocInto<'t, IntegerConst<'t>>
         + AllocOwnedInto<'t, Const2<'t>>
-        + AllocInto<'t, IntegerBasetype>,
+        + AllocOwnedInto<'t, Type>,
 {
 }
 

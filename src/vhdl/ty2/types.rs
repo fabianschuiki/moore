@@ -70,13 +70,13 @@ impl<'a> PartialEq for Type + 'a {
 
 impl<'a> Eq for Type + 'a {}
 
-// impl<'t> ToOwned for Type + 't {
-//     type Owned = OwnedType<'t>;
+impl<'t> ToOwned for Type + 't {
+    type Owned = OwnedType<'t>;
 
-//     fn to_owned(&self) -> OwnedType {
-//         Type::to_owned(self)
-//     }
-// }
+    fn to_owned(&self) -> OwnedType<'t> {
+        Type::to_owned(self)
+    }
+}
 
 /// A type.
 ///
