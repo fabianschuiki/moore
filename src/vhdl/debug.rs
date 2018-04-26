@@ -132,7 +132,7 @@ impl<'b, 'a, 't: 'a> Alloc<'b, 't, konst2::IntegerConst<'t>> for &'a TypeVisitor
 }
 
 impl<'a, 'b, 't: 'a> AllocOwned<'b, 't, konst2::Const2<'t>> for &'a TypeVisitor<'t> {
-    fn alloc_owned(&'b self, value: OwnedConst<'t>) -> &'t mut Const2<'t> {
+    fn alloc_owned(&'b self, value: OwnedConst<'t>) -> &'t Const2<'t> {
         self.const_arena.alloc_owned(value)
     }
 }

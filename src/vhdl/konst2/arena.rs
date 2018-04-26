@@ -13,7 +13,7 @@ make_arenas!(
 );
 
 impl<'t> AllocOwned<'t, 't, Const2<'t>> for ConstArena<'t> {
-    fn alloc_owned(&'t self, value: OwnedConst<'t>) -> &'t mut Const2<'t> {
+    fn alloc_owned(&'t self, value: OwnedConst<'t>) -> &'t Const2<'t> {
         match value {
             OwnedConst::Integer(k) => self.alloc(k),
         }

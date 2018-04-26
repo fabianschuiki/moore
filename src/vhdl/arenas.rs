@@ -56,7 +56,7 @@ pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized + 't> {
     ///
     /// This function differs from `Alloc::alloc` in that it takes `T::Owned`
     /// and returns `&T`.
-    fn alloc_owned(&'a self, value: <T as ToOwned>::Owned) -> &'t mut T;
+    fn alloc_owned(&'a self, value: <T as ToOwned>::Owned) -> &'t T;
 
     /// Conditionally allocate a value of type `Cow<T>`.
     ///
@@ -88,7 +88,7 @@ pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized + 't> {
 // Implement `AllocOwned` for anything that supports the proper `Alloc` and for
 // any types that implement `ToOwned` with `Owned` equal to the type.
 impl<'a, 't, T: ToOwned<Owned = T> + 't> AllocOwned<'a, 't, T> for Alloc<'a, 't, T> {
-    fn alloc_owned(&'a self, value: T) -> &'t mut T {
+    fn alloc_owned(&'a self, value: T) -> &'t T {
         self.alloc(value)
     }
 }
