@@ -8,7 +8,7 @@
 use hir::prelude::*;
 use hir::{EnumLit, ExprContext, Range2};
 use term::{self, TermContext};
-use ty2::{AnyType, IntegerBasetype, IntegerRange, UniversalIntegerType};
+use ty2::{AnyType, EnumBasetype, EnumVariant, IntegerBasetype, IntegerRange, UniversalIntegerType};
 
 /// A type declaration.
 ///
@@ -53,7 +53,13 @@ impl<'t> TypeDecl2<'t> {
                 );
                 Err(())
             }
-            TypeData::Enum(ref literals) => unimplemented!("enum type mapping"),
+            TypeData::Enum(ref literals) => {
+                let ty = EnumBasetype::new(literals.value.iter().map(|x| match *x {
+                    EnumLit::Ident(x) => EnumVariant::Ident(x.value),
+                    EnumLit::Char(x) => EnumVariant::Char(x.value),
+                }));
+                Ok(ctx.alloc_owned(ty.into_owned()))
+            }
             TypeData::Range(ref range) => {
                 let (dir, lb, rb) = range.value.constant_value(ctx)?;
                 assert_eq!(lb.ty(), rb.ty());

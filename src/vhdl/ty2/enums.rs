@@ -18,13 +18,13 @@ pub trait EnumType: Type {
     /// Convert to a type.
     fn as_type(&self) -> &Type;
 
-    /// The literals of this enumeration type.
-    fn literals(&self) -> &[EnumLiteral];
+    /// The variants of this enumeration type.
+    fn variants(&self) -> &[EnumVariant];
 
-    /// The range of literals this type can assume.
+    /// The range of variants this type can assume.
     ///
     /// This is used to support subtyping of enumerations, where a subtype might
-    /// only accept a subrange of the original literals.
+    /// only accept a subrange of the original variants.
     fn range(&self) -> Range<usize>;
 
     /// The base type of this enumeration.
@@ -96,8 +96,8 @@ macro_rules! common_type_impl {
 /// An enumeration base type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumBasetype {
-    /// The enumeration literals.
-    lits: Vec<EnumLiteral>,
+    /// The enumeration variants.
+    lits: Vec<EnumVariant>,
 }
 
 impl EnumBasetype {
@@ -117,7 +117,7 @@ impl EnumBasetype {
     ///
     /// assert_eq!(format!("{}", ty), "(first, second, '0', '1')");
     /// ```
-    pub fn new<I: IntoIterator<Item = EnumLiteral>>(lits: I) -> EnumBasetype {
+    pub fn new<I: IntoIterator<Item = EnumVariant>>(lits: I) -> EnumBasetype {
         EnumBasetype {
             lits: lits.into_iter().collect(),
         }
@@ -147,7 +147,7 @@ impl EnumType for EnumBasetype {
         self
     }
 
-    fn literals(&self) -> &[EnumLiteral] {
+    fn variants(&self) -> &[EnumVariant] {
         &self.lits
     }
 
@@ -244,8 +244,8 @@ impl<'t> EnumType for EnumSubtype<'t> {
         self
     }
 
-    fn literals(&self) -> &[EnumLiteral] {
-        self.base.literals()
+    fn variants(&self) -> &[EnumVariant] {
+        self.base.variants()
     }
 
     fn range(&self) -> Range<usize> {
@@ -271,49 +271,49 @@ impl<'t> Display for EnumSubtype<'t> {
             f,
             "{} range {} {} {}",
             self.mark,
-            self.base.literals()[*self.con.left()],
+            self.base.variants()[*self.con.left()],
             self.con.dir(),
-            self.base.literals()[*self.con.right()],
+            self.base.variants()[*self.con.right()],
         )
     }
 }
 
-/// An enumeration literal.
+/// An enumeration variant.
 ///
 /// Distinguishes between:
 /// - identifier literals such as `FOO`, and
 /// - character literals such as `'0'`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EnumLiteral {
+pub enum EnumVariant {
     /// An identifier enumeration literal.
     Ident(Name),
     /// A character enumeration ltieral.
     Char(char),
 }
 
-impl<'a> From<&'a str> for EnumLiteral {
-    fn from(n: &'a str) -> EnumLiteral {
-        EnumLiteral::Ident(get_name_table().intern(n, false))
+impl<'a> From<&'a str> for EnumVariant {
+    fn from(n: &'a str) -> EnumVariant {
+        EnumVariant::Ident(get_name_table().intern(n, false))
     }
 }
 
-impl From<Name> for EnumLiteral {
-    fn from(n: Name) -> EnumLiteral {
-        EnumLiteral::Ident(n)
+impl From<Name> for EnumVariant {
+    fn from(n: Name) -> EnumVariant {
+        EnumVariant::Ident(n)
     }
 }
 
-impl From<char> for EnumLiteral {
-    fn from(c: char) -> EnumLiteral {
-        EnumLiteral::Char(c)
+impl From<char> for EnumVariant {
+    fn from(c: char) -> EnumVariant {
+        EnumVariant::Char(c)
     }
 }
 
-impl Display for EnumLiteral {
+impl Display for EnumVariant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            EnumLiteral::Ident(n) => write!(f, "{}", n),
-            EnumLiteral::Char(c) => write!(f, "'{}'", c),
+            EnumVariant::Ident(n) => write!(f, "{}", n),
+            EnumVariant::Char(c) => write!(f, "'{}'", c),
         }
     }
 }

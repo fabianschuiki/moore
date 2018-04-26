@@ -1035,10 +1035,10 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		}
 
 		hir::TypeData::Enum(ref lits) => {
-			use ty2::{EnumBasetype, EnumLiteral};
+			use ty2::{EnumBasetype, EnumVariant};
 			let ty = EnumBasetype::new(lits.iter().map(|l| match *l {
-				hir::EnumLit::Ident(sp) => EnumLiteral::from(sp.value),
-				hir::EnumLit::Char(sp)  => EnumLiteral::from(sp.value),
+				hir::EnumLit::Ident(sp) => EnumVariant::from(sp.value),
+				hir::EnumLit::Char(sp)  => EnumVariant::from(sp.value),
 			}));
 			debugln!("type from enum `{}` = {}", hir.name, ty);
 			Ok(self.intern_ty(EnumTy::new(id)))
