@@ -78,8 +78,10 @@ impl<'t> TypeDecl2<'t> {
                     AnyType::Floating(ty) => unimplemented!(),
                     _ => {
                         ctx.emit(
-                            DiagBuilder2::error("bounds must be of integer or floating-point type")
-                                .span(range.span)
+                            DiagBuilder2::error(format!(
+                                "bounds of type `{}` must be of integer or floating-point type",
+                                self.name.value
+                            )).span(range.span)
                                 .add_note(format!("bounds are of type {}", ty)),
                         );
                         Err(())
