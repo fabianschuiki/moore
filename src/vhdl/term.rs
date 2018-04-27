@@ -25,7 +25,7 @@ use konst::ConstInt;
 use add_ctx::AddContext;
 use ty::*;
 use op::*;
-use scope2::{Def2, ScopeData};
+use scope2::{Def2, TypeVariantDef, ScopeData};
 
 /// A term.
 ///
@@ -46,7 +46,7 @@ pub enum Term<'t> {
     /// An integer literal.
     IntLit(BigInt),
     /// A physical literal.
-    PhysLit(BigInt, Spanned<UnitRef>),
+    PhysLit(BigInt, Spanned<EitherUnit<'t>>),
     /// A bit string literal.
     StrLit(Name),
     /// An unresolved name.
@@ -60,7 +60,7 @@ pub enum Term<'t> {
     /// A term that refers to an enum variant.
     Enum(Vec<Spanned<EnumRef>>),
     /// A term that refers to an enum variant.
-    Enum2(Vec<Spanned<()>>),
+    Enum2(Vec<Spanned<Def2<'t>>>),
     /// A term of the form `T.<name>`.
     Select(Subterm<'t>, Spanned<ResolvableName>),
     /// A term of the form `T.all`.
@@ -94,6 +94,30 @@ pub enum Term<'t> {
     Qual(Subterm<'t>, Subterm<'t>),
     /// A term of the form `new T`.
     New(Subterm<'t>),
+}
+
+#[allow(missing_docs)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum EitherUnit<'t> {
+    Old(UnitRef),
+    New(TypeVariantDef<'t>),
+}
+
+#[allow(missing_docs)]
+impl<'t> EitherUnit<'t> {
+    pub fn unwrap_old(self) -> UnitRef {
+        match self {
+            EitherUnit::Old(u) => u,
+            _ => panic!("unit is not an old unit")
+        }
+    }
+
+    pub fn unwrap_new(self) -> TypeVariantDef<'t> {
+        match self {
+            EitherUnit::New(u) => u,
+            _ => panic!("unit is not a new unit")
+        }
+    }
 }
 
 /// A subterm.
@@ -394,7 +418,11 @@ where
                         Term::Ident(Spanned {
                             value: Def::Unit(u),
                             span,
-                        }) => Spanned::new(u, span),
+                        }) => Spanned::new(EitherUnit::Old(u), span),
+                        Term::Ident2(Spanned {
+                            value: Def2::Unit(u),
+                            span,
+                        }) => Spanned::new(EitherUnit::New(u), span),
                         _ => {
                             self.emit(
                                 DiagBuilder2::error(format!(
@@ -548,11 +576,11 @@ impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def2<'t>> for TermContext
         // unique.
         let first_def = defs.pop().unwrap();
         let term = match first_def.value {
-            Def2::Enum(id) if all_enum => {
-                let mut ids = vec![Spanned::new(id, first_def.span)];
+            Def2::Enum(..) if all_enum => {
+                let mut ids = vec![first_def];
                 for def in defs {
                     match def.value {
-                        Def2::Enum(id) => ids.push(Spanned::new(id, def.span)),
+                        Def2::Enum(..) => ids.push(def),
                         _ => unreachable!(),
                     }
                 }

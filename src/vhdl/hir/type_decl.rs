@@ -5,9 +5,11 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use num::BigInt;
+
 use hir::prelude::*;
 use hir::{EnumLit, ExprContext, Range2};
-use term::{self, TermContext};
+use term::{self, Term, TermContext};
 use ty2::{AnyType, EnumBasetype, EnumVariant, IntegerBasetype, IntegerRange, UniversalIntegerType};
 
 /// A type declaration.
@@ -29,9 +31,12 @@ enum TypeData<'t> {
     Enum(Spanned<Vec<EnumLit>>),
     /// An integer or floating point type.
     Range(Spanned<Range2<'t>>),
-    // /// A physical type.
-    // Physical(Spanned<Range2<'t>>, PhysicalUnits),
+    /// A physical type.
+    Physical(Spanned<Range2<'t>>, PhysicalUnits),
 }
+
+/// Units of a physical type.
+pub type PhysicalUnits = ();
 
 impl<'t> TypeDecl2<'t> {
     /// Return the declared type.
@@ -88,6 +93,9 @@ impl<'t> TypeDecl2<'t> {
                     }
                 }
             }
+            TypeData::Physical(ref range, ref units) => {
+                unimplemented!("mapping of physical type `{}`", self.name.value)
+            }
         }
     }
 }
@@ -103,6 +111,9 @@ impl<'t> FromAst<'t> for TypeDecl2<'t> {
         // TODO: Make the definition weak such that an actual type definition
         // may override it.
         context.define(ast.name.map_into(), Def2::Type(slot))?;
+        if let Some(ref data) = ast.data {
+            define_auxiliary_names(&data.value, slot, context)?;
+        }
         Ok(slot)
     }
 
@@ -149,6 +160,33 @@ impl<'t> Decl2<'t> for TypeDecl2<'t> {
     }
 }
 
+/// Define additional names in the scope, e.g. for enums and physical types.
+fn define_auxiliary_names<'t>(
+    data: &ast::TypeData,
+    type_decl: &'t LatentNode<'t, TypeDecl2<'t>>,
+    context: AllocContext<'t>,
+) -> Result<()> {
+    match *data {
+        ast::EnumType(ref paren_elems) => for (i, lit) in paren_elems.value.iter().enumerate() {
+            match lit.expr.data {
+                ast::NameExpr(ref name) => context.define(
+                    ResolvableName::from_primary_name(&name.primary, context)?,
+                    Def2::Enum(TypeVariantDef(type_decl, i)),
+                )?,
+                _ => (),
+            }
+        },
+        ast::RangeType(_, Some(ref units)) => for (i, unit) in units.iter().enumerate() {
+            context.define(
+                Spanned::new(unit.0.name.into(), unit.0.span),
+                Def2::Unit(TypeVariantDef(type_decl, i)),
+            )?;
+        },
+        _ => (),
+    }
+    Ok(())
+}
+
 /// Map an AST type data to the corresponding HIR type data.
 fn unpack_type_data<'t>(
     data: &ast::TypeData,
@@ -182,10 +220,13 @@ fn unpack_type_data<'t>(
             let termctx = TermContext::new2(context);
             let range_expr = termctx.termify_expr(range_expr)?;
             let range = term::term_to_range(range_expr, context)?;
-            if units.is_some() {
-                panic!("units not yet implemented");
+            match *units {
+                Some(ref units) => Ok(TypeData::Physical(
+                    range,
+                    unpack_units(units, type_name, context)?,
+                )),
+                None => Ok(TypeData::Range(range)),
             }
-            Ok(TypeData::Range(range))
         }
         _ => unimplemented!(
             "type `{}` unsupported type data {:#?}",
@@ -193,6 +234,114 @@ fn unpack_type_data<'t>(
             data
         ),
     }
+}
+
+/// Unpack the units of a physical type declaration.
+fn unpack_units<'t>(
+    units: &[(ast::Ident, Option<Box<ast::Expr>>)],
+    type_name: Spanned<Name>,
+    ctx: AllocContext<'t>,
+) -> Result<()> {
+    // Determine the primary unit.
+    let mut prim_iter = units
+        .iter()
+        .enumerate()
+        .filter(|&(_, &(_, ref expr))| expr.is_none())
+        .map(|(index, &(name, _))| (index, name));
+    let primary = match prim_iter.next() {
+        Some(u) => u,
+        None => {
+            ctx.emit(
+                DiagBuilder2::error(format!(
+                    "physical type `{}` has no primary unit",
+                    type_name.value
+                )).span(type_name.span)
+                    .add_note(
+                        "A physical type must have a primary unit of the form `<name>;`. \
+                         See IEEE 1076-2008 section 5.2.4.",
+                    ),
+            );
+            return Err(());
+        }
+    };
+    let mut had_fails = false;
+    for (_, n) in prim_iter {
+        ctx.emit(
+            DiagBuilder2::error(format!(
+                "physical type `{}` has multiple primary units",
+                type_name.value
+            )).span(n.span)
+                .add_note(
+                    "A physical type cannot have multiple primary units. \
+                     See IEEE 1076-2008 section 5.2.4.",
+                ),
+        );
+        had_fails = true;
+    }
+    if had_fails {
+        return Err(());
+    }
+
+    // Determine the units and how they are defined with respect
+    // to each other.
+    let term_ctx = TermContext::new2(ctx);
+    let table = units
+        .iter()
+        .map(|&(unit_name, ref expr)| {
+            let rel = if let Some(ref expr) = *expr {
+                let term = term_ctx.termify_expr(expr)?;
+                let (value, unit) = match term.value {
+                    Term::PhysLit(value, unit) => (value, unit),
+                    _ => {
+                        ctx.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` is not a valid secondary unit",
+                                term.span.extract()
+                            )).span(term.span),
+                        );
+                        debugln!("It is a {:#?}", term.value);
+                        return Err(());
+                    }
+                };
+                // TODO: Find a way to enable this again!
+                // if unit.value.0 != id {
+                //     ctx.emit(
+                //         DiagBuilder2::error(format!(
+                //             "`{}` is not a unit in the physical type `{}`",
+                //             term.span.extract(),
+                //             type_name.value
+                //         )).span(term.span)
+                //             .add_note(format!("`{}` has been declared here:", term.span.extract()
+                // ))
+                //             .span(unit.span),
+                //     );
+                // }
+                Some((value, unit.value.unwrap_new().1))
+            } else {
+                None
+            };
+            Ok((Spanned::new(unit_name.name, unit_name.span), rel))
+        })
+        .collect::<Vec<Result<_>>>()
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
+
+    // Determine the scale of each unit with respect to the
+    // primary unit.
+    let scale_table = table
+        .iter()
+        .map(|&(name, ref rel)| {
+            let mut abs = BigInt::from(1);
+            let mut rel_to = rel.as_ref();
+            while let Some(&(ref scale, index)) = rel_to {
+                abs = abs * scale;
+                rel_to = table[index].1.as_ref();
+            }
+            (name, abs, rel.clone())
+        })
+        .collect::<Vec<_>>();
+
+    Ok(())
 }
 
 /// Unpack a parenthesis element as an enumeration literal.

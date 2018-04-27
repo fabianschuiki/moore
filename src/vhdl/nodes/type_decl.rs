@@ -123,7 +123,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                         return Err(());
                                     }
                                 };
-                                if unit.value.0 != id {
+                                if unit.value.unwrap_old().0 != id {
                                     self.emit(
                                         DiagBuilder2::error(format!(
                                             "`{}` is not a unit in the physical type `{}`",
@@ -137,7 +137,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                             .span(unit.span),
                                     );
                                 }
-                                Some((value, unit.value.1))
+                                Some((value, unit.value.unwrap_old().1))
                             } else {
                                 None
                             };

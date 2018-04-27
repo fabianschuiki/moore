@@ -19,3 +19,11 @@ package pkg_c is
 	constant K1 : SHORT;
 	constant K2 : INT;
 end package;
+
+package pkg_d is
+	type TIME is range 1E18 to 1E18 units
+		sec;
+		min = 60 sec;
+		hr  = 60 min;
+	end units;
+end package;

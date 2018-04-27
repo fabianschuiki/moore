@@ -31,7 +31,9 @@ pub enum Def2<'t> {
     /// A type declaration.
     Type(&'t hir::LatentNode<'t, hir::TypeDecl2<'t>>),
     /// An enumeration type variant.
-    Enum(()),
+    Enum(TypeVariantDef<'t>),
+    /// A physical type unit.
+    Unit(TypeVariantDef<'t>),
 }
 
 impl<'t> fmt::Debug for Def2<'t> {
@@ -41,7 +43,8 @@ impl<'t> fmt::Debug for Def2<'t> {
             Def2::Lib(x) => write!(f, "Lib({:?})", x as *const _),
             Def2::Pkg(x) => write!(f, "Pkg({:?})", x as *const _),
             Def2::Type(x) => write!(f, "Type({:?})", x as *const _),
-            Def2::Enum(x) => write!(f, "Enum({:?})", x),
+            Def2::Enum(x) => write!(f, "Enum({:?}, {})", x.0 as *const _, x.1),
+            Def2::Unit(x) => write!(f, "Unit({:?}, {})", x.0 as *const _, x.1),
         }
     }
 }
@@ -55,7 +58,8 @@ impl<'t> Def2<'t> {
             Def2::Lib(x) => x.desc_kind(),
             Def2::Pkg(x) => x.poll().unwrap().desc_kind(),
             Def2::Type(x) => x.poll().unwrap().desc_kind(),
-            Def2::Enum(_x) => "enum".into(),
+            Def2::Enum(x) => x.0.poll().unwrap().desc_kind(),
+            Def2::Unit(x) => x.0.poll().unwrap().desc_kind(),
         }
     }
 }
@@ -68,6 +72,7 @@ impl<'t> PartialEq for Def2<'t> {
             (Def2::Pkg(a), Def2::Pkg(b)) => (a as *const _ == b as *const _),
             (Def2::Type(a), Def2::Type(b)) => (a as *const _ == b as *const _),
             (Def2::Enum(a), Def2::Enum(b)) => (a == b),
+            (Def2::Unit(a), Def2::Unit(b)) => (a == b),
             _ => false,
         }
     }
@@ -111,9 +116,16 @@ impl<'t> ScopeData<'t> {
     }
 
     /// Define a new name in the scope.
-    pub fn define(&self, name: Spanned<ResolvableName>, def: Def2<'t>, ctx: &SessionContext) -> Result<()> {
+    pub fn define(
+        &self,
+        name: Spanned<ResolvableName>,
+        def: Def2<'t>,
+        ctx: &SessionContext,
+    ) -> Result<()> {
         if ctx.has_verbosity(Verbosity::NAMES) {
-            ctx.emit(DiagBuilder2::note(format!("define `{}` as {:?}", name.value, def)).span(name.span));
+            ctx.emit(
+                DiagBuilder2::note(format!("define `{}` as {:?}", name.value, def)).span(name.span),
+            );
         }
         debugln!("define `{}` as {:?}", name.value, def);
         match def {
@@ -224,3 +236,21 @@ pub trait ScopeContext<'t> {
     /// Find a name in this scope.
     fn resolve(&self, name: ResolvableName, recur: bool) -> Vec<Spanned<Def2<'t>>>;
 }
+
+/// An enumeration variant or physical unit.
+#[derive(Copy, Clone)]
+pub struct TypeVariantDef<'t>(pub &'t hir::LatentNode<'t, hir::TypeDecl2<'t>>, pub usize);
+
+impl<'t> fmt::Debug for TypeVariantDef<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "TypeVariantDef({:?}, {})", self.0 as *const _, self.1)
+    }
+}
+
+impl<'t> PartialEq for TypeVariantDef<'t> {
+    fn eq(&self, other: &Self) -> bool {
+        (self.0 as *const _ == other.0 as *const _ && self.1 == other.1)
+    }
+}
+
+impl<'t> Eq for TypeVariantDef<'t> {}

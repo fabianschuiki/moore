@@ -9,7 +9,7 @@ pub use common::score::Result;
 pub use arenas::{Alloc, AllocInto, AllocOwned, AllocOwnedInto, AllocOwnedSelf, AllocSelf};
 pub use syntax::ast;
 pub use score::ResolvableName;
-pub use scope2::{Def2, ScopeContext, ScopeData};
+pub use scope2::{Def2, ScopeContext, ScopeData, TypeVariantDef};
 pub use hir::visit::Visitor;
 pub use hir::node::*;
 pub use hir::slot::*;
