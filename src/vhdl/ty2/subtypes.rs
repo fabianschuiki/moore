@@ -38,6 +38,3 @@ impl<'t, T: Type + ?Sized + 't, C: Clone> Clone for ScalarSubtype<'t, T, C> {
 
 /// A subtype of a floating-point type.
 pub type FloatingSubtype<'t> = ScalarSubtype<'t, FloatingType, f64>;
-
-/// A subtype of a physical type.
-pub type PhysicalSubtype<'t> = ScalarSubtype<'t, PhysicalType, BigInt>;

@@ -3,16 +3,15 @@
 //! Dealing with types in an abstract manner.
 
 use std::fmt::{self, Debug, Display};
-use std::iter::{once, repeat};
 use std::ops::Deref;
 use std::borrow::Borrow;
 
 pub use num::BigInt;
 
-use common::name::Name;
 use ty2::range::Range;
 use ty2::ints::*;
 use ty2::enums::*;
+use ty2::physical::*;
 
 /// An interface for dealing with types.
 ///
@@ -150,7 +149,7 @@ impl<'t> AnyType<'t> {
             AnyType::Enum(t) => t.as_type(),
             AnyType::Integer(t) => t.as_type(),
             AnyType::Floating(t) => t,
-            AnyType::Physical(t) => t,
+            AnyType::Physical(t) => t.as_type(),
             AnyType::Array(t) => t,
             AnyType::Null => &NullType,
             AnyType::UniversalInteger => &UniversalIntegerType,
@@ -281,6 +280,8 @@ pub enum OwnedType<'t> {
     EnumSubtype(EnumSubtype<'t>),
     IntegerBasetype(IntegerBasetype),
     IntegerSubtype(IntegerSubtype<'t>),
+    PhysicalBasetype(PhysicalBasetype),
+    PhysicalSubtype(PhysicalSubtype<'t>),
     Null,
     UniversalInteger,
     UniversalReal,
@@ -293,6 +294,8 @@ impl<'t> Borrow<Type + 't> for OwnedType<'t> {
             OwnedType::EnumSubtype(ref k) => k,
             OwnedType::IntegerBasetype(ref k) => k,
             OwnedType::IntegerSubtype(ref k) => k,
+            OwnedType::PhysicalBasetype(ref k) => k,
+            OwnedType::PhysicalSubtype(ref k) => k,
             OwnedType::Null => &NullType,
             OwnedType::UniversalInteger => &UniversalIntegerType,
             OwnedType::UniversalReal => &UniversalRealType,
@@ -412,179 +415,6 @@ impl Deref for FloatingType {
     type Target = Range<f64>;
     fn deref(&self) -> &Range<f64> {
         &self.range
-    }
-}
-
-/// A physical type.
-///
-/// In VHDL a physical type is an integer multiple of some measurement unit.
-/// A physical type has exactly one primary unit, and multiple secondary units
-/// defined as multiples of that primary unit.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PhysicalType {
-    /// The range of integer multiples of the primary unit.
-    range: Range<BigInt>,
-    /// The units of this type.
-    units: Vec<PhysicalUnit>,
-    /// The index of the primary unit.
-    primary: usize,
-}
-
-impl PhysicalType {
-    /// Create a new physical type.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{PhysicalType, PhysicalUnit, Range};
-    /// use moore_vhdl::common::name::get_name_table;
-    ///
-    /// let ty = PhysicalType::new(Range::ascending(0, 1_000_000), vec![
-    ///     PhysicalUnit::primary(get_name_table().intern("fs", false), 1),
-    ///     PhysicalUnit::secondary(get_name_table().intern("ps", false), 1_000, 1000, 0),
-    ///     PhysicalUnit::secondary(get_name_table().intern("ns", false), 1_000_000, 1000, 1),
-    /// ], 0);
-    ///
-    /// assert_eq!(format!("{}", ty), "0 to 1000000 units (fs, ps, ns)");
-    /// ```
-    pub fn new<I>(range: Range<BigInt>, units: I, primary: usize) -> PhysicalType
-    where
-        I: IntoIterator<Item = PhysicalUnit>,
-    {
-        PhysicalType {
-            range: range,
-            units: units.into_iter().collect(),
-            primary: primary,
-        }
-    }
-
-    /// Return the units.
-    pub fn units(&self) -> &[PhysicalUnit] {
-        &self.units
-    }
-
-    /// Return the index of the primary unit.
-    pub fn primary_index(&self) -> usize {
-        self.primary
-    }
-}
-
-impl Type for PhysicalType {
-    fn is_scalar(&self) -> bool {
-        true
-    }
-
-    fn is_discrete(&self) -> bool {
-        false
-    }
-
-    fn is_numeric(&self) -> bool {
-        true
-    }
-
-    fn is_composite(&self) -> bool {
-        false
-    }
-
-    fn into_owned<'a>(self) -> OwnedType<'a>
-    where
-        Self: 'a,
-    {
-        unimplemented!()
-    }
-
-    fn to_owned<'a>(&self) -> OwnedType<'a>
-    where
-        Self: 'a,
-    {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> AnyType {
-        AnyType::Physical(self)
-    }
-}
-
-impl Display for PhysicalType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} units (", self.range)?;
-        for (sep, unit) in once("").chain(repeat(", ")).zip(self.units.iter()) {
-            write!(f, "{}{}", sep, unit.name)?;
-        }
-        write!(f, ")")?;
-        Ok(())
-    }
-}
-
-impl Deref for PhysicalType {
-    type Target = Range<BigInt>;
-    fn deref(&self) -> &Range<BigInt> {
-        &self.range
-    }
-}
-
-/// A unit of a physical type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PhysicalUnit {
-    /// The name of the unit.
-    pub name: Name,
-    /// The scale of the unit with respect to the physical type's primary unit.
-    pub abs: BigInt,
-    /// The scale of the unit with respect to another unit.
-    pub rel: Option<(BigInt, usize)>,
-}
-
-impl PhysicalUnit {
-    /// Create a new primary unit.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{PhysicalUnit, BigInt};
-    /// use moore_vhdl::common::name::get_name_table;
-    ///
-    /// let name = get_name_table().intern("fs", false);
-    /// let unit = PhysicalUnit::primary(name, 1);
-    ///
-    /// assert_eq!(unit.name, name);
-    /// assert_eq!(unit.abs, BigInt::from(1));
-    /// assert_eq!(unit.rel, None);
-    /// ```
-    pub fn primary<A>(name: Name, abs: A) -> PhysicalUnit
-    where
-        BigInt: From<A>,
-    {
-        PhysicalUnit {
-            name: name,
-            abs: abs.into(),
-            rel: None,
-        }
-    }
-
-    /// Create a new secondary unit.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{PhysicalUnit, BigInt};
-    /// use moore_vhdl::common::name::get_name_table;
-    ///
-    /// let name = get_name_table().intern("fs", false);
-    /// let unit = PhysicalUnit::secondary(name, 1, 1000, 0);
-    ///
-    /// assert_eq!(unit.name, name);
-    /// assert_eq!(unit.abs, BigInt::from(1));
-    /// assert_eq!(unit.rel, Some((BigInt::from(1000), 0)));
-    /// ```
-    pub fn secondary<A, R>(name: Name, abs: A, rel: R, rel_to: usize) -> PhysicalUnit
-    where
-        BigInt: From<A> + From<R>,
-    {
-        PhysicalUnit {
-            name: name,
-            abs: abs.into(),
-            rel: Some((rel.into(), rel_to)),
-        }
     }
 }
 

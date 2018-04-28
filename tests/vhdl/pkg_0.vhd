@@ -21,7 +21,7 @@ package pkg_c is
 end package;
 
 package pkg_d is
-	type TIME is range 1E18 to 1E18 units
+	type TIME is range 0 to 1E18 units
 		sec;
 		min = 60 sec;
 		hr  = 60 min;

@@ -10,7 +10,8 @@ use num::BigInt;
 use hir::prelude::*;
 use hir::{EnumLit, ExprContext, Range2};
 use term::{self, Term, TermContext};
-use ty2::{AnyType, EnumBasetype, EnumVariant, IntegerBasetype, IntegerRange, UniversalIntegerType};
+use ty2::{AnyType, EnumBasetype, EnumVariant, IntegerBasetype, IntegerRange, PhysicalBasetype,
+          PhysicalUnit, Range, UniversalIntegerType};
 
 /// A type declaration.
 ///
@@ -32,11 +33,8 @@ enum TypeData<'t> {
     /// An integer or floating point type.
     Range(Spanned<Range2<'t>>),
     /// A physical type.
-    Physical(Spanned<Range2<'t>>, PhysicalUnits),
+    Physical(Spanned<Range2<'t>>, Vec<PhysicalUnit>, usize),
 }
-
-/// Units of a physical type.
-pub type PhysicalUnits = ();
 
 impl<'t> TypeDecl2<'t> {
     /// Return the declared type.
@@ -73,7 +71,7 @@ impl<'t> TypeDecl2<'t> {
                     AnyType::Integer(ty) => {
                         let lb = lb.as_any().unwrap_integer();
                         let rb = rb.as_any().unwrap_integer();
-                        let ty = IntegerBasetype::new(IntegerRange::with_left_right(
+                        let ty = IntegerBasetype::new(Range::with_left_right(
                             dir,
                             lb.value().clone(),
                             rb.value().clone(),
@@ -93,8 +91,32 @@ impl<'t> TypeDecl2<'t> {
                     }
                 }
             }
-            TypeData::Physical(ref range, ref units) => {
-                unimplemented!("mapping of physical type `{}`", self.name.value)
+            TypeData::Physical(ref range, ref units, primary) => {
+                let (dir, lb, rb) = range.value.constant_value(ctx)?;
+                assert_eq!(lb.ty(), rb.ty());
+                let ty = lb.ty();
+                match ty.as_any() {
+                    AnyType::Integer(ty) => {
+                        let lb = lb.as_any().unwrap_integer();
+                        let rb = rb.as_any().unwrap_integer();
+                        let ty = PhysicalBasetype::new(
+                            Range::with_left_right(dir, lb.value().clone(), rb.value().clone()),
+                            units.clone(),
+                            primary,
+                        );
+                        Ok(ctx.alloc_owned(ty.into_owned()))
+                    }
+                    _ => {
+                        ctx.emit(
+                            DiagBuilder2::error(format!(
+                                "bounds of physical type `{}` must be integers",
+                                self.name.value
+                            )).span(range.span)
+                                .add_note(format!("bounds are of type {}", ty)),
+                        );
+                        Err(())
+                    }
+                }
             }
         }
     }
@@ -221,10 +243,10 @@ fn unpack_type_data<'t>(
             let range_expr = termctx.termify_expr(range_expr)?;
             let range = term::term_to_range(range_expr, context)?;
             match *units {
-                Some(ref units) => Ok(TypeData::Physical(
-                    range,
-                    unpack_units(units, type_name, context)?,
-                )),
+                Some(ref units) => {
+                    let (units, primary) = unpack_units(units, type_name, context)?;
+                    Ok(TypeData::Physical(range, units, primary))
+                }
                 None => Ok(TypeData::Range(range)),
             }
         }
@@ -241,7 +263,7 @@ fn unpack_units<'t>(
     units: &[(ast::Ident, Option<Box<ast::Expr>>)],
     type_name: Spanned<Name>,
     ctx: AllocContext<'t>,
-) -> Result<()> {
+) -> Result<(Vec<PhysicalUnit>, usize)> {
     // Determine the primary unit.
     let mut prim_iter = units
         .iter()
@@ -326,22 +348,22 @@ fn unpack_units<'t>(
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
 
-    // Determine the scale of each unit with respect to the
-    // primary unit.
-    let scale_table = table
-        .iter()
-        .map(|&(name, ref rel)| {
-            let mut abs = BigInt::from(1);
-            let mut rel_to = rel.as_ref();
-            while let Some(&(ref scale, index)) = rel_to {
-                abs = abs * scale;
-                rel_to = table[index].1.as_ref();
-            }
-            (name, abs, rel.clone())
-        })
-        .collect::<Vec<_>>();
-
-    Ok(())
+    // Determine the scale of each unit with respect to the primary unit.
+    Ok((
+        table
+            .iter()
+            .map(|&(name, ref rel)| {
+                let mut abs = BigInt::from(1);
+                let mut rel_to = rel.as_ref();
+                while let Some(&(ref scale, index)) = rel_to {
+                    abs = abs * scale;
+                    rel_to = table[index].1.as_ref();
+                }
+                PhysicalUnit::new(name.value, abs, rel.clone())
+            })
+            .collect::<Vec<_>>(),
+        primary.0,
+    ))
 }
 
 /// Unpack a parenthesis element as an enumeration literal.

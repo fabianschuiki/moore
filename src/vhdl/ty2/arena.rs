@@ -5,6 +5,7 @@ use ty2::prelude::*;
 use ty2::types::{NullType, UniversalRealType};
 use ty2::ints::*;
 use ty2::enums::*;
+use ty2::physical::*;
 
 make_arenas!(
     /// An arena to allocate types nodes into.
@@ -13,6 +14,8 @@ make_arenas!(
         integer_subtype: IntegerSubtype<'t>,
         enum_basetype: EnumBasetype,
         enum_subtype: EnumSubtype<'t>,
+        physical_basetype: PhysicalBasetype,
+        physical_subtype: PhysicalSubtype<'t>,
     }
 );
 
@@ -23,6 +26,8 @@ impl<'t> AllocOwned<'t, 't, Type> for TypeArena<'t> {
             OwnedType::IntegerSubtype(t) => self.alloc(t),
             OwnedType::EnumBasetype(t) => self.alloc(t),
             OwnedType::EnumSubtype(t) => self.alloc(t),
+            OwnedType::PhysicalBasetype(t) => self.alloc(t),
+            OwnedType::PhysicalSubtype(t) => self.alloc(t),
             OwnedType::Null => &NullType,
             OwnedType::UniversalInteger => &UniversalIntegerType,
             OwnedType::UniversalReal => &UniversalRealType,

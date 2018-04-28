@@ -17,6 +17,7 @@ mod arena;
 mod range;
 mod ints;
 mod enums;
+mod physical;
 mod prelude;
 
 pub use self::types::*;
@@ -26,3 +27,4 @@ pub use self::arena::*;
 pub use self::range::*;
 pub use self::ints::*;
 pub use self::enums::*;
+pub use self::physical::*;
