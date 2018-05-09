@@ -214,7 +214,7 @@ impl<'t> PhysicalSubtype<'t> {
     /// # Example
     ///
     /// ```
-    /// use moore_vhdl::ty2::{Type, TypeMark, PhysicalBasetype, PhysicalSubtype, Range};
+    /// use moore_vhdl::ty2::{Type, TypeMark, PhysicalUnit, PhysicalBasetype, PhysicalSubtype, Range};
     /// use moore_vhdl::common::name::get_name_table;
     ///
     /// let ty = PhysicalBasetype::new(Range::ascending(-1000isize, 1000isize), vec![
