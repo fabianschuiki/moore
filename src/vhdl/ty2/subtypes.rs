@@ -16,7 +16,7 @@ pub trait Subtype: Debug + Display {}
 /// A subtype of a scalar type.
 ///
 /// Scalar types may be subtyped by a range constraint.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct ScalarSubtype<'t, T: Type + ?Sized + 't, C: Clone> {
     #[allow(dead_code)]
     pub(crate) resfn: Option<usize>,
@@ -24,6 +24,8 @@ pub struct ScalarSubtype<'t, T: Type + ?Sized + 't, C: Clone> {
     pub(crate) base: &'t T,
     pub(crate) con: Range<C>,
 }
+
+impl<'t, T: Type + ?Sized + 't + PartialEq, C: Clone + PartialEq> Eq for ScalarSubtype<'t, T, C> {}
 
 impl<'t, T: Type + ?Sized + 't, C: Clone> Clone for ScalarSubtype<'t, T, C> {
     fn clone(&self) -> Self {
@@ -35,6 +37,3 @@ impl<'t, T: Type + ?Sized + 't, C: Clone> Clone for ScalarSubtype<'t, T, C> {
         }
     }
 }
-
-/// A subtype of a floating-point type.
-pub type FloatingSubtype<'t> = ScalarSubtype<'t, FloatingType, f64>;

@@ -334,7 +334,3 @@ impl Display for UniversalIntegerType {
         write!(f, "{{universal integer}}")
     }
 }
-
-// impl_type_for_integer!(IntegerBasetype, IntegerBasetype);
-// impl_type_for_integer!({'t} IntegerSubtype<'t>, IntegerSubtype);
-// impl_type_for_integer!(UniversalIntegerType, UniversalInteger);

@@ -23,5 +23,5 @@ pub trait Visitor<'t> {
         hir.walk(self.as_visitor());
     }
 
-    fn visit_integer_literal_expr(&mut self, _: &'t IntLitExpr) {}
+    fn visit_literal_expr(&mut self, _: &'t LitExpr) {}
 }

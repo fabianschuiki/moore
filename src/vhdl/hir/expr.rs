@@ -2,14 +2,14 @@
 
 #![deny(missing_docs)]
 
-use num::BigInt;
+use num::{BigInt, BigRational, ToPrimitive};
 
 use common::SessionContext;
 use common::errors::*;
 
 use hir::prelude::*;
-use ty2::UniversalIntegerType;
-use konst2::{Const2, IntegerConst};
+use ty2::{UniversalIntegerType, UniversalRealType};
+use konst2::{Const2, FloatingConst, IntegerConst};
 pub use syntax::ast::Dir;
 
 /// An expression.
@@ -42,51 +42,118 @@ where
 {
 }
 
-/// An integer literal expression.
+/// A literal expression.
 #[derive(Debug)]
-pub struct IntLitExpr {
+pub struct LitExpr {
     span: Span,
-    value: BigInt,
+    value: LitExprValue,
 }
 
-impl IntLitExpr {
+/// The value of a literal expression.
+#[derive(Debug)]
+pub enum LitExprValue {
+    /// The value of an integer literal.
+    Integer(BigInt),
+    /// The value of a floating-point literal.
+    Float(BigRational),
+}
+
+impl LitExpr {
     /// Create a new integer literal expression.
-    pub fn new(span: Span, value: BigInt) -> IntLitExpr {
-        IntLitExpr {
+    pub fn new_integer(span: Span, value: BigInt) -> LitExpr {
+        LitExpr {
             span: span,
-            value: value,
+            value: LitExprValue::Integer(value),
+        }
+    }
+
+    /// Create a new float literal expression.
+    pub fn new_float(span: Span, value: BigRational) -> LitExpr {
+        LitExpr {
+            span: span,
+            value: LitExprValue::Float(value),
         }
     }
 
     /// Return the constant value of the literal.
-    pub fn value(&self) -> &BigInt {
+    pub fn value(&self) -> &LitExprValue {
         &self.value
+    }
+
+    /// Check if this is an integer literal.
+    pub fn is_integer(&self) -> bool {
+        match self.value {
+            LitExprValue::Integer(..) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this is a floating-point literal.
+    pub fn is_float(&self) -> bool {
+        match self.value {
+            LitExprValue::Float(..) => true,
+            _ => false,
+        }
+    }
+
+    /// Return the literal's integer value, or `None` if it is not an integer.
+    pub fn integer_value(&self) -> Option<&BigInt> {
+        match self.value {
+            LitExprValue::Integer(ref v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Return the literal's float value, or `None` if it is not an float.
+    pub fn float_value(&self) -> Option<&BigRational> {
+        match self.value {
+            LitExprValue::Float(ref v) => Some(v),
+            _ => None,
+        }
     }
 }
 
-impl<'t> Node<'t> for IntLitExpr {
+impl<'t> Node<'t> for LitExpr {
     fn span(&self) -> Span {
         self.span
     }
 
     fn desc_kind(&self) -> String {
-        "integer literal".into()
+        match self.value {
+            LitExprValue::Integer(..) => "integer literal".into(),
+            LitExprValue::Float(..) => "floating-point literal".into(),
+        }
     }
 
     fn accept(&'t self, visitor: &mut Visitor<'t>) {
-        visitor.visit_integer_literal_expr(self);
+        visitor.visit_literal_expr(self);
     }
 
     fn walk(&'t self, _visitor: &mut Visitor<'t>) {}
 }
 
-impl<'t> Expr2<'t> for IntLitExpr {
+impl<'t> Expr2<'t> for LitExpr {
     fn typeval(&self, _: Option<&'t Type>, _: &ExprContext<'t>) -> Result<&'t Type> {
-        Ok(&UniversalIntegerType)
+        Ok(match self.value {
+            LitExprValue::Integer(..) => &UniversalIntegerType,
+            LitExprValue::Float(..) => &UniversalRealType,
+        })
     }
 
     fn constant_value(&self, ctx: &ExprContext<'t>) -> Result<&'t Const2<'t>> {
-        Ok(ctx.alloc(IntegerConst::try_new(&UniversalIntegerType, self.value.clone()).emit(ctx)?))
+        Ok(ctx.alloc_owned(match self.value {
+            LitExprValue::Integer(ref v) => IntegerConst::try_new(&UniversalIntegerType, v.clone())
+                .emit(ctx)?
+                .into_owned(),
+            LitExprValue::Float(ref v) => {
+                // Convert from BigRational to f64. This is ugly and stupid, but
+                // good enough for the beginning.
+                let f = v.numer().to_f64().unwrap() / v.denom().to_f64().unwrap();
+                FloatingConst::try_new(&UniversalRealType, f)
+                    .emit(ctx)?
+                    .into_owned()
+            }
+        }))
     }
 }
 

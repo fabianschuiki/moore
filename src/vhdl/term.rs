@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 
-use num::BigInt;
+use num::{BigInt, BigRational};
 
 use common::SessionContext;
 use common::name::Name;
@@ -45,6 +45,8 @@ pub enum Term<'t> {
     Default,
     /// An integer literal.
     IntLit(BigInt),
+    /// A floating point literal.
+    FloatLit(BigRational),
     /// A physical literal.
     PhysLit(BigInt, Spanned<EitherUnit<'t>>),
     /// A bit string literal.
@@ -217,7 +219,27 @@ where
                     };
 
                     // Parse the rest of the number.
-                    if frac.is_none() {
+                    if let Some(frac) = frac {
+                        use num::pow;
+                        let shift = frac.as_str().len();
+                        let frac = match BigInt::parse_bytes(frac.as_str().as_bytes(), base) {
+                            Some(v) => v,
+                            None => {
+                                self.emit(DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", frac, base)).span(ast.span));
+                                return Err(());
+                            }
+                        };
+                        let num = int * pow(BigInt::from(base), shift) + frac;
+                        let adj = exp - shift as isize;
+                        let q = if adj < 0 {
+                            BigRational::new(num, pow(BigInt::from(base), (-adj) as usize))
+                        } else if adj > 0 {
+                            BigRational::from(num * pow(BigInt::from(base), adj as usize))
+                        } else {
+                            BigRational::from(num)
+                        };
+                        Term::FloatLit(q)
+                    } else {
                         if exp < 0 {
                             self.emit(
                                 DiagBuilder2::error(format!(
@@ -233,9 +255,6 @@ where
                         } else {
                             Term::IntLit(int)
                         }
-                    } else {
-                        self.emit(DiagBuilder2::bug("Float literals not yet supported").span(ast.span));
-                        return Err(());
                     }
                 }
                 ref wrong => {
@@ -1664,7 +1683,7 @@ impl<'t> TermContext<hir::AllocContext<'t>, &'t ScopeData<'t>, Def2<'t>> {
 /// Map a term to a range.
 pub fn term_to_range<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<Spanned<hir::Range2<'t>>>
 where
-    C: SessionContext + Copy + for<'a> Alloc<'a, 't, hir::IntLitExpr>,
+    C: SessionContext + Copy + for<'a> Alloc<'a, 't, hir::LitExpr>,
 {
     let v = match term.value {
         // Term::Attr(..) => ...
@@ -1693,14 +1712,15 @@ where
 /// Map a term to a range.
 pub fn term_to_expr<'t, C>(term: Spanned<Term<'t>>, ctx: C) -> Result<&'t hir::Expr2<'t>>
 where
-    C: SessionContext + Copy + for<'a> Alloc<'a, 't, hir::IntLitExpr>,
+    C: SessionContext + Copy + for<'a> Alloc<'a, 't, hir::LitExpr>,
 {
     match term.value {
         Term::Unresolved(name) => {
             ctx.emit(DiagBuilder2::error(format!("`{}` is unknown", name)).span(term.span));
             Err(())
         }
-        Term::IntLit(value) => Ok(ctx.alloc(hir::IntLitExpr::new(term.span, value))),
+        Term::IntLit(value) => Ok(ctx.alloc(hir::LitExpr::new_integer(term.span, value))),
+        Term::FloatLit(value) => Ok(ctx.alloc(hir::LitExpr::new_float(term.span, value))),
         // Throw an error for everything that does not look like an expression.
         _ => {
             ctx.emit(

@@ -6,8 +6,10 @@
 
 mod traits;
 mod integer;
+mod floating;
 mod arena;
 
 pub use self::traits::*;
 pub use self::integer::*;
+pub use self::floating::*;
 pub use self::arena::*;

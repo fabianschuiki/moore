@@ -3,13 +3,12 @@
 //! Dealing with types in an abstract manner.
 
 use std::fmt::{self, Debug, Display};
-use std::ops::Deref;
 use std::borrow::Borrow;
 
 pub use num::BigInt;
 
-use ty2::range::Range;
 use ty2::ints::*;
+use ty2::floats::*;
 use ty2::enums::*;
 use ty2::physical::*;
 
@@ -107,32 +106,12 @@ pub enum AnyType<'t> {
 impl<'t> Display for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt(self.as_type(), f)
-        // match *self {
-        //     AnyType::Enum(t) => Display::fmt(t, f),
-        //     AnyType::Integer(t) => Display::fmt(t, f),
-        //     AnyType::Floating(t) => Display::fmt(t, f),
-        //     AnyType::Physical(t) => Display::fmt(t, f),
-        //     AnyType::Array(t) => Display::fmt(t, f),
-        //     AnyType::Null => Display::fmt(&NullType, f),
-        //     AnyType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
-        //     AnyType::UniversalReal => Display::fmt(&UniversalRealType, f),
-        // }
     }
 }
 
 impl<'t> Debug for AnyType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(self.as_type(), f)
-        // match *self {
-        //     AnyType::Enum(t) => Debug::fmt(t, f),
-        //     AnyType::Integer(t) => Debug::fmt(t, f),
-        //     AnyType::Floating(t) => Debug::fmt(t, f),
-        //     AnyType::Physical(t) => Debug::fmt(t, f),
-        //     AnyType::Array(t) => Debug::fmt(t, f),
-        //     AnyType::Null => Debug::fmt(&NullType, f),
-        //     AnyType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
-        //     AnyType::UniversalReal => Debug::fmt(&UniversalRealType, f),
-        // }
     }
 }
 
@@ -148,7 +127,7 @@ impl<'t> AnyType<'t> {
         match self {
             AnyType::Enum(t) => t.as_type(),
             AnyType::Integer(t) => t.as_type(),
-            AnyType::Floating(t) => t,
+            AnyType::Floating(t) => t.as_type(),
             AnyType::Physical(t) => t.as_type(),
             AnyType::Array(t) => t,
             AnyType::Null => &NullType,
@@ -280,6 +259,8 @@ pub enum OwnedType<'t> {
     EnumSubtype(EnumSubtype<'t>),
     IntegerBasetype(IntegerBasetype),
     IntegerSubtype(IntegerSubtype<'t>),
+    FloatingBasetype(FloatingBasetype),
+    FloatingSubtype(FloatingSubtype<'t>),
     PhysicalBasetype(PhysicalBasetype),
     PhysicalSubtype(PhysicalSubtype<'t>),
     Null,
@@ -294,6 +275,8 @@ impl<'t> Borrow<Type + 't> for OwnedType<'t> {
             OwnedType::EnumSubtype(ref k) => k,
             OwnedType::IntegerBasetype(ref k) => k,
             OwnedType::IntegerSubtype(ref k) => k,
+            OwnedType::FloatingBasetype(ref k) => k,
+            OwnedType::FloatingSubtype(ref k) => k,
             OwnedType::PhysicalBasetype(ref k) => k,
             OwnedType::PhysicalSubtype(ref k) => k,
             OwnedType::Null => &NullType,
@@ -306,115 +289,12 @@ impl<'t> Borrow<Type + 't> for OwnedType<'t> {
 impl<'t> Display for OwnedType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <Type as Display>::fmt(self.borrow(), f)
-        // match *self {
-        //     OwnedType::EnumBasetype(ref t) => Display::fmt(t, f),
-        //     OwnedType::EnumSubtype(ref t) => Display::fmt(t, f),
-        //     OwnedType::IntegerBasetype(ref t) => Display::fmt(t, f),
-        //     OwnedType::IntegerSubtype(ref t) => Display::fmt(t, f),
-        //     OwnedType::Null => Display::fmt(&NullType, f),
-        //     OwnedType::UniversalInteger => Display::fmt(&UniversalIntegerType, f),
-        //     OwnedType::UniversalReal => Display::fmt(&UniversalRealType, f),
-        // }
     }
 }
 
 impl<'t> Debug for OwnedType<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <Type as Debug>::fmt(self.borrow(), f)
-        // match *self {
-        //     OwnedType::EnumBasetype(ref t) => Debug::fmt(t, f),
-        //     OwnedType::EnumSubtype(ref t) => Debug::fmt(t, f),
-        //     OwnedType::IntegerBasetype(ref t) => Debug::fmt(t, f),
-        //     OwnedType::IntegerSubtype(ref t) => Debug::fmt(t, f),
-        //     OwnedType::Null => Debug::fmt(&NullType, f),
-        //     OwnedType::UniversalInteger => Debug::fmt(&UniversalIntegerType, f),
-        //     OwnedType::UniversalReal => Debug::fmt(&UniversalRealType, f),
-        // }
-    }
-}
-
-// impl<'t, T: Type> From<T> for OwnedType<'t> {
-//     fn from(other: T) -> OwnedType<'t> {
-//         other.into_owned()
-//     }
-// }
-
-/// A floating-point type.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FloatingType {
-    /// The range of values.
-    range: Range<f64>,
-}
-
-impl FloatingType {
-    /// Create a new floating-point type.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use moore_vhdl::ty2::{Type, FloatingType, Range, RangeDir};
-    ///
-    /// let a = FloatingType::new(Range::ascending(0, 42));
-    /// let b = FloatingType::new(Range::descending(42, 0));
-    ///
-    /// assert_eq!(format!("{}", a), "0 to 42");
-    /// assert_eq!(format!("{}", b), "42 downto 0");
-    /// assert_eq!(a.dir(), RangeDir::To);
-    /// assert_eq!(b.dir(), RangeDir::Downto);
-    /// assert_eq!(a.len(), f64::from(43));
-    /// assert_eq!(b.len(), f64::from(43));
-    /// ```
-    pub fn new(range: Range<f64>) -> FloatingType {
-        FloatingType { range: range }
-    }
-}
-
-impl Type for FloatingType {
-    fn is_scalar(&self) -> bool {
-        true
-    }
-
-    fn is_discrete(&self) -> bool {
-        false
-    }
-
-    fn is_numeric(&self) -> bool {
-        true
-    }
-
-    fn is_composite(&self) -> bool {
-        false
-    }
-
-    fn into_owned<'a>(self) -> OwnedType<'a>
-    where
-        Self: 'a,
-    {
-        unimplemented!()
-    }
-
-    fn to_owned<'a>(&self) -> OwnedType<'a>
-    where
-        Self: 'a,
-    {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> AnyType {
-        AnyType::Floating(self)
-    }
-}
-
-impl Display for FloatingType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.range)
-    }
-}
-
-impl Deref for FloatingType {
-    type Target = Range<f64>;
-    fn deref(&self) -> &Range<f64> {
-        &self.range
     }
 }
 
@@ -530,68 +410,5 @@ impl Type for NullType {
 impl Display for NullType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "null")
-    }
-}
-
-/// A universal real.
-///
-/// This is not strictly a separate type, but rather defined by the standard as
-/// the floating-point type with the largest range. We use this special marker
-/// type.
-///
-/// # Example
-///
-/// ```
-/// use moore_vhdl::ty2::{Type, UniversalRealType};
-///
-/// let ty = UniversalRealType;
-///
-/// assert_eq!(format!("{}", ty), "{universal real}");
-/// assert_eq!(ty.is_scalar(), true);
-/// assert_eq!(ty.is_discrete(), false);
-/// assert_eq!(ty.is_numeric(), true);
-/// ```
-#[derive(Debug, Clone, Copy)]
-pub struct UniversalRealType;
-
-impl Type for UniversalRealType {
-    fn is_scalar(&self) -> bool {
-        true
-    }
-
-    fn is_discrete(&self) -> bool {
-        false
-    }
-
-    fn is_numeric(&self) -> bool {
-        true
-    }
-
-    fn is_composite(&self) -> bool {
-        false
-    }
-
-    fn into_owned<'a>(self) -> OwnedType<'a>
-    where
-        Self: 'a,
-    {
-        OwnedType::UniversalReal
-    }
-
-    fn to_owned<'a>(&self) -> OwnedType<'a>
-    where
-        Self: 'a,
-    {
-        OwnedType::UniversalReal
-    }
-
-    fn as_any(&self) -> AnyType {
-        AnyType::UniversalReal
-    }
-}
-
-impl Display for UniversalRealType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{universal real}}")
     }
 }

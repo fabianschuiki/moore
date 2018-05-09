@@ -6,7 +6,7 @@ use std::borrow::{Borrow, Cow};
 use common::errors::*;
 
 use ty2::Type;
-use konst2::integer::IntegerConst;
+use konst2::{FloatingConst, IntegerConst};
 
 /// An interface for dealing with constants.
 ///
@@ -17,6 +17,9 @@ use konst2::integer::IntegerConst;
 pub trait Const2<'t>: Debug + Display {
     /// Return the type of the constant.
     fn ty(&self) -> &'t Type;
+
+    /// Convert into an owned constant.
+    fn into_owned(self) -> OwnedConst<'t>;
 
     /// Clone this constant.
     fn to_owned(&self) -> OwnedConst<'t>;
@@ -58,36 +61,14 @@ impl EmitError for ConstError {
 #[allow(missing_docs)]
 pub enum AnyConst<'r, 't: 'r> {
     Integer(&'r IntegerConst<'t>),
-}
-
-impl<'r, 't: 't> Const2<'t> for AnyConst<'r, 't> {
-    fn ty(&self) -> &'t Type {
-        match *self {
-            AnyConst::Integer(t) => t.ty(),
-        }
-    }
-
-    fn to_owned(&self) -> OwnedConst<'t> {
-        match *self {
-            AnyConst::Integer(t) => Const2::to_owned(t),
-        }
-    }
-
-    fn as_any<'a>(&'a self) -> AnyConst<'a, 't> {
-        *self
-    }
-
-    fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t> + 't>, ConstError> {
-        match *self {
-            AnyConst::Integer(t) => t.cast(ty),
-        }
-    }
+    Floating(&'r FloatingConst<'t>),
 }
 
 impl<'r, 't> Display for AnyConst<'r, 't> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             AnyConst::Integer(t) => Display::fmt(t, f),
+            AnyConst::Floating(t) => Display::fmt(t, f),
         }
     }
 }
@@ -96,6 +77,7 @@ impl<'r, 't> Debug for AnyConst<'r, 't> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             AnyConst::Integer(t) => Debug::fmt(t, f),
+            AnyConst::Floating(t) => Debug::fmt(t, f),
         }
     }
 }
@@ -112,6 +94,7 @@ impl<'r, 't> AnyConst<'r, 't> {
     pub fn as_const(self) -> &'r Const2<'t> {
         match self {
             AnyConst::Integer(k) => k,
+            AnyConst::Floating(k) => k,
         }
     }
 
@@ -123,9 +106,22 @@ impl<'r, 't> AnyConst<'r, 't> {
         }
     }
 
+    /// Returns `Some(k)` if the constant is `Floating(k)`, `None` otherwise.
+    pub fn as_floating(self) -> Option<&'r FloatingConst<'t>> {
+        match self {
+            AnyConst::Floating(k) => Some(k),
+            _ => None,
+        }
+    }
+
     /// Returns an `&IntegerConst` or panics if the constant is not `Integer`.
     pub fn unwrap_integer(self) -> &'r IntegerConst<'t> {
         self.as_integer().expect("constant is not an integer")
+    }
+
+    /// Returns a `&FloatingConst` or panics if the constant is not `Floating`.
+    pub fn unwrap_floating(self) -> &'r FloatingConst<'t> {
+        self.as_floating().expect("constant is not a float")
     }
 }
 
@@ -134,12 +130,14 @@ impl<'r, 't> AnyConst<'r, 't> {
 #[allow(missing_docs)]
 pub enum OwnedConst<'t> {
     Integer(IntegerConst<'t>),
+    Floating(FloatingConst<'t>),
 }
 
 impl<'t> Borrow<Const2<'t> + 't> for OwnedConst<'t> {
     fn borrow(&self) -> &(Const2<'t> + 't) {
         match *self {
             OwnedConst::Integer(ref k) => k,
+            OwnedConst::Floating(ref k) => k,
         }
     }
 }
@@ -148,6 +146,7 @@ impl<'t> Display for OwnedConst<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             OwnedConst::Integer(ref t) => Display::fmt(t, f),
+            OwnedConst::Floating(ref t) => Display::fmt(t, f),
         }
     }
 }
@@ -156,6 +155,7 @@ impl<'t> Debug for OwnedConst<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             OwnedConst::Integer(ref t) => Debug::fmt(t, f),
+            OwnedConst::Floating(ref t) => Debug::fmt(t, f),
         }
     }
 }

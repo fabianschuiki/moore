@@ -2,8 +2,9 @@
 
 use arenas::{Alloc, AllocOwned};
 use ty2::prelude::*;
-use ty2::types::{NullType, UniversalRealType};
+use ty2::types::NullType;
 use ty2::ints::*;
+use ty2::floats::*;
 use ty2::enums::*;
 use ty2::physical::*;
 
@@ -12,6 +13,8 @@ make_arenas!(
     pub struct TypeArena<'t> {
         integer_basetype: IntegerBasetype,
         integer_subtype: IntegerSubtype<'t>,
+        floating_basetype: FloatingBasetype,
+        floating_subtype: FloatingSubtype<'t>,
         enum_basetype: EnumBasetype,
         enum_subtype: EnumSubtype<'t>,
         physical_basetype: PhysicalBasetype,
@@ -24,6 +27,8 @@ impl<'t> AllocOwned<'t, 't, Type> for TypeArena<'t> {
         match value {
             OwnedType::IntegerBasetype(t) => self.alloc(t),
             OwnedType::IntegerSubtype(t) => self.alloc(t),
+            OwnedType::FloatingBasetype(t) => self.alloc(t),
+            OwnedType::FloatingSubtype(t) => self.alloc(t),
             OwnedType::EnumBasetype(t) => self.alloc(t),
             OwnedType::EnumSubtype(t) => self.alloc(t),
             OwnedType::PhysicalBasetype(t) => self.alloc(t),

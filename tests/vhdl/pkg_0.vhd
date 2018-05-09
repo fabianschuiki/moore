@@ -15,6 +15,7 @@ package pkg_c is
 	use work.pkg_b.BYTE;
 	type SHORT is range 0 to 65535;
 	type INT is range 0 to 4294967295;
+	type UNIT is range 0.0 to 1.0;
 	constant K0 : BYTE;
 	constant K1 : SHORT;
 	constant K2 : INT;

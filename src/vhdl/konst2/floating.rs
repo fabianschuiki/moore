@@ -3,29 +3,27 @@
 use std::fmt;
 use std::borrow::Cow;
 
-use num::BigInt;
-
 use konst2::traits::*;
-use ty2::{IntegerType, Type};
+use ty2::{FloatingType, Type};
 
-/// A constant integer value.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IntegerConst<'t> {
-    ty: &'t IntegerType,
-    value: BigInt,
+/// A constant float value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FloatingConst<'t> {
+    ty: &'t FloatingType,
+    value: f64,
 }
 
-impl<'t> IntegerConst<'t> {
-    /// Create a new constant integer.
+impl<'t> FloatingConst<'t> {
+    /// Create a new constant float.
     ///
     /// Returns an `OutOfRange` error if the value is outside the type's range.
-    pub fn try_new(ty: &'t IntegerType, value: BigInt) -> Result<IntegerConst<'t>, ConstError> {
+    pub fn try_new(ty: &'t FloatingType, value: f64) -> Result<FloatingConst<'t>, ConstError> {
         let valid = match ty.range() {
             Some(r) => r.contains(&value),
             None => true,
         };
         if valid {
-            Ok(IntegerConst {
+            Ok(FloatingConst {
                 ty: ty,
                 value: value,
             })
@@ -34,44 +32,48 @@ impl<'t> IntegerConst<'t> {
         }
     }
 
-    /// Return the integer type.
-    pub fn integer_type(&self) -> &'t IntegerType {
+    /// Return the float type.
+    pub fn floating_type(&self) -> &'t FloatingType {
         self.ty
     }
 
-    /// Return the integer value.
-    pub fn value(&self) -> &BigInt {
-        &self.value
+    /// Return the float value.
+    pub fn value(&self) -> f64 {
+        self.value
     }
 }
 
-impl<'t> Const2<'t> for IntegerConst<'t> {
+impl<'t> Const2<'t> for FloatingConst<'t> {
     fn ty(&self) -> &'t Type {
         self.ty.as_type()
     }
 
     fn as_any<'a>(&'a self) -> AnyConst<'a, 't> {
-        AnyConst::Integer(self)
+        AnyConst::Floating(self)
     }
 
     fn into_owned(self) -> OwnedConst<'t> {
-        OwnedConst::Integer(self)
+        OwnedConst::Floating(self)
     }
 
     fn to_owned(&self) -> OwnedConst<'t> {
-        OwnedConst::Integer(self.clone())
+        OwnedConst::Floating(self.clone())
     }
 
     fn cast(&self, ty: &'t Type) -> Result<Cow<Const2<'t> + 't>, ConstError> {
         if self.ty.as_type() == ty {
             return Ok(Cow::Borrowed(self));
         }
-        unimplemented!("casting of integer constants")
+        unimplemented!("casting of float constants")
     }
 }
 
-impl<'t> fmt::Display for IntegerConst<'t> {
+impl<'t> fmt::Display for FloatingConst<'t> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
+
+// We have to explicitly implement this, since f64 by default does not, causing
+// the usual derive(Eq) to fail.
+impl<'t> Eq for FloatingConst<'t> {}

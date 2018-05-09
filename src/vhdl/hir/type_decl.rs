@@ -10,8 +10,8 @@ use num::BigInt;
 use hir::prelude::*;
 use hir::{EnumLit, ExprContext, Range2};
 use term::{self, Term, TermContext};
-use ty2::{AnyType, EnumBasetype, EnumVariant, IntegerBasetype, IntegerRange, PhysicalBasetype,
-          PhysicalUnit, Range, UniversalIntegerType};
+use ty2::{AnyType, EnumBasetype, EnumVariant, FloatingBasetype, IntegerBasetype, IntegerRange,
+          PhysicalBasetype, PhysicalUnit, Range, UniversalIntegerType};
 
 /// A type declaration.
 ///
@@ -78,7 +78,16 @@ impl<'t> TypeDecl2<'t> {
                         ));
                         Ok(ctx.alloc_owned(ty.into_owned()))
                     }
-                    AnyType::Floating(ty) => unimplemented!(),
+                    AnyType::Floating(ty) => {
+                        let lb = lb.as_any().unwrap_floating();
+                        let rb = rb.as_any().unwrap_floating();
+                        let ty = FloatingBasetype::new(Range::with_left_right(
+                            dir,
+                            lb.value().clone(),
+                            rb.value().clone(),
+                        ));
+                        Ok(ctx.alloc_owned(ty.into_owned()))
+                    }
                     _ => {
                         ctx.emit(
                             DiagBuilder2::error(format!(
