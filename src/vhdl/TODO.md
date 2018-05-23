@@ -1,3 +1,5 @@
+- implement subtype indication
+- implement array type data
 - implement all type data
 - type castability checks
 - ensure recursive types work

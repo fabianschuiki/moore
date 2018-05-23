@@ -1,6 +1,6 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-//! Type and subtype declarations
+//! Type declarations
 
 #![allow(unused_variables)]
 #![allow(unused_imports)]
@@ -8,10 +8,9 @@
 use num::BigInt;
 
 use hir::prelude::*;
-use hir::{EnumLit, ExprContext, Range2};
+use hir::{EnumLit, ExprContext, Range2, SubtypeInd2};
 use term::{self, Term, TermContext};
-use ty2::{AnyType, EnumBasetype, EnumVariant, FloatingBasetype, IntegerBasetype, IntegerRange,
-          PhysicalBasetype, PhysicalUnit, Range, UniversalIntegerType};
+use ty2::*;
 
 /// A type declaration.
 ///
@@ -34,6 +33,8 @@ enum TypeData<'t> {
     Range(Spanned<Range2<'t>>),
     /// A physical type.
     Physical(Spanned<Range2<'t>>, Vec<PhysicalUnit>, usize),
+    /// An access type.
+    Access(&'t SubtypeInd2<'t>),
 }
 
 impl<'t> TypeDecl2<'t> {
@@ -126,6 +127,10 @@ impl<'t> TypeDecl2<'t> {
                         Err(())
                     }
                 }
+            }
+            TypeData::Access(subtype) => {
+                let ty = AccessType::new(subtype.declared_type(ctx)?);
+                Ok(ctx.alloc_owned(ty.into_owned()))
             }
         }
     }
@@ -220,7 +225,7 @@ fn define_auxiliary_names<'t>(
 
 /// Map an AST type data to the corresponding HIR type data.
 fn unpack_type_data<'t>(
-    data: &ast::TypeData,
+    data: &'t ast::TypeData,
     type_name: Spanned<Name>,
     context: AllocContext<'t>,
 ) -> Result<TypeData<'t>> {
@@ -258,6 +263,10 @@ fn unpack_type_data<'t>(
                 }
                 None => Ok(TypeData::Range(range)),
             }
+        }
+        ast::AccessType(ref subty) => {
+            let subty = context.alloc(SubtypeInd2::from_ast(subty, context)?);
+            Ok(TypeData::Access(subty))
         }
         _ => unimplemented!(
             "type `{}` unsupported type data {:#?}",

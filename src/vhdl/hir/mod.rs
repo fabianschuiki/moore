@@ -24,6 +24,7 @@ mod lib;
 mod expr;
 mod obj_decl;
 mod type_decl;
+mod subtype_decl;
 pub mod visit;
 
 pub use self::arena::*;
@@ -36,47 +37,48 @@ pub use self::lib::*;
 pub use self::expr::*;
 pub use self::obj_decl::*;
 pub use self::type_decl::*;
+pub use self::subtype_decl::*;
 
 /// A collection of arenas where HIR nodes may be allocated.
 make_arenas!(
-	pub struct Arenas {
-		lib:                 Lib,
-		entity:              Entity,
-		arch:                Arch,
-		intf_sig:            IntfSignal,
-		subtype_ind:         SubtypeInd,
-		package:             Package,
-		package_body:        PackageBody,
-		package_inst:        PackageInst,
-		type_decl:           TypeDecl,
-		subtype_decl:        SubtypeDecl,
-		expr:                Expr,
-		aggregate:           Aggregate,
-		const_decl:          Decl<ConstDecl>,
-		signal_decl:         Decl<SignalDecl>,
-		variable_decl:       Decl<VarDecl>,
-		file_decl:           Decl<FileDecl>,
-		type_decl2:          Decl<Option<TypeData>>,
-		process_stmt:        ProcessStmt,
-		sig_assign_stmt:     SigAssignStmt,
-		array_type_index:    Spanned<ArrayTypeIndex>,
-		subprog:             Subprog,
-		subprog_body:        SubprogBody,
-		subprog_inst:        SubprogInst,
-		type_mark:           TypeMarkRef,
-		wait_stmt:           Stmt<WaitStmt>,
-		assert_stmt:         Stmt<AssertStmt>,
-		report_stmt:         Stmt<ReportStmt>,
-		// sig_assign_stmt:     Stmt<SigAssignStmt>,
-		var_assign_stmt:     Stmt<VarAssignStmt>,
-		call_stmt:           Stmt<CallStmt>,
-		if_stmt:             Stmt<IfStmt>,
-		case_stmt:           Stmt<CaseStmt>,
-		loop_stmt:           Stmt<LoopStmt>,
-		nexit_stmt:          Stmt<NexitStmt>,
-		return_stmt:         Stmt<ReturnStmt>,
-		null_stmt:           Stmt<NullStmt>,
-	}
+    pub struct Arenas {
+        lib:                 Lib,
+        entity:              Entity,
+        arch:                Arch,
+        intf_sig:            IntfSignal,
+        subtype_ind:         SubtypeInd,
+        package:             Package,
+        package_body:        PackageBody,
+        package_inst:        PackageInst,
+        type_decl:           TypeDecl,
+        subtype_decl:        SubtypeDecl,
+        expr:                Expr,
+        aggregate:           Aggregate,
+        const_decl:          Decl<ConstDecl>,
+        signal_decl:         Decl<SignalDecl>,
+        variable_decl:       Decl<VarDecl>,
+        file_decl:           Decl<FileDecl>,
+        type_decl2:          Decl<Option<TypeData>>,
+        process_stmt:        ProcessStmt,
+        sig_assign_stmt:     SigAssignStmt,
+        array_type_index:    Spanned<ArrayTypeIndex>,
+        subprog:             Subprog,
+        subprog_body:        SubprogBody,
+        subprog_inst:        SubprogInst,
+        type_mark:           TypeMarkRef,
+        wait_stmt:           Stmt<WaitStmt>,
+        assert_stmt:         Stmt<AssertStmt>,
+        report_stmt:         Stmt<ReportStmt>,
+        // sig_assign_stmt:     Stmt<SigAssignStmt>,
+        var_assign_stmt:     Stmt<VarAssignStmt>,
+        call_stmt:           Stmt<CallStmt>,
+        if_stmt:             Stmt<IfStmt>,
+        case_stmt:           Stmt<CaseStmt>,
+        loop_stmt:           Stmt<LoopStmt>,
+        nexit_stmt:          Stmt<NexitStmt>,
+        return_stmt:         Stmt<ReturnStmt>,
+        null_stmt:           Stmt<NullStmt>,
+    }
 );
 
 #[derive(Debug)]

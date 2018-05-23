@@ -23,5 +23,9 @@ pub trait Visitor<'t> {
         hir.walk(self.as_visitor());
     }
 
+    fn visit_subtype_ind(&mut self, hir: &'t SubtypeInd2<'t>) {
+        hir.walk(self.as_visitor());
+    }
+
     fn visit_literal_expr(&mut self, _: &'t LitExpr) {}
 }
