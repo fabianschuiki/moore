@@ -11,6 +11,7 @@ use ty2::ints::*;
 use ty2::floats::*;
 use ty2::enums::*;
 use ty2::physical::*;
+use ty2::access::*;
 
 /// An interface for dealing with types.
 ///
@@ -93,6 +94,7 @@ pub enum AnyType<'t> {
     Array(&'t ArrayType<'t>),
     // record
     // access
+    Access(&'t AccessType<'t>),
     // file
     // protected
 
@@ -130,6 +132,7 @@ impl<'t> AnyType<'t> {
             AnyType::Floating(t) => t.as_type(),
             AnyType::Physical(t) => t.as_type(),
             AnyType::Array(t) => t,
+            AnyType::Access(t) => t,
             AnyType::Null => &NullType,
             AnyType::UniversalInteger => &UniversalIntegerType,
             AnyType::UniversalReal => &UniversalRealType,
@@ -176,6 +179,14 @@ impl<'t> AnyType<'t> {
         }
     }
 
+    /// Returns `Some(t)` if the type is `Access(t)`, `None` otherwise.
+    pub fn as_access(self) -> Option<&'t AccessType<'t>> {
+        match self {
+            AnyType::Access(t) => Some(t),
+            _ => None,
+        }
+    }
+
     /// Checks if the type is `Null`.
     pub fn is_null(self) -> bool {
         match self {
@@ -202,27 +213,33 @@ impl<'t> AnyType<'t> {
 
     /// Returns an `&EnumType` or panics if the type is not `Enum`.
     pub fn unwrap_enum(self) -> &'t EnumType {
-        self.as_enum().expect("type is not an enum")
+        self.as_enum().expect("type is not an enum type")
     }
 
     /// Returns an `&IntegerType` or panics if the type is not `Integer`.
     pub fn unwrap_integer(self) -> &'t IntegerType {
-        self.as_integer().expect("type is not an integer")
+        self.as_integer().expect("type is not an integer type")
     }
 
     /// Returns an `&FloatingType` or panics if the type is not `Floating`.
     pub fn unwrap_floating(self) -> &'t FloatingType {
-        self.as_floating().expect("type is not an floating")
+        self.as_floating()
+            .expect("type is not a floating-point type")
     }
 
     /// Returns an `&PhysicalType` or panics if the type is not `Physical`.
     pub fn unwrap_physical(self) -> &'t PhysicalType {
-        self.as_physical().expect("type is not an physical")
+        self.as_physical().expect("type is not a physical type")
     }
 
     /// Returns an `&ArrayType` or panics if the type is not `Array`.
     pub fn unwrap_array(self) -> &'t ArrayType<'t> {
-        self.as_array().expect("type is not an array")
+        self.as_array().expect("type is not an array type")
+    }
+
+    /// Returns an `&AccessType` or panics if the type is not `Access`.
+    pub fn unwrap_access(self) -> &'t AccessType<'t> {
+        self.as_access().expect("type is not an access type")
     }
 
     /// Check if this is a scalar type.
@@ -263,6 +280,7 @@ pub enum OwnedType<'t> {
     FloatingSubtype(FloatingSubtype<'t>),
     PhysicalBasetype(PhysicalBasetype),
     PhysicalSubtype(PhysicalSubtype<'t>),
+    Access(AccessType<'t>),
     Null,
     UniversalInteger,
     UniversalReal,
@@ -279,6 +297,7 @@ impl<'t> Borrow<Type + 't> for OwnedType<'t> {
             OwnedType::FloatingSubtype(ref k) => k,
             OwnedType::PhysicalBasetype(ref k) => k,
             OwnedType::PhysicalSubtype(ref k) => k,
+            OwnedType::Access(ref k) => k,
             OwnedType::Null => &NullType,
             OwnedType::UniversalInteger => &UniversalIntegerType,
             OwnedType::UniversalReal => &UniversalRealType,

@@ -19,6 +19,7 @@ mod ints;
 mod floats;
 mod enums;
 mod physical;
+mod access;
 mod prelude;
 
 pub use self::types::*;
@@ -30,3 +31,4 @@ pub use self::ints::*;
 pub use self::floats::*;
 pub use self::enums::*;
 pub use self::physical::*;
+pub use self::access::*;

@@ -7,6 +7,7 @@ use ty2::ints::*;
 use ty2::floats::*;
 use ty2::enums::*;
 use ty2::physical::*;
+use ty2::access::*;
 
 make_arenas!(
     /// An arena to allocate types nodes into.
@@ -19,6 +20,7 @@ make_arenas!(
         enum_subtype: EnumSubtype<'t>,
         physical_basetype: PhysicalBasetype,
         physical_subtype: PhysicalSubtype<'t>,
+        access: AccessType<'t>,
     }
 );
 
@@ -33,6 +35,7 @@ impl<'t> AllocOwned<'t, 't, Type> for TypeArena<'t> {
             OwnedType::EnumSubtype(t) => self.alloc(t),
             OwnedType::PhysicalBasetype(t) => self.alloc(t),
             OwnedType::PhysicalSubtype(t) => self.alloc(t),
+            OwnedType::Access(t) => self.alloc(t),
             OwnedType::Null => &NullType,
             OwnedType::UniversalInteger => &UniversalIntegerType,
             OwnedType::UniversalReal => &UniversalRealType,
