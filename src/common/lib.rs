@@ -8,6 +8,8 @@ extern crate bitflags;
 extern crate memmap;
 extern crate rustc_serialize;
 
+#[macro_use]
+pub mod arenas;
 pub mod errors;
 pub mod grind;
 pub mod id;
