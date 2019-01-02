@@ -3,7 +3,7 @@
 use moore_common::grind::{Grinder, Lookahead};
 use moore_common::errors::DiagBuilder2;
 use moore_common::source::*;
-use lexer::categorizer::Category;
+use crate::lexer::categorizer::Category;
 
 
 /// A grinder that bundles up categorized characters into groups and converts

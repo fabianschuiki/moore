@@ -9,7 +9,7 @@ use std::fmt;
 use moore_common::source::{Span, Spanned};
 use moore_common::name::Name;
 use moore_common::util::{HasDesc, HasSpan};
-use lexer::token::Literal;
+use crate::lexer::token::Literal;
 
 pub use self::ExprData::*;
 pub use self::TypeData::*;

@@ -7,9 +7,9 @@ use std::collections::VecDeque;
 use moore_common::grind::Grinder;
 use moore_common::source::*;
 use moore_common::errors::*;
-use lexer::Lexer;
-use lexer::token::Token;
-use parser::TokenStream;
+use crate::lexer::Lexer;
+use crate::lexer::token::Token;
+use crate::parser::TokenStream;
 
 
 pub struct BasicParser<T> where T: Grinder<Item=Option<u8>, Error=DiagBuilder2> {

@@ -2,6 +2,7 @@
 name = "moore-vhdl-syntax"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
+edition = "2018"
 
 description = "The VHDL parser implementation of the moore compiler framework."
 license = "MIT"

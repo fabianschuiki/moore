@@ -6,17 +6,17 @@ use std::marker::PhantomData;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
-use lexer::token::*;
-use parser::rules::{Parser, Reported, Recovered, ReportedResult, RecoveredResult};
+use crate::lexer::token::*;
+use crate::parser::rules::{Parser, Reported, Recovered, ReportedResult, RecoveredResult};
 
 
 /// A predicate that matches on the current position of a token stream.
 pub trait Predicate<P: Parser>: Display {
 	/// Match the predicate against the current position of the parser.
-	fn matches(&mut self, &mut P) -> bool;
+	fn matches(&mut self, _: &mut P) -> bool;
 	/// Skip tokens in the parser until the predicate matches. Optionally also
 	/// consume the tokens that make up the predicate.
-	fn recover(&mut self, &mut P, consume: bool);
+	fn recover(&mut self, _: &mut P, consume: bool);
 }
 
 impl<P> Predicate<P> for Token where P: Parser {

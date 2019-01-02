@@ -4,8 +4,8 @@ use moore_common::grind::{Grinder, Lookahead};
 use moore_common::errors::*;
 use moore_common::source::*;
 use moore_common::name::*;
-use lexer::bundler::Bundle;
-use lexer::token::*;
+use crate::lexer::bundler::Bundle;
+use crate::lexer::token::*;
 
 
 /// A grinder that combines character bundles into lexical tokens. This is the
