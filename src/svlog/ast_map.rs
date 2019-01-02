@@ -3,6 +3,8 @@
 //! A mapping from node IDs to AST nodes.
 
 use ast;
+use common::source::Span;
+use common::util::{HasDesc, HasSpan};
 use common::NodeId;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -27,6 +29,40 @@ impl<'ast> AstMap<'ast> {
     }
 }
 
+/// A reference to an AST node.
+///
+/// This enum essentially provides a wrapper around typed references to AST
+/// nodes. It allows code to obtain a generic reference to an AST node and then
+/// match on the actual type that was provided.
+#[derive(Clone, Copy, Debug)]
 pub enum AstNode<'ast> {
     Module(&'ast ast::ModDecl),
+}
+
+impl<'ast> HasSpan for AstNode<'ast> {
+    fn span(&self) -> Span {
+        match *self {
+            AstNode::Module(m) => m.span(),
+        }
+    }
+
+    fn human_span(&self) -> Span {
+        match *self {
+            AstNode::Module(m) => m.human_span(),
+        }
+    }
+}
+
+impl<'ast> HasDesc for AstNode<'ast> {
+    fn desc(&self) -> &'static str {
+        match *self {
+            AstNode::Module(m) => m.desc(),
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            AstNode::Module(m) => m.desc_full(),
+        }
+    }
 }
