@@ -7,13 +7,13 @@ extern crate llhd;
 extern crate moore;
 extern crate sha1;
 
-use std::path::Path;
-use moore::*;
+use clap::{App, Arg, ArgMatches, SubCommand};
+use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
-use moore::common::score::NodeRef;
-use clap::{App, Arg, ArgMatches, SubCommand};
+use moore::*;
+use std::path::Path;
 
 #[derive(Debug)]
 enum Language {
@@ -290,8 +290,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
             }
         }
         None
-    })()
-    {
+    })() {
         Some(id) => id,
         None => {
             eprintln!(
@@ -452,7 +451,8 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             match defs.get(&lib) {
                 Some(&score::Def::Lib(d)) => d,
                 _ => {
-                    let mut d = DiagBuilder2::error(format!("Library `{}` does not exist", lib)).add_note("The following libraries do exist:");
+                    let mut d = DiagBuilder2::error(format!("Library `{}` does not exist", lib))
+                        .add_note("The following libraries do exist:");
                     let mut names: Vec<_> = defs.iter().map(|(&k, _)| k).collect();
                     names.sort(); // sorts by name ID, roughly equivalent to order of declaration
                     for name in names {
@@ -480,7 +480,8 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
     let defs = ctx.defs(lib.into())?;
     let elab = match defs.get(&name) {
         Some(&score::Def::Vhdl(vhdl::score::Def::Entity(entity))) => {
-            let archs = ctx.vhdl()
+            let archs = ctx
+                .vhdl()
                 .archs(vhdl::score::LibRef::new(lib.into()))?
                 .by_entity
                 .get(&entity)
@@ -513,7 +514,8 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Some(&score::Def::Vhdl(vhdl::score::Def::Pkg(p))) => Elaborate::VhdlPkg(p),
         Some(&score::Def::Svlog(e)) => Elaborate::Svlog(e),
         _ => {
-            let mut d = DiagBuilder2::error(format!("Item `{}` does not exist", name)).add_note("The following items are defined:");
+            let mut d = DiagBuilder2::error(format!("Item `{}` does not exist", name))
+                .add_note("The following items are defined:");
             let mut names: Vec<_> = defs.iter().map(|(&k, _)| k).collect();
             names.sort(); // sorts by name ID, roughly equivalent to order of declaration
             for name in names {
