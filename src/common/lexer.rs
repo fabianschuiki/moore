@@ -2,7 +2,7 @@
 
 //! Lexer utilities.
 
-use errors::DiagResult;
+use crate::errors::DiagResult;
 use std::cmp::max;
 use std::collections::VecDeque;
 use std::io::Read;
@@ -260,7 +260,7 @@ impl<T: Clone + PartialEq> Lexer<T> for StackedLexer<T> {
     fn next_token<'td>(&mut self) -> DiagResult<'td, T> {
         loop {
             let token = if let Some(lexer) = self.stack.last_mut() {
-                try!(lexer.next_token())
+                lexer.next_token()?
             } else {
                 return Ok(self.eof.clone());
             };
@@ -300,7 +300,7 @@ impl<T: Clone + PartialEq> BufferedLexer<T> {
         // Fill the buffer up to the offset that should be peeked at. If an Eof is
         // encountered beforehand, set the `done` flag and abort.
         while !self.done && self.buffer.len() <= offset {
-            let token = try!(self.inner.next_token());
+            let token = self.inner.next_token()?;
             if token == self.eof {
                 self.done = true;
             }
@@ -312,7 +312,7 @@ impl<T: Clone + PartialEq> BufferedLexer<T> {
         Ok(self.buffer.get(offset).unwrap_or(&self.eof))
         // if offset < self.buffer.len() {
         // } else {
-        // 	Ok(self.eof.clone())
+        //  Ok(self.eof.clone())
         // }
     }
 

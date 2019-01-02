@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use id::NodeId;
+use crate::id::NodeId;
 
 /// A context which provides a language-agnostic scoreboard. This is used by
 /// the language-specific scoreboards to communicate with the global scoreboard.

@@ -4,7 +4,7 @@
 //! emits. This parser does not generate any errors, but rather replaces invalid
 //! encoding in the input with the `U+FFFD REPLACEMENT CHARACTER`.
 
-use grind::Grinder;
+use crate::grind::Grinder;
 use std;
 
 pub struct Utf8<T: Grinder<Item = Option<u8>>> {

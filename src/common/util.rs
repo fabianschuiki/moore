@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-use source::{Span, Spanned};
+use crate::source::{Span, Spanned};
 
 /// Provides span information for syntax nodes.
 pub trait HasSpan {

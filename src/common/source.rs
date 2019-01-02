@@ -5,7 +5,7 @@
 //! simple querying of information.
 
 use memmap::Mmap;
-use name::RcStr;
+use crate::name::RcStr;
 use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std;
 use std::borrow::Borrow;

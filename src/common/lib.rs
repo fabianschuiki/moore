@@ -21,7 +21,7 @@ pub mod source;
 pub mod util;
 
 pub use self::id::NodeId;
-use errors::{DiagBuilder2, DiagEmitter, Severity};
+use crate::errors::{DiagBuilder2, DiagEmitter, Severity};
 use std::cell::Cell;
 
 pub struct Session {

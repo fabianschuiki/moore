@@ -1,6 +1,6 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-use grind::{Chisel, Grinder};
+use crate::grind::{Chisel, Grinder};
 
 pub struct Filter<T: Grinder, F> {
     inner: T,

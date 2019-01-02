@@ -1,6 +1,6 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-use grind::Grinder;
+use crate::grind::Grinder;
 use std::collections::VecDeque;
 
 pub struct Lookahead<T: Grinder> {

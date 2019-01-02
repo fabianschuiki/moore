@@ -2,7 +2,7 @@
 
 //! Utilities to implement diagnostics and error reporting facilities.
 
-use source::Span;
+use crate::source::Span;
 use std::fmt;
 
 /// Print debug information. Omitted in release builds.
