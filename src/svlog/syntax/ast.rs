@@ -72,11 +72,18 @@ pub enum Item {
 impl HasSpan for Item {
     fn span(&self) -> Span {
         match *self {
-            Item::Module(ref decl) => decl.span,
+            Item::Module(ref decl) => decl.span(),
             Item::Interface(ref decl) => decl.span,
             Item::Package(ref decl) => decl.span,
             Item::Class(ref decl) => decl.span,
             Item::Item(ref item) => item.span(),
+        }
+    }
+
+    fn human_span(&self) -> Span {
+        match *self {
+            Item::Module(ref decl) => decl.human_span(),
+            _ => self.span(),
         }
     }
 }
@@ -84,11 +91,18 @@ impl HasSpan for Item {
 impl HasDesc for Item {
     fn desc(&self) -> &'static str {
         match *self {
-            Item::Module(ref decl) => "module declaration",
+            Item::Module(ref decl) => decl.desc(),
             Item::Interface(ref decl) => "interface declaration",
             Item::Package(ref decl) => "package declaration",
             Item::Class(ref decl) => "class declaration",
             Item::Item(ref item) => item.as_str(),
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            Item::Module(ref decl) => decl.desc_full(),
+            _ => self.desc().into(),
         }
     }
 }
@@ -109,6 +123,26 @@ pub struct ModDecl {
     pub params: Vec<ParamDecl>,
     pub ports: Vec<Port>,
     pub items: Vec<HierarchyItem>,
+}
+
+impl HasSpan for ModDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name_span
+    }
+}
+
+impl HasDesc for ModDecl {
+    fn desc(&self) -> &'static str {
+        "module declaration"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("module `{}`", self.name)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
