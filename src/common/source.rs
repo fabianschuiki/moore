@@ -4,9 +4,10 @@
 //! source file. This helps keeping the source location lean and allow for
 //! simple querying of information.
 
-use std;
-use name::RcStr;
 use memmap::Mmap;
+use name::RcStr;
+use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
+use std;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -14,7 +15,6 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::rc::Rc;
-use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 
 pub const INVALID_SOURCE: Source = Source(0);
 pub const INVALID_LOCATION: Location = Location {
@@ -239,8 +239,8 @@ impl SourceManager {
 /// Get the global source manager.
 pub fn get_source_manager() -> Rc<SourceManager> {
     thread_local!(static MNGR: Rc<SourceManager> = {
-		Rc::new(SourceManager::new())
-	});
+        Rc::new(SourceManager::new())
+    });
     MNGR.with(|x| x.clone())
 }
 
@@ -530,11 +530,7 @@ where
     }
 }
 
-impl<T> Copy for Spanned<T>
-where
-    T: Copy,
-{
-}
+impl<T> Copy for Spanned<T> where T: Copy {}
 
 impl<T> Clone for Spanned<T>
 where
@@ -601,9 +597,9 @@ mod tests {
 
     #[test]
     fn file() {
-        use std::path::Path;
         use std::fs::File;
         use std::io::Write;
+        use std::path::Path;
 
         let path = Path::new("/tmp/moore-test");
         let data = "Löwe 老虎 Léopard\n";

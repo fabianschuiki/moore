@@ -9,12 +9,12 @@ extern crate memmap;
 extern crate rustc_serialize;
 
 pub mod errors;
-pub mod lexer;
-pub mod name;
-pub mod source;
 pub mod grind;
 pub mod id;
+pub mod lexer;
+pub mod name;
 pub mod score;
+pub mod source;
 pub mod util;
 
 pub use self::id::NodeId;

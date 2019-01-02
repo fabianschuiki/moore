@@ -6,18 +6,15 @@
 //! type safe manner by its ID.
 
 use std;
-use std::collections::{HashMap, BTreeMap};
-use std::hash::Hash;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use id::NodeId;
 
-
 /// A context which provides a language-agnostic scoreboard. This is used by
 /// the language-specific scoreboards to communicate with the global scoreboard.
-pub trait GenericContext {
-}
-
+pub trait GenericContext {}
 
 /// The `NodeStorage` trait allows for references to nodes to be stored and
 /// retrieved via a unique node ID.
@@ -83,49 +80,53 @@ pub trait GenericContext {
 /// // let _: &Bar = *tbl.get(&FooId(2)).unwrap();
 /// ```
 pub trait NodeStorage<I> {
-	/// The type of the node that is returned when presented with an ID of type
-	/// `I`.
-	type Node;
+    /// The type of the node that is returned when presented with an ID of type
+    /// `I`.
+    type Node;
 
-	/// Obtains a reference to the node with the given ID.
-	///
-	/// Returns `None` when no node with the given ID exists.
-	fn get(&self, id: &I) -> Option<&Self::Node>;
+    /// Obtains a reference to the node with the given ID.
+    ///
+    /// Returns `None` when no node with the given ID exists.
+    fn get(&self, id: &I) -> Option<&Self::Node>;
 
-	/// Store a reference to a node under the given ID.
-	///
-	/// Later that reference can be retrieved again by presenting the same ID to
-	/// the `get` function. Returns the previously stored entry, if any.
-	fn set(&mut self, id: I, node: Self::Node) -> Option<Self::Node>;
+    /// Store a reference to a node under the given ID.
+    ///
+    /// Later that reference can be retrieved again by presenting the same ID to
+    /// the `get` function. Returns the previously stored entry, if any.
+    fn set(&mut self, id: I, node: Self::Node) -> Option<Self::Node>;
 }
 
 // Implement the NodeStorage trait for HashMaps.
-impl<K,V> NodeStorage<K> for HashMap<K,V> where K: Hash + Eq {
-	type Node = V;
+impl<K, V> NodeStorage<K> for HashMap<K, V>
+where
+    K: Hash + Eq,
+{
+    type Node = V;
 
-	fn get(&self, id: &K) -> Option<&V> {
-		HashMap::get(self, id)
-	}
+    fn get(&self, id: &K) -> Option<&V> {
+        HashMap::get(self, id)
+    }
 
-	fn set(&mut self, id: K, node: V) -> Option<V> {
-		HashMap::insert(self, id, node)
-	}
+    fn set(&mut self, id: K, node: V) -> Option<V> {
+        HashMap::insert(self, id, node)
+    }
 }
 
 // Implement the NodeStorage trait for BTreeMaps.
-impl<K,V> NodeStorage<K> for BTreeMap<K,V> where K: Ord {
-	type Node = V;
+impl<K, V> NodeStorage<K> for BTreeMap<K, V>
+where
+    K: Ord,
+{
+    type Node = V;
 
-	fn get(&self, id: &K) -> Option<&V> {
-		BTreeMap::get(self, id)
-	}
+    fn get(&self, id: &K) -> Option<&V> {
+        BTreeMap::get(self, id)
+    }
 
-	fn set(&mut self, id: K, node: V) -> Option<V> {
-		BTreeMap::insert(self, id, node)
-	}
+    fn set(&mut self, id: K, node: V) -> Option<V> {
+        BTreeMap::insert(self, id, node)
+    }
 }
-
-
 
 /// The `NodeMaker` trait allows for nodes to be generated from an ID.
 ///
@@ -177,39 +178,36 @@ impl<K,V> NodeStorage<K> for BTreeMap<K,V> where K: Ord {
 /// // assert_eq!(bar, &Foo);
 /// ```
 pub trait NodeMaker<I, N> {
-	/// Creates the node with the given ID.
-	///
-	/// Returns `Err(())` upon failure. Note that the generated node has
-	/// lifetime `'tn` that outlives the `NodeMaker`. This is required to allow
-	/// for the `NodeMaker` to generate multiple nodes at the same time. The
-	/// generated nodes should be owned by an arena or the owner of the
-	/// `NodeMaker` itself.
-	fn make(&self, id: I) -> Result<N>;
+    /// Creates the node with the given ID.
+    ///
+    /// Returns `Err(())` upon failure. Note that the generated node has
+    /// lifetime `'tn` that outlives the `NodeMaker`. This is required to allow
+    /// for the `NodeMaker` to generate multiple nodes at the same time. The
+    /// generated nodes should be owned by an arena or the owner of the
+    /// `NodeMaker` itself.
+    fn make(&self, id: I) -> Result<N>;
 }
-
 
 /// The result of making a node. Errors that occur while making a node should be
 /// reported via a separate channel, e.g. diagnostics, which provide more
 /// information to the user.
 pub type Result<T> = std::result::Result<T, ()>;
 
-
 /// A reference to a node.
 ///
 /// Newtypes around `NodeId` should implement this trait to offer functionality
 /// common to all node references.
 pub trait NodeRef: Copy + Eq + Ord + Hash + Debug + Into<NodeId> {
-	/// Allocate a new reference.
-	///
-	/// Creates a new unique reference. Calls `NodeId::alloc()` under the hood.
-	fn alloc() -> Self {
-		Self::new(NodeId::alloc())
-	}
+    /// Allocate a new reference.
+    ///
+    /// Creates a new unique reference. Calls `NodeId::alloc()` under the hood.
+    fn alloc() -> Self {
+        Self::new(NodeId::alloc())
+    }
 
-	/// Create a new reference from an existing node ID.
-	fn new(id: NodeId) -> Self;
+    /// Create a new reference from an existing node ID.
+    fn new(id: NodeId) -> Self;
 }
-
 
 /// Create a new node reference.
 ///
@@ -233,30 +231,31 @@ pub trait NodeRef: Copy + Eq + Ord + Hash + Debug + Into<NodeId> {
 /// `NodeId`.
 #[macro_export]
 macro_rules! node_ref {
-	($name:ident) => {
-		#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
-		pub struct $name($crate::NodeId);
+    ($name:ident) => {
+        #[derive(
+            Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash,
+        )]
+        pub struct $name($crate::NodeId);
 
-		impl std::fmt::Debug for $name {
-			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				write!(f, "{}({})", stringify!($name), self.0)
-			}
-		}
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{}({})", stringify!($name), self.0)
+            }
+        }
 
-		impl Into<$crate::NodeId> for $name {
-			fn into(self) -> $crate::NodeId {
-				self.0
-			}
-		}
+        impl Into<$crate::NodeId> for $name {
+            fn into(self) -> $crate::NodeId {
+                self.0
+            }
+        }
 
-		impl $crate::score::NodeRef for $name {
-			fn new(id: $crate::NodeId) -> $name {
-				$name(id)
-			}
-		}
-	}
+        impl $crate::score::NodeRef for $name {
+            fn new(id: $crate::NodeId) -> $name {
+                $name(id)
+            }
+        }
+    };
 }
-
 
 /// Create a new group of node references.
 ///
@@ -297,7 +296,6 @@ macro_rules! node_ref_group {
 		}
 	};
 }
-
 
 /// Create a new table that implements the `NodeStorage` trait.
 ///
