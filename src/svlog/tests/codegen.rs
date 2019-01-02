@@ -5,6 +5,7 @@ use common::*;
 
 #[test]
 fn empty_module() {
+    simple_logger::init().unwrap();
     let sess = Session::new();
     let ast = parse("module foo; endmodule");
     let gcx = GlobalContext::new(&sess);

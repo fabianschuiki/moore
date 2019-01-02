@@ -6,6 +6,7 @@
 pub extern crate llhd;
 pub extern crate moore_common;
 pub extern crate moore_svlog as svlog;
+pub extern crate simple_logger;
 pub use moore_common::Session;
 pub use svlog::*;
 
