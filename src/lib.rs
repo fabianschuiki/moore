@@ -13,7 +13,7 @@ extern crate llhd;
 // Re-export everything from the common crate.
 #[macro_use]
 pub extern crate moore_common as common;
-pub use common::*;
+pub use crate::common::*;
 
 // Pull in subcrates. We might want to feature-gate this at some point.
 pub extern crate moore_svlog as svlog;

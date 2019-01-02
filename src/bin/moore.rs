@@ -313,7 +313,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 }
 
 fn score(sess: &Session, matches: &ArgMatches) {
-    use name::get_name_table;
+    use crate::name::get_name_table;
 
     // Prepare a list of include paths.
     let include_paths: Vec<_> = match matches.values_of("inc") {

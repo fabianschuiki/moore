@@ -6,19 +6,18 @@
 //! additional compilation steps are initiated. This enables on-demand
 //! compilation.
 
+use crate::common::errors::*;
+use crate::common::name::Name;
+use crate::common::score::{GenericContext, NodeMaker, NodeRef, Result};
+use crate::common::NodeId;
+use crate::common::Session;
+use crate::svlog::ast as svlog_ast;
+use crate::vhdl;
+use crate::vhdl::syntax::ast as vhdl_ast;
 use std;
-use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use typed_arena::Arena;
-use common::Session;
-use common::name::Name;
-use common::errors::*;
-use common::NodeId;
-use common::score::{GenericContext, NodeMaker, Result, NodeRef};
-use vhdl;
-use vhdl::syntax::ast as vhdl_ast;
-use svlog::ast as svlog_ast;
-
 
 /// The global context which holds information about the used scoreboards. All
 /// useful operations are defined on this context rather than on the scoreboard
@@ -37,7 +36,6 @@ pub struct ScoreContext<'lazy, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
     pub svlog: &'sb (),
 }
 
-
 /// The global scoreboard that drives the compilation of pretty much everything.
 pub struct ScoreBoard<'ast, 'ctx> {
     /// The arenas within which the various nodes will be allocated.
@@ -51,9 +49,7 @@ pub struct ScoreBoard<'ast, 'ctx> {
     defs: RefCell<HashMap<ScopeRef, &'ctx Defs>>,
 }
 
-
 impl<'lazy, 'sb, 'ast, 'ctx> GenericContext for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {}
-
 
 impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
     /// Create a new empty scoreboard.
@@ -66,7 +62,6 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
         }
     }
 }
-
 
 impl<'ast, 'ctx> std::fmt::Debug for ScoreBoard<'ast, 'ctx> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -85,7 +80,6 @@ impl<'ast, 'ctx> std::fmt::Debug for ScoreBoard<'ast, 'ctx> {
     }
 }
 
-
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     /// Obtain a reference to the VHDL context.
     pub fn vhdl(&'lazy self) -> vhdl::score::ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
@@ -97,29 +91,25 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         }
     }
 
-
     /// Add a library to the scoreboard.
     pub fn add_library(&self, name: Name, asts: &'ast [Ast]) -> LibRef {
         let id = LibRef::new(NodeId::alloc());
         self.sb.libs.borrow_mut().insert(id, (name, asts));
 
         // Pass on the VHDL nodes to the VHDL scoreboard.
-        let vhdl_ast = asts.iter()
+        let vhdl_ast = asts
+            .iter()
             .flat_map(|v| match *v {
                 Ast::Vhdl(ref a) => a.iter(),
                 _ => [].iter(),
             })
             .collect();
-        self.vhdl().add_library(
-            name,
-            vhdl::score::LibRef::new(id.into()),
-            vhdl_ast,
-        );
+        self.vhdl()
+            .add_library(name, vhdl::score::LibRef::new(id.into()), vhdl_ast);
 
         // TODO: Do the same for the SVLOG scoreboard.
         id
     }
-
 
     /// Obtain the definitions in a scope. Calculate them if needed.
     pub fn defs(&self, id: ScopeRef) -> Result<&'ctx Defs> {
@@ -140,8 +130,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     }
 }
 
-
-impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs>
+    for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
+{
     fn make(&self, id: ScopeRef) -> Result<&'ctx Defs> {
         match id {
             ScopeRef::Root(_) => {
@@ -150,9 +141,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'l
                 let mut defs = HashMap::new();
                 for (&id, &(name, _)) in self.sb.libs.borrow().iter() {
                     if defs.insert(name, Def::Lib(id)).is_some() {
-                        self.sess.emit(DiagBuilder2::fatal(
-                            format!("Library `{}` defined multiple times", name),
-                        ));
+                        self.sess.emit(DiagBuilder2::fatal(format!(
+                            "Library `{}` defined multiple times",
+                            name
+                        )));
                         return Err(());
                     }
                 }
@@ -167,9 +159,11 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'l
                 // 3) create new def that is the union of the two and return
 
                 // Ask the VHDL scoreboard for the definitions in this library.
-                let vhdl = self.vhdl().defs(vhdl::score::ScopeRef::Lib(
-                    vhdl::score::LibRef::new(id.into()),
-                ))?;
+                let vhdl =
+                    self.vhdl()
+                        .defs(vhdl::score::ScopeRef::Lib(vhdl::score::LibRef::new(
+                            id.into(),
+                        )))?;
                 if self.sess.opts.trace_scoreboard {
                     println!("[SB] vhdl_sb returned {:?}", vhdl);
                 }
@@ -177,7 +171,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'l
                 // Build a union of the names defined by the above scoreboards.
                 // Then determine the actual definition for each name, and throw
                 // an error if multiple definitions are encountered.
-                let names: HashSet<Name> = vhdl.iter()
+                let names: HashSet<Name> = vhdl
+                    .iter()
                     .filter_map(|(&k, _)| match k {
                         vhdl::score::ResolvableName::Ident(n) => Some(n),
                         _ => None,
@@ -189,7 +184,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'l
                     let vhdl_defs = &vhdl[&name.into()];
                     let both_spans: Vec<_> = vhdl_defs.iter().map(|v| v.span).collect(); // TODO: chain with svlog results
                     if both_spans.len() > 1 {
-                        let mut d = DiagBuilder2::error(format!("`{}` declared multiple times", name));
+                        let mut d =
+                            DiagBuilder2::error(format!("`{}` declared multiple times", name));
                         for span in both_spans {
                             d = d.span(span);
                         }
@@ -212,7 +208,6 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs> for ScoreContext<'l
     }
 }
 
-
 /// A collection of arenas that the scoreboard uses to allocate nodes in. This
 /// also contains the sub-arenas for the VHDL- and SystemVerilog-specific
 /// scoreboards.
@@ -220,7 +215,6 @@ pub struct Arenas {
     pub vhdl: vhdl::score::Arenas,
     defs: Arena<Defs>,
 }
-
 
 impl Arenas {
     /// Create a new collection of arenas for the scoreboard to use.
@@ -232,7 +226,6 @@ impl Arenas {
     }
 }
 
-
 /// Roots for every AST that we support. During parsing, a list of these entries
 /// is generated that is then passed to the `ScoreBoard` as a reference.
 #[derive(Debug)]
@@ -241,19 +234,17 @@ pub enum Ast {
     Svlog(svlog_ast::Root),
 }
 
-
 /// The definitions in a scope.
 pub type Defs = HashMap<Name, Def>;
-
 
 // Declare some node references.
 node_ref!(RootRef);
 node_ref!(LibRef);
 
 // Declare some node reference groups.
-node_ref_group!(Def:
-	Lib(LibRef),
-	Vhdl(vhdl::score::Def),
-	Svlog(NodeId), // TODO: handle this case
+node_ref_group!(
+    Def: Lib(LibRef),
+    Vhdl(vhdl::score::Def),
+    Svlog(NodeId), // TODO: handle this case
 );
 node_ref_group!(ScopeRef: Root(RootRef), Lib(LibRef),);
