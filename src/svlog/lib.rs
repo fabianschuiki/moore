@@ -17,3 +17,13 @@ pub mod hir;
 
 pub use context::*;
 pub use syntax::*;
+
+/// Items commonly used within the crate.
+mod crate_prelude {
+    pub use ast;
+    pub use common::errors::*;
+    pub use common::score::Result;
+    pub use common::util::{HasDesc, HasSpan};
+    pub use common::NodeId;
+    pub use context::Context;
+}
