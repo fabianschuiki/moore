@@ -7,11 +7,11 @@
 #![allow(dead_code)]
 
 use std;
-use lexer::{Lexer, TokenAndSpan};
-use token::*;
+use crate::lexer::{Lexer, TokenAndSpan};
+use crate::token::*;
 use std::collections::VecDeque;
-use ast;
-use ast::*;
+use crate::ast;
+use crate::ast::*;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
@@ -381,7 +381,7 @@ where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 /// untouched. If it succeeds, `p` is in the same state as if `parse` was called
 /// on it directly. Use a ParallelParser for better error reporting.
 #[allow(dead_code)]
-fn try<R,F>(p: &mut AbstractParser, mut parse: F) -> Option<R>
+fn r#try<R,F>(p: &mut AbstractParser, mut parse: F) -> Option<R>
 where F: FnMut(&mut AbstractParser) -> ReportedResult<R> {
 	let mut bp = BranchParser::new(p);
 	match parse(&mut bp) {
@@ -431,8 +431,8 @@ fn try_identifier(p: &mut AbstractParser) -> ReportedResult<Option<ast::Identifi
 
 
 trait Predicate {
-	fn matches(&mut self, &mut AbstractParser) -> bool;
-	fn recover(&mut self, &mut AbstractParser, consume: bool);
+	fn matches(&mut self, _: &mut AbstractParser) -> bool;
+	fn recover(&mut self, _: &mut AbstractParser, consume: bool);
 	fn describe(&self) -> String;
 }
 
@@ -5201,8 +5201,8 @@ fn parse_hname(p: &mut AbstractParser, msg: &str) -> ReportedResult<ast::Identif
 mod tests {
 	use moore_common::source::*;
 	use moore_common::name::*;
-	use preproc::*;
-	use lexer::*;
+	use crate::preproc::*;
+	use crate::lexer::*;
 
 	fn parse(input: &str) {
 		use std::cell::Cell;

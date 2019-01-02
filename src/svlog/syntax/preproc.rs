@@ -7,7 +7,7 @@
 use std::path::Path;
 use moore_common::errors::{DiagResult2, DiagBuilder2};
 use std::collections::HashMap;
-use cat::*;
+use crate::cat::*;
 use moore_common::source::*;
 use std::rc::Rc;
 
@@ -663,8 +663,8 @@ enum Defcond {
 mod tests {
 	use super::*;
 	use moore_common::source::*;
-	use cat::CatTokenKind;
-	use cat::CatTokenKind::*;
+	use crate::cat::CatTokenKind;
+	use crate::cat::CatTokenKind::*;
 
 	fn preproc(input: &str) -> Preprocessor {
 		use std::cell::Cell;
@@ -680,13 +680,13 @@ mod tests {
 	}
 
 	fn check(input: &str, expected: &[CatTokenKind]) {
-		let mut pp = preproc(input);
+		let pp = preproc(input);
 		let actual: Vec<_> = pp.map(|x| x.unwrap().0).collect();
 		assert_eq!(actual, expected);
 	}
 
 	fn check_str(input: &str, expected: &str) {
-		let mut pp = preproc(input);
+		let pp = preproc(input);
 		let actual: String = pp.map(|x| x.unwrap().1.extract()).collect();
 		assert_eq!(actual, expected);
 	}
@@ -696,7 +696,7 @@ mod tests {
 		let sm = get_source_manager();
 		sm.add("other.sv", "bar\n");
 		sm.add("test.sv", "foo\n`include \"other.sv\"\nbaz");
-		let mut pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
+		let pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
 		let actual: Vec<_> = pp.map(|x| x.unwrap().0).collect();
 		assert_eq!(actual, &[
 			Text,
@@ -713,7 +713,7 @@ mod tests {
 		let sm = get_source_manager();
 		sm.add("other.sv", "/* World */\n`define foo 42\nbar");
 		sm.add("test.sv", "// Hello\n`include \"other.sv\"\n`foo something\n");
-		let mut pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
+		let pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
 		let actual: String = pp.map(|x| {
 			let x = x.unwrap();
 			println!("{:?}", x);
