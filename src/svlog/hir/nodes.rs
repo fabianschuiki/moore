@@ -3,26 +3,14 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use crate::crate_prelude::*;
-use std::collections::HashMap;
-
-// TODO: Take the AST expressions and split them into lvalue and rvalue
-// expressions. This should make a few things easier.
-
-/// The root of the HIR tree. This represents one elaborated design.
-pub struct Root {
-    pub top: NodeId,
-    pub mods: HashMap<NodeId, Module>,
-    pub intfs: HashMap<NodeId, Interface>,
-    pub pkgs: HashMap<NodeId, Package>,
-}
 
 /// A reference to an HIR node.
 #[derive(Debug, Copy, Clone)]
 pub enum HirNode<'hir> {
-    Module(&'hir Module),
+    Module(&'hir Module<'hir>),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
-    // Port(&'hir Port),
+    Port(&'hir Port),
     // PortSlice(&'hir PortSlice),
     // TypeParam(&'hir ast::ParamTypeDecl),
     // ValueParam(&'hir ast::ParamValueDecl),
@@ -32,13 +20,15 @@ pub enum HirNode<'hir> {
 impl<'hir> HasSpan for HirNode<'hir> {
     fn span(&self) -> Span {
         match *self {
-            HirNode::Module(m) => m.span(),
+            HirNode::Module(x) => x.span(),
+            HirNode::Port(x) => x.span(),
         }
     }
 
     fn human_span(&self) -> Span {
         match *self {
-            HirNode::Module(m) => m.human_span(),
+            HirNode::Module(x) => x.human_span(),
+            HirNode::Port(x) => x.human_span(),
         }
     }
 }
@@ -46,30 +36,32 @@ impl<'hir> HasSpan for HirNode<'hir> {
 impl<'hir> HasDesc for HirNode<'hir> {
     fn desc(&self) -> &'static str {
         match *self {
-            HirNode::Module(m) => m.desc(),
+            HirNode::Module(x) => x.desc(),
+            HirNode::Port(x) => x.desc(),
         }
     }
 
     fn desc_full(&self) -> String {
         match *self {
-            HirNode::Module(m) => m.desc_full(),
+            HirNode::Module(x) => x.desc_full(),
+            HirNode::Port(x) => x.desc_full(),
         }
     }
 }
 
 /// A module.
 #[derive(Debug)]
-pub struct Module {
+pub struct Module<'hir> {
     pub id: NodeId,
     pub name: Spanned<Name>,
     pub span: Span,
     // pub lifetime: ast::Lifetime,
-    // pub ports: Vec<Port>,
+    pub ports: &'hir [NodeId],
     // pub params: Vec<ast::ParamDecl>,
     // pub body: HierarchyBody,
 }
 
-impl HasSpan for Module {
+impl HasSpan for Module<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -79,7 +71,7 @@ impl HasSpan for Module {
     }
 }
 
-impl HasDesc for Module {
+impl HasDesc for Module<'_> {
     fn desc(&self) -> &'static str {
         "module"
     }
@@ -131,11 +123,33 @@ pub struct HierarchyBody {
     pub typedefs: Vec<ast::Typedef>,
 }
 
+/// A module or interface port.
 #[derive(Debug)]
 pub struct Port {
-    pub name: Option<Name>,
+    pub id: NodeId,
+    pub name: Spanned<Name>,
     pub span: Span,
-    pub slices: Vec<PortSlice>,
+    // pub slices: Vec<PortSlice>,
+}
+
+impl HasSpan for Port {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for Port {
+    fn desc(&self) -> &'static str {
+        "port"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("port `{}`", self.name.value)
+    }
 }
 
 /// A port slice refers to a port declaration within the module. It consists of

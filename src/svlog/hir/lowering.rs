@@ -14,6 +14,7 @@ pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode
     #[allow(unreachable_patterns)]
     match ast {
         AstNode::Module(m) => lower_module(cx, node_id, m),
+        AstNode::Port(p) => lower_port(cx, node_id, p),
         _ => {
             cx.emit(
                 DiagBuilder2::bug(format!(
@@ -50,4 +51,21 @@ fn lower_module<'gcx>(
         ports: cx.arenas.alloc_ids(ports),
     };
     Ok(HirNode::Module(cx.arenas.alloc_hir(hir)))
+}
+
+fn lower_port<'gcx>(
+    cx: Context<'gcx>,
+    node_id: NodeId,
+    ast: &'gcx ast::Port,
+) -> Result<HirNode<'gcx>> {
+    let (name, span) = match *ast {
+        ast::Port::Named { span, name, .. } => (Spanned::new(name.name, name.span), span),
+        _ => unimplemented!(),
+    };
+    let hir = hir::Port {
+        id: node_id,
+        name: name,
+        span: span,
+    };
+    Ok(HirNode::Port(cx.arenas.alloc_hir(hir)))
 }
