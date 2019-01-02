@@ -4,7 +4,7 @@ rust:
   - beta
   - nightly
   # minimum supported version
-  - "1.24.0"
+  - "1.31.0"
 matrix:
   allow_failures:
     - rust: nightly
