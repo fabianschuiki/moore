@@ -21,12 +21,15 @@
 //! ```
 
 use ast;
+use ast_map::{AstMap, AstNode};
+use codegen;
 use common::errors::*;
 use common::name::Name;
 use common::score::Result;
 use common::util::{HasDesc, HasSpan};
 use common::NodeId;
 use common::Session;
+use llhd;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -72,6 +75,7 @@ impl<'gcx> Context<'gcx> {
                 match *item {
                     ast::Item::Module(ref m) => {
                         let id = NodeId::alloc();
+                        self.ast_map.set(id, AstNode::Module(m));
                         self.register_global_item(m.name, GlobalItem::Module(id));
                     }
                     _ => self.unimp(item)?,
@@ -88,12 +92,19 @@ impl<'gcx> Context<'gcx> {
     pub fn find_global_item(self, name: Name) -> Option<GlobalItem> {
         self.global_items.borrow().get(&name).cloned()
     }
+
+    /// Generate code for a node.
+    pub fn generate_code(self, node_id: NodeId) -> Result<llhd::Module> {
+        codegen::generate_code(self, node_id)
+    }
 }
 
 /// The owner of all data generated during compilation.
 pub struct GlobalContext<'gcx> {
     /// The global compiler session.
     pub sess: &'gcx Session,
+    /// The mapping of node IDs to abstract syntax tree nodes.
+    ast_map: AstMap<'gcx>,
     /// The items visible in the global scope.
     global_items: RefCell<HashMap<Name, GlobalItem>>,
 }
@@ -103,6 +114,7 @@ impl<'gcx> GlobalContext<'gcx> {
     pub fn new(sess: &'gcx Session) -> Self {
         GlobalContext {
             sess,
+            ast_map: Default::default(),
             global_items: Default::default(),
         }
     }
