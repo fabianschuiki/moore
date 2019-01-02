@@ -3,10 +3,10 @@
 use std::fmt::{self, Debug, Display};
 use std::borrow::{Borrow, Cow};
 
-use common::errors::*;
+use crate::common::errors::*;
 
-use ty2::Type;
-use konst2::{FloatingConst, IntegerConst};
+use crate::ty2::Type;
+use crate::konst2::{FloatingConst, IntegerConst};
 
 /// An interface for dealing with constants.
 ///

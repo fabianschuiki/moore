@@ -3,8 +3,8 @@
 use std::fmt;
 use std::borrow::Cow;
 
-use konst2::traits::*;
-use ty2::{FloatingType, Type};
+use crate::konst2::traits::*;
+use crate::ty2::{FloatingType, Type};
 
 /// A constant float value.
 #[derive(Debug, Clone, PartialEq)]

@@ -2,8 +2,8 @@
 
 //! Arena to allocate HIR nodes into.
 
-use scope2::ScopeData;
-use hir::*;
+use crate::scope2::ScopeData;
+use crate::hir::*;
 
 make_arenas!(
     /// An arena to allocate HIR nodes into.

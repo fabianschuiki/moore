@@ -6,13 +6,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use common::name::Name;
-use common::errors::*;
-use common::source::{Spanned, Span};
-use common::score::Result;
+use crate::common::name::Name;
+use crate::common::errors::*;
+use crate::common::source::{Spanned, Span};
+use crate::common::score::Result;
 
-use score::{ScoreContext, Def};
-use ty::Ty;
+use crate::score::{ScoreContext, Def};
+use crate::ty::Ty;
 
 /// A type requirement on an overloaded entity.
 ///

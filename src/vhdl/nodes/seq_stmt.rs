@@ -4,17 +4,17 @@
 
 use std::iter::FromIterator;
 
-use common::errors::*;
-use common::util::{HasSpan, HasDesc};
-use common::score::Result;
-use common::source::Spanned;
-use common::name::Name;
+use crate::common::errors::*;
+use crate::common::util::{HasSpan, HasDesc};
+use crate::common::score::Result;
+use crate::common::source::Spanned;
+use crate::common::name::Name;
 
-use add_ctx::AddContext;
-use syntax::ast;
-use hir;
-use score::*;
-use term::TermContext;
+use crate::add_ctx::AddContext;
+use crate::syntax::ast;
+use crate::hir;
+use crate::score::*;
+use crate::term::TermContext;
 
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {

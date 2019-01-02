@@ -8,10 +8,10 @@ use std::cell::RefCell;
 
 use num::{BigInt, One};
 
-use common::source::Span;
-use common::name::Name;
-use score::*;
-pub use hir::Dir;
+use crate::common::source::Span;
+use crate::common::name::Name;
+use crate::score::*;
+pub use crate::hir::Dir;
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]

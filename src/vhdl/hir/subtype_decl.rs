@@ -7,10 +7,10 @@
 
 use num::BigInt;
 
-use hir::prelude::*;
-use hir::{EnumLit, ExprContext, Range2};
-use term::{self, Term, TermContext};
-use ty2::{AnyType, EnumBasetype, EnumVariant, FloatingBasetype, IntegerBasetype, IntegerRange,
+use crate::hir::prelude::*;
+use crate::hir::{EnumLit, ExprContext, Range2};
+use crate::term::{self, Term, TermContext};
+use crate::ty2::{AnyType, EnumBasetype, EnumVariant, FloatingBasetype, IntegerBasetype, IntegerRange,
           PhysicalBasetype, PhysicalUnit, Range, UniversalIntegerType};
 
 /// A subtype declaration.

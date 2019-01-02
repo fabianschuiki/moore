@@ -8,9 +8,9 @@ use std::iter::{once, repeat};
 
 pub use num::BigInt;
 
-use common::name::Name;
-use ty2::prelude::*;
-use ty2::ScalarSubtype;
+use crate::common::name::Name;
+use crate::ty2::prelude::*;
+use crate::ty2::ScalarSubtype;
 
 /// A physical type.
 ///

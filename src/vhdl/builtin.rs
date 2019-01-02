@@ -9,14 +9,14 @@ use std::collections::HashSet;
 
 use num::BigInt;
 
-use common::score::NodeRef;
-use common::source::*;
-use common::name::*;
+use crate::common::score::NodeRef;
+use crate::common::source::*;
+use crate::common::name::*;
 
-use score::{ResolvableName, ScoreBoard, ScopeRef, LibRef, BuiltinPkgRef, Def, TypeMarkRef, TypeDeclRef, EnumRef, UnitRef, BuiltinOpRef};
-use scope::Scope;
-use ty::*;
-use op::*;
+use crate::score::{ResolvableName, ScoreBoard, ScopeRef, LibRef, BuiltinPkgRef, Def, TypeMarkRef, TypeDeclRef, EnumRef, UnitRef, BuiltinOpRef};
+use crate::scope::Scope;
+use crate::ty::*;
+use crate::op::*;
 
 // Define some global references for the builtins.
 lazy_static! {

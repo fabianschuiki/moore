@@ -2,9 +2,9 @@
 
 //! Packages
 
-use hir::prelude::*;
-use hir::apply_use_clauses;
-use hir::TypeDecl2;
+use crate::hir::prelude::*;
+use crate::hir::apply_use_clauses;
+use crate::hir::TypeDecl2;
 
 #[derive(Debug)]
 pub struct Package2<'t> {

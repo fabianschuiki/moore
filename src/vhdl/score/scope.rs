@@ -2,8 +2,8 @@
 
 //! This module implements the tracking of definitions and scopes for VHDL.
 
-use score::*;
-use defs::*;
+use crate::score::*;
+use crate::defs::*;
 
 
 macro_rules! impl_make_defs {

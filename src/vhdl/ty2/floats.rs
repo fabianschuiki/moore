@@ -5,8 +5,8 @@
 use std::fmt::{self, Display};
 use std::ops::Deref;
 
-use ty2::prelude::*;
-use ty2::ScalarSubtype;
+use crate::ty2::prelude::*;
+use crate::ty2::ScalarSubtype;
 
 /// A real type.
 ///

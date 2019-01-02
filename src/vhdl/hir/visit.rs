@@ -2,7 +2,7 @@
 
 //! Visitor pattern for the HIR.
 
-use hir::*;
+use crate::hir::*;
 
 /// Provides HIR traversal.
 pub trait Visitor<'t> {

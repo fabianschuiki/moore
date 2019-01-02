@@ -7,16 +7,16 @@
 use std::fmt;
 use std::collections::HashMap;
 
-use common::errors::*;
-use common::name::*;
-use common::source::Spanned;
-use common::score::Result;
+use crate::common::errors::*;
+use crate::common::name::*;
+use crate::common::source::Spanned;
+use crate::common::score::Result;
 
-use syntax::ast;
-use score::ResolvableName;
-pub use syntax::ast::LogicalOp;
-pub use syntax::ast::RelationalOp;
-pub use syntax::ast::ShiftOp;
+use crate::syntax::ast;
+use crate::score::ResolvableName;
+pub use crate::syntax::ast::LogicalOp;
+pub use crate::syntax::ast::RelationalOp;
+pub use crate::syntax::ast::ShiftOp;
 
 /// An operator.
 ///

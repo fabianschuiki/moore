@@ -6,13 +6,13 @@
 //! AST node, creating an ID for it, and adding it to the AST table for later
 //! lowering to HIR.
 
-use common::score::NodeRef;
-use score::*;
-use syntax::lexer::token::Literal;
-use make_ctx::MakeContext;
-use add_ctx::AddContext;
-use term::*;
-use op::*;
+use crate::common::score::NodeRef;
+use crate::score::*;
+use crate::syntax::lexer::token::Literal;
+use crate::make_ctx::MakeContext;
+use crate::add_ctx::AddContext;
+use crate::term::*;
+use crate::op::*;
 
 /// Emit a compiler bug and return `Err`.
 macro_rules! unimp {

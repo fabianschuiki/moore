@@ -5,8 +5,8 @@ use std::borrow::Cow;
 
 use num::BigInt;
 
-use konst2::traits::*;
-use ty2::{IntegerType, Type};
+use crate::konst2::traits::*;
+use crate::ty2::{IntegerType, Type};
 
 /// A constant integer value.
 #[derive(Debug, Clone, PartialEq, Eq)]

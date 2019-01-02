@@ -4,21 +4,21 @@
 
 use std::collections::HashMap;
 
-use common::Verbosity;
-use common::errors::*;
-use common::source::{Span, Spanned};
-use common::score::Result;
-use common::name::Name;
+use crate::common::Verbosity;
+use crate::common::errors::*;
+use crate::common::source::{Span, Spanned};
+use crate::common::score::Result;
+use crate::common::name::Name;
 
-use add_ctx::AddContext;
-use syntax::ast;
-use score::*;
-use term::TermContext;
-use make_ctx::MakeContext;
-use hir;
-use typeck::TypeckContext;
-use ty::*;
-use overload_resolver::*;
+use crate::add_ctx::AddContext;
+use crate::syntax::ast;
+use crate::score::*;
+use crate::term::TermContext;
+use crate::make_ctx::MakeContext;
+use crate::hir;
+use crate::typeck::TypeckContext;
+use crate::ty::*;
+use crate::overload_resolver::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add an expression.

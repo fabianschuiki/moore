@@ -4,14 +4,14 @@
 
 use num::BigInt;
 
-use common::source::*;
-use common::name::*;
-use common::util::HasSpan;
+use crate::common::source::*;
+use crate::common::name::*;
+use crate::common::util::HasSpan;
 
-use score::*;
-use konst::*;
-use op::*;
-pub use syntax::ast::Dir;
+use crate::score::*;
+use crate::konst::*;
+use crate::op::*;
+pub use crate::syntax::ast::Dir;
 
 mod prelude;
 mod arena;

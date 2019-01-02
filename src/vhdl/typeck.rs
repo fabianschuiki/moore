@@ -6,15 +6,15 @@ use std::fmt::Debug;
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use common::{NodeId, Verbosity};
-use common::errors::*;
-use common::source::{Span, Spanned, INVALID_SPAN};
-use common::score::{NodeMaker, NodeStorage, Result};
-use score::*;
-use ty::*;
-use konst::*;
-use hir;
-use lazy::LazyNode;
+use crate::common::{NodeId, Verbosity};
+use crate::common::errors::*;
+use crate::common::source::{Span, Spanned, INVALID_SPAN};
+use crate::common::score::{NodeMaker, NodeStorage, Result};
+use crate::score::*;
+use crate::ty::*;
+use crate::konst::*;
+use crate::hir;
+use crate::lazy::LazyNode;
 
 /// A context to typecheck things in.
 ///
@@ -465,7 +465,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 	}
 }
 
-use ty2::RangeDir;
+use crate::ty2::RangeDir;
 impl From<Dir> for RangeDir {
 	fn from(d: Dir) -> RangeDir {
 		match d {
@@ -1035,7 +1035,7 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 		}
 
 		hir::TypeData::Enum(ref lits) => {
-			use ty2::{EnumBasetype, EnumVariant};
+			use crate::ty2::{EnumBasetype, EnumVariant};
 			let ty = EnumBasetype::new(lits.iter().map(|l| match *l {
 				hir::EnumLit::Ident(sp) => EnumVariant::from(sp.value),
 				hir::EnumLit::Char(sp)  => EnumVariant::from(sp.value),
@@ -1119,7 +1119,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 		let rb = self.const_value(rb_id)?;
 		Ok(match (lb, rb) {
 			(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-				use ty2::{IntegerBasetype, Range};
+				use crate::ty2::{IntegerBasetype, Range};
 				let ty = IntegerBasetype::new(Range::with_left_right(dir, lb.value.clone(), rb.value.clone()));
 				debugln!("type from range `{}` = {}", span.extract(), ty);
 				self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())

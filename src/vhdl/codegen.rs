@@ -4,10 +4,10 @@
 
 use moore_common::score::Result;
 use moore_common::errors::*;
-use score::*;
-use konst::*;
-use ty::*;
-use hir;
+use crate::score::*;
+use crate::konst::*;
+use crate::ty::*;
+use crate::hir;
 use llhd;
 use num::{Signed, Zero, ToPrimitive};
 

@@ -9,23 +9,23 @@ use std::marker::PhantomData;
 
 use num::{BigInt, BigRational};
 
-use common::SessionContext;
-use common::name::Name;
-use common::errors::*;
-use common::source::*;
-use common::util::*;
-use common::score::Result;
+use crate::common::SessionContext;
+use crate::common::name::Name;
+use crate::common::errors::*;
+use crate::common::source::*;
+use crate::common::util::*;
+use crate::common::score::Result;
 
-use arenas::Alloc;
-use syntax::lexer::token::{Exponent, ExponentSign, Literal};
-use syntax::ast::{self, Dir};
-use score::*;
-use hir;
-use konst::ConstInt;
-use add_ctx::AddContext;
-use ty::*;
-use op::*;
-use scope2::{Def2, TypeVariantDef, ScopeData};
+use crate::arenas::Alloc;
+use crate::syntax::lexer::token::{Exponent, ExponentSign, Literal};
+use crate::syntax::ast::{self, Dir};
+use crate::score::*;
+use crate::hir;
+use crate::konst::ConstInt;
+use crate::add_ctx::AddContext;
+use crate::ty::*;
+use crate::op::*;
+use crate::scope2::{Def2, TypeVariantDef, ScopeData};
 
 /// A term.
 ///

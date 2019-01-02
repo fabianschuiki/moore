@@ -2,7 +2,7 @@
 
 //! This module implements constant value computation.
 
-use score::*;
+use crate::score::*;
 
 
 // Calculate the constant value of an expression.

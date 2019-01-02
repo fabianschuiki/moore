@@ -2,11 +2,11 @@
 
 use std::fmt;
 
-use common::source::{Span, Spanned};
-use common::score::Result;
+use crate::common::source::{Span, Spanned};
+use crate::common::score::Result;
 
-use score::ResolvableName;
-use hir::visit::Visitor;
+use crate::score::ResolvableName;
+use crate::hir::visit::Visitor;
 
 /// Construct something from an AST node.
 pub trait FromAst<'t>: Sized {

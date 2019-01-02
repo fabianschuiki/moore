@@ -2,7 +2,7 @@
 
 //! Object declarations
 
-use hir::prelude::*;
+use crate::hir::prelude::*;
 
 /// A constant declaration.
 ///

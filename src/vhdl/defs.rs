@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use moore_common::source::*;
 use moore_common::errors::*;
 use moore_common::score::Result;
-use score::*;
-use syntax::ast;
-use hir;
+use crate::score::*;
+use crate::syntax::ast;
+use crate::hir;
 
 /// A context to declare things in.
 ///
@@ -105,7 +105,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
 	/// Handle type declarations.
 	pub fn declare_type(&mut self, id: TypeDeclRef) {
-		use syntax::ast;
+		use crate::syntax::ast;
 		let ast = self.ctx.ast(id).1;
 		self.declare(ast.name.map_into(), Def::Type(id));
 		// This is a rather hacky way of declaring the variant names for enum

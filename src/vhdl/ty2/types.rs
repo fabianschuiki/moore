@@ -7,11 +7,11 @@ use std::borrow::Borrow;
 
 pub use num::BigInt;
 
-use ty2::ints::*;
-use ty2::floats::*;
-use ty2::enums::*;
-use ty2::physical::*;
-use ty2::access::*;
+use crate::ty2::ints::*;
+use crate::ty2::floats::*;
+use crate::ty2::enums::*;
+use crate::ty2::physical::*;
+use crate::ty2::access::*;
 
 /// An interface for dealing with types.
 ///

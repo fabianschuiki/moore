@@ -11,11 +11,11 @@ use std::collections::HashMap;
 
 use moore_common::NodeId;
 use moore_common::score::{NodeStorage, Result};
-use score::{ScoreBoard, ScoreContext};
-use hir;
-use typeck::TypeckContext;
-use score::*;
-use ty::Ty;
+use crate::score::{ScoreBoard, ScoreContext};
+use crate::hir;
+use crate::typeck::TypeckContext;
+use crate::score::*;
+use crate::ty::Ty;
 
 /// A lazily evaluated node.
 pub enum LazyNode<F> {

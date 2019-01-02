@@ -2,8 +2,8 @@
 
 #![allow(missing_docs)]
 
-use arenas::{Alloc, AllocOwned};
-use konst2::*;
+use crate::arenas::{Alloc, AllocOwned};
+use crate::konst2::*;
 
 make_arenas!(
     /// An arena to allocate constant values into.

@@ -3,11 +3,11 @@
 use std::fmt;
 use std::cell::RefCell;
 
-use common::score::Result;
+use crate::common::score::Result;
 
-use arenas::Alloc;
-use hir::visit::Visitor;
-use hir::{FromAst, LatentNode, Node};
+use crate::arenas::Alloc;
+use crate::hir::visit::Visitor;
+use crate::hir::{FromAst, LatentNode, Node};
 
 /// A placeholder for an HIR node.
 pub struct Slot<'t, T>(RefCell<SlotState<'t, T>>)

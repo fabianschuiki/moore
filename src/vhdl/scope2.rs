@@ -11,13 +11,13 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use common::{SessionContext, Verbosity};
-use common::errors::*;
-use common::score::Result;
-use common::source::Spanned;
+use crate::common::{SessionContext, Verbosity};
+use crate::common::errors::*;
+use crate::common::score::Result;
+use crate::common::source::Spanned;
 
-use hir::{self, Node};
-use score::ResolvableName;
+use crate::hir::{self, Node};
+use crate::score::ResolvableName;
 
 /// A definition.
 #[derive(Copy, Clone)]

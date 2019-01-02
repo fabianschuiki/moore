@@ -13,10 +13,10 @@ use std::fmt::Debug;
 use moore_common::NodeId;
 use moore_common::score::NodeStorage;
 use moore_common::source::Span;
-use score::{HirTable, ScoreContext};
-use lazy::*;
-use hir;
-use arenas::Alloc;
+use crate::score::{HirTable, ScoreContext};
+use crate::lazy::*;
+use crate::hir;
+use crate::arenas::Alloc;
 
 /// A context within which compiler passes can be described.
 ///

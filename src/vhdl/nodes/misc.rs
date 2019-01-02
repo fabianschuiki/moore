@@ -2,16 +2,16 @@
 
 //! Miscellaneous nodes
 
-use common::score::Result;
-use common::source::Spanned;
+use crate::common::score::Result;
+use crate::common::source::Spanned;
 
-use add_ctx::AddContext;
-use make_ctx::MakeContext;
-use syntax::ast;
-use hir;
-use score::*;
-use term::TermContext;
-use ty::*;
+use crate::add_ctx::AddContext;
+use crate::make_ctx::MakeContext;
+use crate::syntax::ast;
+use crate::hir;
+use crate::score::*;
+use crate::term::TermContext;
+use crate::ty::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a subtype indication.

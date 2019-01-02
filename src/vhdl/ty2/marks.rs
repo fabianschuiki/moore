@@ -4,11 +4,11 @@
 
 use std::fmt::{self, Debug, Display};
 
-use common::name::Name;
-use common::source::Span;
+use crate::common::name::Name;
+use crate::common::source::Span;
 
-use ty2::prelude::*;
-use ty2::Subtype;
+use crate::ty2::prelude::*;
+use crate::ty2::Subtype;
 
 /// A type name.
 ///

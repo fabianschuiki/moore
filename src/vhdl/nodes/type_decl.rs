@@ -2,18 +2,18 @@
 
 //! Type declarations
 
-use common::errors::*;
-use common::score::{NodeRef, Result};
-use common::source::Spanned;
-use common::name::Name;
+use crate::common::errors::*;
+use crate::common::score::{NodeRef, Result};
+use crate::common::source::Spanned;
+use crate::common::name::Name;
 
 use num::BigInt;
 
-use add_ctx::AddContext;
-use syntax::ast;
-use hir;
-use score::*;
-use term::{Term, TermContext};
+use crate::add_ctx::AddContext;
+use crate::syntax::ast;
+use crate::hir;
+use crate::score::*;
+use crate::term::{Term, TermContext};
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a type declaration.

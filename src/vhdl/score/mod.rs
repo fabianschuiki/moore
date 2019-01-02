@@ -22,17 +22,17 @@ use typed_arena::Arena;
 use num::{BigInt, Signed};
 use llhd;
 
-use syntax::ast;
-use hir;
-use ty::*;
-use konst::*;
-use codegen::Codegen;
-use typeck::{Typeck, TypeckContext};
-use lazy::*;
-use arenas::Alloc;
-use builtin;
-use op::*;
-pub use builtin::*;
+use crate::syntax::ast;
+use crate::hir;
+use crate::ty::*;
+use crate::konst::*;
+use crate::codegen::Codegen;
+use crate::typeck::{Typeck, TypeckContext};
+use crate::lazy::*;
+use crate::arenas::Alloc;
+use crate::builtin;
+use crate::op::*;
+pub use crate::builtin::*;
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
 /// identifier and output type.
@@ -111,7 +111,7 @@ pub struct ScoreBoard<'ast, 'ctx> {
     /// A table of typeval results.
     pub typeval_table: RefCell<HashMap<NodeId, Result<&'ctx Ty>>>,
     /// A table of scopes. Revised; will replace `scope_table` and `def_table`.
-    pub scope2_table: RefCell<HashMap<ScopeRef, ::scope::Scope>>,
+    pub scope2_table: RefCell<HashMap<ScopeRef, crate::scope::Scope>>,
 }
 
 impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {

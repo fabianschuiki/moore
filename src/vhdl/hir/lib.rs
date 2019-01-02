@@ -1,16 +1,16 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use hir::prelude::*;
+use crate::hir::prelude::*;
 
-use common::name::{get_name_table, Name};
-use common::source::{Span, Spanned, INVALID_SPAN};
-use common::score::Result;
+use crate::common::name::{get_name_table, Name};
+use crate::common::source::{Span, Spanned, INVALID_SPAN};
+use crate::common::score::Result;
 
-use arenas::Alloc;
-use syntax::ast;
-use hir::visit::Visitor;
-use hir::{FromAst, LatentNode, Node, Package2};
-use scope2::{Def2, ScopeContext, ScopeData};
+use crate::arenas::Alloc;
+use crate::syntax::ast;
+use crate::hir::visit::Visitor;
+use crate::hir::{FromAst, LatentNode, Node, Package2};
+use crate::scope2::{Def2, ScopeContext, ScopeData};
 
 /// A library.
 #[derive(Debug)]

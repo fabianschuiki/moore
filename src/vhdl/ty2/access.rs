@@ -4,7 +4,7 @@
 
 use std::fmt::{self, Display};
 
-use ty2::prelude::*;
+use crate::ty2::prelude::*;
 
 /// An access type.
 #[derive(Debug, Clone, PartialEq, Eq)]

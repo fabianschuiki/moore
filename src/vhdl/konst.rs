@@ -4,9 +4,9 @@
 
 use std::fmt;
 use num::BigInt;
-use ty::*;
-use score::TypeDeclRef;
-pub use hir::Dir;
+use crate::ty::*;
+use crate::score::TypeDeclRef;
+pub use crate::hir::Dir;
 
 
 /// A constant value.

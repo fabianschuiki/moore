@@ -1,13 +1,13 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use arenas::{Alloc, AllocOwned};
-use ty2::prelude::*;
-use ty2::types::NullType;
-use ty2::ints::*;
-use ty2::floats::*;
-use ty2::enums::*;
-use ty2::physical::*;
-use ty2::access::*;
+use crate::arenas::{Alloc, AllocOwned};
+use crate::ty2::prelude::*;
+use crate::ty2::types::NullType;
+use crate::ty2::ints::*;
+use crate::ty2::floats::*;
+use crate::ty2::enums::*;
+use crate::ty2::physical::*;
+use crate::ty2::access::*;
 
 make_arenas!(
     /// An arena to allocate types nodes into.

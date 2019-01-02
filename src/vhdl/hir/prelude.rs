@@ -1,17 +1,17 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-pub use common::NodeId;
-pub use common::name::Name;
-pub use common::source::{Span, Spanned};
-pub use common::errors::*;
-pub use common::score::Result;
+pub use crate::common::NodeId;
+pub use crate::common::name::Name;
+pub use crate::common::source::{Span, Spanned};
+pub use crate::common::errors::*;
+pub use crate::common::score::Result;
 
-pub use arenas::{Alloc, AllocInto, AllocOwned, AllocOwnedInto, AllocOwnedSelf, AllocSelf};
-pub use syntax::ast;
-pub use score::ResolvableName;
-pub use scope2::{Def2, ScopeContext, ScopeData, TypeVariantDef};
-pub use hir::visit::Visitor;
-pub use hir::node::*;
-pub use hir::slot::*;
-pub use hir::AllocContext;
-pub use ty2::{self, Type};
+pub use crate::arenas::{Alloc, AllocInto, AllocOwned, AllocOwnedInto, AllocOwnedSelf, AllocSelf};
+pub use crate::syntax::ast;
+pub use crate::score::ResolvableName;
+pub use crate::scope2::{Def2, ScopeContext, ScopeData, TypeVariantDef};
+pub use crate::hir::visit::Visitor;
+pub use crate::hir::node::*;
+pub use crate::hir::slot::*;
+pub use crate::hir::AllocContext;
+pub use crate::ty2::{self, Type};

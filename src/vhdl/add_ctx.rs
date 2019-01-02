@@ -9,13 +9,13 @@
 
 #![deny(missing_docs)]
 
-use common::source::{Span, INVALID_SPAN};
-use common::score::{NodeRef, Result};
-use common::errors::*;
-use common::util::{HasSpan, HasDesc};
-use make_ctx::MakeContext;
-use score::ScoreContext;
-use score::ScopeRef;
+use crate::common::source::{Span, INVALID_SPAN};
+use crate::common::score::{NodeRef, Result};
+use crate::common::errors::*;
+use crate::common::util::{HasSpan, HasDesc};
+use crate::make_ctx::MakeContext;
+use crate::score::ScoreContext;
+use crate::score::ScopeRef;
 
 /// A context within which nodes can be added.
 ///

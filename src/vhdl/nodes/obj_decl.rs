@@ -5,15 +5,15 @@
 //! This includes constant, signal, variable, shared variable, and file
 //! declarations.
 
-use common::errors::*;
-use common::score::Result;
-use common::source::Spanned;
+use crate::common::errors::*;
+use crate::common::score::Result;
+use crate::common::source::Spanned;
 
-use add_ctx::AddContext;
-use syntax::ast;
-use hir;
-use score::*;
-use ty::*;
+use crate::add_ctx::AddContext;
+use crate::syntax::ast;
+use crate::hir;
+use crate::score::*;
+use crate::ty::*;
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a constant declaration.

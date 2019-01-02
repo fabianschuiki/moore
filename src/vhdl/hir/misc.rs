@@ -2,7 +2,7 @@
 
 use std;
 
-use hir::prelude::*;
+use crate::hir::prelude::*;
 
 pub fn apply_use_clauses<'a, I>(clauses: I, context: AllocContext)
 where

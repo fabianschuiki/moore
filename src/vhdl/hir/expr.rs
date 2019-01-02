@@ -4,13 +4,13 @@
 
 use num::{BigInt, BigRational, ToPrimitive};
 
-use common::SessionContext;
-use common::errors::*;
+use crate::common::SessionContext;
+use crate::common::errors::*;
 
-use hir::prelude::*;
-use ty2::{UniversalIntegerType, UniversalRealType};
-use konst2::{Const2, FloatingConst, IntegerConst};
-pub use syntax::ast::Dir;
+use crate::hir::prelude::*;
+use crate::ty2::{UniversalIntegerType, UniversalRealType};
+use crate::konst2::{Const2, FloatingConst, IntegerConst};
+pub use crate::syntax::ast::Dir;
 
 /// An expression.
 ///

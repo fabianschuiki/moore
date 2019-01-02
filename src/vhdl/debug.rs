@@ -3,19 +3,19 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 
-use common::{Session, SessionContext, Verbosity};
-use common::errors::DiagBuilder2;
-use common::source::Spanned;
-use common::errors::*;
-use common::name::{get_name_table, Name};
+use crate::common::{Session, SessionContext, Verbosity};
+use crate::common::errors::DiagBuilder2;
+use crate::common::source::Spanned;
+use crate::common::errors::*;
+use crate::common::name::{get_name_table, Name};
 
-use syntax::ast;
-use hir::{self, Decl2, FromAst, LatentNode, Library, Node};
-use hir::visit::Visitor;
-use scope2::ScopeData;
-use arenas::{Alloc, AllocOwned};
-use ty2;
-use konst2::{self, Const2, OwnedConst};
+use crate::syntax::ast;
+use crate::hir::{self, Decl2, FromAst, LatentNode, Library, Node};
+use crate::hir::visit::Visitor;
+use crate::scope2::ScopeData;
+use crate::arenas::{Alloc, AllocOwned};
+use crate::ty2;
+use crate::konst2::{self, Const2, OwnedConst};
 
 pub fn emit_pkgs(sess: &Session, nodes: Vec<&ast::DesignUnit>) {
     let (arenas, type_arena, const_arena) = (

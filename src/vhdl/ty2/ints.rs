@@ -7,8 +7,8 @@ use std::ops::Deref;
 
 pub use num::BigInt;
 
-use ty2::prelude::*;
-use ty2::ScalarSubtype;
+use crate::ty2::prelude::*;
+use crate::ty2::ScalarSubtype;
 
 /// An integer type.
 ///

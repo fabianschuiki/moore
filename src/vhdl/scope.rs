@@ -6,12 +6,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use common::Verbosity;
-use common::errors::*;
-use common::score::Result;
-use common::source::Spanned;
+use crate::common::Verbosity;
+use crate::common::errors::*;
+use crate::common::score::Result;
+use crate::common::source::Spanned;
 
-use score::{ScoreContext, ScopeRef, Def, ResolvableName};
+use crate::score::{ScoreContext, ScopeRef, Def, ResolvableName};
 
 /// A scope.
 #[derive(Clone, Debug)]

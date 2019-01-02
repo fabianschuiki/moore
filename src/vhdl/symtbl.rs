@@ -7,7 +7,7 @@ use std;
 use std::collections::{HashMap, HashSet};
 use moore_common::name::*;
 use moore_common::source::*;
-use syntax::ast::{self, NodeId};
+use crate::syntax::ast::{self, NodeId};
 
 
 #[derive(Debug)]
