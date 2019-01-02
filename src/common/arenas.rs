@@ -1,10 +1,11 @@
-// Copyright (c) 2018 Fabian Schuiki
+// Copyright (c) 2018-2019 Fabian Schuiki
 
 //! Multi-type arena allocation
 
 #![deny(missing_docs)]
 
 use std::borrow::Cow;
+pub use typed_arena::Arena as TypedArena;
 
 /// Allocates values.
 pub trait Alloc<'a, 't, T: 't> {
@@ -136,7 +137,8 @@ macro_rules! make_arenas {
         $(#[$arena_attr])*
         #[allow(missing_docs)]
         pub struct $arena_name<$($lt),*> {
-            $(pub $name: ::typed_arena::Arena<$type>,)*
+            dummy: std::marker::PhantomData<($(&$lt ()),*)>,
+            $(pub $name: $crate::arenas::TypedArena<$type>,)*
         }
 
         make_arenas!(STRUCT_IMPL $arena_name; [$($lt),*]; $($name: $type,)*);
@@ -147,7 +149,8 @@ macro_rules! make_arenas {
             /// Create a new arena.
             pub fn new() -> $arena_name<$($lt),*> {
                 $arena_name {
-                    $($name: ::typed_arena::Arena::new(),)*
+                    dummy: Default::default(),
+                    $($name: $crate::arenas::TypedArena::new(),)*
                 }
             }
         }
