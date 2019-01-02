@@ -28,6 +28,7 @@ use crate::common::arenas::TypedArena;
 use crate::common::Session;
 use crate::crate_prelude::*;
 use crate::hir::{self, HirNode};
+use crate::ty::TypeKind;
 use llhd;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -130,6 +131,23 @@ impl<'gcx> Context<'gcx> {
     /// Generate code for a node.
     pub fn generate_code(self, node_id: NodeId) -> Result<llhd::Module> {
         codegen::generate_code(self, node_id)
+    }
+
+    /// Determine the type of a node.
+    pub fn type_of(self, node_id: NodeId) -> Result<Type<'gcx>> {
+        typeck::type_of(self, node_id)
+    }
+
+    /// Make a void type.
+    pub fn mkty_void(self) -> Type<'gcx> {
+        static STATIC: TypeKind<'static> = TypeKind::Void;
+        &STATIC
+    }
+
+    /// Make a bit type.
+    pub fn mkty_bit(self) -> Type<'gcx> {
+        static STATIC: TypeKind<'static> = TypeKind::Bit;
+        &STATIC
     }
 }
 

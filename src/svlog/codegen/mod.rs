@@ -4,6 +4,7 @@
 
 use crate::crate_prelude::*;
 use crate::hir::HirNode;
+use crate::ty::TypeKind;
 use std::collections::HashMap;
 
 pub(crate) fn generate_code<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<llhd::Module> {
@@ -47,7 +48,12 @@ fn codegen_module<'gcx>(
             HirNode::Port(p) => p,
             _ => unreachable!(),
         };
-        let ty = llhd::void_ty(); // TODO: pick actual type
+        let ty = cx.type_of(port_id)?;
+        debug!(
+            "port {}.{} has type {:?}",
+            hir.name.value, port.name.value, ty
+        );
+        let ty = codegen_type(cx, ty)?; // TODO: pick actual type
         let ty = match port.dir {
             ast::PortDir::Ref => llhd::pointer_ty(ty),
             _ => llhd::signal_ty(ty),
@@ -89,4 +95,12 @@ fn codegen_module<'gcx>(
     }
 
     Ok(into.add_entity(ent).into())
+}
+
+fn codegen_type<'gcx>(cx: Context<'gcx>, ty: Type<'gcx>) -> Result<llhd::Type> {
+    Ok(match *ty {
+        TypeKind::Void => llhd::void_ty(),
+        TypeKind::Bit => llhd::int_ty(1),
+        _ => unimplemented!(),
+    })
 }

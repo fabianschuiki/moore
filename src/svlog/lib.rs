@@ -15,6 +15,8 @@ mod ast_map;
 pub mod codegen;
 mod context;
 pub mod hir;
+pub mod ty;
+pub mod typeck;
 
 pub use crate::context::*;
 pub use crate::syntax::*;
@@ -30,4 +32,6 @@ mod crate_prelude {
     pub use crate::common::NodeId;
     pub use crate::context::Context;
     pub use crate::hir;
+    pub use crate::ty::{self, Type};
+    pub use crate::typeck;
 }
