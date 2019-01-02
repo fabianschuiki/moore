@@ -11,4 +11,7 @@ extern crate log;
 
 pub(crate) use moore_common as common;
 
+mod context;
+
+pub use context::*;
 pub use syntax::*;
