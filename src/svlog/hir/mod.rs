@@ -9,3 +9,10 @@ pub mod lowering;
 pub mod nodes;
 
 pub use self::nodes::*;
+
+make_arenas!(
+    /// An arena to allocate HIR nodes into.
+    pub struct Arena<'hir> {
+        modules: Module,
+    }
+);
