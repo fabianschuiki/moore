@@ -15,5 +15,5 @@ fn empty_module() {
     let code = cx.generate_code(m.into()).unwrap();
     let asm = module_to_string(&code);
     eprintln!("{}", asm.trim());
-    // assert_eq!(asm.trim(), "entity @foo () () {\n}");
+    assert_eq!(asm.trim(), "entity @foo () () {\n}");
 }

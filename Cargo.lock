@@ -189,7 +189,6 @@ dependencies = [
  "moore-common 0.1.0",
  "moore-svlog-syntax 0.1.0",
  "simple_logger 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "typed-arena 1.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
