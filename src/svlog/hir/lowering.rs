@@ -17,7 +17,7 @@ pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode
         _ => {
             cx.emit(
                 DiagBuilder2::bug(format!(
-                    "lowering to HIR for {} not implemented",
+                    "lowering of {} to hir not implemented",
                     ast.desc_full()
                 ))
                 .span(ast.human_span()),
@@ -30,13 +30,24 @@ pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode
 fn lower_module<'gcx>(
     cx: Context<'gcx>,
     node_id: NodeId,
-    ast: &ast::ModDecl,
+    ast: &'gcx ast::ModDecl,
 ) -> Result<HirNode<'gcx>> {
+    let mut ports = Vec::new();
+    for port in &ast.ports {
+        match *port {
+            ast::Port::Named { .. } => {
+                let id = cx.alloc_id(port.human_span());
+                cx.set_ast(id, AstNode::Port(port));
+                ports.push(id);
+            }
+            _ => return cx.unimp(port),
+        }
+    }
     let hir = hir::Module {
         id: node_id,
         name: Spanned::new(ast.name, ast.name_span),
         span: ast.span,
+        ports: cx.arenas.alloc_ids(ports),
     };
-    let hir = cx.arenas.alloc_hir(hir);
-    Ok(HirNode::Module(hir))
+    Ok(HirNode::Module(cx.arenas.alloc_hir(hir)))
 }

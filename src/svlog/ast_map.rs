@@ -37,18 +37,21 @@ impl<'ast> AstMap<'ast> {
 #[derive(Clone, Copy, Debug)]
 pub enum AstNode<'ast> {
     Module(&'ast ast::ModDecl),
+    Port(&'ast ast::Port),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
     fn span(&self) -> Span {
         match *self {
-            AstNode::Module(m) => m.span(),
+            AstNode::Module(x) => x.span(),
+            AstNode::Port(x) => x.span(),
         }
     }
 
     fn human_span(&self) -> Span {
         match *self {
-            AstNode::Module(m) => m.human_span(),
+            AstNode::Module(x) => x.human_span(),
+            AstNode::Port(x) => x.human_span(),
         }
     }
 }
@@ -56,13 +59,15 @@ impl<'ast> HasSpan for AstNode<'ast> {
 impl<'ast> HasDesc for AstNode<'ast> {
     fn desc(&self) -> &'static str {
         match *self {
-            AstNode::Module(m) => m.desc(),
+            AstNode::Module(x) => x.desc(),
+            AstNode::Port(x) => x.desc(),
         }
     }
 
     fn desc_full(&self) -> String {
         match *self {
-            AstNode::Module(m) => m.desc_full(),
+            AstNode::Module(x) => x.desc_full(),
+            AstNode::Port(x) => x.desc_full(),
         }
     }
 }

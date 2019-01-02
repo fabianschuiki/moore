@@ -24,12 +24,9 @@ use crate::ast;
 use crate::ast_map::{AstMap, AstNode};
 use crate::codegen;
 use crate::common::arenas::Alloc;
-use crate::common::errors::*;
-use crate::common::name::Name;
-use crate::common::score::Result;
-use crate::common::util::{HasDesc, HasSpan};
-use crate::common::NodeId;
+use crate::common::arenas::TypedArena;
 use crate::common::Session;
+use crate::crate_prelude::*;
 use crate::hir::{self, HirNode};
 use llhd;
 use std::cell::RefCell;
@@ -76,8 +73,8 @@ impl<'gcx> Context<'gcx> {
             for item in &root.items {
                 match *item {
                     ast::Item::Module(ref m) => {
-                        let id = NodeId::alloc();
-                        self.ast_map.set(id, AstNode::Module(m));
+                        let id = self.alloc_id(m.human_span());
+                        self.set_ast(id, AstNode::Module(m));
                         self.register_global_item(m.name, GlobalItem::Module(id));
                     }
                     _ => self.unimp(item)?,
@@ -95,15 +92,31 @@ impl<'gcx> Context<'gcx> {
         self.global_items.borrow().get(&name).cloned()
     }
 
+    /// Allocate a new node id.
+    ///
+    /// The provided span is used primarily for diagnostic messages and is
+    /// supposed to easily identify the node to the user in case of an error.
+    pub fn alloc_id(self, span: Span) -> NodeId {
+        let id = NodeId::alloc();
+        self.node_id_to_span.borrow_mut().insert(id, span);
+        id
+    }
+
+    /// Associate an AST ndoe with a node id.
+    pub fn set_ast(self, node_id: NodeId, ast: AstNode<'gcx>) {
+        self.ast_map.set(node_id, ast)
+    }
+
     /// Obtain the AST node associated with a node id.
     pub fn ast_of(self, node_id: NodeId) -> Result<AstNode<'gcx>> {
         match self.ast_map.get(node_id) {
             Some(node) => Ok(node),
             None => {
-                self.emit(DiagBuilder2::bug(format!(
-                    "no ast node for id {} in the map",
-                    node_id
-                )));
+                let span = self.node_id_to_span.borrow()[&node_id];
+                self.emit(
+                    DiagBuilder2::bug(format!("no ast node for `{}` in the map", span.extract()))
+                        .span(span),
+                );
                 Err(())
             }
         }
@@ -128,6 +141,8 @@ pub struct GlobalContext<'gcx> {
     ast_map: AstMap<'gcx>,
     /// The items visible in the global scope.
     global_items: RefCell<HashMap<Name, GlobalItem>>,
+    /// A mapping from node ids to spans for diagnostics.
+    node_id_to_span: RefCell<HashMap<NodeId, Span>>,
     /// The arenas that own all references.
     pub arenas: GlobalArenas<'gcx>,
 }
@@ -139,6 +154,7 @@ impl<'gcx> GlobalContext<'gcx> {
             sess,
             ast_map: Default::default(),
             global_items: Default::default(),
+            node_id_to_span: Default::default(),
             arenas: Default::default(),
         }
     }
@@ -167,14 +183,28 @@ impl Into<NodeId> for GlobalItem {
 ///
 /// Use this struct whenever you want to allocate or internalize
 /// something during the compilation procedure.
-#[derive(Default)]
 pub struct GlobalArenas<'t> {
+    ids: TypedArena<NodeId>,
     hir: hir::Arena<'t>,
 }
 
+impl Default for GlobalArenas<'_> {
+    fn default() -> Self {
+        GlobalArenas {
+            ids: TypedArena::new(),
+            hir: Default::default(),
+        }
+    }
+}
+
 impl<'t> GlobalArenas<'t> {
+    /// Allocate a list of node IDs.
+    pub fn alloc_ids(&'t self, ids: impl IntoIterator<Item = NodeId>) -> &'t [NodeId] {
+        self.ids.alloc_extend(ids)
+    }
+
     /// Allocate an HIR node into the global context.
-    pub fn alloc_hir<T>(&'t self, hir: T) -> &T
+    pub fn alloc_hir<T>(&'t self, hir: T) -> &'t T
     where
         hir::Arena<'t>: Alloc<'t, 't, T>,
         T: 't,
