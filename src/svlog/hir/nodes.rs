@@ -3,10 +3,10 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use std::collections::HashMap;
-pub use moore_common::name::Name;
-pub use moore_common::source::Span;
-pub use moore_svlog_syntax::ast::NodeId;
-use moore_svlog_syntax::ast;
+pub use common::name::Name;
+pub use common::source::Span;
+pub use ast::NodeId;
+use ast;
 
 
 // TODO: Take the AST expressions and split them into lvalue and rvalue

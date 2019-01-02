@@ -269,7 +269,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
     svlog::renumber::renumber(&mut asts);
 
     // Perform name resolution.
-    let nameres = match svlog::resolve::resolve(session, &asts) {
+    let _nameres = match svlog::resolve::resolve(session, &asts) {
         Ok(x) => x,
         Err(_) => {
             eprintln!("{}", DiagBuilder2::fatal("name resolution failed"));
@@ -279,7 +279,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
 
     // Find the ID of the module we are supposed to be elaborating.
     let top_name = matches.value_of("NAME").unwrap();
-    let top = match (|| {
+    let _top = match (|| {
         for ast in &asts {
             for item in &ast.items {
                 if let svlog::ast::Item::Module(ref decl) = *item {
@@ -302,15 +302,15 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
         }
     };
 
-    // Lower to HIR.
-    let hir = match svlog::hir::lower(session, &nameres, top, asts) {
-        Ok(x) => x,
-        Err(_) => {
-            eprintln!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
-            std::process::exit(1);
-        }
-    };
-    debugln!("lowered {} modules", hir.mods.len());
+    // // Lower to HIR.
+    // let hir = match svlog::hir::lower(session, &nameres, top, asts) {
+    //     Ok(x) => x,
+    //     Err(_) => {
+    //         eprintln!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
+    //         std::process::exit(1);
+    //     }
+    // };
+    // debugln!("lowered {} modules", hir.mods.len());
 }
 
 fn score(sess: &Session, matches: &ArgMatches) {

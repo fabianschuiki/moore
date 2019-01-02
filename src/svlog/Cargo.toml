@@ -12,6 +12,5 @@ path = "lib.rs"
 [dependencies]
 moore-common = { path = "../common", version = "0.1" }
 moore-svlog-syntax = { path = "syntax", version = "0.1" }
-moore-svlog-hir = { path = "hir", version = "0.1" }
 llhd = "0.1"
 log = "0.4"
