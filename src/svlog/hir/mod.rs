@@ -8,8 +8,4 @@
 pub mod lowering;
 pub mod nodes;
 
-/// A reference to an HIR node.
-#[derive(Debug)]
-pub enum HirNode<'hir> {
-    Module(&'hir ()),
-}
+pub use self::nodes::*;
