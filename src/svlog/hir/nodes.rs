@@ -129,6 +129,7 @@ pub struct Port {
     pub id: NodeId,
     pub name: Spanned<Name>,
     pub span: Span,
+    pub dir: ast::PortDir,
     // pub slices: Vec<PortSlice>,
 }
 

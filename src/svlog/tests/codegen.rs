@@ -24,10 +24,9 @@ fn empty_module() {
     );
 }
 
-// #[test]
-// fn module_with_trivial_ports() {
-//     assert_eq!(
-//         compile_module("foo", "module foo (input bit a, output bit z); endmodule").trim(),
-//         "entity @foo ($i1 %a) ($i1 %b) {\n}"
-//     );
-// }
+#[test]
+fn module_with_trivial_ports() {
+    let asm = compile_module("foo", "module foo (input bit a, output bit b); endmodule");
+    eprintln!("{}", asm);
+    // assert_eq!(asm.trim(), "entity @foo (i1$ %a) (i1$ %b) {\n}");
+}

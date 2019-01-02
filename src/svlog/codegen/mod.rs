@@ -4,6 +4,7 @@
 
 use crate::crate_prelude::*;
 use crate::hir::HirNode;
+use std::collections::HashMap;
 
 pub(crate) fn generate_code<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<llhd::Module> {
     debug!("generate_code({})", node_id);
@@ -31,10 +32,61 @@ pub(crate) fn generate_code<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<
 }
 
 fn codegen_module<'gcx>(
-    _cx: Context<'gcx>,
+    cx: Context<'gcx>,
     hir: &hir::Module,
     into: &mut llhd::Module,
 ) -> Result<llhd::ValueRef> {
-    let ent = llhd::Entity::new(hir.name.value.into(), llhd::entity_ty(vec![], vec![]));
+    // Determine entity type and port names.
+    let mut inputs = Vec::new();
+    let mut outputs = Vec::new();
+    let mut input_tys = Vec::new();
+    let mut output_tys = Vec::new();
+    let mut port_id_to_name = HashMap::new();
+    for &port_id in hir.ports {
+        let port = match cx.hir_of(port_id)? {
+            HirNode::Port(p) => p,
+            _ => unreachable!(),
+        };
+        let ty = llhd::void_ty(); // TODO: pick actual type
+        let ty = match port.dir {
+            ast::PortDir::Ref => llhd::pointer_ty(ty),
+            _ => llhd::signal_ty(ty),
+        };
+        match port.dir {
+            ast::PortDir::Input | ast::PortDir::Ref => {
+                input_tys.push(ty);
+                inputs.push(port_id);
+            }
+            ast::PortDir::Output => {
+                output_tys.push(ty);
+                outputs.push(port_id);
+            }
+            ast::PortDir::Inout => {
+                input_tys.push(ty.clone());
+                output_tys.push(ty);
+                inputs.push(port_id);
+                outputs.push(port_id);
+            }
+        }
+        port_id_to_name.insert(port_id, port.name);
+    }
+
+    // Create entity.
+    let mut ent = llhd::Entity::new(
+        hir.name.value.into(),
+        llhd::entity_ty(input_tys, output_tys),
+    );
+
+    // Assign proper port names and collect ports into a lookup table.
+    let mut port_map = HashMap::new();
+    for (index, port_id) in inputs.into_iter().enumerate() {
+        ent.inputs_mut()[index].set_name(port_id_to_name[&port_id].value);
+        port_map.insert(port_id, ent.input(index));
+    }
+    for (index, port_id) in outputs.into_iter().enumerate() {
+        ent.outputs_mut()[index].set_name(port_id_to_name[&port_id].value);
+        port_map.insert(port_id, ent.output(index));
+    }
+
     Ok(into.add_entity(ent).into())
 }

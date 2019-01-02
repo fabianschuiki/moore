@@ -58,14 +58,21 @@ fn lower_port<'gcx>(
     node_id: NodeId,
     ast: &'gcx ast::Port,
 ) -> Result<HirNode<'gcx>> {
-    let (name, span) = match *ast {
-        ast::Port::Named { span, name, .. } => (Spanned::new(name.name, name.span), span),
+    let (name, span, dir) = match *ast {
+        ast::Port::Named {
+            span, name, dir, ..
+        } => (
+            Spanned::new(name.name, name.span),
+            span,
+            dir.expect("port missing direction"),
+        ),
         _ => unimplemented!(),
     };
     let hir = hir::Port {
         id: node_id,
         name: name,
         span: span,
+        dir: dir,
     };
     Ok(HirNode::Port(cx.arenas.alloc_hir(hir)))
 }
