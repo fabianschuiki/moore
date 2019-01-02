@@ -2,11 +2,13 @@
 
 //! This crate implements SystemVerilog for the moore compiler.
 
+extern crate llhd;
 extern crate moore_common;
-pub extern crate moore_svlog_syntax;
-pub extern crate moore_svlog_hir;
-extern crate bincode;
-extern crate rustc_serialize;
+pub extern crate moore_svlog_hir as hir;
+pub extern crate moore_svlog_syntax as syntax;
+#[macro_use]
+extern crate log;
 
-pub use moore_svlog_syntax::*;
-pub use moore_svlog_hir as hir;
+pub(crate) use moore_common as common;
+
+pub use syntax::*;
