@@ -2,10 +2,10 @@
 
 //! A mapping from node IDs to AST nodes.
 
-use ast;
-use common::source::Span;
-use common::util::{HasDesc, HasSpan};
-use common::NodeId;
+use crate::ast;
+use crate::common::source::Span;
+use crate::common::util::{HasDesc, HasSpan};
+use crate::common::NodeId;
 use std::cell::RefCell;
 use std::collections::HashMap;
 

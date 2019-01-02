@@ -1,7 +1,7 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
 mod common;
-use common::*;
+use crate::common::*;
 
 /// Compile a module in a piece of verilog code and return the LLHD.
 fn compile_module(name: &str, code: &str) -> String {

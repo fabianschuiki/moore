@@ -2,7 +2,7 @@
 
 //! This module contains the nodes of the tree structure that is the HIR.
 
-use crate_prelude::*;
+use crate::crate_prelude::*;
 use std::collections::HashMap;
 
 // TODO: Take the AST expressions and split them into lvalue and rvalue

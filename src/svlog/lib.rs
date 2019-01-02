@@ -16,18 +16,18 @@ pub mod codegen;
 mod context;
 pub mod hir;
 
-pub use context::*;
-pub use syntax::*;
+pub use crate::context::*;
+pub use crate::syntax::*;
 
 /// Items commonly used within the crate.
 mod crate_prelude {
-    pub use ast;
-    pub use common::errors::*;
-    pub use common::name::Name;
-    pub use common::score::Result;
-    pub use common::source::{Span, Spanned};
-    pub use common::util::{HasDesc, HasSpan};
-    pub use common::NodeId;
-    pub use context::Context;
-    pub use hir;
+    pub use crate::ast;
+    pub use crate::common::errors::*;
+    pub use crate::common::name::Name;
+    pub use crate::common::score::Result;
+    pub use crate::common::source::{Span, Spanned};
+    pub use crate::common::util::{HasDesc, HasSpan};
+    pub use crate::common::NodeId;
+    pub use crate::context::Context;
+    pub use crate::hir;
 }

@@ -2,9 +2,9 @@
 
 //! Lowering of AST nodes to HIR nodes.
 
-use ast_map::AstNode;
-use crate_prelude::*;
-use hir::HirNode;
+use crate::ast_map::AstNode;
+use crate::crate_prelude::*;
+use crate::hir::HirNode;
 
 pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode> {
     debug!("hir_of({})", node_id);

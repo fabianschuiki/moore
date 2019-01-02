@@ -2,8 +2,8 @@
 
 //! This module implements LLHD code generation.
 
-use crate_prelude::*;
-use hir::HirNode;
+use crate::crate_prelude::*;
+use crate::hir::HirNode;
 
 pub(crate) fn generate_code<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<llhd::Module> {
     debug!("generate_code({})", node_id);

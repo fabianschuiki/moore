@@ -7,11 +7,11 @@ pub extern crate llhd;
 pub extern crate moore_common;
 pub extern crate moore_svlog as svlog;
 pub extern crate simple_logger;
-pub use moore_common::Session;
-pub use svlog::*;
+pub use crate::moore_common::Session;
+pub use crate::svlog::*;
 
 pub fn parse(input: &str) -> Vec<ast::Root> {
-    use moore_common::source::get_source_manager;
+    use crate::moore_common::source::get_source_manager;
     use std::cell::Cell;
     thread_local!(static INDEX: Cell<usize> = Cell::new(0));
     let sm = get_source_manager();
@@ -30,7 +30,7 @@ pub fn parse(input: &str) -> Vec<ast::Root> {
 }
 
 pub(crate) fn module_to_string(module: &llhd::Module) -> String {
-    use llhd::{assembly::writer::Writer, visit::Visitor};
+    use crate::llhd::{assembly::writer::Writer, visit::Visitor};
     let mut out = Vec::<u8>::new();
     Writer::new(&mut out).visit_module(&module);
     String::from_utf8(out).unwrap()

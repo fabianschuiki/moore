@@ -20,17 +20,17 @@
 //! let cx = Context::new(&gcx);
 //! ```
 
-use ast;
-use ast_map::{AstMap, AstNode};
-use codegen;
-use common::arenas::Alloc;
-use common::errors::*;
-use common::name::Name;
-use common::score::Result;
-use common::util::{HasDesc, HasSpan};
-use common::NodeId;
-use common::Session;
-use hir::{self, HirNode};
+use crate::ast;
+use crate::ast_map::{AstMap, AstNode};
+use crate::codegen;
+use crate::common::arenas::Alloc;
+use crate::common::errors::*;
+use crate::common::name::Name;
+use crate::common::score::Result;
+use crate::common::util::{HasDesc, HasSpan};
+use crate::common::NodeId;
+use crate::common::Session;
+use crate::hir::{self, HirNode};
 use llhd;
 use std::cell::RefCell;
 use std::collections::HashMap;
