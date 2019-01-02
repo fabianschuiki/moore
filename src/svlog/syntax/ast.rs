@@ -361,13 +361,42 @@ pub enum Port {
     Implicit(Expr),
 }
 
-impl Port {
-    pub fn span(&self) -> Span {
+impl HasSpan for Port {
+    fn span(&self) -> Span {
         match *self {
             Port::Intf { span, .. } => span,
             Port::Explicit { span, .. } => span,
             Port::Named { span, .. } => span,
             Port::Implicit(ref expr) => expr.span,
+        }
+    }
+
+    fn human_span(&self) -> Span {
+        match *self {
+            Port::Intf { name, .. } => name.span,
+            Port::Explicit { name, .. } => name.span,
+            Port::Named { name, .. } => name.span,
+            Port::Implicit(ref expr) => expr.span,
+        }
+    }
+}
+
+impl HasDesc for Port {
+    fn desc(&self) -> &'static str {
+        match *self {
+            Port::Intf { name, .. } => "interface port",
+            Port::Explicit { name, .. } => "explicit port",
+            Port::Named { name, .. } => "port",
+            Port::Implicit(ref expr) => "implicit port",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            Port::Intf { name, .. } | Port::Explicit { name, .. } | Port::Named { name, .. } => {
+                format!("{} `{}`", self.desc(), name.name)
+            }
+            Port::Implicit(ref expr) => format!("{} `{}`", self.desc(), expr.span.extract()),
         }
     }
 }
