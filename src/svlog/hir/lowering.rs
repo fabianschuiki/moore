@@ -2,12 +2,41 @@
 
 //! Lowering of AST nodes to HIR nodes.
 
-use common::score::Result;
-use common::NodeId;
-use context::Context;
+use ast_map::AstNode;
+use crate_prelude::*;
 use hir::HirNode;
 
-pub(crate) fn hir_of<'gcx>(_cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode> {
+pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode> {
     debug!("hir_of({})", node_id);
-    unimplemented!()
+
+    let ast = cx.ast_of(node_id)?;
+
+    #[allow(unreachable_patterns)]
+    match ast {
+        AstNode::Module(m) => lower_module(cx, node_id, m),
+        _ => {
+            cx.emit(
+                DiagBuilder2::bug(format!(
+                    "lowering to HIR for {} not implemented",
+                    ast.desc_full()
+                ))
+                .span(ast.human_span()),
+            );
+            Err(())
+        }
+    }
+}
+
+fn lower_module<'gcx>(
+    cx: Context<'gcx>,
+    node_id: NodeId,
+    ast: &ast::ModDecl,
+) -> Result<HirNode<'gcx>> {
+    let hir = hir::Module {
+        id: node_id,
+        name: Spanned::new(ast.name, ast.name_span),
+        span: ast.span,
+    };
+    let hir = cx.arenas.alloc_hir(hir);
+    Ok(HirNode::Module(hir))
 }

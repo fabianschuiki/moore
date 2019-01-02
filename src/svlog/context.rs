@@ -23,12 +23,14 @@
 use ast;
 use ast_map::{AstMap, AstNode};
 use codegen;
+use common::arenas::Alloc;
 use common::errors::*;
 use common::name::Name;
 use common::score::Result;
 use common::util::{HasDesc, HasSpan};
 use common::NodeId;
 use common::Session;
+use hir::{self, HirNode};
 use llhd;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -93,6 +95,25 @@ impl<'gcx> Context<'gcx> {
         self.global_items.borrow().get(&name).cloned()
     }
 
+    /// Obtain the AST node associated with a node id.
+    pub fn ast_of(self, node_id: NodeId) -> Result<AstNode<'gcx>> {
+        match self.ast_map.get(node_id) {
+            Some(node) => Ok(node),
+            None => {
+                self.emit(DiagBuilder2::bug(format!(
+                    "no ast node for id {} in the map",
+                    node_id
+                )));
+                Err(())
+            }
+        }
+    }
+
+    /// Lower a an AST node to HIR.
+    pub fn hir_of(self, node_id: NodeId) -> Result<HirNode<'gcx>> {
+        hir::lowering::hir_of(self, node_id)
+    }
+
     /// Generate code for a node.
     pub fn generate_code(self, node_id: NodeId) -> Result<llhd::Module> {
         codegen::generate_code(self, node_id)
@@ -107,6 +128,8 @@ pub struct GlobalContext<'gcx> {
     ast_map: AstMap<'gcx>,
     /// The items visible in the global scope.
     global_items: RefCell<HashMap<Name, GlobalItem>>,
+    /// The arenas that own all references.
+    pub arenas: GlobalArenas<'gcx>,
 }
 
 impl<'gcx> GlobalContext<'gcx> {
@@ -116,6 +139,7 @@ impl<'gcx> GlobalContext<'gcx> {
             sess,
             ast_map: Default::default(),
             global_items: Default::default(),
+            arenas: Default::default(),
         }
     }
 }
@@ -136,5 +160,25 @@ impl Into<NodeId> for GlobalItem {
         match self {
             GlobalItem::Module(x) => x,
         }
+    }
+}
+
+/// The arenas that allocate things in the global context.
+///
+/// Use this struct whenever you want to allocate or internalize
+/// something during the compilation procedure.
+#[derive(Default)]
+pub struct GlobalArenas<'t> {
+    hir: hir::Arena<'t>,
+}
+
+impl<'t> GlobalArenas<'t> {
+    /// Allocate an HIR node into the global context.
+    pub fn alloc_hir<T>(&'t self, hir: T) -> &T
+    where
+        hir::Arena<'t>: Alloc<'t, 't, T>,
+        T: 't,
+    {
+        self.hir.alloc(hir)
     }
 }
