@@ -1,10 +1,7 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
-extern crate llhd;
 mod common;
 use common::*;
-use moore_common::Session;
-use moore_svlog::{Context, GlobalContext};
 
 #[test]
 fn empty_module() {
