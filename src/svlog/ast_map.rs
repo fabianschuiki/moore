@@ -13,11 +13,17 @@ pub struct AstMap<'ast> {
 }
 
 impl<'ast> AstMap<'ast> {
+    /// Insert an AST node into the map.
     pub fn set(&self, id: NodeId, node: impl Into<AstNode<'ast>>) {
         let node = node.into();
         if self.map.borrow_mut().insert(id, node).is_some() {
             panic!("An AST node with ID {} already exists in the map", id);
         }
+    }
+
+    /// Retrieve an AST node from the map.
+    pub fn get(&self, id: NodeId) -> Option<AstNode<'ast>> {
+        self.map.borrow().get(&id).cloned()
     }
 }
 
