@@ -3,6 +3,7 @@
 //! This crate implements SystemVerilog for the moore compiler.
 
 extern crate llhd;
+#[macro_use]
 extern crate moore_common;
 pub extern crate moore_svlog_syntax as syntax;
 #[macro_use]
@@ -22,8 +23,11 @@ pub use syntax::*;
 mod crate_prelude {
     pub use ast;
     pub use common::errors::*;
+    pub use common::name::Name;
     pub use common::score::Result;
+    pub use common::source::{Span, Spanned};
     pub use common::util::{HasDesc, HasSpan};
     pub use common::NodeId;
     pub use context::Context;
+    pub use hir;
 }
