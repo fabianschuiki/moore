@@ -7,6 +7,7 @@ mod port;
 use std;
 use moore_common::errors::*;
 use moore_common::Session;
+use moore_common::util::HasSpan;
 use moore_svlog_syntax::ast;
 use moore_svlog_syntax::resolve::NameResolution;
 use nodes::*;

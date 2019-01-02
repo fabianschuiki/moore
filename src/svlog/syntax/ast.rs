@@ -2,11 +2,11 @@
 
 #![allow(unused_variables)]
 
-use moore_common::source::Span;
+use super::token::{Lit, Op};
 use moore_common::name::Name;
+use moore_common::source::Span;
+use moore_common::util::{HasDesc, HasSpan};
 use std::fmt;
-use super::token::{Op, Lit};
-
 
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight
 /// way to refer to individual nodes, e.g. during symbol table construction and
@@ -45,12 +45,9 @@ impl fmt::Display for NodeId {
 /// node.
 pub const DUMMY_NODE_ID: NodeId = NodeId(0);
 
-
-
-pub use self::TypeData::*;
-pub use self::StmtData::*;
 pub use self::ExprData::*;
-
+pub use self::StmtData::*;
+pub use self::TypeData::*;
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Root {
@@ -61,38 +58,45 @@ pub struct Root {
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Item {
-	Module(ModDecl),
-	Interface(IntfDecl),
-	Package(PackageDecl),
-	Class(ClassDecl),
-	Item(HierarchyItem),
-	// Program(ProgramDecl),
-	// Bind(BindDirective),
-	// Config(ConfigDecl),
+    Module(ModDecl),
+    Interface(IntfDecl),
+    Package(PackageDecl),
+    Class(ClassDecl),
+    Item(HierarchyItem),
+    // Program(ProgramDecl),
+    // Bind(BindDirective),
+    // Config(ConfigDecl),
+}
+
+impl HasSpan for Item {
+    fn span(&self) -> Span {
+        match *self {
+            Item::Module(ref decl) => decl.span,
+            Item::Interface(ref decl) => decl.span,
+            Item::Package(ref decl) => decl.span,
+            Item::Class(ref decl) => decl.span,
+            Item::Item(ref item) => item.span(),
+        }
+    }
+}
+
+impl HasDesc for Item {
+    fn desc(&self) -> &'static str {
+        match *self {
+            Item::Module(ref decl) => "module declaration",
+            Item::Interface(ref decl) => "interface declaration",
+            Item::Package(ref decl) => "package declaration",
+            Item::Class(ref decl) => "class declaration",
+            Item::Item(ref item) => item.as_str(),
+        }
+    }
 }
 
 impl Item {
-	pub fn span(&self) -> Span {
-		match *self {
-			Item::Module(ref decl) => decl.span,
-			Item::Interface(ref decl) => decl.span,
-			Item::Package(ref decl) => decl.span,
-			Item::Class(ref decl) => decl.span,
-			Item::Item(ref item) => item.span(),
-		}
-	}
-
-	pub fn as_str(&self) -> &'static str {
-		match *self {
-			Item::Module(ref decl) => "module declaration",
-			Item::Interface(ref decl) => "interface declaration",
-			Item::Package(ref decl) => "package declaration",
-			Item::Class(ref decl) => "class declaration",
-			Item::Item(ref item) => item.as_str(),
-		}
-	}
+    pub fn as_str(&self) -> &'static str {
+        self.desc()
+    }
 }
-
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ModDecl {
