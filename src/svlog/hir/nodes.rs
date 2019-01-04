@@ -5,7 +5,7 @@
 use crate::crate_prelude::*;
 
 /// A reference to an HIR node.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     // Interface(&'hir Interface),
@@ -50,7 +50,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
 }
 
 /// A module.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Module<'hir> {
     pub id: NodeId,
     pub name: Spanned<Name>,
@@ -124,7 +124,7 @@ pub struct HierarchyBody {
 }
 
 /// A module or interface port.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Port {
     pub id: NodeId,
     pub name: Spanned<Name>,

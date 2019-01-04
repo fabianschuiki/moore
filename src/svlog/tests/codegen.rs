@@ -7,11 +7,11 @@ use crate::common::*;
 fn compile_module(name: &str, code: &str) -> String {
     simple_logger::init().is_ok();
     let sess = Session::new();
+    let store = GlobalArenas::default();
     let ast = parse(code);
-    let gcx = GlobalContext::new(&sess);
-    let cx = Context::new(&gcx);
+    let cx = GlobalContext::new(&sess, &store);
     cx.add_root_nodes(&ast).unwrap();
-    let m = cx.find_global_item(name.into()).unwrap();
+    let m = cx.find_module(name.into()).unwrap();
     let code = cx.generate_code(m.into()).unwrap();
     module_to_string(&code)
 }

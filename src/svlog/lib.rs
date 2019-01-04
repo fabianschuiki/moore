@@ -12,26 +12,29 @@ extern crate log;
 pub(crate) use moore_common as common;
 
 mod ast_map;
-pub mod codegen;
+mod codegen;
 mod context;
 pub mod hir;
 pub mod ty;
-pub mod typeck;
+mod typeck;
 
 pub use crate::context::*;
 pub use crate::syntax::*;
 
 /// Items commonly used within the crate.
 mod crate_prelude {
-    pub use crate::ast;
-    pub use crate::common::errors::*;
-    pub use crate::common::name::Name;
-    pub use crate::common::score::Result;
-    pub use crate::common::source::{Span, Spanned};
-    pub use crate::common::util::{HasDesc, HasSpan};
-    pub use crate::common::NodeId;
-    pub use crate::context::Context;
-    pub use crate::hir;
-    pub use crate::ty::{self, Type};
-    pub use crate::typeck;
+    #[allow(unused_imports)]
+    pub(crate) use crate::{
+        ast,
+        common::errors::*,
+        common::name::Name,
+        common::score::Result,
+        common::source::{Span, Spanned},
+        common::util::{HasDesc, HasSpan},
+        common::NodeId,
+        context::{BaseContext, Context, GlobalContext},
+        hir,
+        ty::{self, Type},
+        typeck,
+    };
 }

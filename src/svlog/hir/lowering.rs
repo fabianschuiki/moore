@@ -2,11 +2,9 @@
 
 //! Lowering of AST nodes to HIR nodes.
 
-use crate::ast_map::AstNode;
-use crate::crate_prelude::*;
-use crate::hir::HirNode;
+use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
 
-pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode> {
+pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<HirNode<'gcx>> {
     debug!("hir_of({})", node_id);
 
     let ast = cx.ast_of(node_id)?;
@@ -29,7 +27,7 @@ pub(crate) fn hir_of<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<HirNode
 }
 
 fn lower_module<'gcx>(
-    cx: Context<'gcx>,
+    cx: &impl Context<'gcx>,
     node_id: NodeId,
     ast: &'gcx ast::ModDecl,
 ) -> Result<HirNode<'gcx>> {
@@ -48,13 +46,13 @@ fn lower_module<'gcx>(
         id: node_id,
         name: Spanned::new(ast.name, ast.name_span),
         span: ast.span,
-        ports: cx.arenas.alloc_ids(ports),
+        ports: cx.arena().alloc_ids(ports),
     };
-    Ok(HirNode::Module(cx.arenas.alloc_hir(hir)))
+    Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
 }
 
 fn lower_port<'gcx>(
-    cx: Context<'gcx>,
+    cx: &impl Context<'gcx>,
     node_id: NodeId,
     ast: &'gcx ast::Port,
 ) -> Result<HirNode<'gcx>> {
@@ -74,5 +72,5 @@ fn lower_port<'gcx>(
         span: span,
         dir: dir,
     };
-    Ok(HirNode::Port(cx.arenas.alloc_hir(hir)))
+    Ok(HirNode::Port(cx.arena().alloc_hir(hir)))
 }

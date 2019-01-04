@@ -2,12 +2,13 @@
 
 //! This module implements LLHD code generation.
 
-use crate::crate_prelude::*;
-use crate::hir::HirNode;
-use crate::ty::TypeKind;
+use crate::{crate_prelude::*, hir::HirNode, ty::TypeKind};
 use std::collections::HashMap;
 
-pub(crate) fn generate_code<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<llhd::Module> {
+pub(crate) fn generate_code<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+) -> Result<llhd::Module> {
     debug!("generate_code({})", node_id);
 
     let hir = cx.hir_of(node_id)?;
@@ -33,7 +34,7 @@ pub(crate) fn generate_code<'gcx>(cx: Context<'gcx>, node_id: NodeId) -> Result<
 }
 
 fn codegen_module<'gcx>(
-    cx: Context<'gcx>,
+    cx: &impl Context<'gcx>,
     hir: &hir::Module,
     into: &mut llhd::Module,
 ) -> Result<llhd::ValueRef> {
@@ -48,7 +49,7 @@ fn codegen_module<'gcx>(
             HirNode::Port(p) => p,
             _ => unreachable!(),
         };
-        let ty = cx.type_of(port_id)?;
+        let ty = cx.gcx().type_of(port_id)?;
         debug!(
             "port {}.{} has type {:?}",
             hir.name.value, port.name.value, ty
@@ -97,7 +98,7 @@ fn codegen_module<'gcx>(
     Ok(into.add_entity(ent).into())
 }
 
-fn codegen_type<'gcx>(cx: Context<'gcx>, ty: Type<'gcx>) -> Result<llhd::Type> {
+fn codegen_type<'gcx>(_cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Result<llhd::Type> {
     Ok(match *ty {
         TypeKind::Void => llhd::void_ty(),
         TypeKind::Bit => llhd::int_ty(1),
