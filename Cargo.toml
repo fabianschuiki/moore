@@ -5,7 +5,6 @@ authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
 description = "A compiler for hardware description languages."
-documentation = "https://fabianschuiki.github.io/moore"
 repository = "https://github.com/fabianschuiki/moore"
 readme = "README.md"
 license = "MIT"
