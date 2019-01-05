@@ -174,6 +174,21 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         Err(())
     }
 
+    /// Emit an internal compiler error and message that a node is not
+    /// implemented. Same as [`unimp`], but the caller can provide a message
+    /// prefix.
+    fn unimp_msg<T: HasSpan + HasDesc, R>(&self, msg: impl Into<String>, node: &T) -> Result<R> {
+        self.emit(
+            DiagBuilder2::bug(format!(
+                "{} {} not implemented",
+                msg.into(),
+                node.desc_full()
+            ))
+            .span(node.human_span()),
+        );
+        Err(())
+    }
+
     /// Allocate a new node id.
     ///
     /// The provided span is used primarily for diagnostic messages and is

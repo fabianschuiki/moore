@@ -11,16 +11,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
     match ast {
         AstNode::Module(m) => lower_module(cx, node_id, m),
         AstNode::Port(p) => lower_port(cx, node_id, p),
-        _ => {
-            cx.emit(
-                DiagBuilder2::bug(format!(
-                    "lowering of {} to hir not implemented",
-                    ast.desc_full()
-                ))
-                .span(ast.human_span()),
-            );
-            Err(())
-        }
+        _ => cx.unimp_msg("lowering of", &ast),
     }
 }
 

@@ -8,12 +8,6 @@ pub fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<Type<'g
     #[allow(unreachable_patterns)]
     match hir {
         HirNode::Port(_) => Ok(cx.mkty_void()),
-        _ => {
-            cx.emit(
-                DiagBuilder2::bug(format!("type of {} not implemented", hir.desc_full()))
-                    .span(hir.human_span()),
-            );
-            Err(())
-        }
+        _ => cx.unimp_msg("type analysis of", &hir),
     }
 }
