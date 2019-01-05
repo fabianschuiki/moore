@@ -69,7 +69,7 @@ impl<'gcx> GlobalContext<'gcx> {
     ///
     /// Use the `find_global_item` function afterwards to look up the id of
     /// modules that were added.
-    pub fn add_root_nodes(&self, ast: &'gcx [ast::Root]) -> Result<()> {
+    pub fn add_root_nodes(&self, ast: impl Iterator<Item = &'gcx ast::Root>) {
         for root in ast {
             for item in &root.items {
                 match *item {
@@ -77,11 +77,12 @@ impl<'gcx> GlobalContext<'gcx> {
                         let id = self.map_ast(AstNode::Module(m));
                         self.modules.borrow_mut().insert(m.name, id);
                     }
-                    _ => self.unimp(item)?,
+                    _ => {
+                        let _: Result<()> = self.unimp(item);
+                    }
                 }
             }
         }
-        Ok(())
     }
 
     /// Find a module in the AST.
