@@ -12,8 +12,9 @@ fn compile_module(name: &str, code: &str) -> String {
     let cx = GlobalContext::new(&sess, &store);
     cx.add_root_nodes(&ast).unwrap();
     let m = cx.find_module(name.into()).unwrap();
-    let code = cx.generate_code(m.into()).unwrap();
-    module_to_string(&code)
+    let mut cg = CodeGenerator::new(&cx);
+    cg.emit_module(m.into()).unwrap();
+    module_to_string(&cg.finalize())
 }
 
 #[test]

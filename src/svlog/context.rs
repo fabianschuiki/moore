@@ -25,7 +25,6 @@
 use crate::{
     ast,
     ast_map::{AstMap, AstNode},
-    codegen,
     common::{arenas::Alloc, arenas::TypedArena, Session},
     crate_prelude::*,
     hir::{self, HirNode},
@@ -203,11 +202,6 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
                 Err(())
             }
         }
-    }
-
-    /// Generate code for a node.
-    fn generate_code(&self, node_id: NodeId) -> Result<llhd::Module> {
-        codegen::generate_code(self.gcx(), node_id)
     }
 
     /// Determine the type of a node.

@@ -18,6 +18,7 @@ pub mod hir;
 pub mod ty;
 mod typeck;
 
+pub use crate::codegen::CodeGenerator;
 pub use crate::context::*;
 pub use crate::syntax::*;
 
