@@ -9,7 +9,7 @@ extern crate sha1;
 #[macro_use]
 extern crate log;
 
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{App, Arg, ArgMatches};
 use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
@@ -62,52 +62,49 @@ fn main() {
                 .possible_values(&["types", "expr-types", "type-contexts", "typeck", "names"])
                 .global(true),
         )
-        .subcommand(
-            SubCommand::with_name("score")
-                .arg(
-                    Arg::with_name("inc")
-                        .short("I")
-                        .value_name("DIR")
-                        .help("Add a search path for SystemVerilog includes")
-                        .multiple(true)
-                        .takes_value(true)
-                        .number_of_values(1),
-                )
-                .arg(
-                    Arg::with_name("dump_ast")
-                        .long("dump-ast")
-                        .help("Dump the parsed abstract syntax tree"),
-                )
-                .arg(
-                    Arg::with_name("emit_pkgs")
-                        .long("emit-pkgs")
-                        .help("Dump VHDL packages for debugging"),
-                )
-                .arg(
-                    Arg::with_name("lib")
-                        .short("l")
-                        .long("lib")
-                        .value_name("LIB")
-                        .help("Name of the library to compile into")
-                        .takes_value(true)
-                        .number_of_values(1),
-                )
-                .arg(
-                    Arg::with_name("elaborate")
-                        .short("e")
-                        .long("elaborate")
-                        .value_name("ENTITY")
-                        .help("Elaborate an entity or module")
-                        .multiple(true)
-                        .takes_value(true)
-                        .number_of_values(1),
-                )
-                .arg(
-                    Arg::with_name("INPUT")
-                        .help("The input files to compile")
-                        .multiple(true)
-                        .required(true),
-                ),
+        .arg(
+            Arg::with_name("inc")
+                .short("I")
+                .value_name("DIR")
+                .help("Add a search path for SystemVerilog includes")
+                .multiple(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name("dump_ast")
+                .long("dump-ast")
+                .help("Dump the parsed abstract syntax tree"),
+        )
+        .arg(
+            Arg::with_name("emit_pkgs")
+                .long("emit-pkgs")
+                .help("Dump VHDL packages for debugging"),
+        )
+        .arg(
+            Arg::with_name("lib")
+                .short("l")
+                .long("lib")
+                .value_name("LIB")
+                .help("Name of the library to compile into")
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name("elaborate")
+                .short("e")
+                .long("elaborate")
+                .value_name("ENTITY")
+                .help("Elaborate an entity or module")
+                .multiple(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name("INPUT")
+                .help("The input files to compile")
+                .multiple(true)
+                .required(true),
         )
         .get_matches();
 
@@ -154,9 +151,7 @@ fn main() {
     }
 
     // Invoke the compiler.
-    if let Some(m) = matches.subcommand_matches("score") {
-        score(&session, m);
-    }
+    score(&session, &matches);
 }
 
 fn score(sess: &Session, matches: &ArgMatches) {

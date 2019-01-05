@@ -66,7 +66,7 @@ test_file() {
 	cat "$1" | extract_comments | extract_output > $TMPDIFFEXP
 	if [ ${#ARGS[@]} -gt 0 ]; then
 		LOG="$SRCFILE(${TOPS[@]})"
-		check elaborate "$LOG" $MOORE score "${ARGS[@]}" $SRCFILE
+		check elaborate "$LOG" $MOORE "${ARGS[@]}" $SRCFILE
 		cp $TMPOUT $TMPDIFFACT
 		if [ -s $TMPDIFFEXP ]; then
 			check codegen "$LOG" check_diff $TMPDIFFEXP $TMPDIFFACT
@@ -80,7 +80,7 @@ while read -d $'\0' SRCFILE; do
 	if ! $ALL && grep -E '@exclude' $SRCFILE >/dev/null; then
 		continue
 	fi
-	check parse $SRCFILE $MOORE score $SRCFILE
+	check parse $SRCFILE $MOORE $SRCFILE
 	test_file $SRCFILE
 done < <(find $TESTS_DIR -name "*.sv" -print0 -or -name "*.vhd" -print0 | sort -z)
 
