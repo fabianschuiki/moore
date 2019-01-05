@@ -52,7 +52,7 @@ extract_output() {
 }
 
 check_diff() {
-	diff --color=always -w $1 $2
+	diff -w $1 $2
 }
 
 test_file() {
