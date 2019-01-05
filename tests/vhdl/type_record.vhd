@@ -29,7 +29,7 @@ architecture bar of foo is
 	signal b3: SIGNED_FXPT_COMPLEX (RE(4 to -16), IM(-12 to 4));
 begin end;
 
--- @ elab foo(bar)
+--!@ elab foo(bar)
 
 --| entity @foo_bar () () {
 --|     %a0 = sig {i5, n12, i12} {1, 0, 0}

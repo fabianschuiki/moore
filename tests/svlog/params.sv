@@ -44,8 +44,8 @@ endmodule
 // `T p = 4` is not evaluated if C2 is overridden in the instantiation. It will
 // be evaluated and fail if not overridden. `T2 p2 = 4` will only be evaluated
 // with the type override provided in the instantiation.
-class C1;
-endclass
+// class C1;
+// endclass
 
 // @elab C2
 module C2 #(

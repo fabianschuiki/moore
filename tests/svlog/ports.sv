@@ -7,3 +7,11 @@ module B (
 	inout bit z
 );
 endmodule
+
+//@ elab A
+//| entity @A () () {
+//| }
+
+//@ elab B
+//| entity @B (i1$ %x, i1$ %z) (i1$ %y, i1$ %z0) {
+//| }

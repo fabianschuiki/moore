@@ -1,14 +1,14 @@
--- @elab pkg_a
+--@ elab pkg_a
 package pkg_a is
 end package;
 
--- @ elab pkg_b
+--!@ elab pkg_b
 package pkg_b is
 	type BYTE is range 0 to 255;
 	constant K : BYTE;
 end package;
 
--- @ elab pkg_c
+--!@ elab pkg_c
 package pkg_c is
 	use work.pkg_b.BYTE;
 	type SHORT is range 0 to 65535;

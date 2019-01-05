@@ -4,11 +4,14 @@
 
 set -e
 CRST=`tput sgr0`
-CNAME=`tput bold`
-CFAIL=`tput setaf 1`
+CBOLD=`tput bold`
+CFAIL=`tput bold``tput setaf 1`
 CPASS=`tput setaf 2`
 
-TMP=`mktemp`
+TMPERR=`mktemp`
+TMPOUT=`mktemp`
+TMPDIFFEXP=`mktemp`
+TMPDIFFACT=`mktemp`
 TESTS_DIR="$(dirname "${BASH_SOURCE[0]}")"
 # MOORE="cargo run --"
 (cd "$TESTS_DIR/.." && cargo build)
@@ -19,51 +22,73 @@ if [ "$1" = "--all" ] || [ "$1" = "-a" ]; then
 	ALL=true
 fi
 
+status() {
+	printf "${CBOLD}%12s${CRST}  %s" "$1" "$2"
+}
+
+check() {
+	status "$1" "$2"
+	if ! "${@:3}" >$TMPOUT 2>$TMPERR; then
+		NUM_FAIL=$((NUM_FAIL+1))
+		echo "  [${CFAIL}failed${CRST}]"
+		cat $TMPOUT
+		cat $TMPERR
+	else
+		NUM_PASS=$((NUM_PASS+1))
+		echo "  [${CPASS}passed${CRST}]"
+	fi
+}
+
+extract_comments() {
+	sed -n 's#^\s*\(///*\|---*\)\s*\(.*\)#\2#p' | grep -v '^!'
+}
+
+extract_elabs() {
+	sed -n 's#^@\s*elab\s*##p'
+}
+
+extract_output() {
+	sed -n 's#^|\s##p'
+}
+
+check_diff() {
+	diff --color=always -w $1 $2
+}
+
+test_file() {
+	SRCFILE="$1"
+	ARGS=()
+	TOPS=()
+	for e in $(cat "$1" | extract_comments | extract_elabs); do
+		ARGS+=(-e $e)
+		TOPS+=($e)
+	done
+	cat "$1" | extract_comments | extract_output > $TMPDIFFEXP
+	if [ ${#ARGS[@]} -gt 0 ]; then
+		LOG="$SRCFILE(${TOPS[@]})"
+		check elaborate "$LOG" $MOORE score "${ARGS[@]}" $SRCFILE
+		cp $TMPOUT $TMPDIFFACT
+		if [ -s $TMPDIFFEXP ]; then
+			check codegen "$LOG" check_diff $TMPDIFFEXP $TMPDIFFACT
+		fi
+	fi
+}
+
 NUM_PASS=0
 NUM_FAIL=0
 while read -d $'\0' SRCFILE; do
 	if ! $ALL && grep -E '@exclude' $SRCFILE >/dev/null; then
-		echo "exclude ${CNAME}$SRCFILE${CRST}"
 		continue
 	fi
-
-	echo -n "testing ${CNAME}$SRCFILE${CRST} ..."
-	[ ! -e .moore ] || rm .moore
-
-	if ! $MOORE compile $SRCFILE &> $TMP; then
-		NUM_FAIL=$((NUM_FAIL+1))
-		echo " ${CFAIL}failed${CRST}"
-		cat $TMP
-		COMPILE_RESULT=false
-	else
-		NUM_PASS=$((NUM_PASS+1))
-		echo " ${CPASS}passed${CRST}"
-		COMPILE_RESULT=true
-	fi
-
-	while read TOP; do
-		echo -n "  elaborating ${CNAME}$TOP${CRST} ..."
-		case "$SRCFILE" in
-			*.sv) CMD="$MOORE elaborate $TOP" ;;
-			*.vhd) CMD="$MOORE score -e $TOP $SRCFILE" ;;
-			*) continue ;;
-		esac
-		if ! $COMPILE_RESULT &> $TMP || ! $CMD &> $TMP; then
-			NUM_FAIL=$((NUM_FAIL+1))
-			echo " ${CFAIL}failed${CRST}"
-			cat $TMP
-		else
-			NUM_PASS=$((NUM_PASS+1))
-			echo " ${CPASS}passed${CRST}"
-		fi
-	done < <(grep -o -E '@elab\s+.*' $SRCFILE | cut -f 2 -d " ")
+	check parse $SRCFILE $MOORE score $SRCFILE
+	test_file $SRCFILE
 done < <(find $TESTS_DIR -name "*.sv" -print0 -or -name "*.vhd" -print0 | sort -z)
 
 echo
 if [ $NUM_FAIL -gt 0 ]; then
-	echo "  ${CNAME}result: ${CFAIL}$NUM_FAIL/$((NUM_FAIL+NUM_PASS)) failed${CRST}"
+	echo "  ${CBOLD}result: ${CFAIL}$NUM_FAIL/$((NUM_FAIL+NUM_PASS)) failed${CRST}"
 else
-	echo "  ${CNAME}result: ${CPASS}$NUM_PASS passed${CRST}"
+	echo "  ${CBOLD}result: ${CPASS}$NUM_PASS passed${CRST}"
 fi
 echo
 [ $NUM_FAIL = 0 ] # return non-zero exit code if anything failed

@@ -36,7 +36,7 @@ architecture bar of foo is
 	--signal f1: T1;
 begin end;
 
--- @elab foo(bar)
+--!@ elab foo(bar)
 
 --| entity @foo_bar () () {
 --|     %a = sig [8 x n5] [.. 0]
