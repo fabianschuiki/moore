@@ -8,9 +8,10 @@ use crate::crate_prelude::*;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
+    Port(&'hir Port),
+    Type(&'hir Type),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
-    Port(&'hir Port),
     // PortSlice(&'hir PortSlice),
     // TypeParam(&'hir ast::ParamTypeDecl),
     // ValueParam(&'hir ast::ParamValueDecl),
@@ -22,6 +23,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.span(),
             HirNode::Port(x) => x.span(),
+            HirNode::Type(x) => x.span(),
         }
     }
 
@@ -29,6 +31,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.human_span(),
             HirNode::Port(x) => x.human_span(),
+            HirNode::Type(x) => x.human_span(),
         }
     }
 }
@@ -38,6 +41,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.desc(),
             HirNode::Port(x) => x.desc(),
+            HirNode::Type(x) => x.desc(),
         }
     }
 
@@ -45,6 +49,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.desc_full(),
             HirNode::Port(x) => x.desc_full(),
+            HirNode::Type(x) => x.desc_full(),
         }
     }
 }
@@ -130,6 +135,7 @@ pub struct Port {
     pub name: Spanned<Name>,
     pub span: Span,
     pub dir: ast::PortDir,
+    pub ty: NodeId,
     // pub slices: Vec<PortSlice>,
 }
 
@@ -204,4 +210,51 @@ pub struct GenerateIf {
     pub cond: ast::Expr,
     pub main_block: GenerateBlock,
     pub else_block: Option<GenerateBlock>,
+}
+
+/// A type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Type {
+    pub id: NodeId,
+    pub span: Span,
+    pub kind: TypeKind,
+}
+
+impl HasSpan for Type {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Type {
+    fn desc(&self) -> &'static str {
+        #[allow(unreachable_patterns)]
+        match self.kind {
+            TypeKind::Builtin(BuiltinType::Void) => "void type",
+            TypeKind::Builtin(BuiltinType::Bit) => "bit type",
+            TypeKind::Builtin(BuiltinType::Logic) => "logic type",
+            _ => "type",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match self.kind {
+            _ => self.desc().into(),
+        }
+    }
+}
+
+/// The different forms a type can take.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeKind {
+    /// A builtin type.
+    Builtin(BuiltinType),
+}
+
+/// A builtin type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinType {
+    Void,
+    Bit,
+    Logic,
 }

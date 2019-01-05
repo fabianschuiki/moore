@@ -11,6 +11,20 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
     match ast {
         AstNode::Module(m) => lower_module(cx, node_id, m),
         AstNode::Port(p) => lower_port(cx, node_id, p),
+        AstNode::Type(ty) => {
+            let kind = match ty.data {
+                ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
+                ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
+                ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
+                _ => return cx.unimp(ty),
+            };
+            let hir = hir::Type {
+                id: node_id,
+                span: ty.span,
+                kind: kind,
+            };
+            Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
+        }
         _ => cx.unimp_msg("lowering of", &ast),
     }
 }
@@ -41,21 +55,21 @@ fn lower_port<'gcx>(
     node_id: NodeId,
     ast: &'gcx ast::Port,
 ) -> Result<HirNode<'gcx>> {
-    let (name, span, dir) = match *ast {
+    let hir = match *ast {
         ast::Port::Named {
-            span, name, dir, ..
-        } => (
-            Spanned::new(name.name, name.span),
             span,
-            dir.expect("port missing direction"),
-        ),
-        _ => unimplemented!(),
-    };
-    let hir = hir::Port {
-        id: node_id,
-        name: name,
-        span: span,
-        dir: dir,
+            name,
+            dir,
+            ref ty,
+            ..
+        } => hir::Port {
+            id: node_id,
+            name: Spanned::new(name.name, name.span),
+            span: span,
+            dir: dir.expect("port missing direction"),
+            ty: cx.map_ast(AstNode::Type(ty)),
+        },
+        _ => return cx.unimp(ast),
     };
     Ok(HirNode::Port(cx.arena().alloc_hir(hir)))
 }

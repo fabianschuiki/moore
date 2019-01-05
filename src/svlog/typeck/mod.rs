@@ -7,7 +7,12 @@ pub(crate) fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<
 
     #[allow(unreachable_patterns)]
     match hir {
-        HirNode::Port(_) => Ok(cx.mkty_void()),
+        HirNode::Port(p) => cx.type_of(p.ty),
+        HirNode::Type(hir) => match hir.kind {
+            hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
+            hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
+            _ => return cx.unimp_msg("type analysis of", hir),
+        },
         _ => cx.unimp_msg("type analysis of", &hir),
     }
 }

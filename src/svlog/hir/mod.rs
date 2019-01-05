@@ -16,5 +16,6 @@ make_arenas!(
     pub struct Arena<'hir> {
         modules: Module<'hir>,
         ports: Port,
+        types: Type,
     }
 );

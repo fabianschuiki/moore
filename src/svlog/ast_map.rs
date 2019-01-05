@@ -38,6 +38,7 @@ impl<'ast> AstMap<'ast> {
 pub enum AstNode<'ast> {
     Module(&'ast ast::ModDecl),
     Port(&'ast ast::Port),
+    Type(&'ast ast::Type),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -45,6 +46,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
         match *self {
             AstNode::Module(x) => x.span(),
             AstNode::Port(x) => x.span(),
+            AstNode::Type(x) => x.span(),
         }
     }
 
@@ -52,6 +54,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
         match *self {
             AstNode::Module(x) => x.human_span(),
             AstNode::Port(x) => x.human_span(),
+            AstNode::Type(x) => x.human_span(),
         }
     }
 }
@@ -61,6 +64,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
         match *self {
             AstNode::Module(x) => x.desc(),
             AstNode::Port(x) => x.desc(),
+            AstNode::Type(x) => x.desc(),
         }
     }
 
@@ -68,6 +72,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
         match *self {
             AstNode::Module(x) => x.desc_full(),
             AstNode::Port(x) => x.desc_full(),
+            AstNode::Type(x) => x.desc_full(),
         }
     }
 }
