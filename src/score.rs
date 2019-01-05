@@ -9,9 +9,10 @@
 use crate::common::errors::*;
 use crate::common::name::Name;
 use crate::common::score::{GenericContext, NodeMaker, NodeRef, Result};
+use crate::common::source::Spanned;
 use crate::common::NodeId;
 use crate::common::Session;
-use crate::svlog::ast as svlog_ast;
+use crate::svlog::{ast as svlog_ast, BaseContext};
 use crate::vhdl;
 use crate::vhdl::syntax::ast as vhdl_ast;
 use std;
@@ -33,7 +34,7 @@ pub struct ScoreContext<'lazy, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
     /// The VHDL lazy phase table.
     pub vhdl_phases: &'lazy vhdl::lazy::LazyPhaseTable<'sb, 'ast, 'ctx>,
     /// The SystemVerilog scoreboard.
-    pub svlog: &'sb (),
+    pub svlog: &'sb svlog::GlobalContext<'ast>,
 }
 
 /// The global scoreboard that drives the compilation of pretty much everything.
@@ -107,7 +108,13 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         self.vhdl()
             .add_library(name, vhdl::score::LibRef::new(id.into()), vhdl_ast);
 
-        // TODO: Do the same for the SVLOG scoreboard.
+        // Pass on the SystemVerilog nodes to the VHDL scoreboard.
+        let svlog_ast = asts.iter().filter_map(|v| match *v {
+            Ast::Svlog(ref a) => Some(a),
+            _ => None,
+        });
+        self.svlog.add_root_nodes(svlog_ast);
+
         id
     }
 
@@ -177,25 +184,37 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ScopeRef, &'ctx Defs>
                         vhdl::score::ResolvableName::Ident(n) => Some(n),
                         _ => None,
                     })
+                    .chain(self.svlog.modules().map(|(k, _)| k))
                     .collect();
+                debug!("names defined in library: {:?}", names);
+
                 let mut defs = HashMap::new();
                 let mut had_dups = false;
                 for name in names {
-                    let vhdl_defs = &vhdl[&name.into()];
-                    let both_spans: Vec<_> = vhdl_defs.iter().map(|v| v.span).collect(); // TODO: chain with svlog results
-                    if both_spans.len() > 1 {
-                        let mut d =
+                    let vhdl_defs = match vhdl.get(&name.into()) {
+                        Some(v) => v.iter(),
+                        None => [].iter(),
+                    };
+                    let svlog_defs = self.svlog.find_module(name.into());
+                    let both_defs: Vec<Spanned<Def>> = vhdl_defs
+                        .map(|d| Spanned::new(Def::Vhdl(d.value), d.span))
+                        .chain(
+                            svlog_defs.map(|id| Spanned::new(Def::Svlog(id), self.svlog.span(id))),
+                        )
+                        .collect();
+
+                    if both_defs.len() > 1 {
+                        let mut diag =
                             DiagBuilder2::error(format!("`{}` declared multiple times", name));
-                        for span in both_spans {
-                            d = d.span(span);
+                        for def in both_defs {
+                            diag = diag.span(def.span);
                         }
-                        self.sess.emit(d);
+                        self.sess.emit(diag);
                         had_dups = true;
                         continue;
                     }
-                    // TODO: chain with svlog results
-                    let mut both_defs = vhdl_defs.iter().map(|v| Def::Vhdl(v.value));
-                    defs.insert(name, both_defs.nth(0).unwrap());
+
+                    defs.insert(name, both_defs[0].value);
                 }
                 if had_dups {
                     return Err(());

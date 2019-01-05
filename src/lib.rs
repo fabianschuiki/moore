@@ -6,9 +6,11 @@
 #![allow(unused_variables)]
 
 extern crate bincode;
+extern crate llhd;
 extern crate rustc_serialize;
 extern crate typed_arena;
-extern crate llhd;
+#[macro_use]
+extern crate log;
 
 // Re-export everything from the common crate.
 #[macro_use]

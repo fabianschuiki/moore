@@ -436,7 +436,8 @@ fn score(sess: &Session, matches: &ArgMatches) {
     let arenas = score::Arenas::new();
     let sb = ScoreBoard::new(&arenas);
     let vhdl_sb = vhdl::score::ScoreBoard::new(&arenas.vhdl);
-    let svlog_sb = ();
+    let svlog_arenas = svlog::GlobalArenas::default();
+    let svlog_sb = svlog::GlobalContext::new(&sess, &svlog_arenas);
 
     // Elaborate the requested entities or modules.
     if let Some(names) = matches.values_of("elaborate") {
@@ -590,12 +591,13 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             // use moore::vhdl::codegen::Codegen;
             // ctx.vhdl().codegen(pkg, &mut ())?;
         }
-        Elaborate::Svlog(_module) => {
-            // TODO: Implement this.
-            ctx.sess.emit(DiagBuilder2::error(format!(
-                "SystemVerilog elaboration not supported"
-            )));
-            return Err(());
+        Elaborate::Svlog(m) => {
+            let mut cg = svlog::CodeGenerator::new(ctx.svlog);
+            cg.emit_module(m)?;
+            let code = cg.finalize();
+            use llhd::visit::Visitor;
+            let stdout = std::io::stdout();
+            llhd::assembly::Writer::new(&mut stdout.lock()).visit_module(&code);
         }
     }
     Ok(())
