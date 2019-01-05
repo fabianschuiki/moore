@@ -1,3 +1,0 @@
-- Neat transformations, might apply to ASTs: `http://fitzgeraldnick.com/2017/08/03/scrapmetal.html`
-- See if synthesizers can handle VHDL Guarded Signal Assignment; easy to do with LLHD
-- Possible approach to binary releases: `https://github.com/japaric/trust`
