@@ -6,7 +6,7 @@
 pub type Type<'t> = &'t TypeKind<'t>;
 
 /// Type data.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind<'t> {
     Void,
     Bit,
