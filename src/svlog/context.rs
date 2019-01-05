@@ -204,11 +204,6 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         }
     }
 
-    /// Determine the type of a node.
-    fn type_of(&self, node_id: NodeId) -> Result<Type<'gcx>> {
-        typeck::type_of(self.gcx(), node_id)
-    }
-
     /// Make a void type.
     fn mkty_void(&self) -> Type<'gcx> {
         static STATIC: TypeKind<'static> = TypeKind::Void;
@@ -230,6 +225,12 @@ salsa::query_group! {
             type HirOf;
             use fn hir::lowering::hir_of;
         }
+
+        /// Determine the type of a node.
+        fn type_of(node_id: NodeId) -> Result<Type<'a>> {
+            type TypeOf;
+            use fn typeck::type_of;
+        }
     }
 }
 
@@ -238,6 +239,7 @@ salsa::database_storage! {
     pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
         impl Context<'gcx> {
             fn hir_of() for HirOf<'gcx>;
+            fn type_of() for TypeOf<'gcx>;
         }
     }
 }

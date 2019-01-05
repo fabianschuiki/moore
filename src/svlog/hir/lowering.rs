@@ -5,8 +5,6 @@
 use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
 
 pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<HirNode<'gcx>> {
-    debug!("hir_of({})", node_id);
-
     let ast = cx.ast_of(node_id)?;
 
     #[allow(unreachable_patterns)]
