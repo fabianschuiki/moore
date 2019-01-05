@@ -63,20 +63,6 @@ fn main() {
                 .global(true),
         )
         .subcommand(
-            SubCommand::with_name("elaborate")
-                .arg(
-                    Arg::with_name("NAME")
-                        .help("Entity or module to elaborate")
-                        .required(true)
-                        .index(1),
-                )
-                .arg(
-                    Arg::with_name("ignore_duplicate_defs")
-                        .long("ignore-duplicate-defs")
-                        .help("Ignore multiple module/entity definitions"),
-                ),
-        )
-        .subcommand(
             SubCommand::with_name("score")
                 .arg(
                     Arg::with_name("inc")
@@ -168,63 +154,9 @@ fn main() {
     }
 
     // Invoke the compiler.
-    if let Some(m) = matches.subcommand_matches("elaborate") {
-        session.opts.ignore_duplicate_defs = m.is_present("ignore_duplicate_defs");
-        elaborate(m, &session);
-    } else if let Some(m) = matches.subcommand_matches("score") {
+    if let Some(m) = matches.subcommand_matches("score") {
         score(&session, m);
     }
-}
-
-fn elaborate(matches: &ArgMatches, session: &Session) {
-    // Load the syntax trees previously parsed and stored into the library.
-    let mut asts = svlog::store::load_items(".moore").unwrap();
-
-    // Renumber the AST nodes.
-    svlog::renumber::renumber(&mut asts);
-
-    // Perform name resolution.
-    let _nameres = match svlog::resolve::resolve(session, &asts) {
-        Ok(x) => x,
-        Err(_) => {
-            eprintln!("{}", DiagBuilder2::fatal("name resolution failed"));
-            std::process::exit(1);
-        }
-    };
-
-    // Find the ID of the module we are supposed to be elaborating.
-    let top_name = matches.value_of("NAME").unwrap();
-    let _top = match (|| {
-        for ast in &asts {
-            for item in &ast.items {
-                if let svlog::ast::Item::Module(ref decl) = *item {
-                    if &*decl.name.as_str() == top_name {
-                        return Some(decl.id);
-                    }
-                }
-            }
-        }
-        None
-    })() {
-        Some(id) => id,
-        None => {
-            eprintln!(
-                "{}",
-                DiagBuilder2::fatal(format!("unable to find top module `{}`", top_name))
-            );
-            std::process::exit(1);
-        }
-    };
-
-    // // Lower to HIR.
-    // let hir = match svlog::hir::lower(session, &nameres, top, asts) {
-    //     Ok(x) => x,
-    //     Err(_) => {
-    //         eprintln!("{}", DiagBuilder2::fatal("lowering to HIR failed"));
-    //         std::process::exit(1);
-    //     }
-    // };
-    // debug!("lowered {} modules", hir.mods.len());
 }
 
 fn score(sess: &Session, matches: &ArgMatches) {
