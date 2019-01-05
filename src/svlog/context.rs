@@ -204,6 +204,16 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         id
     }
 
+    /// Return the diagnostic span associated with a ndoe id.
+    fn span(&self, node_id: NodeId) -> Span {
+        self.gcx()
+            .node_id_to_span
+            .borrow()
+            .get(&node_id)
+            .cloned()
+            .unwrap_or(crate::common::source::INVALID_SPAN)
+    }
+
     /// Associate an AST node with a node id.
     fn set_ast(&self, node_id: NodeId, ast: AstNode<'gcx>) {
         self.gcx().ast_map.set(node_id, ast)
