@@ -5,9 +5,10 @@
 //! of the syntactic sugar represented in the AST, and resolving default and
 //! implicit values.
 
-pub mod lowering;
-pub mod nodes;
+mod lowering;
+mod nodes;
 
+pub(crate) use self::lowering::hir_of;
 pub use self::nodes::*;
 
 make_arenas!(

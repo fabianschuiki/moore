@@ -2,7 +2,11 @@
 
 //! This module implements LLHD code generation.
 
-use crate::{crate_prelude::*, hir::HirNode, ty::TypeKind};
+use crate::{
+    crate_prelude::*,
+    hir::HirNode,
+    ty::{Type, TypeKind},
+};
 use std::collections::HashMap;
 
 /// A code generator.

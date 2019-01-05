@@ -28,7 +28,7 @@ use crate::{
     common::{arenas::Alloc, arenas::TypedArena, Session},
     crate_prelude::*,
     hir::{self, HirNode},
-    ty::TypeKind,
+    ty::{Type, TypeKind},
 };
 use llhd;
 use std::cell::RefCell;
@@ -238,7 +238,7 @@ salsa::query_group! {
         /// Lower an AST node to HIR.
         fn hir_of(node_id: NodeId) -> Result<HirNode<'a>> {
             type HirOf;
-            use fn hir::lowering::hir_of;
+            use fn hir::hir_of;
         }
 
         /// Determine the type of a node.

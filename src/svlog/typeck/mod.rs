@@ -1,8 +1,8 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
-use crate::{crate_prelude::*, hir::HirNode};
+use crate::{crate_prelude::*, hir::HirNode, ty::Type};
 
-pub fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<Type<'gcx>> {
+pub(crate) fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<Type<'gcx>> {
     let hir = cx.hir_of(node_id)?;
 
     #[allow(unreachable_patterns)]

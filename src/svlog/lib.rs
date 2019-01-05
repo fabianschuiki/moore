@@ -34,8 +34,6 @@ mod crate_prelude {
         common::util::{HasDesc, HasSpan},
         common::NodeId,
         context::{BaseContext, Context, GlobalContext},
-        hir,
-        ty::{self, Type},
-        typeck,
+        hir, ty, typeck,
     };
 }
