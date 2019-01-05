@@ -10,7 +10,7 @@ fn compile_module(name: &str, code: &str) -> String {
     let store = GlobalArenas::default();
     let ast = parse(code);
     let cx = GlobalContext::new(&sess, &store);
-    cx.add_root_nodes(&ast).unwrap();
+    cx.add_root_nodes(ast.iter());
     let m = cx.find_module(name.into()).unwrap();
     let mut cg = CodeGenerator::new(&cx);
     cg.emit_module(m.into()).unwrap();
