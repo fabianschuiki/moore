@@ -23,11 +23,7 @@ fn lower_module<'gcx>(
     let mut ports = Vec::new();
     for port in &ast.ports {
         match *port {
-            ast::Port::Named { .. } => {
-                let id = cx.alloc_id(port.human_span());
-                cx.set_ast(id, AstNode::Port(port));
-                ports.push(id);
-            }
+            ast::Port::Named { .. } => ports.push(cx.map_ast(AstNode::Port(port))),
             _ => return cx.unimp(port),
         }
     }

@@ -74,8 +74,7 @@ impl<'gcx> GlobalContext<'gcx> {
             for item in &root.items {
                 match *item {
                     ast::Item::Module(ref m) => {
-                        let id = self.alloc_id(m.human_span());
-                        self.set_ast(id, AstNode::Module(m));
+                        let id = self.map_ast(AstNode::Module(m));
                         self.modules.borrow_mut().insert(m.name, id);
                     }
                     _ => self.unimp(item)?,
@@ -202,6 +201,13 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     /// Associate an AST node with a node id.
     fn set_ast(&self, node_id: NodeId, ast: AstNode<'gcx>) {
         self.gcx().ast_map.set(node_id, ast)
+    }
+
+    /// Allocate a node id for an AST node and associate that id with the node.
+    fn map_ast(&self, ast: AstNode<'gcx>) -> NodeId {
+        let id = self.alloc_id(ast.human_span());
+        self.set_ast(id, ast);
+        id
     }
 
     /// Obtain the AST node associated with a node id.
