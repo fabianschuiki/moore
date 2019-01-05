@@ -254,29 +254,36 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     }
 }
 
-salsa::query_group! {
-    /// A collection of compiler queries.
-    pub trait Context<'a>: BaseContext<'a> {
-        /// Lower an AST node to HIR.
-        fn hir_of(node_id: NodeId) -> Result<HirNode<'a>> {
-            type HirOf;
-            use fn hir::hir_of;
-        }
+/// The queries implemented by the compiler.
+pub(super) mod queries {
+    use super::*;
 
-        /// Determine the type of a node.
-        fn type_of(node_id: NodeId) -> Result<Type<'a>> {
-            type TypeOf;
-            use fn typeck::type_of;
+    salsa::query_group! {
+        /// A collection of compiler queries.
+        pub trait Context<'a>: BaseContext<'a> {
+            /// Lower an AST node to HIR.
+            fn hir_of(node_id: NodeId) -> Result<HirNode<'a>> {
+                type HirOf;
+                use fn hir::hir_of;
+            }
+
+            /// Determine the type of a node.
+            fn type_of(node_id: NodeId) -> Result<Type<'a>> {
+                type TypeOf;
+                use fn typeck::type_of;
+            }
+        }
+    }
+
+    salsa::database_storage! {
+        /// The query result storage embedded in the global context.
+        pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
+            impl Context<'gcx> {
+                fn hir_of() for HirOf<'gcx>;
+                fn type_of() for TypeOf<'gcx>;
+            }
         }
     }
 }
 
-salsa::database_storage! {
-    /// The query result storage embedded in the global context.
-    pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
-        impl Context<'gcx> {
-            fn hir_of() for HirOf<'gcx>;
-            fn type_of() for TypeOf<'gcx>;
-        }
-    }
-}
+pub use self::queries::Context;
