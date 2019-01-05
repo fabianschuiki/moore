@@ -6,6 +6,8 @@ extern crate clap;
 extern crate llhd;
 extern crate moore;
 extern crate sha1;
+#[macro_use]
+extern crate log;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use moore::common::score::NodeRef;
@@ -13,7 +15,7 @@ use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
 use moore::*;
-use std::path::Path;
+use std::{path::Path, str::FromStr};
 
 #[derive(Debug)]
 enum Language {
@@ -34,6 +36,24 @@ fn main() {
         )
         .arg(
             Arg::with_name("verbosity")
+                .short("v")
+                .multiple(true)
+                .help("Increase message verbosity"),
+        )
+        .arg(
+            Arg::with_name("quiet")
+                .short("q")
+                .help("Silence all output"),
+        )
+        .arg(
+            Arg::with_name("timestamp")
+                .short("t")
+                .help("prepend log lines with a timestamp")
+                .takes_value(true)
+                .possible_values(&["none", "sec", "ms", "ns"]),
+        )
+        .arg(
+            Arg::with_name("verbosity-opts")
                 .short("V")
                 .help("Sets verbosity settings")
                 .takes_value(true)
@@ -133,9 +153,38 @@ fn main() {
         )
         .get_matches();
 
+    // Configure the logger.
+    let verbose = matches.occurrences_of("verbosity") as usize + 1;
+    let quiet = matches.is_present("quiet");
+    let ts = matches
+        .value_of("timestamp")
+        .map(|v| {
+            stderrlog::Timestamp::from_str(v).unwrap_or_else(|_| {
+                clap::Error {
+                    message: "invalid value for 'timestamp'".into(),
+                    kind: clap::ErrorKind::InvalidValue,
+                    info: None,
+                }
+                .exit()
+            })
+        })
+        .unwrap_or(stderrlog::Timestamp::Off);
+
+    stderrlog::new()
+        .quiet(quiet)
+        .verbosity(verbose)
+        .timestamp(ts)
+        .init()
+        .unwrap();
+
+    // Configure the session.
     let mut session = Session::new();
     session.opts.trace_scoreboard = matches.is_present("trace_scoreboard");
-    for v in matches.values_of("verbosity").into_iter().flat_map(|v| v) {
+    for v in matches
+        .values_of("verbosity-opts")
+        .into_iter()
+        .flat_map(|v| v)
+    {
         session.opts.verbosity |= match v {
             "types" => Verbosity::TYPES,
             "expr-types" => Verbosity::EXPR_TYPES,
@@ -146,6 +195,7 @@ fn main() {
         };
     }
 
+    // Invoke the compiler.
     if let Some(m) = matches.subcommand_matches("compile") {
         compile(m);
     } else if let Some(m) = matches.subcommand_matches("elaborate") {
@@ -309,7 +359,7 @@ fn elaborate(matches: &ArgMatches, session: &Session) {
     //         std::process::exit(1);
     //     }
     // };
-    // debugln!("lowered {} modules", hir.mods.len());
+    // debug!("lowered {} modules", hir.mods.len());
 }
 
 fn score(sess: &Session, matches: &ArgMatches) {
@@ -399,8 +449,8 @@ fn score(sess: &Session, matches: &ArgMatches) {
             svlog: &svlog_sb,
         };
         let lib_id = ctx.add_library(lib, &asts);
-        debugln!("lib_id = {:?}", lib_id);
-        debugln!("{:?}", sb);
+        debug!("lib_id = {:?}", lib_id);
+        debug!("{:?}", sb);
         for name in names {
             match elaborate_name(&ctx, lib_id, name) {
                 Ok(_) => (),
@@ -435,12 +485,9 @@ fn score(sess: &Session, matches: &ArgMatches) {
 /// elaboration.
 fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -> Result<(), ()> {
     let (lib, name, arch) = parse_elaborate_name(input_name)?;
-    debugln!(
+    debug!(
         "parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})",
-        input_name,
-        lib,
-        name,
-        arch
+        input_name, lib, name, arch
     );
 
     // Resolve the library name if one was provided.
@@ -466,7 +513,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             lib_id
         }
     };
-    debugln!("using library {:?}", lib);
+    debug!("using library {:?}", lib);
 
     // Resolve the entity name.
     // TODO: Make sure that the thing we resolve to actually is a VHDL entity or
@@ -525,7 +572,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             return Err(());
         }
     };
-    debugln!("elaborating {:?}", elab);
+    debug!("elaborating {:?}", elab);
 
     // Generate the LLHD definition for whatever we're elaborating.
     match elab {
