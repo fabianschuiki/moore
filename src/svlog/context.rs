@@ -89,6 +89,11 @@ impl<'gcx> GlobalContext<'gcx> {
     pub fn find_module(&self, name: Name) -> Option<NodeId> {
         self.modules.borrow().get(&name).cloned()
     }
+
+    /// Get an iterator over all modules in the AST.
+    pub fn modules(&self) -> impl Iterator<Item = (Name, NodeId)> {
+        self.modules.borrow().clone().into_iter()
+    }
 }
 
 impl DiagEmitter for GlobalContext<'_> {
