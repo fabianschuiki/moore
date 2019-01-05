@@ -247,6 +247,28 @@ pub struct Type {
     pub dims: Vec<TypeDim>,
 }
 
+impl HasSpan for Type {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Type {
+    fn desc(&self) -> &'static str {
+        match self.data {
+            ImplicitType => "implicit type",
+            _ => "type",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match self.data {
+            ImplicitType => self.desc().into(),
+            _ => format!("type `{}`", self.span().extract()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum TypeData {
     ImplicitType,
