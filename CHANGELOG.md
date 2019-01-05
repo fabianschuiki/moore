@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Use [salsa](https://github.com/salsa-rs/salsa) to implement SystemVerilog queries
 - Add usage example to README, plus some cleanup.
+- Switch to dual-licensing.
 
 ## 0.1.0 - 2018-02-27
 ### Added

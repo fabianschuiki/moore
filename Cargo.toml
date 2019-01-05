@@ -7,7 +7,7 @@ edition = "2018"
 description = "A compiler for hardware description languages."
 repository = "https://github.com/fabianschuiki/moore"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0 OR MIT"
 
 [badges]
 travis-ci = { repository = "fabianschuiki/moore", branch = "master" }

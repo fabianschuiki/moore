@@ -5,7 +5,7 @@ authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
 description = "The VHDL implementation of the moore compiler framework."
-license = "MIT"
+license = "Apache-2.0 OR MIT"
 
 [lib]
 path = "lib.rs"
