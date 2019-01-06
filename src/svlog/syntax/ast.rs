@@ -1237,6 +1237,18 @@ pub struct ParamDecl {
     pub kind: ParamKind,
 }
 
+impl HasSpan for ParamDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for ParamDecl {
+    fn desc(&self) -> &'static str {
+        "parameter"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ParamKind {
     Type(Vec<ParamTypeDecl>),
@@ -1255,6 +1267,26 @@ pub struct ParamTypeDecl {
     pub ty: Option<Type>,
 }
 
+impl HasSpan for ParamTypeDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for ParamTypeDecl {
+    fn desc(&self) -> &'static str {
+        "parameter"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("parameter `{}`", self.name.name)
+    }
+}
+
 /// A single value assignment within a parameter or loclparam declaration.
 ///
 /// ```text
@@ -1267,6 +1299,26 @@ pub struct ParamValueDecl {
     pub name: Identifier,
     pub dims: Vec<TypeDim>,
     pub expr: Option<Expr>,
+}
+
+impl HasSpan for ParamValueDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for ParamValueDecl {
+    fn desc(&self) -> &'static str {
+        "parameter"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("parameter `{}`", self.name.name)
+    }
 }
 
 /// A continuous assignment statement.
