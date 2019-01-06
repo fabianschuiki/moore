@@ -325,6 +325,7 @@ impl HasDesc for Type {
 
     fn desc_full(&self) -> String {
         match self.kind {
+            TypeKind::Named(n) => format!("type `{}`", n.value),
             _ => self.desc().into(),
         }
     }
@@ -335,6 +336,8 @@ impl HasDesc for Type {
 pub enum TypeKind {
     /// A builtin type.
     Builtin(BuiltinType),
+    /// A named type.
+    Named(Spanned<Name>),
 }
 
 /// A builtin type.

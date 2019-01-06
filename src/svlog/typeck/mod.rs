@@ -11,7 +11,11 @@ pub(crate) fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<
         HirNode::Type(hir) => match hir.kind {
             hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
             hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
-            _ => return cx.unimp_msg("type analysis of", hir),
+            hir::TypeKind::Named(name) => {
+                trace!("resolve type name {}", name);
+                cx.unimp_msg("name resolution of", hir)
+            }
+            _ => cx.unimp_msg("type analysis of", hir),
         },
         _ => cx.unimp_msg("type analysis of", &hir),
     }

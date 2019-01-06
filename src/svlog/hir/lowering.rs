@@ -16,7 +16,8 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
                 ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
                 ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
-                _ => return cx.unimp(ty),
+                ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
+                _ => return cx.unimp_msg("lowering of", ty),
             };
             let hir = hir::Type {
                 id: node_id,
