@@ -32,7 +32,10 @@ use crate::{
     ParamEnv, ParamEnvData, ParamEnvSource,
 };
 use llhd;
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 /// The central data structure of the compiler. It stores references to various
 /// arenas and tables that store the results of the various computations that
@@ -125,6 +128,7 @@ pub struct GlobalArenas<'t> {
     ids: TypedArena<NodeId>,
     hir: hir::Arena<'t>,
     param_envs: TypedArena<ParamEnvData>,
+    types: TypedArena<TypeKind<'t>>,
 }
 
 impl Default for GlobalArenas<'_> {
@@ -133,6 +137,7 @@ impl Default for GlobalArenas<'_> {
             ids: TypedArena::new(),
             hir: Default::default(),
             param_envs: TypedArena::new(),
+            types: TypedArena::new(),
         }
     }
 }
@@ -160,6 +165,7 @@ impl<'t> GlobalArenas<'t> {
 pub struct GlobalTables<'t> {
     interned_param_envs: RefCell<HashMap<&'t ParamEnvData, ParamEnv>>,
     param_envs: RefCell<Vec<&'t ParamEnvData>>,
+    interned_types: RefCell<HashSet<Type<'t>>>,
 }
 
 /// The fundamental compiler context.
@@ -261,6 +267,16 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         }
     }
 
+    /// Internalize a type.
+    fn intern_type(&self, ty: TypeKind<'gcx>) -> Type<'gcx> {
+        if let Some(&x) = self.tables().interned_types.borrow().get(&ty) {
+            return x;
+        }
+        let ty = self.arena().types.alloc(ty);
+        self.tables().interned_types.borrow_mut().insert(ty);
+        ty
+    }
+
     /// Make a void type.
     fn mkty_void(&self) -> Type<'gcx> {
         static STATIC: TypeKind<'static> = TypeKind::Void;
@@ -271,6 +287,15 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     fn mkty_bit(&self) -> Type<'gcx> {
         static STATIC: TypeKind<'static> = TypeKind::Bit;
         &STATIC
+    }
+
+    /// Make a named type.
+    fn mkty_named(&self, name: Spanned<Name>, binding: NodeId) -> Type<'gcx> {
+        self.intern_type(TypeKind::Named(
+            name,
+            binding,
+            self.gcx().type_of(binding).unwrap_or(self.mkty_void()),
+        ))
     }
 
     /// Internalize a parameter environment.

@@ -2,6 +2,8 @@
 
 //! An implementation of the verilog type system.
 
+use crate::crate_prelude::*;
+
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;
 
@@ -12,7 +14,12 @@ pub enum TypeKind<'t> {
     Bit,
     Logic,
     Reg,
-    Dummy(std::marker::PhantomData<&'t ()>),
+    /// A named type.
+    ///
+    /// The first field represents how the type was originally named by the
+    /// user. The second field represents the binding of the resolved name. The
+    /// third field represents the actual type.
+    Named(Spanned<Name>, NodeId, Type<'t>),
 }
 
 impl<'t> TypeKind<'t> {
