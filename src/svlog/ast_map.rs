@@ -43,6 +43,10 @@ pub enum AstNode<'ast> {
     InstTarget(&'ast ast::Inst),
     /// An instance name and reference to its target.
     Inst(&'ast ast::InstName, NodeId),
+    /// A type parameter.
+    TypeParam(&'ast ast::ParamDecl, &'ast ast::ParamTypeDecl),
+    /// A value parameter.
+    ValueParam(&'ast ast::ParamDecl, &'ast ast::ParamValueDecl),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -53,6 +57,8 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Type(x) => x.span(),
             AstNode::InstTarget(x) => x.span(),
             AstNode::Inst(x, _) => x.span(),
+            AstNode::TypeParam(x, _) => x.span(),
+            AstNode::ValueParam(x, _) => x.span(),
         }
     }
 
@@ -63,6 +69,8 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Type(x) => x.human_span(),
             AstNode::InstTarget(x) => x.human_span(),
             AstNode::Inst(x, _) => x.human_span(),
+            AstNode::TypeParam(_, x) => x.human_span(),
+            AstNode::ValueParam(_, x) => x.human_span(),
         }
     }
 }
@@ -75,6 +83,8 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Type(x) => x.desc(),
             AstNode::InstTarget(x) => x.desc(),
             AstNode::Inst(x, _) => x.desc(),
+            AstNode::TypeParam(_, x) => x.desc(),
+            AstNode::ValueParam(_, x) => x.desc(),
         }
     }
 
@@ -85,6 +95,8 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Type(x) => x.desc_full(),
             AstNode::InstTarget(x) => x.desc_full(),
             AstNode::Inst(x, _) => x.desc_full(),
+            AstNode::TypeParam(_, x) => x.desc_full(),
+            AstNode::ValueParam(_, x) => x.desc_full(),
         }
     }
 }

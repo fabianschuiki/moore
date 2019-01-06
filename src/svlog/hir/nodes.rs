@@ -72,7 +72,7 @@ pub struct Module<'hir> {
     pub span: Span,
     // pub lifetime: ast::Lifetime,
     pub ports: &'hir [NodeId],
-    // pub params: Vec<ast::ParamDecl>,
+    pub params: &'hir [NodeId],
     // pub body: HierarchyBody,
     /// The module/interface instances in the module.
     pub insts: &'hir [NodeId],

@@ -86,6 +86,21 @@ fn lower_module<'gcx>(
             _ => return cx.unimp(port),
         }
     }
+    let mut params = Vec::new();
+    for param in &ast.params {
+        match param.kind {
+            ast::ParamKind::Type(ref decls) => {
+                for decl in decls {
+                    params.push(cx.map_ast(AstNode::TypeParam(param, decl)));
+                }
+            }
+            ast::ParamKind::Value(ref decls) => {
+                for decl in decls {
+                    params.push(cx.map_ast(AstNode::ValueParam(param, decl)));
+                }
+            }
+        }
+    }
     let mut insts = Vec::new();
     for item in &ast.items {
         match *item {
@@ -111,6 +126,7 @@ fn lower_module<'gcx>(
         name: Spanned::new(ast.name, ast.name_span),
         span: ast.span,
         ports: cx.arena().alloc_ids(ports),
+        params: cx.arena().alloc_ids(params),
         insts: cx.arena().alloc_ids(insts),
     };
     Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
