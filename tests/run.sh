@@ -48,11 +48,17 @@ extract_elabs() {
 }
 
 extract_output() {
-	sed -n 's#^|\s##p'
+	sed -nE 's#^\|\s?##p'
 }
 
 check_diff() {
-	diff -w $1 $2
+	if ! diff -w $1 $2; then
+		echo "===== ${CBOLD}expected code${CRST} ====="
+		cat $1
+		echo "===== ${CBOLD}actual code${CRST} ====="
+		cat $2
+		false
+	fi
 }
 
 test_file() {
