@@ -64,30 +64,43 @@ pub(crate) fn compute<'gcx>(
                         }
                     },
                 )
-                .chain(named.iter().map(
-                    |&(span, name, assign_id)| match module.params.iter().find(|&&p| {
-                        let param_name = match cx.ast_of(p) {
-                            Ok(AstNode::TypeParam(_, p)) => Spanned::new(p.name.name, p.name.span),
-                            Ok(AstNode::ValueParam(_, p)) => Spanned::new(p.name.name, p.name.span),
+                .chain(named.iter().map(|&(_span, name, assign_id)| {
+                    let names: Vec<_> = module
+                        .params
+                        .iter()
+                        .flat_map(|&id| match cx.ast_of(id) {
+                            Ok(AstNode::TypeParam(_, p)) => Some((p.name.name, id)),
+                            Ok(AstNode::ValueParam(_, p)) => Some((p.name.name, id)),
                             Ok(_) => unreachable!(),
-                            Err(()) => return false,
-                        };
-                        param_name == name
-                    }) {
-                        Some(&param_id) => Ok((param_id, assign_id)),
+                            Err(()) => None,
+                        })
+                        .collect();
+                    match names
+                        .iter()
+                        .find(|&(param_name, _)| *param_name == name.value)
+                    {
+                        Some(&(_, param_id)) => Ok((param_id, assign_id)),
                         None => {
                             cx.emit(
                                 DiagBuilder2::error(format!(
-                                    "{} has no parameter `{}`",
+                                    "no parameter `{}` in {}",
+                                    name,
                                     module.desc_full(),
-                                    name
                                 ))
-                                .span(span),
+                                .span(name.span)
+                                .add_note(format!(
+                                    "declared parameters are {}",
+                                    names
+                                        .iter()
+                                        .map(|&(n, _)| format!("`{}`", n))
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                )),
                             );
                             Err(())
                         }
-                    },
-                ));
+                    }
+                }));
             let param_iter = param_iter
                 .collect::<Vec<_>>()
                 .into_iter()
