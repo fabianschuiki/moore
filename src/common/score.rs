@@ -263,38 +263,38 @@ macro_rules! node_ref {
 /// Implements `From` for the various references, and `Into<NodeId>`.
 #[macro_export]
 macro_rules! node_ref_group {
-	($name:ident: $($var:ident($ty:ty),)+) => {
-		#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
-		pub enum $name {
-			$($var($ty),)*
-		}
+    ($name:ident: $($var:ident($ty:ty),)+) => {
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
+        pub enum $name {
+            $($var($ty),)*
+        }
 
-		impl std::fmt::Debug for $name {
-			fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-				node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{}({:?})", stringify!($var), id)),*)
-			}
-		}
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                node_ref_group!(MATCHES *self, $($name::$var(id) => write!(f, "{}({:?})", stringify!($var), id)),*)
+            }
+        }
 
-		impl Into<$crate::NodeId> for $name {
-			fn into(self) -> $crate::NodeId {
-				node_ref_group!(MATCHES self, $($name::$var(id) => id.into()),*)
-			}
-		}
+        impl Into<$crate::NodeId> for $name {
+            fn into(self) -> $crate::NodeId {
+                node_ref_group!(MATCHES self, $($name::$var(id) => id.into()),*)
+            }
+        }
 
-		$(
-		impl From<$ty> for $name {
-			fn from(id: $ty) -> $name {
-				$name::$var(id)
-			}
-		}
-		)*
-	};
+        $(
+        impl From<$ty> for $name {
+            fn from(id: $ty) -> $name {
+                $name::$var(id)
+            }
+        }
+        )*
+    };
 
-	(MATCHES $value:expr, $($lhs:pat => $rhs:expr),+) => {
-		match $value {
-			$($lhs => $rhs),+
-		}
-	};
+    (MATCHES $value:expr, $($lhs:pat => $rhs:expr),+) => {
+        match $value {
+            $($lhs => $rhs),+
+        }
+    };
 }
 
 /// Create a new table that implements the `NodeStorage` trait.
@@ -343,50 +343,50 @@ macro_rules! node_ref_group {
 /// ```
 #[macro_export]
 macro_rules! node_storage {
-	($name:ident<$($lt:tt),+>: $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
-		pub struct $name<$($lt),*> {
-			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
-		}
+    ($name:ident<$($lt:tt),+>: $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
+        pub struct $name<$($lt),*> {
+            $($node_name: std::collections::HashMap<$node_ref, $node>,)*
+        }
 
-		node_storage!(STRUCT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
-	};
+        node_storage!(STRUCT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+    };
 
-	($name:ident<$($lt:tt),+> where ($($wh:tt)+): $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
-		pub struct $name<$($lt),*> where $($wh)* {
-			$($node_name: std::collections::HashMap<$node_ref, $node>,)*
-		}
+    ($name:ident<$($lt:tt),+> where ($($wh:tt)+): $($node_name:ident : $node_ref:ty => $node:ty,)+) => {
+        pub struct $name<$($lt),*> where $($wh)* {
+            $($node_name: std::collections::HashMap<$node_ref, $node>,)*
+        }
 
-		node_storage!(STRUCT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
-	};
+        node_storage!(STRUCT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+    };
 
-	(STRUCT_IMPL $name:ident; $($lt:tt),+; $($node_name:ident, $node_ref:ty, $node:ty;)*) => {
-		impl<$($lt),*> $name<$($lt),*> {
-			/// Create a new empty table.
-			pub fn new() -> $name<$($lt),*> {
-				$name {
-					$($node_name: std::collections::HashMap::new(),)*
-				}
-			}
-		}
+    (STRUCT_IMPL $name:ident; $($lt:tt),+; $($node_name:ident, $node_ref:ty, $node:ty;)*) => {
+        impl<$($lt),*> $name<$($lt),*> {
+            /// Create a new empty table.
+            pub fn new() -> $name<$($lt),*> {
+                $name {
+                    $($node_name: std::collections::HashMap::new(),)*
+                }
+            }
+        }
 
-		node_storage!(TRAIT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
-	};
+        node_storage!(TRAIT_IMPL $name; $($lt),*; $($node_name, $node_ref, $node;)*);
+    };
 
-	(TRAIT_IMPL $name:ident; $($lt:tt),+; $node_name:ident, $node_ref:ty, $node:ty; $($tail_name:ident, $tail_ref:ty, $tail:ty;)*) => {
-		impl<$($lt),*> $crate::score::NodeStorage<$node_ref> for $name<$($lt),*> {
-			type Node = $node;
+    (TRAIT_IMPL $name:ident; $($lt:tt),+; $node_name:ident, $node_ref:ty, $node:ty; $($tail_name:ident, $tail_ref:ty, $tail:ty;)*) => {
+        impl<$($lt),*> $crate::score::NodeStorage<$node_ref> for $name<$($lt),*> {
+            type Node = $node;
 
-			fn get(&self, id: &$node_ref) -> Option<&$node> {
-				self.$node_name.get(id)
-			}
+            fn get(&self, id: &$node_ref) -> Option<&$node> {
+                self.$node_name.get(id)
+            }
 
-			fn set(&mut self, id: $node_ref, node: $node) -> Option<$node> {
-				self.$node_name.insert(id, node)
-			}
-		}
+            fn set(&mut self, id: $node_ref, node: $node) -> Option<$node> {
+                self.$node_name.insert(id, node)
+            }
+        }
 
-		node_storage!(TRAIT_IMPL $name; $($lt),*; $($tail_name, $tail_ref, $tail;)*);
-	};
+        node_storage!(TRAIT_IMPL $name; $($lt),*; $($tail_name, $tail_ref, $tail;)*);
+    };
 
-	(TRAIT_IMPL $name:ident; $($lt:tt),*;) => {}
+    (TRAIT_IMPL $name:ident; $($lt:tt),*;) => {}
 }
