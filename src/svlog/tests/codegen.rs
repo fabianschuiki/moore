@@ -32,3 +32,22 @@ fn module_with_trivial_ports() {
         "entity @foo (i1$ %a) (i1$ %b) {\n}"
     );
 }
+
+#[test]
+fn empty_instances() {
+    assert_eq!(
+        compile_module(
+            "foo",
+            "
+            module foo;
+                bar b();
+            endmodule
+
+            module bar;
+            endmodule
+            "
+        )
+        .trim(),
+        "entity @bar () () {\n}\n\nentity @foo () () {\n    inst @bar () ()\n}"
+    );
+}

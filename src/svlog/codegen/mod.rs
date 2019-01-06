@@ -119,6 +119,40 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             port_map.insert(port_id, ent.output(index));
         }
 
+        // Emit instantiations.
+        for &inst_id in hir.insts {
+            trace!("emit code for instantiation {:?}", inst_id);
+            let hir = match self.hir_of(inst_id)? {
+                HirNode::Inst(x) => x,
+                _ => unreachable!(),
+            };
+            let target_hir = match self.hir_of(hir.target)? {
+                HirNode::InstTarget(x) => x,
+                _ => unreachable!(),
+            };
+            trace!("resolve target name `{}`", target_hir.name.value);
+            let resolved = match self.gcx().find_module(target_hir.name.value) {
+                Some(id) => id,
+                None => {
+                    self.emit(
+                        DiagBuilder2::error(format!(
+                            "unknown module or interface `{}`",
+                            target_hir.name.value
+                        ))
+                        .span(target_hir.name.span),
+                    );
+                    return Err(());
+                }
+            };
+            let target = self.emit_module(resolved)?;
+            let ty = self.tables.module_types[&resolved].clone();
+            let inst = llhd::Inst::new(
+                Some(hir.name.value.into()),
+                llhd::InstanceInst(ty, target.into(), vec![], vec![]),
+            );
+            ent.add_inst(inst, llhd::InstPosition::End);
+        }
+
         let result = Ok(self.into.add_entity(ent));
         self.tables.module_defs.insert(id, result.clone());
         result

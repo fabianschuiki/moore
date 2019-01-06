@@ -25,6 +25,25 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
         }
+        AstNode::InstTarget(ast) => {
+            let hir = hir::InstTarget {
+                id: node_id,
+                name: Spanned::new(ast.target.name, ast.target.span),
+                span: ast.span,
+                dummy: Default::default(),
+            };
+            Ok(HirNode::InstTarget(cx.arena().alloc_hir(hir)))
+        }
+        AstNode::Inst(inst, target_id) => {
+            let hir = hir::Inst {
+                id: node_id,
+                name: Spanned::new(inst.name.name, inst.name.span),
+                span: inst.span,
+                target: target_id,
+                dummy: Default::default(),
+            };
+            Ok(HirNode::Inst(cx.arena().alloc_hir(hir)))
+        }
         _ => cx.unimp_msg("lowering of", &ast),
     }
 }
@@ -41,11 +60,32 @@ fn lower_module<'gcx>(
             _ => return cx.unimp(port),
         }
     }
+    let mut insts = Vec::new();
+    for item in &ast.items {
+        match *item {
+            ast::HierarchyItem::Inst(ref inst) => {
+                let target_id = cx.map_ast(AstNode::InstTarget(inst));
+                trace!(
+                    "instantiation target `{}` => {:?}",
+                    inst.target.name,
+                    target_id
+                );
+                for inst in &inst.names {
+                    let inst_id = cx.map_ast(AstNode::Inst(inst, target_id));
+                    trace!("instantiation `{}` => {:?}", inst.name.name, inst_id);
+                    insts.push(inst_id);
+                }
+            }
+            // _ => return cx.unimp_msg("lowering of", item),
+            _ => (),
+        }
+    }
     let hir = hir::Module {
         id: node_id,
         name: Spanned::new(ast.name, ast.name_span),
         span: ast.span,
         ports: cx.arena().alloc_ids(ports),
+        insts: cx.arena().alloc_ids(insts),
     };
     Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
 }

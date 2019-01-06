@@ -83,6 +83,7 @@ impl HasSpan for Item {
     fn human_span(&self) -> Span {
         match *self {
             Item::Module(ref decl) => decl.human_span(),
+            Item::Item(ref item) => item.human_span(),
             _ => self.span(),
         }
     }
@@ -95,13 +96,14 @@ impl HasDesc for Item {
             Item::Interface(ref decl) => "interface declaration",
             Item::Package(ref decl) => "package declaration",
             Item::Class(ref decl) => "class declaration",
-            Item::Item(ref item) => item.as_str(),
+            Item::Item(ref item) => item.desc(),
         }
     }
 
     fn desc_full(&self) -> String {
         match *self {
             Item::Module(ref decl) => decl.desc_full(),
+            Item::Item(ref item) => item.desc_full(),
             _ => self.desc().into(),
         }
     }
@@ -203,8 +205,8 @@ pub enum HierarchyItem {
     Inst(Inst),
 }
 
-impl HierarchyItem {
-    pub fn span(&self) -> Span {
+impl HasSpan for HierarchyItem {
+    fn span(&self) -> Span {
         match *self {
             HierarchyItem::ImportDecl(ref decl) => decl.span,
             HierarchyItem::ParamDecl(ref decl) => decl.span,
@@ -220,8 +222,10 @@ impl HierarchyItem {
             _ => unimplemented!(), // TODO remove this and have the compiler complain
         }
     }
+}
 
-    pub fn as_str(&self) -> &'static str {
+impl HasDesc for HierarchyItem {
+    fn desc(&self) -> &'static str {
         match *self {
             HierarchyItem::ImportDecl(ref decl) => "import declaration",
             HierarchyItem::ParamDecl(ref decl) => "parameter declaration",
@@ -1152,12 +1156,52 @@ pub struct Inst {
     pub names: Vec<InstName>,
 }
 
+impl HasSpan for Inst {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.target.span
+    }
+}
+
+impl HasDesc for Inst {
+    fn desc(&self) -> &'static str {
+        "instantiation"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("`{}` instantiation", self.target.name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct InstName {
     pub span: Span,
     pub name: Identifier,
     pub dims: Vec<TypeDim>,
     pub conns: Vec<PortConn>,
+}
+
+impl HasSpan for InstName {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for InstName {
+    fn desc(&self) -> &'static str {
+        "instance"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("instance `{}`", self.name.name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

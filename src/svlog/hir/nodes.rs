@@ -10,6 +10,8 @@ pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     Port(&'hir Port),
     Type(&'hir Type),
+    InstTarget(&'hir InstTarget<'hir>),
+    Inst(&'hir Inst<'hir>),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
@@ -24,6 +26,8 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Module(x) => x.span(),
             HirNode::Port(x) => x.span(),
             HirNode::Type(x) => x.span(),
+            HirNode::InstTarget(x) => x.span(),
+            HirNode::Inst(x) => x.span(),
         }
     }
 
@@ -32,6 +36,8 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Module(x) => x.human_span(),
             HirNode::Port(x) => x.human_span(),
             HirNode::Type(x) => x.human_span(),
+            HirNode::InstTarget(x) => x.human_span(),
+            HirNode::Inst(x) => x.human_span(),
         }
     }
 }
@@ -42,6 +48,8 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Module(x) => x.desc(),
             HirNode::Port(x) => x.desc(),
             HirNode::Type(x) => x.desc(),
+            HirNode::InstTarget(x) => x.desc(),
+            HirNode::Inst(x) => x.desc(),
         }
     }
 
@@ -50,6 +58,8 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Module(x) => x.desc_full(),
             HirNode::Port(x) => x.desc_full(),
             HirNode::Type(x) => x.desc_full(),
+            HirNode::InstTarget(x) => x.desc_full(),
+            HirNode::Inst(x) => x.desc_full(),
         }
     }
 }
@@ -64,6 +74,8 @@ pub struct Module<'hir> {
     pub ports: &'hir [NodeId],
     // pub params: Vec<ast::ParamDecl>,
     // pub body: HierarchyBody,
+    /// The module/interface instances in the module.
+    pub insts: &'hir [NodeId],
 }
 
 impl HasSpan for Module<'_> {
@@ -83,6 +95,73 @@ impl HasDesc for Module<'_> {
 
     fn desc_full(&self) -> String {
         format!("module `{}`", self.name.value)
+    }
+}
+
+/// An instantiation target.
+///
+/// In an instantiation `foo #(...) a(), b(), c();` this struct represents the
+/// `foo #(...)` part. Multiple instantiations (`a()`, `b()`, `c()`) may share
+/// the same target.
+#[derive(Debug, PartialEq, Eq)]
+pub struct InstTarget<'hir> {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    pub dummy: std::marker::PhantomData<&'hir ()>,
+}
+
+impl HasSpan for InstTarget<'_> {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for InstTarget<'_> {
+    fn desc(&self) -> &'static str {
+        "instantiation"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("`{}` instantiation", self.name.value)
+    }
+}
+
+/// An instantiation.
+///
+/// In an instantiation `foo #(...) a(), b(), c();`, this struct represents the
+/// `a()` part.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Inst<'hir> {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    /// The target of the instantiation.
+    pub target: NodeId,
+    pub dummy: std::marker::PhantomData<&'hir ()>,
+}
+
+impl HasSpan for Inst<'_> {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for Inst<'_> {
+    fn desc(&self) -> &'static str {
+        "instance"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("instance `{}`", self.name.value)
     }
 }
 
