@@ -80,33 +80,53 @@ fn lower_module<'gcx>(
     node_id: NodeId,
     ast: &'gcx ast::ModDecl,
 ) -> Result<HirNode<'gcx>> {
-    let mut ports = Vec::new();
-    for port in &ast.ports {
-        match *port {
-            ast::Port::Named { .. } => ports.push(cx.map_ast(AstNode::Port(port))),
-            _ => return cx.unimp(port),
-        }
-    }
+    let mut next_rib = node_id;
+
+    // Allocate parameters.
     let mut params = Vec::new();
     for param in &ast.params {
         match param.kind {
             ast::ParamKind::Type(ref decls) => {
                 for decl in decls {
-                    params.push(cx.map_ast(AstNode::TypeParam(param, decl)));
+                    let id = cx.map_ast(AstNode::TypeParam(param, decl));
+                    cx.set_parent(id, next_rib);
+                    next_rib = id;
+                    params.push(id);
                 }
             }
             ast::ParamKind::Value(ref decls) => {
                 for decl in decls {
-                    params.push(cx.map_ast(AstNode::ValueParam(param, decl)));
+                    let id = cx.map_ast(AstNode::ValueParam(param, decl));
+                    cx.set_parent(id, next_rib);
+                    next_rib = id;
+                    params.push(id);
                 }
             }
         }
     }
+
+    // Allocate ports.
+    let mut ports = Vec::new();
+    for port in &ast.ports {
+        match *port {
+            ast::Port::Named { .. } => {
+                let id = cx.map_ast(AstNode::Port(port));
+                cx.set_parent(id, next_rib);
+                next_rib = id;
+                ports.push(id);
+            }
+            _ => return cx.unimp(port),
+        }
+    }
+
+    // Allocate items.
     let mut insts = Vec::new();
     for item in &ast.items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
                 let target_id = cx.map_ast(AstNode::InstTarget(inst));
+                cx.set_parent(target_id, next_rib);
+                next_rib = target_id;
                 trace!(
                     "instantiation target `{}` => {:?}",
                     inst.target.name,
@@ -115,6 +135,8 @@ fn lower_module<'gcx>(
                 for inst in &inst.names {
                     let inst_id = cx.map_ast(AstNode::Inst(inst, target_id));
                     trace!("instantiation `{}` => {:?}", inst.name.name, inst_id);
+                    cx.set_parent(inst_id, next_rib);
+                    next_rib = inst_id;
                     insts.push(inst_id);
                 }
             }
@@ -122,6 +144,7 @@ fn lower_module<'gcx>(
             _ => (),
         }
     }
+
     let hir = hir::Module {
         id: node_id,
         name: Spanned::new(ast.name, ast.name_span),
@@ -154,5 +177,6 @@ fn lower_port<'gcx>(
         },
         _ => return cx.unimp(ast),
     };
+    cx.set_parent(hir.ty, cx.parent_node_id(node_id).unwrap());
     Ok(HirNode::Port(cx.arena().alloc_hir(hir)))
 }

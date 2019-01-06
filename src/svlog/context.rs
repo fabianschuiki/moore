@@ -165,6 +165,7 @@ impl<'t> GlobalArenas<'t> {
 pub struct GlobalTables<'t> {
     interned_param_envs: RefCell<HashMap<&'t ParamEnvData, ParamEnv>>,
     param_envs: RefCell<Vec<&'t ParamEnvData>>,
+    node_id_to_parent_node_id: RefCell<HashMap<NodeId, NodeId>>,
     interned_types: RefCell<HashSet<Type<'t>>>,
 }
 
@@ -328,6 +329,35 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     /// for the top-level module.
     fn default_param_env(&self) -> ParamEnv {
         self.intern_param_env(ParamEnvData::default())
+    }
+
+    /// Associate a parent with a node.
+    ///
+    /// Panics if `node_id` already has a parent assigned.
+    fn set_parent(&self, node_id: NodeId, parent_id: NodeId) {
+        if let Some(old_id) = self
+            .tables()
+            .node_id_to_parent_node_id
+            .borrow_mut()
+            .insert(node_id, parent_id)
+        {
+            panic!(
+                "node {:?} already had parent {:?} (overwritten with {:?} now)",
+                node_id, old_id, parent_id
+            );
+        }
+    }
+
+    /// Find the parent node of a node.
+    ///
+    /// Returns `None` if the node has no parent. Pretty much every node has a
+    /// parent, assigned more or less in lexographical order.
+    fn parent_node_id(&self, node_id: NodeId) -> Option<NodeId> {
+        self.tables()
+            .node_id_to_parent_node_id
+            .borrow()
+            .get(&node_id)
+            .cloned()
     }
 }
 
