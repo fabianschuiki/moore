@@ -239,7 +239,7 @@ macro_rules! node_ref {
 
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "{}({})", stringify!($name), self.0)
+                write!(f, "{}({:?})", stringify!($name), self.0)
             }
         }
 

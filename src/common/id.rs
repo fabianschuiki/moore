@@ -1,13 +1,10 @@
 // Copyright (c) 2017 Fabian Schuiki
-use std;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 
 /// A positive, small ID assigned to nodes in the AST and derived data
 /// structures. Used as a lightweight way to refer to individual nodes, e.g.
 /// during symbol table construction and name resolution.
-#[derive(
-    Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, RustcEncodable, RustcDecodable,
-)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, RustcEncodable, RustcDecodable)]
 pub struct NodeId(u32);
 
 impl NodeId {
@@ -37,8 +34,8 @@ impl NodeId {
     }
 }
 
-impl std::fmt::Display for NodeId {
+impl std::fmt::Debug for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "n{}", self.0)
     }
 }

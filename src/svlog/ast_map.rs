@@ -19,7 +19,7 @@ impl<'ast> AstMap<'ast> {
     pub fn set(&self, id: NodeId, node: impl Into<AstNode<'ast>>) {
         let node = node.into();
         if self.map.borrow_mut().insert(id, node).is_some() {
-            panic!("An AST node with ID {} already exists in the map", id);
+            panic!("node {:?} already exists in the map", id);
         }
     }
 
