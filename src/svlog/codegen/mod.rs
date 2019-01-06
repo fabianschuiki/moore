@@ -7,7 +7,7 @@ use crate::{
     hir::HirNode,
     ty::{Type, TypeKind},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 /// A code generator.
 ///
@@ -40,7 +40,16 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 #[derive(Default)]
 struct Tables<'gcx> {
     module_defs: HashMap<NodeId, Result<llhd::value::EntityRef>>,
+    module_types: HashMap<NodeId, llhd::Type>,
     interned_types: HashMap<Type<'gcx>, Result<llhd::Type>>,
+}
+
+impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
+    type Target = C;
+
+    fn deref(&self) -> &C {
+        &self.cx
+    }
 }
 
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
@@ -49,7 +58,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         if let Some(x) = self.tables.module_defs.get(&id) {
             return x.clone();
         }
-        let hir = match self.cx.hir_of(id)? {
+        let hir = match self.hir_of(id)? {
             HirNode::Module(m) => m,
             _ => panic!("expected {:?} to be a module", id),
         };
@@ -61,11 +70,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut output_tys = Vec::new();
         let mut port_id_to_name = HashMap::new();
         for &port_id in hir.ports {
-            let port = match self.cx.hir_of(port_id)? {
+            let port = match self.hir_of(port_id)? {
                 HirNode::Port(p) => p,
                 _ => unreachable!(),
             };
-            let ty = self.cx.gcx().type_of(port_id)?;
+            let ty = self.type_of(port_id)?;
             debug!(
                 "port {}.{} has type {:?}",
                 hir.name.value, port.name.value, ty
