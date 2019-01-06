@@ -128,6 +128,7 @@ pub struct GlobalArenas<'t> {
     ids: TypedArena<NodeId>,
     hir: hir::Arena<'t>,
     param_envs: TypedArena<ParamEnvData>,
+    ribs: TypedArena<Rib>,
     types: TypedArena<TypeKind<'t>>,
 }
 
@@ -137,6 +138,7 @@ impl Default for GlobalArenas<'_> {
             ids: TypedArena::new(),
             hir: Default::default(),
             param_envs: TypedArena::new(),
+            ribs: TypedArena::new(),
             types: TypedArena::new(),
         }
     }
@@ -155,6 +157,11 @@ impl<'t> GlobalArenas<'t> {
         T: 't,
     {
         self.hir.alloc(hir)
+    }
+
+    /// Allocate a rib.
+    pub fn alloc_rib(&'t self, rib: Rib) -> &'t Rib {
+        self.ribs.alloc(rib)
     }
 }
 
@@ -359,6 +366,19 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
             .get(&node_id)
             .cloned()
     }
+
+    /// Resolve a name upwards or emit a diagnostic if nothing is found.
+    fn resolve_upwards_or_error(&self, name: Spanned<Name>, start_at: NodeId) -> Result<NodeId> {
+        match self.gcx().resolve_upwards(name.value, start_at)? {
+            Some(id) => Ok(id),
+            None => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span),
+                );
+                Err(())
+            }
+        }
+    }
 }
 
 /// The queries implemented by the compiler.
@@ -385,6 +405,19 @@ pub(super) mod queries {
                 type TypeOfQuery;
                 use fn typeck::type_of;
             }
+
+            /// Determine the local rib that applies to a node.
+            fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
+                type LocalRibQuery;
+                use fn resolver::local_rib;
+            }
+
+            /// Resolve a name upwards through the ribs.
+            fn resolve_upwards(name: Name, start_at: NodeId) -> Result<Option<NodeId>> {
+                type ResolveUpwardsQuery;
+                use fn resolver::resolve_upwards;
+            }
+
         }
     }
 
@@ -395,6 +428,8 @@ pub(super) mod queries {
                 fn hir_of() for HirOfQuery<'gcx>;
                 fn param_env() for ParamEnvQuery<'gcx>;
                 fn type_of() for TypeOfQuery<'gcx>;
+                fn local_rib() for LocalRibQuery<'gcx>;
+                fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
             }
         }
     }
