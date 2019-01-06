@@ -6,6 +6,7 @@ use crate::{
     crate_prelude::*,
     hir::HirNode,
     ty::{Type, TypeKind},
+    ParamEnv, ParamEnvSource,
 };
 use std::{collections::HashMap, ops::Deref};
 
@@ -39,8 +40,8 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 
 #[derive(Default)]
 struct Tables<'gcx> {
-    module_defs: HashMap<NodeId, Result<llhd::value::EntityRef>>,
-    module_types: HashMap<NodeId, llhd::Type>,
+    module_defs: HashMap<(NodeId, ParamEnv), Result<llhd::value::EntityRef>>,
+    module_types: HashMap<(NodeId, ParamEnv), llhd::Type>,
     interned_types: HashMap<Type<'gcx>, Result<llhd::Type>>,
 }
 
@@ -55,13 +56,23 @@ impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     /// Emit the code for a module and all its dependent modules.
     pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::value::EntityRef> {
-        if let Some(x) = self.tables.module_defs.get(&id) {
+        self.emit_module_with_env(id, self.default_param_env())
+    }
+
+    /// Emit the code for a module and all its dependent modules.
+    pub fn emit_module_with_env(
+        &mut self,
+        id: NodeId,
+        env: ParamEnv,
+    ) -> Result<llhd::value::EntityRef> {
+        if let Some(x) = self.tables.module_defs.get(&(id, env)) {
             return x.clone();
         }
         let hir = match self.hir_of(id)? {
             HirNode::Module(m) => m,
             _ => panic!("expected {:?} to be a module", id),
         };
+        debug!("emit module `{}` with {:?}", hir.name, env);
 
         // Determine entity type and port names.
         let mut inputs = Vec::new();
@@ -103,10 +114,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             port_id_to_name.insert(port_id, port.name);
         }
 
+        // Pick an entity name.
+        let mut entity_name: String = hir.name.value.into();
+        if env != self.default_param_env() {
+            entity_name.push_str(&format!(".param{}", env.0));
+        }
+
         // Create entity.
         let ty = llhd::entity_ty(input_tys, output_tys);
-        let mut ent = llhd::Entity::new(hir.name.value.into(), ty.clone());
-        self.tables.module_types.insert(id, ty);
+        let mut ent = llhd::Entity::new(entity_name, ty.clone());
+        self.tables.module_types.insert((id, env), ty);
 
         // Assign proper port names and collect ports into a lookup table.
         let mut port_map = HashMap::new();
@@ -121,7 +138,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Emit instantiations.
         for &inst_id in hir.insts {
-            trace!("emit code for instantiation {:?}", inst_id);
             let hir = match self.hir_of(inst_id)? {
                 HirNode::Inst(x) => x,
                 _ => unreachable!(),
@@ -130,7 +146,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::InstTarget(x) => x,
                 _ => unreachable!(),
             };
-            trace!("resolve target name `{}`", target_hir.name.value);
             let resolved = match self.gcx().find_module(target_hir.name.value) {
                 Some(id) => id,
                 None => {
@@ -144,8 +159,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     return Err(());
                 }
             };
-            let target = self.emit_module(resolved)?;
-            let ty = self.tables.module_types[&resolved].clone();
+            let env = self.param_env(ParamEnvSource::ModuleInst {
+                module: resolved,
+                pos: &target_hir.pos_params,
+                named: &target_hir.named_params,
+            })?;
+            debug!("{:?} = {:#?}", env, self.param_env_data(env));
+            let target = self.emit_module_with_env(resolved, env)?;
+            let ty = self.tables.module_types[&(resolved, env)].clone();
             let inst = llhd::Inst::new(
                 Some(hir.name.value.into()),
                 llhd::InstanceInst(ty, target.into(), vec![], vec![]),
@@ -154,7 +175,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         let result = Ok(self.into.add_entity(ent));
-        self.tables.module_defs.insert(id, result.clone());
+        self.tables.module_defs.insert((id, env), result.clone());
         result
     }
 

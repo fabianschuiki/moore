@@ -15,12 +15,16 @@ mod ast_map;
 mod codegen;
 mod context;
 pub mod hir;
+mod param_env;
 pub mod ty;
 mod typeck;
 
-pub use crate::codegen::CodeGenerator;
-pub use crate::context::*;
-pub use crate::syntax::*;
+pub use crate::{
+    codegen::CodeGenerator,
+    context::*,
+    param_env::{ParamEnv, ParamEnvData, ParamEnvSource},
+    syntax::*,
+};
 
 /// Items commonly used within the crate.
 mod crate_prelude {
@@ -34,6 +38,6 @@ mod crate_prelude {
         common::util::{HasDesc, HasSpan},
         common::NodeId,
         context::{BaseContext, Context, GlobalContext},
-        hir, ty, typeck,
+        hir, param_env, ty, typeck,
     };
 }

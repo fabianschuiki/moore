@@ -29,10 +29,10 @@ use crate::{
     crate_prelude::*,
     hir::{self, HirNode},
     ty::{Type, TypeKind},
+    ParamEnv, ParamEnvData, ParamEnvSource,
 };
 use llhd;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 
 /// The central data structure of the compiler. It stores references to various
 /// arenas and tables that store the results of the various computations that
@@ -50,6 +50,8 @@ pub struct GlobalContext<'gcx> {
     modules: RefCell<HashMap<Name, NodeId>>,
     /// A mapping from node ids to spans for diagnostics.
     node_id_to_span: RefCell<HashMap<NodeId, Span>>,
+    /// The tables.
+    tables: GlobalTables<'gcx>,
 }
 
 impl<'gcx> GlobalContext<'gcx> {
@@ -62,6 +64,7 @@ impl<'gcx> GlobalContext<'gcx> {
             ast_map: Default::default(),
             modules: Default::default(),
             node_id_to_span: Default::default(),
+            tables: Default::default(),
         }
     }
 
@@ -121,6 +124,7 @@ impl<'gcx> BaseContext<'gcx> for GlobalContext<'gcx> {
 pub struct GlobalArenas<'t> {
     ids: TypedArena<NodeId>,
     hir: hir::Arena<'t>,
+    param_envs: TypedArena<ParamEnvData>,
 }
 
 impl Default for GlobalArenas<'_> {
@@ -128,6 +132,7 @@ impl Default for GlobalArenas<'_> {
         GlobalArenas {
             ids: TypedArena::new(),
             hir: Default::default(),
+            param_envs: TypedArena::new(),
         }
     }
 }
@@ -146,6 +151,15 @@ impl<'t> GlobalArenas<'t> {
     {
         self.hir.alloc(hir)
     }
+}
+
+/// The lookup tables for a global context.
+///
+/// Use this struct whenever you need to keep track of some mapping.
+#[derive(Default)]
+pub struct GlobalTables<'t> {
+    interned_param_envs: RefCell<HashMap<&'t ParamEnvData, ParamEnv>>,
+    param_envs: RefCell<Vec<&'t ParamEnvData>>,
 }
 
 /// The fundamental compiler context.
@@ -168,6 +182,12 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     #[inline(always)]
     fn arena(&self) -> &'gcx GlobalArenas<'gcx> {
         self.gcx().arena
+    }
+
+    /// Access the tables.
+    #[inline(always)]
+    fn tables(&self) -> &GlobalTables<'gcx> {
+        &self.gcx().tables
     }
 
     /// Emit an internal compiler error that a node is not implemented.
@@ -252,6 +272,38 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         static STATIC: TypeKind<'static> = TypeKind::Bit;
         &STATIC
     }
+
+    /// Internalize a parameter environment.
+    fn intern_param_env(&self, env: ParamEnvData) -> ParamEnv {
+        if let Some(&x) = self.tables().interned_param_envs.borrow().get(&env) {
+            return x;
+        }
+        let data = self.arena().param_envs.alloc(env);
+        let id = {
+            let mut vec = self.tables().param_envs.borrow_mut();
+            let id = ParamEnv(vec.len() as u32);
+            vec.push(data);
+            id
+        };
+        self.tables()
+            .interned_param_envs
+            .borrow_mut()
+            .insert(data, id);
+        id
+    }
+
+    /// Get the [`ParamEnvData`] associated with a [`ParamEnv`].
+    fn param_env_data(&self, env: ParamEnv) -> &'gcx ParamEnvData {
+        self.tables().param_envs.borrow()[env.0 as usize]
+    }
+
+    /// Get the default parameter environment.
+    ///
+    /// This is useful for instantiations without any parameter assignment, e.g.
+    /// for the top-level module.
+    fn default_param_env(&self) -> ParamEnv {
+        self.intern_param_env(ParamEnvData::default())
+    }
 }
 
 /// The queries implemented by the compiler.
@@ -263,13 +315,19 @@ pub(super) mod queries {
         pub trait Context<'a>: BaseContext<'a> {
             /// Lower an AST node to HIR.
             fn hir_of(node_id: NodeId) -> Result<HirNode<'a>> {
-                type HirOf;
+                type HirOfQuery;
                 use fn hir::hir_of;
+            }
+
+            /// Compute the parameter bindings for an instantiation.
+            fn param_env(src: ParamEnvSource<'a>) -> Result<ParamEnv> {
+                type ParamEnvQuery;
+                use fn param_env::compute;
             }
 
             /// Determine the type of a node.
             fn type_of(node_id: NodeId) -> Result<Type<'a>> {
-                type TypeOf;
+                type TypeOfQuery;
                 use fn typeck::type_of;
             }
         }
@@ -279,8 +337,9 @@ pub(super) mod queries {
         /// The query result storage embedded in the global context.
         pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
             impl Context<'gcx> {
-                fn hir_of() for HirOf<'gcx>;
-                fn type_of() for TypeOf<'gcx>;
+                fn hir_of() for HirOfQuery<'gcx>;
+                fn param_env() for ParamEnvQuery<'gcx>;
+                fn type_of() for TypeOfQuery<'gcx>;
             }
         }
     }

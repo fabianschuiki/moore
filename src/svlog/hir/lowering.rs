@@ -26,11 +26,37 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
         }
         AstNode::InstTarget(ast) => {
+            let mut named_params = vec![];
+            let mut pos_params = vec![];
+            let mut is_pos = true;
+            for param in &ast.params {
+                if let Some(name) = param.name {
+                    is_pos = false;
+                    named_params.push((
+                        param.span,
+                        Spanned::new(name.name, name.span),
+                        NodeId::alloc(),
+                    ));
+                } else {
+                    if !is_pos {
+                        cx.emit(
+                            DiagBuilder2::warning("positional parameters must appear before named")
+                                .span(param.span)
+                                .add_note(format!(
+                                    "assuming this refers to argument #{}",
+                                    pos_params.len() + 1
+                                )),
+                        );
+                    }
+                    pos_params.push((param.span, NodeId::alloc()));
+                }
+            }
             let hir = hir::InstTarget {
                 id: node_id,
                 name: Spanned::new(ast.target.name, ast.target.span),
                 span: ast.span,
-                dummy: Default::default(),
+                pos_params,
+                named_params,
             };
             Ok(HirNode::InstTarget(cx.arena().alloc_hir(hir)))
         }

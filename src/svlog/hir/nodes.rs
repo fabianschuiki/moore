@@ -10,7 +10,7 @@ pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     Port(&'hir Port),
     Type(&'hir Type),
-    InstTarget(&'hir InstTarget<'hir>),
+    InstTarget(&'hir InstTarget),
     Inst(&'hir Inst<'hir>),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
@@ -104,14 +104,15 @@ impl HasDesc for Module<'_> {
 /// `foo #(...)` part. Multiple instantiations (`a()`, `b()`, `c()`) may share
 /// the same target.
 #[derive(Debug, PartialEq, Eq)]
-pub struct InstTarget<'hir> {
+pub struct InstTarget {
     pub id: NodeId,
     pub name: Spanned<Name>,
     pub span: Span,
-    pub dummy: std::marker::PhantomData<&'hir ()>,
+    pub pos_params: Vec<PosParam>,
+    pub named_params: Vec<NamedParam>,
 }
 
-impl HasSpan for InstTarget<'_> {
+impl HasSpan for InstTarget {
     fn span(&self) -> Span {
         self.span
     }
@@ -121,7 +122,7 @@ impl HasSpan for InstTarget<'_> {
     }
 }
 
-impl HasDesc for InstTarget<'_> {
+impl HasDesc for InstTarget {
     fn desc(&self) -> &'static str {
         "instantiation"
     }
@@ -130,6 +131,12 @@ impl HasDesc for InstTarget<'_> {
         format!("`{}` instantiation", self.name.value)
     }
 }
+
+/// A positional parameter.
+pub type PosParam = (Span, NodeId);
+
+/// A named parameter.
+pub type NamedParam = (Span, Spanned<Name>, NodeId);
 
 /// An instantiation.
 ///
