@@ -12,8 +12,9 @@ pub(crate) fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<
             hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
             hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
             hir::TypeKind::Named(name) => {
-                trace!("resolve type name {}", name);
-                cx.unimp_msg("name resolution of", hir)
+                let binding =
+                    cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
+                Ok(cx.mkty_named(name, binding))
             }
             _ => cx.unimp_msg("type analysis of", hir),
         },
