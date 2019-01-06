@@ -18,5 +18,13 @@ module C;
 	D #(bit) d2();
 endmodule
 
-module D #(type T);
+module D #(type T) (input T t);
 endmodule
+
+// Default types
+module E #(type T = bit) (input T t);
+endmodule
+
+//@ elab E
+//| entity @E (i1$ %t) () {
+//| }

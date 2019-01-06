@@ -18,6 +18,20 @@ pub(crate) fn type_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<
             }
             _ => cx.unimp_msg("type analysis of", hir),
         },
+        HirNode::TypeParam(param) => {
+            // TODO: check if the parameter has been overridden.
+            if let Some(default) = param.default {
+                return cx.type_of(default);
+            }
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{}` not assigned and has no default",
+                    param.name.value
+                ))
+                .span(param.human_span()),
+            );
+            Err(())
+        }
         _ => cx.unimp_msg("type analysis of", &hir),
     }
 }
