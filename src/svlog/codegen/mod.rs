@@ -104,10 +104,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Create entity.
-        let mut ent = llhd::Entity::new(
-            hir.name.value.into(),
-            llhd::entity_ty(input_tys, output_tys),
-        );
+        let ty = llhd::entity_ty(input_tys, output_tys);
+        let mut ent = llhd::Entity::new(hir.name.value.into(), ty.clone());
+        self.tables.module_types.insert(id, ty);
 
         // Assign proper port names and collect ports into a lookup table.
         let mut port_map = HashMap::new();
