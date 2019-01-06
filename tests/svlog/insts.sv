@@ -14,9 +14,9 @@ endmodule
 //| }
 
 module C;
-	D #(0) d1();
-	D #(1) d2();
+	D #(void) d1();
+	D #(bit) d2();
 endmodule
 
-module D #(x);
+module D #(type T);
 endmodule
