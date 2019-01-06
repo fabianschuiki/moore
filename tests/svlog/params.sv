@@ -7,7 +7,7 @@ module A1;
 		memory_size = word_size * 4096;
 endmodule
 
-// @elab A2
+//! @elab A2
 module A2;
 	A1 #(.word_size(1)) a1();
 	A1 #(.memory_size(16)) a2();
@@ -27,7 +27,7 @@ module B1;
 	parameter T p3 = 7;
 endmodule
 
-// @elab B2
+//! @elab B2
 module B2;
 	B1 b1();
 	B1 #(.p(2), .T(logic)) b2();
