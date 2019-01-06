@@ -12,10 +12,10 @@ pub enum HirNode<'hir> {
     Type(&'hir Type),
     InstTarget(&'hir InstTarget),
     Inst(&'hir Inst<'hir>),
+    TypeParam(&'hir TypeParam),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
-    // TypeParam(&'hir ast::ParamTypeDecl),
     // ValueParam(&'hir ast::ParamValueDecl),
     // VarDecl(&'hir ast::VarDecl, &'hir ast::VarDeclName),
 }
@@ -28,6 +28,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Type(x) => x.span(),
             HirNode::InstTarget(x) => x.span(),
             HirNode::Inst(x) => x.span(),
+            HirNode::TypeParam(x) => x.span(),
         }
     }
 
@@ -38,6 +39,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Type(x) => x.human_span(),
             HirNode::InstTarget(x) => x.human_span(),
             HirNode::Inst(x) => x.human_span(),
+            HirNode::TypeParam(x) => x.human_span(),
         }
     }
 }
@@ -50,6 +52,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Type(x) => x.desc(),
             HirNode::InstTarget(x) => x.desc(),
             HirNode::Inst(x) => x.desc(),
+            HirNode::TypeParam(x) => x.desc(),
         }
     }
 
@@ -60,6 +63,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Type(x) => x.desc_full(),
             HirNode::InstTarget(x) => x.desc_full(),
             HirNode::Inst(x) => x.desc_full(),
+            HirNode::TypeParam(x) => x.desc_full(),
         }
     }
 }
@@ -169,6 +173,36 @@ impl HasDesc for Inst<'_> {
 
     fn desc_full(&self) -> String {
         format!("instance `{}`", self.name.value)
+    }
+}
+
+/// A type parameter.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TypeParam {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    pub local: bool,
+    pub default: Option<NodeId>,
+}
+
+impl HasSpan for TypeParam {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for TypeParam {
+    fn desc(&self) -> &'static str {
+        "type parameter"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("type parameter `{}`", self.name.value)
     }
 }
 

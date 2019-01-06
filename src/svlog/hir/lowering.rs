@@ -71,6 +71,20 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Inst(cx.arena().alloc_hir(hir)))
         }
+        AstNode::TypeParam(param, decl) => {
+            let hir = hir::TypeParam {
+                id: node_id,
+                name: Spanned::new(decl.name.name, decl.name.span),
+                span: Span::union(param.span, decl.span),
+                local: param.local,
+                default: decl.ty.as_ref().map(|ty| {
+                    let id = cx.map_ast(AstNode::Type(ty));
+                    cx.set_parent(id, cx.parent_node_id(node_id).unwrap());
+                    id
+                }),
+            };
+            Ok(HirNode::TypeParam(cx.arena().alloc_hir(hir)))
+        }
         _ => cx.unimp_msg("lowering of", &ast),
     }
 }
