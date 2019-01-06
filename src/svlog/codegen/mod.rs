@@ -179,7 +179,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         result
     }
 
-    /// Map a type to an LLHD type.
+    /// Map a type to an LLHD type (interned).
     fn emit_type(&mut self, ty: Type<'gcx>) -> Result<llhd::Type> {
         if let Some(x) = self.tables.interned_types.get(ty) {
             x.clone()
@@ -190,10 +190,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
     }
 
-    fn emit_type_uninterned(&self, ty: Type<'gcx>) -> Result<llhd::Type> {
+    /// Map a type to an LLHD type.
+    fn emit_type_uninterned(&mut self, ty: Type<'gcx>) -> Result<llhd::Type> {
         Ok(match *ty {
             TypeKind::Void => llhd::void_ty(),
             TypeKind::Bit => llhd::int_ty(1),
+            TypeKind::Named(_, _, ty) => self.emit_type(ty)?,
             _ => unimplemented!(),
         })
     }
