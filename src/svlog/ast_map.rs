@@ -36,9 +36,14 @@ impl<'ast> AstMap<'ast> {
 /// match on the actual type that was provided.
 #[derive(Clone, Copy, Debug)]
 pub enum AstNode<'ast> {
+    /// A module.
     Module(&'ast ast::ModDecl),
+    /// A module or interface port.
     Port(&'ast ast::Port),
+    /// A type.
     Type(&'ast ast::Type),
+    /// An expression.
+    Expr(&'ast ast::Expr),
     /// The module/interface name and parameters of an instantiation.
     InstTarget(&'ast ast::Inst),
     /// An instance name and reference to its target.
@@ -57,6 +62,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Module(x) => x.span(),
             AstNode::Port(x) => x.span(),
             AstNode::Type(x) => x.span(),
+            AstNode::Expr(x) => x.span(),
             AstNode::InstTarget(x) => x.span(),
             AstNode::Inst(x, _) => x.span(),
             AstNode::TypeParam(x, _) => x.span(),
@@ -70,6 +76,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Module(x) => x.human_span(),
             AstNode::Port(x) => x.human_span(),
             AstNode::Type(x) => x.human_span(),
+            AstNode::Expr(x) => x.human_span(),
             AstNode::InstTarget(x) => x.human_span(),
             AstNode::Inst(x, _) => x.human_span(),
             AstNode::TypeParam(_, x) => x.human_span(),
@@ -85,6 +92,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Module(x) => x.desc(),
             AstNode::Port(x) => x.desc(),
             AstNode::Type(x) => x.desc(),
+            AstNode::Expr(x) => x.desc(),
             AstNode::InstTarget(x) => x.desc(),
             AstNode::Inst(x, _) => x.desc(),
             AstNode::TypeParam(_, x) => x.desc(),
@@ -98,6 +106,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Module(x) => x.desc_full(),
             AstNode::Port(x) => x.desc_full(),
             AstNode::Type(x) => x.desc_full(),
+            AstNode::Expr(x) => x.desc_full(),
             AstNode::InstTarget(x) => x.desc_full(),
             AstNode::Inst(x, _) => x.desc_full(),
             AstNode::TypeParam(_, x) => x.desc_full(),

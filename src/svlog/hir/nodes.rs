@@ -3,6 +3,7 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use crate::crate_prelude::*;
+use num::BigInt;
 
 /// A reference to an HIR node.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -10,6 +11,7 @@ pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     Port(&'hir Port),
     Type(&'hir Type),
+    Expr(&'hir Expr),
     InstTarget(&'hir InstTarget),
     Inst(&'hir Inst<'hir>),
     TypeParam(&'hir TypeParam),
@@ -26,6 +28,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Module(x) => x.span(),
             HirNode::Port(x) => x.span(),
             HirNode::Type(x) => x.span(),
+            HirNode::Expr(x) => x.span(),
             HirNode::InstTarget(x) => x.span(),
             HirNode::Inst(x) => x.span(),
             HirNode::TypeParam(x) => x.span(),
@@ -37,6 +40,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Module(x) => x.human_span(),
             HirNode::Port(x) => x.human_span(),
             HirNode::Type(x) => x.human_span(),
+            HirNode::Expr(x) => x.human_span(),
             HirNode::InstTarget(x) => x.human_span(),
             HirNode::Inst(x) => x.human_span(),
             HirNode::TypeParam(x) => x.human_span(),
@@ -50,6 +54,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Module(x) => x.desc(),
             HirNode::Port(x) => x.desc(),
             HirNode::Type(x) => x.desc(),
+            HirNode::Expr(x) => x.desc(),
             HirNode::InstTarget(x) => x.desc(),
             HirNode::Inst(x) => x.desc(),
             HirNode::TypeParam(x) => x.desc(),
@@ -61,6 +66,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Module(x) => x.desc_full(),
             HirNode::Port(x) => x.desc_full(),
             HirNode::Type(x) => x.desc_full(),
+            HirNode::Expr(x) => x.desc_full(),
             HirNode::InstTarget(x) => x.desc_full(),
             HirNode::Inst(x) => x.desc_full(),
             HirNode::TypeParam(x) => x.desc_full(),
@@ -256,7 +262,7 @@ pub struct Port {
     pub span: Span,
     pub dir: ast::PortDir,
     pub ty: NodeId,
-    // pub slices: Vec<PortSlice>,
+    pub default: Option<NodeId>,
 }
 
 impl HasSpan for Port {
@@ -388,4 +394,41 @@ pub enum BuiltinType {
     ShortInt,
     Int,
     LongInt,
+}
+
+/// An expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Expr {
+    pub id: NodeId,
+    pub span: Span,
+    pub kind: ExprKind,
+}
+
+impl HasSpan for Expr {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Expr {
+    fn desc(&self) -> &'static str {
+        match self.kind {
+            _ => "expression",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        #[allow(unreachable_patterns)]
+        match self.kind {
+            ExprKind::IntConst(ref k) => format!("integer `{}`", k),
+            _ => format!("{} `{}`", self.desc(), self.span().extract()),
+        }
+    }
+}
+
+/// The different forms an expression can take.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExprKind {
+    /// An integer constant literal.
+    IntConst(BigInt),
 }

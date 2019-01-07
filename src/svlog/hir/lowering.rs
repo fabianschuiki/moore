@@ -26,7 +26,12 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             lower_type(cx, node_id, ty)
         }
         AstNode::Type(ty) => lower_type(cx, node_id, ty),
-
+        AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr))
+            if cx.lowering_hint(node_id) == Some(Hint::Expr) =>
+        {
+            lower_expr(cx, node_id, expr)
+        }
+        AstNode::Expr(expr) => lower_expr(cx, node_id, expr),
         AstNode::InstTarget(ast) => {
             let mut named_params = vec![];
             let mut pos_params = vec![];
@@ -173,23 +178,27 @@ fn lower_port<'gcx>(
     node_id: NodeId,
     ast: &'gcx ast::Port,
 ) -> Result<HirNode<'gcx>> {
+    let parent = cx.parent_node_id(node_id).unwrap();
     let hir = match *ast {
         ast::Port::Named {
             span,
             name,
             dir,
             ref ty,
+            ref expr,
             ..
         } => hir::Port {
             id: node_id,
             name: Spanned::new(name.name, name.span),
             span: span,
             dir: dir.expect("port missing direction"),
-            ty: cx.map_ast(AstNode::Type(ty)),
+            ty: cx.map_ast_with_parent(AstNode::Type(ty), parent),
+            default: expr
+                .as_ref()
+                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent)),
         },
         _ => return cx.unimp(ast),
     };
-    cx.set_parent(hir.ty, cx.parent_node_id(node_id).unwrap());
     Ok(HirNode::Port(cx.arena().alloc_hir(hir)))
 }
 
@@ -215,4 +224,32 @@ fn lower_type<'gcx>(
         kind: kind,
     };
     Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
+}
+
+fn lower_expr<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    expr: &'gcx ast::Expr,
+) -> Result<HirNode<'gcx>> {
+    use crate::syntax::token::Lit;
+    let kind = match expr.data {
+        ast::LiteralExpr(Lit::UnsignedInteger(v)) => match v.as_str().parse() {
+            Ok(v) => hir::ExprKind::IntConst(v),
+            Err(e) => {
+                cx.emit(
+                    DiagBuilder2::error(format!("`{}` is not a valid integer literal", v))
+                        .span(expr.span)
+                        .add_note(format!("{}", e)),
+                );
+                return Err(());
+            }
+        },
+        _ => return cx.unimp_msg("lowering of", expr),
+    };
+    let hir = hir::Expr {
+        id: node_id,
+        span: expr.span,
+        kind: kind,
+    };
+    Ok(HirNode::Expr(cx.arena().alloc_hir(hir)))
 }

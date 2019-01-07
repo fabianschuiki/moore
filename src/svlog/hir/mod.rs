@@ -18,6 +18,7 @@ make_arenas!(
         modules: Module<'hir>,
         ports: Port,
         types: Type,
+        exprs: Expr,
         inst_target: InstTarget,
         insts: Inst<'hir>,
         type_params: TypeParam,
