@@ -353,6 +353,10 @@ impl HasDesc for Type {
             TypeKind::Builtin(BuiltinType::Void) => "void type",
             TypeKind::Builtin(BuiltinType::Bit) => "bit type",
             TypeKind::Builtin(BuiltinType::Logic) => "logic type",
+            TypeKind::Builtin(BuiltinType::Byte) => "byte type",
+            TypeKind::Builtin(BuiltinType::ShortInt) => "short int type",
+            TypeKind::Builtin(BuiltinType::Int) => "int type",
+            TypeKind::Builtin(BuiltinType::LongInt) => "long int type",
             _ => "type",
         }
     }
@@ -380,4 +384,8 @@ pub enum BuiltinType {
     Void,
     Bit,
     Logic,
+    Byte,
+    ShortInt,
+    Int,
+    LongInt,
 }

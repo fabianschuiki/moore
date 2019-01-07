@@ -28,6 +28,7 @@ pub(crate) fn map_to_type<'gcx>(
         HirNode::Type(hir) => match hir.kind {
             hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
             hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
+            hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_logic()),
             hir::TypeKind::Named(name) => {
                 let binding =
                     cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;

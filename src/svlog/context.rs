@@ -315,6 +315,12 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         &STATIC
     }
 
+    /// Make a logic type.
+    fn mkty_logic(&self) -> Type<'gcx> {
+        static STATIC: TypeKind<'static> = TypeKind::Logic;
+        &STATIC
+    }
+
     /// Make a named type.
     fn mkty_named(&self, name: Spanned<Name>, binding: NodeEnvId) -> Type<'gcx> {
         self.intern_type(TypeKind::Named(

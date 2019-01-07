@@ -197,6 +197,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         Ok(match *ty {
             TypeKind::Void => llhd::void_ty(),
             TypeKind::Bit => llhd::int_ty(1),
+            TypeKind::Logic => llhd::int_ty(1),
             TypeKind::Named(_, _, ty) => self.emit_type(ty)?,
             _ => unimplemented!(),
         })

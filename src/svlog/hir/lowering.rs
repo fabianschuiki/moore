@@ -202,6 +202,10 @@ fn lower_type<'gcx>(
         ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
         ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
         ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
+        ast::ByteType => hir::TypeKind::Builtin(hir::BuiltinType::Byte),
+        ast::ShortIntType => hir::TypeKind::Builtin(hir::BuiltinType::ShortInt),
+        ast::IntType => hir::TypeKind::Builtin(hir::BuiltinType::Int),
+        ast::LongIntType => hir::TypeKind::Builtin(hir::BuiltinType::LongInt),
         ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
         _ => return cx.unimp_msg("lowering of", ty),
     };
