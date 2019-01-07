@@ -31,13 +31,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             let mut pos_params = vec![];
             let mut is_pos = true;
             for param in &ast.params {
+                let value_id = cx.map_ast_with_parent(AstNode::TypeOrExpr(&param.expr), node_id);
                 if let Some(name) = param.name {
                     is_pos = false;
-                    named_params.push((
-                        param.span,
-                        Spanned::new(name.name, name.span),
-                        NodeId::alloc(),
-                    ));
+                    named_params.push((param.span, Spanned::new(name.name, name.span), value_id));
                 } else {
                     if !is_pos {
                         cx.emit(
@@ -49,7 +46,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                                 )),
                         );
                     }
-                    pos_params.push((param.span, NodeId::alloc()));
+                    pos_params.push((param.span, value_id));
                 }
             }
             let hir = hir::InstTarget {
