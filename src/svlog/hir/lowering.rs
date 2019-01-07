@@ -4,6 +4,15 @@
 
 use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
 
+/// A hint about how a node should be lowered to HIR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Hint {
+    /// Lower as type.
+    Type,
+    /// Lower as expression.
+    Expr,
+}
+
 pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<HirNode<'gcx>> {
     let ast = cx.ast_of(node_id)?;
 

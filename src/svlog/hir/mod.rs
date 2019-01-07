@@ -9,6 +9,7 @@ mod lowering;
 mod nodes;
 
 pub(crate) use self::lowering::hir_of;
+pub use self::lowering::Hint;
 pub use self::nodes::*;
 
 make_arenas!(

@@ -175,6 +175,7 @@ pub struct GlobalTables<'t> {
     param_env_contexts: RefCell<HashMap<ParamEnv, BTreeSet<NodeId>>>,
     node_id_to_parent_node_id: RefCell<HashMap<NodeId, NodeId>>,
     interned_types: RefCell<HashSet<Type<'t>>>,
+    lowering_hints: RefCell<HashMap<NodeId, hir::Hint>>,
 }
 
 /// The fundamental compiler context.
@@ -423,6 +424,19 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
                 Err(())
             }
         }
+    }
+
+    /// Set a lowering hint on a node.
+    fn set_lowering_hint(&self, node_id: NodeId, hint: hir::Hint) {
+        self.tables()
+            .lowering_hints
+            .borrow_mut()
+            .insert(node_id, hint);
+    }
+
+    /// Get a lowering hint on a node.
+    fn lowering_hint(&self, node_id: NodeId) -> Option<hir::Hint> {
+        self.tables().lowering_hints.borrow().get(&node_id).cloned()
     }
 }
 

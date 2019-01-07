@@ -141,8 +141,14 @@ pub(crate) fn compute<'gcx>(
             let mut values = vec![];
             for (param_id, assign_id) in param_iter {
                 match cx.ast_of(param_id)? {
-                    AstNode::TypeParam(..) => types.push((param_id, assign_id)),
-                    AstNode::ValueParam(..) => values.push((param_id, assign_id)),
+                    AstNode::TypeParam(..) => {
+                        cx.set_lowering_hint(assign_id.0, hir::Hint::Type);
+                        types.push((param_id, assign_id))
+                    }
+                    AstNode::ValueParam(..) => {
+                        cx.set_lowering_hint(assign_id.0, hir::Hint::Expr);
+                        values.push((param_id, assign_id))
+                    }
                     _ => unreachable!(),
                 }
             }
