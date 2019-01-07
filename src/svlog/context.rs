@@ -311,13 +311,13 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
 
     /// Make a bit type.
     fn mkty_bit(&self) -> Type<'gcx> {
-        static STATIC: TypeKind<'static> = TypeKind::Bit;
+        static STATIC: TypeKind<'static> = TypeKind::Bit(ty::Domain::TwoValued);
         &STATIC
     }
 
     /// Make a logic type.
     fn mkty_logic(&self) -> Type<'gcx> {
-        static STATIC: TypeKind<'static> = TypeKind::Logic;
+        static STATIC: TypeKind<'static> = TypeKind::Bit(ty::Domain::FourValued);
         &STATIC
     }
 
@@ -330,6 +330,16 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
                 .map_to_type(binding.0, binding.1)
                 .unwrap_or(self.mkty_void()),
         ))
+    }
+
+    /// Make a 2-value integer type.
+    fn mkty_int(&self, width: usize) -> Type<'gcx> {
+        self.intern_type(TypeKind::Int(width, ty::Domain::TwoValued))
+    }
+
+    /// Make a 4-value integer type.
+    fn mkty_integer(&self, width: usize) -> Type<'gcx> {
+        self.intern_type(TypeKind::Int(width, ty::Domain::FourValued))
     }
 
     /// Internalize a parameter environment.

@@ -10,10 +10,12 @@ pub type Type<'t> = &'t TypeKind<'t>;
 /// Type data.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind<'t> {
+    /// The `void` type.
     Void,
-    Bit,
-    Logic,
-    Reg,
+    /// A single bit type.
+    Bit(Domain),
+    /// An integer type.
+    Int(usize, Domain),
     /// A named type.
     ///
     /// The first field represents how the type was originally named by the
@@ -30,4 +32,13 @@ impl<'t> TypeKind<'t> {
             _ => false,
         }
     }
+}
+
+/// The number of values each bit of a type can assume.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum Domain {
+    /// Two-valued types such as `bit` or `int`.
+    TwoValued,
+    /// Four-valued types such as `logic` or `integer`.
+    FourValued,
 }

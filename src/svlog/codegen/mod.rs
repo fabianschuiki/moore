@@ -207,10 +207,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Map a type to an LLHD type.
     fn emit_type_uninterned(&mut self, ty: Type<'gcx>) -> Result<llhd::Type> {
+        #[allow(unreachable_patterns)]
         Ok(match *ty {
             TypeKind::Void => llhd::void_ty(),
-            TypeKind::Bit => llhd::int_ty(1),
-            TypeKind::Logic => llhd::int_ty(1),
+            TypeKind::Bit(_) => llhd::int_ty(1),
+            TypeKind::Int(width, _) => llhd::int_ty(width),
             TypeKind::Named(_, _, ty) => self.emit_type(ty)?,
             _ => unimplemented!(),
         })
