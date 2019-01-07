@@ -40,8 +40,8 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 
 #[derive(Default)]
 struct Tables<'gcx> {
-    module_defs: HashMap<(NodeId, ParamEnv), Result<llhd::value::EntityRef>>,
-    module_types: HashMap<(NodeId, ParamEnv), llhd::Type>,
+    module_defs: HashMap<NodeEnvId, Result<llhd::value::EntityRef>>,
+    module_types: HashMap<NodeEnvId, llhd::Type>,
     interned_types: HashMap<Type<'gcx>, Result<llhd::Type>>,
 }
 
@@ -159,15 +159,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     return Err(());
                 }
             };
-            let env = self.param_env(ParamEnvSource::ModuleInst {
+            let inst_env = self.param_env(ParamEnvSource::ModuleInst {
                 module: resolved,
                 inst: inst_id,
+                env,
                 pos: &target_hir.pos_params,
                 named: &target_hir.named_params,
             })?;
-            debug!("{:?} = {:#?}", env, self.param_env_data(env));
-            let target = self.emit_module_with_env(resolved, env)?;
-            let ty = self.tables.module_types[&(resolved, env)].clone();
+            debug!("{:?} = {:#?}", inst_env, self.param_env_data(inst_env));
+            let target = self.emit_module_with_env(resolved, inst_env)?;
+            let ty = self.tables.module_types[&(resolved, inst_env)].clone();
             let inst = llhd::Inst::new(
                 Some(hir.name.value.into()),
                 llhd::InstanceInst(ty, target.into(), vec![], vec![]),

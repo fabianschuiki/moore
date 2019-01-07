@@ -36,7 +36,10 @@ pub(crate) fn map_to_type<'gcx>(
             _ => cx.unimp_msg("type analysis of", hir),
         },
         HirNode::TypeParam(param) => {
-            // TODO: check if the parameter has been overridden.
+            let env_data = cx.param_env_data(env);
+            if let Some(assigned_id) = env_data.find_type(node_id) {
+                return cx.map_to_type(assigned_id.0, assigned_id.1);
+            }
             if let Some(default) = param.default {
                 return cx.map_to_type(default, env);
             }

@@ -21,8 +21,26 @@ pub type NodeEnvId = (NodeId, ParamEnv);
 /// A parameter environment.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct ParamEnvData {
-    values: Vec<(NodeId, NodeId)>,
-    types: Vec<(NodeId, NodeId)>,
+    values: Vec<(NodeId, NodeEnvId)>,
+    types: Vec<(NodeId, NodeEnvId)>,
+}
+
+impl ParamEnvData {
+    /// Find the value assigned to a node.
+    pub fn find_value(&self, node_id: NodeId) -> Option<NodeEnvId> {
+        self.values
+            .iter()
+            .find(|&&(id, _)| id == node_id)
+            .map(|&(_, id)| id)
+    }
+
+    /// Find the type assigned to a node.
+    pub fn find_type(&self, node_id: NodeId) -> Option<NodeEnvId> {
+        self.types
+            .iter()
+            .find(|&&(id, _)| id == node_id)
+            .map(|&(_, id)| id)
+    }
 }
 
 /// A location that implies a parameter environment.
@@ -31,6 +49,7 @@ pub enum ParamEnvSource<'hir> {
     ModuleInst {
         module: NodeId,
         inst: NodeId,
+        env: ParamEnv,
         pos: &'hir [PosParam],
         named: &'hir [NamedParam],
     },
@@ -44,6 +63,7 @@ pub(crate) fn compute<'gcx>(
         ParamEnvSource::ModuleInst {
             module,
             inst,
+            env,
             pos,
             named,
         } => {
@@ -59,7 +79,7 @@ pub(crate) fn compute<'gcx>(
                 .enumerate()
                 .map(
                     |(index, &(span, assign_id))| match module.params.get(index) {
-                        Some(&param_id) => Ok((param_id, assign_id)),
+                        Some(&param_id) => Ok((param_id, (assign_id, env))),
                         None => {
                             cx.emit(
                                 DiagBuilder2::error(format!(
@@ -88,7 +108,7 @@ pub(crate) fn compute<'gcx>(
                         .iter()
                         .find(|&(param_name, _)| *param_name == name.value)
                     {
-                        Some(&(_, param_id)) => Ok((param_id, assign_id)),
+                        Some(&(_, param_id)) => Ok((param_id, (assign_id, env))),
                         None => {
                             cx.emit(
                                 DiagBuilder2::error(format!(
