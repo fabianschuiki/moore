@@ -121,7 +121,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Create entity.
-        let ty = llhd::entity_ty(input_tys, output_tys);
+        let ty = llhd::entity_ty(input_tys, output_tys.clone());
         let mut ent = llhd::Entity::new(entity_name, ty.clone());
         self.tables.module_types.insert((id, env), ty);
 
@@ -131,7 +131,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ent.inputs_mut()[index].set_name(port_id_to_name[&port_id].value);
             port_map.insert(port_id, ent.input(index));
         }
-        for (index, port_id) in outputs.into_iter().enumerate() {
+        for (index, &port_id) in outputs.iter().enumerate() {
             ent.outputs_mut()[index].set_name(port_id_to_name[&port_id].value);
             port_map.insert(port_id, ent.output(index));
         }
@@ -172,6 +172,19 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let inst = llhd::Inst::new(
                 Some(hir.name.value.into()),
                 llhd::InstanceInst(ty, target.into(), vec![], vec![]),
+            );
+            ent.add_inst(inst, llhd::InstPosition::End);
+        }
+
+        // Assign default values to undriven output ports.
+        for (index, &port_id) in outputs.iter().enumerate() {
+            let inst = llhd::Inst::new(
+                None,
+                llhd::DriveInst(
+                    port_map[&port_id].into(),
+                    llhd::const_zero(output_tys[index].as_signal()).into(),
+                    None,
+                ),
             );
             ent.add_inst(inst, llhd::InstPosition::End);
         }
