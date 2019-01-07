@@ -20,21 +20,13 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
     match ast {
         AstNode::Module(m) => lower_module(cx, node_id, m),
         AstNode::Port(p) => lower_port(cx, node_id, p),
-        AstNode::Type(ty) => {
-            let kind = match ty.data {
-                ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
-                ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
-                ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
-                ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
-                _ => return cx.unimp_msg("lowering of", ty),
-            };
-            let hir = hir::Type {
-                id: node_id,
-                span: ty.span,
-                kind: kind,
-            };
-            Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
+        AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty))
+            if cx.lowering_hint(node_id) == Some(Hint::Type) =>
+        {
+            lower_type(cx, node_id, ty)
         }
+        AstNode::Type(ty) => lower_type(cx, node_id, ty),
+
         AstNode::InstTarget(ast) => {
             let mut named_params = vec![];
             let mut pos_params = vec![];
@@ -199,4 +191,24 @@ fn lower_port<'gcx>(
     };
     cx.set_parent(hir.ty, cx.parent_node_id(node_id).unwrap());
     Ok(HirNode::Port(cx.arena().alloc_hir(hir)))
+}
+
+fn lower_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    ty: &'gcx ast::Type,
+) -> Result<HirNode<'gcx>> {
+    let kind = match ty.data {
+        ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
+        ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
+        ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
+        ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
+        _ => return cx.unimp_msg("lowering of", ty),
+    };
+    let hir = hir::Type {
+        id: node_id,
+        span: ty.span,
+        kind: kind,
+    };
+    Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
 }
