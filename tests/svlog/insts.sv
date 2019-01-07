@@ -66,17 +66,17 @@ module G #(type T, type R = T) (input T t, input R r);
 endmodule
 
 //@ elab F
-//| entity @G.param1 (i1$ %t, i1$ %r) () {
+//| entity @G.param3 (i1$ %t, i1$ %r) () {
 //| }
 //|
-//| entity @G.param2 (void$ %t, void$ %r) () {
+//| entity @G.param4 (void$ %t, void$ %r) () {
 //| }
 //|
-//| entity @G.param3 (void$ %t, i1$ %r) () {
+//| entity @G.param5 (void$ %t, i1$ %r) () {
 //| }
 //|
 //| entity @F () () {
-//|     inst @G.param1 () ()
-//|     inst @G.param2 () ()
 //|     inst @G.param3 () ()
+//|     inst @G.param4 () ()
+//|     inst @G.param5 () ()
 //| }
