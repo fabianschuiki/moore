@@ -261,16 +261,32 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         id
     }
 
+    /// Call [`map_ast`] and [`set_parent`].
+    fn map_ast_with_parent(&self, ast: AstNode<'gcx>, parent: NodeId) -> NodeId {
+        let id = self.map_ast(ast);
+        self.set_parent(id, parent);
+        id
+    }
+
     /// Obtain the AST node associated with a node id.
     fn ast_of(&self, node_id: NodeId) -> Result<AstNode<'gcx>> {
         match self.gcx().ast_map.get(node_id) {
             Some(node) => Ok(node),
             None => {
-                let span = self.gcx().node_id_to_span.borrow()[&node_id];
-                self.emit(
-                    DiagBuilder2::bug(format!("no ast node for `{}` in the map", span.extract()))
+                if let Some(&span) = self.gcx().node_id_to_span.borrow().get(&node_id) {
+                    self.emit(
+                        DiagBuilder2::bug(format!(
+                            "no ast node for `{}` in the map",
+                            span.extract()
+                        ))
                         .span(span),
-                );
+                    );
+                } else {
+                    self.emit(DiagBuilder2::bug(format!(
+                        "no ast node for {:?} in the map",
+                        node_id
+                    )));
+                }
                 Err(())
             }
         }
