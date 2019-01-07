@@ -47,6 +47,8 @@ pub enum AstNode<'ast> {
     TypeParam(&'ast ast::ParamDecl, &'ast ast::ParamTypeDecl),
     /// A value parameter.
     ValueParam(&'ast ast::ParamDecl, &'ast ast::ParamValueDecl),
+    /// A type or expression.
+    TypeOrExpr(&'ast ast::TypeOrExpr),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -59,6 +61,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Inst(x, _) => x.span(),
             AstNode::TypeParam(x, _) => x.span(),
             AstNode::ValueParam(x, _) => x.span(),
+            AstNode::TypeOrExpr(x) => x.span(),
         }
     }
 
@@ -71,6 +74,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Inst(x, _) => x.human_span(),
             AstNode::TypeParam(_, x) => x.human_span(),
             AstNode::ValueParam(_, x) => x.human_span(),
+            AstNode::TypeOrExpr(x) => x.human_span(),
         }
     }
 }
@@ -85,6 +89,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Inst(x, _) => x.desc(),
             AstNode::TypeParam(_, x) => x.desc(),
             AstNode::ValueParam(_, x) => x.desc(),
+            AstNode::TypeOrExpr(x) => x.desc(),
         }
     }
 
@@ -97,6 +102,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Inst(x, _) => x.desc_full(),
             AstNode::TypeParam(_, x) => x.desc_full(),
             AstNode::ValueParam(_, x) => x.desc_full(),
+            AstNode::TypeOrExpr(x) => x.desc_full(),
         }
     }
 }

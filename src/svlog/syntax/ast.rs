@@ -668,6 +668,18 @@ pub struct Expr {
     pub data: ExprData,
 }
 
+impl HasSpan for Expr {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Expr {
+    fn desc(&self) -> &'static str {
+        "expression"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ExprData {
     DummyExpr,
@@ -733,6 +745,38 @@ pub enum ExprData {
 pub enum TypeOrExpr {
     Type(Type),
     Expr(Expr),
+}
+
+impl HasSpan for TypeOrExpr {
+    fn span(&self) -> Span {
+        match *self {
+            TypeOrExpr::Type(ref x) => x.span(),
+            TypeOrExpr::Expr(ref x) => x.span(),
+        }
+    }
+
+    fn human_span(&self) -> Span {
+        match *self {
+            TypeOrExpr::Type(ref x) => x.human_span(),
+            TypeOrExpr::Expr(ref x) => x.human_span(),
+        }
+    }
+}
+
+impl HasDesc for TypeOrExpr {
+    fn desc(&self) -> &'static str {
+        match *self {
+            TypeOrExpr::Type(ref x) => x.desc(),
+            TypeOrExpr::Expr(ref x) => x.desc(),
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            TypeOrExpr::Type(ref x) => x.desc_full(),
+            TypeOrExpr::Expr(ref x) => x.desc_full(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
