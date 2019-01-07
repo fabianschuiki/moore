@@ -161,6 +161,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             };
             let env = self.param_env(ParamEnvSource::ModuleInst {
                 module: resolved,
+                inst: inst_id,
                 pos: &target_hir.pos_params,
                 named: &target_hir.named_params,
             })?;

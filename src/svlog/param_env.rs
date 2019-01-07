@@ -30,6 +30,7 @@ pub struct ParamEnvData {
 pub enum ParamEnvSource<'hir> {
     ModuleInst {
         module: NodeId,
+        inst: NodeId,
         pos: &'hir [PosParam],
         named: &'hir [NamedParam],
     },
@@ -40,7 +41,12 @@ pub(crate) fn compute<'gcx>(
     src: ParamEnvSource<'gcx>,
 ) -> Result<ParamEnv> {
     match src {
-        ParamEnvSource::ModuleInst { module, pos, named } => {
+        ParamEnvSource::ModuleInst {
+            module,
+            inst,
+            pos,
+            named,
+        } => {
             let module = match cx.hir_of(module)? {
                 HirNode::Module(m) => m,
                 _ => panic!("expected module"),
@@ -121,7 +127,9 @@ pub(crate) fn compute<'gcx>(
                 }
             }
 
-            Ok(cx.intern_param_env(ParamEnvData { types, values }))
+            let env = cx.intern_param_env(ParamEnvData { types, values });
+            cx.add_param_env_context(env, inst);
+            Ok(env)
         }
     }
 }

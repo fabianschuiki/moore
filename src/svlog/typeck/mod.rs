@@ -40,13 +40,18 @@ pub(crate) fn map_to_type<'gcx>(
             if let Some(default) = param.default {
                 return cx.map_to_type(default, env);
             }
-            cx.emit(
-                DiagBuilder2::error(format!(
-                    "`{}` not assigned and has no default",
-                    param.name.value
-                ))
-                .span(param.human_span()),
-            );
+            let mut d = DiagBuilder2::error(format!(
+                "{} not assigned and has no default",
+                param.desc_full(),
+            ));
+            let contexts = cx.param_env_contexts(env);
+            for &context in &contexts {
+                d = d.span(cx.span(context));
+            }
+            if contexts.is_empty() {
+                d = d.span(param.human_span());
+            }
+            cx.emit(d);
             Err(())
         }
         _ => cx.unimp_msg("conversion to type of", &hir),

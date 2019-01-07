@@ -34,7 +34,7 @@ use crate::{
 use llhd;
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
 };
 
 /// The central data structure of the compiler. It stores references to various
@@ -172,6 +172,7 @@ impl<'t> GlobalArenas<'t> {
 pub struct GlobalTables<'t> {
     interned_param_envs: RefCell<HashMap<&'t ParamEnvData, ParamEnv>>,
     param_envs: RefCell<Vec<&'t ParamEnvData>>,
+    param_env_contexts: RefCell<HashMap<ParamEnv, BTreeSet<NodeId>>>,
     node_id_to_parent_node_id: RefCell<HashMap<NodeId, NodeId>>,
     interned_types: RefCell<HashSet<Type<'t>>>,
 }
@@ -338,6 +339,32 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     /// for the top-level module.
     fn default_param_env(&self) -> ParamEnv {
         self.intern_param_env(ParamEnvData::default())
+    }
+
+    /// Associate a context with a param env.
+    ///
+    /// A context in this sense is the node that the param env relates to.
+    /// Usually this is the node that actually generated the param env, e.g. a
+    /// module instantiation.
+    fn add_param_env_context(&self, env: ParamEnv, context: NodeId) {
+        self.tables()
+            .param_env_contexts
+            .borrow_mut()
+            .entry(env)
+            .or_insert_with(Default::default)
+            .insert(context);
+    }
+
+    /// Get the contexts associated with a parameter environment.
+    ///
+    /// Returns what has previously been added with `add_param_env_context`.
+    fn param_env_contexts(&self, env: ParamEnv) -> Vec<NodeId> {
+        self.tables()
+            .param_env_contexts
+            .borrow()
+            .get(&env)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_else(Default::default)
     }
 
     /// Associate a parent with a node.
