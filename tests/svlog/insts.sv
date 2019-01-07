@@ -17,6 +17,7 @@ endmodule
 //|     inst @B () ()
 //| }
 
+
 //////////////////////////////////
 ///  Type parameter overrides  ///
 //////////////////////////////////
@@ -41,6 +42,7 @@ endmodule
 //|     inst @D.param2 () ()
 //| }
 
+
 //////////////////////////////////////
 ///  Default type parameter types  ///
 //////////////////////////////////////
@@ -51,6 +53,7 @@ endmodule
 //@ elab E
 //| entity @E (i1$ %t) () {
 //| }
+
 
 //////////////////////////////////////////////
 ///  Dependencies between type parameters  ///
@@ -80,3 +83,16 @@ endmodule
 //|     inst @G.param4 () ()
 //|     inst @G.param5 () ()
 //| }
+
+
+//////////////////////////
+///  Value parameters  ///
+//////////////////////////
+
+module H;
+    I i1();
+    I #(1) i2();
+endmodule
+
+module I #(K = 0) (output bit k = K);
+endmodule
