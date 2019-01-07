@@ -16,6 +16,7 @@ moore-svlog-syntax = { path = "syntax", version = "0.1" }
 llhd = "0.1"
 log = "0.4"
 salsa = { git = "https://github.com/fabianschuiki/salsa", branch = "database-lifetimes" }
+num = "0.2"
 
 [dev-dependencies]
 simple_logger = "1"
