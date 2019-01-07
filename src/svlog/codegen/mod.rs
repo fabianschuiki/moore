@@ -85,7 +85,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::Port(p) => p,
                 _ => unreachable!(),
             };
-            let ty = self.type_of(port_id)?;
+            let ty = self.type_of(port_id, env)?;
             debug!(
                 "port {}.{} has type {:?}",
                 hir.name.value, port.name.value, ty

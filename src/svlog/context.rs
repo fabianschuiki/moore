@@ -298,11 +298,13 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     }
 
     /// Make a named type.
-    fn mkty_named(&self, name: Spanned<Name>, binding: NodeId) -> Type<'gcx> {
+    fn mkty_named(&self, name: Spanned<Name>, binding: NodeEnvId) -> Type<'gcx> {
         self.intern_type(TypeKind::Named(
             name,
-            binding,
-            self.gcx().type_of(binding).unwrap_or(self.mkty_void()),
+            binding.0,
+            self.gcx()
+                .map_to_type(binding.0, binding.1)
+                .unwrap_or(self.mkty_void()),
         ))
     }
 
@@ -401,9 +403,15 @@ pub(super) mod queries {
             }
 
             /// Determine the type of a node.
-            fn type_of(node_id: NodeId) -> Result<Type<'a>> {
+            fn type_of(node_id: NodeId, env: ParamEnv) -> Result<Type<'a>> {
                 type TypeOfQuery;
                 use fn typeck::type_of;
+            }
+
+            /// Convert a node to a type.
+            fn map_to_type(node_id: NodeId, env: ParamEnv) -> Result<Type<'a>> {
+                type MapToTypeQuery;
+                use fn typeck::map_to_type;
             }
 
             /// Determine the local rib that applies to a node.
@@ -428,6 +436,7 @@ pub(super) mod queries {
                 fn hir_of() for HirOfQuery<'gcx>;
                 fn param_env() for ParamEnvQuery<'gcx>;
                 fn type_of() for TypeOfQuery<'gcx>;
+                fn map_to_type() for MapToTypeQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
             }

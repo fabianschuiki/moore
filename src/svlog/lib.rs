@@ -23,7 +23,7 @@ mod typeck;
 pub use crate::{
     codegen::CodeGenerator,
     context::*,
-    param_env::{ParamEnv, ParamEnvData, ParamEnvSource},
+    param_env::{NodeEnvId, ParamEnv, ParamEnvData, ParamEnvSource},
     resolver::{Rib, RibKind},
     syntax::*,
 };
@@ -42,6 +42,6 @@ mod crate_prelude {
         context::{BaseContext, Context, GlobalContext},
         hir, param_env,
         resolver::{self, Rib, RibKind},
-        ty, typeck,
+        ty, typeck, NodeEnvId,
     };
 }

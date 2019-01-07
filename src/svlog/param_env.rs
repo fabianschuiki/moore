@@ -15,6 +15,9 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ParamEnv(pub(crate) u32);
 
+/// A node id with corresponding parameter environment.
+pub type NodeEnvId = (NodeId, ParamEnv);
+
 /// A parameter environment.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct ParamEnvData {
