@@ -29,7 +29,7 @@ fn empty_module() {
 fn module_with_trivial_ports() {
     assert_eq!(
         compile_module("foo", "module foo (input bit a, output bit b); endmodule").trim(),
-        "entity @foo (i1$ %a) (i1$ %b) {\n}"
+        "entity @foo (i1$ %a) (i1$ %b) {\n    drv %b 0\n}"
     );
 }
 
