@@ -178,6 +178,25 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Assign default values to undriven output ports.
         for (index, &port_id) in outputs.iter().enumerate() {
+            let hir = match self.hir_of(port_id)? {
+                HirNode::Port(p) => p,
+                _ => unreachable!(),
+            };
+            if let Some(default) = hir.default {
+                // TODO: determine the constant value of the port right hand side here
+                trace!(
+                    "determine default value for {:?} = {:#?}",
+                    default,
+                    self.ast_of(default)?
+                );
+                let ty = self.type_of(default, env)?;
+                trace!("{} default expr type = {:?}", hir.desc_full(), ty);
+                // TODO: compute the constant value (`constant_value_of` query)
+            }
+            // TODO: compute the default value to replace the above
+            // (`default_value_of` query), taking into account the port's
+            // default assignment and, if that is missing, the type's default
+            // value.
             let inst = llhd::Inst::new(
                 None,
                 llhd::DriveInst(
