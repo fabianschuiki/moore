@@ -29,6 +29,7 @@ use crate::{
     crate_prelude::*,
     hir::{self, HirNode},
     ty::{Type, TypeKind},
+    value::{Value, ValueData},
     ParamEnv, ParamEnvData, ParamEnvSource,
 };
 use llhd;
@@ -130,6 +131,7 @@ pub struct GlobalArenas<'t> {
     param_envs: TypedArena<ParamEnvData>,
     ribs: TypedArena<Rib>,
     types: TypedArena<TypeKind<'t>>,
+    values: TypedArena<ValueData<'t>>,
 }
 
 impl Default for GlobalArenas<'_> {
@@ -140,6 +142,7 @@ impl Default for GlobalArenas<'_> {
             param_envs: TypedArena::new(),
             ribs: TypedArena::new(),
             types: TypedArena::new(),
+            values: TypedArena::new(),
         }
     }
 }
@@ -175,6 +178,7 @@ pub struct GlobalTables<'t> {
     param_env_contexts: RefCell<HashMap<ParamEnv, BTreeSet<NodeId>>>,
     node_id_to_parent_node_id: RefCell<HashMap<NodeId, NodeId>>,
     interned_types: RefCell<HashSet<Type<'t>>>,
+    interned_values: RefCell<HashSet<Value<'t>>>,
     lowering_hints: RefCell<HashMap<NodeId, hir::Hint>>,
 }
 
@@ -301,6 +305,16 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         let ty = self.arena().types.alloc(ty);
         self.tables().interned_types.borrow_mut().insert(ty);
         ty
+    }
+
+    /// Internalize a value.
+    fn intern_value(&self, value: ValueData<'gcx>) -> Value<'gcx> {
+        if let Some(&x) = self.tables().interned_values.borrow().get(&value) {
+            return x;
+        }
+        let value = self.arena().values.alloc(value);
+        self.tables().interned_values.borrow_mut().insert(value);
+        value
     }
 
     /// Make a void type.

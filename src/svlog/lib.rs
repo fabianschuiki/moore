@@ -19,6 +19,7 @@ mod param_env;
 mod resolver;
 pub mod ty;
 mod typeck;
+pub mod value;
 
 pub use crate::{
     codegen::CodeGenerator,
@@ -42,6 +43,6 @@ mod crate_prelude {
         context::{BaseContext, Context, GlobalContext},
         hir, param_env,
         resolver::{self, Rib, RibKind},
-        ty, typeck, NodeEnvId,
+        ty, typeck, value, NodeEnvId,
     };
 }
