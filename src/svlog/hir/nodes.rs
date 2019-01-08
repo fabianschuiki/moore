@@ -16,11 +16,10 @@ pub enum HirNode<'hir> {
     Inst(&'hir Inst<'hir>),
     TypeParam(&'hir TypeParam),
     ValueParam(&'hir ValueParam),
+    VarDecl(&'hir VarDecl),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
-    // ValueParam(&'hir ast::ParamValueDecl),
-    // VarDecl(&'hir ast::VarDecl, &'hir ast::VarDeclName),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -34,6 +33,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Inst(x) => x.span(),
             HirNode::TypeParam(x) => x.span(),
             HirNode::ValueParam(x) => x.span(),
+            HirNode::VarDecl(x) => x.span(),
         }
     }
 
@@ -47,6 +47,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Inst(x) => x.human_span(),
             HirNode::TypeParam(x) => x.human_span(),
             HirNode::ValueParam(x) => x.human_span(),
+            HirNode::VarDecl(x) => x.human_span(),
         }
     }
 }
@@ -62,6 +63,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Inst(x) => x.desc(),
             HirNode::TypeParam(x) => x.desc(),
             HirNode::ValueParam(x) => x.desc(),
+            HirNode::VarDecl(x) => x.desc(),
         }
     }
 
@@ -75,6 +77,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Inst(x) => x.desc_full(),
             HirNode::TypeParam(x) => x.desc_full(),
             HirNode::ValueParam(x) => x.desc_full(),
+            HirNode::VarDecl(x) => x.desc_full(),
         }
     }
 }
@@ -469,4 +472,34 @@ pub enum ExprKind {
     IntConst(BigInt),
     /// An identifier.
     Ident(Spanned<Name>),
+}
+
+/// A variable declaration.
+#[derive(Debug, PartialEq, Eq)]
+pub struct VarDecl {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    pub ty: NodeId,
+    pub init: Option<NodeId>,
+}
+
+impl HasSpan for VarDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for VarDecl {
+    fn desc(&self) -> &'static str {
+        "variable declaration"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("variable `{}`", self.name.value)
+    }
 }

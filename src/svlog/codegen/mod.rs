@@ -178,6 +178,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ent.add_inst(inst, llhd::InstPosition::End);
         }
 
+        // Emit declarations.
+        for &decl_id in hir.decls {
+            let hir = match self.hir_of(decl_id)? {
+                HirNode::VarDecl(x) => x,
+                _ => unreachable!(),
+            };
+            let ty = self.emit_type(self.type_of(decl_id, env)?)?;
+            let init = match hir.init {
+                Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?)?.into()),
+                None => None,
+            };
+            let inst = llhd::Inst::new(Some(hir.name.value.into()), llhd::SignalInst(ty, init));
+            ent.add_inst(inst, llhd::InstPosition::End);
+        }
+
         // Assign default values to undriven output ports.
         for port_id in outputs {
             let hir = match self.hir_of(port_id)? {
