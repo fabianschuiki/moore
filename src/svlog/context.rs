@@ -513,6 +513,11 @@ pub(super) mod queries {
                 use fn resolver::resolve_upwards;
             }
 
+            /// Determine the constant value of a node.
+            fn constant_value_of(node_id: NodeId, env: ParamEnv) -> Result<Value<'a>> {
+                type ConstantValueOfQuery;
+                use fn value::constant_value_of;
+            }
         }
     }
 
@@ -526,6 +531,7 @@ pub(super) mod queries {
                 fn map_to_type() for MapToTypeQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
+                fn constant_value_of() for ConstantValueOfQuery<'gcx>;
             }
         }
     }

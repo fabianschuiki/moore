@@ -53,3 +53,28 @@ pub fn make_int(ty: Type, mut value: BigInt) -> ValueData {
         kind: ValueKind::Int(value),
     }
 }
+
+/// Determine the constant value of a node.
+pub(crate) fn constant_value_of<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Result<Value<'gcx>> {
+    let hir = cx.hir_of(node_id)?;
+    match hir {
+        HirNode::Expr(expr) => const_expr(cx, expr, env),
+        _ => cx.unimp_msg("constant value computation of", &hir),
+    }
+}
+
+/// Determine the constant value of an expression.
+fn const_expr<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &hir::Expr,
+    env: ParamEnv,
+) -> Result<Value<'gcx>> {
+    let ty = cx.type_of(expr.id, env)?;
+    match expr.kind {
+        hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
+    }
+}
