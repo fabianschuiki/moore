@@ -95,5 +95,24 @@ module H;
     I #(1) i3();
 endmodule
 
-module I #(bit K = 0) (output bit k = K);
+module I #(int K = 0) (output int k = K);
 endmodule
+
+//@ elab H
+//| entity @I () (i32$ %k) {
+//|     drv %k 0
+//| }
+//|
+//| entity @I.param6 () (i32$ %k) {
+//|     drv %k 0
+//| }
+//|
+//| entity @I.param7 () (i32$ %k) {
+//|     drv %k 1
+//| }
+//|
+//| entity @H () () {
+//|     inst @I () ()
+//|     inst @I.param6 () ()
+//|     inst @I.param7 () ()
+//| }

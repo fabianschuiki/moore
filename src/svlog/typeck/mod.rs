@@ -35,6 +35,10 @@ pub(crate) fn map_to_type<'gcx>(
             hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
             hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
             hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_logic()),
+            hir::TypeKind::Builtin(hir::BuiltinType::Byte) => Ok(cx.mkty_int(8)),
+            hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(cx.mkty_int(16)),
+            hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(cx.mkty_int(32)),
+            hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(cx.mkty_int(64)),
             hir::TypeKind::Named(name) => {
                 let binding =
                     cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;

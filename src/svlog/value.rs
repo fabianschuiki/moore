@@ -48,7 +48,10 @@ pub fn make_int(ty: Type, mut value: BigInt) -> ValueData {
         TypeKind::Int(width, _) => {
             value = value % (BigInt::from(1) << width);
         }
-        _ => panic!("create int value with non-int type"),
+        TypeKind::Bit(_) => {
+            value = value % 2;
+        }
+        _ => panic!("create int value `{}` with non-int type {:?}", value, ty),
     }
     ValueData {
         ty: ty,

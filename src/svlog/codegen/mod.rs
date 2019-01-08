@@ -241,6 +241,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
                 Ok(llhd::const_int(width, k.clone()))
             }
+            (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone())),
             _ => panic!("invalid type/value combination {:#?}", value),
         }
     }
