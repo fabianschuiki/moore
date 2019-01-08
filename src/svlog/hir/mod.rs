@@ -22,5 +22,6 @@ make_arenas!(
         inst_target: InstTarget,
         insts: Inst<'hir>,
         type_params: TypeParam,
+        value_params: ValueParam,
     }
 );

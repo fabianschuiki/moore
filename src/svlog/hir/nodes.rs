@@ -15,6 +15,7 @@ pub enum HirNode<'hir> {
     InstTarget(&'hir InstTarget),
     Inst(&'hir Inst<'hir>),
     TypeParam(&'hir TypeParam),
+    ValueParam(&'hir ValueParam),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
@@ -32,6 +33,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::InstTarget(x) => x.span(),
             HirNode::Inst(x) => x.span(),
             HirNode::TypeParam(x) => x.span(),
+            HirNode::ValueParam(x) => x.span(),
         }
     }
 
@@ -44,6 +46,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::InstTarget(x) => x.human_span(),
             HirNode::Inst(x) => x.human_span(),
             HirNode::TypeParam(x) => x.human_span(),
+            HirNode::ValueParam(x) => x.human_span(),
         }
     }
 }
@@ -58,6 +61,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::InstTarget(x) => x.desc(),
             HirNode::Inst(x) => x.desc(),
             HirNode::TypeParam(x) => x.desc(),
+            HirNode::ValueParam(x) => x.desc(),
         }
     }
 
@@ -70,6 +74,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::InstTarget(x) => x.desc_full(),
             HirNode::Inst(x) => x.desc_full(),
             HirNode::TypeParam(x) => x.desc_full(),
+            HirNode::ValueParam(x) => x.desc_full(),
         }
     }
 }
@@ -209,6 +214,37 @@ impl HasDesc for TypeParam {
 
     fn desc_full(&self) -> String {
         format!("type parameter `{}`", self.name.value)
+    }
+}
+
+/// A value parameter.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ValueParam {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    pub local: bool,
+    pub ty: NodeId,
+    pub default: Option<NodeId>,
+}
+
+impl HasSpan for ValueParam {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for ValueParam {
+    fn desc(&self) -> &'static str {
+        "parameter"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("parameter `{}`", self.name.value)
     }
 }
 

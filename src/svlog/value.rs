@@ -65,6 +65,28 @@ pub(crate) fn constant_value_of<'gcx>(
     let hir = cx.hir_of(node_id)?;
     match hir {
         HirNode::Expr(expr) => const_expr(cx, expr, env),
+        HirNode::ValueParam(param) => {
+            let env_data = cx.param_env_data(env);
+            if let Some(assigned_id) = env_data.find_value(node_id) {
+                return cx.constant_value_of(assigned_id.0, assigned_id.1);
+            }
+            if let Some(default) = param.default {
+                return cx.constant_value_of(default, env);
+            }
+            let mut d = DiagBuilder2::error(format!(
+                "{} not assigned and has no default",
+                param.desc_full(),
+            ));
+            let contexts = cx.param_env_contexts(env);
+            for &context in &contexts {
+                d = d.span(cx.span(context));
+            }
+            if contexts.is_empty() {
+                d = d.span(param.human_span());
+            }
+            cx.emit(d);
+            Err(())
+        }
         _ => cx.unimp_msg("constant value computation of", &hir),
     }
 }

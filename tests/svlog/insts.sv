@@ -91,8 +91,9 @@ endmodule
 
 module H;
     I i1();
-    I #(1) i2();
+    I #(0) i2();
+    I #(1) i3();
 endmodule
 
-module I #(K = 0) (output bit k = K);
+module I #(bit K = 0) (output bit k = K);
 endmodule
