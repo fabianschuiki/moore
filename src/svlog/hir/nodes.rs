@@ -418,6 +418,7 @@ impl HasDesc for Expr {
         #[allow(unreachable_patterns)]
         match self.kind {
             ExprKind::IntConst(ref k) => format!("integer `{}`", k),
+            ExprKind::Ident(n) => format!("identifier `{}`", n.value),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
         }
     }
@@ -428,4 +429,6 @@ impl HasDesc for Expr {
 pub enum ExprKind {
     /// An integer constant literal.
     IntConst(BigInt),
+    /// An identifier.
+    Ident(Spanned<Name>),
 }

@@ -14,6 +14,8 @@ pub(crate) fn type_of<'gcx>(
         HirNode::Port(p) => cx.map_to_type(p.ty, env),
         HirNode::Expr(e) => match e.kind {
             hir::ExprKind::IntConst(_) => Ok(cx.mkty_int(32)),
+            hir::ExprKind::Ident(_) => cx.type_of(cx.resolve_node(node_id, env)?, env),
+            _ => cx.unimp_msg("type analysis of", &hir),
         },
         _ => cx.unimp_msg("type analysis of", &hir),
     }

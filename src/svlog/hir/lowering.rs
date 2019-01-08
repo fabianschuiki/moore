@@ -244,6 +244,7 @@ fn lower_expr<'gcx>(
                 return Err(());
             }
         },
+        ast::IdentExpr(ident) => hir::ExprKind::Ident(Spanned::new(ident.name, ident.span)),
         _ => return cx.unimp_msg("lowering of", expr),
     };
     let hir = hir::Expr {

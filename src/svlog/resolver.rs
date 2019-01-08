@@ -5,7 +5,7 @@
 //! This module implements the infrastructure to describe scopes and resolve
 //! names in them.
 
-use crate::{ast_map::AstNode, crate_prelude::*};
+use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode, ParamEnv};
 use std::collections::HashMap;
 
 /// One local scope.
@@ -106,4 +106,21 @@ pub(crate) fn resolve_upwards<'gcx>(
         next_id = rib.parent;
     }
     Ok(None)
+}
+
+/// Resolve a node to its target.
+pub(crate) fn resolve_node<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    _env: ParamEnv,
+) -> Result<NodeId> {
+    let hir = cx.hir_of(node_id)?;
+    match hir {
+        HirNode::Expr(expr) => match expr.kind {
+            hir::ExprKind::Ident(ident) => return cx.resolve_upwards_or_error(ident, node_id),
+            _ => (),
+        },
+        _ => (),
+    }
+    panic!("cannot resolve {:?}", hir)
 }

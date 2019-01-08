@@ -76,8 +76,11 @@ fn const_expr<'gcx>(
     env: ParamEnv,
 ) -> Result<Value<'gcx>> {
     let ty = cx.type_of(expr.id, env)?;
+    #[allow(unreachable_patterns)]
     match expr.kind {
         hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
+        hir::ExprKind::Ident(_) => cx.constant_value_of(cx.resolve_node(expr.id, env)?, env),
+        _ => cx.unimp_msg("constant value computation of", expr),
     }
 }
 

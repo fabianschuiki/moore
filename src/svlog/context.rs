@@ -513,6 +513,12 @@ pub(super) mod queries {
                 use fn resolver::resolve_upwards;
             }
 
+            /// Resolve a node to its target.
+            fn resolve_node(node_id: NodeId, env: ParamEnv) -> Result<NodeId> {
+                type ResolveNodeQuery;
+                use fn resolver::resolve_node;
+            }
+
             /// Determine the constant value of a node.
             fn constant_value_of(node_id: NodeId, env: ParamEnv) -> Result<Value<'a>> {
                 type ConstantValueOfQuery;
@@ -539,6 +545,7 @@ pub(super) mod queries {
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
                 fn constant_value_of() for ConstantValueOfQuery<'gcx>;
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
+                fn resolve_node() for ResolveNodeQuery<'gcx>;
             }
         }
     }
