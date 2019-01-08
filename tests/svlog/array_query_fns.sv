@@ -1,7 +1,7 @@
 // Array query functions
 // 20.7 of std-2009
 
-// @elab A
+//!@ elab A
 module A;
 
 	// Dimension numbers
