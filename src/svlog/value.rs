@@ -17,7 +17,7 @@ use crate::{
     ty::{Type, TypeKind},
     ParamEnv,
 };
-use num::BigInt;
+use num::{BigInt, Zero};
 
 /// A verilog value.
 pub type Value<'t> = &'t ValueData<'t>;
@@ -34,6 +34,8 @@ pub struct ValueData<'t> {
 /// The different forms a value can assume.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueKind {
+    /// The `void` value.
+    Void,
     /// An arbitrary precision integer.
     Int(BigInt),
 }
@@ -76,5 +78,17 @@ fn const_expr<'gcx>(
     let ty = cx.type_of(expr.id, env)?;
     match expr.kind {
         hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
+    }
+}
+
+/// Determine the default value of a type.
+pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Value<'gcx> {
+    match *ty {
+        TypeKind::Void => cx.intern_value(ValueData {
+            ty,
+            kind: ValueKind::Void,
+        }),
+        TypeKind::Bit(..) | TypeKind::Int(..) => cx.intern_value(make_int(ty, Zero::zero())),
+        TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
     }
 }

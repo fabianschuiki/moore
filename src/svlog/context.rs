@@ -518,6 +518,12 @@ pub(super) mod queries {
                 type ConstantValueOfQuery;
                 use fn value::constant_value_of;
             }
+
+            /// Determine the default value of a type.
+            fn type_default_value(ty: Type<'a>) -> Value<'a> {
+                type TypeDefaultValueQuery;
+                use fn value::type_default_value;
+            }
         }
     }
 
@@ -532,6 +538,7 @@ pub(super) mod queries {
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
                 fn constant_value_of() for ConstantValueOfQuery<'gcx>;
+                fn type_default_value() for TypeDefaultValueQuery<'gcx>;
             }
         }
     }
