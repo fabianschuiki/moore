@@ -91,6 +91,8 @@ pub struct Module<'hir> {
     // pub body: HierarchyBody,
     /// The module/interface instances in the module.
     pub insts: &'hir [NodeId],
+    /// The variable and net declarations in the module.
+    pub decls: &'hir [NodeId],
 }
 
 impl HasSpan for Module<'_> {

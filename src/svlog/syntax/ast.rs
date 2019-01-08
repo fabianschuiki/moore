@@ -640,6 +640,18 @@ pub struct VarDecl {
     pub names: Vec<VarDeclName>,
 }
 
+impl HasSpan for VarDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for VarDecl {
+    fn desc(&self) -> &'static str {
+        "variable declaration"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct VarDeclName {
     pub id: NodeId,
@@ -648,6 +660,26 @@ pub struct VarDeclName {
     pub name_span: Span,
     pub dims: Vec<TypeDim>,
     pub init: Option<Expr>,
+}
+
+impl HasSpan for VarDeclName {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name_span
+    }
+}
+
+impl HasDesc for VarDeclName {
+    fn desc(&self) -> &'static str {
+        "variable"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("variable `{}`", self.name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

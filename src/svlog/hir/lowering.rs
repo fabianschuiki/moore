@@ -152,11 +152,11 @@ fn lower_module<'gcx>(
 
     // Allocate items.
     let mut insts = Vec::new();
+    let mut decls = Vec::new();
     for item in &ast.items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
-                let target_id = cx.map_ast(AstNode::InstTarget(inst));
-                cx.set_parent(target_id, next_rib);
+                let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
                 next_rib = target_id;
                 trace!(
                     "instantiation target `{}` => {:?}",
@@ -164,15 +164,24 @@ fn lower_module<'gcx>(
                     target_id
                 );
                 for inst in &inst.names {
-                    let inst_id = cx.map_ast(AstNode::Inst(inst, target_id));
+                    let inst_id = cx.map_ast_with_parent(AstNode::Inst(inst, target_id), next_rib);
                     trace!("instantiation `{}` => {:?}", inst.name.name, inst_id);
-                    cx.set_parent(inst_id, next_rib);
                     next_rib = inst_id;
                     insts.push(inst_id);
                 }
             }
+            ast::HierarchyItem::VarDecl(ref decl) => {
+                let type_id = cx.map_ast_with_parent(AstNode::Type(&decl.ty), next_rib);
+                next_rib = type_id;
+                for name in &decl.names {
+                    let decl_id =
+                        cx.map_ast_with_parent(AstNode::VarDecl(name, decl, type_id), next_rib);
+                    next_rib = decl_id;
+                    decls.push(decl_id);
+                }
+            }
             // _ => return cx.unimp_msg("lowering of", item),
-            _ => (),
+            _ => debug!("skipping unsupported {:?}", item),
         }
     }
 
@@ -183,6 +192,7 @@ fn lower_module<'gcx>(
         ports: cx.arena().alloc_ids(ports),
         params: cx.arena().alloc_ids(params),
         insts: cx.arena().alloc_ids(insts),
+        decls: cx.arena().alloc_ids(decls),
     };
     Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
 }
