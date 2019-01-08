@@ -6,6 +6,7 @@ use crate::{
     crate_prelude::*,
     hir::HirNode,
     ty::{Type, TypeKind},
+    value::{Value, ValueKind},
     ParamEnv, ParamEnvSource,
 };
 use std::{collections::HashMap, ops::Deref};
@@ -43,6 +44,7 @@ struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<llhd::value::EntityRef>>,
     module_types: HashMap<NodeEnvId, llhd::Type>,
     interned_types: HashMap<Type<'gcx>, Result<llhd::Type>>,
+    interned_values: HashMap<Value<'gcx>, Result<llhd::Const>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -182,28 +184,18 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::Port(p) => p,
                 _ => unreachable!(),
             };
-            if let Some(default) = hir.default {
-                // TODO: determine the constant value of the port right hand side here
-                trace!(
-                    "determine default value for {:?} = {:#?}",
-                    default,
-                    self.ast_of(default)?
-                );
-                let ty = self.type_of(default, env)?;
-                trace!("{} default expr type = {:?}", hir.desc_full(), ty);
-                // TODO: compute the constant value (`constant_value_of` query)
-            }
+            let default_value = if let Some(default) = hir.default {
+                self.emit_const(self.constant_value_of(default, env)?)?
+            } else {
+                llhd::const_zero(output_tys[index].as_signal())
+            };
             // TODO: compute the default value to replace the above
             // (`default_value_of` query), taking into account the port's
             // default assignment and, if that is missing, the type's default
             // value.
             let inst = llhd::Inst::new(
                 None,
-                llhd::DriveInst(
-                    port_map[&port_id].into(),
-                    llhd::const_zero(output_tys[index].as_signal()).into(),
-                    None,
-                ),
+                llhd::DriveInst(port_map[&port_id].into(), default_value.into(), None),
             );
             ent.add_inst(inst, llhd::InstPosition::End);
         }
@@ -234,5 +226,26 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             TypeKind::Named(_, _, ty) => self.emit_type(ty)?,
             _ => unimplemented!(),
         })
+    }
+
+    /// Map a value to an LLHD constant (interned).
+    fn emit_const(&mut self, value: Value<'gcx>) -> Result<llhd::Const> {
+        if let Some(x) = self.tables.interned_values.get(value) {
+            x.clone()
+        } else {
+            let x = self.emit_const_uninterned(value);
+            self.tables.interned_values.insert(value, x.clone());
+            x
+        }
+    }
+
+    /// Map a value to an LLHD constant.
+    fn emit_const_uninterned(&mut self, value: Value<'gcx>) -> Result<llhd::Const> {
+        match (value.ty, &value.kind) {
+            (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
+                Ok(llhd::const_int(width, k.clone()))
+            }
+            _ => panic!("invalid type/value combination {:#?}", value),
+        }
     }
 }

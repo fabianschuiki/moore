@@ -26,8 +26,8 @@ module C (
 );
 endmodule
 
-//!@ elab C
-//!| entity @C () (i1$ %x, i1$ %y) {
-//!|     drv %x 0
-//!|     drv %y 1
-//!| }
+//@ elab C
+//| entity @C () (i1$ %x, i1$ %y) {
+//|     drv %x 0
+//|     drv %y 1
+//| }
