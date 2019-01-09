@@ -56,6 +56,8 @@ pub enum AstNode<'ast> {
     TypeOrExpr(&'ast ast::TypeOrExpr),
     /// A variable declaration.
     VarDecl(&'ast ast::VarDeclName, &'ast ast::VarDecl, NodeId),
+    /// A procedure.
+    Proc(&'ast ast::Procedure),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -71,6 +73,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::ValueParam(x, _) => x.span(),
             AstNode::TypeOrExpr(x) => x.span(),
             AstNode::VarDecl(_, x, _) => x.span(),
+            AstNode::Proc(x) => x.span(),
         }
     }
 
@@ -86,6 +89,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::ValueParam(_, x) => x.human_span(),
             AstNode::TypeOrExpr(x) => x.human_span(),
             AstNode::VarDecl(x, _, _) => x.human_span(),
+            AstNode::Proc(x) => x.human_span(),
         }
     }
 }
@@ -103,6 +107,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::ValueParam(_, x) => x.desc(),
             AstNode::TypeOrExpr(x) => x.desc(),
             AstNode::VarDecl(x, _, _) => x.desc(),
+            AstNode::Proc(x) => x.desc(),
         }
     }
 
@@ -118,6 +123,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::ValueParam(_, x) => x.desc_full(),
             AstNode::TypeOrExpr(x) => x.desc_full(),
             AstNode::VarDecl(x, _, _) => x.desc_full(),
+            AstNode::Proc(x) => x.desc_full(),
         }
     }
 }

@@ -211,9 +211,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ent.add_inst(inst, llhd::InstPosition::End);
         }
 
+        // Emit and instantiate procedures.
+        for &proc_id in hir.procs {
+            let _prok = self.emit_procedure(proc_id, env)?;
+            // TODO: instantiate procedure and wire up relevant signals
+        }
+
         let result = Ok(self.into.add_entity(ent));
         self.tables.module_defs.insert((id, env), result.clone());
         result
+    }
+
+    /// Emit the code for a procedure.
+    fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::value::ProcessRef> {
+        let prok = llhd::Process::new(format!("{:?}", id), llhd::entity_ty(vec![], vec![]));
+        Ok(self.into.add_process(prok))
     }
 
     /// Map a type to an LLHD type (interned).

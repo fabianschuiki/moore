@@ -96,6 +96,8 @@ pub struct Module<'hir> {
     pub insts: &'hir [NodeId],
     /// The variable and net declarations in the module.
     pub decls: &'hir [NodeId],
+    /// The procedures in the module.
+    pub procs: &'hir [NodeId],
 }
 
 impl HasSpan for Module<'_> {

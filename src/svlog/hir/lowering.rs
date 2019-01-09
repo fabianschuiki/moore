@@ -166,6 +166,7 @@ fn lower_module<'gcx>(
     // Allocate items.
     let mut insts = Vec::new();
     let mut decls = Vec::new();
+    let mut procs = Vec::new();
     for item in &ast.items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
@@ -193,6 +194,11 @@ fn lower_module<'gcx>(
                     decls.push(decl_id);
                 }
             }
+            ast::HierarchyItem::Procedure(ref prok) => {
+                let id = cx.map_ast_with_parent(AstNode::Proc(prok), next_rib);
+                next_rib = id;
+                procs.push(id);
+            }
             // _ => return cx.unimp_msg("lowering of", item),
             _ => warn!("skipping unsupported {:?}", item),
         }
@@ -206,6 +212,7 @@ fn lower_module<'gcx>(
         params: cx.arena().alloc_ids(params),
         insts: cx.arena().alloc_ids(insts),
         decls: cx.arena().alloc_ids(decls),
+        procs: cx.arena().alloc_ids(procs),
     };
     Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
 }

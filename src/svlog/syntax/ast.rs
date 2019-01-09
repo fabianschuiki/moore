@@ -474,6 +474,18 @@ pub struct Procedure {
     pub stmt: Stmt,
 }
 
+impl HasSpan for Procedure {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Procedure {
+    fn desc(&self) -> &'static str {
+        "procedure"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum ProcedureKind {
     Initial,
