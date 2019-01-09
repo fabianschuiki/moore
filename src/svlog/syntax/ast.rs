@@ -503,6 +503,18 @@ pub struct Stmt {
     pub data: StmtData,
 }
 
+impl HasSpan for Stmt {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Stmt {
+    fn desc(&self) -> &'static str {
+        "statement"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum StmtData {
     NullStmt,

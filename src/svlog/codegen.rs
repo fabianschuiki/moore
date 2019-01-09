@@ -224,19 +224,25 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Emit the code for a procedure.
     fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::value::ProcessRef> {
+        // Create process and entry block.
         let mut prok = llhd::Process::new(format!("{:?}", id), llhd::entity_ty(vec![], vec![]));
-        let entry_bb = prok
+        let entry_blk = prok
             .body_mut()
-            .add_block(llhd::Block::new(None), llhd::block::BlockPosition::End);
+            .add_block(llhd::Block::new(None), llhd::block::BlockPosition::Begin);
         let hir = match self.hir_of(id)? {
             HirNode::Proc(x) => x,
             _ => unreachable!(),
         };
+
+        // Emit statements.
+        let final_blk = self.emit_stmt(hir.stmt, env, &mut prok, entry_blk)?;
+
+        // Emit epilogue.
         match hir.kind {
             ast::ProcedureKind::Initial => {
                 prok.body_mut().add_inst(
                     llhd::Inst::new(None, llhd::HaltInst),
-                    llhd::InstPosition::End,
+                    llhd::InstPosition::BlockEnd(final_blk),
                 );
             }
             _ => (),
@@ -287,5 +293,19 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone())),
             _ => panic!("invalid type/value combination {:#?}", value),
         }
+    }
+
+    /// Emit the code for a statement.
+    fn emit_stmt(
+        &mut self,
+        stmt_id: NodeId,
+        _env: ParamEnv,
+        _prok: &mut llhd::Process,
+        block: llhd::value::BlockRef,
+    ) -> Result<llhd::value::BlockRef> {
+        let hir = match self.hir_of(stmt_id)? {
+            _ => unreachable!(),
+        };
+        Ok(block)
     }
 }

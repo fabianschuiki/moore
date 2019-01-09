@@ -120,6 +120,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 id: node_id,
                 span: prok.span,
                 kind: prok.kind,
+                stmt: cx.map_ast_with_parent(AstNode::Stmt(&prok.stmt), node_id),
             };
             Ok(HirNode::Proc(cx.arena().alloc_hir(hir)))
         }

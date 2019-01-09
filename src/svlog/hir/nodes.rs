@@ -517,6 +517,7 @@ pub struct Proc {
     pub id: NodeId,
     pub span: Span,
     pub kind: ast::ProcedureKind,
+    pub stmt: NodeId,
 }
 
 impl HasSpan for Proc {
@@ -534,7 +535,6 @@ impl HasDesc for Proc {
             ast::ProcedureKind::AlwaysLatch => "`always_latch` procedure",
             ast::ProcedureKind::AlwaysFf => "`always_ff` procedure",
             ast::ProcedureKind::Final => "`final` procedure",
-            _ => "procedure",
         }
     }
 }
