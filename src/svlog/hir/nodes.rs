@@ -568,6 +568,7 @@ impl HasDesc for Stmt {
         #[allow(unreachable_patterns)]
         match self.kind {
             StmtKind::Null => "null statement",
+            StmtKind::Assign { .. } => "assign statement",
             _ => "statement",
         }
     }
@@ -578,4 +579,17 @@ impl HasDesc for Stmt {
 pub enum StmtKind {
     /// A null statement.
     Null,
+    /// An assign statement (blocking or non-blocking).
+    Assign {
+        lhs: NodeId,
+        rhs: NodeId,
+        kind: AssignKind,
+    },
+}
+
+/// The different forms an assignment can take.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssignKind {
+    /// A blocking assignment.
+    Block(ast::AssignOp),
 }

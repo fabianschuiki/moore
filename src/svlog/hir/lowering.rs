@@ -127,6 +127,15 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::Stmt(stmt) => {
             let kind = match stmt.data {
                 ast::NullStmt => hir::StmtKind::Null,
+                ast::BlockingAssignStmt {
+                    ref lhs,
+                    ref rhs,
+                    op,
+                } => hir::StmtKind::Assign {
+                    lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+                    rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+                    kind: hir::AssignKind::Block(op),
+                },
                 _ => return cx.unimp_msg("lowering of", stmt),
             };
             let hir = hir::Stmt {

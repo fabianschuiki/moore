@@ -637,7 +637,7 @@ pub enum TimingControl {
     Cycle(CycleDelay),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum AssignOp {
     Identity,
     Add,
