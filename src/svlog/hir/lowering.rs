@@ -194,7 +194,7 @@ fn lower_module<'gcx>(
                 }
             }
             // _ => return cx.unimp_msg("lowering of", item),
-            _ => debug!("skipping unsupported {:?}", item),
+            _ => warn!("skipping unsupported {:?}", item),
         }
     }
 

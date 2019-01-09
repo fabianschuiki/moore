@@ -41,14 +41,9 @@ fn main() {
                 .help("Increase message verbosity"),
         )
         .arg(
-            Arg::with_name("quiet")
-                .short("q")
-                .help("Silence all output"),
-        )
-        .arg(
             Arg::with_name("timestamp")
                 .short("t")
-                .help("prepend log lines with a timestamp")
+                .help("Prepend log lines with a timestamp")
                 .takes_value(true)
                 .possible_values(&["none", "sec", "ms", "ns"]),
         )
@@ -110,7 +105,7 @@ fn main() {
 
     // Configure the logger.
     let verbose = matches.occurrences_of("verbosity") as usize + 1;
-    let quiet = matches.is_present("quiet");
+    let quiet = !matches.is_present("verbosity");
     let ts = matches
         .value_of("timestamp")
         .map(|v| {
