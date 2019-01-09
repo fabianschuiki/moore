@@ -124,6 +124,19 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Proc(cx.arena().alloc_hir(hir)))
         }
+        AstNode::Stmt(stmt) => {
+            let kind = match stmt.data {
+                ast::NullStmt => hir::StmtKind::Null,
+                _ => return cx.unimp_msg("lowering of", stmt),
+            };
+            let hir = hir::Stmt {
+                id: node_id,
+                label: stmt.label.map(|n| Spanned::new(n, stmt.span)), // this is horrible...
+                span: stmt.span,
+                kind: kind,
+            };
+            Ok(HirNode::Stmt(cx.arena().alloc_hir(hir)))
+        }
         _ => cx.unimp_msg("lowering of", &ast),
     }
 }

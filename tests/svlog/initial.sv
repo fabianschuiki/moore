@@ -1,5 +1,5 @@
 module A;
 	int a;
 	initial;
-	initial a = 42;
+	// initial a = 42;
 endmodule

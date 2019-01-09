@@ -18,6 +18,7 @@ pub enum HirNode<'hir> {
     ValueParam(&'hir ValueParam),
     VarDecl(&'hir VarDecl),
     Proc(&'hir Proc),
+    Stmt(&'hir Stmt),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
@@ -36,6 +37,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::ValueParam(x) => x.span(),
             HirNode::VarDecl(x) => x.span(),
             HirNode::Proc(x) => x.span(),
+            HirNode::Stmt(x) => x.span(),
         }
     }
 
@@ -51,6 +53,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::ValueParam(x) => x.human_span(),
             HirNode::VarDecl(x) => x.human_span(),
             HirNode::Proc(x) => x.human_span(),
+            HirNode::Stmt(x) => x.human_span(),
         }
     }
 }
@@ -68,6 +71,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::ValueParam(x) => x.desc(),
             HirNode::VarDecl(x) => x.desc(),
             HirNode::Proc(x) => x.desc(),
+            HirNode::Stmt(x) => x.desc(),
         }
     }
 
@@ -83,6 +87,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::ValueParam(x) => x.desc_full(),
             HirNode::VarDecl(x) => x.desc_full(),
             HirNode::Proc(x) => x.desc_full(),
+            HirNode::Stmt(x) => x.desc_full(),
         }
     }
 }
@@ -537,4 +542,40 @@ impl HasDesc for Proc {
             ast::ProcedureKind::Final => "`final` procedure",
         }
     }
+}
+
+/// A variable declaration.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Stmt {
+    pub id: NodeId,
+    pub label: Option<Spanned<Name>>,
+    pub span: Span,
+    pub kind: StmtKind,
+}
+
+impl HasSpan for Stmt {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.label.map(|l| l.span).unwrap_or(self.span)
+    }
+}
+
+impl HasDesc for Stmt {
+    fn desc(&self) -> &'static str {
+        #[allow(unreachable_patterns)]
+        match self.kind {
+            StmtKind::Null => "null statement",
+            _ => "statement",
+        }
+    }
+}
+
+/// The different forms a statement can take.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StmtKind {
+    /// A null statement.
+    Null,
 }

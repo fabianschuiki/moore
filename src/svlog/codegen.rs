@@ -304,8 +304,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         block: llhd::value::BlockRef,
     ) -> Result<llhd::value::BlockRef> {
         let hir = match self.hir_of(stmt_id)? {
+            HirNode::Stmt(x) => x,
             _ => unreachable!(),
         };
+        #[allow(unreachable_patterns)]
+        match hir.kind {
+            hir::StmtKind::Null => (),
+            _ => return self.unimp_msg("code generation for", hir),
+        }
         Ok(block)
     }
 }
