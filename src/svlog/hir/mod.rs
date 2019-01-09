@@ -5,12 +5,17 @@
 //! After parsing the AST is lowered into this representation, eliminating a lot
 //! of syntactic sugar and resolving any syntactic ambiguities.
 
+use crate::crate_prelude::*;
+use std::{collections::BTreeSet, sync::Arc};
+
 mod lowering;
 mod nodes;
+mod visit;
 
 pub(crate) use self::lowering::hir_of;
 pub use self::lowering::Hint;
 pub use self::nodes::*;
+pub use self::visit::*;
 
 make_arenas!(
     /// An arena to allocate HIR nodes into.
@@ -28,3 +33,64 @@ make_arenas!(
         stmts: Stmt,
     }
 );
+
+/// Determine the nodes accessed by another node.
+pub(crate) fn accessed_nodes<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+) -> Result<Arc<AccessTable>> {
+    let mut k = AccessTableCollector {
+        cx,
+        table: AccessTable {
+            node_id,
+            read: Default::default(),
+            written: Default::default(),
+        },
+    };
+    k.visit_node_with_id(node_id, false);
+    Ok(Arc::new(k.table))
+}
+
+/// A table of accessed nodes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccessTable {
+    /// The node for which the analysis was performed.
+    pub node_id: NodeId,
+    /// All nodes being read.
+    pub read: BTreeSet<NodeId>,
+    /// All nodes being written.
+    pub written: BTreeSet<NodeId>,
+}
+
+/// A visitor for the HIR that populates an access table.
+struct AccessTableCollector<'a, C> {
+    cx: &'a C,
+    table: AccessTable,
+}
+
+impl<'a, 'gcx: 'a, C> Visitor<'gcx> for AccessTableCollector<'a, C>
+where
+    C: Context<'gcx>,
+{
+    type Context = C;
+    fn context(&self) -> &C {
+        self.cx
+    }
+
+    fn visit_expr(&mut self, expr: &'gcx Expr, lvalue: bool) {
+        match expr.kind {
+            ExprKind::Ident(name) => match self.cx.resolve_upwards_or_error(name, expr.id) {
+                Ok(binding) => {
+                    if lvalue {
+                        self.table.written.insert(binding);
+                    } else {
+                        self.table.read.insert(binding);
+                    }
+                }
+                Err(()) => (),
+            },
+            _ => (),
+        }
+        walk_expr(self, expr, lvalue)
+    }
+}

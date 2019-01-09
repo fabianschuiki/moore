@@ -213,8 +213,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Emit and instantiate procedures.
         for &proc_id in hir.procs {
-            let _prok = self.emit_procedure(proc_id, env)?;
-            // TODO: instantiate procedure and wire up relevant signals
+            use llhd::value::Context as LlhdContext;
+            let prok = self.emit_procedure(proc_id, env)?;
+            let ty = llhd::ModuleContext::new(&self.into)
+                .ty(&prok.into())
+                .clone();
+            let inst = llhd::Inst::new(None, llhd::InstanceInst(ty, prok.into(), vec![], vec![]));
+            ent.add_inst(inst, llhd::InstPosition::End);
         }
 
         let result = Ok(self.into.add_entity(ent));
@@ -224,18 +229,48 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Emit the code for a procedure.
     fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::value::ProcessRef> {
-        // Create process and entry block.
-        let mut prok = llhd::Process::new(format!("{:?}", id), llhd::entity_ty(vec![], vec![]));
-        let entry_blk = prok
-            .body_mut()
-            .add_block(llhd::Block::new(None), llhd::block::BlockPosition::Begin);
         let hir = match self.hir_of(id)? {
             HirNode::Proc(x) => x,
             _ => unreachable!(),
         };
 
-        // Emit statements.
-        let final_blk = self.emit_stmt(hir.stmt, env, &mut prok, entry_blk)?;
+        // Find the accessed nodes.
+        let acc = self.accessed_nodes(hir.stmt)?;
+        trace!("process accesses {:#?}", acc);
+        let mut inputs = vec![];
+        let mut outputs = vec![];
+        for &id in &acc.read {
+            inputs.push((id, llhd::signal_ty(self.emit_type(self.type_of(id, env)?)?)));
+        }
+        for &id in &acc.written {
+            outputs.push((id, llhd::signal_ty(self.emit_type(self.type_of(id, env)?)?)));
+        }
+        trace!("process inputs = {:#?}", inputs);
+        trace!("process outputs = {:#?}", outputs);
+
+        // Create process and entry block.
+        let mut prok = llhd::Process::new(
+            format!("{:?}", id),
+            llhd::entity_ty(
+                inputs.iter().map(|(_, ty)| ty.clone()).collect(),
+                outputs.iter().map(|(_, ty)| ty.clone()).collect(),
+            ),
+        );
+        let entry_blk = prok
+            .body_mut()
+            .add_block(llhd::Block::new(None), llhd::block::BlockPosition::Begin);
+
+        // Create a mapping from read/written nodes to process parameters and
+        // emit statements.
+        let mut values = HashMap::new();
+        for (&(id, _), arg) in inputs
+            .iter()
+            .zip(prok.inputs())
+            .chain(outputs.iter().zip(prok.outputs()))
+        {
+            values.insert(id, arg.as_ref().into());
+        }
+        let final_blk = self.emit_stmt(hir.stmt, env, &mut prok, entry_blk, &mut values)?;
 
         // Emit epilogue.
         match hir.kind {
@@ -299,9 +334,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     fn emit_stmt(
         &mut self,
         stmt_id: NodeId,
-        _env: ParamEnv,
-        _prok: &mut llhd::Process,
-        block: llhd::value::BlockRef,
+        env: ParamEnv,
+        prok: &mut llhd::Process,
+        mut block: llhd::value::BlockRef,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::value::BlockRef> {
         let hir = match self.hir_of(stmt_id)? {
             HirNode::Stmt(x) => x,
@@ -310,8 +346,98 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         #[allow(unreachable_patterns)]
         match hir.kind {
             hir::StmtKind::Null => (),
+            hir::StmtKind::Block(ref ids) => {
+                for &id in ids {
+                    block = self.emit_stmt(id, env, prok, block, values)?;
+                }
+            }
+            hir::StmtKind::Assign { lhs, rhs, kind } => {
+                let lhs_value = self.emit_lvalue(lhs, env, prok, block, values)?;
+                let rhs_value = self.emit_rvalue(rhs, env, prok, block, values)?;
+                match kind {
+                    hir::AssignKind::Block(ast::AssignOp::Identity) => {
+                        let inst =
+                            llhd::Inst::new(None, llhd::DriveInst(lhs_value, rhs_value, None));
+                        prok.body_mut()
+                            .add_inst(inst, llhd::InstPosition::BlockEnd(block));
+                    }
+                    _ => {
+                        return self
+                            .unimp_msg(format!("code generation for assignment {:?} in", kind), hir)
+                    }
+                }
+            }
             _ => return self.unimp_msg("code generation for", hir),
         }
         Ok(block)
+    }
+
+    /// Emit the code for an lvalue.
+    fn emit_lvalue(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        _prok: &mut llhd::Process,
+        _block: llhd::value::BlockRef,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<llhd::ValueRef> {
+        let hir = match self.hir_of(expr_id)? {
+            HirNode::Expr(x) => x,
+            _ => unreachable!(),
+        };
+        match hir.kind {
+            hir::ExprKind::Ident(_) => {
+                let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
+                match binding {
+                    HirNode::VarDecl(decl) => return Ok(values[&decl.id].clone()),
+                    _ => (),
+                }
+                self.emit(
+                    DiagBuilder2::error(format!("{} cannot be assigned to", binding.desc_full()))
+                        .span(hir.span())
+                        .add_note(format!("{} declared here", binding.desc_full()))
+                        .span(binding.human_span()),
+                );
+                return Err(());
+            }
+            _ => (),
+        }
+        self.emit(
+            DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
+                .span(hir.span()),
+        );
+        Err(())
+    }
+
+    /// Emit the code for an lvalue.
+    fn emit_rvalue(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        prok: &mut llhd::Process,
+        block: llhd::value::BlockRef,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<llhd::ValueRef> {
+        let hir = match self.hir_of(expr_id)? {
+            HirNode::Expr(x) => x,
+            _ => unreachable!(),
+        };
+        #[allow(unreachable_patterns)]
+        match hir.kind {
+            hir::ExprKind::IntConst(_) => self
+                .emit_const(self.constant_value_of(expr_id, env)?)
+                .map(Into::into),
+            hir::ExprKind::Ident(_) => {
+                let binding = self.resolve_node(expr_id, env)?;
+                let value = values[&binding].clone();
+                let ty = self.emit_type(self.type_of(expr_id, env)?)?;
+                let inst = llhd::Inst::new(None, llhd::ProbeInst(ty, value));
+                Ok(prok
+                    .body_mut()
+                    .add_inst(inst, llhd::InstPosition::BlockEnd(block))
+                    .into())
+            }
+            _ => self.unimp_msg("code generation for", hir),
+        }
     }
 }

@@ -462,7 +462,10 @@ impl HasSpan for Expr {
 
 impl HasDesc for Expr {
     fn desc(&self) -> &'static str {
+        #[allow(unreachable_patterns)]
         match self.kind {
+            ExprKind::IntConst(_) => "integer constant",
+            ExprKind::Ident(_) => "identifier",
             _ => "expression",
         }
     }
@@ -470,8 +473,8 @@ impl HasDesc for Expr {
     fn desc_full(&self) -> String {
         #[allow(unreachable_patterns)]
         match self.kind {
-            ExprKind::IntConst(ref k) => format!("integer `{}`", k),
-            ExprKind::Ident(n) => format!("identifier `{}`", n.value),
+            ExprKind::IntConst(ref k) => format!("{} `{}`", self.desc(), k),
+            ExprKind::Ident(n) => format!("{} `{}`", self.desc(), n.value),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
         }
     }
@@ -568,6 +571,7 @@ impl HasDesc for Stmt {
         #[allow(unreachable_patterns)]
         match self.kind {
             StmtKind::Null => "null statement",
+            StmtKind::Block(_) => "block",
             StmtKind::Assign { .. } => "assign statement",
             _ => "statement",
         }
@@ -579,6 +583,8 @@ impl HasDesc for Stmt {
 pub enum StmtKind {
     /// A null statement.
     Null,
+    /// A sequential block.
+    Block(Vec<NodeId>),
     /// An assign statement (blocking or non-blocking).
     Assign {
         lhs: NodeId,
@@ -588,7 +594,7 @@ pub enum StmtKind {
 }
 
 /// The different forms an assignment can take.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssignKind {
     /// A blocking assignment.
     Block(ast::AssignOp),

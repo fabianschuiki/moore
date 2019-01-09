@@ -27,7 +27,7 @@ use crate::{
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
     crate_prelude::*,
-    hir::{self, HirNode},
+    hir::{self, AccessTable, HirNode},
     ty::{Type, TypeKind},
     value::{Value, ValueData},
     ParamEnv, ParamEnvData, ParamEnvSource,
@@ -36,6 +36,7 @@ use llhd;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashMap, HashSet},
+    sync::Arc,
 };
 
 /// The central data structure of the compiler. It stores references to various
@@ -530,6 +531,12 @@ pub(super) mod queries {
                 type TypeDefaultValueQuery;
                 use fn value::type_default_value;
             }
+
+            /// Determine the nodes accessed by another node.
+            fn accessed_nodes(node_id: NodeId) -> Result<Arc<AccessTable>> {
+                type AccessedNodesQuery;
+                use fn  hir::accessed_nodes;
+            }
         }
     }
 
@@ -546,6 +553,7 @@ pub(super) mod queries {
                 fn constant_value_of() for ConstantValueOfQuery<'gcx>;
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
+                fn accessed_nodes() for AccessedNodesQuery<'gcx>;
             }
         }
     }

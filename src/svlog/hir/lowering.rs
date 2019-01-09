@@ -127,6 +127,19 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::Stmt(stmt) => {
             let kind = match stmt.data {
                 ast::NullStmt => hir::StmtKind::Null,
+                ast::SequentialBlock(ref stmts) => {
+                    let mut next_rib = node_id;
+                    hir::StmtKind::Block(
+                        stmts
+                            .iter()
+                            .map(|stmt| {
+                                let id = cx.map_ast_with_parent(AstNode::Stmt(stmt), next_rib);
+                                next_rib = id;
+                                id
+                            })
+                            .collect(),
+                    )
+                }
                 ast::BlockingAssignStmt {
                     ref lhs,
                     ref rhs,
