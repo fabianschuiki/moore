@@ -115,6 +115,14 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
         }
+        AstNode::Proc(prok) => {
+            let hir = hir::Proc {
+                id: node_id,
+                span: prok.span,
+                kind: prok.kind,
+            };
+            Ok(HirNode::Proc(cx.arena().alloc_hir(hir)))
+        }
         _ => cx.unimp_msg("lowering of", &ast),
     }
 }

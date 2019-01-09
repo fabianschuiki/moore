@@ -24,5 +24,6 @@ make_arenas!(
         type_params: TypeParam,
         value_params: ValueParam,
         var_decls: VarDecl,
+        procs: Proc,
     }
 );

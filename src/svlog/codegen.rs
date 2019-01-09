@@ -224,7 +224,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Emit the code for a procedure.
     fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::value::ProcessRef> {
-        let prok = llhd::Process::new(format!("{:?}", id), llhd::entity_ty(vec![], vec![]));
+        let mut prok = llhd::Process::new(format!("{:?}", id), llhd::entity_ty(vec![], vec![]));
+        let entry_bb = prok
+            .body_mut()
+            .add_block(llhd::Block::new(None), llhd::block::BlockPosition::End);
+        let hir = match self.hir_of(id)? {
+            HirNode::Proc(x) => x,
+            _ => unreachable!(),
+        };
+        match hir.kind {
+            ast::ProcedureKind::Initial => {
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(None, llhd::HaltInst),
+                    llhd::InstPosition::End,
+                );
+            }
+            _ => (),
+        }
         Ok(self.into.add_process(prok))
     }
 

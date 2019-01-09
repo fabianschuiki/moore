@@ -17,6 +17,7 @@ pub enum HirNode<'hir> {
     TypeParam(&'hir TypeParam),
     ValueParam(&'hir ValueParam),
     VarDecl(&'hir VarDecl),
+    Proc(&'hir Proc),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
@@ -34,6 +35,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::TypeParam(x) => x.span(),
             HirNode::ValueParam(x) => x.span(),
             HirNode::VarDecl(x) => x.span(),
+            HirNode::Proc(x) => x.span(),
         }
     }
 
@@ -48,6 +50,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::TypeParam(x) => x.human_span(),
             HirNode::ValueParam(x) => x.human_span(),
             HirNode::VarDecl(x) => x.human_span(),
+            HirNode::Proc(x) => x.human_span(),
         }
     }
 }
@@ -64,6 +67,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::TypeParam(x) => x.desc(),
             HirNode::ValueParam(x) => x.desc(),
             HirNode::VarDecl(x) => x.desc(),
+            HirNode::Proc(x) => x.desc(),
         }
     }
 
@@ -78,6 +82,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::TypeParam(x) => x.desc_full(),
             HirNode::ValueParam(x) => x.desc_full(),
             HirNode::VarDecl(x) => x.desc_full(),
+            HirNode::Proc(x) => x.desc_full(),
         }
     }
 }
@@ -503,5 +508,33 @@ impl HasDesc for VarDecl {
 
     fn desc_full(&self) -> String {
         format!("variable `{}`", self.name.value)
+    }
+}
+
+/// A procedure.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Proc {
+    pub id: NodeId,
+    pub span: Span,
+    pub kind: ast::ProcedureKind,
+}
+
+impl HasSpan for Proc {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Proc {
+    fn desc(&self) -> &'static str {
+        match self.kind {
+            ast::ProcedureKind::Initial => "`initial` procedure",
+            ast::ProcedureKind::Always => "`always` procedure",
+            ast::ProcedureKind::AlwaysComb => "`always_comb` procedure",
+            ast::ProcedureKind::AlwaysLatch => "`always_latch` procedure",
+            ast::ProcedureKind::AlwaysFf => "`always_ff` procedure",
+            ast::ProcedureKind::Final => "`final` procedure",
+            _ => "procedure",
+        }
     }
 }
