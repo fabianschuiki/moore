@@ -591,6 +591,11 @@ pub enum StmtKind {
         rhs: NodeId,
         kind: AssignKind,
     },
+    /// A statement with timing control.
+    Timed {
+        control: TimingControl,
+        stmt: NodeId,
+    },
 }
 
 /// The different forms an assignment can take.
@@ -598,4 +603,11 @@ pub enum StmtKind {
 pub enum AssignKind {
     /// A blocking assignment.
     Block(ast::AssignOp),
+}
+
+/// The different forms of timing control that can be applied to a statement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TimingControl {
+    /// A delayed statement. Contains an expression that evaluates to a time.
+    Delay(NodeId),
 }

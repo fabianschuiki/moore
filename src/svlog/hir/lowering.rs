@@ -149,7 +149,22 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
                     kind: hir::AssignKind::Block(op),
                 },
-                _ => return cx.unimp_msg("lowering of", stmt),
+                ast::TimedStmt(ref control, ref stmt) => {
+                    let control = match *control {
+                        ast::TimingControl::Delay(ref dc) => hir::TimingControl::Delay(
+                            cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
+                        ),
+                        _ => unimplemented!(),
+                    };
+                    hir::StmtKind::Timed {
+                        control,
+                        stmt: cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id),
+                    }
+                }
+                _ => {
+                    debug!("{:#?}", stmt);
+                    return cx.unimp_msg("lowering of", stmt);
+                }
             };
             let hir = hir::Stmt {
                 id: node_id,
@@ -159,7 +174,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Stmt(cx.arena().alloc_hir(hir)))
         }
-        _ => cx.unimp_msg("lowering of", &ast),
+        _ => {
+            debug!("{:#?}", ast);
+            cx.unimp_msg("lowering of", &ast)
+        }
     }
 }
 

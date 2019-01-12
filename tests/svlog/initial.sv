@@ -14,7 +14,9 @@ module A;
 
 	initial begin
 		c = 0;
+		#5ns;
 		c = 1;
+		#5ns;
 		c = a;
 	end
 endmodule
