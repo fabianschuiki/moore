@@ -17,7 +17,7 @@ use crate::{
     ty::{Type, TypeKind},
     ParamEnv,
 };
-use num::{BigInt, Zero};
+use num::{BigInt, BigRational, Zero};
 
 /// A verilog value.
 pub type Value<'t> = &'t ValueData<'t>;
@@ -38,6 +38,8 @@ pub enum ValueKind {
     Void,
     /// An arbitrary precision integer.
     Int(BigInt),
+    /// An arbitrary precision time interval.
+    Time(BigRational),
 }
 
 /// Create a new integer value.
@@ -56,6 +58,14 @@ pub fn make_int(ty: Type, mut value: BigInt) -> ValueData {
     ValueData {
         ty: ty,
         kind: ValueKind::Int(value),
+    }
+}
+
+/// Create a new time value.
+pub fn make_time(value: BigRational) -> ValueData<'static> {
+    ValueData {
+        ty: &ty::TIME_TYPE,
+        kind: ValueKind::Time(value),
     }
 }
 
@@ -104,6 +114,7 @@ fn const_expr<'gcx>(
     #[allow(unreachable_patterns)]
     match expr.kind {
         hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
+        hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
         hir::ExprKind::Ident(_) => cx.constant_value_of(cx.resolve_node(expr.id, env)?, env),
         _ => cx.unimp_msg("constant value computation of", expr),
     }
@@ -113,9 +124,10 @@ fn const_expr<'gcx>(
 pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Value<'gcx> {
     match *ty {
         TypeKind::Void => cx.intern_value(ValueData {
-            ty,
+            ty: &ty::VOID_TYPE,
             kind: ValueKind::Void,
         }),
+        TypeKind::Time => cx.intern_value(make_time(Zero::zero())),
         TypeKind::Bit(..) | TypeKind::Int(..) => cx.intern_value(make_int(ty, Zero::zero())),
         TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
     }
