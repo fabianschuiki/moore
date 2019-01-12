@@ -18,5 +18,6 @@ module A;
 		c = 1;
 		#5ns;
 		c = a;
+		#5ns;
 	end
 endmodule

@@ -606,7 +606,7 @@ pub enum AssignKind {
 }
 
 /// The different forms of timing control that can be applied to a statement.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimingControl {
     /// A delayed statement. Contains an expression that evaluates to a time.
     Delay(NodeId),

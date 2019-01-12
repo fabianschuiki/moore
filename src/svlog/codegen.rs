@@ -9,6 +9,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource,
 };
+use num::BigInt;
 use std::{collections::HashMap, ops::Deref};
 
 /// A code generator.
@@ -370,6 +371,20 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                             .unimp_msg(format!("code generation for assignment {:?} in", kind), hir)
                     }
                 }
+            }
+            hir::StmtKind::Timed {
+                control: hir::TimingControl::Delay(_expr_id),
+                stmt,
+            } => {
+                let resume_blk = prok
+                    .body_mut()
+                    .add_block(llhd::Block::new(None), llhd::block::BlockPosition::End);
+                let duration = llhd::const_time(BigInt::from(1).into(), 0.into(), 0.into()).into();
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(None, llhd::WaitInst(resume_blk, Some(duration), vec![])),
+                    llhd::InstPosition::BlockEnd(block),
+                );
+                block = self.emit_stmt(stmt, env, prok, resume_blk, values)?;
             }
             _ => return self.unimp_msg("code generation for", hir),
         }
