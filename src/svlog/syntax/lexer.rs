@@ -306,13 +306,29 @@ impl<'a> Lexer<'a> {
                         self.eat_number_body_into(&mut s, &mut sp, false)?;
                         name_table.intern(&s, true)
                     };
+                    let frac = if self.peek[0].0 == CatTokenKind::Symbol('.') {
+                        let mut s = String::new();
+                        self.bump()?; // eat the period
+                        self.eat_number_body_into(&mut s, &mut sp, false)?;
+                        Some(name_table.intern(&s, true))
+                    } else {
+                        None
+                    };
+                    if let Some(unit) = self.try_time_unit() {
+                        sp.expand(self.peek[0].1);
+                        self.bump()?; // eat the unit
+                        return Ok((Literal(Time(value, frac, unit)), sp));
+                    }
+                    if frac.is_some() {
+                        return Ok((Literal(Number(value, frac)), sp));
+                    }
                     self.skip_noise()?; // whitespace allowed after size indication
                     match self.peek[0] {
                         (CatTokenKind::Symbol('\''), _) => {
                             self.bump()?; // eat the apostrophe
                             return self.match_based_number(Some(value), sp);
                         }
-                        _ => return Ok((Literal(UnsignedInteger(value)), sp)),
+                        _ => return Ok((Literal(Number(value, None)), sp)),
                     }
                 }
 
@@ -537,7 +553,7 @@ impl<'a> Lexer<'a> {
             match self.peek[0] {
                 (CatTokenKind::Digits, sp) | (CatTokenKind::Text, sp) => {
                     if self.peek[0].0 == CatTokenKind::Text && !allow_alphabetic {
-                        return Err(DiagBuilder2::fatal("Unsigned number or size of literal must be a decimal and thus cannot contain any letters").span(sp));
+                        break;
                     }
                     into.push_str(&sp.extract());
                     span.expand(sp);
@@ -552,6 +568,23 @@ impl<'a> Lexer<'a> {
             r#try!(self.bump());
         }
         Ok(())
+    }
+
+    /// Try to parse the next text token as a time unit.
+    fn try_time_unit(&mut self) -> Option<TimeUnit> {
+        if self.peek[0].0 == CatTokenKind::Text {
+            match self.peek[0].1.extract().as_str() {
+                "s" => Some(TimeUnit::Second),
+                "ms" => Some(TimeUnit::MilliSecond),
+                "us" => Some(TimeUnit::MicroSecond),
+                "ns" => Some(TimeUnit::NanoSecond),
+                "ps" => Some(TimeUnit::PicoSecond),
+                "fs" => Some(TimeUnit::FemtoSecond),
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -732,6 +765,32 @@ mod tests {
                     "Humpty Dumpty sat on a wall. Humpty Dumpty had a great fall.",
                 ))),
                 CloseDelim(Paren),
+            ],
+        );
+    }
+
+    #[test]
+    fn time_literal() {
+        check(
+            "42s 14.3ms 16.32us 9ns 0.1ps 8123fs",
+            &[
+                Literal(Time(name("42"), None, TimeUnit::Second)),
+                Literal(Time(name("14"), Some(name("3")), TimeUnit::MilliSecond)),
+                Literal(Time(name("16"), Some(name("32")), TimeUnit::MicroSecond)),
+                Literal(Time(name("9"), None, TimeUnit::NanoSecond)),
+                Literal(Time(name("0"), Some(name("1")), TimeUnit::PicoSecond)),
+                Literal(Time(name("8123"), None, TimeUnit::FemtoSecond)),
+            ],
+        );
+    }
+
+    #[test]
+    fn number_literal() {
+        check(
+            "42 4.2",
+            &[
+                Literal(Number(name("42"), None)),
+                Literal(Number(name("4"), Some(name("2")))),
             ],
         );
     }

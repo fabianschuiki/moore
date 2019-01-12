@@ -3419,8 +3419,7 @@ fn try_delay_control(p: &mut AbstractParser) -> ReportedResult<Option<DelayContr
 		}
 
 		// Literals
-		Literal(UnsignedInteger(..)) |
-		Literal(Real(..)) |
+		Literal(Number(..)) |
 		Literal(Time(..)) => parse_expr_first(p, Precedence::Max)?,
 
 		// TODO: Parse "1step" keyword
@@ -4578,7 +4577,7 @@ fn parse_assertion(p: &mut AbstractParser) -> ReportedResult<Assertion> {
 	let null = get_name_table().intern("0", false);
 	let is_property = p.peek(1).0 == Keyword(Kw::Property);
 	let is_sequence = p.peek(1).0 == Keyword(Kw::Sequence);
-	let is_deferred = p.peek(1).0 == Hashtag && p.peek(2).0 == Literal(UnsignedInteger(null));
+	let is_deferred = p.peek(1).0 == Hashtag && p.peek(2).0 == Literal(Number(null, None));
 
 	// Handle the different combinations of keywords and lookaheads from above.
 

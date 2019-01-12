@@ -321,7 +321,7 @@ fn lower_expr<'gcx>(
 ) -> Result<HirNode<'gcx>> {
     use crate::syntax::token::Lit;
     let kind = match expr.data {
-        ast::LiteralExpr(Lit::UnsignedInteger(v)) => match v.as_str().parse() {
+        ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
             Ok(v) => hir::ExprKind::IntConst(v),
             Err(e) => {
                 cx.emit(
