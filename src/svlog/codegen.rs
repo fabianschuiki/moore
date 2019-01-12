@@ -9,7 +9,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource,
 };
-use num::BigInt;
+use num::Zero;
 use std::{collections::HashMap, ops::Deref};
 
 /// A code generator.
@@ -330,6 +330,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
                 Ok(llhd::const_int(width, k.clone()))
             }
+            (&TypeKind::Time, &ValueKind::Time(ref k)) => {
+                Ok(llhd::const_time(k.clone(), Zero::zero(), Zero::zero()))
+            }
             (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone())),
             _ => panic!("invalid type/value combination {:#?}", value),
         }
@@ -373,13 +376,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
             }
             hir::StmtKind::Timed {
-                control: hir::TimingControl::Delay(_expr_id),
+                control: hir::TimingControl::Delay(expr_id),
                 stmt,
             } => {
                 let resume_blk = prok
                     .body_mut()
                     .add_block(llhd::Block::new(None), llhd::block::BlockPosition::End);
-                let duration = llhd::const_time(BigInt::from(1).into(), 0.into(), 0.into()).into();
+                let duration = self.emit_rvalue(expr_id, env, prok, block, values)?.into();
                 prok.body_mut().add_inst(
                     llhd::Inst::new(None, llhd::WaitInst(resume_blk, Some(duration), vec![])),
                     llhd::InstPosition::BlockEnd(block),
@@ -443,7 +446,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
         #[allow(unreachable_patterns)]
         match hir.kind {
-            hir::ExprKind::IntConst(_) => self
+            hir::ExprKind::IntConst(_) | hir::ExprKind::TimeConst(_) => self
                 .emit_const(self.constant_value_of(expr_id, env)?)
                 .map(Into::into),
             hir::ExprKind::Ident(_) => {
