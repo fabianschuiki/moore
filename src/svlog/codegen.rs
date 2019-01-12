@@ -128,14 +128,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         self.tables.module_types.insert((id, env), ty);
 
         // Assign proper port names and collect ports into a lookup table.
-        let mut port_map = HashMap::new();
+        let mut values = HashMap::<NodeId, llhd::ValueRef>::new();
         for (index, port_id) in inputs.into_iter().enumerate() {
             ent.inputs_mut()[index].set_name(port_id_to_name[&port_id].value);
-            port_map.insert(port_id, ent.input(index));
+            values.insert(port_id, ent.input(index).into());
         }
         for (index, &port_id) in outputs.iter().enumerate() {
             ent.outputs_mut()[index].set_name(port_id_to_name[&port_id].value);
-            port_map.insert(port_id, ent.output(index));
+            values.insert(port_id, ent.output(index).into());
         }
 
         // Emit declarations.
@@ -207,7 +207,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             })?;
             let inst = llhd::Inst::new(
                 None,
-                llhd::DriveInst(port_map[&port_id].into(), default_value.into(), None),
+                llhd::DriveInst(values[&port_id].clone(), default_value.into(), None),
             );
             ent.add_inst(inst, llhd::InstPosition::End);
         }
@@ -219,7 +219,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let ty = llhd::ModuleContext::new(&self.into)
                 .ty(&prok.into())
                 .clone();
-            let inst = llhd::Inst::new(None, llhd::InstanceInst(ty, prok.into(), vec![], vec![]));
+            let acc = self.accessed_nodes(proc_id)?;
+            let inputs = acc.read.iter().map(|id| values[id].clone()).collect();
+            let outputs = acc.written.iter().map(|id| values[id].clone()).collect();
+            let inst = llhd::Inst::new(None, llhd::InstanceInst(ty, prok.into(), inputs, outputs));
             ent.add_inst(inst, llhd::InstPosition::End);
         }
 
