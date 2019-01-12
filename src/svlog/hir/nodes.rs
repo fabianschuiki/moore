@@ -3,7 +3,7 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use crate::crate_prelude::*;
-use num::BigInt;
+use num::{BigInt, BigRational};
 
 /// A reference to an HIR node.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -465,6 +465,7 @@ impl HasDesc for Expr {
         #[allow(unreachable_patterns)]
         match self.kind {
             ExprKind::IntConst(_) => "integer constant",
+            ExprKind::TimeConst(_) => "time constant",
             ExprKind::Ident(_) => "identifier",
             _ => "expression",
         }
@@ -474,6 +475,7 @@ impl HasDesc for Expr {
         #[allow(unreachable_patterns)]
         match self.kind {
             ExprKind::IntConst(ref k) => format!("{} `{}`", self.desc(), k),
+            ExprKind::TimeConst(ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::Ident(n) => format!("{} `{}`", self.desc(), n.value),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
         }
@@ -485,6 +487,8 @@ impl HasDesc for Expr {
 pub enum ExprKind {
     /// An integer constant literal.
     IntConst(BigInt),
+    /// A time constant literal.
+    TimeConst(BigRational),
     /// An identifier.
     Ident(Spanned<Name>),
 }

@@ -350,6 +350,22 @@ fn lower_expr<'gcx>(
                 return Err(());
             }
         },
+        ast::LiteralExpr(Lit::Time(int, frac, unit)) => {
+            use syntax::token::TimeUnit;
+            let mut value = parse_fixed_point_number(cx, expr.span, int, frac)?;
+            let magnitude = match unit {
+                TimeUnit::Second => 0,
+                TimeUnit::MilliSecond => 1,
+                TimeUnit::MicroSecond => 2,
+                TimeUnit::NanoSecond => 3,
+                TimeUnit::PicoSecond => 4,
+                TimeUnit::FemtoSecond => 5,
+            };
+            for _ in 0..magnitude {
+                value = value / num::BigInt::from(1000);
+            }
+            hir::ExprKind::TimeConst(value)
+        }
         ast::IdentExpr(ident) => hir::ExprKind::Ident(Spanned::new(ident.name, ident.span)),
         _ => return cx.unimp_msg("lowering of", expr),
     };
@@ -359,4 +375,38 @@ fn lower_expr<'gcx>(
         kind: kind,
     };
     Ok(HirNode::Expr(cx.arena().alloc_hir(hir)))
+}
+
+/// Parse a fixed point number into a [`BigRational`].
+///
+/// The fractional part of the number is optional, such that this function may
+/// also be used to parse integers into a ratio.
+fn parse_fixed_point_number<'gcx>(
+    cx: &impl Context<'gcx>,
+    span: Span,
+    int: Name,
+    frac: Option<Name>,
+) -> Result<num::BigRational> {
+    let mut num_digits = int.to_string();
+    let mut denom_digits = String::from("1");
+    if let Some(frac) = frac {
+        let s = frac.to_string();
+        num_digits.push_str(&s);
+        denom_digits.extend(s.chars().map(|_| '0'));
+    }
+    match (num_digits.parse(), denom_digits.parse()) {
+        (Ok(a), Ok(b)) => Ok((a, b).into()),
+        (Err(e), _) | (_, Err(e)) => {
+            let value = match frac {
+                Some(frac) => format!("{}.{}", int, frac),
+                None => format!("{}", int),
+            };
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` is not a number literal", value))
+                    .span(span)
+                    .add_note(format!("{}", e)),
+            );
+            Err(())
+        }
+    }
 }
