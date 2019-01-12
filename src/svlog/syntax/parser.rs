@@ -5652,7 +5652,6 @@ fn parse_hname(p: &mut AbstractParser, msg: &str) -> ReportedResult<ast::Identif
 mod tests {
     use crate::lexer::*;
     use crate::preproc::*;
-    use moore_common::name::*;
     use moore_common::source::*;
 
     fn parse(input: &str) {
@@ -5667,7 +5666,7 @@ mod tests {
         let source = sm.add(&format!("test_{}.sv", idx), input);
         let pp = Preprocessor::new(source, &[]);
         let lexer = Lexer::new(pp);
-        super::parse(lexer);
+        super::parse(lexer).unwrap();
     }
 
     #[test]
