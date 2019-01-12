@@ -319,6 +319,14 @@ impl<'a> Lexer<'a> {
                         self.bump()?; // eat the unit
                         return Ok((Literal(Time(value, frac, unit)), sp));
                     }
+                    if self.peek[0].0 == CatTokenKind::Text {
+                        return Err(DiagBuilder2::fatal(format!(
+                            "number literal `{}` may not directly be followed by letters `{}`",
+                            sp.extract(),
+                            self.peek[0].1.extract(),
+                        ))
+                        .span(sp));
+                    }
                     if frac.is_some() {
                         return Ok((Literal(Number(value, frac)), sp));
                     }
@@ -689,7 +697,7 @@ mod tests {
         check(
             "659; 'h 837FF; 'o7460",
             &[
-                Literal(UnsignedInteger(name("659"))),
+                Literal(Number(name("659"), None)),
                 Semicolon,
                 Literal(BasedInteger(None, false, 'h', name("837FF"))),
                 Semicolon,
@@ -699,7 +707,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Unsigned number or size of literal must be a decimal")]
+    #[should_panic(expected = "number literal `4` may not directly be followed by letters `af`")]
     fn unsized_literal_constant_numbers_illegal() {
         check("4af", &vec![]);
     }
@@ -739,7 +747,7 @@ mod tests {
         check(
             "27_195_000; 16'b0011_0101_0001_1111; 32 'h 12ab_f001",
             &[
-                Literal(UnsignedInteger(name("27195000"))),
+                Literal(Number(name("27195000"), None)),
                 Semicolon,
                 Literal(BasedInteger(
                     Some(name("16")),
