@@ -698,9 +698,6 @@ enum Defcond {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cat::CatTokenKind;
-    use crate::cat::CatTokenKind::*;
-    use moore_common::source::*;
 
     fn preproc(input: &str) -> Preprocessor {
         use std::cell::Cell;
@@ -713,12 +710,6 @@ mod tests {
         });
         let source = sm.add(&format!("test_{}.sv", idx), input);
         Preprocessor::new(source, &[])
-    }
-
-    fn check(input: &str, expected: &[CatTokenKind]) {
-        let pp = preproc(input);
-        let actual: Vec<_> = pp.map(|x| x.unwrap().0).collect();
-        assert_eq!(actual, expected);
     }
 
     fn check_str(input: &str, expected: &str) {
