@@ -138,6 +138,22 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             port_map.insert(port_id, ent.output(index));
         }
 
+        // Emit declarations.
+        for &decl_id in hir.decls {
+            let hir = match self.hir_of(decl_id)? {
+                HirNode::VarDecl(x) => x,
+                _ => unreachable!(),
+            };
+            let ty = self.emit_type(self.type_of(decl_id, env)?)?;
+            let init = match hir.init {
+                Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?)?.into()),
+                None => None,
+            };
+            let inst = llhd::Inst::new(Some(hir.name.value.into()), llhd::SignalInst(ty, init));
+            let id = ent.add_inst(inst, llhd::InstPosition::End);
+            values.insert(decl_id, id.into());
+        }
+
         // Emit instantiations.
         for &inst_id in hir.insts {
             let hir = match self.hir_of(inst_id)? {
@@ -175,21 +191,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 Some(hir.name.value.into()),
                 llhd::InstanceInst(ty, target.into(), vec![], vec![]),
             );
-            ent.add_inst(inst, llhd::InstPosition::End);
-        }
-
-        // Emit declarations.
-        for &decl_id in hir.decls {
-            let hir = match self.hir_of(decl_id)? {
-                HirNode::VarDecl(x) => x,
-                _ => unreachable!(),
-            };
-            let ty = self.emit_type(self.type_of(decl_id, env)?)?;
-            let init = match hir.init {
-                Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?)?.into()),
-                None => None,
-            };
-            let inst = llhd::Inst::new(Some(hir.name.value.into()), llhd::SignalInst(ty, init));
             ent.add_inst(inst, llhd::InstPosition::End);
         }
 
