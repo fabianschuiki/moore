@@ -320,20 +320,22 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
 
     /// Make a void type.
     fn mkty_void(&self) -> Type<'gcx> {
-        static STATIC: TypeKind<'static> = TypeKind::Void;
-        &STATIC
+        &ty::VOID_TYPE
+    }
+
+    /// Make a time type.
+    fn mkty_time(&self) -> Type<'gcx> {
+        &ty::TIME_TYPE
     }
 
     /// Make a bit type.
     fn mkty_bit(&self) -> Type<'gcx> {
-        static STATIC: TypeKind<'static> = TypeKind::Bit(ty::Domain::TwoValued);
-        &STATIC
+        &ty::BIT_TYPE
     }
 
     /// Make a logic type.
     fn mkty_logic(&self) -> Type<'gcx> {
-        static STATIC: TypeKind<'static> = TypeKind::Bit(ty::Domain::FourValued);
-        &STATIC
+        &ty::LOGIC_TYPE
     }
 
     /// Make a named type.

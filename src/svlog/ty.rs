@@ -12,6 +12,8 @@ pub type Type<'t> = &'t TypeKind<'t>;
 pub enum TypeKind<'t> {
     /// The `void` type.
     Void,
+    /// The `time` type.
+    Time,
     /// A single bit type.
     Bit(Domain),
     /// An integer type.
@@ -42,3 +44,12 @@ pub enum Domain {
     /// Four-valued types such as `logic` or `integer`.
     FourValued,
 }
+
+/// The `void` type.
+pub static VOID_TYPE: TypeKind<'static> = TypeKind::Void;
+/// The `time` type.
+pub static TIME_TYPE: TypeKind<'static> = TypeKind::Time;
+/// The `bit` type.
+pub static BIT_TYPE: TypeKind<'static> = TypeKind::Bit(ty::Domain::TwoValued);
+/// The `logic` type.
+pub static LOGIC_TYPE: TypeKind<'static> = TypeKind::Bit(ty::Domain::FourValued);
