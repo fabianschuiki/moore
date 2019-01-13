@@ -28,6 +28,7 @@ pub trait Visitor<'a>: Sized {
             HirNode::Proc(x) => self.visit_proc(x),
             HirNode::Stmt(x) => self.visit_stmt(x),
             HirNode::Expr(x) => self.visit_expr(x, lvalue),
+            HirNode::EventExpr(x) => self.visit_event_expr(x),
             _ => (),
         }
     }
@@ -42,6 +43,18 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_expr(&mut self, expr: &'a Expr, lvalue: bool) {
         walk_expr(self, expr, lvalue);
+    }
+
+    fn visit_timing_control(&mut self, ctrl: &'a TimingControl) {
+        walk_timing_control(self, ctrl);
+    }
+
+    fn visit_event_expr(&mut self, expr: &'a EventExpr) {
+        walk_event_expr(self, expr);
+    }
+
+    fn visit_event(&mut self, event: &'a Event) {
+        walk_event(self, event);
     }
 }
 
@@ -64,6 +77,10 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
             visitor.visit_node_with_id(lhs, true);
             visitor.visit_node_with_id(rhs, false);
         }
+        StmtKind::Timed { ref control, stmt } => {
+            visitor.visit_timing_control(control);
+            visitor.visit_node_with_id(stmt, false);
+        }
         _ => (),
     }
 }
@@ -72,5 +89,29 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
 pub fn walk_expr<'a>(_visitor: &mut impl Visitor<'a>, expr: &'a Expr, _lvalue: bool) {
     match expr.kind {
         _ => (),
+    }
+}
+
+/// Walk the contents of a timing control block.
+pub fn walk_timing_control<'a>(visitor: &mut impl Visitor<'a>, ctrl: &'a TimingControl) {
+    match *ctrl {
+        TimingControl::Delay(id) => visitor.visit_node_with_id(id, false),
+        TimingControl::ImplicitEvent => (),
+        TimingControl::ExplicitEvent(id) => visitor.visit_node_with_id(id, false),
+    }
+}
+
+/// Walk the contents of an event expression.
+pub fn walk_event_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a EventExpr) {
+    for event in &expr.events {
+        visitor.visit_event(event);
+    }
+}
+
+/// Walk the contents of an event.
+pub fn walk_event<'a>(visitor: &mut impl Visitor<'a>, event: &'a Event) {
+    visitor.visit_node_with_id(event.expr, false);
+    for &iff in &event.iff {
+        visitor.visit_node_with_id(iff, false);
     }
 }
