@@ -149,16 +149,27 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
                     kind: hir::AssignKind::Block(op),
                 },
-                ast::TimedStmt(ref control, ref stmt) => {
+                ast::TimedStmt(ref control, ref inner_stmt) => {
                     let control = match *control {
                         ast::TimingControl::Delay(ref dc) => hir::TimingControl::Delay(
                             cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
                         ),
-                        _ => unimplemented!(),
+                        ast::TimingControl::Event(ref ec) => match ec.data {
+                            ast::EventControlData::Implicit => hir::TimingControl::ImplicitEvent,
+                            ast::EventControlData::Expr(ref expr) => {
+                                hir::TimingControl::ExplicitEvent(
+                                    cx.map_ast_with_parent(AstNode::EventExpr(expr), node_id),
+                                )
+                            }
+                        },
+                        _ => {
+                            debug!("{:#?}", stmt);
+                            return cx.unimp_msg("lowering of timing control", stmt);
+                        }
                     };
                     hir::StmtKind::Timed {
                         control,
-                        stmt: cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id),
+                        stmt: cx.map_ast_with_parent(AstNode::Stmt(inner_stmt), node_id),
                     }
                 }
                 _ => {

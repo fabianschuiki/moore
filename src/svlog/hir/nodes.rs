@@ -614,4 +614,8 @@ pub enum AssignKind {
 pub enum TimingControl {
     /// A delayed statement. Contains an expression that evaluates to a time.
     Delay(NodeId),
+    /// A statement triggered by any event on its inputs.
+    ImplicitEvent,
+    /// A statement triggered by an explicit event expression.
+    ExplicitEvent(NodeId),
 }

@@ -60,6 +60,8 @@ pub enum AstNode<'ast> {
     Proc(&'ast ast::Procedure),
     /// A statement.
     Stmt(&'ast ast::Stmt),
+    /// An event expression.
+    EventExpr(&'ast ast::EventExpr),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -77,6 +79,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::VarDecl(_, x, _) => x.span(),
             AstNode::Proc(x) => x.span(),
             AstNode::Stmt(x) => x.span(),
+            AstNode::EventExpr(x) => x.span(),
         }
     }
 
@@ -94,6 +97,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::VarDecl(x, _, _) => x.human_span(),
             AstNode::Proc(x) => x.human_span(),
             AstNode::Stmt(x) => x.human_span(),
+            AstNode::EventExpr(x) => x.human_span(),
         }
     }
 }
@@ -113,6 +117,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::VarDecl(x, _, _) => x.desc(),
             AstNode::Proc(x) => x.desc(),
             AstNode::Stmt(x) => x.desc(),
+            AstNode::EventExpr(x) => x.desc(),
         }
     }
 
@@ -130,6 +135,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::VarDecl(x, _, _) => x.desc_full(),
             AstNode::Proc(x) => x.desc_full(),
             AstNode::Stmt(x) => x.desc_full(),
+            AstNode::EventExpr(x) => x.desc_full(),
         }
     }
 }

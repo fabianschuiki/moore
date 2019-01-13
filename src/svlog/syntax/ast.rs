@@ -896,13 +896,19 @@ pub enum EdgeIdent {
     Negedge,
 }
 
-impl EventExpr {
-    pub fn span(&self) -> Span {
+impl HasSpan for EventExpr {
+    fn span(&self) -> Span {
         match *self {
             EventExpr::Edge { span: sp, .. } => sp,
             EventExpr::Iff { span: sp, .. } => sp,
             EventExpr::Or { span: sp, .. } => sp,
         }
+    }
+}
+
+impl HasDesc for EventExpr {
+    fn desc(&self) -> &'static str {
+        "event expression"
     }
 }
 

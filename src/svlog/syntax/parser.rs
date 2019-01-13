@@ -10,9 +10,7 @@ use crate::ast;
 use crate::ast::*;
 use crate::lexer::{Lexer, TokenAndSpan};
 use crate::token::*;
-use moore_common::errors::*;
-use moore_common::name::*;
-use moore_common::source::*;
+use moore_common::{errors::*, name::*, source::*, util::HasSpan};
 use std;
 use std::collections::VecDeque;
 
