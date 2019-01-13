@@ -31,6 +31,7 @@ make_arenas!(
         var_decls: VarDecl,
         procs: Proc,
         stmts: Stmt,
+        event_exprs: EventExpr,
     }
 );
 

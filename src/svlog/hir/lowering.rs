@@ -185,6 +185,16 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Stmt(cx.arena().alloc_hir(hir)))
         }
+        AstNode::EventExpr(expr) => {
+            let mut events = vec![];
+            lower_event_expr(cx, expr, node_id, &mut events, &mut vec![])?;
+            let hir = hir::EventExpr {
+                id: node_id,
+                span: expr.span(),
+                events,
+            };
+            Ok(HirNode::EventExpr(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             debug!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -420,4 +430,41 @@ fn parse_fixed_point_number<'gcx>(
             Err(())
         }
     }
+}
+
+fn lower_event_expr<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx ast::EventExpr,
+    parent_id: NodeId,
+    into: &mut Vec<hir::Event>,
+    cond_stack: &mut Vec<NodeId>,
+) -> Result<()> {
+    match *expr {
+        ast::EventExpr::Edge {
+            span,
+            edge,
+            ref value,
+        } => {
+            into.push(hir::Event {
+                span,
+                edge,
+                expr: cx.map_ast_with_parent(AstNode::Expr(value), parent_id),
+                iff: cond_stack.clone(),
+            });
+        }
+        ast::EventExpr::Iff {
+            ref expr, ref cond, ..
+        } => {
+            cond_stack.push(cx.map_ast_with_parent(AstNode::Expr(cond), parent_id));
+            lower_event_expr(cx, expr, parent_id, into, cond_stack)?;
+            cond_stack.pop().unwrap();
+        }
+        ast::EventExpr::Or {
+            ref lhs, ref rhs, ..
+        } => {
+            lower_event_expr(cx, lhs, parent_id, into, cond_stack)?;
+            lower_event_expr(cx, rhs, parent_id, into, cond_stack)?;
+        }
+    };
+    Ok(())
 }

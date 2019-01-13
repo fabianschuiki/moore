@@ -19,6 +19,7 @@ pub enum HirNode<'hir> {
     VarDecl(&'hir VarDecl),
     Proc(&'hir Proc),
     Stmt(&'hir Stmt),
+    EventExpr(&'hir EventExpr),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
@@ -38,6 +39,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::VarDecl(x) => x.span(),
             HirNode::Proc(x) => x.span(),
             HirNode::Stmt(x) => x.span(),
+            HirNode::EventExpr(x) => x.span(),
         }
     }
 
@@ -54,6 +56,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::VarDecl(x) => x.human_span(),
             HirNode::Proc(x) => x.human_span(),
             HirNode::Stmt(x) => x.human_span(),
+            HirNode::EventExpr(x) => x.human_span(),
         }
     }
 }
@@ -72,6 +75,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::VarDecl(x) => x.desc(),
             HirNode::Proc(x) => x.desc(),
             HirNode::Stmt(x) => x.desc(),
+            HirNode::EventExpr(x) => x.desc(),
         }
     }
 
@@ -88,6 +92,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::VarDecl(x) => x.desc_full(),
             HirNode::Proc(x) => x.desc_full(),
             HirNode::Stmt(x) => x.desc_full(),
+            HirNode::EventExpr(x) => x.desc_full(),
         }
     }
 }
@@ -618,4 +623,35 @@ pub enum TimingControl {
     ImplicitEvent,
     /// A statement triggered by an explicit event expression.
     ExplicitEvent(NodeId),
+}
+
+/// An event expression.
+///
+/// Contains multiple events separated by `,` or `or`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventExpr {
+    pub id: NodeId,
+    pub span: Span,
+    pub events: Vec<Event>,
+}
+
+impl HasSpan for EventExpr {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for EventExpr {
+    fn desc(&self) -> &'static str {
+        "event expression"
+    }
+}
+
+/// An individual event within an event expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Event {
+    pub span: Span,
+    pub edge: ast::EdgeIdent,
+    pub expr: NodeId,
+    pub iff: Vec<NodeId>,
 }
