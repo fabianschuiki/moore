@@ -9,6 +9,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource,
 };
+use llhd::value::Context as LlhdContext;
 use num::Zero;
 use std::{collections::HashMap, ops::Deref};
 
@@ -398,6 +399,130 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 );
                 block = self.emit_stmt(stmt, env, prok, resume_blk, values)?;
             }
+            hir::StmtKind::Timed {
+                control: hir::TimingControl::ExplicitEvent(expr_id),
+                stmt,
+            } => {
+                let expr_hir = match self.hir_of(expr_id)? {
+                    HirNode::EventExpr(x) => x,
+                    _ => unreachable!(),
+                };
+                trace!("would now emit event checking code for {:#?}", expr_hir);
+
+                // Store initial values of the expressions the event is
+                // sensitive to.
+                let init_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("init".into())),
+                    llhd::block::BlockPosition::End,
+                );
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(
+                        None,
+                        llhd::BranchInst(llhd::BranchKind::Uncond(init_blk.into())),
+                    ),
+                    llhd::InstPosition::BlockEnd(block),
+                );
+                let mut init_values = vec![];
+                for event in &expr_hir.events {
+                    init_values.push(self.emit_rvalue(event.expr, env, prok, init_blk, values)?);
+                }
+
+                // Wait for any of the inputs to those expressions to change.
+                let check_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("check".into())),
+                    llhd::block::BlockPosition::End,
+                );
+                let mut trigger_on = vec![];
+                for event in &expr_hir.events {
+                    let acc = self.accessed_nodes(event.expr)?;
+                    for id in &acc.read {
+                        trigger_on.push(values[&id].clone());
+                    }
+                }
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(None, llhd::WaitInst(check_blk, None, trigger_on)),
+                    llhd::InstPosition::BlockEnd(init_blk),
+                );
+
+                // Check if any of the events happened and produce a single bit
+                // value that represents this.
+                let mut event_cond = None;
+                for (event, init_value) in expr_hir.events.iter().zip(init_values.into_iter()) {
+                    trace!(
+                        "would now emit check if {:?} changed according to {:#?}",
+                        init_value,
+                        event
+                    );
+                    let now_value = self.emit_rvalue(event.expr, env, prok, check_blk, values)?;
+                    let mut trigger = self.emit_event_trigger(
+                        event.edge, init_value, now_value, env, prok, check_blk, values,
+                    )?;
+                    for &iff in &event.iff {
+                        let iff_value = self.emit_rvalue(iff, env, prok, check_blk, values)?;
+                        trigger = prok
+                            .body_mut()
+                            .add_inst(
+                                llhd::Inst::new(
+                                    Some("iff".into()),
+                                    llhd::BinaryInst(
+                                        llhd::BinaryOp::And,
+                                        llhd::int_ty(1),
+                                        trigger,
+                                        iff_value,
+                                    ),
+                                ),
+                                llhd::InstPosition::BlockEnd(check_blk),
+                            )
+                            .into();
+                    }
+                    event_cond = Some(match event_cond {
+                        Some(chain) => prok
+                            .body_mut()
+                            .add_inst(
+                                llhd::Inst::new(
+                                    Some("event_or".into()),
+                                    llhd::BinaryInst(
+                                        llhd::BinaryOp::Or,
+                                        llhd::int_ty(1),
+                                        chain,
+                                        trigger,
+                                    ),
+                                ),
+                                llhd::InstPosition::BlockEnd(check_blk),
+                            )
+                            .into(),
+                        None => trigger,
+                    });
+                }
+
+                // If the event happened, branch to a new block which will
+                // contain the subsequent statements. Otherwise jump back up to
+                // the initial block.
+                block = match event_cond {
+                    Some(event_cond) => {
+                        let event_blk = prok.body_mut().add_block(
+                            llhd::Block::new(Some("event".into())),
+                            llhd::block::BlockPosition::End,
+                        );
+                        prok.body_mut().add_inst(
+                            llhd::Inst::new(
+                                None,
+                                llhd::BranchInst(llhd::BranchKind::Cond(
+                                    event_cond,
+                                    event_blk.into(),
+                                    init_blk.into(),
+                                )),
+                            ),
+                            llhd::InstPosition::BlockEnd(check_blk),
+                        );
+                        event_blk
+                    }
+                    None => check_blk,
+                };
+
+                // Emit the actual statement.
+                block = self.emit_stmt(stmt, env, prok, block, values)?;
+            }
             _ => return self.unimp_msg("code generation for", hir),
         }
         Ok(block)
@@ -470,5 +595,152 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             }
             _ => self.unimp_msg("code generation for", hir),
         }
+    }
+
+    /// Emit the code to check if a certain edge occurred between two values.
+    fn emit_event_trigger(
+        &mut self,
+        edge: ast::EdgeIdent,
+        prev: llhd::ValueRef,
+        now: llhd::ValueRef,
+        _env: ParamEnv,
+        prok: &mut llhd::Process,
+        block: llhd::value::BlockRef,
+        _values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<llhd::ValueRef> {
+        let ty = llhd::ProcessContext::new(&llhd::ModuleContext::new(&self.into), prok).ty(&now);
+
+        // Check if a posedge happened.
+        let posedge = match edge {
+            ast::EdgeIdent::Posedge | ast::EdgeIdent::Edge => {
+                let prev_eq_0 = prok
+                    .body_mut()
+                    .add_inst(
+                        llhd::Inst::new(
+                            None,
+                            llhd::CompareInst(
+                                llhd::CompareOp::Eq,
+                                ty.clone(),
+                                prev.clone(),
+                                llhd::const_zero(&ty).into(),
+                            ),
+                        ),
+                        llhd::InstPosition::BlockEnd(block),
+                    )
+                    .into();
+                let now_neq_0 = prok
+                    .body_mut()
+                    .add_inst(
+                        llhd::Inst::new(
+                            None,
+                            llhd::CompareInst(
+                                llhd::CompareOp::Neq,
+                                ty.clone(),
+                                now.clone(),
+                                llhd::const_zero(&ty).into(),
+                            ),
+                        ),
+                        llhd::InstPosition::BlockEnd(block),
+                    )
+                    .into();
+                Some(
+                    prok.body_mut()
+                        .add_inst(
+                            llhd::Inst::new(
+                                Some("posedge".into()),
+                                llhd::BinaryInst(
+                                    llhd::BinaryOp::And,
+                                    llhd::int_ty(1),
+                                    prev_eq_0,
+                                    now_neq_0,
+                                ),
+                            ),
+                            llhd::InstPosition::BlockEnd(block),
+                        )
+                        .into(),
+                )
+            }
+            _ => None,
+        };
+
+        // Check if a negedge happened.
+        let negedge = match edge {
+            ast::EdgeIdent::Negedge | ast::EdgeIdent::Edge => {
+                let now_eq_0 = prok
+                    .body_mut()
+                    .add_inst(
+                        llhd::Inst::new(
+                            None,
+                            llhd::CompareInst(
+                                llhd::CompareOp::Eq,
+                                ty.clone(),
+                                now.clone(),
+                                llhd::const_zero(&ty).into(),
+                            ),
+                        ),
+                        llhd::InstPosition::BlockEnd(block),
+                    )
+                    .into();
+                let prev_neq_0 = prok
+                    .body_mut()
+                    .add_inst(
+                        llhd::Inst::new(
+                            None,
+                            llhd::CompareInst(
+                                llhd::CompareOp::Neq,
+                                ty.clone(),
+                                prev.clone(),
+                                llhd::const_zero(&ty).into(),
+                            ),
+                        ),
+                        llhd::InstPosition::BlockEnd(block),
+                    )
+                    .into();
+                Some(
+                    prok.body_mut()
+                        .add_inst(
+                            llhd::Inst::new(
+                                Some("negedge".into()),
+                                llhd::BinaryInst(
+                                    llhd::BinaryOp::And,
+                                    llhd::int_ty(1),
+                                    now_eq_0,
+                                    prev_neq_0,
+                                ),
+                            ),
+                            llhd::InstPosition::BlockEnd(block),
+                        )
+                        .into(),
+                )
+            }
+            _ => None,
+        };
+
+        // Combine the two edge triggers, or emit an implicit edge check if none
+        // of the above edges was checked.
+        Ok(match (posedge, negedge) {
+            (Some(a), Some(b)) => prok
+                .body_mut()
+                .add_inst(
+                    llhd::Inst::new(
+                        Some("edge".into()),
+                        llhd::BinaryInst(llhd::BinaryOp::Or, llhd::int_ty(1), a, b),
+                    ),
+                    llhd::InstPosition::BlockEnd(block),
+                )
+                .into(),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => prok
+                .body_mut()
+                .add_inst(
+                    llhd::Inst::new(
+                        Some("impledge".into()),
+                        llhd::CompareInst(llhd::CompareOp::Neq, ty, prev, now),
+                    ),
+                    llhd::InstPosition::BlockEnd(block),
+                )
+                .into(),
+        })
     }
 }
