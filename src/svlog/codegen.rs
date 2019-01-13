@@ -285,6 +285,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     llhd::InstPosition::BlockEnd(final_blk),
                 );
             }
+            ast::ProcedureKind::Always
+            | ast::ProcedureKind::AlwaysComb
+            | ast::ProcedureKind::AlwaysLatch
+            | ast::ProcedureKind::AlwaysFf => {
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(None, llhd::BranchInst(llhd::BranchKind::Uncond(entry_blk))),
+                    llhd::InstPosition::BlockEnd(final_blk),
+                );
+            }
             _ => (),
         }
         Ok(self.into.add_process(prok))
