@@ -258,11 +258,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
     let vhdl_module = vhdl_sb.llmod.into_inner();
 
     // Emit the module.
-    {
-        use llhd::visit::Visitor;
-        let stdout = std::io::stdout();
-        llhd::assembly::Writer::new(&mut stdout.lock()).visit_module(&vhdl_module);
-    }
+    llhd::assembly::write(&mut std::io::stdout().lock(), &vhdl_module);
 
     if sess.failed() {
         std::process::exit(1);
@@ -382,9 +378,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             let mut cg = svlog::CodeGenerator::new(ctx.svlog);
             cg.emit_module(m)?;
             let code = cg.finalize();
-            use llhd::visit::Visitor;
-            let stdout = std::io::stdout();
-            llhd::assembly::Writer::new(&mut stdout.lock()).visit_module(&code);
+            llhd::assembly::write(&mut std::io::stdout().lock(), &code);
         }
     }
     Ok(())

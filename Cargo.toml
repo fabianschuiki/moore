@@ -20,7 +20,7 @@ moore-svlog = { path = "src/svlog", version = "0.1" }
 moore-vhdl = { path = "src/vhdl", version = "0.1" }
 bincode = "0.6.1"
 clap = "2"
-llhd = "0.1"
+llhd = "0.3"
 num = "0.1"
 rustc-serialize = "0.3.22"
 serde = "1"

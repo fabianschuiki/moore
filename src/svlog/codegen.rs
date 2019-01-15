@@ -9,7 +9,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource,
 };
-use llhd::value::Context as LlhdContext;
+use llhd::Context as LlhdContext;
 use num::Zero;
 use std::{collections::HashMap, ops::Deref};
 
@@ -43,7 +43,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 
 #[derive(Default)]
 struct Tables<'gcx> {
-    module_defs: HashMap<NodeEnvId, Result<llhd::value::EntityRef>>,
+    module_defs: HashMap<NodeEnvId, Result<llhd::EntityRef>>,
     module_types: HashMap<NodeEnvId, llhd::Type>,
     interned_types: HashMap<Type<'gcx>, Result<llhd::Type>>,
     interned_values: HashMap<Value<'gcx>, Result<llhd::Const>>,
@@ -59,16 +59,12 @@ impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
 
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::value::EntityRef> {
+    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::EntityRef> {
         self.emit_module_with_env(id, self.default_param_env())
     }
 
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module_with_env(
-        &mut self,
-        id: NodeId,
-        env: ParamEnv,
-    ) -> Result<llhd::value::EntityRef> {
+    pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::EntityRef> {
         if let Some(x) = self.tables.module_defs.get(&(id, env)) {
             return x.clone();
         }
@@ -216,7 +212,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Emit and instantiate procedures.
         for &proc_id in hir.procs {
-            use llhd::value::Context as LlhdContext;
+            use llhd::Context as LlhdContext;
             let prok = self.emit_procedure(proc_id, env)?;
             let ty = llhd::ModuleContext::new(&self.into)
                 .ty(&prok.into())
@@ -234,7 +230,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Emit the code for a procedure.
-    fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::value::ProcessRef> {
+    fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ProcessRef> {
         let hir = match self.hir_of(id)? {
             HirNode::Proc(x) => x,
             _ => unreachable!(),
@@ -264,7 +260,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         );
         let entry_blk = prok
             .body_mut()
-            .add_block(llhd::Block::new(None), llhd::block::BlockPosition::Begin);
+            .add_block(llhd::Block::new(None), llhd::BlockPosition::Begin);
 
         // Create a mapping from read/written nodes to process parameters and
         // emit statements.
@@ -354,9 +350,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         stmt_id: NodeId,
         env: ParamEnv,
         prok: &mut llhd::Process,
-        mut block: llhd::value::BlockRef,
+        mut block: llhd::BlockRef,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::value::BlockRef> {
+    ) -> Result<llhd::BlockRef> {
         let hir = match self.hir_of(stmt_id)? {
             HirNode::Stmt(x) => x,
             _ => unreachable!(),
@@ -391,7 +387,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             } => {
                 let resume_blk = prok
                     .body_mut()
-                    .add_block(llhd::Block::new(None), llhd::block::BlockPosition::End);
+                    .add_block(llhd::Block::new(None), llhd::BlockPosition::End);
                 let duration = self.emit_rvalue(expr_id, env, prok, block, values)?.into();
                 prok.body_mut().add_inst(
                     llhd::Inst::new(None, llhd::WaitInst(resume_blk, Some(duration), vec![])),
@@ -413,7 +409,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 // sensitive to.
                 let init_blk = prok.body_mut().add_block(
                     llhd::Block::new(Some("init".into())),
-                    llhd::block::BlockPosition::End,
+                    llhd::BlockPosition::End,
                 );
                 prok.body_mut().add_inst(
                     llhd::Inst::new(
@@ -430,7 +426,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 // Wait for any of the inputs to those expressions to change.
                 let check_blk = prok.body_mut().add_block(
                     llhd::Block::new(Some("check".into())),
-                    llhd::block::BlockPosition::End,
+                    llhd::BlockPosition::End,
                 );
                 let mut trigger_on = vec![];
                 for event in &expr_hir.events {
@@ -502,7 +498,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     Some(event_cond) => {
                         let event_blk = prok.body_mut().add_block(
                             llhd::Block::new(Some("event".into())),
-                            llhd::block::BlockPosition::End,
+                            llhd::BlockPosition::End,
                         );
                         prok.body_mut().add_inst(
                             llhd::Inst::new(
@@ -534,7 +530,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         expr_id: NodeId,
         env: ParamEnv,
         _prok: &mut llhd::Process,
-        _block: llhd::value::BlockRef,
+        _block: llhd::BlockRef,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::ValueRef> {
         let hir = match self.hir_of(expr_id)? {
@@ -571,7 +567,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         expr_id: NodeId,
         env: ParamEnv,
         prok: &mut llhd::Process,
-        block: llhd::value::BlockRef,
+        block: llhd::BlockRef,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::ValueRef> {
         let hir = match self.hir_of(expr_id)? {
@@ -605,7 +601,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         now: llhd::ValueRef,
         _env: ParamEnv,
         prok: &mut llhd::Process,
-        block: llhd::value::BlockRef,
+        block: llhd::BlockRef,
         _values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::ValueRef> {
         let ty = llhd::ProcessContext::new(&llhd::ModuleContext::new(&self.into), prok).ty(&now);

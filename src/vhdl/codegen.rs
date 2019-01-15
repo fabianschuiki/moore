@@ -2,18 +2,18 @@
 
 //! LLHD code generation for VHDL.
 
-use moore_common::score::Result;
-use moore_common::errors::*;
-use crate::score::*;
-use crate::konst::*;
-use crate::ty::*;
 use crate::hir;
+use crate::konst::*;
+use crate::score::*;
+use crate::ty::*;
 use llhd;
-use num::{Signed, Zero, ToPrimitive};
+use moore_common::errors::*;
+use moore_common::score::Result;
+use num::{Signed, ToPrimitive, Zero};
 
 /// Generates LLHD code.
-pub trait Codegen<I,C> {
-	fn codegen(&self, id: I, ctx: &mut C) -> Result<()>;
+pub trait Codegen<I, C> {
+    fn codegen(&self, id: I, ctx: &mut C) -> Result<()>;
 }
 
 /// This macro implements the `Codegen` trait for a specific combination of
@@ -33,132 +33,135 @@ macro_rules! impl_codegen {
 }
 
 macro_rules! unimp {
-	($slf:tt, $id:expr) => {{
-		$slf.sess.emit(DiagBuilder2::bug(format!("code generation for {:?} not implemented", $id)));
-		return Err(());
-	}}
+    ($slf:tt, $id:expr) => {{
+        $slf.sess.emit(DiagBuilder2::bug(format!(
+            "code generation for {:?} not implemented",
+            $id
+        )));
+        return Err(());
+    }};
 }
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-	/// Map a VHDL type to the corresponding LLHD type.
-	pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
-		let ty = self.deref_named_type(ty)?;
-		Ok(match *ty {
-			Ty::Named(..) => unreachable!(),
-			Ty::Null => llhd::void_ty(),
-			Ty::Int(ref ty) => {
-				let diff = match ty.dir {
-					hir::Dir::To => &ty.right_bound - &ty.left_bound,
-					hir::Dir::Downto => &ty.left_bound - &ty.right_bound,
-				};
-				if diff.is_negative() {
-					llhd::void_ty()
-				} else {
-					llhd::int_ty(diff.bits())
-				}
-			}
-			Ty::Enum(ref ty) => {
-				let hir = self.lazy_hir(ty.decl)?;
-				match hir.data.as_ref().unwrap().value {
-					hir::TypeData::Enum(ref lits) => llhd::enum_ty(lits.len()),
-					_ => unreachable!()
-				}
-			}
-			Ty::Physical(ref ty) => {
-				self.emit(
-					DiagBuilder2::error(format!("cannot generate code for physical type `{}`", ty))
-				);
-				return Err(());
-			}
-			Ty::Access(ref ty) => {
-				llhd::pointer_ty(self.map_type(ty)?)
-			}
-			Ty::Array(ref ty) => {
-				let mut llty = self.map_type(&ty.element)?;
-				for index in ty.indices.iter().rev() {
-					match *index {
-						ArrayIndex::Unbounded(_) => {
-							self.emit(
-								DiagBuilder2::error(format!("type `{}` is unbounded", ty))
-								// TODO: What span should we use here?
-							);
-							return Err(());
-						}
-						ArrayIndex::Constrained(ref ty) => {
-							let num = match **ty {
-								Ty::Int(ref ty) => {
-									let l = ty.len();
-									if l.is_negative() || l.is_zero() {
-										return Ok(llhd::void_ty());
-									}
-									match l.to_usize() {
-										Some(l) => l,
-										None => {
-											self.emit(
+    /// Map a VHDL type to the corresponding LLHD type.
+    pub fn map_type(&self, ty: &Ty) -> Result<llhd::Type> {
+        let ty = self.deref_named_type(ty)?;
+        Ok(match *ty {
+            Ty::Named(..) => unreachable!(),
+            Ty::Null => llhd::void_ty(),
+            Ty::Int(ref ty) => {
+                let diff = match ty.dir {
+                    hir::Dir::To => &ty.right_bound - &ty.left_bound,
+                    hir::Dir::Downto => &ty.left_bound - &ty.right_bound,
+                };
+                if diff.is_negative() {
+                    llhd::void_ty()
+                } else {
+                    llhd::int_ty(diff.bits())
+                }
+            }
+            Ty::Enum(ref ty) => {
+                let hir = self.lazy_hir(ty.decl)?;
+                match hir.data.as_ref().unwrap().value {
+                    hir::TypeData::Enum(ref lits) => llhd::enum_ty(lits.len()),
+                    _ => unreachable!(),
+                }
+            }
+            Ty::Physical(ref ty) => {
+                self.emit(DiagBuilder2::error(format!(
+                    "cannot generate code for physical type `{}`",
+                    ty
+                )));
+                return Err(());
+            }
+            Ty::Access(ref ty) => llhd::pointer_ty(self.map_type(ty)?),
+            Ty::Array(ref ty) => {
+                let mut llty = self.map_type(&ty.element)?;
+                for index in ty.indices.iter().rev() {
+                    match *index {
+                        ArrayIndex::Unbounded(_) => {
+                            self.emit(
+                                DiagBuilder2::error(format!("type `{}` is unbounded", ty)), // TODO: What span should we use here?
+                            );
+                            return Err(());
+                        }
+                        ArrayIndex::Constrained(ref ty) => {
+                            let num =
+                                match **ty {
+                                    Ty::Int(ref ty) => {
+                                        let l = ty.len();
+                                        if l.is_negative() || l.is_zero() {
+                                            return Ok(llhd::void_ty());
+                                        }
+                                        match l.to_usize() {
+                                            Some(l) => l,
+                                            None => {
+                                                self.emit(
 												DiagBuilder2::error(format!("array index `{}` is too large; {} elements", ty, l))
 												// TODO: What span should we use here?
 											);
-											return Err(());
-										}
-									}
-								}
-								Ty::Enum(ref ty) => {
-									match self.lazy_hir(ty.decl)?.data.as_ref().unwrap().value {
-										hir::TypeData::Enum(ref lits) => lits.len(),
-										_ => unreachable!()
-									}
-								}
-								_ => {
-									self.emit(
-										DiagBuilder2::error(format!("`{}` is an invalid array index type", ty))
-										// TODO: What span should we use here?
-									);
-									return Err(());
-								}
-							};
-							llty = llhd::vector_ty(num, llty);
-						}
-					}
-				}
-				llty
-			}
-			Ty::File(ref _ty) => {
-				llhd::int_ty(32)
-			}
-			Ty::Record(ref ty) => {
-				let fields = ty.fields
-					.iter()
-					.map(|&(_, ref ty)| self.map_type(ty))
-					.collect::<Result<_>>()?;
-				llhd::struct_ty(fields)
-			}
-			Ty::Subprog(..) => unimplemented!(),
-			// Unbounded integers cannot be mapped to LLHD. All cases where
-			// such an int can leak through to codegen should actually be caught
-			// beforehand in the type check.
-			Ty::UnboundedInt | Ty::UniversalInt => unreachable!(),
-		})
-	}
+                                                return Err(());
+                                            }
+                                        }
+                                    }
+                                    Ty::Enum(ref ty) => {
+                                        match self.lazy_hir(ty.decl)?.data.as_ref().unwrap().value {
+                                            hir::TypeData::Enum(ref lits) => lits.len(),
+                                            _ => unreachable!(),
+                                        }
+                                    }
+                                    _ => {
+                                        self.emit(
+                                            DiagBuilder2::error(format!(
+                                                "`{}` is an invalid array index type",
+                                                ty
+                                            )), // TODO: What span should we use here?
+                                        );
+                                        return Err(());
+                                    }
+                                };
+                            llty = llhd::vector_ty(num, llty);
+                        }
+                    }
+                }
+                llty
+            }
+            Ty::File(ref _ty) => llhd::int_ty(32),
+            Ty::Record(ref ty) => {
+                let fields = ty
+                    .fields
+                    .iter()
+                    .map(|&(_, ref ty)| self.map_type(ty))
+                    .collect::<Result<_>>()?;
+                llhd::struct_ty(fields)
+            }
+            Ty::Subprog(..) => unimplemented!(),
+            // Unbounded integers cannot be mapped to LLHD. All cases where
+            // such an int can leak through to codegen should actually be caught
+            // beforehand in the type check.
+            Ty::UnboundedInt | Ty::UniversalInt => unreachable!(),
+        })
+    }
 
-	/// Map a constant value to the LLHD counterpart.
-	pub fn map_const(&self, konst: &Const) -> Result<llhd::ValueRef> {
-		Ok(match *konst {
-			// TODO: Map this to llhd::const_void once available.
-			Const::Null => llhd::const_int(0, 0.into()),
-			Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
-			Const::Enum(ref k) => {
-				let size = match self.lazy_hir(k.decl)?.data.as_ref().unwrap().value {
-					hir::TypeData::Enum(ref lits) => lits.len(),
-					_ => unreachable!(),
-				};
-				llhd::const_int(size, k.index.into())
-			}
-			Const::Float(ref _k) => panic!("cannot map float constant"),
-			Const::IntRange(_) | Const::FloatRange(_) => panic!("cannot map range constant"),
-		}.into())
-	}
+    /// Map a constant value to the LLHD counterpart.
+    pub fn map_const(&self, konst: &Const) -> Result<llhd::ValueRef> {
+        Ok(match *konst {
+            // TODO: Map this to llhd::const_void once available.
+            Const::Null => llhd::const_int(0, 0.into()),
+            Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
+            Const::Enum(ref k) => {
+                let size = match self.lazy_hir(k.decl)?.data.as_ref().unwrap().value {
+                    hir::TypeData::Enum(ref lits) => lits.len(),
+                    _ => unreachable!(),
+                };
+                llhd::const_int(size, k.index.into())
+            }
+            Const::Float(ref _k) => panic!("cannot map float constant"),
+            Const::IntRange(_) | Const::FloatRange(_) => panic!("cannot map range constant"),
+        }
+        .into())
+    }
 }
-
 
 impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 	match id {
@@ -185,7 +188,6 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
 	}
 });
 
-
 impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::Entity => {
 	unimp!(self, id);
 });
@@ -193,7 +195,6 @@ impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::Entity => {
 impl_codegen!(self, id: VarDeclRef, _ctx: &mut llhd::Entity => {
 	unimp!(self, id);
 });
-
 
 impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 	// Determine the type of the signal.
@@ -217,7 +218,6 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 	ctx.add_inst(inst, llhd::InstPosition::End);
 	Ok(())
 });
-
 
 impl_codegen!(self, id: FileDeclRef, _ctx: &mut llhd::Entity => {
 	unimp!(self, id);
@@ -256,7 +256,7 @@ impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
 	// TOOD: codegen statements
 	{
 		let body = prok.body_mut();
-		let entry_blk = body.add_block(llhd::Block::new(Some("entry".into())), llhd::block::BlockPosition::End);
+		let entry_blk = body.add_block(llhd::Block::new(Some("entry".into())), llhd::BlockPosition::End);
 		let mut builder = InstBuilder::new(body, entry_blk);
 		for &stmt in &hir.stmts {
 			self.codegen(stmt, &mut builder)?;
@@ -336,31 +336,33 @@ impl_codegen!(self, id: CompDeclRef, _ctx: &mut () => {
 
 /// An helper to build sequences of instructions.
 pub struct InstBuilder<'ctx> {
-	pub body: &'ctx mut llhd::seq_body::SeqBody,
-	pub block: llhd::value::BlockRef,
+    pub body: &'ctx mut llhd::SeqBody,
+    pub block: llhd::BlockRef,
 }
 
 impl<'ctx> InstBuilder<'ctx> {
-	/// Create a new instruction builder.
-	pub fn new(body: &'ctx mut llhd::seq_body::SeqBody, block: llhd::value::BlockRef) -> InstBuilder<'ctx> {
-		InstBuilder {
-			body: body,
-			block: block,
-		}
-	}
+    /// Create a new instruction builder.
+    pub fn new(body: &'ctx mut llhd::SeqBody, block: llhd::BlockRef) -> InstBuilder<'ctx> {
+        InstBuilder {
+            body: body,
+            block: block,
+        }
+    }
 
-	/// Add a new instruction.
-	pub fn add_inst(&mut self, inst: llhd::Inst) -> llhd::value::InstRef {
-		self.body.add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
-	}
+    /// Add a new instruction.
+    pub fn add_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
+        self.body
+            .add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
+    }
 
-	/// Add a new block.
-	pub fn add_block(&mut self, block: llhd::block::Block) -> llhd::value::BlockRef {
-		self.body.add_block(block, llhd::block::BlockPosition::After(self.block))
-	}
+    /// Add a new block.
+    pub fn add_block(&mut self, block: llhd::Block) -> llhd::BlockRef {
+        self.body
+            .add_block(block, llhd::BlockPosition::After(self.block))
+    }
 
-	/// Change the block at the end of which instructions will be added.
-	pub fn set_block(&mut self, block: llhd::value::BlockRef) {
-		self.block = block
-	}
+    /// Change the block at the end of which instructions will be added.
+    pub fn set_block(&mut self, block: llhd::BlockRef) {
+        self.block = block
+    }
 }
