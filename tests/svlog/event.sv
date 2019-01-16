@@ -39,3 +39,20 @@ endmodule
 //|     %d = sig i1
 //|     inst @n226 (%a, %b, %c, %d) ()
 //| }
+
+module B;
+	bit clk;
+	int count;
+
+	always_ff @(posedge clk) begin
+		count = 1;
+	end
+
+	initial begin
+		#1ns clk = 1;
+		#1ns clk = 0;
+		#1ns;
+	end
+endmodule
+
+//@ elab B
