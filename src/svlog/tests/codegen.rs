@@ -48,6 +48,6 @@ fn empty_instances() {
             "
         )
         .trim(),
-        "entity @bar () () {\n}\n\nentity @foo () () {\n    inst @bar () ()\n}"
+        "entity @bar () () {\n}\n\nentity @foo () () {\n    %b = inst @bar () ()\n}"
     );
 }
