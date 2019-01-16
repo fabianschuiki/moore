@@ -4,7 +4,7 @@ module A;
 endmodule
 
 //@ elab A
-//| proc @n226 (i1$ %0, i1$ %1, i1$ %2, i1$ %3) () {
+//| proc @n227 (i1$ %0, i1$ %1, i1$ %2, i1$ %3) () {
 //| %4:
 //|     br label %init
 //| %init:
@@ -37,7 +37,7 @@ endmodule
 //|     %b = sig i1
 //|     %c = sig i1
 //|     %d = sig i1
-//|     inst @n226 (%a, %b, %c, %d) ()
+//|     inst @n227 (%a, %b, %c, %d) ()
 //| }
 
 module B;
@@ -54,5 +54,3 @@ module B;
 		#1ns;
 	end
 endmodule
-
-//@ elab B

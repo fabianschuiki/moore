@@ -14,7 +14,7 @@ endmodule
 //| }
 //|
 //| entity @A () () {
-//|     inst @B () ()
+//|     %b = inst @B () ()
 //| }
 
 
@@ -38,8 +38,8 @@ endmodule
 //| }
 //|
 //| entity @C () () {
-//|     inst @D.param1 () ()
-//|     inst @D.param2 () ()
+//|     %d1 = inst @D.param1 () ()
+//|     %d2 = inst @D.param2 () ()
 //| }
 
 
@@ -79,9 +79,9 @@ endmodule
 //| }
 //|
 //| entity @F () () {
-//|     inst @G.param3 () ()
-//|     inst @G.param4 () ()
-//|     inst @G.param5 () ()
+//|     %g1 = inst @G.param3 () ()
+//|     %g2 = inst @G.param4 () ()
+//|     %g3 = inst @G.param5 () ()
 //| }
 
 
@@ -112,7 +112,7 @@ endmodule
 //| }
 //|
 //| entity @H () () {
-//|     inst @I () ()
-//|     inst @I.param6 () ()
-//|     inst @I.param7 () ()
+//|     %i1 = inst @I () ()
+//|     %i2 = inst @I.param6 () ()
+//|     %i3 = inst @I.param7 () ()
 //| }

@@ -27,5 +27,5 @@ endmodule
 //| }
 //|
 //| entity @B () () {
-//|     inst @A.param1 () ()
+//|     %a1 = inst @A.param1 () ()
 //| }
