@@ -366,14 +366,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
             }
             hir::StmtKind::Assign { lhs, rhs, kind } => {
-                let lhs_value = self.emit_lvalue(lhs, env, prok, block, values)?;
                 let rhs_value = self.emit_rvalue(rhs, env, prok, block, values)?;
                 match kind {
                     hir::AssignKind::Block(ast::AssignOp::Identity) => {
-                        let inst =
-                            llhd::Inst::new(None, llhd::DriveInst(lhs_value, rhs_value, None));
-                        prok.body_mut()
-                            .add_inst(inst, llhd::InstPosition::BlockEnd(block));
+                        self.emit_blocking_assign(lhs, rhs_value, env, prok, block, values)?;
                     }
                     _ => {
                         return self
@@ -589,21 +585,95 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     .add_inst(inst, llhd::InstPosition::BlockEnd(block))
                     .into())
             }
-            hir::ExprKind::Unary(op, arg) => {
-                let lop = match op {
-                    hir::UnaryOp::BitNot => llhd::UnaryOp::Not,
-                    _ => return self.unimp_msg("code generation for", hir),
-                };
-                let ty = self.emit_type(self.type_of(expr_id, env)?)?;
-                let value = self.emit_rvalue(arg, env, prok, block, values)?;
-                let inst = llhd::Inst::new(None, llhd::UnaryInst(lop, ty, value));
-                Ok(prok
-                    .body_mut()
-                    .add_inst(inst, llhd::InstPosition::BlockEnd(block))
-                    .into())
-            }
+            hir::ExprKind::Unary(op, arg) => match op {
+                hir::UnaryOp::BitNot => {
+                    let ty = self.emit_type(self.type_of(expr_id, env)?)?;
+                    let value = self.emit_rvalue(arg, env, prok, block, values)?;
+                    let inst =
+                        llhd::Inst::new(None, llhd::UnaryInst(llhd::UnaryOp::Not, ty, value));
+                    Ok(prok
+                        .body_mut()
+                        .add_inst(inst, llhd::InstPosition::BlockEnd(block))
+                        .into())
+                }
+                hir::UnaryOp::PreInc => {
+                    self.emit_incdec(arg, env, llhd::BinaryOp::Add, false, prok, block, values)
+                }
+                hir::UnaryOp::PreDec => {
+                    self.emit_incdec(arg, env, llhd::BinaryOp::Sub, false, prok, block, values)
+                }
+                hir::UnaryOp::PostInc => {
+                    self.emit_incdec(arg, env, llhd::BinaryOp::Add, true, prok, block, values)
+                }
+                hir::UnaryOp::PostDec => {
+                    self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true, prok, block, values)
+                }
+                _ => self.unimp_msg("code generation for", hir),
+            },
             _ => self.unimp_msg("code generation for", hir),
         }
+    }
+
+    /// Emit the code for a post-increment or -decrement operation.
+    fn emit_incdec(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        op: llhd::BinaryOp,
+        postfix: bool,
+        prok: &mut llhd::Process,
+        block: llhd::BlockRef,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<llhd::ValueRef> {
+        let ty = self.type_of(expr_id, env)?;
+        let now = self.emit_rvalue(expr_id, env, prok, block, values)?;
+        let next: llhd::ValueRef = prok
+            .body_mut()
+            .add_inst(
+                llhd::Inst::new(
+                    None,
+                    llhd::BinaryInst(
+                        op,
+                        self.emit_type(ty)?,
+                        now.clone(),
+                        self.const_one_for_type(ty)?,
+                    ),
+                ),
+                llhd::InstPosition::BlockEnd(block),
+            )
+            .into();
+        self.emit_blocking_assign(expr_id, next.clone(), env, prok, block, values)?;
+        match postfix {
+            true => Ok(now),
+            false => Ok(next),
+        }
+    }
+
+    /// Emit a blocking assignment to a variable or signal.
+    fn emit_blocking_assign(
+        &mut self,
+        lvalue_id: NodeId,
+        rvalue: llhd::ValueRef,
+        env: ParamEnv,
+        prok: &mut llhd::Process,
+        block: llhd::BlockRef,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<()> {
+        let lvalue = self.emit_lvalue(lvalue_id, env, prok, block, values)?;
+        let (lty, rty) = {
+            let ctx = llhd::ModuleContext::new(&self.into);
+            let ctx = llhd::ProcessContext::new(&ctx, prok);
+            (ctx.ty(&lvalue), ctx.ty(&rvalue))
+        };
+        let inst = match *lty {
+            llhd::SignalType(..) => llhd::DriveInst(lvalue, rvalue, None),
+            llhd::PointerType(..) => llhd::StoreInst(rty, rvalue, lvalue),
+            ref t => panic!("value of type `{}` cannot be driven", t),
+        };
+        let inst = llhd::Inst::new(None, inst);
+        prok.body_mut()
+            .add_inst(inst, llhd::InstPosition::BlockEnd(block));
+        Ok(())
     }
 
     /// Emit the code to check if a certain edge occurred between two values.
@@ -751,5 +821,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 )
                 .into(),
         })
+    }
+
+    /// Emit the value `1` for a type.
+    fn const_one_for_type(&mut self, ty: Type<'gcx>) -> Result<llhd::ValueRef> {
+        use num::one;
+        match *ty {
+            TypeKind::Void | TypeKind::Time => panic!("no unit-value for type {:?}", ty),
+            TypeKind::Bit(..) | TypeKind::Int(..) => Ok(self
+                .emit_const(self.intern_value(value::make_int(ty, one())))?
+                .into()),
+            TypeKind::Named(_, _, ty) => self.const_one_for_type(ty),
+        }
     }
 }

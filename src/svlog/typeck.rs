@@ -19,7 +19,12 @@ pub(crate) fn type_of<'gcx>(
             hir::ExprKind::Unary(op, arg) => {
                 let arg_ty = cx.type_of(arg, env)?;
                 Ok(match op {
-                    hir::UnaryOp::BitNot => arg_ty,
+                    hir::UnaryOp::BitNot
+                    | hir::UnaryOp::PreInc
+                    | hir::UnaryOp::PreDec
+                    | hir::UnaryOp::PostInc
+                    | hir::UnaryOp::PostDec => arg_ty,
+                    _ => return cx.unimp_msg("type analysis of", &hir),
                 })
             }
             _ => cx.unimp_msg("type analysis of", &hir),

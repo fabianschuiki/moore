@@ -505,6 +505,14 @@ pub enum ExprKind {
 pub enum UnaryOp {
     /// The bitwise not operator `~x`.
     BitNot,
+    /// The prefix increment operator `++x`.
+    PreInc,
+    /// The prefix decrement operator `--x`.
+    PreDec,
+    /// The postfix increment operator `x++`.
+    PostInc,
+    /// The postfix decrement operator `x--`.
+    PostDec,
 }
 
 /// A variable declaration.
