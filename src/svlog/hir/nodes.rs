@@ -496,6 +496,15 @@ pub enum ExprKind {
     TimeConst(BigRational),
     /// An identifier.
     Ident(Spanned<Name>),
+    /// A unary operator.
+    Unary(UnaryOp, NodeId),
+}
+
+/// The different unary operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp {
+    /// The bitwise not operator `~x`.
+    BitNot,
 }
 
 /// A variable declaration.

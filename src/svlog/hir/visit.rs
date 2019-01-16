@@ -6,7 +6,10 @@
 //! be visited.
 
 use super::{nodes::*, HirNode};
-use crate::{common::NodeId, Context};
+use crate::{
+    common::{name::Name, source::Spanned, NodeId},
+    Context,
+};
 
 /// A visitor of the HIR.
 pub trait Visitor<'a>: Sized {
@@ -32,6 +35,9 @@ pub trait Visitor<'a>: Sized {
             _ => (),
         }
     }
+
+    fn visit_ident(&mut self, _ident: Spanned<Name>) {}
+    fn visit_unary_op(&mut self, _op: UnaryOp) {}
 
     fn visit_proc(&mut self, prok: &'a Proc) {
         walk_proc(self, prok)
@@ -86,9 +92,16 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
 }
 
 /// Walk the contents of an expression.
-pub fn walk_expr<'a>(_visitor: &mut impl Visitor<'a>, expr: &'a Expr, _lvalue: bool) {
+pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: bool) {
     match expr.kind {
-        _ => (),
+        ExprKind::IntConst(_) | ExprKind::TimeConst(_) => (),
+        ExprKind::Ident(x) => {
+            visitor.visit_ident(x);
+        }
+        ExprKind::Unary(op, arg) => {
+            visitor.visit_unary_op(op);
+            visitor.visit_node_with_id(arg, lvalue);
+        }
     }
 }
 

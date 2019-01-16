@@ -589,6 +589,19 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     .add_inst(inst, llhd::InstPosition::BlockEnd(block))
                     .into())
             }
+            hir::ExprKind::Unary(op, arg) => {
+                let lop = match op {
+                    hir::UnaryOp::BitNot => llhd::UnaryOp::Not,
+                    _ => return self.unimp_msg("code generation for", hir),
+                };
+                let ty = self.emit_type(self.type_of(expr_id, env)?)?;
+                let value = self.emit_rvalue(arg, env, prok, block, values)?;
+                let inst = llhd::Inst::new(None, llhd::UnaryInst(lop, ty, value));
+                Ok(prok
+                    .body_mut()
+                    .add_inst(inst, llhd::InstPosition::BlockEnd(block))
+                    .into())
+            }
             _ => self.unimp_msg("code generation for", hir),
         }
     }

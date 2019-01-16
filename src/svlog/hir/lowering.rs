@@ -358,7 +358,8 @@ fn lower_expr<'gcx>(
     node_id: NodeId,
     expr: &'gcx ast::Expr,
 ) -> Result<HirNode<'gcx>> {
-    use crate::syntax::token::Lit;
+    use crate::syntax::token::{Lit, Op};
+    let parent = cx.parent_node_id(node_id).unwrap();
     let kind = match expr.data {
         ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
             Ok(v) => hir::ExprKind::IntConst(v),
@@ -388,6 +389,31 @@ fn lower_expr<'gcx>(
             hir::ExprKind::TimeConst(value)
         }
         ast::IdentExpr(ident) => hir::ExprKind::Ident(Spanned::new(ident.name, ident.span)),
+        ast::UnaryExpr {
+            op,
+            expr: ref arg,
+            postfix,
+        } => hir::ExprKind::Unary(
+            match op {
+                Op::BitNot if !postfix => hir::UnaryOp::BitNot,
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "`{}` is not a valid {} operator",
+                            op,
+                            match postfix {
+                                true => "postfix",
+                                false => "prefix",
+                            }
+                        ))
+                        .span(expr.span()),
+                    );
+                    return Err(());
+                }
+            },
+            cx.map_ast_with_parent(AstNode::Expr(arg), parent),
+        ),
+
         _ => return cx.unimp_msg("lowering of", expr),
     };
     let hir = hir::Expr {
