@@ -524,6 +524,18 @@ pub enum BinaryOp {
     Add,
     /// The subtraction operator `x - y`.
     Sub,
+    /// The equality operator `x == y`.
+    Eq,
+    /// The inequality operator `x != y`.
+    Neq,
+    /// The less-than operator `x < y`.
+    Lt,
+    /// The less-than-or-equal operator `x <= y`.
+    Leq,
+    /// The greater-than operator `x > y`.
+    Gt,
+    /// The greater-than-or-equal operator `x >= y`.
+    Geq,
 }
 
 /// A variable declaration.

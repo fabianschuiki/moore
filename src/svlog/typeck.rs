@@ -32,6 +32,12 @@ pub(crate) fn type_of<'gcx>(
                 let _rhs_ty = cx.type_of(rhs, env)?;
                 Ok(match op {
                     hir::BinaryOp::Add | hir::BinaryOp::Sub => lhs_ty,
+                    hir::BinaryOp::Eq
+                    | hir::BinaryOp::Neq
+                    | hir::BinaryOp::Lt
+                    | hir::BinaryOp::Leq
+                    | hir::BinaryOp::Gt
+                    | hir::BinaryOp::Geq => cx.mkty_bit(),
                     _ => return cx.unimp_msg("type analysis of", &hir),
                 })
             }

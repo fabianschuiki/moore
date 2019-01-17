@@ -611,12 +611,18 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 _ => self.unimp_msg("code generation for", hir),
             },
             hir::ExprKind::Binary(op, lhs, rhs) => {
-                let ty = self.emit_type(self.type_of(expr_id, env)?)?;
+                let ty = self.emit_type(self.type_of(lhs, env)?)?;
                 let lhs = self.emit_rvalue(lhs, env, prok, block, values)?;
                 let rhs = self.emit_rvalue(rhs, env, prok, block, values)?;
                 let inst = match op {
                     hir::BinaryOp::Add => llhd::BinaryInst(llhd::BinaryOp::Add, ty, lhs, rhs),
                     hir::BinaryOp::Sub => llhd::BinaryInst(llhd::BinaryOp::Sub, ty, lhs, rhs),
+                    hir::BinaryOp::Eq => llhd::CompareInst(llhd::CompareOp::Eq, ty, lhs, rhs),
+                    hir::BinaryOp::Neq => llhd::CompareInst(llhd::CompareOp::Neq, ty, lhs, rhs),
+                    hir::BinaryOp::Lt => llhd::CompareInst(llhd::CompareOp::Ult, ty, lhs, rhs),
+                    hir::BinaryOp::Leq => llhd::CompareInst(llhd::CompareOp::Ule, ty, lhs, rhs),
+                    hir::BinaryOp::Gt => llhd::CompareInst(llhd::CompareOp::Ugt, ty, lhs, rhs),
+                    hir::BinaryOp::Geq => llhd::CompareInst(llhd::CompareOp::Uge, ty, lhs, rhs),
                     _ => return self.unimp_msg("code generation for", hir),
                 };
                 Ok(prok
