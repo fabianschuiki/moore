@@ -515,6 +515,56 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 // Emit the actual statement.
                 block = self.emit_stmt(stmt, env, prok, block, values)?;
             }
+            hir::StmtKind::If {
+                cond,
+                main_stmt,
+                else_stmt,
+            } => {
+                let main_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("if_true".into())),
+                    llhd::BlockPosition::End,
+                );
+                let else_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("if_false".into())),
+                    llhd::BlockPosition::End,
+                );
+                let cond = self.emit_rvalue(cond, env, prok, block, values)?;
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(
+                        None,
+                        llhd::BranchInst(llhd::BranchKind::Cond(
+                            cond,
+                            main_blk.into(),
+                            else_blk.into(),
+                        )),
+                    ),
+                    llhd::InstPosition::BlockEnd(block),
+                );
+                let final_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("if_exit".into())),
+                    llhd::BlockPosition::End,
+                );
+                let main_blk = self.emit_stmt(main_stmt, env, prok, main_blk, values)?;
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(
+                        None,
+                        llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())),
+                    ),
+                    llhd::InstPosition::BlockEnd(main_blk),
+                );
+                let else_blk = match else_stmt {
+                    Some(else_stmt) => self.emit_stmt(else_stmt, env, prok, else_blk, values)?,
+                    None => else_blk,
+                };
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(
+                        None,
+                        llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())),
+                    ),
+                    llhd::InstPosition::BlockEnd(else_blk),
+                );
+                block = final_blk;
+            }
             _ => return self.unimp_msg("code generation for", hir),
         }
         Ok(block)

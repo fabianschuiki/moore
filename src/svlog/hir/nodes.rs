@@ -651,6 +651,16 @@ pub enum StmtKind {
         control: TimingControl,
         stmt: NodeId,
     },
+    /// An if statement.
+    ///
+    /// ```text
+    /// if (<cond>) <main_stmt> [else <else_stmt>]
+    /// ```
+    If {
+        cond: NodeId,
+        main_stmt: NodeId,
+        else_stmt: Option<NodeId>,
+    },
 }
 
 /// The different forms an assignment can take.

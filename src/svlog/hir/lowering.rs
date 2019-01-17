@@ -172,6 +172,18 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         stmt: cx.map_ast_with_parent(AstNode::Stmt(inner_stmt), node_id),
                     }
                 }
+                ast::IfStmt {
+                    ref cond,
+                    ref main_stmt,
+                    ref else_stmt,
+                    ..
+                } => hir::StmtKind::If {
+                    cond: cx.map_ast_with_parent(AstNode::Expr(cond), node_id),
+                    main_stmt: cx.map_ast_with_parent(AstNode::Stmt(main_stmt), node_id),
+                    else_stmt: else_stmt
+                        .as_ref()
+                        .map(|else_stmt| cx.map_ast_with_parent(AstNode::Stmt(else_stmt), node_id)),
+                },
                 _ => {
                     debug!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);
