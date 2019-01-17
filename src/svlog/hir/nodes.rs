@@ -507,6 +507,8 @@ pub enum ExprKind {
 pub enum UnaryOp {
     /// The bitwise not operator `~x`.
     BitNot,
+    /// The not operator `!x`.
+    LogicNot,
     /// The prefix increment operator `++x`.
     PreInc,
     /// The prefix decrement operator `--x`.
@@ -536,6 +538,10 @@ pub enum BinaryOp {
     Gt,
     /// The greater-than-or-equal operator `x >= y`.
     Geq,
+    /// The logic and operator `x && y`.
+    LogicAnd,
+    /// The logic or operator `x || y`.
+    LogicOr,
 }
 
 /// A variable declaration.

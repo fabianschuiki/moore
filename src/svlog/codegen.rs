@@ -586,7 +586,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     .into())
             }
             hir::ExprKind::Unary(op, arg) => match op {
-                hir::UnaryOp::BitNot => {
+                hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
                     let ty = self.emit_type(self.type_of(expr_id, env)?)?;
                     let value = self.emit_rvalue(arg, env, prok, block, values)?;
                     let inst =
@@ -623,6 +623,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     hir::BinaryOp::Leq => llhd::CompareInst(llhd::CompareOp::Ule, ty, lhs, rhs),
                     hir::BinaryOp::Gt => llhd::CompareInst(llhd::CompareOp::Ugt, ty, lhs, rhs),
                     hir::BinaryOp::Geq => llhd::CompareInst(llhd::CompareOp::Uge, ty, lhs, rhs),
+                    hir::BinaryOp::LogicAnd => llhd::BinaryInst(llhd::BinaryOp::And, ty, lhs, rhs),
+                    hir::BinaryOp::LogicOr => llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs),
                     _ => return self.unimp_msg("code generation for", hir),
                 };
                 Ok(prok

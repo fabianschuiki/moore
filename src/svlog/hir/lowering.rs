@@ -396,6 +396,7 @@ fn lower_expr<'gcx>(
         } => hir::ExprKind::Unary(
             match op {
                 Op::BitNot if !postfix => hir::UnaryOp::BitNot,
+                Op::LogicNot if !postfix => hir::UnaryOp::LogicNot,
                 Op::Inc if !postfix => hir::UnaryOp::PreInc,
                 Op::Dec if !postfix => hir::UnaryOp::PreDec,
                 Op::Inc if postfix => hir::UnaryOp::PostInc,
@@ -431,6 +432,8 @@ fn lower_expr<'gcx>(
                 Op::Leq => hir::BinaryOp::Leq,
                 Op::Gt => hir::BinaryOp::Gt,
                 Op::Geq => hir::BinaryOp::Geq,
+                Op::LogicAnd => hir::BinaryOp::LogicAnd,
+                Op::LogicOr => hir::BinaryOp::LogicOr,
                 _ => {
                     cx.emit(
                         DiagBuilder2::error(format!("`{}` is not a valid binary operator", op,))

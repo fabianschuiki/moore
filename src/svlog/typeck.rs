@@ -24,6 +24,7 @@ pub(crate) fn type_of<'gcx>(
                     | hir::UnaryOp::PreDec
                     | hir::UnaryOp::PostInc
                     | hir::UnaryOp::PostDec => arg_ty,
+                    hir::UnaryOp::LogicNot => cx.mkty_bit(),
                     _ => return cx.unimp_msg("type analysis of", &hir),
                 })
             }
@@ -37,7 +38,9 @@ pub(crate) fn type_of<'gcx>(
                     | hir::BinaryOp::Lt
                     | hir::BinaryOp::Leq
                     | hir::BinaryOp::Gt
-                    | hir::BinaryOp::Geq => cx.mkty_bit(),
+                    | hir::BinaryOp::Geq
+                    | hir::BinaryOp::LogicAnd
+                    | hir::BinaryOp::LogicOr => cx.mkty_bit(),
                     _ => return cx.unimp_msg("type analysis of", &hir),
                 })
             }
