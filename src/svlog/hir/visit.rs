@@ -38,6 +38,7 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_ident(&mut self, _ident: Spanned<Name>) {}
     fn visit_unary_op(&mut self, _op: UnaryOp) {}
+    fn visit_binary_op(&mut self, _op: BinaryOp) {}
 
     fn visit_proc(&mut self, prok: &'a Proc) {
         walk_proc(self, prok)
@@ -101,6 +102,11 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         ExprKind::Unary(op, arg) => {
             visitor.visit_unary_op(op);
             visitor.visit_node_with_id(arg, lvalue);
+        }
+        ExprKind::Binary(op, lhs, rhs) => {
+            visitor.visit_binary_op(op);
+            visitor.visit_node_with_id(lhs, lvalue);
+            visitor.visit_node_with_id(rhs, lvalue);
         }
     }
 }

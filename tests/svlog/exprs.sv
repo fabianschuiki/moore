@@ -1,15 +1,16 @@
 module A;
-	int a, b, c;
+	int a, b, c = 19;
 	initial begin
 		#1ns a = ~b;
 		#1ns a = b++;
 		#1ns a = ++b;
 		#1ns a = b--;
 		#1ns a = --b;
-		// a = 1 + 2;
-		// a = b + 1;
-		// a = b + c;
-		// a = b - c;
+		#1ns b = 42;
+		#1ns a = 1 + 2;
+		#1ns a = b + 1;
+		#1ns a = b + c;
+		#1ns a = b - c;
 		// a = b * c;
 		// a = b / c;
 		// a = b & c;

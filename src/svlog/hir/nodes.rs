@@ -498,6 +498,8 @@ pub enum ExprKind {
     Ident(Spanned<Name>),
     /// A unary operator.
     Unary(UnaryOp, NodeId),
+    /// A binary operator.
+    Binary(BinaryOp, NodeId, NodeId),
 }
 
 /// The different unary operators.
@@ -513,6 +515,15 @@ pub enum UnaryOp {
     PostInc,
     /// The postfix decrement operator `x--`.
     PostDec,
+}
+
+/// The different binary operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    /// The addition operator `x + y`.
+    Add,
+    /// The subtraction operator `x - y`.
+    Sub,
 }
 
 /// A variable declaration.

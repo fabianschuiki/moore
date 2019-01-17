@@ -417,7 +417,25 @@ fn lower_expr<'gcx>(
             },
             cx.map_ast_with_parent(AstNode::Expr(arg), parent),
         ),
-
+        ast::BinaryExpr {
+            op,
+            ref lhs,
+            ref rhs,
+        } => hir::ExprKind::Binary(
+            match op {
+                Op::Add => hir::BinaryOp::Add,
+                Op::Sub => hir::BinaryOp::Sub,
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("`{}` is not a valid binary operator", op,))
+                            .span(expr.span()),
+                    );
+                    return Err(());
+                }
+            },
+            cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
+            cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
+        ),
         _ => return cx.unimp_msg("lowering of", expr),
     };
     let hir = hir::Expr {

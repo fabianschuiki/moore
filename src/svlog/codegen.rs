@@ -610,6 +610,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
                 _ => self.unimp_msg("code generation for", hir),
             },
+            hir::ExprKind::Binary(op, lhs, rhs) => {
+                let ty = self.emit_type(self.type_of(expr_id, env)?)?;
+                let lhs = self.emit_rvalue(lhs, env, prok, block, values)?;
+                let rhs = self.emit_rvalue(rhs, env, prok, block, values)?;
+                let inst = match op {
+                    hir::BinaryOp::Add => llhd::BinaryInst(llhd::BinaryOp::Add, ty, lhs, rhs),
+                    hir::BinaryOp::Sub => llhd::BinaryInst(llhd::BinaryOp::Sub, ty, lhs, rhs),
+                    _ => return self.unimp_msg("code generation for", hir),
+                };
+                Ok(prok
+                    .body_mut()
+                    .add_inst(
+                        llhd::Inst::new(None, inst),
+                        llhd::InstPosition::BlockEnd(block),
+                    )
+                    .into())
+            }
             _ => self.unimp_msg("code generation for", hir),
         }
     }

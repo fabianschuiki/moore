@@ -27,6 +27,14 @@ pub(crate) fn type_of<'gcx>(
                     _ => return cx.unimp_msg("type analysis of", &hir),
                 })
             }
+            hir::ExprKind::Binary(op, lhs, rhs) => {
+                let lhs_ty = cx.type_of(lhs, env)?;
+                let _rhs_ty = cx.type_of(rhs, env)?;
+                Ok(match op {
+                    hir::BinaryOp::Add | hir::BinaryOp::Sub => lhs_ty,
+                    _ => return cx.unimp_msg("type analysis of", &hir),
+                })
+            }
             _ => cx.unimp_msg("type analysis of", &hir),
         },
         HirNode::ValueParam(p) => cx.map_to_type(p.ty, env),
