@@ -100,6 +100,20 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
                 visitor.visit_node_with_id(else_stmt, false);
             }
         }
+        StmtKind::Loop { kind, body } => {
+            match kind {
+                LoopKind::Forever => (),
+                LoopKind::Repeat(id) | LoopKind::While(id) | LoopKind::Do(id) => {
+                    visitor.visit_node_with_id(id, false);
+                }
+                LoopKind::For(init, cond, step) => {
+                    visitor.visit_node_with_id(init, false);
+                    visitor.visit_node_with_id(cond, false);
+                    visitor.visit_node_with_id(step, false);
+                }
+            }
+            visitor.visit_node_with_id(body, false);
+        }
     }
 }
 

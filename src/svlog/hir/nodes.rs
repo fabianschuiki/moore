@@ -663,6 +663,8 @@ pub enum StmtKind {
         main_stmt: NodeId,
         else_stmt: Option<NodeId>,
     },
+    /// A loop statement.
+    Loop { kind: LoopKind, body: NodeId },
 }
 
 /// The different forms an assignment can take.
@@ -670,6 +672,21 @@ pub enum StmtKind {
 pub enum AssignKind {
     /// A blocking assignment.
     Block(ast::AssignOp),
+}
+
+/// The different forms a loop can take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopKind {
+    /// A `forever` loop.
+    Forever,
+    /// A `repeat (<count>)` loop.
+    Repeat(NodeId),
+    //// A `while (<cond>)` loop.
+    While(NodeId),
+    //// A `do .. while (<cond>)` loop.
+    Do(NodeId),
+    //// A `for (<init>; <cond>; <step>)` loop.
+    For(NodeId, NodeId, NodeId),
 }
 
 /// The different forms of timing control that can be applied to a statement.

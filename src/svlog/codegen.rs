@@ -568,6 +568,175 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 );
                 block = final_blk;
             }
+            hir::StmtKind::Loop { kind, body } => {
+                let body_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("loop_body".into())),
+                    llhd::BlockPosition::End,
+                );
+                let exit_blk = prok.body_mut().add_block(
+                    llhd::Block::new(Some("loop_exit".into())),
+                    llhd::BlockPosition::End,
+                );
+
+                // Emit the loop initialization.
+                let repeat_var = match kind {
+                    hir::LoopKind::Forever => None,
+                    hir::LoopKind::Repeat(count) => {
+                        let ty = self.type_of(count, env)?;
+                        let lty = self.emit_type(ty)?;
+                        let count = self.emit_rvalue(count, env, prok, block, values)?;
+                        let var: llhd::ValueRef = prok
+                            .body_mut()
+                            .add_inst(
+                                llhd::Inst::new(
+                                    Some("loop_count".into()),
+                                    llhd::VariableInst(lty.clone()),
+                                ),
+                                llhd::InstPosition::BlockEnd(block),
+                            )
+                            .into();
+                        prok.body_mut().add_inst(
+                            llhd::Inst::new(None, llhd::StoreInst(lty, count, var.clone())),
+                            llhd::InstPosition::BlockEnd(block),
+                        );
+                        Some((var, ty))
+                    }
+                    hir::LoopKind::While(_) => None,
+                    hir::LoopKind::Do(_) => None,
+                    hir::LoopKind::For(init, _, _) => {
+                        block = self.emit_stmt(init, env, prok, block, values)?;
+                        None
+                    }
+                };
+
+                // Emit the loop prologue.
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(
+                        None,
+                        llhd::BranchInst(llhd::BranchKind::Uncond(body_blk.into())),
+                    ),
+                    llhd::InstPosition::BlockEnd(block),
+                );
+                block = body_blk;
+                let enter_cond = match kind {
+                    hir::LoopKind::Forever => None,
+                    hir::LoopKind::Repeat(_) => {
+                        let (repeat_var, ty) = repeat_var.clone().unwrap();
+                        let lty = self.emit_type(ty)?;
+                        let value = prok
+                            .body_mut()
+                            .add_inst(
+                                llhd::Inst::new(None, llhd::LoadInst(lty.clone(), repeat_var)),
+                                llhd::InstPosition::BlockEnd(block),
+                            )
+                            .into();
+                        Some(
+                            prok.body_mut()
+                                .add_inst(
+                                    llhd::Inst::new(
+                                        None,
+                                        llhd::CompareInst(
+                                            llhd::CompareOp::Eq,
+                                            lty.clone(),
+                                            value,
+                                            llhd::const_zero(&lty).into(),
+                                        ),
+                                    ),
+                                    llhd::InstPosition::BlockEnd(block),
+                                )
+                                .into(),
+                        )
+                    }
+                    hir::LoopKind::While(cond) => {
+                        Some(self.emit_rvalue(cond, env, prok, block, values)?)
+                    }
+                    hir::LoopKind::Do(_) => None,
+                    hir::LoopKind::For(_, cond, _) => {
+                        Some(self.emit_rvalue(cond, env, prok, block, values)?)
+                    }
+                };
+                if let Some(enter_cond) = enter_cond {
+                    let entry_blk = prok.body_mut().add_block(
+                        llhd::Block::new(Some("loop_continue".into())),
+                        llhd::BlockPosition::End,
+                    );
+                    prok.body_mut().add_inst(
+                        llhd::Inst::new(
+                            None,
+                            llhd::BranchInst(llhd::BranchKind::Cond(
+                                enter_cond,
+                                entry_blk.into(),
+                                exit_blk.into(),
+                            )),
+                        ),
+                        llhd::InstPosition::BlockEnd(block),
+                    );
+                    block = entry_blk;
+                }
+
+                // Emit the loop body.
+                block = self.emit_stmt(body, env, prok, block, values)?;
+
+                // Emit the epilogue.
+                let continue_cond = match kind {
+                    hir::LoopKind::Forever => None,
+                    hir::LoopKind::Repeat(_) => {
+                        let (repeat_var, ty) = repeat_var.clone().unwrap();
+                        let lty = self.emit_type(ty)?;
+                        let value = prok
+                            .body_mut()
+                            .add_inst(
+                                llhd::Inst::new(
+                                    None,
+                                    llhd::LoadInst(lty.clone(), repeat_var.clone()),
+                                ),
+                                llhd::InstPosition::BlockEnd(block),
+                            )
+                            .into();
+                        let value = prok
+                            .body_mut()
+                            .add_inst(
+                                llhd::Inst::new(
+                                    None,
+                                    llhd::BinaryInst(
+                                        llhd::BinaryOp::Sub,
+                                        lty.clone(),
+                                        value,
+                                        self.const_one_for_type(ty)?,
+                                    ),
+                                ),
+                                llhd::InstPosition::BlockEnd(block),
+                            )
+                            .into();
+                        prok.body_mut().add_inst(
+                            llhd::Inst::new(None, llhd::StoreInst(lty, value, repeat_var)),
+                            llhd::InstPosition::BlockEnd(block),
+                        );
+                        None
+                    }
+                    hir::LoopKind::While(_) => None,
+                    hir::LoopKind::Do(cond) => {
+                        Some(self.emit_rvalue(cond, env, prok, block, values)?)
+                    }
+                    hir::LoopKind::For(_, _, step) => {
+                        self.emit_rvalue(step, env, prok, block, values)?;
+                        None
+                    }
+                };
+                prok.body_mut().add_inst(
+                    llhd::Inst::new(
+                        None,
+                        llhd::BranchInst(match continue_cond {
+                            Some(cond) => {
+                                llhd::BranchKind::Cond(cond, body_blk.into(), exit_blk.into())
+                            }
+                            None => llhd::BranchKind::Uncond(body_blk.into()),
+                        }),
+                    ),
+                    llhd::InstPosition::BlockEnd(block),
+                );
+                block = exit_blk;
+            }
             _ => return self.unimp_msg("code generation for", hir),
         }
         Ok(block)

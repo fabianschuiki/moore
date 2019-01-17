@@ -187,6 +187,35 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 ast::ExprStmt(ref expr) => {
                     hir::StmtKind::Expr(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
                 }
+                ast::ForeverStmt(ref body) => hir::StmtKind::Loop {
+                    kind: hir::LoopKind::Forever,
+                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+                },
+                ast::RepeatStmt(ref count, ref body) => hir::StmtKind::Loop {
+                    kind: hir::LoopKind::Repeat(
+                        cx.map_ast_with_parent(AstNode::Expr(count), node_id),
+                    ),
+                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+                },
+                ast::WhileStmt(ref cond, ref body) => hir::StmtKind::Loop {
+                    kind: hir::LoopKind::While(
+                        cx.map_ast_with_parent(AstNode::Expr(cond), node_id),
+                    ),
+                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+                },
+                ast::DoStmt(ref body, ref cond) => hir::StmtKind::Loop {
+                    kind: hir::LoopKind::Do(cx.map_ast_with_parent(AstNode::Expr(cond), node_id)),
+                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+                },
+                ast::ForStmt(ref init, ref cond, ref step, ref body) => {
+                    let init = cx.map_ast_with_parent(AstNode::Stmt(init), node_id);
+                    let cond = cx.map_ast_with_parent(AstNode::Expr(cond), init);
+                    let step = cx.map_ast_with_parent(AstNode::Expr(step), init);
+                    hir::StmtKind::Loop {
+                        kind: hir::LoopKind::For(init, cond, step),
+                        body: cx.map_ast_with_parent(AstNode::Stmt(body), init),
+                    }
+                }
                 _ => {
                     debug!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);
