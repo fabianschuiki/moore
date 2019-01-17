@@ -184,6 +184,9 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         .as_ref()
                         .map(|else_stmt| cx.map_ast_with_parent(AstNode::Stmt(else_stmt), node_id)),
                 },
+                ast::ExprStmt(ref expr) => {
+                    hir::StmtKind::Expr(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
+                }
                 _ => {
                     debug!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);

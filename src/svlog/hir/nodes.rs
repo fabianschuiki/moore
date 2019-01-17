@@ -651,6 +651,8 @@ pub enum StmtKind {
         control: TimingControl,
         stmt: NodeId,
     },
+    /// An expression statement.
+    Expr(NodeId),
     /// An if statement.
     ///
     /// ```text

@@ -515,6 +515,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 // Emit the actual statement.
                 block = self.emit_stmt(stmt, env, prok, block, values)?;
             }
+            hir::StmtKind::Expr(expr_id) => {
+                self.emit_rvalue(expr_id, env, prok, block, values)?;
+            }
             hir::StmtKind::If {
                 cond,
                 main_stmt,

@@ -88,6 +88,7 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
             visitor.visit_timing_control(control);
             visitor.visit_node_with_id(stmt, false);
         }
+        StmtKind::Expr(expr) => visitor.visit_node_with_id(expr, false),
         StmtKind::If {
             cond,
             main_stmt,
