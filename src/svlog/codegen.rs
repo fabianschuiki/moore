@@ -192,6 +192,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ent.add_inst(inst, llhd::InstPosition::End);
         }
 
+        // Emit generate blocks.
+        for &gen_id in hir.gens {
+            let hir = match self.hir_of(gen_id)? {
+                HirNode::Gen(x) => x,
+                _ => unreachable!(),
+            };
+            match hir.kind {
+                _ => return self.unimp_msg("code generation for", hir),
+            }
+        }
+
         // Assign default values to undriven output ports.
         for port_id in outputs {
             let hir = match self.hir_of(port_id)? {

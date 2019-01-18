@@ -1459,7 +1459,7 @@ impl HasSpan for GenerateFor {
 
 impl HasDesc for GenerateFor {
     fn desc(&self) -> &'static str {
-        "generate statement"
+        "for-generate statement"
     }
 }
 
@@ -1469,6 +1469,18 @@ pub struct GenerateIf {
     pub cond: Expr,
     pub main_block: GenerateBlock,
     pub else_block: Option<GenerateBlock>,
+}
+
+impl HasSpan for GenerateIf {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for GenerateIf {
+    fn desc(&self) -> &'static str {
+        "if-generate statement"
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

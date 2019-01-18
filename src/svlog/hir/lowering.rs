@@ -239,6 +239,24 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::EventExpr(cx.arena().alloc_hir(hir)))
         }
+        AstNode::GenIf(gen) => {
+            let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), node_id);
+            let main_body = cx.map_ast_with_parent(AstNode::GenBlk(&gen.main_block), node_id);
+            let else_body = gen
+                .else_block
+                .as_ref()
+                .map(|else_block| cx.map_ast_with_parent(AstNode::GenBlk(else_block), node_id));
+            let hir = hir::Gen {
+                id: node_id,
+                span: gen.span(),
+                kind: hir::GenKind::If {
+                    cond,
+                    main_body,
+                    else_body,
+                },
+            };
+            Ok(HirNode::Gen(cx.arena().alloc_hir(hir)))
+        }
         AstNode::GenFor(gen) => {
             let init = cx.map_ast_with_parent(AstNode::Stmt(&gen.init), node_id);
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), init);
@@ -343,6 +361,11 @@ fn lower_module<'gcx>(
                 let id = cx.map_ast_with_parent(AstNode::Proc(prok), next_rib);
                 next_rib = id;
                 procs.push(id);
+            }
+            ast::HierarchyItem::GenerateIf(ref gen) => {
+                let id = cx.map_ast_with_parent(AstNode::GenIf(gen), next_rib);
+                next_rib = id;
+                gens.push(id);
             }
             ast::HierarchyItem::GenerateFor(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenFor(gen), next_rib);
