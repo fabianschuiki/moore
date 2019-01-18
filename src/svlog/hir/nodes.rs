@@ -20,6 +20,7 @@ pub enum HirNode<'hir> {
     Proc(&'hir Proc),
     Stmt(&'hir Stmt),
     EventExpr(&'hir EventExpr),
+    Gen(&'hir Gen),
     // Interface(&'hir Interface),
     // Package(&'hir Package),
     // PortSlice(&'hir PortSlice),
@@ -40,6 +41,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Proc(x) => x.span(),
             HirNode::Stmt(x) => x.span(),
             HirNode::EventExpr(x) => x.span(),
+            HirNode::Gen(x) => x.span(),
         }
     }
 
@@ -57,6 +59,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Proc(x) => x.human_span(),
             HirNode::Stmt(x) => x.human_span(),
             HirNode::EventExpr(x) => x.human_span(),
+            HirNode::Gen(x) => x.human_span(),
         }
     }
 }
@@ -76,6 +79,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Proc(x) => x.desc(),
             HirNode::Stmt(x) => x.desc(),
             HirNode::EventExpr(x) => x.desc(),
+            HirNode::Gen(x) => x.desc(),
         }
     }
 
@@ -93,6 +97,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Proc(x) => x.desc_full(),
             HirNode::Stmt(x) => x.desc_full(),
             HirNode::EventExpr(x) => x.desc_full(),
+            HirNode::Gen(x) => x.desc_full(),
         }
     }
 }
@@ -113,6 +118,8 @@ pub struct Module<'hir> {
     pub decls: &'hir [NodeId],
     /// The procedures in the module.
     pub procs: &'hir [NodeId],
+    /// The generate blocks in the module.
+    pub gens: &'hir [NodeId],
 }
 
 impl HasSpan for Module<'_> {
@@ -729,4 +736,42 @@ pub struct Event {
     pub edge: ast::EdgeIdent,
     pub expr: NodeId,
     pub iff: Vec<NodeId>,
+}
+
+/// A generate statement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Gen {
+    pub id: NodeId,
+    pub span: Span,
+    pub kind: GenKind,
+}
+
+impl HasSpan for Gen {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Gen {
+    fn desc(&self) -> &'static str {
+        "generate statement"
+    }
+}
+
+/// The different forms a generate statement can take.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GenKind {
+    /// An if-generate statement.
+    If {
+        cond: NodeId,
+        main_body: NodeId,
+        else_body: Option<NodeId>,
+    },
+    /// A for-generate statement.
+    For {
+        init: NodeId,
+        cond: NodeId,
+        step: NodeId,
+        body: NodeId,
+    },
 }

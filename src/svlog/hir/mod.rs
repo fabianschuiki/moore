@@ -32,6 +32,7 @@ make_arenas!(
         procs: Proc,
         stmts: Stmt,
         event_exprs: EventExpr,
+        gens: Gen,
     }
 );
 

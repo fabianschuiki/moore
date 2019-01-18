@@ -239,6 +239,23 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::EventExpr(cx.arena().alloc_hir(hir)))
         }
+        AstNode::GenFor(gen) => {
+            let init = cx.map_ast_with_parent(AstNode::Stmt(&gen.init), node_id);
+            let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), init);
+            let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), init);
+            let body = cx.map_ast_with_parent(AstNode::GenBlk(&gen.block), init);
+            let hir = hir::Gen {
+                id: node_id,
+                span: gen.span(),
+                kind: hir::GenKind::For {
+                    init,
+                    cond,
+                    step,
+                    body,
+                },
+            };
+            Ok(HirNode::Gen(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             debug!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -294,6 +311,7 @@ fn lower_module<'gcx>(
     let mut insts = Vec::new();
     let mut decls = Vec::new();
     let mut procs = Vec::new();
+    let mut gens = Vec::new();
     for item in &ast.items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
@@ -326,6 +344,11 @@ fn lower_module<'gcx>(
                 next_rib = id;
                 procs.push(id);
             }
+            ast::HierarchyItem::GenerateFor(ref gen) => {
+                let id = cx.map_ast_with_parent(AstNode::GenFor(gen), next_rib);
+                next_rib = id;
+                gens.push(id);
+            }
             // _ => return cx.unimp_msg("lowering of", item),
             _ => warn!("skipping unsupported {:?}", item),
         }
@@ -340,6 +363,7 @@ fn lower_module<'gcx>(
         insts: cx.arena().alloc_ids(insts),
         decls: cx.arena().alloc_ids(decls),
         procs: cx.arena().alloc_ids(procs),
+        gens: cx.arena().alloc_ids(gens),
     };
     Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
 }

@@ -1451,6 +1451,18 @@ pub struct GenerateFor {
     pub block: GenerateBlock,
 }
 
+impl HasSpan for GenerateFor {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for GenerateFor {
+    fn desc(&self) -> &'static str {
+        "generate statement"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenerateIf {
     pub span: Span,
@@ -1471,6 +1483,18 @@ pub struct GenerateBlock {
     pub span: Span,
     pub label: Option<Name>,
     pub items: Vec<HierarchyItem>,
+}
+
+impl HasSpan for GenerateBlock {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for GenerateBlock {
+    fn desc(&self) -> &'static str {
+        "generate statement"
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
