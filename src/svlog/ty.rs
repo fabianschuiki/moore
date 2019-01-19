@@ -34,6 +34,18 @@ impl<'t> TypeKind<'t> {
             _ => false,
         }
     }
+
+    /// Get the width of the type.
+    ///
+    /// Panics if the type is not an integer.
+    pub fn width(&self) -> usize {
+        match *self {
+            TypeKind::Bit(_) => 1,
+            TypeKind::Int(w, _) => w,
+            TypeKind::Named(_, _, ty) => ty.width(),
+            _ => panic!("{:?} has no width", self),
+        }
+    }
 }
 
 /// The number of values each bit of a type can assume.

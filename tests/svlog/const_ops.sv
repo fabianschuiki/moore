@@ -7,6 +7,8 @@ module A #(int a = 42, int b = 19);
 	B #(a > b) b6();
 	B #(a <= b) b7();
 	B #(a < b) b8();
+	B #(!a) b9();
+	B #(~a) b10();
 endmodule
 
 module B #(int K);
@@ -46,6 +48,14 @@ endmodule
 //|     %x = sig i32 0
 //| }
 //|
+//| entity @B.param9 () () {
+//|     %x = sig i32 0
+//| }
+//|
+//| entity @B.param10 () () {
+//|     %x = sig i32 4294967253
+//| }
+//|
 //| entity @A () () {
 //|     %b1 = inst @B.param1 () ()
 //|     %b2 = inst @B.param2 () ()
@@ -55,4 +65,6 @@ endmodule
 //|     %b6 = inst @B.param6 () ()
 //|     %b7 = inst @B.param7 () ()
 //|     %b8 = inst @B.param8 () ()
+//|     %b9 = inst @B.param9 () ()
+//|     %b10 = inst @B.param10 () ()
 //| }

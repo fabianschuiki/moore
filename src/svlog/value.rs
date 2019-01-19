@@ -17,7 +17,7 @@ use crate::{
     ty::{Type, TypeKind},
     ParamEnv,
 };
-use num::{BigInt, BigRational, Zero};
+use num::{BigInt, BigRational, One, Zero};
 
 /// A verilog value.
 pub type Value<'t> = &'t ValueData<'t>;
@@ -116,13 +116,33 @@ fn const_expr<'gcx>(
         hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
         hir::ExprKind::Ident(_) => cx.constant_value_of(cx.resolve_node(expr.id, env)?, env),
+        hir::ExprKind::Unary(op, arg) => {
+            let arg_val = cx.constant_value_of(arg, env)?;
+            debug!("exec {:?}({:?})", op, arg_val);
+            match arg_val.kind {
+                ValueKind::Int(ref arg) => Ok(cx.intern_value(make_int(
+                    ty,
+                    const_unary_op_on_int(cx, expr.span, ty, op, arg)?,
+                ))),
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "{} cannot be applied to the given arguments",
+                            op.desc_full(),
+                        ))
+                        .span(expr.span()),
+                    );
+                    Err(())
+                }
+            }
+        }
         hir::ExprKind::Binary(op, lhs, rhs) => {
             let lhs_val = cx.constant_value_of(lhs, env)?;
             let rhs_val = cx.constant_value_of(rhs, env)?;
             debug!("exec {:?}({:?}, {:?})", op, lhs_val, rhs_val);
             match (&lhs_val.kind, &rhs_val.kind) {
                 (&ValueKind::Int(ref lhs), &ValueKind::Int(ref rhs)) => Ok(cx.intern_value(
-                    make_int(ty, const_binary_op_on_int(cx, expr.span, op, lhs, rhs)?),
+                    make_int(ty, const_binary_op_on_int(cx, expr.span, ty, op, lhs, rhs)?),
                 )),
                 _ => {
                     cx.emit(
@@ -140,9 +160,34 @@ fn const_expr<'gcx>(
     }
 }
 
+fn const_unary_op_on_int<'gcx>(
+    cx: &impl Context<'gcx>,
+    span: Span,
+    ty: Type<'gcx>,
+    op: hir::UnaryOp,
+    arg: &BigInt,
+) -> Result<BigInt> {
+    Ok(match op {
+        hir::UnaryOp::BitNot => (BigInt::one() << ty.width()) - 1 - arg,
+        hir::UnaryOp::LogicNot => (arg.is_zero() as usize).into(),
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "{} cannot be applied to integer `{}`",
+                    op.desc_full(),
+                    arg,
+                ))
+                .span(span),
+            );
+            return Err(());
+        }
+    })
+}
+
 fn const_binary_op_on_int<'gcx>(
     cx: &impl Context<'gcx>,
     span: Span,
+    _ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: &BigInt,
     rhs: &BigInt,

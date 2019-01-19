@@ -526,6 +526,19 @@ pub enum UnaryOp {
     PostDec,
 }
 
+impl HasDesc for UnaryOp {
+    fn desc(&self) -> &'static str {
+        match *self {
+            UnaryOp::BitNot => "`~` operator",
+            UnaryOp::LogicNot => "`!` operator",
+            UnaryOp::PreInc => "`++` prefix operator",
+            UnaryOp::PreDec => "`--` prefix operator",
+            UnaryOp::PostInc => "`++` postfix operator",
+            UnaryOp::PostDec => "`--` postfix operator",
+        }
+    }
+}
+
 /// The different binary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
