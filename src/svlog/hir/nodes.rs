@@ -551,6 +551,23 @@ pub enum BinaryOp {
     LogicOr,
 }
 
+impl HasDesc for BinaryOp {
+    fn desc(&self) -> &'static str {
+        match *self {
+            BinaryOp::Add => "`+` operator",
+            BinaryOp::Sub => "`-` operator",
+            BinaryOp::Eq => "`==` operator",
+            BinaryOp::Neq => "`!=` operator",
+            BinaryOp::Lt => "`<` operator",
+            BinaryOp::Leq => "`<=` operator",
+            BinaryOp::Gt => "`>` operator",
+            BinaryOp::Geq => "`>=` operator",
+            BinaryOp::LogicAnd => "`&&` operator",
+            BinaryOp::LogicOr => "`||` operator",
+        }
+    }
+}
+
 /// A variable declaration.
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarDecl {

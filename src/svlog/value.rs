@@ -116,8 +116,59 @@ fn const_expr<'gcx>(
         hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
         hir::ExprKind::Ident(_) => cx.constant_value_of(cx.resolve_node(expr.id, env)?, env),
+        hir::ExprKind::Binary(op, lhs, rhs) => {
+            let lhs_val = cx.constant_value_of(lhs, env)?;
+            let rhs_val = cx.constant_value_of(rhs, env)?;
+            debug!("exec {:?}({:?}, {:?})", op, lhs_val, rhs_val);
+            match (&lhs_val.kind, &rhs_val.kind) {
+                (&ValueKind::Int(ref lhs), &ValueKind::Int(ref rhs)) => Ok(cx.intern_value(
+                    make_int(ty, const_binary_op_on_int(cx, expr.span, op, lhs, rhs)?),
+                )),
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "{} cannot be applied to the given arguments",
+                            op.desc_full(),
+                        ))
+                        .span(expr.span()),
+                    );
+                    Err(())
+                }
+            }
+        }
         _ => cx.unimp_msg("constant value computation of", expr),
     }
+}
+
+fn const_binary_op_on_int<'gcx>(
+    cx: &impl Context<'gcx>,
+    span: Span,
+    op: hir::BinaryOp,
+    lhs: &BigInt,
+    rhs: &BigInt,
+) -> Result<BigInt> {
+    Ok(match op {
+        hir::BinaryOp::Add => lhs + rhs,
+        hir::BinaryOp::Sub => lhs - rhs,
+        hir::BinaryOp::Eq => ((lhs == rhs) as usize).into(),
+        hir::BinaryOp::Neq => ((lhs != rhs) as usize).into(),
+        hir::BinaryOp::Lt => ((lhs < rhs) as usize).into(),
+        hir::BinaryOp::Leq => ((lhs <= rhs) as usize).into(),
+        hir::BinaryOp::Gt => ((lhs > rhs) as usize).into(),
+        hir::BinaryOp::Geq => ((lhs >= rhs) as usize).into(),
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "{} cannot be applied to integers `{}` and `{}`",
+                    op.desc_full(),
+                    lhs,
+                    rhs
+                ))
+                .span(span),
+            );
+            return Err(());
+        }
+    })
 }
 
 /// Determine the default value of a type.
