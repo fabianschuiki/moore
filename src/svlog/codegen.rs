@@ -136,8 +136,42 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             values.insert(port_id, ent.output(index).into());
         }
 
+        self.emit_module_block(id, env, &hir.block, &mut ent, &mut values)?;
+
+        // Assign default values to undriven output ports.
+        for port_id in outputs {
+            let hir = match self.hir_of(port_id)? {
+                HirNode::Port(p) => p,
+                _ => unreachable!(),
+            };
+            let default_value = self.emit_const(if let Some(default) = hir.default {
+                self.constant_value_of(default, env)?
+            } else {
+                self.type_default_value(self.type_of(port_id, env)?)
+            })?;
+            let inst = llhd::Inst::new(
+                None,
+                llhd::DriveInst(values[&port_id].clone(), default_value.into(), None),
+            );
+            ent.add_inst(inst, llhd::InstPosition::End);
+        }
+
+        let result = Ok(self.into.add_entity(ent));
+        self.tables.module_defs.insert((id, env), result.clone());
+        result
+    }
+
+    /// Emit the code for the contents of a module.
+    pub fn emit_module_block(
+        &mut self,
+        id: NodeId,
+        env: ParamEnv,
+        hir: &hir::ModuleBlock,
+        ent: &mut llhd::Entity,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<()> {
         // Emit declarations.
-        for &decl_id in hir.decls {
+        for &decl_id in &hir.decls {
             let hir = match self.hir_of(decl_id)? {
                 HirNode::VarDecl(x) => x,
                 _ => unreachable!(),
@@ -153,7 +187,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Emit instantiations.
-        for &inst_id in hir.insts {
+        for &inst_id in &hir.insts {
             let hir = match self.hir_of(inst_id)? {
                 HirNode::Inst(x) => x,
                 _ => unreachable!(),
@@ -193,7 +227,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Emit generate blocks.
-        for &gen_id in hir.gens {
+        for &gen_id in &hir.gens {
             let hir = match self.hir_of(gen_id)? {
                 HirNode::Gen(x) => x,
                 _ => unreachable!(),
@@ -218,26 +252,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             }
         }
 
-        // Assign default values to undriven output ports.
-        for port_id in outputs {
-            let hir = match self.hir_of(port_id)? {
-                HirNode::Port(p) => p,
-                _ => unreachable!(),
-            };
-            let default_value = self.emit_const(if let Some(default) = hir.default {
-                self.constant_value_of(default, env)?
-            } else {
-                self.type_default_value(self.type_of(port_id, env)?)
-            })?;
-            let inst = llhd::Inst::new(
-                None,
-                llhd::DriveInst(values[&port_id].clone(), default_value.into(), None),
-            );
-            ent.add_inst(inst, llhd::InstPosition::End);
-        }
-
         // Emit and instantiate procedures.
-        for &proc_id in hir.procs {
+        for &proc_id in &hir.procs {
             use llhd::Context as LlhdContext;
             let prok = self.emit_procedure(proc_id, env)?;
             let ty = llhd::ModuleContext::new(&self.into)
@@ -250,9 +266,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ent.add_inst(inst, llhd::InstPosition::End);
         }
 
-        let result = Ok(self.into.add_entity(ent));
-        self.tables.module_defs.insert((id, env), result.clone());
-        result
+        Ok(())
     }
 
     /// Emit the code for a procedure.

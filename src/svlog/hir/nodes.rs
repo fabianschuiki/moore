@@ -108,18 +108,12 @@ pub struct Module<'hir> {
     pub id: NodeId,
     pub name: Spanned<Name>,
     pub span: Span,
-    // pub lifetime: ast::Lifetime,
+    /// The ports of the module.
     pub ports: &'hir [NodeId],
+    /// The parameters of the module.
     pub params: &'hir [NodeId],
-    // pub body: HierarchyBody,
-    /// The module/interface instances in the module.
-    pub insts: &'hir [NodeId],
-    /// The variable and net declarations in the module.
-    pub decls: &'hir [NodeId],
-    /// The procedures in the module.
-    pub procs: &'hir [NodeId],
-    /// The generate blocks in the module.
-    pub gens: &'hir [NodeId],
+    /// The contents of the module.
+    pub block: ModuleBlock,
 }
 
 impl HasSpan for Module<'_> {
@@ -140,6 +134,19 @@ impl HasDesc for Module<'_> {
     fn desc_full(&self) -> String {
         format!("module `{}`", self.name.value)
     }
+}
+
+/// The contents of a module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleBlock {
+    /// The module/interface instances in the module.
+    pub insts: Vec<NodeId>,
+    /// The variable and net declarations in the module.
+    pub decls: Vec<NodeId>,
+    /// The procedures in the module.
+    pub procs: Vec<NodeId>,
+    /// The generate blocks in the module.
+    pub gens: Vec<NodeId>,
 }
 
 /// An instantiation target.
@@ -794,14 +801,14 @@ pub enum GenKind {
     /// An if-generate statement.
     If {
         cond: NodeId,
-        main_body: NodeId,
-        else_body: Option<NodeId>,
+        main_body: ModuleBlock,
+        else_body: Option<ModuleBlock>,
     },
     /// A for-generate statement.
     For {
         init: NodeId,
         cond: NodeId,
         step: NodeId,
-        body: NodeId,
+        body: ModuleBlock,
     },
 }

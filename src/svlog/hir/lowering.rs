@@ -241,11 +241,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         }
         AstNode::GenIf(gen) => {
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), node_id);
-            let main_body = cx.map_ast_with_parent(AstNode::GenBlk(&gen.main_block), node_id);
-            let else_body = gen
-                .else_block
-                .as_ref()
-                .map(|else_block| cx.map_ast_with_parent(AstNode::GenBlk(else_block), node_id));
+            let main_body = lower_module_block(cx, node_id, &gen.main_block.items)?;
+            let else_body = match gen.else_block {
+                Some(ref else_block) => Some(lower_module_block(cx, node_id, &else_block.items)?),
+                None => None,
+            };
             let hir = hir::Gen {
                 id: node_id,
                 span: gen.span(),
@@ -261,7 +261,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             let init = cx.map_ast_with_parent(AstNode::Stmt(&gen.init), node_id);
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), init);
             let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), init);
-            let body = cx.map_ast_with_parent(AstNode::GenBlk(&gen.block), init);
+            let body = lower_module_block(cx, init, &gen.block.items)?;
             let hir = hir::Gen {
                 id: node_id,
                 span: gen.span(),
@@ -326,11 +326,30 @@ fn lower_module<'gcx>(
     }
 
     // Allocate items.
+    let block = lower_module_block(cx, next_rib, &ast.items)?;
+
+    let hir = hir::Module {
+        id: node_id,
+        name: Spanned::new(ast.name, ast.name_span),
+        span: ast.span,
+        ports: cx.arena().alloc_ids(ports),
+        params: cx.arena().alloc_ids(params),
+        block,
+    };
+    Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
+}
+
+fn lower_module_block<'gcx>(
+    cx: &impl Context<'gcx>,
+    parent_rib: NodeId,
+    items: impl IntoIterator<Item = &'gcx ast::HierarchyItem>,
+) -> Result<hir::ModuleBlock> {
+    let mut next_rib = parent_rib;
     let mut insts = Vec::new();
     let mut decls = Vec::new();
     let mut procs = Vec::new();
     let mut gens = Vec::new();
-    for item in &ast.items {
+    for item in items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
                 let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
@@ -376,19 +395,12 @@ fn lower_module<'gcx>(
             _ => warn!("skipping unsupported {:?}", item),
         }
     }
-
-    let hir = hir::Module {
-        id: node_id,
-        name: Spanned::new(ast.name, ast.name_span),
-        span: ast.span,
-        ports: cx.arena().alloc_ids(ports),
-        params: cx.arena().alloc_ids(params),
-        insts: cx.arena().alloc_ids(insts),
-        decls: cx.arena().alloc_ids(decls),
-        procs: cx.arena().alloc_ids(procs),
-        gens: cx.arena().alloc_ids(gens),
-    };
-    Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
+    Ok(hir::ModuleBlock {
+        insts: insts,
+        decls: decls,
+        procs: procs,
+        gens: gens,
+    })
 }
 
 fn lower_port<'gcx>(
