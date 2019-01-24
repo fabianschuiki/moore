@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Added
 - Support for if-generate and for-generate blocks.
+- Support for value and type parameters.
+- Support for module instantiations and processes.
+- Support for signal declarations.
 
 ### Changed
 - Use [salsa](https://github.com/salsa-rs/salsa) to implement SystemVerilog queries.
