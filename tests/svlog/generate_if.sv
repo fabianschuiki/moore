@@ -10,3 +10,31 @@ module B #(int K);
     else
         initial x = 19;
 endmodule
+
+//@ elab A
+//| proc @n235 () (i32$ %0) {
+//| %1:
+//|     drv %0 19
+//|     halt
+//| }
+//|
+//| entity @B.param1 () () {
+//|     %x = sig i32 11
+//|     inst @n235 () (%x)
+//| }
+//|
+//| proc @n234 () (i32$ %0) {
+//| %1:
+//|     drv %0 42
+//|     halt
+//| }
+//|
+//| entity @B.param2 () () {
+//|     %x = sig i32 13
+//|     inst @n234 () (%x)
+//| }
+//|
+//| entity @A () () {
+//|     %b1 = inst @B.param1 () ()
+//|     %b2 = inst @B.param2 () ()
+//| }
