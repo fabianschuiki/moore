@@ -236,16 +236,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             match hir.kind {
                 hir::GenKind::If {
                     cond,
-                    main_body,
-                    else_body,
+                    ref main_body,
+                    ref else_body,
                 } => {
-                    debug!("emit if-generate {:#?}", hir.kind);
                     let k = self.constant_value_of(cond, env)?;
-                    trace!("condition is {:#?}", k);
                     if k.is_false() {
-                        trace!("would emit else_body {:#?}", else_body);
+                        if let Some(else_body) = else_body {
+                            self.emit_module_block(id, env, else_body, ent, values)?;
+                        }
                     } else {
-                        trace!("would emit main_body {:#?}", main_body);
+                        self.emit_module_block(id, env, main_body, ent, values)?;
                     }
                 }
                 _ => return self.unimp_msg("code generation for", hir),
