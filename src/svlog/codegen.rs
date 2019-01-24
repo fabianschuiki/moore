@@ -248,6 +248,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         self.emit_module_block(id, env, main_body, ent, values)?;
                     }
                 }
+                hir::GenKind::For {
+                    ref init,
+                    cond,
+                    step,
+                    ref body,
+                } => {
+                    let mut local_env = env;
+                    for &i in init {
+                        local_env = self.execute_genvar_init(i, local_env)?;
+                    }
+                    while self.constant_value_of(cond, local_env)?.is_true() {
+                        self.emit_module_block(id, local_env, body, ent, values)?;
+                        local_env = self.execute_genvar_step(step, local_env)?;
+                    }
+                }
                 _ => return self.unimp_msg("code generation for", hir),
             }
         }
@@ -1119,6 +1134,58 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 .emit_const(self.intern_value(value::make_int(ty, one())))?
                 .into()),
             TypeKind::Named(_, _, ty) => self.const_one_for_type(ty),
+        }
+    }
+
+    /// Execute the initialization step of a generate loop.
+    fn execute_genvar_init(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
+        let hir = self.hir_of(id)?;
+        match hir {
+            HirNode::GenvarDecl(_) => (),
+            _ => unreachable!(),
+        }
+        Ok(env)
+    }
+
+    /// Execute the iteration step of a generate loop.
+    fn execute_genvar_step(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
+        let hir = self.hir_of(id)?;
+        let mut env_data = self.param_env_data(env).clone();
+        let next = match hir {
+            HirNode::Expr(expr) => match expr.kind {
+                hir::ExprKind::Unary(op, target_id) => {
+                    let target_id = self.resolve_node(target_id, env)?;
+                    let current_value = self.constant_value_of(target_id, env)?;
+                    let next_value = match current_value.kind {
+                        ValueKind::Int(ref v) => match op {
+                            hir::UnaryOp::PostInc | hir::UnaryOp::PreInc => Some(v + 1),
+                            hir::UnaryOp::PostDec | hir::UnaryOp::PreDec => Some(v - 1),
+                            _ => None,
+                        }
+                        .map(|v| value::make_int(current_value.ty, v)),
+                        _ => unreachable!(),
+                    };
+                    next_value.map(|v| (target_id, v))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        match next {
+            Some((target_id, next_value)) => {
+                env_data.set_value(target_id, self.intern_value(next_value));
+                return Ok(self.intern_param_env(env_data));
+            }
+            None => {
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "{} is not a valid genvar iteration step",
+                        hir.desc_full()
+                    ))
+                    .span(hir.human_span()),
+                );
+                Err(())
+            }
         }
     }
 }

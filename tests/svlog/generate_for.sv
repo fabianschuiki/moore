@@ -1,5 +1,5 @@
-module A #(K);
-    for (genvar i = 0; i < K; i++)
+module A;
+    for (genvar i = 0; i < 4; i++)
         B b();
 endmodule
 
