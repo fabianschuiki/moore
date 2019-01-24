@@ -15,7 +15,7 @@ use crate::{
     crate_prelude::*,
     hir::HirNode,
     ty::{Type, TypeKind},
-    ParamEnv,
+    ParamEnv, ParamEnvBinding,
 };
 use num::{BigInt, BigRational, One, Zero};
 
@@ -80,8 +80,12 @@ pub(crate) fn constant_value_of<'gcx>(
         HirNode::Expr(expr) => const_expr(cx, expr, env),
         HirNode::ValueParam(param) => {
             let env_data = cx.param_env_data(env);
-            if let Some(assigned_id) = env_data.find_value(node_id) {
-                return cx.constant_value_of(assigned_id.0, assigned_id.1);
+            match env_data.find_value(node_id) {
+                Some(ParamEnvBinding::Indirect(assigned_id)) => {
+                    return cx.constant_value_of(assigned_id.0, assigned_id.1)
+                }
+                Some(ParamEnvBinding::Direct(v)) => return Ok(v),
+                _ => (),
             }
             if let Some(default) = param.default {
                 return cx.constant_value_of(default, env);

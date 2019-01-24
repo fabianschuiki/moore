@@ -24,7 +24,7 @@ pub mod value;
 pub use crate::{
     codegen::CodeGenerator,
     context::*,
-    param_env::{NodeEnvId, ParamEnv, ParamEnvData, ParamEnvSource},
+    param_env::{NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource},
     resolver::{Rib, RibKind},
     syntax::*,
 };

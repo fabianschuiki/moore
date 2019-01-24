@@ -1,6 +1,6 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
-use crate::{crate_prelude::*, hir::HirNode, ty::Type, ParamEnv};
+use crate::{crate_prelude::*, hir::HirNode, ty::Type, ParamEnv, ParamEnvBinding};
 
 /// Determine the type of a node.
 pub(crate) fn type_of<'gcx>(
@@ -78,8 +78,12 @@ pub(crate) fn map_to_type<'gcx>(
         },
         HirNode::TypeParam(param) => {
             let env_data = cx.param_env_data(env);
-            if let Some(assigned_id) = env_data.find_type(node_id) {
-                return cx.map_to_type(assigned_id.0, assigned_id.1);
+            match env_data.find_type(node_id) {
+                Some(ParamEnvBinding::Indirect(assigned_id)) => {
+                    return cx.map_to_type(assigned_id.0, assigned_id.1)
+                }
+                Some(ParamEnvBinding::Direct(t)) => return Ok(t),
+                _ => (),
             }
             if let Some(default) = param.default {
                 return cx.map_to_type(default, env);

@@ -129,7 +129,7 @@ impl<'gcx> BaseContext<'gcx> for GlobalContext<'gcx> {
 pub struct GlobalArenas<'t> {
     ids: TypedArena<NodeId>,
     hir: hir::Arena<'t>,
-    param_envs: TypedArena<ParamEnvData>,
+    param_envs: TypedArena<ParamEnvData<'t>>,
     ribs: TypedArena<Rib>,
     types: TypedArena<TypeKind<'t>>,
     values: TypedArena<ValueData<'t>>,
@@ -174,8 +174,8 @@ impl<'t> GlobalArenas<'t> {
 /// Use this struct whenever you need to keep track of some mapping.
 #[derive(Default)]
 pub struct GlobalTables<'t> {
-    interned_param_envs: RefCell<HashMap<&'t ParamEnvData, ParamEnv>>,
-    param_envs: RefCell<Vec<&'t ParamEnvData>>,
+    interned_param_envs: RefCell<HashMap<&'t ParamEnvData<'t>, ParamEnv>>,
+    param_envs: RefCell<Vec<&'t ParamEnvData<'t>>>,
     param_env_contexts: RefCell<HashMap<ParamEnv, BTreeSet<NodeId>>>,
     node_id_to_parent_node_id: RefCell<HashMap<NodeId, NodeId>>,
     interned_types: RefCell<HashSet<Type<'t>>>,
@@ -360,7 +360,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     }
 
     /// Internalize a parameter environment.
-    fn intern_param_env(&self, env: ParamEnvData) -> ParamEnv {
+    fn intern_param_env(&self, env: ParamEnvData<'gcx>) -> ParamEnv {
         if let Some(&x) = self.tables().interned_param_envs.borrow().get(&env) {
             return x;
         }
@@ -379,7 +379,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     }
 
     /// Get the [`ParamEnvData`] associated with a [`ParamEnv`].
-    fn param_env_data(&self, env: ParamEnv) -> &'gcx ParamEnvData {
+    fn param_env_data(&self, env: ParamEnv) -> &'gcx ParamEnvData<'gcx> {
         self.tables().param_envs.borrow()[env.0 as usize]
     }
 

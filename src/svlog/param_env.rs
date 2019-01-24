@@ -6,6 +6,8 @@ use crate::{
     ast_map::AstNode,
     crate_prelude::*,
     hir::{HirNode, NamedParam, PosParam},
+    ty::Type,
+    value::Value,
 };
 
 /// A parameter environment.
@@ -20,14 +22,14 @@ pub type NodeEnvId = (NodeId, ParamEnv);
 
 /// A parameter environment.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct ParamEnvData {
-    values: Vec<(NodeId, NodeEnvId)>,
-    types: Vec<(NodeId, NodeEnvId)>,
+pub struct ParamEnvData<'t> {
+    values: Vec<(NodeId, ParamEnvBinding<Value<'t>>)>,
+    types: Vec<(NodeId, ParamEnvBinding<Type<'t>>)>,
 }
 
-impl ParamEnvData {
+impl<'t> ParamEnvData<'t> {
     /// Find the value assigned to a node.
-    pub fn find_value(&self, node_id: NodeId) -> Option<NodeEnvId> {
+    pub fn find_value(&self, node_id: NodeId) -> Option<ParamEnvBinding<Value<'t>>> {
         self.values
             .iter()
             .find(|&&(id, _)| id == node_id)
@@ -35,12 +37,27 @@ impl ParamEnvData {
     }
 
     /// Find the type assigned to a node.
-    pub fn find_type(&self, node_id: NodeId) -> Option<NodeEnvId> {
+    pub fn find_type(&self, node_id: NodeId) -> Option<ParamEnvBinding<Type<'t>>> {
         self.types
             .iter()
             .find(|&&(id, _)| id == node_id)
             .map(|&(_, id)| id)
     }
+
+    /// Assign a value to a node.
+    pub fn set_value(&mut self, node_id: NodeId, value: Value<'t>) {
+        self.values.retain(|&(n, _)| n != node_id);
+        self.values.push((node_id, ParamEnvBinding::Direct(value)));
+    }
+}
+
+/// A binding in a parameter environment.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum ParamEnvBinding<T> {
+    /// A direct binding, directly assigning a type or value to a node.
+    Direct(T),
+    /// An indirect binding, pointing at another node's type or value.
+    Indirect(NodeEnvId),
 }
 
 /// A location that implies a parameter environment.
@@ -143,11 +160,11 @@ pub(crate) fn compute<'gcx>(
                 match cx.ast_of(param_id)? {
                     AstNode::TypeParam(..) => {
                         cx.set_lowering_hint(assign_id.0, hir::Hint::Type);
-                        types.push((param_id, assign_id))
+                        types.push((param_id, ParamEnvBinding::Indirect(assign_id)))
                     }
                     AstNode::ValueParam(..) => {
                         cx.set_lowering_hint(assign_id.0, hir::Hint::Expr);
-                        values.push((param_id, assign_id))
+                        values.push((param_id, ParamEnvBinding::Indirect(assign_id)))
                     }
                     _ => unreachable!(),
                 }
