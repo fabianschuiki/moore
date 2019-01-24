@@ -198,6 +198,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::Gen(x) => x,
                 _ => unreachable!(),
             };
+            #[allow(unreachable_patterns)]
             match hir.kind {
                 hir::GenKind::If {
                     cond,
@@ -207,7 +208,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     debug!("emit if-generate {:#?}", hir.kind);
                     let k = self.constant_value_of(cond, env)?;
                     trace!("condition is {:#?}", k);
-                    if k == self.type_default_value(k.ty) {
+                    if k.is_false() {
                         trace!("would emit else_body {:#?}", else_body);
                     } else {
                         trace!("would emit main_body {:#?}", main_body);

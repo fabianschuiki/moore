@@ -42,6 +42,22 @@ pub enum ValueKind {
     Time(BigRational),
 }
 
+impl<'t> ValueData<'t> {
+    /// Check if this value evaluates to true.
+    pub fn is_true(&self) -> bool {
+        !self.is_false()
+    }
+
+    /// Check if this value evaluates to false.
+    pub fn is_false(&self) -> bool {
+        match self.kind {
+            ValueKind::Void => true,
+            ValueKind::Int(ref v) => v.is_zero(),
+            ValueKind::Time(ref v) => v.is_zero(),
+        }
+    }
+}
+
 /// Create a new integer value.
 ///
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
