@@ -258,10 +258,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::Gen(cx.arena().alloc_hir(hir)))
         }
         AstNode::GenFor(gen) => {
-            let init = cx.map_ast_with_parent(AstNode::Stmt(&gen.init), node_id);
-            let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), init);
-            let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), init);
-            let body = lower_module_block(cx, init, &gen.block.items)?;
+            let init = lower_genvar_init(cx, &gen.init, node_id)?;
+            let rib = *init.last().unwrap();
+            let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), rib);
+            let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), rib);
+            let body = lower_module_block(cx, rib, &gen.block.items)?;
             let hir = hir::Gen {
                 id: node_id,
                 span: gen.span(),
@@ -273,6 +274,18 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 },
             };
             Ok(HirNode::Gen(cx.arena().alloc_hir(hir)))
+        }
+        AstNode::GenvarDecl(decl) => {
+            let hir = hir::GenvarDecl {
+                id: node_id,
+                span: decl.span(),
+                name: Spanned::new(decl.name, decl.name_span),
+                init: decl
+                    .init
+                    .as_ref()
+                    .map(|init| cx.map_ast_with_parent(AstNode::Expr(init), node_id)),
+            };
+            Ok(HirNode::GenvarDecl(cx.arena().alloc_hir(hir)))
         }
         _ => {
             debug!("{:#?}", ast);
@@ -627,4 +640,33 @@ fn lower_event_expr<'gcx>(
         }
     };
     Ok(())
+}
+
+/// Lower a list of genvar declarations.
+fn lower_genvar_init<'gcx>(
+    cx: &impl Context<'gcx>,
+    stmt: &'gcx ast::Stmt,
+    mut parent_id: NodeId,
+) -> Result<Vec<NodeId>> {
+    let mut ids = vec![];
+    match stmt.data {
+        ast::GenvarDeclStmt(ref decls) => {
+            for decl in decls {
+                let id = cx.map_ast_with_parent(AstNode::GenvarDecl(decl), parent_id);
+                ids.push(id);
+                parent_id = id;
+            }
+        }
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "{} is not a valid genvar initialization",
+                    stmt.desc_full()
+                ))
+                .span(stmt.human_span()),
+            );
+            return Err(());
+        }
+    }
+    Ok(ids)
 }

@@ -33,6 +33,7 @@ make_arenas!(
         stmts: Stmt,
         event_exprs: EventExpr,
         gens: Gen,
+        genvar_decls: GenvarDecl,
     }
 );
 

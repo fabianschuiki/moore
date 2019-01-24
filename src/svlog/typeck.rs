@@ -48,6 +48,7 @@ pub(crate) fn type_of<'gcx>(
         },
         HirNode::ValueParam(p) => cx.map_to_type(p.ty, env),
         HirNode::VarDecl(d) => cx.map_to_type(d.ty, env),
+        HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
         _ => cx.unimp_msg("type analysis of", &hir),
     }
 }

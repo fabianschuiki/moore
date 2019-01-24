@@ -715,6 +715,26 @@ pub struct GenvarDecl {
     pub init: Option<Expr>,
 }
 
+impl HasSpan for GenvarDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name_span
+    }
+}
+
+impl HasDesc for GenvarDecl {
+    fn desc(&self) -> &'static str {
+        "genvar"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("genvar `{}`", self.name)
+    }
+}
+
 // TODO: Assign an id to each and every expression. This will later allow the
 // types of each expression to be recorded properly, and simplifies the act of
 // assigning IDs. Maybe expression IDs should be distinct from node IDs?

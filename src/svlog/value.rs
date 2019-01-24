@@ -120,6 +120,24 @@ pub(crate) fn constant_value_of<'gcx>(
             cx.emit(d);
             Err(())
         }
+        HirNode::GenvarDecl(decl) => {
+            let env_data = cx.param_env_data(env);
+            match env_data.find_value(node_id) {
+                Some(ParamEnvBinding::Indirect(assigned_id)) => {
+                    return cx.constant_value_of(assigned_id.0, assigned_id.1)
+                }
+                Some(ParamEnvBinding::Direct(v)) => return Ok(v),
+                _ => (),
+            }
+            if let Some(init) = decl.init {
+                return cx.constant_value_of(init, env);
+            }
+            cx.emit(
+                DiagBuilder2::error(format!("{} not initialized", decl.desc_full()))
+                    .span(decl.human_span()),
+            );
+            Err(())
+        }
         _ => cx.unimp_msg("constant value computation of", &hir),
     }
 }

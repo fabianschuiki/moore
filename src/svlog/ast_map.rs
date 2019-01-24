@@ -66,8 +66,8 @@ pub enum AstNode<'ast> {
     GenIf(&'ast ast::GenerateIf),
     /// A for-generate statement.
     GenFor(&'ast ast::GenerateFor),
-    /// A generate block.
-    GenBlk(&'ast ast::GenerateBlock),
+    /// A genvar declaration.
+    GenvarDecl(&'ast ast::GenvarDecl),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -88,7 +88,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::EventExpr(x) => x.span(),
             AstNode::GenIf(x) => x.span(),
             AstNode::GenFor(x) => x.span(),
-            AstNode::GenBlk(x) => x.span(),
+            AstNode::GenvarDecl(x) => x.span(),
         }
     }
 
@@ -109,7 +109,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::EventExpr(x) => x.human_span(),
             AstNode::GenIf(x) => x.human_span(),
             AstNode::GenFor(x) => x.human_span(),
-            AstNode::GenBlk(x) => x.human_span(),
+            AstNode::GenvarDecl(x) => x.human_span(),
         }
     }
 }
@@ -132,7 +132,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::EventExpr(x) => x.desc(),
             AstNode::GenIf(x) => x.desc(),
             AstNode::GenFor(x) => x.desc(),
-            AstNode::GenBlk(x) => x.desc(),
+            AstNode::GenvarDecl(x) => x.desc(),
         }
     }
 
@@ -153,7 +153,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::EventExpr(x) => x.desc_full(),
             AstNode::GenIf(x) => x.desc_full(),
             AstNode::GenFor(x) => x.desc_full(),
-            AstNode::GenBlk(x) => x.desc_full(),
+            AstNode::GenvarDecl(x) => x.desc_full(),
         }
     }
 }

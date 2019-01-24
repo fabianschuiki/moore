@@ -21,9 +21,7 @@ pub enum HirNode<'hir> {
     Stmt(&'hir Stmt),
     EventExpr(&'hir EventExpr),
     Gen(&'hir Gen),
-    // Interface(&'hir Interface),
-    // Package(&'hir Package),
-    // PortSlice(&'hir PortSlice),
+    GenvarDecl(&'hir GenvarDecl),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -42,6 +40,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Stmt(x) => x.span(),
             HirNode::EventExpr(x) => x.span(),
             HirNode::Gen(x) => x.span(),
+            HirNode::GenvarDecl(x) => x.span(),
         }
     }
 
@@ -60,6 +59,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Stmt(x) => x.human_span(),
             HirNode::EventExpr(x) => x.human_span(),
             HirNode::Gen(x) => x.human_span(),
+            HirNode::GenvarDecl(x) => x.human_span(),
         }
     }
 }
@@ -80,6 +80,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Stmt(x) => x.desc(),
             HirNode::EventExpr(x) => x.desc(),
             HirNode::Gen(x) => x.desc(),
+            HirNode::GenvarDecl(x) => x.desc(),
         }
     }
 
@@ -98,6 +99,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Stmt(x) => x.desc_full(),
             HirNode::EventExpr(x) => x.desc_full(),
             HirNode::Gen(x) => x.desc_full(),
+            HirNode::GenvarDecl(x) => x.desc_full(),
         }
     }
 }
@@ -806,9 +808,38 @@ pub enum GenKind {
     },
     /// A for-generate statement.
     For {
-        init: NodeId,
+        init: Vec<NodeId>,
         cond: NodeId,
         step: NodeId,
         body: ModuleBlock,
     },
+}
+
+/// A genvar declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenvarDecl {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    pub init: Option<NodeId>,
+}
+
+impl HasSpan for GenvarDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for GenvarDecl {
+    fn desc(&self) -> &'static str {
+        "genvar declaration"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("genvar `{}`", self.name.value)
+    }
 }
