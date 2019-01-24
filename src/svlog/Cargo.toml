@@ -1,18 +1,19 @@
 [package]
 name = "moore-svlog"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
 description = "The SystemVerilog implementation of the moore compiler framework."
+repository = "https://github.com/fabianschuiki/moore"
 license = "Apache-2.0 OR MIT"
 
 [lib]
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../common", version = "0.1" }
-moore-svlog-syntax = { path = "syntax", version = "0.1" }
+moore-common = { path = "../common", version = "0.2.0" }
+moore-svlog-syntax = { path = "syntax", version = "0.2.0" }
 llhd = "0.3"
 log = "0.4"
 salsa = { git = "https://github.com/fabianschuiki/salsa", branch = "database-lifetimes" }

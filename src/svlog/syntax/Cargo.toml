@@ -1,17 +1,18 @@
 [package]
 name = "moore-svlog-syntax"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
 description = "The SystemVerilog parser implementation of the moore compiler framework."
+repository = "https://github.com/fabianschuiki/moore"
 license = "Apache-2.0 OR MIT"
 
 [lib]
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../../common", version = "0.1" }
+moore-common = { path = "../../common", version = "0.2.0" }
 rustc-serialize = "0.3.22"
 bincode = "0.6.1"
 slog = "2.0.12"
