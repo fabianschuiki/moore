@@ -65,11 +65,48 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::InstTarget(cx.arena().alloc_hir(hir)))
         }
         AstNode::Inst(inst, target_id) => {
+            let mut named_ports = vec![];
+            let mut pos_ports = vec![];
+            let mut has_wildcard_port = false;
+            let mut is_pos = true;
+            for port in &inst.conns {
+                match port.kind {
+                    ast::PortConnKind::Auto => has_wildcard_port = true,
+                    ast::PortConnKind::Named(name, ref mode) => {
+                        is_pos = false;
+                        let value_id = match *mode {
+                            ast::PortConnMode::Auto => unimplemented!(),
+                            ast::PortConnMode::Unconnected => unimplemented!(),
+                            ast::PortConnMode::Connected(ref expr) => {
+                                cx.map_ast_with_parent(AstNode::Expr(expr), node_id)
+                            }
+                        };
+                        named_ports.push((port.span, Spanned::new(name.name, name.span), value_id));
+                    }
+                    ast::PortConnKind::Positional(ref expr) => {
+                        if !is_pos {
+                            cx.emit(
+                                DiagBuilder2::warning("positional port must appear before named")
+                                    .span(port.span)
+                                    .add_note(format!(
+                                        "assuming this refers to argument #{}",
+                                        pos_ports.len() + 1
+                                    )),
+                            );
+                        }
+                        let value_id = cx.map_ast_with_parent(AstNode::Expr(expr), node_id);
+                        pos_ports.push((port.span, value_id));
+                    }
+                }
+            }
             let hir = hir::Inst {
                 id: node_id,
                 name: Spanned::new(inst.name.name, inst.name.span),
                 span: inst.span,
                 target: target_id,
+                named_ports,
+                pos_ports,
+                has_wildcard_port,
                 dummy: Default::default(),
             };
             Ok(HirNode::Inst(cx.arena().alloc_hir(hir)))

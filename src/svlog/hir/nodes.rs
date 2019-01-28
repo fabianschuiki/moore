@@ -209,6 +209,12 @@ pub struct Inst<'hir> {
     pub span: Span,
     /// The target of the instantiation.
     pub target: NodeId,
+    /// The positional port connections.
+    pub pos_ports: Vec<PosParam>,
+    /// The named port connections.
+    pub named_ports: Vec<NamedParam>,
+    /// If the instantiation has a wildcard port connection `.*`.
+    pub has_wildcard_port: bool,
     pub dummy: std::marker::PhantomData<&'hir ()>,
 }
 

@@ -227,7 +227,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 pos: &target_hir.pos_params,
                 named: &target_hir.named_params,
             })?;
-            debug!("{:?} = {:#?}", inst_env, self.param_env_data(inst_env));
+            trace!("{:?} = {:#?}", inst_env, self.param_env_data(inst_env));
+            trace!("pos_ports = {:#?}", hir.pos_ports);
+            trace!("named_ports = {:#?}", hir.named_ports);
+            trace!("has_wildcard_port = {:#?}", hir.has_wildcard_port);
+            // let port_mapping = self.port_mapping(PortMappingSource::ModuleInst {
+            //     module: resolved,
+            //     inst: inst_id,
+            //     env: inst_env,
+            //     pos: &target_hir.pos_ports,
+            //     named: &target_hir.named_ports,
+            // })?;
             let target = self.emit_module_with_env(resolved, inst_env)?;
             let ty = self.tables.module_types[&(resolved, inst_env)].clone();
             let inst = llhd::Inst::new(
