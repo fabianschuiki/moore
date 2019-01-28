@@ -258,7 +258,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::Gen(cx.arena().alloc_hir(hir)))
         }
         AstNode::GenFor(gen) => {
-            let init = lower_genvar_init(cx, &gen.init, node_id)?;
+            let init = alloc_genvar_init(cx, &gen.init, node_id)?;
             let rib = *init.last().unwrap();
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), rib);
             let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), rib);
@@ -294,6 +294,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
     }
 }
 
+/// Lower a module to HIR.
+///
+/// This allocates node IDs to everything in the module and registers AST nodes
+/// for each ID.
 fn lower_module<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
@@ -631,7 +635,7 @@ fn lower_event_expr<'gcx>(
 }
 
 /// Lower a list of genvar declarations.
-fn lower_genvar_init<'gcx>(
+fn alloc_genvar_init<'gcx>(
     cx: &impl Context<'gcx>,
     stmt: &'gcx ast::Stmt,
     mut parent_id: NodeId,
