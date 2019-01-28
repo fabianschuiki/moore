@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for parameter declarations.
 - Support for typedefs.
 
+### Fixed
+- Fix assigning values to output ports.
+
 ### Changed
 - The first verbosity level (`-v`) does no longer print info lines.
 

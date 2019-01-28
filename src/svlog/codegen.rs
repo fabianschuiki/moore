@@ -815,6 +815,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
                 match binding {
                     HirNode::VarDecl(decl) => return Ok(values[&decl.id].clone()),
+                    HirNode::Port(port) => return Ok(values[&port.id].clone()),
                     _ => (),
                 }
                 self.emit(

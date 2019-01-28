@@ -31,3 +31,11 @@ endmodule
 //|     drv %x 0
 //|     drv %y 1
 //| }
+
+
+module D (
+	input bit x,
+	output bit y
+);
+	initial y = ~x;
+endmodule
