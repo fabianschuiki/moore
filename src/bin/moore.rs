@@ -104,7 +104,7 @@ fn main() {
         .get_matches();
 
     // Configure the logger.
-    let verbose = matches.occurrences_of("verbosity") as usize + 1;
+    let verbose = matches.occurrences_of("verbosity") as usize;
     let quiet = !matches.is_present("verbosity");
     let ts = matches
         .value_of("timestamp")

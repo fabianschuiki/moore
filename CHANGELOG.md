@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - Support for parameter declarations.
 
+### Changed
+- The first verbosity level (`-v`) does no longer print info lines.
+
 ## 0.2.0 - 2019-01-24
 ### Added
 - Support for if-generate and for-generate blocks.
