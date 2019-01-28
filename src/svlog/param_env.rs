@@ -89,20 +89,28 @@ pub(crate) fn compute<'gcx>(
                 _ => panic!("expected module"),
             };
 
+            // Collect a list of module parameters.
+            let module_params: Vec<_> = module
+                .params
+                .iter()
+                .cloned()
+                .chain(module.block.params.iter().cloned())
+                .collect();
+
             // Associate the positional and named assignments with the actual
             // parameters of the module.
             let param_iter = pos
                 .iter()
                 .enumerate()
                 .map(
-                    |(index, &(span, assign_id))| match module.params.get(index) {
+                    |(index, &(span, assign_id))| match module_params.get(index) {
                         Some(&param_id) => Ok((param_id, (assign_id, env))),
                         None => {
                             cx.emit(
                                 DiagBuilder2::error(format!(
                                     "{} only has {} parameter(s)",
                                     module.desc_full(),
-                                    module.params.len()
+                                    module_params.len()
                                 ))
                                 .span(span),
                             );
@@ -111,8 +119,7 @@ pub(crate) fn compute<'gcx>(
                     },
                 )
                 .chain(named.iter().map(|&(_span, name, assign_id)| {
-                    let names: Vec<_> = module
-                        .params
+                    let names: Vec<_> = module_params
                         .iter()
                         .flat_map(|&id| match cx.ast_of(id) {
                             Ok(AstNode::TypeParam(_, p)) => Some((p.name.name, id)),
