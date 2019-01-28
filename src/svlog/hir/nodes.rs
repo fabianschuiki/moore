@@ -419,6 +419,18 @@ pub struct Type {
     pub kind: TypeKind,
 }
 
+impl Type {
+    /// Check if this is an explicit type.
+    pub fn is_explicit(&self) -> bool {
+        !self.is_implicit()
+    }
+
+    /// Check if this is an implicit type.
+    pub fn is_implicit(&self) -> bool {
+        self.kind == TypeKind::Implicit
+    }
+}
+
 impl HasSpan for Type {
     fn span(&self) -> Span {
         self.span
@@ -429,6 +441,7 @@ impl HasDesc for Type {
     fn desc(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self.kind {
+            TypeKind::Implicit => "implicit type",
             TypeKind::Builtin(BuiltinType::Void) => "void type",
             TypeKind::Builtin(BuiltinType::Bit) => "bit type",
             TypeKind::Builtin(BuiltinType::Logic) => "logic type",
@@ -451,6 +464,8 @@ impl HasDesc for Type {
 /// The different forms a type can take.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeKind {
+    /// An implicit type.
+    Implicit,
     /// A builtin type.
     Builtin(BuiltinType),
     /// A named type.

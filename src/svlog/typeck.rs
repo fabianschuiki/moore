@@ -46,7 +46,33 @@ pub(crate) fn type_of<'gcx>(
             }
             _ => cx.unimp_msg("type analysis of", &hir),
         },
-        HirNode::ValueParam(p) => cx.map_to_type(p.ty, env),
+        HirNode::ValueParam(p) => {
+            if is_explicit_type(cx, p.ty)? {
+                return cx.map_to_type(p.ty, env);
+            }
+            let env_data = cx.param_env_data(env);
+            match env_data.find_value(node_id) {
+                Some(ParamEnvBinding::Indirect(assigned_id)) => {
+                    return cx.type_of(assigned_id.0, assigned_id.1)
+                }
+                Some(ParamEnvBinding::Direct(t)) => return Ok(t.ty),
+                _ => (),
+            }
+            if let Some(default) = p.default {
+                return cx.type_of(default, env);
+            }
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "{} has implicit type but was not assigned and has no default",
+                    p.desc_full()
+                ))
+                .span(p.human_span())
+                .add_note("specify a type for the parameter; or")
+                .add_note("add a default value for the parameter; or")
+                .add_note("override the parameter from outside"),
+            );
+            Err(())
+        }
         HirNode::VarDecl(d) => cx.map_to_type(d.ty, env),
         HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
         _ => cx.unimp_msg("type analysis of", &hir),
@@ -75,6 +101,10 @@ pub(crate) fn map_to_type<'gcx>(
                     cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
                 Ok(cx.mkty_named(name, (binding, env)))
             }
+            // We should never request mapping of an implicit type. Rather, the
+            // actual type should be mapped. Arriving here is a bug in the
+            // calling function.
+            hir::TypeKind::Implicit => unreachable!("implicit type not resolved"),
             _ => cx.unimp_msg("type analysis of", hir),
         },
         HirNode::TypeParam(param) => {
@@ -105,4 +135,12 @@ pub(crate) fn map_to_type<'gcx>(
         }
         _ => cx.unimp_msg("conversion to type of", &hir),
     }
+}
+
+/// Check if a type (given by its node id) is explicit.
+fn is_explicit_type<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<bool> {
+    Ok(match cx.hir_of(node_id)? {
+        HirNode::Type(x) => x.is_explicit(),
+        _ => false,
+    })
 }

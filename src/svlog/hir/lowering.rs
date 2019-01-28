@@ -443,6 +443,7 @@ fn lower_type<'gcx>(
     ty: &'gcx ast::Type,
 ) -> Result<HirNode<'gcx>> {
     let kind = match ty.data {
+        ast::ImplicitType => hir::TypeKind::Implicit,
         ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
         ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
         ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
