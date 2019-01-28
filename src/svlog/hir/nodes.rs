@@ -149,6 +149,8 @@ pub struct ModuleBlock {
     pub procs: Vec<NodeId>,
     /// The generate blocks in the module.
     pub gens: Vec<NodeId>,
+    /// The parameter declarations in the module.
+    pub params: Vec<NodeId>,
 }
 
 /// An instantiation target.

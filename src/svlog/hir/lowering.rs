@@ -304,24 +304,7 @@ fn lower_module<'gcx>(
     // Allocate parameters.
     let mut params = Vec::new();
     for param in &ast.params {
-        match param.kind {
-            ast::ParamKind::Type(ref decls) => {
-                for decl in decls {
-                    let id = cx.map_ast(AstNode::TypeParam(param, decl));
-                    cx.set_parent(id, next_rib);
-                    next_rib = id;
-                    params.push(id);
-                }
-            }
-            ast::ParamKind::Value(ref decls) => {
-                for decl in decls {
-                    let id = cx.map_ast(AstNode::ValueParam(param, decl));
-                    cx.set_parent(id, next_rib);
-                    next_rib = id;
-                    params.push(id);
-                }
-            }
-        }
+        next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
     }
 
     // Allocate ports.
@@ -362,6 +345,7 @@ fn lower_module_block<'gcx>(
     let mut decls = Vec::new();
     let mut procs = Vec::new();
     let mut gens = Vec::new();
+    let mut params = Vec::new();
     for item in items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
@@ -404,15 +388,19 @@ fn lower_module_block<'gcx>(
                 next_rib = id;
                 gens.push(id);
             }
+            ast::HierarchyItem::ParamDecl(ref param) => {
+                next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
+            }
             // _ => return cx.unimp_msg("lowering of", item),
             _ => warn!("skipping unsupported {:?}", item),
         }
     }
     Ok(hir::ModuleBlock {
-        insts: insts,
-        decls: decls,
-        procs: procs,
-        gens: gens,
+        insts,
+        decls,
+        procs,
+        gens,
+        params,
     })
 }
 
@@ -669,4 +657,32 @@ fn lower_genvar_init<'gcx>(
         }
     }
     Ok(ids)
+}
+
+/// Allocate node IDs for a parameter declaration.
+fn alloc_param_decl<'gcx>(
+    cx: &impl Context<'gcx>,
+    param: &'gcx ast::ParamDecl,
+    mut next_rib: NodeId,
+    into: &mut Vec<NodeId>,
+) -> NodeId {
+    match param.kind {
+        ast::ParamKind::Type(ref decls) => {
+            for decl in decls {
+                let id = cx.map_ast(AstNode::TypeParam(param, decl));
+                cx.set_parent(id, next_rib);
+                next_rib = id;
+                into.push(id);
+            }
+        }
+        ast::ParamKind::Value(ref decls) => {
+            for decl in decls {
+                let id = cx.map_ast(AstNode::ValueParam(param, decl));
+                cx.set_parent(id, next_rib);
+                next_rib = id;
+                into.push(id);
+            }
+        }
+    }
+    next_rib
 }
