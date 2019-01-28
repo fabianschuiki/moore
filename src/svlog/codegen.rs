@@ -140,6 +140,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Assign default values to undriven output ports.
         for port_id in outputs {
+            let driven = {
+                let value = &values[&port_id];
+                ent.insts().any(|inst| match inst.kind() {
+                    llhd::DriveInst(target, ..) => target == value,
+                    llhd::InstanceInst(_, _, _, ref driven) => driven.contains(value),
+                    _ => false,
+                })
+            };
+            if driven {
+                continue;
+            }
             let hir = match self.hir_of(port_id)? {
                 HirNode::Port(p) => p,
                 _ => unreachable!(),
