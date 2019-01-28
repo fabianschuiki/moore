@@ -691,7 +691,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                                     llhd::Inst::new(
                                         None,
                                         llhd::CompareInst(
-                                            llhd::CompareOp::Eq,
+                                            llhd::CompareOp::Neq,
                                             lty.clone(),
                                             value,
                                             llhd::const_zero(&lty).into(),
