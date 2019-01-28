@@ -34,6 +34,7 @@ make_arenas!(
         event_exprs: EventExpr,
         gens: Gen,
         genvar_decls: GenvarDecl,
+        typedefs: Typedef,
     }
 );
 

@@ -77,6 +77,9 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
         AstNode::GenvarDecl(decl) => {
             RibKind::Normal(Spanned::new(decl.name, decl.name_span), node_id)
         }
+        AstNode::Typedef(def) => {
+            RibKind::Normal(Spanned::new(def.name.name, def.name.span), node_id)
+        }
         _ => {
             return cx.local_rib(
                 cx.parent_node_id(node_id)

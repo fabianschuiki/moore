@@ -989,6 +989,26 @@ pub struct Typedef {
     pub dims: Vec<TypeDim>,
 }
 
+impl HasSpan for Typedef {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for Typedef {
+    fn desc(&self) -> &'static str {
+        "typedef"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("typedef `{}`", self.name.name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Constraint {
     pub span: Span,

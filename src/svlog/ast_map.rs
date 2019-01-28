@@ -68,6 +68,8 @@ pub enum AstNode<'ast> {
     GenFor(&'ast ast::GenerateFor),
     /// A genvar declaration.
     GenvarDecl(&'ast ast::GenvarDecl),
+    /// A typedef.
+    Typedef(&'ast ast::Typedef),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -89,6 +91,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::GenIf(x) => x.span(),
             AstNode::GenFor(x) => x.span(),
             AstNode::GenvarDecl(x) => x.span(),
+            AstNode::Typedef(x) => x.span(),
         }
     }
 
@@ -110,6 +113,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::GenIf(x) => x.human_span(),
             AstNode::GenFor(x) => x.human_span(),
             AstNode::GenvarDecl(x) => x.human_span(),
+            AstNode::Typedef(x) => x.human_span(),
         }
     }
 }
@@ -133,6 +137,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::GenIf(x) => x.desc(),
             AstNode::GenFor(x) => x.desc(),
             AstNode::GenvarDecl(x) => x.desc(),
+            AstNode::Typedef(x) => x.desc(),
         }
     }
 
@@ -154,6 +159,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::GenIf(x) => x.desc_full(),
             AstNode::GenFor(x) => x.desc_full(),
             AstNode::GenvarDecl(x) => x.desc_full(),
+            AstNode::Typedef(x) => x.desc_full(),
         }
     }
 }

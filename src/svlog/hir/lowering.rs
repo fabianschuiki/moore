@@ -287,6 +287,15 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::GenvarDecl(cx.arena().alloc_hir(hir)))
         }
+        AstNode::Typedef(def) => {
+            let hir = hir::Typedef {
+                id: node_id,
+                span: def.span(),
+                name: Spanned::new(def.name.name, def.name.span),
+                ty: cx.map_ast_with_parent(AstNode::Type(&def.ty), node_id),
+            };
+            Ok(HirNode::Typedef(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             debug!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -394,6 +403,10 @@ fn lower_module_block<'gcx>(
             }
             ast::HierarchyItem::ParamDecl(ref param) => {
                 next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
+            }
+            ast::HierarchyItem::Typedef(ref def) => {
+                let id = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
+                next_rib = id;
             }
             // _ => return cx.unimp_msg("lowering of", item),
             _ => warn!("skipping unsupported {:?}", item),

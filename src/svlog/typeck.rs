@@ -133,6 +133,7 @@ pub(crate) fn map_to_type<'gcx>(
             cx.emit(d);
             Err(())
         }
+        HirNode::Typedef(def) => cx.map_to_type(def.ty, env),
         _ => cx.unimp_msg("conversion to type of", &hir),
     }
 }

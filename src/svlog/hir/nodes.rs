@@ -22,6 +22,7 @@ pub enum HirNode<'hir> {
     EventExpr(&'hir EventExpr),
     Gen(&'hir Gen),
     GenvarDecl(&'hir GenvarDecl),
+    Typedef(&'hir Typedef),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -41,6 +42,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::EventExpr(x) => x.span(),
             HirNode::Gen(x) => x.span(),
             HirNode::GenvarDecl(x) => x.span(),
+            HirNode::Typedef(x) => x.span(),
         }
     }
 
@@ -60,6 +62,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::EventExpr(x) => x.human_span(),
             HirNode::Gen(x) => x.human_span(),
             HirNode::GenvarDecl(x) => x.human_span(),
+            HirNode::Typedef(x) => x.human_span(),
         }
     }
 }
@@ -81,6 +84,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::EventExpr(x) => x.desc(),
             HirNode::Gen(x) => x.desc(),
             HirNode::GenvarDecl(x) => x.desc(),
+            HirNode::Typedef(x) => x.desc(),
         }
     }
 
@@ -100,6 +104,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::EventExpr(x) => x.desc_full(),
             HirNode::Gen(x) => x.desc_full(),
             HirNode::GenvarDecl(x) => x.desc_full(),
+            HirNode::Typedef(x) => x.desc_full(),
         }
     }
 }
@@ -858,5 +863,34 @@ impl HasDesc for GenvarDecl {
 
     fn desc_full(&self) -> String {
         format!("genvar `{}`", self.name.value)
+    }
+}
+
+/// A typedef.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Typedef {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    pub ty: NodeId,
+}
+
+impl HasSpan for Typedef {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for Typedef {
+    fn desc(&self) -> &'static str {
+        "typedef"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("typedef `{}`", self.name.value)
     }
 }

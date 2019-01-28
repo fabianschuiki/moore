@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Added
 - Support for parameter declarations.
+- Support for typedefs.
 
 ### Changed
 - The first verbosity level (`-v`) does no longer print info lines.
