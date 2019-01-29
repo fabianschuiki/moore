@@ -30,7 +30,7 @@ use crate::{
     hir::{self, AccessTable, HirNode},
     ty::{Type, TypeKind},
     value::{Value, ValueData},
-    ParamEnv, ParamEnvData, ParamEnvSource,
+    ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
 use llhd;
 use std::{
@@ -539,6 +539,12 @@ pub(super) mod queries {
                 type AccessedNodesQuery;
                 use fn  hir::accessed_nodes;
             }
+
+            /// Compute the port assignments for an instantiation.
+            fn port_mapping(src: PortMappingSource<'a>) -> Result<Arc<PortMapping>> {
+                type PortMappingQuery;
+                use fn port_mapping::compute;
+            }
         }
     }
 
@@ -556,6 +562,7 @@ pub(super) mod queries {
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn accessed_nodes() for AccessedNodesQuery<'gcx>;
+                fn port_mapping() for PortMappingQuery<'gcx>;
             }
         }
     }

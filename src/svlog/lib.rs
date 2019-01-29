@@ -16,6 +16,7 @@ mod codegen;
 mod context;
 pub mod hir;
 mod param_env;
+mod port_mapping;
 mod resolver;
 pub mod ty;
 mod typeck;
@@ -25,6 +26,7 @@ pub use crate::{
     codegen::CodeGenerator,
     context::*,
     param_env::{NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource},
+    port_mapping::{PortMapping, PortMappingSource},
     resolver::{Rib, RibKind},
     syntax::*,
 };
@@ -41,7 +43,7 @@ mod crate_prelude {
         common::util::{HasDesc, HasSpan},
         common::NodeId,
         context::{BaseContext, Context, GlobalContext},
-        hir, param_env,
+        hir, param_env, port_mapping,
         resolver::{self, Rib, RibKind},
         ty, typeck, value, NodeEnvId,
     };
