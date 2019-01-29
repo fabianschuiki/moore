@@ -39,3 +39,16 @@ module D (
 );
 	initial y = ~x;
 endmodule
+
+//@ elab D
+//| proc @n226 (i1$ %0) (i1$ %1) {
+//| %2:
+//|     %3 = prb %0
+//|     %4 = not i1 %3
+//|     drv %1 %4
+//|     halt
+//| }
+//|
+//| entity @D (i1$ %x) (i1$ %y) {
+//|     inst @n226 (%x) (%y)
+//| }

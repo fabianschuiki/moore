@@ -7,7 +7,7 @@ use crate::{
     hir::HirNode,
     ty::{Type, TypeKind},
     value::{Value, ValueKind},
-    ParamEnv, ParamEnvSource,
+    ParamEnv, ParamEnvSource, PortMappingSource,
 };
 use llhd::Context as LlhdContext;
 use num::Zero;
@@ -231,18 +231,49 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             trace!("pos_ports = {:#?}", hir.pos_ports);
             trace!("named_ports = {:#?}", hir.named_ports);
             trace!("has_wildcard_port = {:#?}", hir.has_wildcard_port);
-            // let port_mapping = self.port_mapping(PortMappingSource::ModuleInst {
-            //     module: resolved,
-            //     inst: inst_id,
-            //     env: inst_env,
-            //     pos: &target_hir.pos_ports,
-            //     named: &target_hir.named_ports,
-            // })?;
+            let port_mapping = self.port_mapping(PortMappingSource::ModuleInst {
+                module: resolved,
+                inst: inst_id,
+                env: inst_env,
+                pos: &hir.pos_ports,
+                named: &hir.named_ports,
+            })?;
+            trace!("port_mapping = {:#?}", port_mapping);
+            let mut inputs = Vec::new();
+            let mut outputs = Vec::new();
+            let resolved_hir = match self.hir_of(resolved)? {
+                HirNode::Module(x) => x,
+                _ => unreachable!(),
+            };
+            for &port_id in resolved_hir.ports {
+                let port = match self.hir_of(port_id)? {
+                    HirNode::Port(p) => p,
+                    _ => unreachable!(),
+                };
+                let mapping = port_mapping.find(port_id);
+                let (is_input, is_output) = match port.dir {
+                    ast::PortDir::Input | ast::PortDir::Ref => (true, false),
+                    ast::PortDir::Output => (false, true),
+                    ast::PortDir::Inout => (true, true),
+                };
+                if let Some(mapping) = mapping {
+                    if is_input {
+                        inputs.push(self.emit_port_rvalue(mapping.0, mapping.1, ent, values)?);
+                    }
+                    if is_output {
+                        outputs.push(self.emit_port_lvalue(mapping.0, mapping.1, ent, values)?);
+                    }
+                } else {
+                    unimplemented!("unconnected port");
+                }
+            }
+            trace!("inputs = {:#?}", inputs);
+            trace!("outputs = {:#?}", outputs);
             let target = self.emit_module_with_env(resolved, inst_env)?;
             let ty = self.tables.module_types[&(resolved, inst_env)].clone();
             let inst = llhd::Inst::new(
                 Some(hir.name.value.into()),
-                llhd::InstanceInst(ty, target.into(), vec![], vec![]),
+                llhd::InstanceInst(ty, target.into(), inputs, outputs),
             );
             ent.add_inst(inst, llhd::InstPosition::End);
         }
@@ -1209,5 +1240,68 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 Err(())
             }
         }
+    }
+
+    /// Emit the code to connect an expression to an input port.
+    fn emit_port_rvalue(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        _ent: &mut llhd::Entity,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<llhd::ValueRef> {
+        let hir = match self.hir_of(expr_id)? {
+            HirNode::Expr(x) => x,
+            _ => unreachable!(),
+        };
+        #[allow(unreachable_patterns)]
+        match hir.kind {
+            hir::ExprKind::IntConst(_) => self
+                .emit_const(self.constant_value_of(expr_id, env)?)
+                .map(Into::into),
+            hir::ExprKind::Ident(_) => {
+                let binding = self.resolve_node(expr_id, env)?;
+                let value = values[&binding].clone();
+                Ok(value)
+            }
+            _ => self.unimp_msg("code generation for", hir),
+        }
+    }
+
+    /// Emit the code to connect an expression to an output port.
+    fn emit_port_lvalue(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        _ent: &mut llhd::Entity,
+        values: &mut HashMap<NodeId, llhd::ValueRef>,
+    ) -> Result<llhd::ValueRef> {
+        let hir = match self.hir_of(expr_id)? {
+            HirNode::Expr(x) => x,
+            _ => unreachable!(),
+        };
+        match hir.kind {
+            hir::ExprKind::Ident(_) => {
+                let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
+                match binding {
+                    HirNode::VarDecl(decl) => return Ok(values[&decl.id].clone()),
+                    HirNode::Port(port) => return Ok(values[&port.id].clone()),
+                    _ => (),
+                }
+                self.emit(
+                    DiagBuilder2::error(format!("{} cannot be assigned to", binding.desc_full()))
+                        .span(hir.span())
+                        .add_note(format!("{} declared here", binding.desc_full()))
+                        .span(binding.human_span()),
+                );
+                return Err(());
+            }
+            _ => (),
+        }
+        self.emit(
+            DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
+                .span(hir.span()),
+        );
+        Err(())
     }
 }

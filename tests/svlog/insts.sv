@@ -116,3 +116,27 @@ endmodule
 //|     %i2 = inst @I.param6 () ()
 //|     %i3 = inst @I.param7 () ()
 //| }
+
+
+//////////////////////////
+///  Port assignments  ///
+//////////////////////////
+
+module K;
+	int a, b;
+	L l0(a, b);
+endmodule
+
+module L (input int a, output int b);
+endmodule
+
+//@ elab K
+//| entity @L (i32$ %a) (i32$ %b) {
+//|     drv %b 0
+//| }
+//|
+//| entity @K () () {
+//|     %a = sig i32
+//|     %b = sig i32
+//|     %l0 = inst @L (%a) (%b)
+//| }
