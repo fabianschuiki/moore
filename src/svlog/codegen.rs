@@ -384,24 +384,24 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         {
             values.insert(id, arg.as_ref().into());
         }
-        let final_blk = self.emit_stmt(hir.stmt, env, &mut prok, entry_blk, &mut values)?;
+        let mut pg = ProcessGenerator {
+            gen: self,
+            prok: &mut prok,
+            pos: llhd::InstPosition::BlockEnd(entry_blk),
+            values: &mut values,
+        };
+        pg.emit_stmt(hir.stmt, env)?;
 
         // Emit epilogue.
         match hir.kind {
             ast::ProcedureKind::Initial => {
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(None, llhd::HaltInst),
-                    llhd::InstPosition::BlockEnd(final_blk),
-                );
+                pg.emit_nameless_inst(llhd::HaltInst);
             }
             ast::ProcedureKind::Always
             | ast::ProcedureKind::AlwaysComb
             | ast::ProcedureKind::AlwaysLatch
             | ast::ProcedureKind::AlwaysFf => {
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(None, llhd::BranchInst(llhd::BranchKind::Uncond(entry_blk))),
-                    llhd::InstPosition::BlockEnd(final_blk),
-                );
+                pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(entry_blk)));
             }
             _ => (),
         }
@@ -454,432 +454,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone())),
             _ => panic!("invalid type/value combination {:#?}", value),
         }
-    }
-
-    /// Emit the code for a statement.
-    fn emit_stmt(
-        &mut self,
-        stmt_id: NodeId,
-        env: ParamEnv,
-        prok: &mut llhd::Process,
-        mut block: llhd::BlockRef,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::BlockRef> {
-        let hir = match self.hir_of(stmt_id)? {
-            HirNode::Stmt(x) => x,
-            _ => unreachable!(),
-        };
-        #[allow(unreachable_patterns)]
-        match hir.kind {
-            hir::StmtKind::Null => (),
-            hir::StmtKind::Block(ref ids) => {
-                for &id in ids {
-                    block = self.emit_stmt(id, env, prok, block, values)?;
-                }
-            }
-            hir::StmtKind::Assign { lhs, rhs, kind } => {
-                let rhs_value = self.emit_rvalue(rhs, env, prok, block, values)?;
-                match kind {
-                    hir::AssignKind::Block(ast::AssignOp::Identity) => {
-                        ProcessGenerator {
-                            gen: self,
-                            prok,
-                            block,
-                            values,
-                        }
-                        .emit_blocking_assign(lhs, rhs_value, env)?;
-                    }
-                    _ => {
-                        return self
-                            .unimp_msg(format!("code generation for assignment {:?} in", kind), hir)
-                    }
-                }
-            }
-            hir::StmtKind::Timed {
-                control: hir::TimingControl::Delay(expr_id),
-                stmt,
-            } => {
-                let resume_blk = prok
-                    .body_mut()
-                    .add_block(llhd::Block::new(None), llhd::BlockPosition::End);
-                let duration = self.emit_rvalue(expr_id, env, prok, block, values)?.into();
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(None, llhd::WaitInst(resume_blk, Some(duration), vec![])),
-                    llhd::InstPosition::BlockEnd(block),
-                );
-                block = self.emit_stmt(stmt, env, prok, resume_blk, values)?;
-            }
-            hir::StmtKind::Timed {
-                control: hir::TimingControl::ExplicitEvent(expr_id),
-                stmt,
-            } => {
-                let expr_hir = match self.hir_of(expr_id)? {
-                    HirNode::EventExpr(x) => x,
-                    _ => unreachable!(),
-                };
-                trace!("would now emit event checking code for {:#?}", expr_hir);
-
-                // Store initial values of the expressions the event is
-                // sensitive to.
-                let init_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("init".into())),
-                    llhd::BlockPosition::End,
-                );
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(
-                        None,
-                        llhd::BranchInst(llhd::BranchKind::Uncond(init_blk.into())),
-                    ),
-                    llhd::InstPosition::BlockEnd(block),
-                );
-                let mut init_values = vec![];
-                for event in &expr_hir.events {
-                    init_values.push(self.emit_rvalue(event.expr, env, prok, init_blk, values)?);
-                }
-
-                // Wait for any of the inputs to those expressions to change.
-                let check_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("check".into())),
-                    llhd::BlockPosition::End,
-                );
-                let mut trigger_on = vec![];
-                for event in &expr_hir.events {
-                    let acc = self.accessed_nodes(event.expr)?;
-                    for id in &acc.read {
-                        trigger_on.push(values[&id].clone());
-                    }
-                }
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(None, llhd::WaitInst(check_blk, None, trigger_on)),
-                    llhd::InstPosition::BlockEnd(init_blk),
-                );
-
-                // Check if any of the events happened and produce a single bit
-                // value that represents this.
-                let mut event_cond = None;
-                for (event, init_value) in expr_hir.events.iter().zip(init_values.into_iter()) {
-                    trace!(
-                        "would now emit check if {:?} changed according to {:#?}",
-                        init_value,
-                        event
-                    );
-                    let now_value = self.emit_rvalue(event.expr, env, prok, check_blk, values)?;
-                    let mut trigger = ProcessGenerator {
-                        gen: self,
-                        prok,
-                        block: check_blk,
-                        values,
-                    }
-                    .emit_event_trigger(event.edge, init_value, now_value)?;
-                    for &iff in &event.iff {
-                        let iff_value = self.emit_rvalue(iff, env, prok, check_blk, values)?;
-                        trigger = prok
-                            .body_mut()
-                            .add_inst(
-                                llhd::Inst::new(
-                                    Some("iff".into()),
-                                    llhd::BinaryInst(
-                                        llhd::BinaryOp::And,
-                                        llhd::int_ty(1),
-                                        trigger,
-                                        iff_value,
-                                    ),
-                                ),
-                                llhd::InstPosition::BlockEnd(check_blk),
-                            )
-                            .into();
-                    }
-                    event_cond = Some(match event_cond {
-                        Some(chain) => prok
-                            .body_mut()
-                            .add_inst(
-                                llhd::Inst::new(
-                                    Some("event_or".into()),
-                                    llhd::BinaryInst(
-                                        llhd::BinaryOp::Or,
-                                        llhd::int_ty(1),
-                                        chain,
-                                        trigger,
-                                    ),
-                                ),
-                                llhd::InstPosition::BlockEnd(check_blk),
-                            )
-                            .into(),
-                        None => trigger,
-                    });
-                }
-
-                // If the event happened, branch to a new block which will
-                // contain the subsequent statements. Otherwise jump back up to
-                // the initial block.
-                block = match event_cond {
-                    Some(event_cond) => {
-                        let event_blk = prok.body_mut().add_block(
-                            llhd::Block::new(Some("event".into())),
-                            llhd::BlockPosition::End,
-                        );
-                        prok.body_mut().add_inst(
-                            llhd::Inst::new(
-                                None,
-                                llhd::BranchInst(llhd::BranchKind::Cond(
-                                    event_cond,
-                                    event_blk.into(),
-                                    init_blk.into(),
-                                )),
-                            ),
-                            llhd::InstPosition::BlockEnd(check_blk),
-                        );
-                        event_blk
-                    }
-                    None => check_blk,
-                };
-
-                // Emit the actual statement.
-                block = self.emit_stmt(stmt, env, prok, block, values)?;
-            }
-            hir::StmtKind::Expr(expr_id) => {
-                self.emit_rvalue(expr_id, env, prok, block, values)?;
-            }
-            hir::StmtKind::If {
-                cond,
-                main_stmt,
-                else_stmt,
-            } => {
-                let main_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("if_true".into())),
-                    llhd::BlockPosition::End,
-                );
-                let else_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("if_false".into())),
-                    llhd::BlockPosition::End,
-                );
-                let cond = self.emit_rvalue(cond, env, prok, block, values)?;
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(
-                        None,
-                        llhd::BranchInst(llhd::BranchKind::Cond(
-                            cond,
-                            main_blk.into(),
-                            else_blk.into(),
-                        )),
-                    ),
-                    llhd::InstPosition::BlockEnd(block),
-                );
-                let final_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("if_exit".into())),
-                    llhd::BlockPosition::End,
-                );
-                let main_blk = self.emit_stmt(main_stmt, env, prok, main_blk, values)?;
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(
-                        None,
-                        llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())),
-                    ),
-                    llhd::InstPosition::BlockEnd(main_blk),
-                );
-                let else_blk = match else_stmt {
-                    Some(else_stmt) => self.emit_stmt(else_stmt, env, prok, else_blk, values)?,
-                    None => else_blk,
-                };
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(
-                        None,
-                        llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())),
-                    ),
-                    llhd::InstPosition::BlockEnd(else_blk),
-                );
-                block = final_blk;
-            }
-            hir::StmtKind::Loop { kind, body } => {
-                let body_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("loop_body".into())),
-                    llhd::BlockPosition::End,
-                );
-                let exit_blk = prok.body_mut().add_block(
-                    llhd::Block::new(Some("loop_exit".into())),
-                    llhd::BlockPosition::End,
-                );
-
-                // Emit the loop initialization.
-                let repeat_var = match kind {
-                    hir::LoopKind::Forever => None,
-                    hir::LoopKind::Repeat(count) => {
-                        let ty = self.type_of(count, env)?;
-                        let lty = self.emit_type(ty)?;
-                        let count = self.emit_rvalue(count, env, prok, block, values)?;
-                        let var: llhd::ValueRef = prok
-                            .body_mut()
-                            .add_inst(
-                                llhd::Inst::new(
-                                    Some("loop_count".into()),
-                                    llhd::VariableInst(lty.clone()),
-                                ),
-                                llhd::InstPosition::BlockEnd(block),
-                            )
-                            .into();
-                        prok.body_mut().add_inst(
-                            llhd::Inst::new(None, llhd::StoreInst(lty, count, var.clone())),
-                            llhd::InstPosition::BlockEnd(block),
-                        );
-                        Some((var, ty))
-                    }
-                    hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(init, _, _) => {
-                        block = self.emit_stmt(init, env, prok, block, values)?;
-                        None
-                    }
-                };
-
-                // Emit the loop prologue.
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(
-                        None,
-                        llhd::BranchInst(llhd::BranchKind::Uncond(body_blk.into())),
-                    ),
-                    llhd::InstPosition::BlockEnd(block),
-                );
-                block = body_blk;
-                let enter_cond = match kind {
-                    hir::LoopKind::Forever => None,
-                    hir::LoopKind::Repeat(_) => {
-                        let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty)?;
-                        let value = prok
-                            .body_mut()
-                            .add_inst(
-                                llhd::Inst::new(None, llhd::LoadInst(lty.clone(), repeat_var)),
-                                llhd::InstPosition::BlockEnd(block),
-                            )
-                            .into();
-                        Some(
-                            prok.body_mut()
-                                .add_inst(
-                                    llhd::Inst::new(
-                                        None,
-                                        llhd::CompareInst(
-                                            llhd::CompareOp::Neq,
-                                            lty.clone(),
-                                            value,
-                                            llhd::const_zero(&lty).into(),
-                                        ),
-                                    ),
-                                    llhd::InstPosition::BlockEnd(block),
-                                )
-                                .into(),
-                        )
-                    }
-                    hir::LoopKind::While(cond) => {
-                        Some(self.emit_rvalue(cond, env, prok, block, values)?)
-                    }
-                    hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(_, cond, _) => {
-                        Some(self.emit_rvalue(cond, env, prok, block, values)?)
-                    }
-                };
-                if let Some(enter_cond) = enter_cond {
-                    let entry_blk = prok.body_mut().add_block(
-                        llhd::Block::new(Some("loop_continue".into())),
-                        llhd::BlockPosition::End,
-                    );
-                    prok.body_mut().add_inst(
-                        llhd::Inst::new(
-                            None,
-                            llhd::BranchInst(llhd::BranchKind::Cond(
-                                enter_cond,
-                                entry_blk.into(),
-                                exit_blk.into(),
-                            )),
-                        ),
-                        llhd::InstPosition::BlockEnd(block),
-                    );
-                    block = entry_blk;
-                }
-
-                // Emit the loop body.
-                block = self.emit_stmt(body, env, prok, block, values)?;
-
-                // Emit the epilogue.
-                let continue_cond = match kind {
-                    hir::LoopKind::Forever => None,
-                    hir::LoopKind::Repeat(_) => {
-                        let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty)?;
-                        let value = prok
-                            .body_mut()
-                            .add_inst(
-                                llhd::Inst::new(
-                                    None,
-                                    llhd::LoadInst(lty.clone(), repeat_var.clone()),
-                                ),
-                                llhd::InstPosition::BlockEnd(block),
-                            )
-                            .into();
-                        let value = prok
-                            .body_mut()
-                            .add_inst(
-                                llhd::Inst::new(
-                                    None,
-                                    llhd::BinaryInst(
-                                        llhd::BinaryOp::Sub,
-                                        lty.clone(),
-                                        value,
-                                        self.const_one_for_type(ty)?,
-                                    ),
-                                ),
-                                llhd::InstPosition::BlockEnd(block),
-                            )
-                            .into();
-                        prok.body_mut().add_inst(
-                            llhd::Inst::new(None, llhd::StoreInst(lty, value, repeat_var)),
-                            llhd::InstPosition::BlockEnd(block),
-                        );
-                        None
-                    }
-                    hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(cond) => {
-                        Some(self.emit_rvalue(cond, env, prok, block, values)?)
-                    }
-                    hir::LoopKind::For(_, _, step) => {
-                        self.emit_rvalue(step, env, prok, block, values)?;
-                        None
-                    }
-                };
-                prok.body_mut().add_inst(
-                    llhd::Inst::new(
-                        None,
-                        llhd::BranchInst(match continue_cond {
-                            Some(cond) => {
-                                llhd::BranchKind::Cond(cond, body_blk.into(), exit_blk.into())
-                            }
-                            None => llhd::BranchKind::Uncond(body_blk.into()),
-                        }),
-                    ),
-                    llhd::InstPosition::BlockEnd(block),
-                );
-                block = exit_blk;
-            }
-            _ => return self.unimp_msg("code generation for", hir),
-        }
-        Ok(block)
-    }
-
-    /// Emit the code for an rvalue.
-    fn emit_rvalue(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        prok: &mut llhd::Process,
-        block: llhd::BlockRef,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::ValueRef> {
-        return ProcessGenerator {
-            gen: self,
-            prok,
-            block,
-            values,
-        }
-        .emit_rvalue(expr_id, env);
     }
 
     /// Emit the value `1` for a type.
@@ -1000,8 +574,8 @@ struct ProcessGenerator<'a, 'gcx, C> {
     gen: &'a mut CodeGenerator<'gcx, C>,
     /// The process into which instructions are emitted.
     prok: &'a mut llhd::Process,
-    /// The current basic block into which instructions are emitted.
-    block: llhd::BlockRef,
+    /// The current insertion point for new instructions.
+    pos: llhd::InstPosition,
     /// The emitted values.
     values: &'a mut HashMap<NodeId, llhd::ValueRef>,
 }
@@ -1025,9 +599,7 @@ where
     C: Context<'gcx> + 'a,
 {
     fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
-        self.prok
-            .body_mut()
-            .add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
+        self.prok.body_mut().add_inst(inst, self.pos)
     }
 
     fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef {
@@ -1045,9 +617,21 @@ where
     }
 }
 
-impl<'a, 'b, 'gcx, C> StmtGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, &'a C> where
-    C: Context<'gcx> + 'a
+impl<'a, 'b, 'gcx, C> StmtGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, &'a C>
+where
+    C: Context<'gcx> + 'a,
 {
+    fn set_insertion_point(&mut self, pos: llhd::InstPosition) {
+        self.pos = pos;
+    }
+
+    fn insertion_point(&self) -> llhd::InstPosition {
+        self.pos
+    }
+
+    fn add_block(&mut self, block: llhd::Block, pos: llhd::BlockPosition) -> llhd::BlockRef {
+        self.prok.body_mut().add_block(block, pos)
+    }
 }
 
 /// A generator for expressions.
@@ -1227,6 +811,295 @@ trait StmtGenerator<'a, 'gcx, C>: ExprGenerator<'a, 'gcx, C>
 where
     C: Context<'gcx> + 'a,
 {
+    /// Change the insertion point for new instructions.
+    fn set_insertion_point(&mut self, pos: llhd::InstPosition);
+
+    /// Get the insertion point for new instructions.
+    fn insertion_point(&self) -> llhd::InstPosition;
+
+    /// Add a block.
+    fn add_block(&mut self, block: llhd::Block, pos: llhd::BlockPosition) -> llhd::BlockRef;
+
+    /// Append new instructions at the end of a block.
+    fn append_to_block(&mut self, block: llhd::BlockRef) {
+        self.set_insertion_point(llhd::InstPosition::BlockEnd(block));
+    }
+
+    /// Add a nameless block.
+    fn add_nameless_block(&mut self) -> llhd::BlockRef {
+        self.add_block(llhd::Block::new(None), llhd::BlockPosition::End)
+    }
+
+    /// Add a named block.
+    fn add_named_block(&mut self, name: impl Into<String>) -> llhd::BlockRef {
+        self.add_block(
+            llhd::Block::new(Some(name.into())),
+            llhd::BlockPosition::End,
+        )
+    }
+
+    /// Emit the code for a statement.
+    fn emit_stmt(&mut self, stmt_id: NodeId, env: ParamEnv) -> Result<()> {
+        let hir = match self.hir_of(stmt_id)? {
+            HirNode::Stmt(x) => x,
+            _ => unreachable!(),
+        };
+        #[allow(unreachable_patterns)]
+        match hir.kind {
+            hir::StmtKind::Null => (),
+            hir::StmtKind::Block(ref ids) => {
+                for &id in ids {
+                    self.emit_stmt(id, env)?;
+                }
+            }
+            hir::StmtKind::Assign { lhs, rhs, kind } => {
+                let rhs_value = self.emit_rvalue(rhs, env)?;
+                match kind {
+                    hir::AssignKind::Block(ast::AssignOp::Identity) => {
+                        self.emit_blocking_assign(lhs, rhs_value, env)?;
+                    }
+                    _ => {
+                        return self
+                            .unimp_msg(format!("code generation for assignment {:?} in", kind), hir)
+                    }
+                }
+            }
+            hir::StmtKind::Timed {
+                control: hir::TimingControl::Delay(expr_id),
+                stmt,
+            } => {
+                let resume_blk = self.add_nameless_block();
+                let duration = self.emit_rvalue(expr_id, env)?.into();
+                self.emit_nameless_inst(llhd::WaitInst(resume_blk, Some(duration), vec![]));
+                self.append_to_block(resume_blk);
+                self.emit_stmt(stmt, env)?;
+            }
+            hir::StmtKind::Timed {
+                control: hir::TimingControl::ExplicitEvent(expr_id),
+                stmt,
+            } => {
+                let expr_hir = match self.hir_of(expr_id)? {
+                    HirNode::EventExpr(x) => x,
+                    _ => unreachable!(),
+                };
+                trace!("would now emit event checking code for {:#?}", expr_hir);
+
+                // Store initial values of the expressions the event is
+                // sensitive to.
+                let init_blk = self.add_named_block("init");
+                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    init_blk.into(),
+                )));
+                self.append_to_block(init_blk);
+                let mut init_values = vec![];
+                for event in &expr_hir.events {
+                    init_values.push(self.emit_rvalue(event.expr, env)?);
+                }
+
+                // Wait for any of the inputs to those expressions to change.
+                let check_blk = self.add_named_block("check");
+                let mut trigger_on = vec![];
+                for event in &expr_hir.events {
+                    let acc = self.accessed_nodes(event.expr)?;
+                    for &id in &acc.read {
+                        trigger_on.push(self.emitted_value(id).clone());
+                    }
+                }
+                self.emit_nameless_inst(llhd::WaitInst(check_blk, None, trigger_on));
+                self.append_to_block(check_blk);
+
+                // Check if any of the events happened and produce a single bit
+                // value that represents this.
+                let mut event_cond = None;
+                for (event, init_value) in expr_hir.events.iter().zip(init_values.into_iter()) {
+                    trace!(
+                        "would now emit check if {:?} changed according to {:#?}",
+                        init_value,
+                        event
+                    );
+                    let now_value = self.emit_rvalue(event.expr, env)?;
+                    let mut trigger = self.emit_event_trigger(event.edge, init_value, now_value)?;
+                    for &iff in &event.iff {
+                        let iff_value = self.emit_rvalue(iff, env)?;
+                        trigger = self
+                            .emit_named_inst(
+                                "iff",
+                                llhd::BinaryInst(
+                                    llhd::BinaryOp::And,
+                                    llhd::int_ty(1),
+                                    trigger,
+                                    iff_value,
+                                ),
+                            )
+                            .into();
+                    }
+                    event_cond = Some(match event_cond {
+                        Some(chain) => self
+                            .emit_named_inst(
+                                "event_or",
+                                llhd::BinaryInst(
+                                    llhd::BinaryOp::Or,
+                                    llhd::int_ty(1),
+                                    chain,
+                                    trigger,
+                                ),
+                            )
+                            .into(),
+                        None => trigger,
+                    });
+                }
+
+                // If the event happened, branch to a new block which will
+                // contain the subsequent statements. Otherwise jump back up to
+                // the initial block.
+                if let Some(event_cond) = event_cond {
+                    let event_blk = self.add_named_block("event");
+                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
+                        event_cond,
+                        event_blk.into(),
+                        init_blk.into(),
+                    )));
+                    self.append_to_block(event_blk);
+                }
+
+                // Emit the actual statement.
+                self.emit_stmt(stmt, env)?;
+            }
+            hir::StmtKind::Expr(expr_id) => {
+                self.emit_rvalue(expr_id, env)?;
+            }
+            hir::StmtKind::If {
+                cond,
+                main_stmt,
+                else_stmt,
+            } => {
+                let main_blk = self.add_named_block("if_true");
+                let else_blk = self.add_named_block("if_false");
+                let cond = self.emit_rvalue(cond, env)?;
+                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
+                    cond,
+                    main_blk.into(),
+                    else_blk.into(),
+                )));
+                let final_blk = self.add_named_block("if_exit");
+                self.append_to_block(main_blk);
+                self.emit_stmt(main_stmt, env)?;
+                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    final_blk.into(),
+                )));
+                self.append_to_block(else_blk);
+                if let Some(else_stmt) = else_stmt {
+                    self.emit_stmt(else_stmt, env)?;
+                };
+                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    final_blk.into(),
+                )));
+                self.append_to_block(final_blk);
+            }
+            hir::StmtKind::Loop { kind, body } => {
+                let body_blk = self.add_named_block("loop_body");
+                let exit_blk = self.add_named_block("loop_exit");
+
+                // Emit the loop initialization.
+                let repeat_var = match kind {
+                    hir::LoopKind::Forever => None,
+                    hir::LoopKind::Repeat(count) => {
+                        let ty = self.type_of(count, env)?;
+                        let lty = self.emit_type(ty)?;
+                        let count = self.emit_rvalue(count, env)?;
+                        let var: llhd::ValueRef = self
+                            .emit_named_inst("loop_count", llhd::VariableInst(lty.clone()))
+                            .into();
+                        self.emit_nameless_inst(llhd::StoreInst(lty, count, var.clone()));
+                        Some((var, ty))
+                    }
+                    hir::LoopKind::While(_) => None,
+                    hir::LoopKind::Do(_) => None,
+                    hir::LoopKind::For(init, _, _) => {
+                        self.emit_stmt(init, env)?;
+                        None
+                    }
+                };
+
+                // Emit the loop prologue.
+                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    body_blk.into(),
+                )));
+                self.append_to_block(body_blk);
+                let enter_cond = match kind {
+                    hir::LoopKind::Forever => None,
+                    hir::LoopKind::Repeat(_) => {
+                        let (repeat_var, ty) = repeat_var.clone().unwrap();
+                        let lty = self.emit_type(ty)?;
+                        let value = self
+                            .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var))
+                            .into();
+                        Some(
+                            self.emit_nameless_inst(llhd::CompareInst(
+                                llhd::CompareOp::Neq,
+                                lty.clone(),
+                                value,
+                                llhd::const_zero(&lty).into(),
+                            ))
+                            .into(),
+                        )
+                    }
+                    hir::LoopKind::While(cond) => Some(self.emit_rvalue(cond, env)?),
+                    hir::LoopKind::Do(_) => None,
+                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue(cond, env)?),
+                };
+                if let Some(enter_cond) = enter_cond {
+                    let entry_blk = self.add_named_block("loop_continue");
+                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
+                        enter_cond,
+                        entry_blk.into(),
+                        exit_blk.into(),
+                    )));
+                    self.append_to_block(entry_blk);
+                }
+
+                // Emit the loop body.
+                self.emit_stmt(body, env)?;
+
+                // Emit the epilogue.
+                let continue_cond = match kind {
+                    hir::LoopKind::Forever => None,
+                    hir::LoopKind::Repeat(_) => {
+                        let (repeat_var, ty) = repeat_var.clone().unwrap();
+                        let lty = self.emit_type(ty)?;
+                        let value = self
+                            .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var.clone()))
+                            .into();
+                        let one = self.const_one_for_type(ty)?;
+                        let value = self
+                            .emit_nameless_inst(llhd::BinaryInst(
+                                llhd::BinaryOp::Sub,
+                                lty.clone(),
+                                value,
+                                one,
+                            ))
+                            .into();
+                        self.emit_nameless_inst(llhd::StoreInst(lty, value, repeat_var));
+                        None
+                    }
+                    hir::LoopKind::While(_) => None,
+                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue(cond, env)?),
+                    hir::LoopKind::For(_, _, step) => {
+                        self.emit_rvalue(step, env)?;
+                        None
+                    }
+                };
+                self.emit_nameless_inst(llhd::BranchInst(match continue_cond {
+                    Some(cond) => llhd::BranchKind::Cond(cond, body_blk.into(), exit_blk.into()),
+                    None => llhd::BranchKind::Uncond(body_blk.into()),
+                }));
+                self.append_to_block(exit_blk);
+            }
+            _ => return self.unimp_msg("code generation for", hir),
+        }
+        Ok(())
+    }
+
     /// Emit the code to check if a certain edge occurred between two values.
     fn emit_event_trigger(
         &mut self,
