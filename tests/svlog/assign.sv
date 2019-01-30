@@ -9,3 +9,13 @@ endmodule
 //|     %2 = add i32 %0 %1
 //|     drv %c %2
 //| }
+
+module B;
+	int a, b, c;
+	A adder(a, b, c);
+	initial #1ns repeat(8) begin
+		a = a + 1;
+		b = b + 2;
+		#1ns;
+	end
+endmodule
