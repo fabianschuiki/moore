@@ -257,11 +257,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     ast::PortDir::Inout => (true, true),
                 };
                 if let Some(mapping) = mapping {
+                    let mut gen = EntityGenerator {
+                        gen: self,
+                        ent,
+                        values,
+                    };
                     if is_input {
-                        inputs.push(self.emit_port_rvalue(mapping.0, mapping.1, ent, values)?);
+                        inputs.push(gen.emit_rvalue(mapping.0, mapping.1)?);
                     }
                     if is_output {
-                        outputs.push(self.emit_port_lvalue(mapping.0, mapping.1, ent, values)?);
+                        outputs.push(gen.emit_lvalue(mapping.0, mapping.1)?);
                     }
                 } else {
                     unimplemented!("unconnected port");
@@ -1082,38 +1087,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 Err(())
             }
         }
-    }
-
-    /// Emit the code to connect an expression to an input port.
-    fn emit_port_rvalue(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        ent: &mut llhd::Entity,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::ValueRef> {
-        return EntityGenerator {
-            gen: self,
-            ent,
-            values,
-        }
-        .emit_rvalue(expr_id, env);
-    }
-
-    /// Emit the code to connect an expression to an output port.
-    fn emit_port_lvalue(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        ent: &mut llhd::Entity,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::ValueRef> {
-        return EntityGenerator {
-            gen: self,
-            ent,
-            values,
-        }
-        .emit_lvalue(expr_id, env);
     }
 }
 
