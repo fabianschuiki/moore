@@ -23,23 +23,29 @@ endmodule
 //////////////////////////////////
 
 module C;
-	D #(void) d1();
-	D #(bit) d2();
+	int t1;
+	bit t2;
+	D #(int) d1(t1);
+	D #(bit) d2(t2);
 endmodule
 
 module D #(type T) (input T t);
 endmodule
 
 //@ elab C
-//| entity @D.param1 (void$ %t) () {
+//| entity @D.param1 (i32$ %t) () {
 //| }
 //|
 //| entity @D.param2 (i1$ %t) () {
 //| }
 //|
 //| entity @C () () {
-//|     %d1 = inst @D.param1 () ()
-//|     %d2 = inst @D.param2 () ()
+//|     %t1 = sig i32
+//|     %t2 = sig i1
+//|     %0 = prb %t1
+//|     %d1 = inst @D.param1 (%0) ()
+//|     %1 = prb %t2
+//|     %d2 = inst @D.param2 (%1) ()
 //| }
 
 
@@ -60,9 +66,11 @@ endmodule
 //////////////////////////////////////////////
 
 module F;
-	G #(bit) g1();
-	G #(void) g2();
-	G #(void, bit) g3();
+	int x1;
+	bit x2;
+	G #(bit) g1(x2, x2);
+	G #(int) g2(x1, x1);
+	G #(int, bit) g3(x1, x2);
 endmodule
 
 module G #(type T, type R = T) (input T t, input R r);
@@ -72,10 +80,10 @@ endmodule
 //| entity @G.param3 (i1$ %t, i1$ %r) () {
 //| }
 //|
-//| entity @G.param4 (void$ %t, void$ %r) () {
+//| entity @G.param4 (i32$ %t, i32$ %r) () {
 //| }
 //|
-//| entity @G.param5 (void$ %t, i1$ %r) () {
+//| entity @G.param5 (i32$ %t, i1$ %r) () {
 //| }
 //|
 //| entity @F () () {
@@ -90,9 +98,10 @@ endmodule
 //////////////////////////
 
 module H;
-    I i1();
-    I #(0) i2();
-    I #(1) i3();
+	int x;
+    I i1(x);
+    I #(0) i2(x);
+    I #(1) i3(x);
 endmodule
 
 module I #(int K = 0) (output int k = K);
@@ -112,9 +121,10 @@ endmodule
 //| }
 //|
 //| entity @H () () {
-//|     %i1 = inst @I () ()
-//|     %i2 = inst @I.param6 () ()
-//|     %i3 = inst @I.param7 () ()
+//|     %x = sig i32
+//|     %i1 = inst @I () (%x)
+//|     %i2 = inst @I.param6 () (%x)
+//|     %i3 = inst @I.param7 () (%x)
 //| }
 
 
@@ -143,5 +153,6 @@ endmodule
 //| entity @K () () {
 //|     %a = sig i32
 //|     %b = sig i32
-//|     %l0 = inst @L (%a) (%b)
+//|     %0 = prb %a
+//|     %l0 = inst @L (%0) (%b)
 //| }

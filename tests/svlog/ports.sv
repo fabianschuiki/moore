@@ -41,7 +41,7 @@ module D (
 endmodule
 
 //@ elab D
-//| proc @n226 (i1$ %0) (i1$ %1) {
+//| proc @n238 (i1$ %0) (i1$ %1) {
 //| %2:
 //|     %3 = prb %0
 //|     %4 = not i1 %3
@@ -50,5 +50,5 @@ endmodule
 //| }
 //|
 //| entity @D (i1$ %x) (i1$ %y) {
-//|     inst @n226 (%x) (%y)
+//|     inst @n238 (%x) (%y)
 //| }
