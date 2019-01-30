@@ -1089,25 +1089,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         &mut self,
         expr_id: NodeId,
         env: ParamEnv,
-        _ent: &mut llhd::Entity,
+        ent: &mut llhd::Entity,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::ValueRef> {
-        let hir = match self.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            _ => unreachable!(),
-        };
-        #[allow(unreachable_patterns)]
-        match hir.kind {
-            hir::ExprKind::IntConst(_) => self
-                .emit_const(self.constant_value_of(expr_id, env)?)
-                .map(Into::into),
-            hir::ExprKind::Ident(_) => {
-                let binding = self.resolve_node(expr_id, env)?;
-                let value = values[&binding].clone();
-                Ok(value)
-            }
-            _ => self.unimp_msg("code generation for", hir),
+        return EntityGenerator {
+            gen: self,
+            ent,
+            values,
         }
+        .emit_rvalue(expr_id, env);
     }
 
     /// Emit the code to connect an expression to an output port.
@@ -1115,41 +1105,64 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         &mut self,
         expr_id: NodeId,
         env: ParamEnv,
-        _ent: &mut llhd::Entity,
+        ent: &mut llhd::Entity,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::ValueRef> {
-        let hir = match self.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            _ => unreachable!(),
-        };
-        match hir.kind {
-            hir::ExprKind::Ident(_) => {
-                let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
-                match binding {
-                    HirNode::VarDecl(decl) => return Ok(values[&decl.id].clone()),
-                    HirNode::Port(port) => return Ok(values[&port.id].clone()),
-                    _ => (),
-                }
-                self.emit(
-                    DiagBuilder2::error(format!("{} cannot be assigned to", binding.desc_full()))
-                        .span(hir.span())
-                        .add_note(format!("{} declared here", binding.desc_full()))
-                        .span(binding.human_span()),
-                );
-                return Err(());
-            }
-            _ => (),
+        return EntityGenerator {
+            gen: self,
+            ent,
+            values,
         }
-        self.emit(
-            DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
-                .span(hir.span()),
-        );
-        Err(())
+        .emit_lvalue(expr_id, env);
     }
 }
 
 /// A code generator for entities.
-struct EntityGenerator {}
+struct EntityGenerator<'a, 'gcx, C> {
+    /// The global code generator.
+    gen: &'a mut CodeGenerator<'gcx, C>,
+    /// The entity into which instructions are emitted.
+    ent: &'a mut llhd::Entity,
+    /// The emitted values.
+    values: &'a mut HashMap<NodeId, llhd::ValueRef>,
+}
+
+impl<'a, 'gcx, C> Deref for EntityGenerator<'a, 'gcx, C> {
+    type Target = CodeGenerator<'gcx, C>;
+
+    fn deref(&self) -> &CodeGenerator<'gcx, C> {
+        &self.gen
+    }
+}
+
+impl<'a, 'gcx, C> DerefMut for EntityGenerator<'a, 'gcx, C> {
+    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
+        &mut self.gen
+    }
+}
+
+impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for EntityGenerator<'b, 'gcx, &'a C>
+where
+    C: Context<'gcx> + 'a,
+{
+    fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
+        self.ent.add_inst(inst, llhd::InstPosition::End)
+    }
+
+    fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef {
+        &self.values[&node_id]
+    }
+
+    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef) {
+        self.values.insert(node_id, value);
+    }
+
+    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type {
+        let ctx = llhd::ModuleContext::new(&self.gen.into);
+        let ctx = llhd::EntityContext::new(&ctx, self.ent);
+        ctx.ty(value)
+    }
+}
 
 /// A code generator for processes.
 struct ProcessGenerator<'a, 'gcx, C> {

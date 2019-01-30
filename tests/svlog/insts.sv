@@ -130,6 +130,11 @@ endmodule
 module L (input int a, output int b);
 endmodule
 
+module M;
+	int a, b;
+	L l0(a + 2, b);
+endmodule
+
 //@ elab K
 //| entity @L (i32$ %a) (i32$ %b) {
 //|     drv %b 0
