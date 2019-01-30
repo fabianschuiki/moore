@@ -11,7 +11,7 @@ use crate::{
 };
 use llhd::Context as LlhdContext;
 use num::Zero;
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
 /// A code generator.
 ///
@@ -476,7 +476,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 let rhs_value = self.emit_rvalue(rhs, env, prok, block, values)?;
                 match kind {
                     hir::AssignKind::Block(ast::AssignOp::Identity) => {
-                        self.emit_blocking_assign(lhs, rhs_value, env, prok, block, values)?;
+                        ProcessGenerator {
+                            gen: self,
+                            prok,
+                            block,
+                            values,
+                        }
+                        .emit_blocking_assign(lhs, rhs_value, env)?;
                     }
                     _ => {
                         return self
@@ -849,45 +855,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         Ok(block)
     }
 
-    /// Emit the code for an lvalue.
-    fn emit_lvalue(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        _prok: &mut llhd::Process,
-        _block: llhd::BlockRef,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::ValueRef> {
-        let hir = match self.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            _ => unreachable!(),
-        };
-        match hir.kind {
-            hir::ExprKind::Ident(_) => {
-                let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
-                match binding {
-                    HirNode::VarDecl(decl) => return Ok(values[&decl.id].clone()),
-                    HirNode::Port(port) => return Ok(values[&port.id].clone()),
-                    _ => (),
-                }
-                self.emit(
-                    DiagBuilder2::error(format!("{} cannot be assigned to", binding.desc_full()))
-                        .span(hir.span())
-                        .add_note(format!("{} declared here", binding.desc_full()))
-                        .span(binding.human_span()),
-                );
-                return Err(());
-            }
-            _ => (),
-        }
-        self.emit(
-            DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
-                .span(hir.span()),
-        );
-        Err(())
-    }
-
-    /// Emit the code for an lvalue.
+    /// Emit the code for an rvalue.
     fn emit_rvalue(
         &mut self,
         expr_id: NodeId,
@@ -896,139 +864,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         block: llhd::BlockRef,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
     ) -> Result<llhd::ValueRef> {
-        let hir = match self.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            _ => unreachable!(),
-        };
-        #[allow(unreachable_patterns)]
-        match hir.kind {
-            hir::ExprKind::IntConst(_) | hir::ExprKind::TimeConst(_) => self
-                .emit_const(self.constant_value_of(expr_id, env)?)
-                .map(Into::into),
-            hir::ExprKind::Ident(_) => {
-                let binding = self.resolve_node(expr_id, env)?;
-                let value = values[&binding].clone();
-                let ty = self.emit_type(self.type_of(expr_id, env)?)?;
-                let inst = llhd::Inst::new(None, llhd::ProbeInst(ty, value));
-                Ok(prok
-                    .body_mut()
-                    .add_inst(inst, llhd::InstPosition::BlockEnd(block))
-                    .into())
-            }
-            hir::ExprKind::Unary(op, arg) => match op {
-                hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
-                    let ty = self.emit_type(self.type_of(expr_id, env)?)?;
-                    let value = self.emit_rvalue(arg, env, prok, block, values)?;
-                    let inst =
-                        llhd::Inst::new(None, llhd::UnaryInst(llhd::UnaryOp::Not, ty, value));
-                    Ok(prok
-                        .body_mut()
-                        .add_inst(inst, llhd::InstPosition::BlockEnd(block))
-                        .into())
-                }
-                hir::UnaryOp::PreInc => {
-                    self.emit_incdec(arg, env, llhd::BinaryOp::Add, false, prok, block, values)
-                }
-                hir::UnaryOp::PreDec => {
-                    self.emit_incdec(arg, env, llhd::BinaryOp::Sub, false, prok, block, values)
-                }
-                hir::UnaryOp::PostInc => {
-                    self.emit_incdec(arg, env, llhd::BinaryOp::Add, true, prok, block, values)
-                }
-                hir::UnaryOp::PostDec => {
-                    self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true, prok, block, values)
-                }
-                _ => self.unimp_msg("code generation for", hir),
-            },
-            hir::ExprKind::Binary(op, lhs, rhs) => {
-                let ty = self.emit_type(self.type_of(lhs, env)?)?;
-                let lhs = self.emit_rvalue(lhs, env, prok, block, values)?;
-                let rhs = self.emit_rvalue(rhs, env, prok, block, values)?;
-                let inst = match op {
-                    hir::BinaryOp::Add => llhd::BinaryInst(llhd::BinaryOp::Add, ty, lhs, rhs),
-                    hir::BinaryOp::Sub => llhd::BinaryInst(llhd::BinaryOp::Sub, ty, lhs, rhs),
-                    hir::BinaryOp::Eq => llhd::CompareInst(llhd::CompareOp::Eq, ty, lhs, rhs),
-                    hir::BinaryOp::Neq => llhd::CompareInst(llhd::CompareOp::Neq, ty, lhs, rhs),
-                    hir::BinaryOp::Lt => llhd::CompareInst(llhd::CompareOp::Ult, ty, lhs, rhs),
-                    hir::BinaryOp::Leq => llhd::CompareInst(llhd::CompareOp::Ule, ty, lhs, rhs),
-                    hir::BinaryOp::Gt => llhd::CompareInst(llhd::CompareOp::Ugt, ty, lhs, rhs),
-                    hir::BinaryOp::Geq => llhd::CompareInst(llhd::CompareOp::Uge, ty, lhs, rhs),
-                    hir::BinaryOp::LogicAnd => llhd::BinaryInst(llhd::BinaryOp::And, ty, lhs, rhs),
-                    hir::BinaryOp::LogicOr => llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs),
-                    _ => return self.unimp_msg("code generation for", hir),
-                };
-                Ok(prok
-                    .body_mut()
-                    .add_inst(
-                        llhd::Inst::new(None, inst),
-                        llhd::InstPosition::BlockEnd(block),
-                    )
-                    .into())
-            }
-            _ => self.unimp_msg("code generation for", hir),
+        return ProcessGenerator {
+            gen: self,
+            prok,
+            block,
+            values,
         }
-    }
-
-    /// Emit the code for a post-increment or -decrement operation.
-    fn emit_incdec(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        op: llhd::BinaryOp,
-        postfix: bool,
-        prok: &mut llhd::Process,
-        block: llhd::BlockRef,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::ValueRef> {
-        let ty = self.type_of(expr_id, env)?;
-        let now = self.emit_rvalue(expr_id, env, prok, block, values)?;
-        let next: llhd::ValueRef = prok
-            .body_mut()
-            .add_inst(
-                llhd::Inst::new(
-                    None,
-                    llhd::BinaryInst(
-                        op,
-                        self.emit_type(ty)?,
-                        now.clone(),
-                        self.const_one_for_type(ty)?,
-                    ),
-                ),
-                llhd::InstPosition::BlockEnd(block),
-            )
-            .into();
-        self.emit_blocking_assign(expr_id, next.clone(), env, prok, block, values)?;
-        match postfix {
-            true => Ok(now),
-            false => Ok(next),
-        }
-    }
-
-    /// Emit a blocking assignment to a variable or signal.
-    fn emit_blocking_assign(
-        &mut self,
-        lvalue_id: NodeId,
-        rvalue: llhd::ValueRef,
-        env: ParamEnv,
-        prok: &mut llhd::Process,
-        block: llhd::BlockRef,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<()> {
-        let lvalue = self.emit_lvalue(lvalue_id, env, prok, block, values)?;
-        let (lty, rty) = {
-            let ctx = llhd::ModuleContext::new(&self.into);
-            let ctx = llhd::ProcessContext::new(&ctx, prok);
-            (ctx.ty(&lvalue), ctx.ty(&rvalue))
-        };
-        let inst = match *lty {
-            llhd::SignalType(..) => llhd::DriveInst(lvalue, rvalue, None),
-            llhd::PointerType(..) => llhd::StoreInst(rty, rvalue, lvalue),
-            ref t => panic!("value of type `{}` cannot be driven", t),
-        };
-        let inst = llhd::Inst::new(None, inst);
-        prok.body_mut()
-            .add_inst(inst, llhd::InstPosition::BlockEnd(block));
-        Ok(())
+        .emit_rvalue(expr_id, env);
     }
 
     /// Emit the code to check if a certain edge occurred between two values.
@@ -1305,3 +1147,232 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         Err(())
     }
 }
+
+/// A code generator for entities.
+struct EntityGenerator {}
+
+/// A code generator for processes.
+struct ProcessGenerator<'a, 'gcx, C> {
+    /// The global code generator.
+    gen: &'a mut CodeGenerator<'gcx, C>,
+    /// The process into which instructions are emitted.
+    prok: &'a mut llhd::Process,
+    /// The current basic block into which instructions are emitted.
+    block: llhd::BlockRef,
+    /// The emitted values.
+    values: &'a mut HashMap<NodeId, llhd::ValueRef>,
+}
+
+impl<'a, 'gcx, C> Deref for ProcessGenerator<'a, 'gcx, C> {
+    type Target = CodeGenerator<'gcx, C>;
+
+    fn deref(&self) -> &CodeGenerator<'gcx, C> {
+        &self.gen
+    }
+}
+
+impl<'a, 'gcx, C> DerefMut for ProcessGenerator<'a, 'gcx, C> {
+    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
+        &mut self.gen
+    }
+}
+
+impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, &'a C>
+where
+    C: Context<'gcx> + 'a,
+{
+    fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
+        self.prok
+            .body_mut()
+            .add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
+    }
+
+    fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef {
+        &self.values[&node_id]
+    }
+
+    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef) {
+        self.values.insert(node_id, value);
+    }
+
+    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type {
+        let ctx = llhd::ModuleContext::new(&self.gen.into);
+        let ctx = llhd::ProcessContext::new(&ctx, self.prok);
+        ctx.ty(value)
+    }
+}
+
+/// A generator for expressions.
+///
+/// This trait is implemented by everything that can accept the code emitted for
+/// an expression. This most prominently also includes entities, which have no
+/// means for control flow.
+trait ExprGenerator<'a, 'gcx, C>
+where
+    Self: DerefMut<Target = CodeGenerator<'gcx, &'a C>>,
+    C: Context<'gcx> + 'a,
+{
+    /// Emit an instruction.
+    fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef;
+
+    /// Get a value emitted for a node.
+    ///
+    /// Panics if no value has been emitted.
+    fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef;
+
+    /// Set the value emitted for a node.
+    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef);
+
+    /// Get the type of an LLHD value.
+    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type;
+
+    /// Emit a nameless instruction.
+    ///
+    /// Constructs an instruction and calls [`emit_inst`].
+    fn emit_nameless_inst(&mut self, inst: llhd::InstKind) -> llhd::InstRef {
+        self.emit_inst(llhd::Inst::new(None, inst))
+    }
+
+    /// Emit a named instruction.
+    ///
+    /// Constructs an instruction and calls [`emit_inst`].
+    fn emit_named_inst(&mut self, name: String, inst: llhd::InstKind) -> llhd::InstRef {
+        self.emit_inst(llhd::Inst::new(Some(name), inst))
+    }
+
+    /// Emit the code for an rvalue.
+    fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ValueRef> {
+        let hir = match self.hir_of(expr_id)? {
+            HirNode::Expr(x) => x,
+            _ => unreachable!(),
+        };
+        #[allow(unreachable_patterns)]
+        match hir.kind {
+            hir::ExprKind::IntConst(_) | hir::ExprKind::TimeConst(_) => {
+                let k = self.constant_value_of(expr_id, env)?;
+                self.emit_const(k).map(Into::into)
+            }
+            hir::ExprKind::Ident(_) => {
+                let binding = self.resolve_node(expr_id, env)?;
+                let value = self.emitted_value(binding).clone();
+                let ty = self.type_of(expr_id, env)?;
+                let ty = self.emit_type(ty)?;
+                Ok(self.emit_nameless_inst(llhd::ProbeInst(ty, value)).into())
+            }
+            hir::ExprKind::Unary(op, arg) => match op {
+                hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
+                    let ty = self.type_of(expr_id, env)?;
+                    let ty = self.emit_type(ty)?;
+                    let value = self.emit_rvalue(arg, env)?;
+                    Ok(self
+                        .emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, ty, value))
+                        .into())
+                }
+                hir::UnaryOp::PreInc => self.emit_incdec(arg, env, llhd::BinaryOp::Add, false),
+                hir::UnaryOp::PreDec => self.emit_incdec(arg, env, llhd::BinaryOp::Sub, false),
+                hir::UnaryOp::PostInc => self.emit_incdec(arg, env, llhd::BinaryOp::Add, true),
+                hir::UnaryOp::PostDec => self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true),
+                _ => self.unimp_msg("code generation for", hir),
+            },
+            hir::ExprKind::Binary(op, lhs, rhs) => {
+                let ty = self.type_of(lhs, env)?;
+                let ty = self.emit_type(ty)?;
+                let lhs = self.emit_rvalue(lhs, env)?;
+                let rhs = self.emit_rvalue(rhs, env)?;
+                let inst = match op {
+                    hir::BinaryOp::Add => llhd::BinaryInst(llhd::BinaryOp::Add, ty, lhs, rhs),
+                    hir::BinaryOp::Sub => llhd::BinaryInst(llhd::BinaryOp::Sub, ty, lhs, rhs),
+                    hir::BinaryOp::Eq => llhd::CompareInst(llhd::CompareOp::Eq, ty, lhs, rhs),
+                    hir::BinaryOp::Neq => llhd::CompareInst(llhd::CompareOp::Neq, ty, lhs, rhs),
+                    hir::BinaryOp::Lt => llhd::CompareInst(llhd::CompareOp::Ult, ty, lhs, rhs),
+                    hir::BinaryOp::Leq => llhd::CompareInst(llhd::CompareOp::Ule, ty, lhs, rhs),
+                    hir::BinaryOp::Gt => llhd::CompareInst(llhd::CompareOp::Ugt, ty, lhs, rhs),
+                    hir::BinaryOp::Geq => llhd::CompareInst(llhd::CompareOp::Uge, ty, lhs, rhs),
+                    hir::BinaryOp::LogicAnd => llhd::BinaryInst(llhd::BinaryOp::And, ty, lhs, rhs),
+                    hir::BinaryOp::LogicOr => llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs),
+                    _ => return self.unimp_msg("code generation for", hir),
+                };
+                Ok(self.emit_nameless_inst(inst).into())
+            }
+            _ => self.unimp_msg("code generation for", hir),
+        }
+    }
+
+    /// Emit the code for an lvalue.
+    fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ValueRef> {
+        let hir = match self.hir_of(expr_id)? {
+            HirNode::Expr(x) => x,
+            _ => unreachable!(),
+        };
+        match hir.kind {
+            hir::ExprKind::Ident(_) => {
+                let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
+                match binding {
+                    HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
+                    HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
+                    _ => (),
+                }
+                self.emit(
+                    DiagBuilder2::error(format!("{} cannot be assigned to", binding.desc_full()))
+                        .span(hir.span())
+                        .add_note(format!("{} declared here", binding.desc_full()))
+                        .span(binding.human_span()),
+                );
+                return Err(());
+            }
+            _ => (),
+        }
+        self.emit(
+            DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
+                .span(hir.span()),
+        );
+        Err(())
+    }
+
+    /// Emit the code for a post-increment or -decrement operation.
+    fn emit_incdec(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        op: llhd::BinaryOp,
+        postfix: bool,
+    ) -> Result<llhd::ValueRef> {
+        let ty = self.type_of(expr_id, env)?;
+        let now = self.emit_rvalue(expr_id, env)?;
+        let llty = self.emit_type(ty)?;
+        let one = self.const_one_for_type(ty)?;
+        let next: llhd::ValueRef = self
+            .emit_nameless_inst(llhd::BinaryInst(op, llty, now.clone(), one))
+            .into();
+        self.emit_blocking_assign(expr_id, next.clone(), env)?;
+        match postfix {
+            true => Ok(now),
+            false => Ok(next),
+        }
+    }
+
+    /// Emit a blocking assignment to a variable or signal.
+    fn emit_blocking_assign(
+        &mut self,
+        lvalue_id: NodeId,
+        rvalue: llhd::ValueRef,
+        env: ParamEnv,
+    ) -> Result<()> {
+        let lvalue = self.emit_lvalue(lvalue_id, env)?;
+        let lty = self.llhd_type(&lvalue);
+        let rty = self.llhd_type(&rvalue);
+        let inst = match *lty {
+            llhd::SignalType(..) => llhd::DriveInst(lvalue, rvalue, None),
+            llhd::PointerType(..) => llhd::StoreInst(rty, rvalue, lvalue),
+            ref t => panic!("value of type `{}` cannot be driven", t),
+        };
+        self.emit_nameless_inst(inst);
+        Ok(())
+    }
+}
+
+/// A generator for statements.
+///
+/// This trait is implemented by everything that can accept the code emitted for
+/// a statement. This excludes entities which have no means for control flow.
+trait StmtGenerator {}
