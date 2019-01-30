@@ -564,9 +564,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         event
                     );
                     let now_value = self.emit_rvalue(event.expr, env, prok, check_blk, values)?;
-                    let mut trigger = self.emit_event_trigger(
-                        event.edge, init_value, now_value, env, prok, check_blk, values,
-                    )?;
+                    let mut trigger = ProcessGenerator {
+                        gen: self,
+                        prok,
+                        block: check_blk,
+                        values,
+                    }
+                    .emit_event_trigger(event.edge, init_value, now_value)?;
                     for &iff in &event.iff {
                         let iff_value = self.emit_rvalue(iff, env, prok, check_blk, values)?;
                         trigger = prok
@@ -878,153 +882,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         .emit_rvalue(expr_id, env);
     }
 
-    /// Emit the code to check if a certain edge occurred between two values.
-    fn emit_event_trigger(
-        &mut self,
-        edge: ast::EdgeIdent,
-        prev: llhd::ValueRef,
-        now: llhd::ValueRef,
-        _env: ParamEnv,
-        prok: &mut llhd::Process,
-        block: llhd::BlockRef,
-        _values: &mut HashMap<NodeId, llhd::ValueRef>,
-    ) -> Result<llhd::ValueRef> {
-        let ty = llhd::ProcessContext::new(&llhd::ModuleContext::new(&self.into), prok).ty(&now);
-
-        // Check if a posedge happened.
-        let posedge = match edge {
-            ast::EdgeIdent::Posedge | ast::EdgeIdent::Edge => {
-                let prev_eq_0 = prok
-                    .body_mut()
-                    .add_inst(
-                        llhd::Inst::new(
-                            None,
-                            llhd::CompareInst(
-                                llhd::CompareOp::Eq,
-                                ty.clone(),
-                                prev.clone(),
-                                llhd::const_zero(&ty).into(),
-                            ),
-                        ),
-                        llhd::InstPosition::BlockEnd(block),
-                    )
-                    .into();
-                let now_neq_0 = prok
-                    .body_mut()
-                    .add_inst(
-                        llhd::Inst::new(
-                            None,
-                            llhd::CompareInst(
-                                llhd::CompareOp::Neq,
-                                ty.clone(),
-                                now.clone(),
-                                llhd::const_zero(&ty).into(),
-                            ),
-                        ),
-                        llhd::InstPosition::BlockEnd(block),
-                    )
-                    .into();
-                Some(
-                    prok.body_mut()
-                        .add_inst(
-                            llhd::Inst::new(
-                                Some("posedge".into()),
-                                llhd::BinaryInst(
-                                    llhd::BinaryOp::And,
-                                    llhd::int_ty(1),
-                                    prev_eq_0,
-                                    now_neq_0,
-                                ),
-                            ),
-                            llhd::InstPosition::BlockEnd(block),
-                        )
-                        .into(),
-                )
-            }
-            _ => None,
-        };
-
-        // Check if a negedge happened.
-        let negedge = match edge {
-            ast::EdgeIdent::Negedge | ast::EdgeIdent::Edge => {
-                let now_eq_0 = prok
-                    .body_mut()
-                    .add_inst(
-                        llhd::Inst::new(
-                            None,
-                            llhd::CompareInst(
-                                llhd::CompareOp::Eq,
-                                ty.clone(),
-                                now.clone(),
-                                llhd::const_zero(&ty).into(),
-                            ),
-                        ),
-                        llhd::InstPosition::BlockEnd(block),
-                    )
-                    .into();
-                let prev_neq_0 = prok
-                    .body_mut()
-                    .add_inst(
-                        llhd::Inst::new(
-                            None,
-                            llhd::CompareInst(
-                                llhd::CompareOp::Neq,
-                                ty.clone(),
-                                prev.clone(),
-                                llhd::const_zero(&ty).into(),
-                            ),
-                        ),
-                        llhd::InstPosition::BlockEnd(block),
-                    )
-                    .into();
-                Some(
-                    prok.body_mut()
-                        .add_inst(
-                            llhd::Inst::new(
-                                Some("negedge".into()),
-                                llhd::BinaryInst(
-                                    llhd::BinaryOp::And,
-                                    llhd::int_ty(1),
-                                    now_eq_0,
-                                    prev_neq_0,
-                                ),
-                            ),
-                            llhd::InstPosition::BlockEnd(block),
-                        )
-                        .into(),
-                )
-            }
-            _ => None,
-        };
-
-        // Combine the two edge triggers, or emit an implicit edge check if none
-        // of the above edges was checked.
-        Ok(match (posedge, negedge) {
-            (Some(a), Some(b)) => prok
-                .body_mut()
-                .add_inst(
-                    llhd::Inst::new(
-                        Some("edge".into()),
-                        llhd::BinaryInst(llhd::BinaryOp::Or, llhd::int_ty(1), a, b),
-                    ),
-                    llhd::InstPosition::BlockEnd(block),
-                )
-                .into(),
-            (Some(a), None) => a,
-            (None, Some(b)) => b,
-            (None, None) => prok
-                .body_mut()
-                .add_inst(
-                    llhd::Inst::new(
-                        Some("impledge".into()),
-                        llhd::CompareInst(llhd::CompareOp::Neq, ty, prev, now),
-                    ),
-                    llhd::InstPosition::BlockEnd(block),
-                )
-                .into(),
-        })
-    }
-
     /// Emit the value `1` for a type.
     fn const_one_for_type(&mut self, ty: Type<'gcx>) -> Result<llhd::ValueRef> {
         use num::one;
@@ -1188,6 +1045,11 @@ where
     }
 }
 
+impl<'a, 'b, 'gcx, C> StmtGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, &'a C> where
+    C: Context<'gcx> + 'a
+{
+}
+
 /// A generator for expressions.
 ///
 /// This trait is implemented by everything that can accept the code emitted for
@@ -1222,8 +1084,8 @@ where
     /// Emit a named instruction.
     ///
     /// Constructs an instruction and calls [`emit_inst`].
-    fn emit_named_inst(&mut self, name: String, inst: llhd::InstKind) -> llhd::InstRef {
-        self.emit_inst(llhd::Inst::new(Some(name), inst))
+    fn emit_named_inst(&mut self, name: impl Into<String>, inst: llhd::InstKind) -> llhd::InstRef {
+        self.emit_inst(llhd::Inst::new(Some(name.into()), inst))
     }
 
     /// Emit the code for an rvalue.
@@ -1361,4 +1223,106 @@ where
 ///
 /// This trait is implemented by everything that can accept the code emitted for
 /// a statement. This excludes entities which have no means for control flow.
-trait StmtGenerator {}
+trait StmtGenerator<'a, 'gcx, C>: ExprGenerator<'a, 'gcx, C>
+where
+    C: Context<'gcx> + 'a,
+{
+    /// Emit the code to check if a certain edge occurred between two values.
+    fn emit_event_trigger(
+        &mut self,
+        edge: ast::EdgeIdent,
+        prev: llhd::ValueRef,
+        now: llhd::ValueRef,
+    ) -> Result<llhd::ValueRef> {
+        let ty = self.llhd_type(&now);
+
+        // Check if a posedge happened.
+        let posedge = match edge {
+            ast::EdgeIdent::Posedge | ast::EdgeIdent::Edge => {
+                let prev_eq_0 = self
+                    .emit_nameless_inst(llhd::CompareInst(
+                        llhd::CompareOp::Eq,
+                        ty.clone(),
+                        prev.clone(),
+                        llhd::const_zero(&ty).into(),
+                    ))
+                    .into();
+                let now_neq_0 = self
+                    .emit_nameless_inst(llhd::CompareInst(
+                        llhd::CompareOp::Neq,
+                        ty.clone(),
+                        now.clone(),
+                        llhd::const_zero(&ty).into(),
+                    ))
+                    .into();
+                Some(
+                    self.emit_named_inst(
+                        "posedge",
+                        llhd::BinaryInst(
+                            llhd::BinaryOp::And,
+                            llhd::int_ty(1),
+                            prev_eq_0,
+                            now_neq_0,
+                        ),
+                    )
+                    .into(),
+                )
+            }
+            _ => None,
+        };
+
+        // Check if a negedge happened.
+        let negedge = match edge {
+            ast::EdgeIdent::Negedge | ast::EdgeIdent::Edge => {
+                let now_eq_0 = self
+                    .emit_nameless_inst(llhd::CompareInst(
+                        llhd::CompareOp::Eq,
+                        ty.clone(),
+                        now.clone(),
+                        llhd::const_zero(&ty).into(),
+                    ))
+                    .into();
+                let prev_neq_0 = self
+                    .emit_nameless_inst(llhd::CompareInst(
+                        llhd::CompareOp::Neq,
+                        ty.clone(),
+                        prev.clone(),
+                        llhd::const_zero(&ty).into(),
+                    ))
+                    .into();
+                Some(
+                    self.emit_named_inst(
+                        "negedge",
+                        llhd::BinaryInst(
+                            llhd::BinaryOp::And,
+                            llhd::int_ty(1),
+                            now_eq_0,
+                            prev_neq_0,
+                        ),
+                    )
+                    .into(),
+                )
+            }
+            _ => None,
+        };
+
+        // Combine the two edge triggers, or emit an implicit edge check if none
+        // of the above edges was checked.
+        Ok(match (posedge, negedge) {
+            (Some(a), Some(b)) => self
+                .emit_named_inst(
+                    "edge",
+                    llhd::BinaryInst(llhd::BinaryOp::Or, llhd::int_ty(1), a, b),
+                )
+                .into(),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => self
+                .emit_named_inst(
+                    "impledge",
+                    llhd::CompareInst(llhd::CompareOp::Neq, ty, prev, now),
+                )
+                .into(),
+        })
+    }
+}
