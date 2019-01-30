@@ -197,6 +197,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             values.insert(decl_id, id.into());
         }
 
+        // Emit assignments.
+        for &assign_id in &hir.assigns {
+            let mut gen = EntityGenerator {
+                gen: self,
+                ent: ent,
+                values: values,
+            };
+            let hir = match gen.hir_of(assign_id)? {
+                HirNode::Assign(x) => x,
+                _ => unreachable!(),
+            };
+            let rhs = gen.emit_rvalue(hir.rhs, env)?;
+            gen.emit_blocking_assign(hir.lhs, rhs, env)?;
+        }
+
         // Emit instantiations.
         for &inst_id in &hir.insts {
             let hir = match self.hir_of(inst_id)? {

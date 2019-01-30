@@ -35,6 +35,7 @@ make_arenas!(
         gens: Gen,
         genvar_decls: GenvarDecl,
         typedefs: Typedef,
+        assigns: Assign,
     }
 );
 

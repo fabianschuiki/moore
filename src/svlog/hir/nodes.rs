@@ -23,6 +23,7 @@ pub enum HirNode<'hir> {
     Gen(&'hir Gen),
     GenvarDecl(&'hir GenvarDecl),
     Typedef(&'hir Typedef),
+    Assign(&'hir Assign),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -43,6 +44,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Gen(x) => x.span(),
             HirNode::GenvarDecl(x) => x.span(),
             HirNode::Typedef(x) => x.span(),
+            HirNode::Assign(x) => x.span(),
         }
     }
 
@@ -63,6 +65,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Gen(x) => x.human_span(),
             HirNode::GenvarDecl(x) => x.human_span(),
             HirNode::Typedef(x) => x.human_span(),
+            HirNode::Assign(x) => x.human_span(),
         }
     }
 }
@@ -85,6 +88,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Gen(x) => x.desc(),
             HirNode::GenvarDecl(x) => x.desc(),
             HirNode::Typedef(x) => x.desc(),
+            HirNode::Assign(x) => x.desc(),
         }
     }
 
@@ -105,6 +109,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Gen(x) => x.desc_full(),
             HirNode::GenvarDecl(x) => x.desc_full(),
             HirNode::Typedef(x) => x.desc_full(),
+            HirNode::Assign(x) => x.desc_full(),
         }
     }
 }
@@ -156,6 +161,8 @@ pub struct ModuleBlock {
     pub gens: Vec<NodeId>,
     /// The parameter declarations in the module.
     pub params: Vec<NodeId>,
+    /// The continuous assignments in the module.
+    pub assigns: Vec<NodeId>,
 }
 
 /// An instantiation target.
@@ -898,5 +905,26 @@ impl HasDesc for Typedef {
 
     fn desc_full(&self) -> String {
         format!("typedef `{}`", self.name.value)
+    }
+}
+
+/// A continuous assignment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Assign {
+    pub id: NodeId,
+    pub span: Span,
+    pub lhs: NodeId,
+    pub rhs: NodeId,
+}
+
+impl HasSpan for Assign {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Assign {
+    fn desc(&self) -> &'static str {
+        "assignment"
     }
 }

@@ -333,6 +333,15 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Typedef(cx.arena().alloc_hir(hir)))
         }
+        AstNode::ContAssign(_, lhs, rhs) => {
+            let hir = hir::Assign {
+                id: node_id,
+                span: Span::union(lhs.span(), rhs.span()),
+                lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+                rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+            };
+            Ok(HirNode::Assign(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             debug!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -396,6 +405,7 @@ fn lower_module_block<'gcx>(
     let mut procs = Vec::new();
     let mut gens = Vec::new();
     let mut params = Vec::new();
+    let mut assigns = Vec::new();
     for item in items {
         match *item {
             ast::HierarchyItem::Inst(ref inst) => {
@@ -445,6 +455,14 @@ fn lower_module_block<'gcx>(
                 let id = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
                 next_rib = id;
             }
+            ast::HierarchyItem::ContAssign(ref assign) => {
+                for &(ref lhs, ref rhs) in &assign.assignments {
+                    let id =
+                        cx.map_ast_with_parent(AstNode::ContAssign(assign, lhs, rhs), next_rib);
+                    next_rib = id;
+                    assigns.push(id);
+                }
+            }
             // _ => return cx.unimp_msg("lowering of", item),
             _ => warn!("skipping unsupported {:?}", item),
         }
@@ -455,6 +473,7 @@ fn lower_module_block<'gcx>(
         procs,
         gens,
         params,
+        assigns,
     })
 }
 

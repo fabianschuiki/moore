@@ -1482,6 +1482,18 @@ pub struct ContAssign {
     pub assignments: Vec<(Expr, Expr)>,
 }
 
+impl HasSpan for ContAssign {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for ContAssign {
+    fn desc(&self) -> &'static str {
+        "continuous assignment"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenerateFor {
     pub span: Span,
