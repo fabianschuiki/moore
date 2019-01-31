@@ -766,8 +766,40 @@ where
                     hir::BinaryOp::Leq => llhd::CompareInst(llhd::CompareOp::Ule, ty, lhs, rhs),
                     hir::BinaryOp::Gt => llhd::CompareInst(llhd::CompareOp::Ugt, ty, lhs, rhs),
                     hir::BinaryOp::Geq => llhd::CompareInst(llhd::CompareOp::Uge, ty, lhs, rhs),
-                    hir::BinaryOp::LogicAnd => llhd::BinaryInst(llhd::BinaryOp::And, ty, lhs, rhs),
-                    hir::BinaryOp::LogicOr => llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs),
+                    hir::BinaryOp::LogicAnd | hir::BinaryOp::BitAnd => {
+                        llhd::BinaryInst(llhd::BinaryOp::And, ty, lhs, rhs)
+                    }
+                    hir::BinaryOp::LogicOr | hir::BinaryOp::BitOr => {
+                        llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs)
+                    }
+                    hir::BinaryOp::BitXor => llhd::BinaryInst(llhd::BinaryOp::Xor, ty, lhs, rhs),
+                    hir::BinaryOp::BitNand => {
+                        let v = self.emit_nameless_inst(llhd::BinaryInst(
+                            llhd::BinaryOp::And,
+                            ty.clone(),
+                            lhs,
+                            rhs,
+                        ));
+                        llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
+                    }
+                    hir::BinaryOp::BitNor => {
+                        let v = self.emit_nameless_inst(llhd::BinaryInst(
+                            llhd::BinaryOp::Or,
+                            ty.clone(),
+                            lhs,
+                            rhs,
+                        ));
+                        llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
+                    }
+                    hir::BinaryOp::BitXnor => {
+                        let v = self.emit_nameless_inst(llhd::BinaryInst(
+                            llhd::BinaryOp::Xor,
+                            ty.clone(),
+                            lhs,
+                            rhs,
+                        ));
+                        llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
+                    }
                     _ => return self.unimp_msg("code generation for", hir),
                 };
                 (self.emit_nameless_inst(inst).into(), Mode::Value)

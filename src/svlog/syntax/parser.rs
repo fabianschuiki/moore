@@ -2503,7 +2503,9 @@ fn as_binary_operator(tkn: Token) -> Option<Op> {
             | Op::Gt
             | Op::Geq
             | Op::BitAnd
+            | Op::BitNand
             | Op::BitOr
+            | Op::BitNor
             | Op::BitXor
             | Op::BitXnor
             | Op::BitNxor

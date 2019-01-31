@@ -612,6 +612,13 @@ fn lower_expr<'gcx>(
                 Op::Geq => hir::BinaryOp::Geq,
                 Op::LogicAnd => hir::BinaryOp::LogicAnd,
                 Op::LogicOr => hir::BinaryOp::LogicOr,
+                Op::BitAnd => hir::BinaryOp::BitAnd,
+                Op::BitNand => hir::BinaryOp::BitNand,
+                Op::BitOr => hir::BinaryOp::BitOr,
+                Op::BitNor => hir::BinaryOp::BitNor,
+                Op::BitXor => hir::BinaryOp::BitXor,
+                Op::BitXnor => hir::BinaryOp::BitXnor,
+                Op::BitNxor => hir::BinaryOp::BitXnor,
                 _ => {
                     cx.emit(
                         DiagBuilder2::error(format!("`{}` is not a valid binary operator", op,))

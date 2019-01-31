@@ -606,6 +606,18 @@ pub enum BinaryOp {
     LogicAnd,
     /// The logic or operator `x || y`.
     LogicOr,
+    /// The bitwise and operator `x & y`.
+    BitAnd,
+    /// The bitwise not-and operator `x ~& y`.
+    BitNand,
+    /// The bitwise or operator `x | y`.
+    BitOr,
+    /// The bitwise not-or operator `x ~| y`.
+    BitNor,
+    /// The bitwise exclusive-or operator `x ^ y`.
+    BitXor,
+    /// The bitwise exclusive-not-or operator `x ^~ y` or `x ~^ y`.
+    BitXnor,
 }
 
 impl HasDesc for BinaryOp {
@@ -621,6 +633,12 @@ impl HasDesc for BinaryOp {
             BinaryOp::Geq => "`>=` operator",
             BinaryOp::LogicAnd => "`&&` operator",
             BinaryOp::LogicOr => "`||` operator",
+            BinaryOp::BitAnd => "`&` operator",
+            BinaryOp::BitNand => "`~&` operator",
+            BinaryOp::BitOr => "`|` operator",
+            BinaryOp::BitNor => "`~|` operator",
+            BinaryOp::BitXor => "`^` operator",
+            BinaryOp::BitXnor => "`~^` operator",
         }
     }
 }
