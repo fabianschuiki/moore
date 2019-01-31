@@ -87,9 +87,17 @@ endmodule
 //| }
 //|
 //| entity @F () () {
-//|     %g1 = inst @G.param3 () ()
-//|     %g2 = inst @G.param4 () ()
-//|     %g3 = inst @G.param5 () ()
+//|     %x1 = sig i32
+//|     %x2 = sig i1
+//|     %0 = prb %x2
+//|     %1 = prb %x2
+//|     %g1 = inst @G.param3 (%0, %1) ()
+//|     %2 = prb %x1
+//|     %3 = prb %x1
+//|     %g2 = inst @G.param4 (%2, %3) ()
+//|     %4 = prb %x1
+//|     %5 = prb %x2
+//|     %g3 = inst @G.param5 (%4, %5) ()
 //| }
 
 
