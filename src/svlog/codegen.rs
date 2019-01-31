@@ -389,8 +389,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             .body_mut()
             .add_block(llhd::Block::new(None), llhd::BlockPosition::Begin);
 
-        // Create a mapping from read/written nodes to process parameters and
-        // emit statements.
+        // Create a mapping from read/written nodes to process parameters.
         let mut values = HashMap::new();
         for (&(id, _), arg) in inputs
             .iter()
@@ -405,6 +404,26 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             pos: llhd::InstPosition::BlockEnd(entry_blk),
             values: &mut values,
         };
+
+        // Emit prologue and determine which basic block to jump back to.
+        let head_blk = match hir.kind {
+            ast::ProcedureKind::AlwaysComb => {
+                let body_blk = pg.add_named_block("body");
+                let check_blk = pg.add_named_block("check");
+                pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(body_blk)));
+                pg.append_to_block(check_blk);
+                let trigger_on = inputs
+                    .iter()
+                    .map(|(id, _)| pg.emitted_value(*id).clone())
+                    .collect();
+                pg.emit_nameless_inst(llhd::WaitInst(body_blk, None, trigger_on));
+                pg.append_to_block(body_blk);
+                check_blk
+            }
+            _ => entry_blk,
+        };
+
+        // Emit the main statement.
         pg.emit_stmt(hir.stmt, env)?;
 
         // Emit epilogue.
@@ -416,7 +435,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             | ast::ProcedureKind::AlwaysComb
             | ast::ProcedureKind::AlwaysLatch
             | ast::ProcedureKind::AlwaysFf => {
-                pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(entry_blk)));
+                pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(head_blk)));
             }
             _ => (),
         }

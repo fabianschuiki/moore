@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 - Fix assigning values to output ports.
+- Fix semantics of `always_comb` blocks; they are now run once at startup and then implicitly when an input changes.
 
 ### Changed
 - The first verbosity level (`-v`) does no longer print info lines.
