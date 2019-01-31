@@ -262,8 +262,8 @@ impl<'a> AbstractParser for Parser<'a> {
     }
 
     fn add_diag(&mut self, diag: DiagBuilder2) {
-        println!("");
-        println!("{}", diag);
+        eprintln!("");
+        eprintln!("{}", diag);
 
         // Keep track of the worst diagnostic severity we've encountered, such
         // that parsing can be aborted accordingly.
