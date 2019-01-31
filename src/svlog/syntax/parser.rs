@@ -129,23 +129,23 @@ trait AbstractParser {
     }
 
     // fn recover(&mut self, terminators: &[Token], eat_terminator: bool) {
-    // 	// println!("recovering to {:?}", terminators);
-    // 	loop {
-    // 		match self.peek(0) {
-    // 			(Eof, _) => return,
-    // 			(tkn, _) => {
-    // 				for t in terminators {
-    // 					if *t == tkn {
-    // 						if eat_terminator {
-    // 							self.skip();
-    // 						}
-    // 						return;
-    // 					}
-    // 				}
-    // 				self.skip();
-    // 			}
-    // 		}
-    // 	}
+    //  // println!("recovering to {:?}", terminators);
+    //  loop {
+    //      match self.peek(0) {
+    //          (Eof, _) => return,
+    //          (tkn, _) => {
+    //              for t in terminators {
+    //                  if *t == tkn {
+    //                      if eat_terminator {
+    //                          self.skip();
+    //                      }
+    //                      return;
+    //                  }
+    //              }
+    //              self.skip();
+    //          }
+    //      }
+    //  }
     // }
 
     fn recover_balanced(&mut self, terminators: &[Token], eat_terminator: bool) {
@@ -781,29 +781,29 @@ fn parse_constant_expr(p: &mut AbstractParser) -> ReportedResult<()> {
 
     // // Try the unary operators.
     // if let Some(x) = as_unary_operator(tkn) {
-    // 	p.bump();
-    // 	return parse_constant_expr(p);
+    //  p.bump();
+    //  return parse_constant_expr(p);
     // }
 
     // // Parse the constant primary.
     // let expr = match tkn {
-    // 	// Primary literals.
-    // 	UnsignedNumber(x) => { p.bump(); () },
-    // 	Literal(Str(x)) => { p.bump(); () },
-    // 	Literal(BasedInteger(size, signed, base, value)) => { p.bump(); () },
-    // 	Literal(UnbasedUnsized(x)) => { p.bump(); () },
-    // 	Ident(x) => { p.bump(); () },
-    // 	_ => {
-    // 		p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
-    // 		return Err(());
-    // 	}
+    //  // Primary literals.
+    //  UnsignedNumber(x) => { p.bump(); () },
+    //  Literal(Str(x)) => { p.bump(); () },
+    //  Literal(BasedInteger(size, signed, base, value)) => { p.bump(); () },
+    //  Literal(UnbasedUnsized(x)) => { p.bump(); () },
+    //  Ident(x) => { p.bump(); () },
+    //  _ => {
+    //      p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
+    //      return Err(());
+    //  }
     // };
 
     // // Try the binary operators.
     // let (tkn, span) = p.peek(0);
     // if let Some(x) = as_binary_operator(tkn) {
-    // 	p.bump();
-    // 	return parse_constant_expr(p);
+    //  p.bump();
+    //  return parse_constant_expr(p);
     // }
 
     // // TODO: Parse ternary operator.
@@ -1151,23 +1151,23 @@ fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportDecl
     })
 
     // loop {
-    // 	parse_modport_item(p)?;
-    // 	match p.peek(0) {
-    // 		(Comma, sp) => {
-    // 			p.bump();
-    // 			if let (Semicolon, _) = p.peek(0) {
-    // 				p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-    // 				break;
-    // 			} else {
-    // 				continue;
-    // 			}
-    // 		},
-    // 		(Semicolon, _) => break,
-    // 		(x, sp) => {
-    // 			p.add_diag(DiagBuilder2::error(format!("Expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
-    // 			return Err(());
-    // 		}
-    // 	}
+    //  parse_modport_item(p)?;
+    //  match p.peek(0) {
+    //      (Comma, sp) => {
+    //          p.bump();
+    //          if let (Semicolon, _) = p.peek(0) {
+    //              p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+    //              break;
+    //          } else {
+    //              continue;
+    //          }
+    //      },
+    //      (Semicolon, _) => break,
+    //      (x, sp) => {
+    //          p.add_diag(DiagBuilder2::error(format!("Expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
+    //          return Err(());
+    //      }
+    //  }
     // }
 
     // Ok(())
@@ -1201,9 +1201,9 @@ fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<ast::ModportItem
 
     // // Eat the opening parenthesis.
     // if !p.try_eat(OpenDelim(Paren)) {
-    // 	let (tkn, q) = p.peek(0);
-    // 	p.add_diag(DiagBuilder2::error(format!("Expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
-    // 	return Err(());
+    //  let (tkn, q) = p.peek(0);
+    //  p.add_diag(DiagBuilder2::error(format!("Expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
+    //  return Err(());
     // }
 
     span.expand(p.last_span());
@@ -1215,36 +1215,36 @@ fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<ast::ModportItem
 
     // // Parse the port declarations.
     // loop {
-    // 	match parse_modport_port_decl(p) {
-    // 		Ok(x) => x,
-    // 		Err(_) => {
-    // 			p.recover(&[CloseDelim(Paren)], true);
-    // 			return Err(());
-    // 		}
-    // 	}
-    // 	match p.peek(0) {
-    // 		(Comma, sp) => {
-    // 			p.bump();
-    // 			if let (CloseDelim(Paren), _) = p.peek(0) {
-    // 				p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
-    // 				break;
-    // 			} else {
-    // 				continue;
-    // 			}
-    // 		}
-    // 		(CloseDelim(Paren), _) => break,
-    // 		(x, sp) => {
-    // 			p.add_diag(DiagBuilder2::error(format!("Expected , or ) after port declaration, got `{:?}`", x)).span(sp));
-    // 			return Err(());
-    // 		}
-    // 	}
+    //  match parse_modport_port_decl(p) {
+    //      Ok(x) => x,
+    //      Err(_) => {
+    //          p.recover(&[CloseDelim(Paren)], true);
+    //          return Err(());
+    //      }
+    //  }
+    //  match p.peek(0) {
+    //      (Comma, sp) => {
+    //          p.bump();
+    //          if let (CloseDelim(Paren), _) = p.peek(0) {
+    //              p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+    //              break;
+    //          } else {
+    //              continue;
+    //          }
+    //      }
+    //      (CloseDelim(Paren), _) => break,
+    //      (x, sp) => {
+    //          p.add_diag(DiagBuilder2::error(format!("Expected , or ) after port declaration, got `{:?}`", x)).span(sp));
+    //          return Err(());
+    //      }
+    //  }
     // }
 
     // // Eat the closing parenthesis.
     // if !p.try_eat(CloseDelim(Paren)) {
-    // 	let (tkn, q) = p.peek(0);
-    // 	p.add_diag(DiagBuilder2::error(format!("Expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
-    // 	return Err(());
+    //  let (tkn, q) = p.peek(0);
+    //  p.add_diag(DiagBuilder2::error(format!("Expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
+    //  return Err(());
     // }
 
     // Ok(())
@@ -1959,8 +1959,8 @@ fn parse_expr_suffix(
             // p.bump();
             // p.eat_ident("scope name")?;
             // let expr = Expr {
-            // 	span: Span::union(prefix.span, p.last_span()),
-            // 	data: DummyExpr,
+            //  span: Span::union(prefix.span, p.last_span()),
+            //  data: DummyExpr,
             // };
             // return parse_expr_suffix(p, expr, precedence);
         }
@@ -2587,135 +2587,135 @@ fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
 /// port in the list. This is required since ports inherit certain information
 /// from their predecessor if omitted.
 // fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Port> {
-// 	let mut span = p.peek(0).1;
+//  let mut span = p.peek(0).1;
 
-// 	// TODO: Rewrite this function to leverage the branch parser for the
-// 	// different kinds of port declarations.
+//  // TODO: Rewrite this function to leverage the branch parser for the
+//  // different kinds of port declarations.
 
-// 	// Consume the optional port direction.
-// 	let mut dir = as_port_direction(p.peek(0).0);
-// 	if dir.is_some() {
-// 		p.bump();
-// 	}
+//  // Consume the optional port direction.
+//  let mut dir = as_port_direction(p.peek(0).0);
+//  if dir.is_some() {
+//      p.bump();
+//  }
 
-// 	// Consume the optional net type or var keyword, which determines the port
-// 	// kind.
-// 	let mut kind = match p.peek(0).0 {
-// 		// Net Types
-// 		Keyword(Kw::Supply0) => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Supply1) => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Tri)     => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Triand)  => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Trior)   => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Trireg)  => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Tri0)    => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Tri1)    => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Uwire)   => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Wire)    => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Wand)    => Some(PortKind::Net(NetType::Wire)),
-// 		Keyword(Kw::Wor)     => Some(PortKind::Net(NetType::Wire)),
+//  // Consume the optional net type or var keyword, which determines the port
+//  // kind.
+//  let mut kind = match p.peek(0).0 {
+//      // Net Types
+//      Keyword(Kw::Supply0) => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Supply1) => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Tri)     => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Triand)  => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Trior)   => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Trireg)  => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Tri0)    => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Tri1)    => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Uwire)   => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Wire)    => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Wand)    => Some(PortKind::Net(NetType::Wire)),
+//      Keyword(Kw::Wor)     => Some(PortKind::Net(NetType::Wire)),
 
-// 		// Var Kind
-// 		Keyword(Kw::Var)     => Some(PortKind::Var),
-// 		_ => None
-// 	};
-// 	if kind.is_some() {
-// 		p.bump();
-// 	}
+//      // Var Kind
+//      Keyword(Kw::Var)     => Some(PortKind::Var),
+//      _ => None
+//  };
+//  if kind.is_some() {
+//      p.bump();
+//  }
 
-// 	// Try to parse ports of the form:
-// 	// "." port_identifier "(" [expression] ")"
-// 	if p.try_eat(Period) {
-// 		let q = p.peek(0).1;
-// 		p.add_diag(DiagBuilder2::error("Ports starting with a . not yet supported").span(q));
-// 		return Err(())
-// 	}
+//  // Try to parse ports of the form:
+//  // "." port_identifier "(" [expression] ")"
+//  if p.try_eat(Period) {
+//      let q = p.peek(0).1;
+//      p.add_diag(DiagBuilder2::error("Ports starting with a . not yet supported").span(q));
+//      return Err(())
+//  }
 
-// 	// Otherwise parse the port data type, which may be a whole host of
-// 	// different things.
-// 	let mut ty = parse_data_type(p)?;
+//  // Otherwise parse the port data type, which may be a whole host of
+//  // different things.
+//  let mut ty = parse_data_type(p)?;
 
-// 	// Here goes the tricky part: If the data type not followed by the name (and
-// 	// optional dimensions) of the port, the data type actually was the port
-// 	// name. These are indistinguishable.
-// 	let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
-// 		(name, span, parse_optional_dimensions(p)?)
-// 	} else {
-// 		if let Type { span: span, data: NamedType(ast::Identifier{name,..}), dims: dims, .. } = ty {
-// 			let r = (name, span, (dims, span));
-// 			ty = Type {
-// 				span: span.begin().into(),
-// 				data: ast::ImplicitType,
-// 				dims: Vec::new(),
-// 				sign: ast::TypeSign::None,
-// 			};
-// 			r
-// 		} else {
-// 			p.add_diag(DiagBuilder2::error("Expected port type or name").span(ty.span));
-// 			return Err(());
-// 		}
-// 	};
+//  // Here goes the tricky part: If the data type not followed by the name (and
+//  // optional dimensions) of the port, the data type actually was the port
+//  // name. These are indistinguishable.
+//  let (name, name_span, (dims, dims_span)) = if let Some((name, span)) = p.try_eat_ident() {
+//      (name, span, parse_optional_dimensions(p)?)
+//  } else {
+//      if let Type { span: span, data: NamedType(ast::Identifier{name,..}), dims: dims, .. } = ty {
+//          let r = (name, span, (dims, span));
+//          ty = Type {
+//              span: span.begin().into(),
+//              data: ast::ImplicitType,
+//              dims: Vec::new(),
+//              sign: ast::TypeSign::None,
+//          };
+//          r
+//      } else {
+//          p.add_diag(DiagBuilder2::error("Expected port type or name").span(ty.span));
+//          return Err(());
+//      }
+//  };
 
-// 	// TODO: The following goes into the lowering to HIR phase. Just keep track
-// 	// of what was unspecified here.
+//  // TODO: The following goes into the lowering to HIR phase. Just keep track
+//  // of what was unspecified here.
 
-// 	// // Determine the kind of the port based on the optional kind keywords, the
-// 	// // direction, and the type.
-// 	// if dir.is_none() && kind.is_none() && ty.is_none() && prev.is_some() {
-// 	// 	dir = Some(prev.unwrap().dir.clone());
-// 	// 	kind = Some(prev.unwrap().kind.clone());
-// 	// 	ty = Some(prev.unwrap().ty.clone());
-// 	// } else {
-// 	// 	// The direction defaults to inout.
-// 	// 	if dir.is_none() {
-// 	// 		dir = Some(PortDir::Inout);
-// 	// 	}
+//  // // Determine the kind of the port based on the optional kind keywords, the
+//  // // direction, and the type.
+//  // if dir.is_none() && kind.is_none() && ty.is_none() && prev.is_some() {
+//  //  dir = Some(prev.unwrap().dir.clone());
+//  //  kind = Some(prev.unwrap().kind.clone());
+//  //  ty = Some(prev.unwrap().ty.clone());
+//  // } else {
+//  //  // The direction defaults to inout.
+//  //  if dir.is_none() {
+//  //      dir = Some(PortDir::Inout);
+//  //  }
 
-// 	// 	// The type defaults to logic.
-// 	// 	if ty.is_none() {
-// 	// 		ty = Some(Type {
-// 	// 			span: INVALID_SPAN,
-// 	// 			data: LogicType,
-// 	// 			sign: TypeSign::None,
-// 	// 			dims: Vec::new(),
-// 	// 		});
-// 	// 	}
+//  //  // The type defaults to logic.
+//  //  if ty.is_none() {
+//  //      ty = Some(Type {
+//  //          span: INVALID_SPAN,
+//  //          data: LogicType,
+//  //          sign: TypeSign::None,
+//  //          dims: Vec::new(),
+//  //      });
+//  //  }
 
-// 	// 	// The kind defaults to different things based on the direction and
-// 	// 	// type:
-// 	// 	// - input,inout: default net
-// 	// 	// - ref: var
-// 	// 	// - output (implicit type): net
-// 	// 	// - output (explicit type): var
-// 	// 	if kind.is_none() {
-// 	// 		kind = Some(match dir.unwrap() {
-// 	// 			PortDir::Input | PortDir::Inout => NetPort,
-// 	// 			PortDir::Ref => VarPort,
-// 	// 			PortDir::Output if ty.clone().unwrap().data == ImplicitType => NetPort,
-// 	// 			PortDir::Output => VarPort,
-// 	// 		});
-// 	// 	}
-// 	// }
+//  //  // The kind defaults to different things based on the direction and
+//  //  // type:
+//  //  // - input,inout: default net
+//  //  // - ref: var
+//  //  // - output (implicit type): net
+//  //  // - output (explicit type): var
+//  //  if kind.is_none() {
+//  //      kind = Some(match dir.unwrap() {
+//  //          PortDir::Input | PortDir::Inout => NetPort,
+//  //          PortDir::Ref => VarPort,
+//  //          PortDir::Output if ty.clone().unwrap().data == ImplicitType => NetPort,
+//  //          PortDir::Output => VarPort,
+//  //      });
+//  //  }
+//  // }
 
-// 	// Parse the optional initial assignment for this port.
-// 	if p.try_eat(Operator(Op::Assign)) {
-// 		let q = p.peek(0).1;
-// 		p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
-// 	}
+//  // Parse the optional initial assignment for this port.
+//  if p.try_eat(Operator(Op::Assign)) {
+//      let q = p.peek(0).1;
+//      p.add_diag(DiagBuilder2::error("Ports with initial assignment not yet supported").span(q));
+//  }
 
-// 	// Update the port's span to cover all of the tokens consumed.
-// 	span.expand(p.last_span());
+//  // Update the port's span to cover all of the tokens consumed.
+//  span.expand(p.last_span());
 
-// 	Ok(Port {
-// 		id: DUMMY_NODE_ID,
-// 		span: span,
-// 		name: name,
-// 		name_span: name_span,
-// 		kind: kind,
-// 		ty: ty,
-// 		dir: dir,
-// 		dims: dims,
-// 	})
+//  Ok(Port {
+//      id: DUMMY_NODE_ID,
+//      span: span,
+//      name: name,
+//      name_span: name_span,
+//      kind: kind,
+//      ty: ty,
+//      dir: dir,
+//      dims: dims,
+//  })
 // }
 
 /// Parse a single port declaration. These can take a few different forms.
@@ -4608,17 +4608,17 @@ impl<'a, R: Clone> ParallelParser<'a, R> {
             Err(())
 
             // if errors.is_empty() {
-            // 	Err(())
+            //  Err(())
             // } else {
-            // 	for (n, _, m) in errors {
-            // 		if num_errors > 1 {
-            // 			p.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
-            // 		}
-            // 		for d in m {
-            // 			p.add_diag(d);
-            // 		}
-            // 	}
-            // 	Err(())
+            //  for (n, _, m) in errors {
+            //      if num_errors > 1 {
+            //          p.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
+            //      }
+            //      for d in m {
+            //          p.add_diag(d);
+            //      }
+            //  }
+            //  Err(())
             // }
         }
     }
