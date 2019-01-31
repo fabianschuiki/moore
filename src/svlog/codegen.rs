@@ -278,7 +278,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         values,
                     };
                     if is_input {
-                        inputs.push(gen.emit_rvalue(mapping.0, mapping.1)?);
+                        inputs.push(gen.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?);
                     }
                     if is_output {
                         outputs.push(gen.emit_lvalue(mapping.0, mapping.1)?);
@@ -689,38 +689,69 @@ where
 
     /// Emit the code for an rvalue.
     fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ValueRef> {
+        self.emit_rvalue_mode(expr_id, env, Mode::Value)
+    }
+
+    /// Emit the code for an rvalue.
+    fn emit_rvalue_mode(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        mode: Mode,
+    ) -> Result<llhd::ValueRef> {
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             _ => unreachable!(),
         };
         #[allow(unreachable_patterns)]
-        match hir.kind {
+        let (value, actual_mode) = match hir.kind {
             hir::ExprKind::IntConst(_) | hir::ExprKind::TimeConst(_) => {
                 let k = self.constant_value_of(expr_id, env)?;
-                self.emit_const(k).map(Into::into)
+                (self.emit_const(k).map(Into::into)?, Mode::Value)
             }
             hir::ExprKind::Ident(_) => {
                 let binding = self.resolve_node(expr_id, env)?;
                 let value = self.emitted_value(binding).clone();
-                let ty = self.type_of(expr_id, env)?;
-                let ty = self.emit_type(ty)?;
-                Ok(self.emit_nameless_inst(llhd::ProbeInst(ty, value)).into())
-            }
-            hir::ExprKind::Unary(op, arg) => match op {
-                hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
-                    let ty = self.type_of(expr_id, env)?;
-                    let ty = self.emit_type(ty)?;
-                    let value = self.emit_rvalue(arg, env)?;
-                    Ok(self
-                        .emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, ty, value))
-                        .into())
+                // We currently just assume that the value above is a signal.
+                // As soon as we have actual variable declarations, this will
+                // need some more cleverness.
+                match mode {
+                    Mode::Value => {
+                        let ty = self.type_of(expr_id, env)?;
+                        let ty = self.emit_type(ty)?;
+                        (
+                            self.emit_nameless_inst(llhd::ProbeInst(ty, value)).into(),
+                            Mode::Value,
+                        )
+                    }
+                    Mode::Signal => (value, Mode::Signal),
                 }
-                hir::UnaryOp::PreInc => self.emit_incdec(arg, env, llhd::BinaryOp::Add, false),
-                hir::UnaryOp::PreDec => self.emit_incdec(arg, env, llhd::BinaryOp::Sub, false),
-                hir::UnaryOp::PostInc => self.emit_incdec(arg, env, llhd::BinaryOp::Add, true),
-                hir::UnaryOp::PostDec => self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true),
-                _ => self.unimp_msg("code generation for", hir),
-            },
+            }
+            hir::ExprKind::Unary(op, arg) => (
+                match op {
+                    hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
+                        let ty = self.type_of(expr_id, env)?;
+                        let ty = self.emit_type(ty)?;
+                        let value = self.emit_rvalue(arg, env)?;
+                        self.emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, ty, value))
+                            .into()
+                    }
+                    hir::UnaryOp::PreInc => {
+                        self.emit_incdec(arg, env, llhd::BinaryOp::Add, false)?
+                    }
+                    hir::UnaryOp::PreDec => {
+                        self.emit_incdec(arg, env, llhd::BinaryOp::Sub, false)?
+                    }
+                    hir::UnaryOp::PostInc => {
+                        self.emit_incdec(arg, env, llhd::BinaryOp::Add, true)?
+                    }
+                    hir::UnaryOp::PostDec => {
+                        self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true)?
+                    }
+                    _ => return self.unimp_msg("code generation for", hir),
+                },
+                Mode::Value,
+            ),
             hir::ExprKind::Binary(op, lhs, rhs) => {
                 let ty = self.type_of(lhs, env)?;
                 let ty = self.emit_type(ty)?;
@@ -739,9 +770,19 @@ where
                     hir::BinaryOp::LogicOr => llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs),
                     _ => return self.unimp_msg("code generation for", hir),
                 };
-                Ok(self.emit_nameless_inst(inst).into())
+                (self.emit_nameless_inst(inst).into(), Mode::Value)
             }
-            _ => self.unimp_msg("code generation for", hir),
+            _ => return self.unimp_msg("code generation for", hir),
+        };
+        match (mode, actual_mode) {
+            (Mode::Signal, Mode::Value) => {
+                let ty = self.llhd_type(&value);
+                let sig = self.emit_nameless_inst(llhd::SignalInst(ty, None));
+                self.emit_nameless_inst(llhd::DriveInst(sig.clone().into(), value, None));
+                Ok(sig.into())
+            }
+            (Mode::Value, Mode::Signal) => unreachable!(),
+            _ => Ok(value),
         }
     }
 
@@ -1213,4 +1254,16 @@ where
                 .into(),
         })
     }
+}
+
+/// An rvalue emission mode.
+///
+/// Upon code emission, rvalues may be emitted either as direct values,
+/// pointers, or signals. This enum is used to communicate the intent to the
+/// corresopnding functions.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Mode {
+    Value,
+    // Pointer,
+    Signal,
 }
