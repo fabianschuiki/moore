@@ -253,8 +253,14 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         body: cx.map_ast_with_parent(AstNode::Stmt(body), init),
                     }
                 }
+                ast::VarDeclStmt(ref decls) => {
+                    let mut stmts = vec![];
+                    let parent = cx.parent_node_id(node_id).unwrap();
+                    let rib = alloc_var_decl(cx, decls, parent, &mut stmts);
+                    hir::StmtKind::InlineGroup { stmts, rib }
+                }
                 _ => {
-                    debug!("{:#?}", stmt);
+                    error!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);
                 }
             };
@@ -343,7 +349,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::Assign(cx.arena().alloc_hir(hir)))
         }
         _ => {
-            debug!("{:#?}", ast);
+            error!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
         }
     }
@@ -424,14 +430,7 @@ fn lower_module_block<'gcx>(
                 }
             }
             ast::HierarchyItem::VarDecl(ref decl) => {
-                let type_id = cx.map_ast_with_parent(AstNode::Type(&decl.ty), next_rib);
-                next_rib = type_id;
-                for name in &decl.names {
-                    let decl_id =
-                        cx.map_ast_with_parent(AstNode::VarDecl(name, decl, type_id), next_rib);
-                    next_rib = decl_id;
-                    decls.push(decl_id);
-                }
+                next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
             }
             ast::HierarchyItem::Procedure(ref prok) => {
                 let id = cx.map_ast_with_parent(AstNode::Proc(prok), next_rib);
@@ -521,7 +520,10 @@ fn lower_type<'gcx>(
         ast::IntType => hir::TypeKind::Builtin(hir::BuiltinType::Int),
         ast::LongIntType => hir::TypeKind::Builtin(hir::BuiltinType::LongInt),
         ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
-        _ => return cx.unimp_msg("lowering of", ty),
+        _ => {
+            error!("{:#?}", ty);
+            return cx.unimp_msg("lowering of", ty);
+        }
     };
     let hir = hir::Type {
         id: node_id,
@@ -630,7 +632,10 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
             cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
         ),
-        _ => return cx.unimp_msg("lowering of", expr),
+        _ => {
+            error!("{:#?}", expr);
+            return cx.unimp_msg("lowering of", expr);
+        }
     };
     let hir = hir::Expr {
         id: node_id,
@@ -764,6 +769,23 @@ fn alloc_param_decl<'gcx>(
                 into.push(id);
             }
         }
+    }
+    next_rib
+}
+
+/// Allocate node IDs for a variable declaration.
+fn alloc_var_decl<'gcx>(
+    cx: &impl Context<'gcx>,
+    decl: &'gcx ast::VarDecl,
+    mut next_rib: NodeId,
+    into: &mut Vec<NodeId>,
+) -> NodeId {
+    let type_id = cx.map_ast_with_parent(AstNode::Type(&decl.ty), next_rib);
+    next_rib = type_id;
+    for name in &decl.names {
+        let decl_id = cx.map_ast_with_parent(AstNode::VarDecl(name, decl, type_id), next_rib);
+        next_rib = decl_id;
+        into.push(decl_id);
     }
     next_rib
 }

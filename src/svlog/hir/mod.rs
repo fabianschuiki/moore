@@ -86,10 +86,12 @@ where
         match expr.kind {
             ExprKind::Ident(name) => match self.cx.resolve_upwards_or_error(name, expr.id) {
                 Ok(binding) => {
-                    if lvalue {
-                        self.table.written.insert(binding);
-                    } else {
-                        self.table.read.insert(binding);
+                    if !self.cx.is_parent_of(self.table.node_id, binding) {
+                        if lvalue {
+                            self.table.written.insert(binding);
+                        } else {
+                            self.table.read.insert(binding);
+                        }
                     }
                 }
                 Err(()) => (),

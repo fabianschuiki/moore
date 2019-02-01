@@ -446,6 +446,18 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
             .cloned()
     }
 
+    /// Check if a node is the parent of another.
+    fn is_parent_of(&self, parent_id: NodeId, child_id: NodeId) -> bool {
+        if parent_id == child_id {
+            true
+        } else {
+            match self.parent_node_id(child_id) {
+                Some(id) => self.is_parent_of(parent_id, id),
+                None => false,
+            }
+        }
+    }
+
     /// Resolve a name upwards or emit a diagnostic if nothing is found.
     fn resolve_upwards_or_error(&self, name: Spanned<Name>, start_at: NodeId) -> Result<NodeId> {
         match self.gcx().resolve_upwards(name.value, start_at)? {

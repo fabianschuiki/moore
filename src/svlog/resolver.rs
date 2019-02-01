@@ -64,26 +64,48 @@ impl RibKind {
 pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<&'gcx Rib> {
     let ast = cx.ast_of(node_id)?;
     let kind = match ast {
-        AstNode::TypeParam(_, decl) => {
-            RibKind::Normal(Spanned::new(decl.name.name, decl.name.span), node_id)
-        }
-        AstNode::ValueParam(_, decl) => {
-            RibKind::Normal(Spanned::new(decl.name.name, decl.name.span), node_id)
-        }
-        AstNode::Module(_) => RibKind::Module(HashMap::new()),
-        AstNode::VarDecl(decl, _, _) => {
-            RibKind::Normal(Spanned::new(decl.name, decl.name_span), node_id)
-        }
-        AstNode::GenvarDecl(decl) => {
-            RibKind::Normal(Spanned::new(decl.name, decl.name_span), node_id)
-        }
-        AstNode::Typedef(def) => {
-            RibKind::Normal(Spanned::new(def.name.name, def.name.span), node_id)
-        }
+        AstNode::TypeParam(_, decl) => Some(RibKind::Normal(
+            Spanned::new(decl.name.name, decl.name.span),
+            node_id,
+        )),
+        AstNode::ValueParam(_, decl) => Some(RibKind::Normal(
+            Spanned::new(decl.name.name, decl.name.span),
+            node_id,
+        )),
+        AstNode::Module(_) => Some(RibKind::Module(HashMap::new())),
+        AstNode::VarDecl(decl, _, _) => Some(RibKind::Normal(
+            Spanned::new(decl.name, decl.name_span),
+            node_id,
+        )),
+        AstNode::GenvarDecl(decl) => Some(RibKind::Normal(
+            Spanned::new(decl.name, decl.name_span),
+            node_id,
+        )),
+        AstNode::Typedef(def) => Some(RibKind::Normal(
+            Spanned::new(def.name.name, def.name.span),
+            node_id,
+        )),
         AstNode::Port(&ast::Port::Named { name, .. }) => {
-            RibKind::Normal(Spanned::new(name.name, name.span), node_id)
+            Some(RibKind::Normal(Spanned::new(name.name, name.span), node_id))
         }
-        _ => {
+        AstNode::Stmt(stmt) => match stmt.data {
+            ast::VarDeclStmt(_) => {
+                let hir = match cx.hir_of(node_id)? {
+                    HirNode::Stmt(x) => x,
+                    _ => unreachable!(),
+                };
+                match hir.kind {
+                    hir::StmtKind::InlineGroup { rib, .. } => return cx.local_rib(rib),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let kind = match kind {
+        Some(kind) => kind,
+        None => {
             return cx.local_rib(
                 cx.parent_node_id(node_id)
                     .expect("root node must produce a rib"),

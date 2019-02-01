@@ -731,19 +731,35 @@ where
             hir::ExprKind::Ident(_) => {
                 let binding = self.resolve_node(expr_id, env)?;
                 let value = self.emitted_value(binding).clone();
+                let ty = self.llhd_type(&value);
+                let is_signal = match *ty {
+                    llhd::SignalType(_) => true,
+                    _ => false,
+                };
                 // We currently just assume that the value above is a signal.
                 // As soon as we have actual variable declarations, this will
                 // need some more cleverness.
-                match mode {
-                    Mode::Value => {
-                        let ty = self.type_of(expr_id, env)?;
-                        let ty = self.emit_type(ty)?;
+                match (mode, is_signal) {
+                    (Mode::Value, true) => {
+                        let ty = ty.as_signal().clone();
                         (
                             self.emit_nameless_inst(llhd::ProbeInst(ty, value)).into(),
                             Mode::Value,
                         )
                     }
-                    Mode::Signal => (value, Mode::Signal),
+                    (Mode::Value, false) => {
+                        // let ty = ty.as_pointer().clone(); // TODO: fix this
+                        let ty = match *ty {
+                            llhd::PointerType(ref ty) => ty.clone(),
+                            _ => panic!("not a pointer"),
+                        };
+                        (
+                            self.emit_nameless_inst(llhd::LoadInst(ty, value)).into(),
+                            Mode::Value,
+                        )
+                    }
+                    (Mode::Signal, true) => (value, Mode::Signal),
+                    (Mode::Signal, false) => (value, Mode::Value),
                 }
             }
             hir::ExprKind::Unary(op, arg) => (
@@ -947,10 +963,20 @@ where
 
     /// Emit the code for a statement.
     fn emit_stmt(&mut self, stmt_id: NodeId, env: ParamEnv) -> Result<()> {
-        let hir = match self.hir_of(stmt_id)? {
-            HirNode::Stmt(x) => x,
+        match self.hir_of(stmt_id)? {
+            HirNode::Stmt(x) => self.emit_stmt_regular(stmt_id, x, env),
+            HirNode::VarDecl(x) => self.emit_stmt_var_decl(stmt_id, x, env),
             _ => unreachable!(),
-        };
+        }
+    }
+
+    /// Emit the code for a statement, given its HIR.
+    fn emit_stmt_regular(
+        &mut self,
+        _stmt_id: NodeId,
+        hir: &hir::Stmt,
+        env: ParamEnv,
+    ) -> Result<()> {
         #[allow(unreachable_patterns)]
         match hir.kind {
             hir::StmtKind::Null => (),
@@ -1202,7 +1228,31 @@ where
                 }));
                 self.append_to_block(exit_blk);
             }
+            hir::StmtKind::InlineGroup { ref stmts, .. } => {
+                for &stmt in stmts {
+                    self.emit_stmt(stmt, env)?;
+                }
+            }
             _ => return self.unimp_msg("code generation for", hir),
+        }
+        Ok(())
+    }
+
+    /// Emit the code for a variable declaration statement, given its HIR.
+    fn emit_stmt_var_decl(
+        &mut self,
+        decl_id: NodeId,
+        hir: &hir::VarDecl,
+        env: ParamEnv,
+    ) -> Result<()> {
+        let ty = self.type_of(decl_id, env)?;
+        let ty = self.emit_type(ty)?;
+        let id = self.emit_named_inst(hir.name.value, llhd::VariableInst(ty.clone()));
+        self.set_emitted_value(decl_id, id.into());
+        if let Some(expr) = hir.init {
+            let k = self.constant_value_of(expr, env)?;
+            let k = self.emit_const(k)?;
+            self.emit_nameless_inst(llhd::StoreInst(ty, k.into(), id.into()));
         }
         Ok(())
     }

@@ -764,6 +764,13 @@ pub enum StmtKind {
     },
     /// A loop statement.
     Loop { kind: LoopKind, body: NodeId },
+    /// An inline group of statements.
+    ///
+    /// This is a special node that is used for example with variable
+    /// declarations, where one statement can generate multiple nodes referrable
+    /// by name. An inline group differs from a block in that its ribs are
+    /// made visible, whereas a block keeps them local.
+    InlineGroup { stmts: Vec<NodeId>, rib: NodeId },
 }
 
 /// The different forms an assignment can take.

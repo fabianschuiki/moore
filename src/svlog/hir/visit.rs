@@ -119,6 +119,11 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
             }
             visitor.visit_node_with_id(body, false);
         }
+        StmtKind::InlineGroup { ref stmts, .. } => {
+            for &stmt in stmts {
+                visitor.visit_node_with_id(stmt, false);
+            }
+        }
     }
 }
 
