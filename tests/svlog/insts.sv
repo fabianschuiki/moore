@@ -42,10 +42,8 @@ endmodule
 //| entity @C () () {
 //|     %t1 = sig i32
 //|     %t2 = sig i1
-//|     %0 = prb %t1
-//|     %d1 = inst @D.param1 (%0) ()
-//|     %1 = prb %t2
-//|     %d2 = inst @D.param2 (%1) ()
+//|     %d1 = inst @D.param1 (%t1) ()
+//|     %d2 = inst @D.param2 (%t2) ()
 //| }
 
 
@@ -89,15 +87,9 @@ endmodule
 //| entity @F () () {
 //|     %x1 = sig i32
 //|     %x2 = sig i1
-//|     %0 = prb %x2
-//|     %1 = prb %x2
-//|     %g1 = inst @G.param3 (%0, %1) ()
-//|     %2 = prb %x1
-//|     %3 = prb %x1
-//|     %g2 = inst @G.param4 (%2, %3) ()
-//|     %4 = prb %x1
-//|     %5 = prb %x2
-//|     %g3 = inst @G.param5 (%4, %5) ()
+//|     %g1 = inst @G.param3 (%x2, %x2) ()
+//|     %g2 = inst @G.param4 (%x1, %x1) ()
+//|     %g3 = inst @G.param5 (%x1, %x2) ()
 //| }
 
 
@@ -161,6 +153,20 @@ endmodule
 //| entity @K () () {
 //|     %a = sig i32
 //|     %b = sig i32
+//|     %l0 = inst @L (%a) (%b)
+//| }
+
+//@ elab M
+//| entity @L (i32$ %a) (i32$ %b) {
+//|     drv %b 0
+//| }
+//|
+//| entity @M () () {
+//|     %a = sig i32
+//|     %b = sig i32
 //|     %0 = prb %a
-//|     %l0 = inst @L (%0) (%b)
+//|     %1 = add i32 %0 2
+//|     %2 = sig i32
+//|     drv %2 %1
+//|     %l0 = inst @L (%2) (%b)
 //| }
