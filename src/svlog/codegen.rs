@@ -208,8 +208,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::Assign(x) => x,
                 _ => unreachable!(),
             };
-            let rhs = gen.emit_rvalue(hir.rhs, env)?;
-            gen.emit_blocking_assign(hir.lhs, rhs, env)?;
+            let lhs = gen.emit_lvalue(hir.lhs, env)?;
+            let rhs = gen.emit_rvalue_mode(hir.rhs, env, Mode::Signal)?;
+            gen.emit_nameless_inst(llhd::DriveInst(lhs, rhs, None));
         }
 
         // Emit instantiations.
@@ -583,6 +584,8 @@ impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for EntityGenerator<'b, 'gcx, &
 where
     C: Context<'gcx> + 'a,
 {
+    type AsStmtGen = DummyStmtGenerator<'b, 'gcx, &'a C>;
+
     fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
         self.ent.add_inst(inst, llhd::InstPosition::End)
     }
@@ -632,6 +635,12 @@ impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, 
 where
     C: Context<'gcx> + 'a,
 {
+    type AsStmtGen = Self;
+
+    fn as_stmt_gen(&mut self) -> Option<&mut Self::AsStmtGen> {
+        Some(self)
+    }
+
     fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
         self.prok.body_mut().add_inst(inst, self.pos)
     }
@@ -678,6 +687,17 @@ where
     Self: DerefMut<Target = CodeGenerator<'gcx, &'a C>>,
     C: Context<'gcx> + 'a,
 {
+    type AsStmtGen: StmtGenerator<'a, 'gcx, C>;
+
+    /// Try to convert to a statement generator.
+    ///
+    /// Returns `Some` if `self` can emit code for statements, `None` otherwise.
+    /// This function is useful for certain expressions such as `x++` which do
+    /// mutate state and have to emit certain sequential statements.
+    fn as_stmt_gen(&mut self) -> Option<&mut Self::AsStmtGen> {
+        None
+    }
+
     /// Emit an instruction.
     fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef;
 
@@ -899,30 +919,25 @@ where
         let next: llhd::ValueRef = self
             .emit_nameless_inst(llhd::BinaryInst(op, llty, now.clone(), one))
             .into();
-        self.emit_blocking_assign(expr_id, next.clone(), env)?;
-        match postfix {
-            true => Ok(now),
-            false => Ok(next),
+        match self.as_stmt_gen() {
+            Some(gen) => {
+                gen.emit_blocking_assign(expr_id, next.clone(), env)?;
+                match postfix {
+                    true => Ok(now),
+                    false => Ok(next),
+                }
+            }
+            None => {
+                let hir = self.hir_of(expr_id)?;
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "inc/dec operator can only be used in processes, tasks, and functions",
+                    ))
+                    .span(hir.human_span()),
+                );
+                Err(())
+            }
         }
-    }
-
-    /// Emit a blocking assignment to a variable or signal.
-    fn emit_blocking_assign(
-        &mut self,
-        lvalue_id: NodeId,
-        rvalue: llhd::ValueRef,
-        env: ParamEnv,
-    ) -> Result<()> {
-        let lvalue = self.emit_lvalue(lvalue_id, env)?;
-        let lty = self.llhd_type(&lvalue);
-        let rty = self.llhd_type(&rvalue);
-        let inst = match *lty {
-            llhd::SignalType(..) => llhd::DriveInst(lvalue, rvalue, None),
-            llhd::PointerType(..) => llhd::StoreInst(rty, rvalue, lvalue),
-            ref t => panic!("value of type `{}` cannot be driven", t),
-        };
-        self.emit_nameless_inst(inst);
-        Ok(())
     }
 }
 
@@ -1354,6 +1369,94 @@ where
                 )
                 .into(),
         })
+    }
+
+    /// Emit a blocking assignment to a variable or signal.
+    fn emit_blocking_assign(
+        &mut self,
+        lvalue_id: NodeId,
+        rvalue: llhd::ValueRef,
+        env: ParamEnv,
+    ) -> Result<()> {
+        let lvalue = self.emit_lvalue(lvalue_id, env)?;
+        let lty = self.llhd_type(&lvalue);
+        let rty = self.llhd_type(&rvalue);
+        match *lty {
+            llhd::SignalType(..) => {
+                let one_epsilon = llhd::const_time(num::zero(), num::zero(), num::one());
+                self.emit_nameless_inst(llhd::DriveInst(
+                    lvalue,
+                    rvalue,
+                    Some(one_epsilon.clone().into()),
+                ));
+                // Emit a wait statement to allow for the assignment to take
+                // effect.
+                let blk = self.add_nameless_block();
+                self.emit_nameless_inst(llhd::WaitInst(blk, Some(one_epsilon.into()), vec![]));
+                self.append_to_block(blk);
+            }
+            llhd::PointerType(..) => {
+                self.emit_nameless_inst(llhd::StoreInst(rty, rvalue, lvalue));
+            }
+            ref t => panic!("value of type `{}` cannot be driven", t),
+        }
+        Ok(())
+    }
+}
+
+struct DummyStmtGenerator<'a, 'gcx, C>(std::marker::PhantomData<(&'a (), &'gcx (), C)>);
+
+impl<'a, 'gcx, C> Deref for DummyStmtGenerator<'a, 'gcx, C> {
+    type Target = CodeGenerator<'gcx, C>;
+
+    fn deref(&self) -> &CodeGenerator<'gcx, C> {
+        unreachable!()
+    }
+}
+
+impl<'a, 'gcx, C> DerefMut for DummyStmtGenerator<'a, 'gcx, C> {
+    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
+        unreachable!()
+    }
+}
+
+impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for DummyStmtGenerator<'b, 'gcx, &'a C>
+where
+    C: Context<'gcx> + 'a,
+{
+    type AsStmtGen = Self;
+
+    fn emit_inst(&mut self, _inst: llhd::Inst) -> llhd::InstRef {
+        unreachable!()
+    }
+
+    fn emitted_value(&self, _node_id: NodeId) -> &llhd::ValueRef {
+        unreachable!()
+    }
+
+    fn set_emitted_value(&mut self, _node_id: NodeId, _value: llhd::ValueRef) {
+        unreachable!()
+    }
+
+    fn llhd_type(&self, _value: &llhd::ValueRef) -> llhd::Type {
+        unreachable!()
+    }
+}
+
+impl<'a, 'b, 'gcx, C> StmtGenerator<'a, 'gcx, C> for DummyStmtGenerator<'b, 'gcx, &'a C>
+where
+    C: Context<'gcx> + 'a,
+{
+    fn set_insertion_point(&mut self, _pos: llhd::InstPosition) {
+        unreachable!()
+    }
+
+    fn insertion_point(&self) -> llhd::InstPosition {
+        unreachable!()
+    }
+
+    fn add_block(&mut self, _block: llhd::Block, _pos: llhd::BlockPosition) -> llhd::BlockRef {
+        unreachable!()
     }
 }
 
