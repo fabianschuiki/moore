@@ -45,7 +45,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<llhd::EntityRef>>,
     module_types: HashMap<NodeEnvId, llhd::Type>,
-    interned_types: HashMap<Type<'gcx>, Result<llhd::Type>>,
+    interned_types: HashMap<(Type<'gcx>, ParamEnv), Result<llhd::Type>>,
     interned_values: HashMap<Value<'gcx>, Result<llhd::Const>>,
 }
 
@@ -90,7 +90,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 "port {}.{} has type {:?}",
                 hir.name.value, port.name.value, ty
             );
-            let ty = self.emit_type(ty)?;
+            let ty = self.emit_type(ty, env)?;
             let ty = match port.dir {
                 ast::PortDir::Ref => llhd::pointer_ty(ty),
                 _ => llhd::signal_ty(ty),
@@ -187,7 +187,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::VarDecl(x) => x,
                 _ => unreachable!(),
             };
-            let ty = self.emit_type(self.type_of(decl_id, env)?)?;
+            let ty = self.emit_type(self.type_of(decl_id, env)?, env)?;
             let init = match hir.init {
                 Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?)?.into()),
                 None => None,
@@ -370,10 +370,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut inputs = vec![];
         let mut outputs = vec![];
         for &id in &acc.read {
-            inputs.push((id, llhd::signal_ty(self.emit_type(self.type_of(id, env)?)?)));
+            inputs.push((
+                id,
+                llhd::signal_ty(self.emit_type(self.type_of(id, env)?, env)?),
+            ));
         }
         for &id in &acc.written {
-            outputs.push((id, llhd::signal_ty(self.emit_type(self.type_of(id, env)?)?)));
+            outputs.push((
+                id,
+                llhd::signal_ty(self.emit_type(self.type_of(id, env)?, env)?),
+            ));
         }
         trace!("process inputs = {:#?}", inputs);
         trace!("process outputs = {:#?}", outputs);
@@ -444,25 +450,25 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a type to an LLHD type (interned).
-    fn emit_type(&mut self, ty: Type<'gcx>) -> Result<llhd::Type> {
-        if let Some(x) = self.tables.interned_types.get(ty) {
+    fn emit_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
+        if let Some(x) = self.tables.interned_types.get(&(ty, env)) {
             x.clone()
         } else {
-            let x = self.emit_type_uninterned(ty);
-            self.tables.interned_types.insert(ty, x.clone());
+            let x = self.emit_type_uninterned(ty, env);
+            self.tables.interned_types.insert((ty, env), x.clone());
             x
         }
     }
 
     /// Map a type to an LLHD type.
-    fn emit_type_uninterned(&mut self, ty: Type<'gcx>) -> Result<llhd::Type> {
+    fn emit_type_uninterned(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
         #[allow(unreachable_patterns)]
         Ok(match *ty {
             TypeKind::Void => llhd::void_ty(),
             TypeKind::Bit(_) => llhd::int_ty(1),
             TypeKind::Int(width, _) => llhd::int_ty(width),
-            TypeKind::Named(_, _, ty) => self.emit_type(ty)?,
-            _ => unimplemented!(),
+            TypeKind::Named(_, _, ty) => self.emit_type(ty, env)?,
+            _ => unimplemented!("emit type {:?}", ty),
         })
     }
 
@@ -495,11 +501,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     fn const_one_for_type(&mut self, ty: Type<'gcx>) -> Result<llhd::ValueRef> {
         use num::one;
         match *ty {
-            TypeKind::Void | TypeKind::Time => panic!("no unit-value for type {:?}", ty),
             TypeKind::Bit(..) | TypeKind::Int(..) => Ok(self
                 .emit_const(self.intern_value(value::make_int(ty, one())))?
                 .into()),
             TypeKind::Named(_, _, ty) => self.const_one_for_type(ty),
+            _ => panic!("no unit-value for type {:?}", ty),
         }
     }
 
@@ -786,7 +792,7 @@ where
                 match op {
                     hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
                         let ty = self.type_of(expr_id, env)?;
-                        let ty = self.emit_type(ty)?;
+                        let ty = self.emit_type(ty, env)?;
                         let value = self.emit_rvalue(arg, env)?;
                         self.emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, ty, value))
                             .into()
@@ -809,7 +815,7 @@ where
             ),
             hir::ExprKind::Binary(op, lhs, rhs) => {
                 let ty = self.type_of(lhs, env)?;
-                let ty = self.emit_type(ty)?;
+                let ty = self.emit_type(ty, env)?;
                 let lhs = self.emit_rvalue(lhs, env)?;
                 let rhs = self.emit_rvalue(rhs, env)?;
                 let inst = match op {
@@ -914,7 +920,7 @@ where
     ) -> Result<llhd::ValueRef> {
         let ty = self.type_of(expr_id, env)?;
         let now = self.emit_rvalue(expr_id, env)?;
-        let llty = self.emit_type(ty)?;
+        let llty = self.emit_type(ty, env)?;
         let one = self.const_one_for_type(ty)?;
         let next: llhd::ValueRef = self
             .emit_nameless_inst(llhd::BinaryInst(op, llty, now.clone(), one))
@@ -1153,7 +1159,7 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(count) => {
                         let ty = self.type_of(count, env)?;
-                        let lty = self.emit_type(ty)?;
+                        let lty = self.emit_type(ty, env)?;
                         let count = self.emit_rvalue(count, env)?;
                         let var: llhd::ValueRef = self
                             .emit_named_inst("loop_count", llhd::VariableInst(lty.clone()))
@@ -1178,7 +1184,7 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty)?;
+                        let lty = self.emit_type(ty, env)?;
                         let value = self
                             .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var))
                             .into();
@@ -1214,7 +1220,7 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty)?;
+                        let lty = self.emit_type(ty, env)?;
                         let value = self
                             .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var.clone()))
                             .into();
@@ -1261,7 +1267,7 @@ where
         env: ParamEnv,
     ) -> Result<()> {
         let ty = self.type_of(decl_id, env)?;
-        let ty = self.emit_type(ty)?;
+        let ty = self.emit_type(ty, env)?;
         let id = self.emit_named_inst(hir.name.value, llhd::VariableInst(ty.clone()));
         self.set_emitted_value(decl_id, id.into());
         if let Some(expr) = hir.init {
