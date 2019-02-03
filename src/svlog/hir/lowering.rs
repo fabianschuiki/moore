@@ -679,6 +679,25 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(expr), parent),
             Spanned::new(name.name, name.span),
         ),
+        ast::IndexExpr {
+            ref indexee,
+            ref index,
+        } => {
+            let indexee = cx.map_ast_with_parent(AstNode::Expr(indexee), parent);
+            let mode = match index.data {
+                ast::RangeExpr {
+                    mode,
+                    ref lhs,
+                    ref rhs,
+                } => hir::IndexMode::Many(
+                    mode,
+                    cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
+                    cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
+                ),
+                _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), parent)),
+            };
+            hir::ExprKind::Index(indexee, mode)
+        }
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);

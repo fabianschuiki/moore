@@ -571,6 +571,8 @@ pub enum ExprKind {
     Binary(BinaryOp, NodeId, NodeId),
     /// A field access such as `a.b`.
     Field(NodeId, Spanned<Name>),
+    /// An index access such as `a[b]` or `a[b:c]`.
+    Index(NodeId, IndexMode),
 }
 
 /// The different unary operators.
@@ -661,6 +663,15 @@ impl HasDesc for BinaryOp {
             BinaryOp::BitXnor => "`~^` operator",
         }
     }
+}
+
+/// The different forms an index expression can take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexMode {
+    /// A single value access such as `[a]`.
+    One(NodeId),
+    /// A slice of values such as `[a:b]`, `[a+:b]`, or `[a-:b]`.
+    Many(ast::RangeMode, NodeId, NodeId),
 }
 
 /// A variable declaration.
