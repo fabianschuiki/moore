@@ -10,7 +10,10 @@ use crate::{
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
 use llhd::Context as LlhdContext;
-use num::Zero;
+use num::{
+    traits::{cast::ToPrimitive, sign::Signed},
+    BigInt, One, Zero,
+};
 use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
 /// A code generator.
@@ -933,6 +936,67 @@ where
                 //     self.emit_nameless_inst(llhd::ExtractInst(llty, target, index)),
                 //     Mode::Value,
                 // )
+            }
+            hir::ExprKind::Index(target_id, mode) => {
+                let ty = self.type_of(target_id, env)?;
+                let _llty = self.emit_type(ty, env)?;
+                let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
+                let map_int = |expr: NodeId| -> Result<&BigInt> {
+                    match self.constant_value_of(expr, env)?.kind {
+                        ValueKind::Int(ref x) => Ok(x),
+                        _ => {
+                            let hir = self.hir_of(expr)?;
+                            self.emit(
+                                DiagBuilder2::error(format!(
+                                    "{} is not a constant integer",
+                                    hir.desc_full()
+                                ))
+                                .span(hir.human_span()),
+                            );
+                            Err(())
+                        }
+                    }
+                };
+                match mode {
+                    hir::IndexMode::One(index) => {
+                        let index_int = map_int(index)?.to_usize().unwrap();
+                        unimplemented!(
+                            "single element index at {:?} for target {:?}",
+                            index_int,
+                            target
+                        );
+                        // (
+                        //     self.emit_nameless_inst(llhd::ExtractInst(llty, target, index_int))
+                        //         .into(),
+                        //     Mode::Value,
+                        // )
+                    }
+                    hir::IndexMode::Many(many_mode, lhs, rhs) => {
+                        let lhs_int = map_int(lhs)?;
+                        let rhs_int = map_int(rhs)?;
+                        let (base, length) = match many_mode {
+                            ast::RangeMode::Absolute => (
+                                std::cmp::min(lhs_int, rhs_int).clone(),
+                                (lhs_int - rhs_int).abs() + BigInt::one(),
+                            ),
+                            ast::RangeMode::RelativeUp => (lhs_int.clone(), rhs_int.clone()),
+                            ast::RangeMode::RelativeDown => (lhs_int - rhs_int, rhs_int.clone()),
+                        };
+                        let (base, length) = (base.to_usize().unwrap(), length.to_usize().unwrap());
+                        unimplemented!(
+                            "multiple elements {:?} base {} length {} for target {:?}",
+                            many_mode,
+                            base,
+                            length,
+                            target
+                        );
+                        // (
+                        //     self.emit_nameless_inst(llhd::ExtractInst(llty, target, base, length))
+                        //         .into(),
+                        //     Mode::Value,
+                        // )
+                    }
+                }
             }
             _ => return self.unimp_msg("code generation for", hir),
         };
