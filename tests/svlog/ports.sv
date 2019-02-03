@@ -45,7 +45,9 @@ endmodule
 //| %2:
 //|     %3 = prb %0
 //|     %4 = not i1 %3
-//|     drv %1 %4
+//|     drv %1 %4 1e
+//|     wait %7 for 1e
+//| %7:
 //|     halt
 //| }
 //|

@@ -7,7 +7,9 @@ endmodule
 //|     %0 = prb %a
 //|     %1 = prb %b
 //|     %2 = add i32 %0 %1
-//|     drv %c %2
+//|     %3 = sig i32
+//|     drv %3 %2
+//|     drv %c %3
 //| }
 
 module B;

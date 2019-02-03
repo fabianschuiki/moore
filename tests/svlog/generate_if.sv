@@ -14,7 +14,9 @@ endmodule
 //@ elab A
 //| proc @n235 () (i32$ %0) {
 //| %1:
-//|     drv %0 19
+//|     drv %0 19 1e
+//|     wait %4 for 1e
+//| %4:
 //|     halt
 //| }
 //|
@@ -25,7 +27,9 @@ endmodule
 //|
 //| proc @n234 () (i32$ %0) {
 //| %1:
-//|     drv %0 42
+//|     drv %0 42 1e
+//|     wait %4 for 1e
+//| %4:
 //|     halt
 //| }
 //|
