@@ -88,26 +88,7 @@ pub(crate) fn map_to_type<'gcx>(
     let hir = cx.hir_of(node_id)?;
     #[allow(unreachable_patterns)]
     match hir {
-        HirNode::Type(hir) => match hir.kind {
-            hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
-            hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
-            hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_logic()),
-            hir::TypeKind::Builtin(hir::BuiltinType::Byte) => Ok(cx.mkty_int(8)),
-            hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(cx.mkty_int(16)),
-            hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(cx.mkty_int(32)),
-            hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(cx.mkty_int(64)),
-            hir::TypeKind::Named(name) => {
-                let binding =
-                    cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
-                Ok(cx.mkty_named(name, (binding, env)))
-            }
-            hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
-            // We should never request mapping of an implicit type. Rather, the
-            // actual type should be mapped. Arriving here is a bug in the
-            // calling function.
-            hir::TypeKind::Implicit => unreachable!("implicit type not resolved"),
-            _ => cx.unimp_msg("type analysis of", hir),
-        },
+        HirNode::Type(hir) => map_type_kind(cx, node_id, env, hir, &hir.kind),
         HirNode::TypeParam(param) => {
             let env_data = cx.param_env_data(env);
             match env_data.find_type(node_id) {
@@ -145,4 +126,36 @@ fn is_explicit_type<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<bo
         HirNode::Type(x) => x.is_explicit(),
         _ => false,
     })
+}
+
+/// Map an HIR type into the type system.
+///
+/// This essentially converts `hir::TypeKind` to `Type`.
+fn map_type_kind<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+    root: &hir::Type,
+    kind: &hir::TypeKind,
+) -> Result<Type<'gcx>> {
+    #[allow(unreachable_patterns)]
+    match *kind {
+        hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
+        hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
+        hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_logic()),
+        hir::TypeKind::Builtin(hir::BuiltinType::Byte) => Ok(cx.mkty_int(8)),
+        hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(cx.mkty_int(16)),
+        hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(cx.mkty_int(32)),
+        hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(cx.mkty_int(64)),
+        hir::TypeKind::Named(name) => {
+            let binding = cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
+            Ok(cx.mkty_named(name, (binding, env)))
+        }
+        hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
+        // We should never request mapping of an implicit type. Rather, the
+        // actual type should be mapped. Arriving here is a bug in the
+        // calling function.
+        hir::TypeKind::Implicit => unreachable!("implicit type not resolved"),
+        _ => cx.unimp_msg("type analysis of", root),
+    }
 }
