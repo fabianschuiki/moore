@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - Support for variable declarations.
 
+### Fixed
+- Fix blocking assignments, making them actually block.
+
 ## 0.3.0 - 2019-02-01
 ### Added
 - Support for parameter declarations.
