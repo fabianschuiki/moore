@@ -360,6 +360,18 @@ pub struct StructMember {
     pub names: Vec<VarDeclName>,
 }
 
+impl HasSpan for StructMember {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for StructMember {
+    fn desc(&self) -> &'static str {
+        "struct member"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Port {
     Intf {

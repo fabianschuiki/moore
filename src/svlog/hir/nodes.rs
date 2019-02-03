@@ -488,6 +488,8 @@ pub enum TypeKind {
     Builtin(BuiltinType),
     /// A named type.
     Named(Spanned<Name>),
+    /// A struct or union type.
+    Struct(Vec<NodeId>),
 }
 
 /// A builtin type.

@@ -520,6 +520,14 @@ fn lower_type<'gcx>(
         ast::IntType => hir::TypeKind::Builtin(hir::BuiltinType::Int),
         ast::LongIntType => hir::TypeKind::Builtin(hir::BuiltinType::LongInt),
         ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
+        ast::StructType { ref members, .. } => {
+            let mut fields = vec![];
+            let mut next_rib = node_id;
+            for member in members {
+                next_rib = alloc_struct_member(cx, member, next_rib, &mut fields);
+            }
+            hir::TypeKind::Struct(fields)
+        }
         _ => {
             error!("{:#?}", ty);
             return cx.unimp_msg("lowering of", ty);
@@ -786,6 +794,24 @@ fn alloc_var_decl<'gcx>(
         let decl_id = cx.map_ast_with_parent(AstNode::VarDecl(name, decl, type_id), next_rib);
         next_rib = decl_id;
         into.push(decl_id);
+    }
+    next_rib
+}
+
+/// Allocate node IDs for a struct member.
+fn alloc_struct_member<'gcx>(
+    cx: &impl Context<'gcx>,
+    member: &'gcx ast::StructMember,
+    mut next_rib: NodeId,
+    into: &mut Vec<NodeId>,
+) -> NodeId {
+    let type_id = cx.map_ast_with_parent(AstNode::Type(&member.ty), next_rib);
+    next_rib = type_id;
+    for name in &member.names {
+        let member_id =
+            cx.map_ast_with_parent(AstNode::StructMember(name, member, type_id), next_rib);
+        next_rib = member_id;
+        into.push(member_id);
     }
     next_rib
 }
