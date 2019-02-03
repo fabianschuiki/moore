@@ -337,6 +337,24 @@ pub enum TypeDim {
     Associative,
 }
 
+impl HasDesc for TypeDim {
+    fn desc(&self) -> &'static str {
+        "type dimension"
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            TypeDim::Expr(ref expr) => format!("`[{}]`", expr.span().extract()),
+            TypeDim::Range(ref lhs, ref rhs) => {
+                format!("`[{}:{}]`", lhs.span().extract(), rhs.span().extract())
+            }
+            TypeDim::Queue => format!("`[$]`"),
+            TypeDim::Unsized => format!("`[]`"),
+            TypeDim::Associative => format!("associative type dimension"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct EnumName {
     pub span: Span,

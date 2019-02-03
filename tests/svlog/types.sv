@@ -1,9 +1,11 @@
 module A;
 	bit a0;
 	int a1;
+	bit [41:0] a2;
 
 	logic b0;
 	integer b1;
+	logic [41:0] b2;
 
 	// enum {
 	// 	Foo, Bar

@@ -467,6 +467,8 @@ impl HasDesc for Type {
             TypeKind::Builtin(BuiltinType::ShortInt) => "short int type",
             TypeKind::Builtin(BuiltinType::Int) => "int type",
             TypeKind::Builtin(BuiltinType::LongInt) => "long int type",
+            TypeKind::Struct(_) => "struct type",
+            TypeKind::PackedArray(..) => "packed array type",
             _ => "type",
         }
     }
@@ -490,6 +492,10 @@ pub enum TypeKind {
     Named(Spanned<Name>),
     /// A struct or union type.
     Struct(Vec<NodeId>),
+    /// A packed array such as `bit [31:0]`.
+    ///
+    /// Represented as `(inner_type, range_lhs, range_rhs)`.
+    PackedArray(Box<TypeKind>, NodeId, NodeId),
 }
 
 /// A builtin type.

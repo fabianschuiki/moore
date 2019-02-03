@@ -523,7 +523,7 @@ fn lower_type<'gcx>(
     node_id: NodeId,
     ty: &'gcx ast::Type,
 ) -> Result<HirNode<'gcx>> {
-    let kind = match ty.data {
+    let mut kind = match ty.data {
         ast::ImplicitType => hir::TypeKind::Implicit,
         ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
         ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
@@ -546,6 +546,28 @@ fn lower_type<'gcx>(
             return cx.unimp_msg("lowering of", ty);
         }
     };
+    for dim in &ty.dims {
+        match *dim {
+            ast::TypeDim::Range(ref lhs, ref rhs) => {
+                kind = hir::TypeKind::PackedArray(
+                    Box::new(kind),
+                    cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+                    cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+                );
+            }
+            _ => {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "{} is not a valid packed dimension",
+                        dim.desc_full()
+                    ))
+                    .span(ty.human_span())
+                    .add_note("packed array dimensions can only be given as range, e.g. `[31:0]`"),
+                );
+                return Err(());
+            }
+        }
+    }
     let hir = hir::Type {
         id: node_id,
         span: ty.span,
