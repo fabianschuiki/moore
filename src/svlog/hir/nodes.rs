@@ -457,27 +457,11 @@ impl HasSpan for Type {
 
 impl HasDesc for Type {
     fn desc(&self) -> &'static str {
-        #[allow(unreachable_patterns)]
-        match self.kind {
-            TypeKind::Implicit => "implicit type",
-            TypeKind::Builtin(BuiltinType::Void) => "void type",
-            TypeKind::Builtin(BuiltinType::Bit) => "bit type",
-            TypeKind::Builtin(BuiltinType::Logic) => "logic type",
-            TypeKind::Builtin(BuiltinType::Byte) => "byte type",
-            TypeKind::Builtin(BuiltinType::ShortInt) => "short int type",
-            TypeKind::Builtin(BuiltinType::Int) => "int type",
-            TypeKind::Builtin(BuiltinType::LongInt) => "long int type",
-            TypeKind::Struct(_) => "struct type",
-            TypeKind::PackedArray(..) => "packed array type",
-            _ => "type",
-        }
+        self.kind.desc()
     }
 
     fn desc_full(&self) -> String {
-        match self.kind {
-            TypeKind::Named(n) => format!("type `{}`", n.value),
-            _ => self.desc().into(),
-        }
+        self.kind.desc_full()
     }
 }
 
@@ -496,6 +480,32 @@ pub enum TypeKind {
     ///
     /// Represented as `(inner_type, range_lhs, range_rhs)`.
     PackedArray(Box<TypeKind>, NodeId, NodeId),
+}
+
+impl HasDesc for TypeKind {
+    fn desc(&self) -> &'static str {
+        #[allow(unreachable_patterns)]
+        match *self {
+            TypeKind::Implicit => "implicit type",
+            TypeKind::Builtin(BuiltinType::Void) => "void type",
+            TypeKind::Builtin(BuiltinType::Bit) => "bit type",
+            TypeKind::Builtin(BuiltinType::Logic) => "logic type",
+            TypeKind::Builtin(BuiltinType::Byte) => "byte type",
+            TypeKind::Builtin(BuiltinType::ShortInt) => "short int type",
+            TypeKind::Builtin(BuiltinType::Int) => "int type",
+            TypeKind::Builtin(BuiltinType::LongInt) => "long int type",
+            TypeKind::Struct(_) => "struct type",
+            TypeKind::PackedArray(..) => "packed array type",
+            _ => "type",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            TypeKind::Named(n) => format!("type `{}`", n.value),
+            _ => self.desc().into(),
+        }
+    }
 }
 
 /// A builtin type.
