@@ -534,7 +534,7 @@ impl HasDesc for Expr {
         match self.kind {
             ExprKind::IntConst(ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::TimeConst(ref k) => format!("{} `{}`", self.desc(), k),
-            ExprKind::Ident(n) => format!("{} `{}`", self.desc(), n.value),
+            ExprKind::Ident(n) => format!("`{}`", n.value),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
         }
     }
@@ -553,6 +553,8 @@ pub enum ExprKind {
     Unary(UnaryOp, NodeId),
     /// A binary operator.
     Binary(BinaryOp, NodeId, NodeId),
+    /// A field access such as `a.b`.
+    Field(NodeId, Spanned<Name>),
 }
 
 /// The different unary operators.

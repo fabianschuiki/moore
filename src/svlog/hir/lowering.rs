@@ -653,6 +653,10 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
             cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
         ),
+        ast::MemberExpr { ref expr, name } => hir::ExprKind::Field(
+            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+            Spanned::new(name.name, name.span),
+        ),
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);

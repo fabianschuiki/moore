@@ -143,6 +143,9 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
             visitor.visit_node_with_id(lhs, lvalue);
             visitor.visit_node_with_id(rhs, lvalue);
         }
+        ExprKind::Field(expr, _) => {
+            visitor.visit_node_with_id(expr, lvalue);
+        }
     }
 }
 
