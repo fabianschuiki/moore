@@ -101,6 +101,7 @@ pub(crate) fn map_to_type<'gcx>(
                     cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
                 Ok(cx.mkty_named(name, (binding, env)))
             }
+            hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
             // We should never request mapping of an implicit type. Rather, the
             // actual type should be mapped. Arriving here is a bug in the
             // calling function.

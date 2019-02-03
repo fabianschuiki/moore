@@ -264,5 +264,8 @@ pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) 
         TypeKind::Time => cx.intern_value(make_time(Zero::zero())),
         TypeKind::Bit(..) | TypeKind::Int(..) => cx.intern_value(make_int(ty, Zero::zero())),
         TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
+        TypeKind::Struct(_) => {
+            unimplemented!("create a struct value and fill in defaults for each field")
+        }
     }
 }

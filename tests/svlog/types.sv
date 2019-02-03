@@ -14,5 +14,9 @@ module A;
 	struct {
 		logic a;
 		int b;
-	} c1;
+		struct {
+			bit x;
+			integer y;
+		} c;
+	} c2;
 endmodule

@@ -468,6 +468,20 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             TypeKind::Bit(_) => llhd::int_ty(1),
             TypeKind::Int(width, _) => llhd::int_ty(width),
             TypeKind::Named(_, _, ty) => self.emit_type(ty, env)?,
+            TypeKind::Struct(id) => {
+                let fields = match self.hir_of(id)? {
+                    HirNode::Type(hir::Type {
+                        kind: hir::TypeKind::Struct(ref fields),
+                        ..
+                    }) => fields,
+                    _ => unreachable!(),
+                };
+                let mut types = vec![];
+                for &field_id in fields {
+                    types.push(self.emit_type(self.type_of(field_id, env)?, env)?);
+                }
+                llhd::struct_ty(types)
+            }
             _ => unimplemented!("emit type {:?}", ty),
         })
     }

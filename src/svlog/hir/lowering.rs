@@ -348,6 +348,19 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::Assign(cx.arena().alloc_hir(hir)))
         }
+        AstNode::StructMember(name, decl, ty) => {
+            let hir = hir::VarDecl {
+                id: node_id,
+                name: Spanned::new(name.name, name.name_span),
+                span: Span::union(name.span, decl.span),
+                ty: ty,
+                init: name
+                    .init
+                    .as_ref()
+                    .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), ty)),
+            };
+            Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             error!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)

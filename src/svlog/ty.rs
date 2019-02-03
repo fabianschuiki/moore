@@ -24,6 +24,8 @@ pub enum TypeKind<'t> {
     /// user. The second field represents the binding of the resolved name. The
     /// third field represents the actual type.
     Named(Spanned<Name>, NodeId, Type<'t>),
+    /// A struct type.
+    Struct(NodeId),
 }
 
 impl<'t> TypeKind<'t> {

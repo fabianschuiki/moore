@@ -359,6 +359,11 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         self.intern_type(TypeKind::Int(width, ty::Domain::FourValued))
     }
 
+    /// Make a struct type.
+    fn mkty_struct(&self, def_id: NodeId) -> Type<'gcx> {
+        self.intern_type(TypeKind::Struct(def_id))
+    }
+
     /// Internalize a parameter environment.
     fn intern_param_env(&self, env: ParamEnvData<'gcx>) -> ParamEnv {
         if let Some(&x) = self.tables().interned_param_envs.borrow().get(&env) {
