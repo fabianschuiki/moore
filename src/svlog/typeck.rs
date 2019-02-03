@@ -187,7 +187,10 @@ fn map_type_kind<'gcx>(
             match **inner {
                 hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_int(size)),
                 hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_integer(size)),
-                _ => unimplemented!("wrapping type {:?} in packed array of size {}", inner, size),
+                _ => {
+                    let inner_ty = map_type_kind(cx, node_id, env, root, inner)?;
+                    Ok(cx.mkty_packed_array(size, inner_ty))
+                }
             }
         }
         // We should never request mapping of an implicit type. Rather, the

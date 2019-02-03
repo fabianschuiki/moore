@@ -267,5 +267,8 @@ pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) 
         TypeKind::Struct(_) => {
             unimplemented!("create a struct value and fill in defaults for each field")
         }
+        TypeKind::PackedArray(..) => {
+            unimplemented!("create a packed array value and fill in defaults for each element")
+        }
     }
 }

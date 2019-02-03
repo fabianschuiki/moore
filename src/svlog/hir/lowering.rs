@@ -546,7 +546,7 @@ fn lower_type<'gcx>(
             return cx.unimp_msg("lowering of", ty);
         }
     };
-    for dim in &ty.dims {
+    for dim in ty.dims.iter().rev() {
         match *dim {
             ast::TypeDim::Range(ref lhs, ref rhs) => {
                 kind = hir::TypeKind::PackedArray(

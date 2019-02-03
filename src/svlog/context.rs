@@ -364,6 +364,11 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         self.intern_type(TypeKind::Struct(def_id))
     }
 
+    /// Make a packed array type.
+    fn mkty_packed_array(&self, size: usize, elem_ty: Type<'gcx>) -> Type<'gcx> {
+        self.intern_type(TypeKind::PackedArray(size, elem_ty))
+    }
+
     /// Internalize a parameter environment.
     fn intern_param_env(&self, env: ParamEnvData<'gcx>) -> ParamEnv {
         if let Some(&x) = self.tables().interned_param_envs.borrow().get(&env) {

@@ -26,6 +26,8 @@ pub enum TypeKind<'t> {
     Named(Spanned<Name>, NodeId, Type<'t>),
     /// A struct type.
     Struct(NodeId),
+    /// A packed array type.
+    PackedArray(usize, Type<'t>),
 }
 
 impl<'t> TypeKind<'t> {

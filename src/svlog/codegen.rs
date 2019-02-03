@@ -482,6 +482,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
                 llhd::struct_ty(types)
             }
+            TypeKind::PackedArray(size, ty) => llhd::vector_ty(size, self.emit_type(ty, env)?),
             _ => unimplemented!("emit type {:?}", ty),
         })
     }
