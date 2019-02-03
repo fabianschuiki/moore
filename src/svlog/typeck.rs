@@ -1,6 +1,9 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
-use crate::{crate_prelude::*, hir::HirNode, ty::Type, ParamEnv, ParamEnvBinding};
+use crate::{
+    crate_prelude::*, hir::HirNode, ty::Type, value::ValueKind, ParamEnv, ParamEnvBinding,
+};
+use num::traits::{cast::ToPrimitive, sign::Signed};
 
 /// Determine the type of a node.
 pub(crate) fn type_of<'gcx>(
@@ -152,6 +155,41 @@ fn map_type_kind<'gcx>(
             Ok(cx.mkty_named(name, (binding, env)))
         }
         hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
+        hir::TypeKind::PackedArray(ref inner, lhs, rhs) => {
+            let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
+                match cx.constant_value_of(bound, env)?.kind {
+                    ValueKind::Int(ref int) => Ok(int),
+                    _ => {
+                        let span = cx.span(bound);
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "array bound `{}` is not an integer",
+                                span.extract()
+                            ))
+                            .span(span),
+                        );
+                        return Err(());
+                    }
+                }
+            };
+            let size: num::BigInt = (map_bound(lhs)? - map_bound(rhs)?).abs();
+            let size = match size.to_usize() {
+                Some(i) => i + 1,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("{} is too large", kind.desc_full()))
+                            .span(root.human_span())
+                            .add_note(format!("array would contain {} elements", size)),
+                    );
+                    return Err(());
+                }
+            };
+            match **inner {
+                hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_int(size)),
+                hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_integer(size)),
+                _ => unimplemented!("wrapping type {:?} in packed array of size {}", inner, size),
+            }
+        }
         // We should never request mapping of an implicit type. Rather, the
         // actual type should be mapped. Arriving here is a bug in the
         // calling function.

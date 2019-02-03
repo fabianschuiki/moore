@@ -22,3 +22,14 @@ module A;
 		} c;
 	} c2;
 endmodule
+
+//@ elab A
+//| entity @A () () {
+//|     %a0 = sig i1
+//|     %a1 = sig i32
+//|     %a2 = sig i42
+//|     %b0 = sig i1
+//|     %b1 = sig i32
+//|     %b2 = sig i42
+//|     %c2 = sig {i1, i32, {i1, i32}}
+//| }
