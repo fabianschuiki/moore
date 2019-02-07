@@ -170,3 +170,18 @@ endmodule
 //|     drv %2 %1
 //|     %k = inst @K (%2) (%b)
 //| }
+
+module N1;
+	int a, b;
+	K k(.a, .b);
+endmodule
+
+module N2;
+	int a, b;
+	K k(.*);
+endmodule
+
+module N3;
+	int a, b;
+	K k(a, .b());
+endmodule
