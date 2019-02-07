@@ -573,6 +573,8 @@ pub enum ExprKind {
     Field(NodeId, Spanned<Name>),
     /// An index access such as `a[b]` or `a[b:c]`.
     Index(NodeId, IndexMode),
+    /// A builtin function call such as `$clog2(x)`.
+    Builtin(BuiltinCall),
 }
 
 /// The different unary operators.
@@ -693,6 +695,13 @@ pub enum IndexMode {
     One(NodeId),
     /// A slice of values such as `[a:b]`, `[a+:b]`, or `[a-:b]`.
     Many(ast::RangeMode, NodeId, NodeId),
+}
+
+/// The different builtin function calls that are supported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinCall {
+    /// A call to the ceil-log2 function `$clog2(x)`.
+    Clog2(NodeId),
 }
 
 /// A variable declaration.

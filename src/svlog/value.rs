@@ -194,6 +194,14 @@ fn const_expr<'gcx>(
                 }
             }
         }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
+            let arg_val = cx.constant_value_of(arg, env)?;
+            let arg_int = match arg_val.kind {
+                ValueKind::Int(ref arg) => arg,
+                _ => unreachable!(),
+            };
+            Ok(cx.intern_value(make_int(arg_val.ty, arg_int.bits().into())))
+        }
         _ => cx.unimp_msg("constant value computation of", expr),
     }
 }

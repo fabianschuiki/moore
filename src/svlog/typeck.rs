@@ -83,6 +83,7 @@ pub(crate) fn type_of<'gcx>(
                     hir::IndexMode::Many(..) => Ok(target_ty),
                 }
             }
+            hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_)) => Ok(cx.mkty_int(32)),
             _ => {
                 error!("{:#?}", hir);
                 cx.unimp_msg("type analysis of", &hir)

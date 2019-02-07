@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for struct types.
 - Support for packed arrays.
 - Support for the `*`, `/`, `%`, `<<`, `<<<`, `>>`, and `>>>` operators.
+- Support for the `$clog2` builtin function.
 
 ### Fixed
 - Fix blocking assignments, making them actually block.

@@ -156,6 +156,9 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
                 }
             }
         }
+        ExprKind::Builtin(BuiltinCall::Clog2(arg)) => {
+            visitor.visit_node_with_id(arg, false);
+        }
     }
 }
 

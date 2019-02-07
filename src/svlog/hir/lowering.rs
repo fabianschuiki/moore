@@ -75,8 +75,8 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     ast::PortConnKind::Named(name, ref mode) => {
                         is_pos = false;
                         let value_id = match *mode {
-                            ast::PortConnMode::Auto => unimplemented!(),
-                            ast::PortConnMode::Unconnected => unimplemented!(),
+                            ast::PortConnMode::Auto => unimplemented!("auto-connected ports"),
+                            ast::PortConnMode::Unconnected => unimplemented!("unconnected ports"),
                             ast::PortConnMode::Connected(ref expr) => {
                                 cx.map_ast_with_parent(AstNode::Expr(expr), node_id)
                             }
@@ -705,6 +705,28 @@ fn lower_expr<'gcx>(
             };
             hir::ExprKind::Index(indexee, mode)
         }
+        ast::CallExpr(ref callee, ref args) => match callee.data {
+            ast::SysIdentExpr(ident) if &*ident.name.as_str() == "clog2" => {
+                let arg = match args.as_slice() {
+                    [ast::CallArg {
+                        expr: Some(ref arg),
+                        ..
+                    }] => cx.map_ast_with_parent(AstNode::Expr(arg), parent),
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error("`$clog2` takes one argument")
+                                .span(expr.human_span()),
+                        );
+                        return Err(());
+                    }
+                };
+                hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg))
+            }
+            _ => {
+                error!("{:#?}", callee);
+                return cx.unimp_msg("lowering of call to", callee.as_ref());
+            }
+        },
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);
