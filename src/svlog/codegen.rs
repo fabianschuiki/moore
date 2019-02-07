@@ -896,16 +896,15 @@ where
             hir::ExprKind::Field(target_id, _) => {
                 let (_, index, _) = self.resolve_field_access(expr_id, env)?;
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-                unimplemented!(
-                    "llhd extract instruction for field {} of target {:?}",
-                    index,
-                    target
-                );
-                // let llty = self.emit_type(ty, env)?;
-                // (
-                //     self.emit_nameless_inst(llhd::ExtractInst(llty, target, index)),
-                //     Mode::Value,
-                // )
+                (
+                    self.emit_nameless_inst(llhd::ExtractInst(
+                        self.llhd_type(&target),
+                        target,
+                        llhd::SliceMode::Element(index),
+                    ))
+                    .into(),
+                    Mode::Value,
+                )
             }
             hir::ExprKind::Index(target_id, mode) => {
                 let ty = self.type_of(target_id, env)?;
@@ -1267,7 +1266,7 @@ where
                         let var: llhd::ValueRef = self
                             .emit_named_inst("loop_count", llhd::VariableInst(lty.clone()))
                             .into();
-                        self.emit_nameless_inst(llhd::StoreInst(lty, count, var.clone()));
+                        self.emit_nameless_inst(llhd::StoreInst(lty, var.clone(), count));
                         Some((var, ty))
                     }
                     hir::LoopKind::While(_) => None,
@@ -1336,7 +1335,7 @@ where
                                 one,
                             ))
                             .into();
-                        self.emit_nameless_inst(llhd::StoreInst(lty, value, repeat_var));
+                        self.emit_nameless_inst(llhd::StoreInst(lty, repeat_var, value));
                         None
                     }
                     hir::LoopKind::While(_) => None,
@@ -1376,7 +1375,7 @@ where
         if let Some(expr) = hir.init {
             let k = self.constant_value_of(expr, env)?;
             let k = self.emit_const(k)?;
-            self.emit_nameless_inst(llhd::StoreInst(ty, k.into(), id.into()));
+            self.emit_nameless_inst(llhd::StoreInst(ty, id.into(), k.into()));
         }
         Ok(())
     }
@@ -1505,7 +1504,7 @@ where
                 self.append_to_block(blk);
             }
             llhd::PointerType(..) => {
-                self.emit_nameless_inst(llhd::StoreInst(rty, rvalue, lvalue));
+                self.emit_nameless_inst(llhd::StoreInst(rty, lvalue, rvalue));
             }
             ref t => panic!("value of type `{}` cannot be driven", t),
         }
