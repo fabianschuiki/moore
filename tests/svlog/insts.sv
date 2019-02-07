@@ -132,32 +132,32 @@ endmodule
 ///  Port assignments  ///
 //////////////////////////
 
-module K;
+module K (input int a, output int b);
+endmodule
+
+module L;
 	int a, b;
-	L l0(a, b);
+	K k(a, b);
 endmodule
 
-module L (input int a, output int b);
-endmodule
-
-module M;
-	int a, b;
-	L l0(a + 2, b);
-endmodule
-
-//@ elab K
-//| entity @L (i32$ %a) (i32$ %b) {
+//@ elab L
+//| entity @K (i32$ %a) (i32$ %b) {
 //|     drv %b 0
 //| }
 //|
-//| entity @K () () {
+//| entity @L () () {
 //|     %a = sig i32
 //|     %b = sig i32
-//|     %l0 = inst @L (%a) (%b)
+//|     %k = inst @K (%a) (%b)
 //| }
 
+module M;
+	int a, b;
+	K k(a + 2, b);
+endmodule
+
 //@ elab M
-//| entity @L (i32$ %a) (i32$ %b) {
+//| entity @K (i32$ %a) (i32$ %b) {
 //|     drv %b 0
 //| }
 //|
@@ -168,5 +168,5 @@ endmodule
 //|     %1 = add i32 %0 2
 //|     %2 = sig i32
 //|     drv %2 %1
-//|     %l0 = inst @L (%2) (%b)
+//|     %k = inst @K (%2) (%b)
 //| }
