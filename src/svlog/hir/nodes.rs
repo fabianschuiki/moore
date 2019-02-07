@@ -612,6 +612,12 @@ pub enum BinaryOp {
     Add,
     /// The subtraction operator `x - y`.
     Sub,
+    /// The multiplication operator `x * y`.
+    Mul,
+    /// The division operator `x / y`.
+    Div,
+    /// The modulus operator `x % y`.
+    Mod,
     /// The equality operator `x == y`.
     Eq,
     /// The inequality operator `x != y`.
@@ -640,6 +646,14 @@ pub enum BinaryOp {
     BitXor,
     /// The bitwise exclusive-not-or operator `x ^~ y` or `x ~^ y`.
     BitXnor,
+    /// The logic left shift operator `x << y`.
+    LogicShL,
+    /// The logic right shift operator `x >> y`.
+    LogicShR,
+    /// The arithmetic left shift operator `x <<< y`.
+    ArithShL,
+    /// The arithmetic right shift operator `x >>> y`.
+    ArithShR,
 }
 
 impl HasDesc for BinaryOp {
@@ -647,6 +661,9 @@ impl HasDesc for BinaryOp {
         match *self {
             BinaryOp::Add => "`+` operator",
             BinaryOp::Sub => "`-` operator",
+            BinaryOp::Mul => "`*` operator",
+            BinaryOp::Div => "`/` operator",
+            BinaryOp::Mod => "`%` operator",
             BinaryOp::Eq => "`==` operator",
             BinaryOp::Neq => "`!=` operator",
             BinaryOp::Lt => "`<` operator",
@@ -661,6 +678,10 @@ impl HasDesc for BinaryOp {
             BinaryOp::BitNor => "`~|` operator",
             BinaryOp::BitXor => "`^` operator",
             BinaryOp::BitXnor => "`~^` operator",
+            BinaryOp::LogicShL => "`<<` operator",
+            BinaryOp::LogicShR => "`>>` operator",
+            BinaryOp::ArithShL => "`<<<` operator",
+            BinaryOp::ArithShR => "`>>>` operator",
         }
     }
 }

@@ -839,6 +839,9 @@ where
                 let inst = match op {
                     hir::BinaryOp::Add => llhd::BinaryInst(llhd::BinaryOp::Add, ty, lhs, rhs),
                     hir::BinaryOp::Sub => llhd::BinaryInst(llhd::BinaryOp::Sub, ty, lhs, rhs),
+                    hir::BinaryOp::Mul => llhd::BinaryInst(llhd::BinaryOp::Mul, ty, lhs, rhs),
+                    hir::BinaryOp::Div => llhd::BinaryInst(llhd::BinaryOp::Div, ty, lhs, rhs),
+                    hir::BinaryOp::Mod => llhd::BinaryInst(llhd::BinaryOp::Mod, ty, lhs, rhs),
                     hir::BinaryOp::Eq => llhd::CompareInst(llhd::CompareOp::Eq, ty, lhs, rhs),
                     hir::BinaryOp::Neq => llhd::CompareInst(llhd::CompareOp::Neq, ty, lhs, rhs),
                     hir::BinaryOp::Lt => llhd::CompareInst(llhd::CompareOp::Ult, ty, lhs, rhs),
@@ -879,7 +882,14 @@ where
                         ));
                         llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
                     }
-                    _ => return self.unimp_msg("code generation for", hir),
+                    hir::BinaryOp::LogicShL => llhd::BinaryInst(llhd::BinaryOp::Shl, ty, lhs, rhs),
+                    hir::BinaryOp::LogicShR => llhd::BinaryInst(llhd::BinaryOp::Shr, ty, lhs, rhs),
+                    hir::BinaryOp::ArithShL => llhd::BinaryInst(llhd::BinaryOp::Shl, ty, lhs, rhs),
+                    hir::BinaryOp::ArithShR => llhd::BinaryInst(llhd::BinaryOp::Shr, ty, lhs, rhs),
+                    _ => {
+                        error!("{:#?}", hir);
+                        return self.unimp_msg("code generation for", hir);
+                    }
                 };
                 (self.emit_nameless_inst(inst).into(), Mode::Value)
             }

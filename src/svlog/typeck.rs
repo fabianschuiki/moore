@@ -35,7 +35,15 @@ pub(crate) fn type_of<'gcx>(
                 let lhs_ty = cx.type_of(lhs, env)?;
                 let _rhs_ty = cx.type_of(rhs, env)?;
                 Ok(match op {
-                    hir::BinaryOp::Add | hir::BinaryOp::Sub => lhs_ty,
+                    hir::BinaryOp::Add
+                    | hir::BinaryOp::Sub
+                    | hir::BinaryOp::Mul
+                    | hir::BinaryOp::Div
+                    | hir::BinaryOp::Mod
+                    | hir::BinaryOp::LogicShL
+                    | hir::BinaryOp::LogicShR
+                    | hir::BinaryOp::ArithShL
+                    | hir::BinaryOp::ArithShR => lhs_ty,
                     hir::BinaryOp::Eq
                     | hir::BinaryOp::Neq
                     | hir::BinaryOp::Lt

@@ -17,7 +17,7 @@ use crate::{
     ty::{Type, TypeKind},
     ParamEnv, ParamEnvBinding,
 };
-use num::{BigInt, BigRational, One, Zero};
+use num::{BigInt, BigRational, One, ToPrimitive, Zero};
 
 /// A verilog value.
 pub type Value<'t> = &'t ValueData<'t>;
@@ -233,12 +233,25 @@ fn const_binary_op_on_int<'gcx>(
     Ok(match op {
         hir::BinaryOp::Add => lhs + rhs,
         hir::BinaryOp::Sub => lhs - rhs,
+        hir::BinaryOp::Mul => lhs * rhs,
+        hir::BinaryOp::Div => lhs / rhs,
+        hir::BinaryOp::Mod => lhs % rhs,
         hir::BinaryOp::Eq => ((lhs == rhs) as usize).into(),
         hir::BinaryOp::Neq => ((lhs != rhs) as usize).into(),
         hir::BinaryOp::Lt => ((lhs < rhs) as usize).into(),
         hir::BinaryOp::Leq => ((lhs <= rhs) as usize).into(),
         hir::BinaryOp::Gt => ((lhs > rhs) as usize).into(),
         hir::BinaryOp::Geq => ((lhs >= rhs) as usize).into(),
+        hir::BinaryOp::LogicShL | hir::BinaryOp::ArithShL => match rhs.to_isize() {
+            Some(sh) if sh < 0 => lhs >> -sh as usize,
+            Some(sh) => lhs << sh as usize,
+            None => num::zero(),
+        },
+        hir::BinaryOp::LogicShR | hir::BinaryOp::ArithShR => match rhs.to_isize() {
+            Some(sh) if sh < 0 => lhs << -sh as usize,
+            Some(sh) => lhs >> sh as usize,
+            None => num::zero(),
+        },
         _ => {
             cx.emit(
                 DiagBuilder2::error(format!(

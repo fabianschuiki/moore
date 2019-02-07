@@ -9,6 +9,13 @@ module A #(int a = 42, int b = 19);
 	B #(a < b) b8();
 	B #(!a) b9();
 	B #(~a) b10();
+	B #(a * b) b11();
+	B #(a / b) b12();
+	B #(a % b) b13();
+	B #(a << b) b14();
+	B #(a <<< b) b15();
+	B #(a >> b) b16();
+	B #(a >>> b) b17();
 endmodule
 
 module B #(int K);
@@ -56,6 +63,34 @@ endmodule
 //|     %x = sig i32 4294967253
 //| }
 //|
+//| entity @B.param11 () () {
+//|     %x = sig i32 798
+//| }
+//|
+//| entity @B.param12 () () {
+//|     %x = sig i32 2
+//| }
+//|
+//| entity @B.param13 () () {
+//|     %x = sig i32 4
+//| }
+//|
+//| entity @B.param14 () () {
+//|     %x = sig i32 22020096
+//| }
+//|
+//| entity @B.param15 () () {
+//|     %x = sig i32 22020096
+//| }
+//|
+//| entity @B.param16 () () {
+//|     %x = sig i32 0
+//| }
+//|
+//| entity @B.param17 () () {
+//|     %x = sig i32 0
+//| }
+//|
 //| entity @A () () {
 //|     %b1 = inst @B.param1 () ()
 //|     %b2 = inst @B.param2 () ()
@@ -67,4 +102,11 @@ endmodule
 //|     %b8 = inst @B.param8 () ()
 //|     %b9 = inst @B.param9 () ()
 //|     %b10 = inst @B.param10 () ()
+//|     %b11 = inst @B.param11 () ()
+//|     %b12 = inst @B.param12 () ()
+//|     %b13 = inst @B.param13 () ()
+//|     %b14 = inst @B.param14 () ()
+//|     %b15 = inst @B.param15 () ()
+//|     %b16 = inst @B.param16 () ()
+//|     %b17 = inst @B.param17 () ()
 //| }
