@@ -893,48 +893,8 @@ where
                 };
                 (self.emit_nameless_inst(inst).into(), Mode::Value)
             }
-            hir::ExprKind::Field(target_id, name) => {
-                let ty = self.type_of(target_id, env)?;
-                let struct_def = match ty {
-                    &TypeKind::Struct(id) => id,
-                    &TypeKind::Named(_, _, &TypeKind::Struct(id)) => id,
-                    _ => {
-                        let hir = self.hir_of(target_id)?;
-                        self.emit(
-                            DiagBuilder2::error(format!("{} is not a struct", hir.desc_full()))
-                                .span(hir.human_span()),
-                        );
-                        return Err(());
-                    }
-                };
-                let struct_fields = match self.hir_of(struct_def)? {
-                    HirNode::Type(hir::Type {
-                        kind: hir::TypeKind::Struct(ref fields),
-                        ..
-                    }) => fields,
-                    _ => unreachable!(),
-                };
-                let index = struct_fields.iter().position(|&id| match self.hir_of(id) {
-                    Ok(HirNode::VarDecl(vd)) => vd.name.value == name.value,
-                    _ => false,
-                });
-                let index = match index {
-                    Some(x) => x,
-                    None => {
-                        let hir = self.hir_of(target_id)?;
-                        self.emit(
-                            DiagBuilder2::error(format!(
-                                "{} has no field `{}`",
-                                hir.desc_full(),
-                                name
-                            ))
-                            .span(name.span())
-                            .add_note(format!("{} is a struct defined here:", hir.desc_full()))
-                            .span(self.span(struct_def)),
-                        );
-                        return Err(());
-                    }
-                };
+            hir::ExprKind::Field(target_id, _) => {
+                let (_, index, _) = self.resolve_field_access(expr_id, env)?;
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
                 unimplemented!(
                     "llhd extract instruction for field {} of target {:?}",

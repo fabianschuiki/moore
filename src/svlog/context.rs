@@ -567,6 +567,16 @@ pub(super) mod queries {
                 type PortMappingQuery;
                 use fn port_mapping::compute;
             }
+
+            /// Resolve the field name in a field access expression.
+            ///
+            /// Returns the node id of the corresponding struct definition, the
+            /// index of the field that is actually being accessed, and the node
+            /// id of the field definition.
+            fn resolve_field_access(node_id: NodeId, env: ParamEnv) -> Result<(NodeId, usize, NodeId)> {
+                type ResolveFieldAccessQuery;
+                use fn resolver::resolve_field_access;
+            }
         }
     }
 
@@ -585,6 +595,7 @@ pub(super) mod queries {
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn accessed_nodes() for AccessedNodesQuery<'gcx>;
                 fn port_mapping() for PortMappingQuery<'gcx>;
+                fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
             }
         }
     }

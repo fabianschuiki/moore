@@ -1,7 +1,11 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
 use crate::{
-    crate_prelude::*, hir::HirNode, ty::Type, value::ValueKind, ParamEnv, ParamEnvBinding,
+    crate_prelude::*,
+    hir::HirNode,
+    ty::{Type, TypeKind},
+    value::ValueKind,
+    ParamEnv, ParamEnvBinding,
 };
 use num::traits::{cast::ToPrimitive, sign::Signed};
 
@@ -55,7 +59,34 @@ pub(crate) fn type_of<'gcx>(
                     _ => return cx.unimp_msg("type analysis of", &hir),
                 })
             }
-            _ => cx.unimp_msg("type analysis of", &hir),
+            hir::ExprKind::Field(..) => {
+                let (_, _, field_id) = cx.resolve_field_access(node_id, env)?;
+                cx.type_of(field_id, env)
+            }
+            hir::ExprKind::Index(target, mode) => {
+                let target_ty = cx.type_of(target, env)?;
+                match mode {
+                    hir::IndexMode::One(..) => match *target_ty {
+                        TypeKind::PackedArray(_, ty) => Ok(ty),
+                        _ => {
+                            let hir = cx.hir_of(target)?;
+                            cx.emit(
+                                DiagBuilder2::error(format!(
+                                    "{} cannot be indexed into",
+                                    hir.desc_full()
+                                ))
+                                .span(hir.human_span()),
+                            );
+                            Err(())
+                        }
+                    },
+                    hir::IndexMode::Many(..) => Ok(target_ty),
+                }
+            }
+            _ => {
+                error!("{:#?}", hir);
+                cx.unimp_msg("type analysis of", &hir)
+            }
         },
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {

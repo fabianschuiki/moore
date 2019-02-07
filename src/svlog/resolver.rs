@@ -5,7 +5,7 @@
 //! This module implements the infrastructure to describe scopes and resolve
 //! names in them.
 
-use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode, ParamEnv};
+use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode, ty::TypeKind, ParamEnv};
 use std::collections::HashMap;
 
 /// One local scope.
@@ -157,4 +157,58 @@ pub(crate) fn resolve_node<'gcx>(
         _ => (),
     }
     panic!("cannot resolve {:?}", hir)
+}
+
+/// Resolve the field name in a field access expression.
+pub(crate) fn resolve_field_access<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Result<(NodeId, usize, NodeId)> {
+    let hir = match cx.hir_of(node_id)? {
+        HirNode::Expr(x) => x,
+        _ => unreachable!(),
+    };
+    let (target_id, name) = match hir.kind {
+        hir::ExprKind::Field(target_id, name) => (target_id, name),
+        _ => unreachable!(),
+    };
+    let ty = cx.type_of(target_id, env)?;
+    let struct_def = match ty {
+        &TypeKind::Struct(id) => id,
+        &TypeKind::Named(_, _, &TypeKind::Struct(id)) => id,
+        _ => {
+            let hir = cx.hir_of(target_id)?;
+            cx.emit(
+                DiagBuilder2::error(format!("{} is not a struct", hir.desc_full()))
+                    .span(hir.human_span()),
+            );
+            return Err(());
+        }
+    };
+    let struct_fields = match cx.hir_of(struct_def)? {
+        HirNode::Type(hir::Type {
+            kind: hir::TypeKind::Struct(ref fields),
+            ..
+        }) => fields,
+        _ => unreachable!(),
+    };
+    let index = struct_fields.iter().position(|&id| match cx.hir_of(id) {
+        Ok(HirNode::VarDecl(vd)) => vd.name.value == name.value,
+        _ => false,
+    });
+    let index = match index {
+        Some(x) => x,
+        None => {
+            let hir = cx.hir_of(target_id)?;
+            cx.emit(
+                DiagBuilder2::error(format!("{} has no field `{}`", hir.desc_full(), name))
+                    .span(name.span())
+                    .add_note(format!("{} is a struct defined here:", hir.desc_full()))
+                    .span(cx.span(struct_def)),
+            );
+            return Err(());
+        }
+    };
+    Ok((struct_def, index, struct_fields[index]))
 }
