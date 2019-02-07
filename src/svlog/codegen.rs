@@ -929,16 +929,15 @@ where
                 match mode {
                     hir::IndexMode::One(index) => {
                         let index_int = map_int(index)?.to_usize().unwrap();
-                        unimplemented!(
-                            "single element index at {:?} for target {:?}",
-                            index_int,
-                            target
-                        );
-                        // (
-                        //     self.emit_nameless_inst(llhd::ExtractInst(llty, target, index_int))
-                        //         .into(),
-                        //     Mode::Value,
-                        // )
+                        (
+                            self.emit_nameless_inst(llhd::ExtractInst(
+                                self.llhd_type(&target),
+                                target,
+                                llhd::SliceMode::Element(index_int),
+                            ))
+                            .into(),
+                            Mode::Value,
+                        )
                     }
                     hir::IndexMode::Many(many_mode, lhs, rhs) => {
                         let lhs_int = map_int(lhs)?;
@@ -952,18 +951,15 @@ where
                             ast::RangeMode::RelativeDown => (lhs_int - rhs_int, rhs_int.clone()),
                         };
                         let (base, length) = (base.to_usize().unwrap(), length.to_usize().unwrap());
-                        unimplemented!(
-                            "multiple elements {:?} base {} length {} for target {:?}",
-                            many_mode,
-                            base,
-                            length,
-                            target
-                        );
-                        // (
-                        //     self.emit_nameless_inst(llhd::ExtractInst(llty, target, base, length))
-                        //         .into(),
-                        //     Mode::Value,
-                        // )
+                        (
+                            self.emit_nameless_inst(llhd::ExtractInst(
+                                self.llhd_type(&target),
+                                target,
+                                llhd::SliceMode::Slice(base, length),
+                            ))
+                            .into(),
+                            Mode::Value,
+                        )
                     }
                 }
             }
