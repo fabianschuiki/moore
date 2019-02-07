@@ -19,17 +19,17 @@ pub trait Codegen<I, C> {
 /// This macro implements the `Codegen` trait for a specific combination of
 /// identifier and context types.
 macro_rules! impl_codegen {
-	($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &mut $ctx_ty:ty => $blk:block) => {
-		impl<'lazy, 'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
-		}
-	};
+    ($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &mut $ctx_ty:ty => $blk:block) => {
+        impl<'lazy, 'sb, 'ast, 'ctx> Codegen<$id_ty, $ctx_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+            fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
+        }
+    };
 
-	($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &$ctx_lt:tt mut $ctx_ty:ty => $blk:block) => {
-		impl<'lazy, 'sb, 'ast, 'ctx, $ctx_lt> Codegen<$id_ty, $ctx_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-			fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
-		}
-	}
+    ($slf:tt, $id:ident: $id_ty:ty, $ctx:ident: &$ctx_lt:tt mut $ctx_ty:ty => $blk:block) => {
+        impl<'lazy, 'sb, 'ast, 'ctx, $ctx_lt> Codegen<$id_ty, $ctx_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+            fn codegen(&$slf, $id: $id_ty, $ctx: &mut $ctx_ty) -> Result<()> $blk
+        }
+    }
 }
 
 macro_rules! unimp {
@@ -97,9 +97,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                                             Some(l) => l,
                                             None => {
                                                 self.emit(
-												DiagBuilder2::error(format!("array index `{}` is too large; {} elements", ty, l))
-												// TODO: What span should we use here?
-											);
+                                                DiagBuilder2::error(format!("array index `{}` is too large; {} elements", ty, l))
+                                                // TODO: What span should we use here?
+                                            );
                                                 return Err(());
                                             }
                                         }
@@ -120,7 +120,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                                         return Err(());
                                     }
                                 };
-                            llty = llhd::vector_ty(num, llty);
+                            llty = llhd::array_ty(num, llty);
                         }
                     }
                 }
@@ -164,174 +164,174 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 }
 
 impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
-	match id {
-		DeclInBlockRef::Subprog(id)     => self.codegen(id, &mut ()),
-		DeclInBlockRef::SubprogBody(id) => self.codegen(id, &mut ()),
-		DeclInBlockRef::SubprogInst(id) => self.codegen(id, &mut ()),
-		DeclInBlockRef::Pkg(id)         => self.codegen(id, &mut ()),
-		DeclInBlockRef::PkgBody(id)     => self.codegen(id, &mut ()),
-		DeclInBlockRef::PkgInst(id)     => self.codegen(id, &mut ()),
-		DeclInBlockRef::Type(_id)       => Ok(()),
-		DeclInBlockRef::Subtype(_id)    => Ok(()),
-		DeclInBlockRef::Const(id)       => self.codegen(id, ctx),
-		DeclInBlockRef::Signal(id)      => self.codegen(id, ctx),
-		DeclInBlockRef::Var(id)         => self.codegen(id, ctx),
-		DeclInBlockRef::File(id)        => self.codegen(id, ctx),
-		DeclInBlockRef::Alias(_id)      => Ok(()),
-		DeclInBlockRef::Comp(id)        => self.codegen(id, &mut ()),
-		DeclInBlockRef::Attr(_id)       => Ok(()),
-		DeclInBlockRef::AttrSpec(_id)   => Ok(()),
-		DeclInBlockRef::CfgSpec(_id)    => Ok(()),
-		DeclInBlockRef::Discon(_id)     => Ok(()),
-		DeclInBlockRef::GroupTemp(_id)  => Ok(()),
-		DeclInBlockRef::Group(_id)      => Ok(()),
-	}
+    match id {
+        DeclInBlockRef::Subprog(id)     => self.codegen(id, &mut ()),
+        DeclInBlockRef::SubprogBody(id) => self.codegen(id, &mut ()),
+        DeclInBlockRef::SubprogInst(id) => self.codegen(id, &mut ()),
+        DeclInBlockRef::Pkg(id)         => self.codegen(id, &mut ()),
+        DeclInBlockRef::PkgBody(id)     => self.codegen(id, &mut ()),
+        DeclInBlockRef::PkgInst(id)     => self.codegen(id, &mut ()),
+        DeclInBlockRef::Type(_id)       => Ok(()),
+        DeclInBlockRef::Subtype(_id)    => Ok(()),
+        DeclInBlockRef::Const(id)       => self.codegen(id, ctx),
+        DeclInBlockRef::Signal(id)      => self.codegen(id, ctx),
+        DeclInBlockRef::Var(id)         => self.codegen(id, ctx),
+        DeclInBlockRef::File(id)        => self.codegen(id, ctx),
+        DeclInBlockRef::Alias(_id)      => Ok(()),
+        DeclInBlockRef::Comp(id)        => self.codegen(id, &mut ()),
+        DeclInBlockRef::Attr(_id)       => Ok(()),
+        DeclInBlockRef::AttrSpec(_id)   => Ok(()),
+        DeclInBlockRef::CfgSpec(_id)    => Ok(()),
+        DeclInBlockRef::Discon(_id)     => Ok(()),
+        DeclInBlockRef::GroupTemp(_id)  => Ok(()),
+        DeclInBlockRef::Group(_id)      => Ok(()),
+    }
 });
 
 impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: VarDeclRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
-	// Determine the type of the signal.
-	let hir = self.lazy_hir(id)?;
-	let ty = self.lazy_typeval(id)?;
+    // Determine the type of the signal.
+    let hir = self.lazy_hir(id)?;
+    let ty = self.lazy_typeval(id)?;
 
-	// Calculate the initial value for the signal, either from the provided
-	// expression or implicitly.
-	let init = if let Some(init_id) = hir.decl.init {
-		self.const_value(init_id)?
-	} else {
-		self.default_value_for_type(&ty)?
-	};
+    // Calculate the initial value for the signal, either from the provided
+    // expression or implicitly.
+    let init = if let Some(init_id) = hir.decl.init {
+        self.const_value(init_id)?
+    } else {
+        self.default_value_for_type(&ty)?
+    };
 
-	debugln!("signal {:?}, type {:?}, init {:?}", id, ty, init);
-	// Create the signal instance.
-	let inst = llhd::Inst::new(
-		Some(hir.name.value.into()),
-		llhd::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
-	);
-	ctx.add_inst(inst, llhd::InstPosition::End);
-	Ok(())
+    debugln!("signal {:?}, type {:?}, init {:?}", id, ty, init);
+    // Create the signal instance.
+    let inst = llhd::Inst::new(
+        Some(hir.name.value.into()),
+        llhd::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
+    );
+    ctx.add_inst(inst, llhd::InstPosition::End);
+    Ok(())
 });
 
 impl_codegen!(self, id: FileDeclRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: ConcStmtRef, ctx: &mut llhd::Entity => {
-	match id {
-		ConcStmtRef::Block(id)         => self.codegen(id, ctx),
-		ConcStmtRef::Process(id)       => self.codegen(id, ctx),
-		ConcStmtRef::ConcProcCall(id)  => self.codegen(id, ctx),
-		ConcStmtRef::ConcAssert(id)    => self.codegen(id, ctx),
-		ConcStmtRef::ConcSigAssign(id) => self.codegen(id, ctx),
-		ConcStmtRef::CompInst(id)      => self.codegen(id, ctx),
-		ConcStmtRef::ForGen(id)        => self.codegen(id, ctx),
-		ConcStmtRef::IfGen(id)         => self.codegen(id, ctx),
-		ConcStmtRef::CaseGen(id)       => self.codegen(id, ctx),
-	}
+    match id {
+        ConcStmtRef::Block(id)         => self.codegen(id, ctx),
+        ConcStmtRef::Process(id)       => self.codegen(id, ctx),
+        ConcStmtRef::ConcProcCall(id)  => self.codegen(id, ctx),
+        ConcStmtRef::ConcAssert(id)    => self.codegen(id, ctx),
+        ConcStmtRef::ConcSigAssign(id) => self.codegen(id, ctx),
+        ConcStmtRef::CompInst(id)      => self.codegen(id, ctx),
+        ConcStmtRef::ForGen(id)        => self.codegen(id, ctx),
+        ConcStmtRef::IfGen(id)         => self.codegen(id, ctx),
+        ConcStmtRef::CaseGen(id)       => self.codegen(id, ctx),
+    }
 });
 
 impl_codegen!(self, id: BlockStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
-	let hir = self.hir(id)?;
-	let name = match hir.label {
-		Some(n) => format!("{}_{}", ctx.name(), n.value),
-		None => format!("{}_proc", ctx.name()),
-	};
-	debugln!("generating process `{}`", name);
-	// TODO: Check which signals are actually read and written.
-	let ty = llhd::entity_ty(vec![], vec![]);
-	let mut prok = llhd::Process::new(name, ty.clone());
-	// TODO: define the process as a local name
-	// TOOD: codegen declarations
-	// TOOD: codegen statements
-	{
-		let body = prok.body_mut();
-		let entry_blk = body.add_block(llhd::Block::new(Some("entry".into())), llhd::BlockPosition::End);
-		let mut builder = InstBuilder::new(body, entry_blk);
-		for &stmt in &hir.stmts {
-			self.codegen(stmt, &mut builder)?;
-		}
-	}
-	// TODO: codegen wait statements implied by sensitivity list
-	let prok_ref = self.sb.llmod.borrow_mut().add_process(prok);
-	// TODO: wire instantiation with signals in the process' port.
-	ctx.add_inst(
-		llhd::Inst::new(hir.label.map(|l| l.value.into()), llhd::InstKind::InstanceInst(
-			ty, prok_ref.into(), vec![], vec![]
-		)),
-		llhd::InstPosition::End
-	);
-	Ok(())
+    let hir = self.hir(id)?;
+    let name = match hir.label {
+        Some(n) => format!("{}_{}", ctx.name(), n.value),
+        None => format!("{}_proc", ctx.name()),
+    };
+    debugln!("generating process `{}`", name);
+    // TODO: Check which signals are actually read and written.
+    let ty = llhd::entity_ty(vec![], vec![]);
+    let mut prok = llhd::Process::new(name, ty.clone());
+    // TODO: define the process as a local name
+    // TOOD: codegen declarations
+    // TOOD: codegen statements
+    {
+        let body = prok.body_mut();
+        let entry_blk = body.add_block(llhd::Block::new(Some("entry".into())), llhd::BlockPosition::End);
+        let mut builder = InstBuilder::new(body, entry_blk);
+        for &stmt in &hir.stmts {
+            self.codegen(stmt, &mut builder)?;
+        }
+    }
+    // TODO: codegen wait statements implied by sensitivity list
+    let prok_ref = self.sb.llmod.borrow_mut().add_process(prok);
+    // TODO: wire instantiation with signals in the process' port.
+    ctx.add_inst(
+        llhd::Inst::new(hir.label.map(|l| l.value.into()), llhd::InstKind::InstanceInst(
+            ty, prok_ref.into(), vec![], vec![]
+        )),
+        llhd::InstPosition::End
+    );
+    Ok(())
 });
 
 impl_codegen!(self, id: ConcCallStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: ConcAssertStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: ConcSigAssignStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: CompInstStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: ForGenStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: IfGenStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: CaseGenStmtRef, _ctx: &mut llhd::Entity => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: SeqStmtRef, _ctx: &'a mut InstBuilder<'a> => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: SubprogDeclRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: SubprogBodyRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: SubprogInstRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: PkgDeclRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: PkgBodyRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: PkgInstRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 impl_codegen!(self, id: CompDeclRef, _ctx: &mut () => {
-	unimp!(self, id);
+    unimp!(self, id);
 });
 
 /// An helper to build sequences of instructions.

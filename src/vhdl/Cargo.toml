@@ -16,7 +16,7 @@ moore-common = { path = "../common", version = "0.3.0" }
 moore-vhdl-syntax = { path = "syntax", version = "0.3.0" }
 bincode = "0.6"
 lazy_static = "0.2"
-llhd = "0.3"
+llhd = "0.4"
 num = "0.1"
 rustc-serialize = "0.3"
 slog = "2.0.12"

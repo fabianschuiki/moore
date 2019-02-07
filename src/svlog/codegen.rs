@@ -485,7 +485,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
                 llhd::struct_ty(types)
             }
-            TypeKind::PackedArray(size, ty) => llhd::vector_ty(size, self.emit_type(ty, env)?),
+            TypeKind::PackedArray(size, ty) => llhd::array_ty(size, self.emit_type(ty, env)?),
             _ => unimplemented!("emit type {:?}", ty),
         })
     }
@@ -785,7 +785,7 @@ where
                 // need some more cleverness.
                 match (mode, is_signal) {
                     (Mode::Value, true) => {
-                        let ty = ty.as_signal().clone();
+                        let ty = ty.unwrap_signal().clone();
                         (
                             self.emit_nameless_inst(llhd::ProbeInst(ty, value)).into(),
                             Mode::Value,
