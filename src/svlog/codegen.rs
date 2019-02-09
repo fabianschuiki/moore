@@ -784,7 +784,7 @@ where
                 let k = self.constant_value_of(expr_id, env)?;
                 (self.emit_const(k).map(Into::into)?, Mode::Value)
             }
-            hir::ExprKind::Ident(_) => {
+            hir::ExprKind::Ident(name) => {
                 let binding = self.resolve_node(expr_id, env)?;
                 let value = self.emitted_value(binding).clone();
                 let ty = self.llhd_type(&value);
@@ -799,7 +799,8 @@ where
                     (Mode::Value, true) => {
                         let ty = ty.unwrap_signal().clone();
                         (
-                            self.emit_nameless_inst(llhd::ProbeInst(ty, value)).into(),
+                            self.emit_named_inst(format!("{}", name), llhd::ProbeInst(ty, value))
+                                .into(),
                             Mode::Value,
                         )
                     }
@@ -810,7 +811,8 @@ where
                             _ => panic!("not a pointer"),
                         };
                         (
-                            self.emit_nameless_inst(llhd::LoadInst(ty, value)).into(),
+                            self.emit_named_inst(format!("{}", name), llhd::LoadInst(ty, value))
+                                .into(),
                             Mode::Value,
                         )
                     }
