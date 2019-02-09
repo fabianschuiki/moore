@@ -5,8 +5,9 @@ module A;
 			shortint b;
 		} x;
 		int y;
-		// x.a = 42;
 		y = x.a;
 		y = x.b;
+		x.a = 42;
+		x.b = 42;
 	end
 endmodule
