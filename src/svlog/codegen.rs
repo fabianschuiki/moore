@@ -907,15 +907,26 @@ where
                 };
                 (self.emit_nameless_inst(inst).into(), Mode::Value)
             }
-            hir::ExprKind::Field(target_id, _) => {
+            hir::ExprKind::Field(target_id, field_name) => {
                 let (_, index, _) = self.resolve_field_access(expr_id, env)?;
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
                 (
-                    self.emit_nameless_inst(llhd::ExtractInst(
-                        self.llhd_type(&target),
-                        target,
-                        llhd::SliceMode::Element(index),
-                    ))
+                    self.emit_named_inst(
+                        format!(
+                            "{}.{}",
+                            self.with_llhd_context(|ctx| ctx
+                                .try_value(&target)
+                                .and_then(|v| v.name())
+                                .map(String::from))
+                                .unwrap_or_else(|| "struct".into()),
+                            field_name
+                        ),
+                        llhd::ExtractInst(
+                            self.llhd_type(&target),
+                            target,
+                            llhd::SliceMode::Element(index),
+                        ),
+                    )
                     .into(),
                     Mode::Value,
                 )
