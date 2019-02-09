@@ -932,61 +932,8 @@ where
                 )
             }
             hir::ExprKind::Index(target_id, mode) => {
-                let ty = self.type_of(target_id, env)?;
-                let _llty = self.emit_type(ty, env)?;
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-                let map_int = |expr: NodeId| -> Result<&BigInt> {
-                    match self.constant_value_of(expr, env)?.kind {
-                        ValueKind::Int(ref x) => Ok(x),
-                        _ => {
-                            let hir = self.hir_of(expr)?;
-                            self.emit(
-                                DiagBuilder2::error(format!(
-                                    "{} is not a constant integer",
-                                    hir.desc_full()
-                                ))
-                                .span(hir.human_span()),
-                            );
-                            Err(())
-                        }
-                    }
-                };
-                match mode {
-                    hir::IndexMode::One(index) => {
-                        let index_int = map_int(index)?.to_usize().unwrap();
-                        (
-                            self.emit_nameless_inst(llhd::ExtractInst(
-                                self.llhd_type(&target),
-                                target,
-                                llhd::SliceMode::Element(index_int),
-                            ))
-                            .into(),
-                            Mode::Value,
-                        )
-                    }
-                    hir::IndexMode::Many(many_mode, lhs, rhs) => {
-                        let lhs_int = map_int(lhs)?;
-                        let rhs_int = map_int(rhs)?;
-                        let (base, length) = match many_mode {
-                            ast::RangeMode::Absolute => (
-                                std::cmp::min(lhs_int, rhs_int).clone(),
-                                (lhs_int - rhs_int).abs() + BigInt::one(),
-                            ),
-                            ast::RangeMode::RelativeUp => (lhs_int.clone(), rhs_int.clone()),
-                            ast::RangeMode::RelativeDown => (lhs_int - rhs_int, rhs_int.clone()),
-                        };
-                        let (base, length) = (base.to_usize().unwrap(), length.to_usize().unwrap());
-                        (
-                            self.emit_nameless_inst(llhd::ExtractInst(
-                                self.llhd_type(&target),
-                                target,
-                                llhd::SliceMode::Slice(base, length),
-                            ))
-                            .into(),
-                            Mode::Value,
-                        )
-                    }
-                }
+                (self.emit_index_access(target, env, mode)?, Mode::Value)
             }
             _ => return self.unimp_msg("code generation for", hir),
         };
@@ -1044,6 +991,10 @@ where
                 );
                 return Ok(extracted.into());
             }
+            hir::ExprKind::Index(target_id, mode) => {
+                let target = self.emit_lvalue(target_id, env)?;
+                return self.emit_index_access(target, env, mode);
+            }
             _ => (),
         }
         self.emit(
@@ -1087,6 +1038,73 @@ where
                 Err(())
             }
         }
+    }
+
+    /// Emit the code to index into an integer or array.
+    fn emit_index_access(
+        &mut self,
+        target: llhd::ValueRef,
+        env: ParamEnv,
+        mode: hir::IndexMode,
+    ) -> Result<llhd::ValueRef> {
+        let map_int = |expr: NodeId| -> Result<&BigInt> {
+            match self.constant_value_of(expr, env)?.kind {
+                ValueKind::Int(ref x) => Ok(x),
+                _ => {
+                    let hir = self.hir_of(expr)?;
+                    self.emit(
+                        DiagBuilder2::error(format!(
+                            "{} is not a constant integer",
+                            hir.desc_full()
+                        ))
+                        .span(hir.human_span()),
+                    );
+                    Err(())
+                }
+            }
+        };
+        let basename = self
+            .with_llhd_context(|ctx| {
+                ctx.try_value(&target)
+                    .and_then(|v| v.name().map(String::from))
+            })
+            .unwrap_or_else(|| "".into());
+        Ok(match mode {
+            hir::IndexMode::One(index) => {
+                let index_int = map_int(index)?.to_usize().unwrap();
+                self.emit_named_inst(
+                    format!("{}.element", basename),
+                    llhd::ExtractInst(
+                        self.llhd_type(&target),
+                        target,
+                        llhd::SliceMode::Element(index_int),
+                    ),
+                )
+                .into()
+            }
+            hir::IndexMode::Many(many_mode, lhs, rhs) => {
+                let lhs_int = map_int(lhs)?;
+                let rhs_int = map_int(rhs)?;
+                let (base, length) = match many_mode {
+                    ast::RangeMode::Absolute => (
+                        std::cmp::min(lhs_int, rhs_int).clone(),
+                        (lhs_int - rhs_int).abs() + BigInt::one(),
+                    ),
+                    ast::RangeMode::RelativeUp => (lhs_int.clone(), rhs_int.clone()),
+                    ast::RangeMode::RelativeDown => (lhs_int - rhs_int, rhs_int.clone()),
+                };
+                let (base, length) = (base.to_usize().unwrap(), length.to_usize().unwrap());
+                self.emit_named_inst(
+                    format!("{}.slice", basename),
+                    llhd::ExtractInst(
+                        self.llhd_type(&target),
+                        target,
+                        llhd::SliceMode::Slice(base, length),
+                    ),
+                )
+                .into()
+            }
+        })
     }
 }
 
