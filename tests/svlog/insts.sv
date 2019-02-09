@@ -164,11 +164,11 @@ endmodule
 //| entity @M () () {
 //|     %a = sig i32
 //|     %b = sig i32
-//|     %0 = prb %a
-//|     %1 = add i32 %0 2
-//|     %2 = sig i32
-//|     drv %2 %1
-//|     %k = inst @K (%2) (%b)
+//|     %a0 = prb %a
+//|     %0 = add i32 %a0 2
+//|     %1 = sig i32
+//|     drv %1 %0
+//|     %k = inst @K (%1) (%b)
 //| }
 
 module N1;

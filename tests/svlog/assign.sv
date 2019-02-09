@@ -4,12 +4,12 @@ endmodule
 
 //@ elab A
 //| entity @A (i32$ %a, i32$ %b) (i32$ %c) {
-//|     %0 = prb %a
-//|     %1 = prb %b
-//|     %2 = add i32 %0 %1
-//|     %3 = sig i32
-//|     drv %3 %2
-//|     drv %c %3
+//|     %a0 = prb %a
+//|     %b0 = prb %b
+//|     %0 = add i32 %a0 %b0
+//|     %1 = sig i32
+//|     drv %1 %0
+//|     drv %c %1
 //| }
 
 module B;

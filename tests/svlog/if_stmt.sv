@@ -6,20 +6,20 @@ endmodule
 //@ elab A
 //| proc @n223 (i32$ %0) (i32$ %1) {
 //| %2:
-//|     %3 = prb %1
-//|     %4 = cmp eq i32 %3 42
-//|     br %4 label %if_true %if_false
+//|     %a = prb %1
+//|     %3 = cmp eq i32 %a 42
+//|     br %3 label %if_true %if_false
 //| %if_true:
 //|     drv %1 16 0s 1e
-//|     wait %8 for 0s 1e
+//|     wait %7 for 0s 1e
 //| %if_false:
 //|     drv %1 9001 0s 1e
-//|     wait %11 for 0s 1e
+//|     wait %10 for 0s 1e
 //| %if_exit:
 //|     halt
-//| %8:
+//| %7:
 //|     br label %if_exit
-//| %11:
+//| %10:
 //|     br label %if_exit
 //| }
 //|

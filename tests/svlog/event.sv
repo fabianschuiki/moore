@@ -8,24 +8,24 @@ endmodule
 //| %4:
 //|     br label %init
 //| %init:
-//|     %6 = prb %0
-//|     %7 = prb %1
-//|     %8 = prb %2
+//|     %a = prb %0
+//|     %b = prb %1
+//|     %c = prb %2
 //|     wait %check, %0, %1, %2
 //| %check:
-//|     %10 = prb %0
-//|     %impledge = cmp neq i1 %6 %10
-//|     %11 = prb %1
-//|     %12 = cmp eq i1 %7 0
-//|     %13 = cmp neq i1 %11 0
-//|     %posedge = and i1 %12 %13
+//|     %a0 = prb %0
+//|     %impledge = cmp neq i1 %a %a0
+//|     %b0 = prb %1
+//|     %7 = cmp eq i1 %b 0
+//|     %8 = cmp neq i1 %b0 0
+//|     %posedge = and i1 %7 %8
 //|     %event_or = or i1 %impledge %posedge
-//|     %14 = prb %2
-//|     %15 = cmp eq i1 %14 0
-//|     %16 = cmp neq i1 %8 0
-//|     %negedge = and i1 %15 %16
-//|     %17 = prb %3
-//|     %iff = and i1 %negedge %17
+//|     %c0 = prb %2
+//|     %9 = cmp eq i1 %c0 0
+//|     %10 = cmp neq i1 %c 0
+//|     %negedge = and i1 %9 %10
+//|     %d = prb %3
+//|     %iff = and i1 %negedge %d
 //|     %event_or0 = or i1 %event_or %iff
 //|     br %event_or0 label %event %init
 //| %event:

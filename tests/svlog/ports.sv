@@ -43,11 +43,11 @@ endmodule
 //@ elab D
 //| proc @n238 (i1$ %0) (i1$ %1) {
 //| %2:
-//|     %3 = prb %0
-//|     %4 = not i1 %3
-//|     drv %1 %4 0s 1e
-//|     wait %7 for 0s 1e
-//| %7:
+//|     %x = prb %0
+//|     %3 = not i1 %x
+//|     drv %1 %3 0s 1e
+//|     wait %6 for 0s 1e
+//| %6:
 //|     halt
 //| }
 //|
