@@ -9,7 +9,6 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
-use llhd::Context as LlhdContext;
 use num::{
     traits::{cast::ToPrimitive, sign::Signed},
     BigInt, One, Zero,
@@ -622,10 +621,13 @@ where
         self.values.insert(node_id, value);
     }
 
-    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type {
+    fn with_llhd_context<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&dyn llhd::Context) -> R,
+    {
         let ctx = llhd::ModuleContext::new(&self.gen.into);
         let ctx = llhd::EntityContext::new(&ctx, self.ent);
-        ctx.ty(value)
+        f(&ctx)
     }
 }
 
@@ -677,10 +679,13 @@ where
         self.values.insert(node_id, value);
     }
 
-    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type {
+    fn with_llhd_context<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&dyn llhd::Context) -> R,
+    {
         let ctx = llhd::ModuleContext::new(&self.gen.into);
         let ctx = llhd::ProcessContext::new(&ctx, self.prok);
-        ctx.ty(value)
+        f(&ctx)
     }
 }
 
@@ -733,8 +738,15 @@ where
     /// Set the value emitted for a node.
     fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef);
 
+    /// Resolve an LLHD value reference.
+    fn with_llhd_context<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&dyn llhd::Context) -> R;
+
     /// Get the type of an LLHD value.
-    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type;
+    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type {
+        self.with_llhd_context(|ctx| ctx.ty(value))
+    }
 
     /// Emit a nameless instruction.
     ///
@@ -1542,7 +1554,10 @@ where
         unreachable!()
     }
 
-    fn llhd_type(&self, _value: &llhd::ValueRef) -> llhd::Type {
+    fn with_llhd_context<F, R>(&self, _f: F) -> R
+    where
+        F: FnOnce(&dyn llhd::Context) -> R,
+    {
         unreachable!()
     }
 }
