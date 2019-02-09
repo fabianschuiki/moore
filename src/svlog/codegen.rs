@@ -1024,6 +1024,26 @@ where
                 );
                 return Err(());
             }
+            hir::ExprKind::Field(target, field_name) => {
+                let (_, field_index, _) = self.resolve_field_access(expr_id, env)?;
+                let target_val = self.emit_lvalue(target, env)?;
+                let extracted = self.emit_named_inst(
+                    format!(
+                        "{}.{}",
+                        self.with_llhd_context(|ctx| ctx
+                            .try_value(&target_val)
+                            .and_then(|v| v.name().map(String::from)))
+                            .unwrap_or_else(|| "struct".into()),
+                        field_name
+                    ),
+                    llhd::ExtractInst(
+                        self.llhd_type(&target_val),
+                        target_val,
+                        llhd::SliceMode::Element(field_index),
+                    ),
+                );
+                return Ok(extracted.into());
+            }
             _ => (),
         }
         self.emit(
