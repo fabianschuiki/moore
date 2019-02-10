@@ -538,7 +538,7 @@ impl HasDesc for Expr {
     fn desc(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self.kind {
-            ExprKind::IntConst(_) => "integer constant",
+            ExprKind::IntConst(..) => "integer constant",
             ExprKind::TimeConst(_) => "time constant",
             ExprKind::Ident(_) => "identifier",
             _ => "expression",
@@ -548,7 +548,7 @@ impl HasDesc for Expr {
     fn desc_full(&self) -> String {
         #[allow(unreachable_patterns)]
         match self.kind {
-            ExprKind::IntConst(ref k) => format!("{} `{}`", self.desc(), k),
+            ExprKind::IntConst(_, ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::TimeConst(ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::Ident(n) => format!("`{}`", n.value),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
@@ -559,8 +559,8 @@ impl HasDesc for Expr {
 /// The different forms an expression can take.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
-    /// An integer constant literal.
-    IntConst(BigInt),
+    /// An integer constant literal such as `42` or `'d42` or `32'd42`.
+    IntConst(usize, BigInt),
     /// A time constant literal.
     TimeConst(BigRational),
     /// An identifier.

@@ -151,7 +151,7 @@ fn const_expr<'gcx>(
     let ty = cx.type_of(expr.id, env)?;
     #[allow(unreachable_patterns)]
     match expr.kind {
-        hir::ExprKind::IntConst(ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
+        hir::ExprKind::IntConst(_, ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
         hir::ExprKind::Ident(_) => cx.constant_value_of(cx.resolve_node(expr.id, env)?, env),
         hir::ExprKind::Unary(op, arg) => {

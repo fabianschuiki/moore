@@ -600,7 +600,7 @@ fn lower_expr<'gcx>(
     let parent = cx.parent_node_id(node_id).unwrap();
     let kind = match expr.data {
         ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
-            Ok(v) => hir::ExprKind::IntConst(v),
+            Ok(v) => hir::ExprKind::IntConst(32, v),
             Err(e) => {
                 cx.emit(
                     DiagBuilder2::error(format!("`{}` is not a valid integer literal", v))

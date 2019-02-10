@@ -20,7 +20,7 @@ pub(crate) fn type_of<'gcx>(
     match hir {
         HirNode::Port(p) => cx.map_to_type(p.ty, env),
         HirNode::Expr(e) => match e.kind {
-            hir::ExprKind::IntConst(_) => Ok(cx.mkty_int(32)),
+            hir::ExprKind::IntConst(width, _) => Ok(cx.mkty_int(width)),
             hir::ExprKind::TimeConst(_) => Ok(cx.mkty_time()),
             hir::ExprKind::Ident(_) => cx.type_of(cx.resolve_node(node_id, env)?, env),
             hir::ExprKind::Unary(op, arg) => {
