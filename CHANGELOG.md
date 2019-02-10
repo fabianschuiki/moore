@@ -5,23 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 ### Added
-- Support for variable declarations.
-- Support for struct types.
-- Support for packed arrays.
+- Support for variable declarations. ([#70](https://github.com/fabianschuiki/moore/issues/70))
+- Support for struct types. ([#76](https://github.com/fabianschuiki/moore/issues/76))
+- Support for packed arrays. ([#75](https://github.com/fabianschuiki/moore/issues/75))
 - Support for the `*`, `/`, `%`, `<<`, `<<<`, `>>`, and `>>>` operators.
-- Support for the `$clog2` builtin function.
+- Support for the `$clog2` builtin function. ([#81](https://github.com/fabianschuiki/moore/issues/81))
 
 ### Fixed
-- Fix blocking assignments, making them actually block.
+- Fix blocking assignments, making them actually block. ([#78](https://github.com/fabianschuiki/moore/issues/78))
 
 ### Changed
 - Update llhd to v0.4.0.
 
 ## 0.3.0 - 2019-02-01
 ### Added
-- Support for parameter declarations.
-- Support for typedefs.
-- Support for port assignments in instantiations.
+- Support for parameter declarations. ([#71](https://github.com/fabianschuiki/moore/issues/71))
+- Support for typedefs. ([#74](https://github.com/fabianschuiki/moore/issues/74))
+- Support for port assignments in instantiations. ([#77](https://github.com/fabianschuiki/moore/issues/77))
 - Support for continuous assignments in modules.
 - Support for bitwise logic operators.
 
@@ -37,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## 0.2.0 - 2019-01-24
 ### Added
-- Support for if-generate and for-generate blocks.
+- Support for if-generate and for-generate blocks. ([#72](https://github.com/fabianschuiki/moore/issues/72), [#73](https://github.com/fabianschuiki/moore/issues/73))
 - Support for value and type parameters.
 - Support for module instantiations and processes.
 - Support for signal declarations.
