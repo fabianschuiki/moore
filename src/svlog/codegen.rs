@@ -781,6 +781,7 @@ where
         #[allow(unreachable_patterns)]
         let (value, actual_mode) = match hir.kind {
             hir::ExprKind::IntConst(..)
+            | hir::ExprKind::UnsizedConst(..)
             | hir::ExprKind::TimeConst(_) => {
                 let k = self.constant_value_of(expr_id, env)?;
                 (self.emit_const(k).map(Into::into)?, Mode::Value)

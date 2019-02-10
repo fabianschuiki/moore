@@ -561,6 +561,8 @@ impl HasDesc for Expr {
 pub enum ExprKind {
     /// An integer constant literal such as `42` or `'d42` or `32'd42`.
     IntConst(usize, BigInt),
+    /// An unsized and unbased constant literal such as `'0`.
+    UnsizedConst(char),
     /// A time constant literal.
     TimeConst(BigRational),
     /// An identifier.

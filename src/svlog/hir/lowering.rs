@@ -610,6 +610,7 @@ fn lower_expr<'gcx>(
                 return Err(());
             }
         },
+        ast::LiteralExpr(Lit::UnbasedUnsized(c)) => hir::ExprKind::UnsizedConst(c),
         ast::LiteralExpr(Lit::Time(int, frac, unit)) => {
             use syntax::token::TimeUnit;
             let mut value = parse_fixed_point_number(cx, expr.span, int, frac)?;
