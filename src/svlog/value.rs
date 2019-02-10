@@ -138,6 +138,13 @@ pub(crate) fn constant_value_of<'gcx>(
             );
             Err(())
         }
+        HirNode::VarDecl(_) => {
+            cx.emit(
+                DiagBuilder2::error(format!("{} has no constant value", hir.desc_full()))
+                    .span(hir.human_span()),
+            );
+            Err(())
+        }
         _ => cx.unimp_msg("constant value computation of", &hir),
     }
 }
@@ -155,7 +162,23 @@ fn const_expr<'gcx>(
         hir::ExprKind::UnsizedConst('0') => Ok(cx.intern_value(make_int(ty, num::zero()))),
         hir::ExprKind::UnsizedConst('1') => Ok(cx.intern_value(make_int(ty, num::one()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
-        hir::ExprKind::Ident(_) => cx.constant_value_of(cx.resolve_node(expr.id, env)?, env),
+        hir::ExprKind::Ident(_) => {
+            let binding = cx.resolve_node(expr.id, env)?;
+            match cx.constant_value_of(binding, env) {
+                Ok(k) => Ok(k),
+                Err(_) => {
+                    let hir = cx.hir_of(binding)?;
+                    cx.emit(
+                        DiagBuilder2::note(format!(
+                            "constant value of {} needed here",
+                            hir.desc_full()
+                        ))
+                        .span(cx.span(expr.id)),
+                    );
+                    Err(())
+                }
+            }
+        }
         hir::ExprKind::Unary(op, arg) => {
             let arg_val = cx.constant_value_of(arg, env)?;
             debug!("exec {:?}({:?})", op, arg_val);
