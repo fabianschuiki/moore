@@ -3,6 +3,7 @@
 //! Lowering of AST nodes to HIR nodes.
 
 use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
+use num::BigInt;
 
 /// A hint about how a node should be lowered to HIR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -611,6 +612,57 @@ fn lower_expr<'gcx>(
             }
         },
         ast::LiteralExpr(Lit::UnbasedUnsized(c)) => hir::ExprKind::UnsizedConst(c),
+        ast::LiteralExpr(Lit::BasedInteger(maybe_size, _signed, base, value)) => {
+            let parsed = BigInt::parse_bytes(
+                value.as_str().as_bytes(),
+                match base {
+                    'h' => 16,
+                    'd' => 10,
+                    'o' => 8,
+                    'b' => 2,
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error(format!("`{}` is not a valid integer base", base))
+                                .span(expr.span)
+                                .add_note("valid bases are `b`, `o`, `d`, and `h`"),
+                        );
+                        return Err(());
+                    }
+                },
+            );
+            let parsed = match parsed {
+                Some(parsed) => parsed,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("`{}` is not a valid integer literal", value))
+                            .span(expr.span),
+                    );
+                    return Err(());
+                }
+            };
+            let size_needed = parsed.bits();
+            let size = match maybe_size {
+                Some(size) => match size.as_str().parse() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        cx.emit(
+                            DiagBuilder2::error(format!("`{}` is not a valid integer size", size))
+                                .span(expr.span)
+                                .add_note(format!("{}", e)),
+                        );
+                        return Err(());
+                    }
+                },
+                None => size_needed,
+            };
+            if size_needed > size {
+                cx.emit(DiagBuilder2::warning(format!(
+                    "`{}` is too large",
+                    value,
+                )).span(expr.span).add_note(format!("constant is {} bits wide, but the value `{}{}` needs {} bits to not be truncated", size, base, value, size_needed)));
+            }
+            hir::ExprKind::IntConst(size, parsed)
+        }
         ast::LiteralExpr(Lit::Time(int, frac, unit)) => {
             use syntax::token::TimeUnit;
             let mut value = parse_fixed_point_number(cx, expr.span, int, frac)?;
