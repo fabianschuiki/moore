@@ -795,6 +795,15 @@ fn lower_expr<'gcx>(
                 return cx.unimp_msg("lowering of call to", callee.as_ref());
             }
         },
+        ast::TernaryExpr {
+            ref cond,
+            ref true_expr,
+            ref false_expr,
+        } => hir::ExprKind::Ternary(
+            cx.map_ast_with_parent(AstNode::Expr(cond), parent),
+            cx.map_ast_with_parent(AstNode::Expr(true_expr), parent),
+            cx.map_ast_with_parent(AstNode::Expr(false_expr), parent),
+        ),
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);

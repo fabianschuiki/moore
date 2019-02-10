@@ -159,6 +159,11 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         ExprKind::Builtin(BuiltinCall::Clog2(arg)) => {
             visitor.visit_node_with_id(arg, false);
         }
+        ExprKind::Ternary(cond, true_expr, false_expr) => {
+            visitor.visit_node_with_id(cond, false);
+            visitor.visit_node_with_id(true_expr, lvalue);
+            visitor.visit_node_with_id(false_expr, lvalue);
+        }
     }
 }
 

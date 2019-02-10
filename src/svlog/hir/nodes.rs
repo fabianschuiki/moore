@@ -577,6 +577,8 @@ pub enum ExprKind {
     Index(NodeId, IndexMode),
     /// A builtin function call such as `$clog2(x)`.
     Builtin(BuiltinCall),
+    /// A ternary expression such as `a ? b : c`.
+    Ternary(NodeId, NodeId, NodeId),
 }
 
 /// The different unary operators.

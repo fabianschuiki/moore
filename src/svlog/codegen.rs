@@ -937,6 +937,53 @@ where
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
                 (self.emit_index_access(target, env, mode)?, Mode::Value)
             }
+            hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
+                let gen = match self.as_stmt_gen() {
+                    Some(gen) => gen,
+                    None => {
+                        let hir = self.hir_of(expr_id)?;
+                        self.emit(
+                            DiagBuilder2::error(format!(
+                                "ternary operator only supported in processes or functions",
+                            ))
+                            .span(hir.human_span()),
+                        );
+                        return Err(());
+                    }
+                };
+                let ty = gen.type_of(expr_id, env)?;
+                let ty = gen.emit_type(ty, env)?;
+                let true_blk = gen.add_named_block("ternary_true");
+                let false_blk = gen.add_named_block("ternary_false");
+                let result_var: llhd::ValueRef = gen
+                    .emit_named_inst("ternary", llhd::VariableInst(ty.clone()))
+                    .into();
+                let cond = gen.emit_rvalue(cond, env)?;
+                gen.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
+                    cond,
+                    true_blk.into(),
+                    false_blk.into(),
+                )));
+                let final_blk = gen.add_named_block("ternary_exit");
+                gen.append_to_block(true_blk);
+                let value = gen.emit_rvalue(true_expr, env)?;
+                gen.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
+                gen.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    final_blk.into(),
+                )));
+                gen.append_to_block(false_blk);
+                let value = gen.emit_rvalue(false_expr, env)?;
+                gen.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
+                gen.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    final_blk.into(),
+                )));
+                gen.append_to_block(final_blk);
+                (
+                    self.emit_nameless_inst(llhd::LoadInst(ty, result_var))
+                        .into(),
+                    Mode::Value,
+                )
+            }
             _ => return self.unimp_msg("code generation for", hir),
         };
         match (mode, actual_mode) {

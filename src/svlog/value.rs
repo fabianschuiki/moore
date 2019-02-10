@@ -204,6 +204,13 @@ fn const_expr<'gcx>(
             };
             Ok(cx.intern_value(make_int(arg_val.ty, arg_int.bits().into())))
         }
+        hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
+            let cond_val = cx.constant_value_of(cond, env)?;
+            match cond_val.is_true() {
+                true => cx.constant_value_of(true_expr, env),
+                false => cx.constant_value_of(false_expr, env),
+            }
+        }
         _ => cx.unimp_msg("constant value computation of", expr),
     }
 }
