@@ -1,7 +1,15 @@
 module A;
 	int a, b, c = 19;
 	initial begin
+		// #1ns a = +b;
 		#1ns a = -b;
+		// #1ns a = &b;
+		// #1ns a = ~&b;
+		// #1ns a = |b;
+		// #1ns a = ~|b;
+		// #1ns a = ^b;
+		// #1ns a = ~^b;
+		// #1ns a = ^~b;
 		#1ns a = ~b;
 		#1ns a = b++;
 		#1ns a = ++b;
