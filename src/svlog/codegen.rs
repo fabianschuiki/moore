@@ -822,7 +822,13 @@ where
             }
             hir::ExprKind::Ident(name) => {
                 let binding = self.resolve_node(expr_id, env)?;
-                let value = self.emitted_value(binding).clone();
+                let (value, is_const) = match self.is_constant(binding)? {
+                    true => {
+                        let k = self.constant_value_of(binding, env)?;
+                        (self.emit_const(k)?.into(), true)
+                    }
+                    false => (self.emitted_value(binding).clone(), false),
+                };
                 let ty = self.llhd_type(&value);
                 let is_signal = match *ty {
                     llhd::SignalType(_) => true,
@@ -831,8 +837,8 @@ where
                 // We currently just assume that the value above is a signal.
                 // As soon as we have actual variable declarations, this will
                 // need some more cleverness.
-                match (mode, is_signal) {
-                    (Mode::Value, true) => {
+                match (mode, is_signal, is_const) {
+                    (Mode::Value, true, _) => {
                         let ty = ty.unwrap_signal().clone();
                         (
                             self.emit_named_inst(format!("{}", name), llhd::ProbeInst(ty, value))
@@ -840,7 +846,7 @@ where
                             Mode::Value,
                         )
                     }
-                    (Mode::Value, false) => {
+                    (Mode::Value, false, false) => {
                         // let ty = ty.as_pointer().clone(); // TODO: fix this
                         let ty = match *ty {
                             llhd::PointerType(ref ty) => ty.clone(),
@@ -852,8 +858,9 @@ where
                             Mode::Value,
                         )
                     }
-                    (Mode::Signal, true) => (value, Mode::Signal),
-                    (Mode::Signal, false) => (value, Mode::Value),
+                    (Mode::Value, false, true) => (value, Mode::Value),
+                    (Mode::Signal, true, _) => (value, Mode::Signal),
+                    (Mode::Signal, false, _) => (value, Mode::Value),
                 }
             }
             hir::ExprKind::Unary(op, arg) => (
