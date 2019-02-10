@@ -124,7 +124,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create entity.
         let ty = llhd::entity_ty(input_tys, output_tys.clone());
-        let mut ent = llhd::Entity::new(entity_name, ty.clone());
+        let mut ent = llhd::Entity::new(entity_name.clone(), ty.clone());
         self.tables.module_types.insert((id, env), ty);
 
         // Assign proper port names and collect ports into a lookup table.
@@ -138,7 +138,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             values.insert(port_id, ent.output(index).into());
         }
 
-        self.emit_module_block(id, env, &hir.block, &mut ent, &mut values)?;
+        self.emit_module_block(id, env, &hir.block, &mut ent, &mut values, &entity_name)?;
 
         // Assign default values to undriven output ports.
         for port_id in outputs {
@@ -182,6 +182,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         hir: &hir::ModuleBlock,
         ent: &mut llhd::Entity,
         values: &mut HashMap<NodeId, llhd::ValueRef>,
+        name_prefix: &str,
     ) -> Result<()> {
         // Emit declarations.
         for &decl_id in &hir.decls {
@@ -317,10 +318,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     let k = self.constant_value_of(cond, env)?;
                     if k.is_false() {
                         if let Some(else_body) = else_body {
-                            self.emit_module_block(id, env, else_body, ent, values)?;
+                            self.emit_module_block(id, env, else_body, ent, values, name_prefix)?;
                         }
                     } else {
-                        self.emit_module_block(id, env, main_body, ent, values)?;
+                        self.emit_module_block(id, env, main_body, ent, values, name_prefix)?;
                     }
                 }
                 hir::GenKind::For {
@@ -334,7 +335,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         local_env = self.execute_genvar_init(i, local_env)?;
                     }
                     while self.constant_value_of(cond, local_env)?.is_true() {
-                        self.emit_module_block(id, local_env, body, ent, values)?;
+                        self.emit_module_block(id, local_env, body, ent, values, name_prefix)?;
                         local_env = self.execute_genvar_step(step, local_env)?;
                     }
                 }
@@ -345,7 +346,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Emit and instantiate procedures.
         for &proc_id in &hir.procs {
             use llhd::Context as LlhdContext;
-            let prok = self.emit_procedure(proc_id, env)?;
+            let prok = self.emit_procedure(proc_id, env, name_prefix)?;
             let ty = llhd::ModuleContext::new(&self.into)
                 .ty(&prok.into())
                 .clone();
@@ -360,7 +361,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Emit the code for a procedure.
-    fn emit_procedure(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ProcessRef> {
+    fn emit_procedure(
+        &mut self,
+        id: NodeId,
+        env: ParamEnv,
+        name_prefix: &str,
+    ) -> Result<llhd::ProcessRef> {
         let hir = match self.hir_of(id)? {
             HirNode::Proc(x) => x,
             _ => unreachable!(),
@@ -387,8 +393,22 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         trace!("process outputs = {:#?}", outputs);
 
         // Create process and entry block.
+        let proc_name = format!(
+            "{}.{}.{}.{}",
+            name_prefix,
+            match hir.kind {
+                ast::ProcedureKind::Initial => "initial",
+                ast::ProcedureKind::Always => "always",
+                ast::ProcedureKind::AlwaysComb => "always_comb",
+                ast::ProcedureKind::AlwaysLatch => "always_latch",
+                ast::ProcedureKind::AlwaysFf => "always_ff",
+                ast::ProcedureKind::Final => "final",
+            },
+            id.as_usize(),
+            env.0,
+        );
         let mut prok = llhd::Process::new(
-            format!("{:?}", id),
+            proc_name,
             llhd::entity_ty(
                 inputs.iter().map(|(_, ty)| ty.clone()).collect(),
                 outputs.iter().map(|(_, ty)| ty.clone()).collect(),
