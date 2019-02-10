@@ -550,6 +550,12 @@ pub(super) mod queries {
                 use fn value::constant_value_of;
             }
 
+            /// Check if a node has a constant value.
+            fn is_constant(node_id: NodeId) -> Result<bool> {
+                type IsConstantQuery;
+                use fn value::is_constant;
+            }
+
             /// Determine the default value of a type.
             fn type_default_value(ty: Type<'a>) -> Value<'a> {
                 type TypeDefaultValueQuery;
@@ -591,6 +597,7 @@ pub(super) mod queries {
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
                 fn constant_value_of() for ConstantValueOfQuery<'gcx>;
+                fn is_constant() for IsConstantQuery<'gcx>;
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn accessed_nodes() for AccessedNodesQuery<'gcx>;

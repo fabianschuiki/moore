@@ -307,6 +307,16 @@ fn const_binary_op_on_int<'gcx>(
     })
 }
 
+/// Check if a node has a constant value.
+pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<bool> {
+    let hir = cx.hir_of(node_id)?;
+    Ok(match hir {
+        HirNode::ValueParam(_) => true,
+        HirNode::GenvarDecl(_) => true,
+        _ => false,
+    })
+}
+
 /// Determine the default value of a type.
 pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Value<'gcx> {
     match *ty {
