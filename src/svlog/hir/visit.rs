@@ -33,6 +33,7 @@ pub trait Visitor<'a>: Sized {
             HirNode::Expr(x) => self.visit_expr(x, lvalue),
             HirNode::EventExpr(x) => self.visit_event_expr(x),
             HirNode::Typedef(x) => self.visit_typedef(x),
+            HirNode::VarDecl(x) => self.visit_var_decl(x),
             _ => (),
         }
     }
@@ -67,6 +68,10 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_typedef(&mut self, typedef: &'a Typedef) {
         walk_typedef(self, typedef);
+    }
+
+    fn visit_var_decl(&mut self, decl: &'a VarDecl) {
+        walk_var_decl(self, decl);
     }
 }
 
@@ -194,4 +199,12 @@ pub fn walk_event<'a>(visitor: &mut impl Visitor<'a>, event: &'a Event) {
 /// Walk the contents of a typedef.
 pub fn walk_typedef<'a>(visitor: &mut impl Visitor<'a>, typedef: &'a Typedef) {
     visitor.visit_node_with_id(typedef.ty, false);
+}
+
+/// Walk the contents of a variable declaration.
+pub fn walk_var_decl<'a>(visitor: &mut impl Visitor<'a>, decl: &'a VarDecl) {
+    visitor.visit_node_with_id(decl.ty, false);
+    if let Some(init) = decl.init {
+        visitor.visit_node_with_id(init, false);
+    }
 }
