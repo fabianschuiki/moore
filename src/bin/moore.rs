@@ -121,6 +121,12 @@ fn main() {
         .unwrap_or(stderrlog::Timestamp::Off);
 
     stderrlog::new()
+        .module("moore")
+        .module("moore_common")
+        .module("moore_svlog")
+        .module("moore_svlog_syntax")
+        .module("moore_vhdl")
+        .module("moore_vhdl_syntax")
         .quiet(quiet)
         .verbosity(verbose)
         .timestamp(ts)
