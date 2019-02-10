@@ -86,7 +86,7 @@ where
         match expr.kind {
             ExprKind::Ident(name) => match self.cx.resolve_upwards_or_error(name, expr.id) {
                 Ok(binding) => {
-                    if !self.cx.is_parent_of(self.table.node_id, binding) {
+                    if self.is_binding_interesting(binding) {
                         if lvalue {
                             self.table.written.insert(binding);
                         } else {
@@ -99,5 +99,24 @@ where
             _ => (),
         }
         walk_expr(self, expr, lvalue)
+    }
+}
+
+impl<'a, 'gcx: 'a, C> AccessTableCollector<'a, C>
+where
+    C: Context<'gcx>,
+{
+    fn is_binding_interesting(&self, binding: NodeId) -> bool {
+        if self.cx.is_parent_of(self.table.node_id, binding) {
+            return false;
+        }
+        match self.cx.hir_of(binding) {
+            Ok(HirNode::ValueParam(..)) => return false,
+            Ok(HirNode::TypeParam(..)) => return false,
+            Ok(HirNode::GenvarDecl(..)) => return false,
+            Err(_) => return false,
+            _ => (),
+        }
+        true
     }
 }
