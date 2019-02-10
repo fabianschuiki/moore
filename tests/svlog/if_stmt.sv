@@ -4,7 +4,7 @@ module A;
 endmodule
 
 //@ elab A
-//| proc @n223 (i32$ %0) (i32$ %1) {
+//| proc @A.initial.223.0 (i32$ %0) (i32$ %1) {
 //| %2:
 //|     %a = prb %1
 //|     %3 = cmp eq i32 %a 42
@@ -25,5 +25,5 @@ endmodule
 //|
 //| entity @A () () {
 //|     %a = sig i32
-//|     inst @n223 (%a) (%a)
+//|     inst @A.initial.223.0 (%a) (%a)
 //| }

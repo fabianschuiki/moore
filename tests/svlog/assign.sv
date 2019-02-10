@@ -31,7 +31,7 @@ module C;
 endmodule
 
 //@ elab C
-//| proc @n236 () (i32$ %0) {
+//| proc @C.initial.236.0 () (i32$ %0) {
 //| %1:
 //|     drv %0 9001 0s 1d
 //|     drv %0 42 1ns
@@ -40,5 +40,5 @@ endmodule
 //|
 //| entity @C () () {
 //|     %a = sig i32
-//|     inst @n236 () (%a)
+//|     inst @C.initial.236.0 () (%a)
 //| }

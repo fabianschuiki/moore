@@ -12,7 +12,7 @@ module B #(int K);
 endmodule
 
 //@ elab A
-//| proc @n235 () (i32$ %0) {
+//| proc @B.param1.initial.235.1 () (i32$ %0) {
 //| %1:
 //|     drv %0 19 0s 1e
 //|     wait %4 for 0s 1e
@@ -22,10 +22,10 @@ endmodule
 //|
 //| entity @B.param1 () () {
 //|     %x = sig i32 11
-//|     inst @n235 () (%x)
+//|     inst @B.param1.initial.235.1 () (%x)
 //| }
 //|
-//| proc @n234 () (i32$ %0) {
+//| proc @B.param2.initial.234.2 () (i32$ %0) {
 //| %1:
 //|     drv %0 42 0s 1e
 //|     wait %4 for 0s 1e
@@ -35,7 +35,7 @@ endmodule
 //|
 //| entity @B.param2 () () {
 //|     %x = sig i32 13
-//|     inst @n234 () (%x)
+//|     inst @B.param2.initial.234.2 () (%x)
 //| }
 //|
 //| entity @A () () {
