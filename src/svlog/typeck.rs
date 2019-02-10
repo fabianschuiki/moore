@@ -27,7 +27,8 @@ pub(crate) fn type_of<'gcx>(
             hir::ExprKind::Unary(op, arg) => {
                 let arg_ty = cx.type_of(arg, env)?;
                 Ok(match op {
-                    hir::UnaryOp::BitNot
+                    hir::UnaryOp::Neg
+                    | hir::UnaryOp::BitNot
                     | hir::UnaryOp::PreInc
                     | hir::UnaryOp::PreDec
                     | hir::UnaryOp::PostInc

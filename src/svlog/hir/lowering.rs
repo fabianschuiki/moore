@@ -686,6 +686,7 @@ fn lower_expr<'gcx>(
             postfix,
         } => hir::ExprKind::Unary(
             match op {
+                Op::Sub if !postfix => hir::UnaryOp::Neg,
                 Op::BitNot if !postfix => hir::UnaryOp::BitNot,
                 Op::LogicNot if !postfix => hir::UnaryOp::LogicNot,
                 Op::Inc if !postfix => hir::UnaryOp::PreInc,

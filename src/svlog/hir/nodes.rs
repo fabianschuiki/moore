@@ -584,6 +584,8 @@ pub enum ExprKind {
 /// The different unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
+    /// The minus operator `-x`.
+    Neg,
     /// The bitwise not operator `~x`.
     BitNot,
     /// The not operator `!x`.
@@ -601,6 +603,7 @@ pub enum UnaryOp {
 impl HasDesc for UnaryOp {
     fn desc(&self) -> &'static str {
         match *self {
+            UnaryOp::Neg => "`-` operator",
             UnaryOp::BitNot => "`~` operator",
             UnaryOp::LogicNot => "`!` operator",
             UnaryOp::PreInc => "`++` prefix operator",

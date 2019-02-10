@@ -865,6 +865,19 @@ where
             }
             hir::ExprKind::Unary(op, arg) => (
                 match op {
+                    hir::UnaryOp::Neg => {
+                        let ty = self.type_of(expr_id, env)?;
+                        let ty = self.emit_type(ty, env)?;
+                        let zero = llhd::const_zero(&ty).into();
+                        let arg = self.emit_rvalue(arg, env)?;
+                        self.emit_nameless_inst(llhd::BinaryInst(
+                            llhd::BinaryOp::Sub,
+                            ty,
+                            zero,
+                            arg,
+                        ))
+                        .into()
+                    }
                     hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
                         let ty = self.type_of(expr_id, env)?;
                         let ty = self.emit_type(ty, env)?;
