@@ -839,6 +839,10 @@ pub enum StmtKind {
 pub enum AssignKind {
     /// A blocking assignment.
     Block(ast::AssignOp),
+    /// A non-blocking assignment.
+    Nonblock,
+    /// A non-blocking assignment with delay.
+    NonblockDelay(NodeId),
 }
 
 /// The different forms a loop can take.

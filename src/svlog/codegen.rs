@@ -1173,6 +1173,16 @@ where
                     hir::AssignKind::Block(ast::AssignOp::Identity) => {
                         self.emit_blocking_assign(lhs, rhs_value, env)?;
                     }
+                    hir::AssignKind::Nonblock => {
+                        let lhs_value = self.emit_lvalue(lhs, env)?;
+                        let delay = llhd::const_time(num::zero(), 1, 0).into();
+                        self.emit_nameless_inst(llhd::DriveInst(lhs_value, rhs_value, Some(delay)));
+                    }
+                    hir::AssignKind::NonblockDelay(delay) => {
+                        let lhs_value = self.emit_lvalue(lhs, env)?;
+                        let delay = self.emit_rvalue(delay, env)?;
+                        self.emit_nameless_inst(llhd::DriveInst(lhs_value, rhs_value, Some(delay)));
+                    }
                     _ => {
                         return self
                             .unimp_msg(format!("code generation for assignment {:?} in", kind), hir)

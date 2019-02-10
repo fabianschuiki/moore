@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for packed arrays. ([#75](https://github.com/fabianschuiki/moore/issues/75))
 - Support for the `*`, `/`, `%`, `<<`, `<<<`, `>>`, and `>>>` operators.
 - Support for the `$clog2` builtin function. ([#81](https://github.com/fabianschuiki/moore/issues/81))
+- Support for non-blocking assignments with and without delay. ([#82](https://github.com/fabianschuiki/moore/issues/82))
 
 ### Fixed
 - Fix blocking assignments, making them actually block. ([#78](https://github.com/fabianschuiki/moore/issues/78))

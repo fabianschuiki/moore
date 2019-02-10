@@ -21,3 +21,24 @@ module B;
 		#1ns;
 	end
 endmodule
+
+module C;
+	int a;
+	initial begin
+		a <= 9001;
+		a <= #1ns 42;
+	end
+endmodule
+
+//@ elab C
+//| proc @n236 () (i32$ %0) {
+//| %1:
+//|     drv %0 9001 0s 1d
+//|     drv %0 42 1ns
+//|     halt
+//| }
+//|
+//| entity @C () () {
+//|     %a = sig i32
+//|     inst @n236 () (%a)
+//| }

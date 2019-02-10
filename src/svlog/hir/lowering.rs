@@ -259,6 +259,21 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     let rib = alloc_var_decl(cx, decls, parent, &mut stmts);
                     hir::StmtKind::InlineGroup { stmts, rib }
                 }
+                ast::NonblockingAssignStmt {
+                    ref lhs,
+                    ref rhs,
+                    ref delay,
+                    ..
+                } => hir::StmtKind::Assign {
+                    lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+                    rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+                    kind: match *delay {
+                        Some(ref dc) => hir::AssignKind::NonblockDelay(
+                            cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
+                        ),
+                        None => hir::AssignKind::Nonblock,
+                    },
+                },
                 _ => {
                     error!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);
