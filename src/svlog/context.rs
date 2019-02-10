@@ -29,7 +29,7 @@ use crate::{
     crate_prelude::*,
     hir::{self, AccessTable, HirNode},
     ty::{Type, TypeKind},
-    value::{Value, ValueData},
+    value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
 use llhd;
@@ -492,6 +492,21 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     /// Get a lowering hint on a node.
     fn lowering_hint(&self, node_id: NodeId) -> Option<hir::Hint> {
         self.tables().lowering_hints.borrow().get(&node_id).cloned()
+    }
+
+    /// Compute the constant value of a node and make sure it is an integer.
+    fn constant_int_value_of(&self, node_id: NodeId, env: ParamEnv) -> Result<&'gcx num::BigInt> {
+        match self.gcx().constant_value_of(node_id, env)?.kind {
+            ValueKind::Int(ref x) => Ok(x),
+            _ => {
+                let hir = self.gcx().hir_of(node_id)?;
+                self.emit(
+                    DiagBuilder2::error(format!("{} is not a constant integer", hir.desc_full()))
+                        .span(hir.human_span()),
+                );
+                Err(())
+            }
+        }
     }
 }
 

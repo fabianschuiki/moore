@@ -1150,64 +1150,69 @@ where
         env: ParamEnv,
         mode: hir::IndexMode,
     ) -> Result<llhd::ValueRef> {
-        let map_int = |expr: NodeId| -> Result<&BigInt> {
-            match self.constant_value_of(expr, env)?.kind {
-                ValueKind::Int(ref x) => Ok(x),
-                _ => {
-                    let hir = self.hir_of(expr)?;
-                    self.emit(
-                        DiagBuilder2::error(format!(
-                            "{} is not a constant integer",
-                            hir.desc_full()
-                        ))
-                        .span(hir.human_span()),
-                    );
-                    Err(())
-                }
-            }
-        };
         let basename = self
             .with_llhd_context(|ctx| {
                 ctx.try_value(&target)
                     .and_then(|v| v.name().map(String::from))
             })
             .unwrap_or_else(|| "".into());
-        Ok(match mode {
-            hir::IndexMode::One(index) => {
-                let index_int = map_int(index)?.to_usize().unwrap();
-                self.emit_named_inst(
-                    format!("{}.element", basename),
-                    llhd::ExtractInst(
-                        self.llhd_type(&target),
-                        target,
-                        llhd::SliceMode::Element(index_int),
-                    ),
-                )
-                .into()
+        let target_ty = self.llhd_type(&target);
+        let shift = match mode {
+            hir::IndexMode::One(index) => self.emit_rvalue(index, env)?,
+            hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, _delta) => {
+                self.emit_rvalue(base, env)?
             }
-            hir::IndexMode::Many(many_mode, lhs, rhs) => {
-                let lhs_int = map_int(lhs)?;
-                let rhs_int = map_int(rhs)?;
-                let (base, length) = match many_mode {
-                    ast::RangeMode::Absolute => (
-                        std::cmp::min(lhs_int, rhs_int).clone(),
-                        (lhs_int - rhs_int).abs() + BigInt::one(),
-                    ),
-                    ast::RangeMode::RelativeUp => (lhs_int.clone(), rhs_int.clone()),
-                    ast::RangeMode::RelativeDown => (lhs_int - rhs_int, rhs_int.clone()),
-                };
-                let (base, length) = (base.to_usize().unwrap(), length.to_usize().unwrap());
+            hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
+                let base = self.emit_rvalue(base, env)?;
+                let delta = self.emit_rvalue(delta, env)?;
+                let ty = self.llhd_type(&base);
+                self.emit_nameless_inst(llhd::BinaryInst(llhd::BinaryOp::Sub, ty, base, delta))
+                    .into()
+            }
+            hir::IndexMode::Many(ast::RangeMode::Absolute, lhs, rhs) => {
+                let lhs_int = self.constant_int_value_of(lhs, env)?;
+                let rhs_int = self.constant_int_value_of(rhs, env)?;
+                let base = std::cmp::min(lhs_int, rhs_int).clone().to_usize().unwrap();
+                let length = ((lhs_int - rhs_int).abs() + BigInt::one())
+                    .to_usize()
+                    .unwrap();
+                return Ok(self
+                    .emit_named_inst(
+                        format!("{}.const_slice", basename),
+                        llhd::ExtractInst(
+                            self.llhd_type(&target),
+                            target,
+                            llhd::SliceMode::Slice(base, length),
+                        ),
+                    )
+                    .into());
+            }
+        };
+        let shifted = self
+            .emit_nameless_inst(llhd::BinaryInst(
+                llhd::BinaryOp::Shr,
+                target_ty.clone(),
+                target,
+                shift,
+            ))
+            .into();
+        let sliced = match mode {
+            hir::IndexMode::One(_) => self
+                .emit_named_inst(
+                    format!("{}.element", basename),
+                    llhd::ExtractInst(target_ty, shifted, llhd::SliceMode::Element(0)),
+                )
+                .into(),
+            hir::IndexMode::Many(_, _, delta) => {
+                let delta = self.constant_int_value_of(delta, env)?.to_usize().unwrap();
                 self.emit_named_inst(
                     format!("{}.slice", basename),
-                    llhd::ExtractInst(
-                        self.llhd_type(&target),
-                        target,
-                        llhd::SliceMode::Slice(base, length),
-                    ),
+                    llhd::ExtractInst(target_ty, shifted, llhd::SliceMode::Slice(0, delta)),
                 )
                 .into()
             }
-        })
+        };
+        Ok(sliced)
     }
 }
 
