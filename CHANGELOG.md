@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Update llhd to v0.4.0.
 
+### Removed
+- Remove obsolete code in the svlog syntax crate. ([#80](https://github.com/fabianschuiki/moore/issues/80))
+
 ## 0.3.0 - 2019-02-01
 ### Added
 - Support for parameter declarations. ([#71](https://github.com/fabianschuiki/moore/issues/71))
