@@ -351,8 +351,22 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 .ty(&prok.into())
                 .clone();
             let acc = self.accessed_nodes(proc_id)?;
-            let inputs = acc.read.iter().map(|id| values[id].clone()).collect();
-            let outputs = acc.written.iter().map(|id| values[id].clone()).collect();
+            let lookup_value = |&id| match values.get(&id) {
+                Some(v) => v.clone(),
+                None => {
+                    self.emit(
+                        DiagBuilder2::bug(format!(
+                            "{} used as input/output of {}, but no value has been emitted",
+                            self.hir_of(id).unwrap().desc_full(),
+                            self.hir_of(proc_id).unwrap().desc_full(),
+                        ))
+                        .span(self.span(id)),
+                    );
+                    panic!("no value emitted for {:?}", id);
+                }
+            };
+            let inputs = acc.read.iter().map(lookup_value).collect();
+            let outputs = acc.written.iter().map(lookup_value).collect();
             let inst = llhd::Inst::new(None, llhd::InstanceInst(ty, prok.into(), inputs, outputs));
             ent.add_inst(inst, llhd::InstPosition::End);
         }
