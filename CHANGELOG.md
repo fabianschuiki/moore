@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 - Fix blocking assignments, making them actually block. ([#78](https://github.com/fabianschuiki/moore/issues/78))
+- Fix variables with implicit types failing to infer their type.
 
 ### Changed
 - Update llhd to v0.4.0.

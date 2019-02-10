@@ -116,7 +116,24 @@ pub(crate) fn type_of<'gcx>(
             );
             Err(())
         }
-        HirNode::VarDecl(d) => cx.map_to_type(d.ty, env),
+        HirNode::VarDecl(d) => {
+            if is_explicit_type(cx, d.ty)? {
+                cx.map_to_type(d.ty, env)
+            } else if let Some(init) = d.init {
+                cx.type_of(init, env)
+            } else {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "{} has implicit type but is not initialized",
+                        d.desc_full()
+                    ))
+                    .span(d.human_span())
+                    .add_note("specify a type for the variable; or")
+                    .add_note("add an initial value"),
+                );
+                Err(())
+            }
+        }
         HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
         _ => cx.unimp_msg("type analysis of", &hir),
     }
