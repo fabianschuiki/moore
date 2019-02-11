@@ -791,6 +791,22 @@ fn lower_expr<'gcx>(
                 };
                 hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg))
             }
+            ast::SysIdentExpr(ident) if &*ident.name.as_str() == "bits" => {
+                let arg = match args.as_slice() {
+                    [ast::CallArg {
+                        expr: Some(ref arg),
+                        ..
+                    }] => cx.map_ast_with_parent(AstNode::Expr(arg), parent),
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error("`$bits` takes one argument")
+                                .span(expr.human_span()),
+                        );
+                        return Err(());
+                    }
+                };
+                hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg))
+            }
             _ => {
                 error!("{:#?}", callee);
                 return cx.unimp_msg("lowering of call to", callee.as_ref());

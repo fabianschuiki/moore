@@ -14,7 +14,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{Type, TypeKind},
+    ty::{bit_size_of_type, Type, TypeKind},
     ParamEnv, ParamEnvBinding,
 };
 use num::{BigInt, BigRational, One, ToPrimitive, Zero};
@@ -226,6 +226,13 @@ fn const_expr<'gcx>(
                 _ => unreachable!(),
             };
             Ok(cx.intern_value(make_int(arg_val.ty, arg_int.bits().into())))
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
+            let ty = cx.type_of(arg, env)?;
+            Ok(cx.intern_value(make_int(
+                cx.mkty_int(32),
+                bit_size_of_type(cx, ty, env)?.into(),
+            )))
         }
         hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
             let cond_val = cx.constant_value_of(cond, env)?;

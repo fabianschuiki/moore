@@ -2,7 +2,7 @@
 
 //! An implementation of the verilog type system.
 
-use crate::crate_prelude::*;
+use crate::{crate_prelude::*, hir::HirNode, ParamEnv};
 
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;
@@ -69,3 +69,33 @@ pub static TIME_TYPE: TypeKind<'static> = TypeKind::Time;
 pub static BIT_TYPE: TypeKind<'static> = TypeKind::Bit(ty::Domain::TwoValued);
 /// The `logic` type.
 pub static LOGIC_TYPE: TypeKind<'static> = TypeKind::Bit(ty::Domain::FourValued);
+
+// Compute the size of a type in bits.
+pub fn bit_size_of_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    ty: Type<'gcx>,
+    env: ParamEnv,
+) -> Result<usize> {
+    match *ty {
+        TypeKind::Void => Ok(0),
+        TypeKind::Time => panic!("time value has no bit size"),
+        TypeKind::Bit(_) => Ok(1),
+        TypeKind::Int(width, _) => Ok(width),
+        TypeKind::Named(_, _, ty) => bit_size_of_type(cx, ty, env),
+        TypeKind::Struct(struct_id) => {
+            let fields = match cx.hir_of(struct_id)? {
+                HirNode::Type(hir::Type {
+                    kind: hir::TypeKind::Struct(ref fields),
+                    ..
+                }) => fields,
+                _ => unreachable!(),
+            };
+            let mut size = 0;
+            for &field in fields {
+                size += bit_size_of_type(cx, cx.type_of(field, env)?, env)?;
+            }
+            Ok(size)
+        }
+        TypeKind::PackedArray(elements, ty) => Ok(elements * bit_size_of_type(cx, ty, env)?),
+    }
+}

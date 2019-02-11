@@ -1038,6 +1038,10 @@ where
                     Mode::Value,
                 )
             }
+            hir::ExprKind::Builtin(_) => {
+                let k = self.constant_value_of(expr_id, env)?;
+                (self.emit_const(k)?.into(), Mode::Value)
+            }
             _ => return self.unimp_msg("code generation for", hir),
         };
         match (mode, actual_mode) {

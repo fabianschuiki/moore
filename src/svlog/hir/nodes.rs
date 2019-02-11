@@ -709,6 +709,8 @@ pub enum IndexMode {
 pub enum BuiltinCall {
     /// A call to the ceil-log2 function `$clog2(x)`.
     Clog2(NodeId),
+    /// A call to the storage size function `$bits(x)`.
+    Bits(NodeId),
 }
 
 /// A variable declaration.

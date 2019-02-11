@@ -85,7 +85,8 @@ pub(crate) fn type_of<'gcx>(
                     hir::IndexMode::Many(..) => Ok(target_ty),
                 }
             }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_)) => Ok(cx.mkty_int(32)),
+            hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(cx.mkty_int(32)),
             hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
             _ => {
                 error!("{:#?}", hir);

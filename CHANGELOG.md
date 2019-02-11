@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for struct types. ([#76](https://github.com/fabianschuiki/moore/issues/76))
 - Support for packed arrays. ([#75](https://github.com/fabianschuiki/moore/issues/75))
 - Support for the `*`, `/`, `%`, `<<`, `<<<`, `>>`, and `>>>` operators.
-- Support for the `$clog2` builtin function. ([#81](https://github.com/fabianschuiki/moore/issues/81))
+- Support for the `$clog2` and `$bits` builtin functions. ([#81](https://github.com/fabianschuiki/moore/issues/81), [#88](https://github.com/fabianschuiki/moore/issues/88))
 - Support for non-blocking assignments with and without delay. ([#82](https://github.com/fabianschuiki/moore/issues/82))
 - Support for based integer literals, and `'0`, and `'1`. ([#84](https://github.com/fabianschuiki/moore/issues/84))
 - Support for the ternary operator in processes and functions. ([#83](https://github.com/fabianschuiki/moore/issues/83))
