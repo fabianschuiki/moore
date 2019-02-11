@@ -5,7 +5,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{Type, TypeKind},
+    ty::{bit_size_of_type, Type, TypeKind},
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
@@ -865,6 +865,7 @@ where
             }
             hir::ExprKind::Unary(op, arg) => (
                 match op {
+                    hir::UnaryOp::Pos => self.emit_rvalue(arg, env)?,
                     hir::UnaryOp::Neg => {
                         let ty = self.type_of(expr_id, env)?;
                         let ty = self.emit_type(ty, env)?;
@@ -896,6 +897,24 @@ where
                     }
                     hir::UnaryOp::PostDec => {
                         self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true)?
+                    }
+                    hir::UnaryOp::RedAnd => {
+                        self.emit_reduction(arg, env, llhd::BinaryOp::And, false)?
+                    }
+                    hir::UnaryOp::RedNand => {
+                        self.emit_reduction(arg, env, llhd::BinaryOp::And, true)?
+                    }
+                    hir::UnaryOp::RedOr => {
+                        self.emit_reduction(arg, env, llhd::BinaryOp::Or, false)?
+                    }
+                    hir::UnaryOp::RedNor => {
+                        self.emit_reduction(arg, env, llhd::BinaryOp::Or, true)?
+                    }
+                    hir::UnaryOp::RedXor => {
+                        self.emit_reduction(arg, env, llhd::BinaryOp::Xor, false)?
+                    }
+                    hir::UnaryOp::RedXnor => {
+                        self.emit_reduction(arg, env, llhd::BinaryOp::Xor, true)?
                     }
                     _ => return self.unimp_msg("code generation for", hir),
                 },
@@ -1217,6 +1236,47 @@ where
             }
         };
         Ok(sliced)
+    }
+
+    /// Emit the code to perform a reduction operation.
+    fn emit_reduction(
+        &mut self,
+        target: NodeId,
+        env: ParamEnv,
+        op: llhd::BinaryOp,
+        negate: bool,
+    ) -> Result<llhd::ValueRef> {
+        let input_ty = self.type_of(target, env)?;
+        let input_bits = bit_size_of_type(self.cx, input_ty, env)?;
+        let input_ty = self.emit_type(input_ty, env)?;
+        let input_value = self.emit_rvalue(target, env)?;
+        let mut result: llhd::ValueRef = self
+            .emit_nameless_inst(llhd::ExtractInst(
+                input_ty.clone(),
+                input_value.clone(),
+                llhd::SliceMode::Element(0),
+            ))
+            .into();
+        let bit_ty = self.llhd_type(&result);
+        for i in 1..input_bits {
+            let bit = self
+                .emit_nameless_inst(llhd::ExtractInst(
+                    input_ty.clone(),
+                    input_value.clone(),
+                    llhd::SliceMode::Element(i),
+                ))
+                .into();
+            result = self
+                .emit_nameless_inst(llhd::BinaryInst(op, bit_ty.clone(), result, bit))
+                .into();
+        }
+        if negate {
+            Ok(self
+                .emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, bit_ty, result))
+                .into())
+        } else {
+            Ok(result)
+        }
     }
 }
 

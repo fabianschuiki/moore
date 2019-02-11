@@ -584,6 +584,8 @@ pub enum ExprKind {
 /// The different unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
+    /// The plus operator `+x`.
+    Pos,
     /// The minus operator `-x`.
     Neg,
     /// The bitwise not operator `~x`.
@@ -598,18 +600,37 @@ pub enum UnaryOp {
     PostInc,
     /// The postfix decrement operator `x--`.
     PostDec,
+    /// The reduction and operator `&x`.
+    RedAnd,
+    /// The reduction not-and operator `~&x`.
+    RedNand,
+    /// The reduction or operator `|x`.
+    RedOr,
+    /// The reduction not-or operator `~|x`.
+    RedNor,
+    /// The reduction exclusive-or operator `^x`.
+    RedXor,
+    /// The reduction exclusive-not-or operator `^~x` or `~^x`.
+    RedXnor,
 }
 
 impl HasDesc for UnaryOp {
     fn desc(&self) -> &'static str {
         match *self {
-            UnaryOp::Neg => "`-` operator",
+            UnaryOp::Pos => "unary `+` operator",
+            UnaryOp::Neg => "unary `-` operator",
             UnaryOp::BitNot => "`~` operator",
             UnaryOp::LogicNot => "`!` operator",
             UnaryOp::PreInc => "`++` prefix operator",
             UnaryOp::PreDec => "`--` prefix operator",
             UnaryOp::PostInc => "`++` postfix operator",
             UnaryOp::PostDec => "`--` postfix operator",
+            UnaryOp::RedAnd => "`&` reduction operator",
+            UnaryOp::RedNand => "`~&` reduction operator",
+            UnaryOp::RedOr => "`|` reduction operator",
+            UnaryOp::RedNor => "`~|` reduction operator",
+            UnaryOp::RedXor => "`^` reduction operator",
+            UnaryOp::RedXnor => "`^~` reduction operator",
         }
     }
 }

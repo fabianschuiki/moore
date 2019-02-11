@@ -686,6 +686,7 @@ fn lower_expr<'gcx>(
             postfix,
         } => hir::ExprKind::Unary(
             match op {
+                Op::Add if !postfix => hir::UnaryOp::Pos,
                 Op::Sub if !postfix => hir::UnaryOp::Neg,
                 Op::BitNot if !postfix => hir::UnaryOp::BitNot,
                 Op::LogicNot if !postfix => hir::UnaryOp::LogicNot,
@@ -693,6 +694,13 @@ fn lower_expr<'gcx>(
                 Op::Dec if !postfix => hir::UnaryOp::PreDec,
                 Op::Inc if postfix => hir::UnaryOp::PostInc,
                 Op::Dec if postfix => hir::UnaryOp::PostDec,
+                Op::BitAnd if !postfix => hir::UnaryOp::RedAnd,
+                Op::BitNand if !postfix => hir::UnaryOp::RedNand,
+                Op::BitOr if !postfix => hir::UnaryOp::RedOr,
+                Op::BitNor if !postfix => hir::UnaryOp::RedNor,
+                Op::BitXor if !postfix => hir::UnaryOp::RedXor,
+                Op::BitNxor if !postfix => hir::UnaryOp::RedXnor,
+                Op::BitXnor if !postfix => hir::UnaryOp::RedXnor,
                 _ => {
                     cx.emit(
                         DiagBuilder2::error(format!(

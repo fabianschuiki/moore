@@ -253,6 +253,7 @@ fn const_unary_op_on_int<'gcx>(
     arg: &BigInt,
 ) -> Result<BigInt> {
     Ok(match op {
+        hir::UnaryOp::Pos => arg.clone(),
         hir::UnaryOp::Neg => -arg,
         hir::UnaryOp::BitNot => (BigInt::one() << ty.width()) - 1 - arg,
         hir::UnaryOp::LogicNot => (arg.is_zero() as usize).into(),
