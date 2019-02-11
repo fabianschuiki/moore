@@ -60,5 +60,3 @@ module D;
 		a >>>= b;
 	end
 endmodule
-
-//@ elab D
