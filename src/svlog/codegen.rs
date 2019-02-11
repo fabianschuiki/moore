@@ -1281,6 +1281,30 @@ where
                     hir::AssignKind::Block(ast::AssignOp::Identity) => {
                         self.emit_blocking_assign(lhs, rhs_value, env)?;
                     }
+                    hir::AssignKind::Block(op) => {
+                        let binop = match op {
+                            ast::AssignOp::Identity => unreachable!(),
+                            ast::AssignOp::Add => llhd::BinaryOp::Add,
+                            ast::AssignOp::Sub => llhd::BinaryOp::Sub,
+                            ast::AssignOp::Mul => llhd::BinaryOp::Mul,
+                            ast::AssignOp::Div => llhd::BinaryOp::Div,
+                            ast::AssignOp::Mod => llhd::BinaryOp::Mod,
+                            ast::AssignOp::BitAnd => llhd::BinaryOp::And,
+                            ast::AssignOp::BitOr => llhd::BinaryOp::Or,
+                            ast::AssignOp::BitXor => llhd::BinaryOp::Xor,
+                            ast::AssignOp::LogicShL => llhd::BinaryOp::Shl,
+                            ast::AssignOp::LogicShR => llhd::BinaryOp::Shr,
+                            ast::AssignOp::ArithShL => llhd::BinaryOp::Shl,
+                            ast::AssignOp::ArithShR => llhd::BinaryOp::Shr,
+                        };
+                        let lhs_value = self.emit_rvalue(lhs, env)?;
+                        let ty = self.type_of(lhs, env)?;
+                        let ty = self.emit_type(ty, env)?;
+                        let value = self
+                            .emit_nameless_inst(llhd::BinaryInst(binop, ty, lhs_value, rhs_value))
+                            .into();
+                        self.emit_blocking_assign(lhs, value, env)?;
+                    }
                     hir::AssignKind::Nonblock => {
                         let lhs_value = self.emit_lvalue(lhs, env)?;
                         let delay = llhd::const_time(num::zero(), 1, 0).into();

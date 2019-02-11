@@ -42,3 +42,23 @@ endmodule
 //|     %a = sig i32
 //|     inst @C.initial.236.0 () (%a)
 //| }
+
+module D;
+	initial begin
+		int a, b;
+		a += b;
+		a -= b;
+		a *= b;
+		a /= b;
+		a %= b;
+		a &= b;
+		a |= b;
+		a ^= b;
+		a <<= b;
+		a <<<= b;
+		a >>= b;
+		a >>>= b;
+	end
+endmodule
+
+//@ elab D
