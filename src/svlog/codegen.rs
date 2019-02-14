@@ -971,10 +971,18 @@ where
                         ));
                         llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
                     }
-                    hir::BinaryOp::LogicShL => llhd::BinaryInst(llhd::BinaryOp::Shl, ty, lhs, rhs),
-                    hir::BinaryOp::LogicShR => llhd::BinaryInst(llhd::BinaryOp::Shr, ty, lhs, rhs),
-                    hir::BinaryOp::ArithShL => llhd::BinaryInst(llhd::BinaryOp::Shl, ty, lhs, rhs),
-                    hir::BinaryOp::ArithShR => llhd::BinaryInst(llhd::BinaryOp::Shr, ty, lhs, rhs),
+                    hir::BinaryOp::LogicShL => {
+                        self.emit_shift_operator(llhd::ShiftDir::Left, false, ty, lhs, rhs)
+                    }
+                    hir::BinaryOp::LogicShR => {
+                        self.emit_shift_operator(llhd::ShiftDir::Right, false, ty, lhs, rhs)
+                    }
+                    hir::BinaryOp::ArithShL => {
+                        self.emit_shift_operator(llhd::ShiftDir::Left, true, ty, lhs, rhs)
+                    }
+                    hir::BinaryOp::ArithShR => {
+                        self.emit_shift_operator(llhd::ShiftDir::Right, true, ty, lhs, rhs)
+                    }
                     _ => {
                         error!("{:#?}", hir);
                         return self.unimp_msg("code generation for", hir);
@@ -1211,11 +1219,28 @@ where
                     .into());
             }
         };
+        let single_element_ty = |ty: &llhd::Type| -> llhd::Type {
+            match **ty {
+                llhd::IntType(_) => llhd::int_ty(1),
+                llhd::ArrayType(_, ref ty) => ty.clone(),
+                _ => panic!("variable index access into target of type {}", ty),
+            }
+        };
+        let dummy = match *target_ty {
+            llhd::PointerType(ref ty) => self
+                .emit_named_inst("dummy", llhd::VariableInst(single_element_ty(ty)))
+                .into(),
+            llhd::SignalType(ref ty) => self
+                .emit_named_inst("dummy", llhd::SignalInst(single_element_ty(ty), None))
+                .into(),
+            _ => llhd::const_zero(&single_element_ty(&target_ty)).into(),
+        };
         let shifted = self
-            .emit_nameless_inst(llhd::BinaryInst(
-                llhd::BinaryOp::Shr,
+            .emit_nameless_inst(llhd::ShiftInst(
+                llhd::ShiftDir::Right,
                 target_ty.clone(),
                 target,
+                dummy,
                 shift,
             ))
             .into();
@@ -1277,6 +1302,32 @@ where
         } else {
             Ok(result)
         }
+    }
+
+    /// Emit a binary shift operator.
+    fn emit_shift_operator(
+        &mut self,
+        dir: llhd::ShiftDir,
+        arith: bool,
+        ty: llhd::Type,
+        lhs: llhd::ValueRef,
+        rhs: llhd::ValueRef,
+    ) -> llhd::InstKind {
+        let insert = match *ty {
+            llhd::IntType(w) if arith && dir == llhd::ShiftDir::Right => self
+                .emit_nameless_inst(llhd::ExtractInst(
+                    ty.clone(),
+                    lhs.clone(),
+                    llhd::SliceMode::Element(w - 1),
+                ))
+                .into(),
+            llhd::IntType(_) => llhd::const_int(1, num::zero()).into(),
+            _ => panic!(
+                "shift operator on target of type {}; target is {:?}",
+                ty, lhs
+            ),
+        };
+        llhd::ShiftInst(dir, ty, lhs, insert, rhs)
     }
 }
 
@@ -1346,27 +1397,37 @@ where
                         self.emit_blocking_assign(lhs, rhs_value, env)?;
                     }
                     hir::AssignKind::Block(op) => {
-                        let binop = match op {
-                            ast::AssignOp::Identity => unreachable!(),
-                            ast::AssignOp::Add => llhd::BinaryOp::Add,
-                            ast::AssignOp::Sub => llhd::BinaryOp::Sub,
-                            ast::AssignOp::Mul => llhd::BinaryOp::Mul,
-                            ast::AssignOp::Div => llhd::BinaryOp::Div,
-                            ast::AssignOp::Mod => llhd::BinaryOp::Mod,
-                            ast::AssignOp::BitAnd => llhd::BinaryOp::And,
-                            ast::AssignOp::BitOr => llhd::BinaryOp::Or,
-                            ast::AssignOp::BitXor => llhd::BinaryOp::Xor,
-                            ast::AssignOp::LogicShL => llhd::BinaryOp::Shl,
-                            ast::AssignOp::LogicShR => llhd::BinaryOp::Shr,
-                            ast::AssignOp::ArithShL => llhd::BinaryOp::Shl,
-                            ast::AssignOp::ArithShR => llhd::BinaryOp::Shr,
-                        };
                         let lhs_value = self.emit_rvalue(lhs, env)?;
                         let ty = self.type_of(lhs, env)?;
                         let ty = self.emit_type(ty, env)?;
-                        let value = self
-                            .emit_nameless_inst(llhd::BinaryInst(binop, ty, lhs_value, rhs_value))
-                            .into();
+                        let binop = |op| -> llhd::InstKind {
+                            llhd::BinaryInst(op, ty.clone(), lhs_value.clone(), rhs_value.clone())
+                        };
+                        let mut shift = |dir, arith| -> llhd::InstKind {
+                            self.emit_shift_operator(
+                                dir,
+                                arith,
+                                ty.clone(),
+                                lhs_value.clone(),
+                                rhs_value.clone(),
+                            )
+                        };
+                        let inst = match op {
+                            ast::AssignOp::Identity => unreachable!(),
+                            ast::AssignOp::Add => binop(llhd::BinaryOp::Add),
+                            ast::AssignOp::Sub => binop(llhd::BinaryOp::Sub),
+                            ast::AssignOp::Mul => binop(llhd::BinaryOp::Mul),
+                            ast::AssignOp::Div => binop(llhd::BinaryOp::Div),
+                            ast::AssignOp::Mod => binop(llhd::BinaryOp::Mod),
+                            ast::AssignOp::BitAnd => binop(llhd::BinaryOp::And),
+                            ast::AssignOp::BitOr => binop(llhd::BinaryOp::Or),
+                            ast::AssignOp::BitXor => binop(llhd::BinaryOp::Xor),
+                            ast::AssignOp::LogicShL => shift(llhd::ShiftDir::Left, false),
+                            ast::AssignOp::LogicShR => shift(llhd::ShiftDir::Right, false),
+                            ast::AssignOp::ArithShL => shift(llhd::ShiftDir::Left, true),
+                            ast::AssignOp::ArithShR => shift(llhd::ShiftDir::Right, true),
+                        };
+                        let value = self.emit_nameless_inst(inst).into();
                         self.emit_blocking_assign(lhs, value, env)?;
                     }
                     hir::AssignKind::Nonblock => {

@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix error when parameters or genvars are used in process. ([#85](https://github.com/fabianschuiki/moore/issues/85))
 
 ### Changed
-- Update llhd to v0.4.0.
+- Update llhd to v0.5.0.
 - Make emitted process names more descriptive.
 
 ### Removed
