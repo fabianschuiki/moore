@@ -854,6 +854,7 @@ pub enum ExprData {
         name: Identifier,
     },
     PatternExpr(Vec<PatternField>),
+    InsideExpr(Box<Expr>, Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

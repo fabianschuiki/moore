@@ -2059,6 +2059,19 @@ fn parse_expr_suffix(
             return parse_expr_suffix(p, expr, precedence);
         }
 
+        // expr "inside" "{" open_range_list "}"
+        Keyword(Kw::Inside) if precedence < Precedence::Ternary => {
+            p.bump();
+            let set = flanked(p, Brace, |p| {
+                comma_list_nonempty(p, CloseDelim(Brace), "range", |p| parse_expr(p))
+            })?;
+            let expr = Expr {
+                span: Span::union(prefix.span, p.last_span()),
+                data: InsideExpr(Box::new(prefix), set),
+            };
+            return parse_expr_suffix(p, expr, precedence);
+        }
+
         _ => (),
     }
 
