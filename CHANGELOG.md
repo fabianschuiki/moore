@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+### Fixed
+- Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))
+
 ## 0.4.0 - 2019-02-19
 ### Added
 - Support for variable declarations. ([#70](https://github.com/fabianschuiki/moore/issues/70))

@@ -11,7 +11,7 @@ use crate::{
 };
 use num::{
     traits::{cast::ToPrimitive, sign::Signed},
-    BigInt, One, Zero,
+    BigInt, One,
 };
 use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
@@ -213,7 +213,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             };
             let lhs = gen.emit_lvalue(hir.lhs, env)?;
             let rhs = gen.emit_rvalue_mode(hir.rhs, env, Mode::Value)?;
-            gen.emit_nameless_inst(llhd::DriveInst(lhs, rhs, None));
+            let one_epsilon = llhd::const_time(num::zero(), 0, 0);
+            gen.emit_nameless_inst(llhd::DriveInst(lhs, rhs, Some(one_epsilon.clone().into())));
         }
 
         // Emit instantiations.
@@ -540,9 +541,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
                 Ok(llhd::const_int(width, k.clone()))
             }
-            (&TypeKind::Time, &ValueKind::Time(ref k)) => {
-                Ok(llhd::const_time(k.clone(), Zero::zero(), Zero::zero()))
-            }
+            (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(llhd::const_time(k.clone(), 0, 0)),
             (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone())),
             _ => panic!("invalid type/value combination {:#?}", value),
         }
@@ -1817,7 +1816,7 @@ where
         let rty = self.llhd_type(&rvalue);
         match *lty {
             llhd::SignalType(..) => {
-                let one_epsilon = llhd::const_time(num::zero(), num::zero(), num::one());
+                let one_epsilon = llhd::const_time(num::zero(), 0, 0);
                 self.emit_nameless_inst(llhd::DriveInst(
                     lvalue,
                     rvalue,
