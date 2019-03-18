@@ -4,7 +4,7 @@
 
 use super::token::{Lit, Op};
 use moore_common::name::Name;
-use moore_common::source::Span;
+use moore_common::source::{Span, Spanned};
 use moore_common::util::{HasDesc, HasSpan};
 use std::fmt;
 
@@ -53,7 +53,7 @@ pub use self::TypeData::*;
 
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Root {
-    pub timeunits: Option<Timeunit>,
+    pub timeunits: Timeunit,
     pub items: Vec<Item>,
 }
 
@@ -177,8 +177,17 @@ pub enum Lifetime {
     Automatic,
 }
 
+/// A time unit specification.
+///
+/// ```text
+/// "timeunit" time_literal ["/" time_literal] ";"
+/// "timeprecision" time_literal ";"
+/// ```
 #[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
-pub struct Timeunit;
+pub struct Timeunit {
+    pub unit: Option<Spanned<Lit>>,
+    pub prec: Option<Spanned<Lit>>,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub enum HierarchyItem {

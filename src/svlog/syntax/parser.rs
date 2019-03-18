@@ -557,12 +557,18 @@ pub fn parse(input: Lexer) -> Result<Root, ()> {
 
 fn parse_source_text(p: &mut Parser) -> Root {
     let mut root = Root {
-        timeunits: None,
+        timeunits: Timeunit {
+            unit: None,
+            prec: None,
+        },
         items: Vec::new(),
     };
 
     // Parse the optional timeunits declaration.
-    // TODO
+    match parse_time_units(p) {
+        Ok(x) => root.timeunits = x,
+        Err(()) => (),
+    }
 
     // Parse the descriptions in the source text.
     while !p.is_fatal() && p.peek(0).0 != Eof {
@@ -573,6 +579,46 @@ fn parse_source_text(p: &mut Parser) -> Root {
     }
 
     root
+}
+
+fn parse_time_units(p: &mut AbstractParser) -> ReportedResult<Timeunit> {
+    let mut unit = None;
+    let mut prec = None;
+    while p.peek(0).0 == Keyword(Kw::Timeunit) || p.peek(0).0 == Keyword(Kw::Timeprecision) {
+        recovered(p, Semicolon, |p| {
+            if p.try_eat(Keyword(Kw::Timeunit)) {
+                unit = Some(parse_time_literal(p)?);
+                if p.try_eat(Operator(Op::Div)) {
+                    prec = Some(parse_time_literal(p)?);
+                }
+            } else if p.try_eat(Keyword(Kw::Timeprecision)) {
+                prec = Some(parse_time_literal(p)?);
+            } else {
+                unreachable!();
+            }
+            Ok(())
+        })?;
+        p.require_reported(Semicolon)?;
+    }
+
+    Ok(Timeunit { unit, prec })
+}
+
+fn parse_time_literal(p: &mut AbstractParser) -> ReportedResult<Spanned<Lit>> {
+    let (tkn, sp) = p.peek(0);
+    match tkn {
+        Literal(lit @ Time(..)) => {
+            p.bump();
+            Ok(Spanned::new(lit, sp))
+        }
+        _ => {
+            p.add_diag(
+                DiagBuilder2::error(format!("expected time literal, instead got `{}`", tkn))
+                    .span(sp),
+            );
+            Err(())
+        }
+    }
 }
 
 fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
@@ -899,7 +945,10 @@ fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
         p.require_reported(Semicolon)?;
 
         // TODO: Parse the optional timeunits declaration.
-        let timeunits = Timeunit;
+        let timeunits = Timeunit {
+            unit: None,
+            prec: None,
+        };
 
         // Parse the package items.
         let mut items = Vec::new();
