@@ -212,7 +212,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 _ => unreachable!(),
             };
             let lhs = gen.emit_lvalue(hir.lhs, env)?;
-            let rhs = gen.emit_rvalue_mode(hir.rhs, env, Mode::Signal)?;
+            let rhs = gen.emit_rvalue_mode(hir.rhs, env, Mode::Value)?;
             gen.emit_nameless_inst(llhd::DriveInst(lhs, rhs, None));
         }
 
