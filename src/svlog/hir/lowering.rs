@@ -816,6 +816,13 @@ fn lower_expr<'gcx>(
                 };
                 hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg))
             }
+            ast::SysIdentExpr(ident) => {
+                cx.emit(
+                    DiagBuilder2::error(format!("`{}` unknown", ident.name))
+                        .span(expr.human_span()),
+                );
+                return Err(());
+            }
             _ => {
                 error!("{:#?}", callee);
                 return cx.unimp_msg("lowering of call to", callee.as_ref());
