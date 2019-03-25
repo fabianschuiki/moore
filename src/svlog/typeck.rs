@@ -46,6 +46,7 @@ pub(crate) fn type_of<'gcx>(
                     | hir::BinaryOp::Mul
                     | hir::BinaryOp::Div
                     | hir::BinaryOp::Mod
+                    | hir::BinaryOp::Pow
                     | hir::BinaryOp::LogicShL
                     | hir::BinaryOp::LogicShR
                     | hir::BinaryOp::ArithShL

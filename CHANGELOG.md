@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - Parsing of `timeunit` and `timeprecision` statements. ([#92](https://github.com/fabianschuiki/moore/issues/92))
 - Parsing of `inside` expressions. ([#93](https://github.com/fabianschuiki/moore/issues/93))
+- Support for the `**` operators. ([#94](https://github.com/fabianschuiki/moore/issues/94))
 
 ### Fixed
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))

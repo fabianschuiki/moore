@@ -729,6 +729,7 @@ fn lower_expr<'gcx>(
                 Op::Mul => hir::BinaryOp::Mul,
                 Op::Div => hir::BinaryOp::Div,
                 Op::Mod => hir::BinaryOp::Mod,
+                Op::Pow => hir::BinaryOp::Pow,
                 Op::LogicEq => hir::BinaryOp::Eq,
                 Op::LogicNeq => hir::BinaryOp::Neq,
                 Op::Lt => hir::BinaryOp::Lt,

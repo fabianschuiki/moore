@@ -19,6 +19,7 @@ module A #(int a = 42, int b = 19);
 	B #(a == b ? 42 : 9001) b18();
 	B #(a != b ? 42 : 9001) b19();
 	B #(-a) b20();
+	B #(a ** b) b21();
 endmodule
 
 module B #(int K);
@@ -106,6 +107,10 @@ endmodule
 //|     %x = sig i32 -42
 //| }
 //|
+//| entity @B.param21 () () {
+//|     %x = sig i32 1332215808
+//| }
+//|
 //| entity @A () () {
 //|     %b1 = inst @B.param1 () ()
 //|     %b2 = inst @B.param2 () ()
@@ -127,4 +132,5 @@ endmodule
 //|     %b18 = inst @B.param18 () ()
 //|     %b19 = inst @B.param19 () ()
 //|     %b20 = inst @B.param20 () ()
+//|     %b21 = inst @B.param21 () ()
 //| }

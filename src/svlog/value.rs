@@ -285,6 +285,15 @@ fn const_binary_op_on_int<'gcx>(
         hir::BinaryOp::Mul => lhs * rhs,
         hir::BinaryOp::Div => lhs / rhs,
         hir::BinaryOp::Mod => lhs % rhs,
+        hir::BinaryOp::Pow => {
+            let mut result = num::one();
+            let mut cnt = rhs.clone();
+            while !cnt.is_zero() {
+                result = result * lhs;
+                cnt = cnt - 1;
+            }
+            result
+        }
         hir::BinaryOp::Eq => ((lhs == rhs) as usize).into(),
         hir::BinaryOp::Neq => ((lhs != rhs) as usize).into(),
         hir::BinaryOp::Lt => ((lhs < rhs) as usize).into(),

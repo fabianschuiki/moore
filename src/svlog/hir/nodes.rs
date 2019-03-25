@@ -648,6 +648,8 @@ pub enum BinaryOp {
     Div,
     /// The modulus operator `x % y`.
     Mod,
+    /// The power operator `x ** y`.
+    Pow,
     /// The equality operator `x == y`.
     Eq,
     /// The inequality operator `x != y`.
@@ -694,6 +696,7 @@ impl HasDesc for BinaryOp {
             BinaryOp::Mul => "`*` operator",
             BinaryOp::Div => "`/` operator",
             BinaryOp::Mod => "`%` operator",
+            BinaryOp::Pow => "`**` operator",
             BinaryOp::Eq => "`==` operator",
             BinaryOp::Neq => "`!=` operator",
             BinaryOp::Lt => "`<` operator",

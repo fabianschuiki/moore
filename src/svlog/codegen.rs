@@ -930,6 +930,7 @@ where
                     hir::BinaryOp::Mul => llhd::BinaryInst(llhd::BinaryOp::Mul, ty, lhs, rhs),
                     hir::BinaryOp::Div => llhd::BinaryInst(llhd::BinaryOp::Div, ty, lhs, rhs),
                     hir::BinaryOp::Mod => llhd::BinaryInst(llhd::BinaryOp::Mod, ty, lhs, rhs),
+                    hir::BinaryOp::Pow => llhd::BinaryInst(llhd::BinaryOp::Mul, ty, lhs, rhs), // fix this
                     hir::BinaryOp::Eq => llhd::CompareInst(llhd::CompareOp::Eq, ty, lhs, rhs),
                     hir::BinaryOp::Neq => llhd::CompareInst(llhd::CompareOp::Neq, ty, lhs, rhs),
                     hir::BinaryOp::Lt => llhd::CompareInst(llhd::CompareOp::Ult, ty, lhs, rhs),

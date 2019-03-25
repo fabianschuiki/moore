@@ -22,6 +22,7 @@ module A;
 		#1ns a = b - c;
 		#1ns a = b * c;
 		#1ns a = b / c;
+		#1ns a = b ** c;
 		#1ns a = b & c;
 		#1ns a = b | c;
 		#1ns a = b ^ c;
