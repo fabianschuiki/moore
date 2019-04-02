@@ -292,6 +292,8 @@ pub enum TypeData {
     VirtIntfType(Name),
     EventType,
     MailboxType,
+    ImplicitSignedType,
+    ImplicitUnsignedType,
 
     // Scoping
     ScopedType {
@@ -856,6 +858,7 @@ pub enum ExprData {
     },
     PatternExpr(Vec<PatternField>),
     InsideExpr(Box<Expr>, Vec<Expr>),
+    CastExpr(Type, Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

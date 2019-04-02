@@ -1517,6 +1517,14 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
             p.bump();
             Ok(ast::EventType)
         }
+        Keyword(Kw::Signed) => {
+            p.bump();
+            Ok(ast::ImplicitSignedType)
+        }
+        Keyword(Kw::Unsigned) => {
+            p.bump();
+            Ok(ast::ImplicitUnsignedType)
+        }
 
         // Integer Vector Types
         Keyword(Kw::Bit) => {
@@ -1932,6 +1940,27 @@ fn parse_expr_prec(p: &mut AbstractParser, precedence: Precedence) -> ReportedRe
                     data: ClassNewExpr(Some(Box::new(expr))),
                 });
             }
+        }
+    }
+
+    // Try to parse a cast expression, which starts with an explicit type.
+    {
+        let mut bp = BranchParser::new(p);
+        let mut span = bp.last_span();
+        let ty = parse_explicit_type(&mut bp);
+        let tick = bp.require_reported(Apostrophe);
+        match (ty, tick) {
+            (Ok(ty), Ok(())) => {
+                bp.commit();
+                let expr = flanked(p, Paren, parse_expr)?;
+                span.expand(p.last_span());
+                let cast = Expr {
+                    span,
+                    data: CastExpr(ty, Box::new(expr)),
+                };
+                return parse_expr_suffix(p, cast, precedence);
+            }
+            _ => (),
         }
     }
 
