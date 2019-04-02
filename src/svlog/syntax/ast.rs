@@ -801,6 +801,7 @@ pub enum ExprData {
     LiteralExpr(Lit),
     IdentExpr(Identifier),
     SysIdentExpr(Identifier),
+    ScopeExpr(Box<Expr>, Identifier),
     IndexExpr {
         indexee: Box<Expr>,
         index: Box<Expr>,

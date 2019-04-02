@@ -2003,15 +2003,12 @@ fn parse_expr_suffix(
 
         // expr "::" ident
         Namespace if precedence <= Precedence::Scope => {
-            p.add_diag(DiagBuilder2::fatal("Don't know how to handle the scope operator").span(sp));
-            return Err(());
-            // p.bump();
-            // p.eat_ident("scope name")?;
-            // let expr = Expr {
-            //  span: Span::union(prefix.span, p.last_span()),
-            //  data: DummyExpr,
-            // };
-            // return parse_expr_suffix(p, expr, precedence);
+            p.bump();
+            let expr = Expr {
+                span: Span::union(prefix.span, p.last_span()),
+                data: ScopeExpr(Box::new(prefix), parse_identifier(p, "scope name")?),
+            };
+            return parse_expr_suffix(p, expr, precedence);
         }
 
         // expr "++"
