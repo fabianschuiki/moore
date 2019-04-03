@@ -105,10 +105,10 @@ impl<'a> Preprocessor<'a> {
                 let name_p;
                 let name_q;
                 let closing = match self.token {
-					Some((Symbol('"'), sp)) => { name_p = sp.end(); self.bump(); '"' },
-					Some((Symbol('<'), sp)) => { name_p = sp.end(); self.bump(); '>' },
-					_ => { return Err(DiagBuilder2::fatal("Expected filename inside double quotes (\"...\") or angular brackets (<...>) after `include").span(span))}
-				};
+                    Some((Symbol('"'), sp)) => { name_p = sp.end(); self.bump(); '"' },
+                    Some((Symbol('<'), sp)) => { name_p = sp.end(); self.bump(); '>' },
+                    _ => { return Err(DiagBuilder2::fatal("Expected filename inside double quotes (\"...\") or angular brackets (<...>) after `include").span(span))}
+                };
 
                 // Accumulate the include path until the closing symbol.
                 let mut filename = String::new();
@@ -219,11 +219,11 @@ impl<'a> Preprocessor<'a> {
                                 _ => (),
                             }
                             match self.token {
-								Some((Symbol(','), _)) => self.bump(),
-								Some((Symbol(')'), _)) => break,
-								Some((_, sp)) => return Err(DiagBuilder2::fatal("Expected , or ) after macro argument name").span(sp)),
-								None => return Err(DiagBuilder2::fatal("Expected closing parenthesis at the end of the macro definition").span(span)),
-							}
+                                Some((Symbol(','), _)) => self.bump(),
+                                Some((Symbol(')'), _)) => break,
+                                Some((_, sp)) => return Err(DiagBuilder2::fatal("Expected , or ) after macro argument name").span(sp)),
+                                None => return Err(DiagBuilder2::fatal("Expected closing parenthesis at the end of the macro definition").span(span)),
+                            }
                         }
                         self.bump();
                     }
@@ -300,17 +300,17 @@ impl<'a> Preprocessor<'a> {
                     }),
                     Directive::Elsif => {
                         match self.defcond_stack.pop() {
-							Some(Defcond::Done) |
-							Some(Defcond::Enabled) => self.defcond_stack.push(Defcond::Done),
-							Some(Defcond::Disabled) => {
-								if exists {
-									self.defcond_stack.push(Defcond::Enabled);
-								} else {
-									self.defcond_stack.push(Defcond::Disabled);
-								}
-							},
-							None => return Err(DiagBuilder2::fatal("Found `elsif without any preceeding `ifdef, `ifndef, or `elsif directive").span(span))
-						};
+                            Some(Defcond::Done) |
+                            Some(Defcond::Enabled) => self.defcond_stack.push(Defcond::Done),
+                            Some(Defcond::Disabled) => {
+                                if exists {
+                                    self.defcond_stack.push(Defcond::Enabled);
+                                } else {
+                                    self.defcond_stack.push(Defcond::Disabled);
+                                }
+                            },
+                            None => return Err(DiagBuilder2::fatal("Found `elsif without any preceeding `ifdef, `ifndef, or `elsif directive").span(span))
+                        };
                     }
                     _ => unreachable!(),
                 }
@@ -357,8 +357,8 @@ impl<'a> Preprocessor<'a> {
                     if !makro.args.is_empty() {
                         // // Skip whitespace.
                         // match self.token {
-                        // 	Some((Whitespace, _)) => self.bump(),
-                        // 	_ => ()
+                        //  Some((Whitespace, _)) => self.bump(),
+                        //  _ => ()
                         // }
 
                         // Consume the opening paranthesis.
@@ -377,8 +377,8 @@ impl<'a> Preprocessor<'a> {
                             // // Skip whitespace and break out of the loop if the
                             // // closing parenthesis was encountered.
                             // match self.token {
-                            // 	Some((Whitespace, _)) => self.bump(),
-                            // 	_ => ()
+                            //  Some((Whitespace, _)) => self.bump(),
+                            //  _ => ()
                             // }
                             match self.token {
                                 Some((Symbol(')'), _)) => break,
@@ -594,9 +594,23 @@ impl<'a> Iterator for Preprocessor<'a> {
                             _ => (),
                         }
                         continue;
+                    } else if let Some(tkn @ (Symbol('"'), _)) = self.token {
+                        // emit the '"'
+                        self.bump();
+                        if !self.is_inactive() {
+                            return Some(Ok(tkn));
+                        }
+                    } else if let Some(tkn @ (Symbol('\\'), _)) = self.token {
+                        // emit the '\'
+                        self.bump();
+                        if !self.is_inactive() {
+                            return Some(Ok(tkn));
+                        }
+                    } else if let Some((Symbol('`'), _)) = self.token {
+                        self.bump(); // consume the second backtick and ignore
                     } else {
                         return Some(Err(DiagBuilder2::fatal(
-                            "Expected compiler directive after '`'",
+                            "Expected compiler directive after '`', or '``', '`\"', or '`\\'",
                         )
                         .span(sp_backtick)));
                     }
@@ -640,19 +654,19 @@ enum Directive {
 }
 
 thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
-	use self::Directive::*;
-	let mut table = HashMap::new();
-	table.insert("include", Include);
-	table.insert("define", Define);
-	table.insert("undef", Undef);
-	table.insert("undefineall", Undefineall);
-	table.insert("ifdef", Ifdef);
-	table.insert("ifndef", Ifndef);
-	table.insert("else", Else);
-	table.insert("elsif", Elsif);
-	table.insert("endif", Endif);
-	table.insert("timescale", Timescale);
-	table
+    use self::Directive::*;
+    let mut table = HashMap::new();
+    table.insert("include", Include);
+    table.insert("define", Define);
+    table.insert("undef", Undef);
+    table.insert("undefineall", Undefineall);
+    table.insert("ifdef", Ifdef);
+    table.insert("ifndef", Ifndef);
+    table.insert("else", Else);
+    table.insert("elsif", Elsif);
+    table.insert("endif", Endif);
+    table.insert("timescale", Timescale);
+    table
 });
 
 #[derive(Debug)]

@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for the `**` operators. ([#94](https://github.com/fabianschuiki/moore/issues/94))
 - Parse the `::` operator.
 - Parse cast expressions.
+- Accept ``` `` ```, `` `\ ``, and `` `" `` in preprocessor.
 
 ### Fixed
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))

@@ -408,6 +408,40 @@ impl<'a> Lexer<'a> {
     /// number literals or string constants.
     fn skip_noise(&mut self) -> DiagResult2<()> {
         loop {
+            match (self.peek[0].0, self.peek[1].0) {
+                // Single-line comment inserted by preprocessor.
+                (CatTokenKind::Symbol('/'), CatTokenKind::Symbol('/')) => {
+                    self.bump()?;
+                    self.bump()?;
+                    loop {
+                        match self.peek[0].0 {
+                            CatTokenKind::Eof => break,
+                            CatTokenKind::Newline => {
+                                self.bump()?;
+                                break;
+                            }
+                            _ => self.bump()?,
+                        }
+                    }
+                }
+                // Multi-line comment inserted by preprocessor.
+                (CatTokenKind::Symbol('/'), CatTokenKind::Symbol('*')) => {
+                    self.bump()?;
+                    self.bump()?;
+                    loop {
+                        match (self.peek[0].0, self.peek[1].0) {
+                            (CatTokenKind::Eof, _) => break,
+                            (CatTokenKind::Symbol('*'), CatTokenKind::Symbol('/')) => {
+                                self.bump()?;
+                                self.bump()?;
+                                break;
+                            }
+                            _ => self.bump()?,
+                        }
+                    }
+                }
+                _ => (),
+            }
             match self.peek[0].0 {
                 CatTokenKind::Whitespace | CatTokenKind::Newline | CatTokenKind::Comment => {
                     self.bump()?
