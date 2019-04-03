@@ -101,7 +101,18 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             }
             _ => None,
         },
-        AstNode::Package(_) => Some(RibKind::Module(HashMap::new())),
+        AstNode::Package(_) => {
+            let hir = match cx.hir_of(node_id)? {
+                HirNode::Package(x) => x,
+                _ => unreachable!(),
+            };
+            Some(RibKind::Module(
+                hir.names
+                    .iter()
+                    .map(|(name, id)| (name.value, *id))
+                    .collect(),
+            ))
+        }
         _ => None,
     };
     let kind = match kind {
@@ -158,12 +169,7 @@ pub(crate) fn resolve_downwards<'gcx>(
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
     let rib = cx.local_rib(start_at)?;
-    trace!(
-        "How do I find `{}` in the declared things in {:?}?",
-        name,
-        rib
-    );
-    Ok(None)
+    Ok(rib.get(name))
 }
 
 /// Resolve a node to its target.

@@ -377,6 +377,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
         }
+        AstNode::Package(p) => lower_package(cx, node_id, p),
         _ => {
             error!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -1019,4 +1020,54 @@ fn alloc_struct_member<'gcx>(
         into.push(member_id);
     }
     next_rib
+}
+
+/// Lower a package to HIR.
+///
+/// This allocates node IDs to everything in the package and registers AST nodes
+/// for each ID.
+fn lower_package<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    ast: &'gcx ast::PackageDecl,
+) -> Result<HirNode<'gcx>> {
+    let mut next_rib = node_id;
+    let mut names = Vec::new();
+    let mut decls = Vec::new();
+    let mut params = Vec::new();
+    for item in &ast.items {
+        match *item {
+            ast::HierarchyItem::VarDecl(ref decl) => {
+                next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
+            }
+            ast::HierarchyItem::ParamDecl(ref param) => {
+                next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
+            }
+            ast::HierarchyItem::Typedef(ref def) => {
+                next_rib = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
+                names.push((Spanned::new(def.name.name, def.name.span), next_rib));
+            }
+            ast::HierarchyItem::SubroutineDecl(ref decl) => warn!(
+                "ignoring unsupported subroutine `{}`",
+                decl.prototype.name.name
+            ),
+            _ => {
+                cx.emit(
+                    DiagBuilder2::error(format!("{} cannot appear in a package", item.desc_full()))
+                        .span(item.human_span()),
+                );
+                return Err(());
+            }
+        }
+    }
+
+    let hir = hir::Package {
+        id: node_id,
+        name: Spanned::new(ast.name, ast.name_span),
+        span: ast.span,
+        names,
+        decls,
+        params,
+    };
+    Ok(HirNode::Package(cx.arena().alloc_hir(hir)))
 }

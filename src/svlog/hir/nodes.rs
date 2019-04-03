@@ -24,6 +24,7 @@ pub enum HirNode<'hir> {
     GenvarDecl(&'hir GenvarDecl),
     Typedef(&'hir Typedef),
     Assign(&'hir Assign),
+    Package(&'hir Package),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -45,6 +46,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::GenvarDecl(x) => x.span(),
             HirNode::Typedef(x) => x.span(),
             HirNode::Assign(x) => x.span(),
+            HirNode::Package(x) => x.span(),
         }
     }
 
@@ -66,6 +68,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::GenvarDecl(x) => x.human_span(),
             HirNode::Typedef(x) => x.human_span(),
             HirNode::Assign(x) => x.human_span(),
+            HirNode::Package(x) => x.human_span(),
         }
     }
 }
@@ -89,6 +92,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::GenvarDecl(x) => x.desc(),
             HirNode::Typedef(x) => x.desc(),
             HirNode::Assign(x) => x.desc(),
+            HirNode::Package(x) => x.desc(),
         }
     }
 
@@ -110,6 +114,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::GenvarDecl(x) => x.desc_full(),
             HirNode::Typedef(x) => x.desc_full(),
             HirNode::Assign(x) => x.desc_full(),
+            HirNode::Package(x) => x.desc_full(),
         }
     }
 }
@@ -1051,5 +1056,39 @@ impl HasSpan for Assign {
 impl HasDesc for Assign {
     fn desc(&self) -> &'static str {
         "assignment"
+    }
+}
+
+/// A package.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Package {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    /// The names declared in this package.
+    pub names: Vec<(Spanned<Name>, NodeId)>,
+    /// The constant declarations in the module.
+    pub decls: Vec<NodeId>,
+    /// The parameter declarations in the package.
+    pub params: Vec<NodeId>,
+}
+
+impl HasSpan for Package {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for Package {
+    fn desc(&self) -> &'static str {
+        "package"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("package `{}`", self.name.value)
     }
 }
