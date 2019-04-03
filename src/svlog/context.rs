@@ -109,6 +109,11 @@ impl<'gcx> GlobalContext<'gcx> {
     pub fn modules(&self) -> impl Iterator<Item = (Name, NodeId)> {
         self.modules.borrow().clone().into_iter()
     }
+
+    /// Find a package in the AST.
+    pub fn find_package(&self, name: Name) -> Option<NodeId> {
+        self.packages.borrow().get(&name).cloned()
+    }
 }
 
 impl DiagEmitter for GlobalContext<'_> {
@@ -488,6 +493,19 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
         }
     }
 
+    /// Resolve a name downwards or emit a diagnostic if nothing is found.
+    fn resolve_downwards_or_error(&self, name: Spanned<Name>, start_at: NodeId) -> Result<NodeId> {
+        match self.gcx().resolve_downwards(name.value, start_at)? {
+            Some(id) => Ok(id),
+            None => {
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span),
+                );
+                Err(())
+            }
+        }
+    }
+
     /// Set a lowering hint on a node.
     fn set_lowering_hint(&self, node_id: NodeId, hint: hir::Hint) {
         self.tables()
@@ -560,6 +578,12 @@ pub(super) mod queries {
                 use fn resolver::resolve_upwards;
             }
 
+            /// Resolve a name downwards through the ribs.
+            fn resolve_downwards(name: Name, start_at: NodeId) -> Result<Option<NodeId>> {
+                type ResolveDownwardsQuery;
+                use fn resolver::resolve_downwards;
+            }
+
             /// Resolve a node to its target.
             fn resolve_node(node_id: NodeId, env: ParamEnv) -> Result<NodeId> {
                 type ResolveNodeQuery;
@@ -618,6 +642,7 @@ pub(super) mod queries {
                 fn map_to_type() for MapToTypeQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
+                fn resolve_downwards() for ResolveDownwardsQuery<'gcx>;
                 fn constant_value_of() for ConstantValueOfQuery<'gcx>;
                 fn is_constant() for IsConstantQuery<'gcx>;
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;

@@ -212,8 +212,8 @@ fn map_type_kind<'gcx>(
         hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(cx.mkty_int(16)),
         hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(cx.mkty_int(32)),
         hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(cx.mkty_int(64)),
-        hir::TypeKind::Named(name) => {
-            let binding = cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
+        hir::TypeKind::Named(name) | hir::TypeKind::Scope(_, name) => {
+            let binding = cx.resolve_node(node_id, env)?;
             Ok(cx.mkty_named(name, (binding, env)))
         }
         hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
@@ -254,10 +254,6 @@ fn map_type_kind<'gcx>(
                     Ok(cx.mkty_packed_array(size, inner_ty))
                 }
             }
-        }
-        hir::TypeKind::Scope(scope_id, name) => {
-            trace!("would now resolve `{}` downwards from {:?}", name, scope_id);
-            cx.unimp_msg("scope resolution of", root)
         }
         // We should never request mapping of an implicit type. Rather, the
         // actual type should be mapped. Arriving here is a bug in the

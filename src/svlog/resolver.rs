@@ -101,6 +101,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             }
             _ => None,
         },
+        AstNode::Package(_) => Some(RibKind::Module(HashMap::new())),
         _ => None,
     };
     let kind = match kind {
@@ -139,6 +140,29 @@ pub(crate) fn resolve_upwards<'gcx>(
         }
         next_id = rib.parent;
     }
+    if let m @ Some(_) = cx.gcx().find_module(name) {
+        return Ok(m);
+    }
+    if let p @ Some(_) = cx.gcx().find_package(name) {
+        return Ok(p);
+    }
+    Ok(None)
+}
+
+/// Resolve a name downwards.
+///
+/// This is equivalent to performing a hierarchical name lookup.
+pub(crate) fn resolve_downwards<'gcx>(
+    cx: &impl Context<'gcx>,
+    name: Name,
+    start_at: NodeId,
+) -> Result<Option<NodeId>> {
+    let rib = cx.local_rib(start_at)?;
+    trace!(
+        "How do I find `{}` in the declared things in {:?}?",
+        name,
+        rib
+    );
     Ok(None)
 }
 
@@ -146,12 +170,20 @@ pub(crate) fn resolve_upwards<'gcx>(
 pub(crate) fn resolve_node<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    _env: ParamEnv,
+    env: ParamEnv,
 ) -> Result<NodeId> {
     let hir = cx.hir_of(node_id)?;
     match hir {
         HirNode::Expr(expr) => match expr.kind {
             hir::ExprKind::Ident(ident) => return cx.resolve_upwards_or_error(ident, node_id),
+            _ => (),
+        },
+        HirNode::Type(ty) => match ty.kind {
+            hir::TypeKind::Named(name) => return cx.resolve_upwards_or_error(name, node_id),
+            hir::TypeKind::Scope(scope_id, name) => {
+                let within = cx.resolve_node(scope_id, env)?;
+                return cx.resolve_downwards_or_error(name, within);
+            }
             _ => (),
         },
         _ => (),
