@@ -74,6 +74,8 @@ pub enum AstNode<'ast> {
     ContAssign(&'ast ast::ContAssign, &'ast ast::Expr, &'ast ast::Expr),
     /// A struct member.
     StructMember(&'ast ast::VarDeclName, &'ast ast::StructMember, NodeId),
+    /// A package.
+    Package(&'ast ast::PackageDecl),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -98,6 +100,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Typedef(x) => x.span(),
             AstNode::ContAssign(x, _, _) => x.span(),
             AstNode::StructMember(_, x, _) => x.span(),
+            AstNode::Package(x) => x.span(),
         }
     }
 
@@ -122,6 +125,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Typedef(x) => x.human_span(),
             AstNode::ContAssign(x, _, _) => x.human_span(),
             AstNode::StructMember(x, _, _) => x.human_span(),
+            AstNode::Package(x) => x.human_span(),
         }
     }
 }
@@ -148,6 +152,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Typedef(x) => x.desc(),
             AstNode::ContAssign(x, _, _) => x.desc(),
             AstNode::StructMember(x, _, _) => x.desc(),
+            AstNode::Package(x) => x.desc(),
         }
     }
 
@@ -172,6 +177,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Typedef(x) => x.desc_full(),
             AstNode::ContAssign(x, _, _) => x.desc_full(),
             AstNode::StructMember(x, _, _) => x.desc_full(),
+            AstNode::Package(x) => x.desc_full(),
         }
     }
 }

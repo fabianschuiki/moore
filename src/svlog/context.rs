@@ -53,6 +53,8 @@ pub struct GlobalContext<'gcx> {
     ast_map: AstMap<'gcx>,
     /// The modules in the AST.
     modules: RefCell<HashMap<Name, NodeId>>,
+    /// The packages in the AST.
+    packages: RefCell<HashMap<Name, NodeId>>,
     /// A mapping from node ids to spans for diagnostics.
     node_id_to_span: RefCell<HashMap<NodeId, Span>>,
     /// The tables.
@@ -68,6 +70,7 @@ impl<'gcx> GlobalContext<'gcx> {
             runtime: Default::default(),
             ast_map: Default::default(),
             modules: Default::default(),
+            packages: Default::default(),
             node_id_to_span: Default::default(),
             tables: Default::default(),
         }
@@ -84,6 +87,10 @@ impl<'gcx> GlobalContext<'gcx> {
                     ast::Item::Module(ref m) => {
                         let id = self.map_ast(AstNode::Module(m));
                         self.modules.borrow_mut().insert(m.name, id);
+                    }
+                    ast::Item::Package(ref p) => {
+                        let id = self.map_ast(AstNode::Package(p));
+                        self.packages.borrow_mut().insert(p.name, id);
                     }
                     _ => {
                         let _: Result<()> = self.unimp(item);

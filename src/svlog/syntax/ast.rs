@@ -170,6 +170,26 @@ pub struct PackageDecl {
     pub items: Vec<HierarchyItem>,
 }
 
+impl HasSpan for PackageDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name_span
+    }
+}
+
+impl HasDesc for PackageDecl {
+    fn desc(&self) -> &'static str {
+        "package declaration"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("package `{}`", self.name)
+    }
+}
+
 /// Lifetime specifier for variables, tasks, and functions. Defaults to static.
 #[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub enum Lifetime {
