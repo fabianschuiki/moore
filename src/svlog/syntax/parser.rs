@@ -3063,6 +3063,12 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
         }
     };
 
+    // Parse the optional lifetime specifier.
+    let lifetime = as_lifetime(p.peek(0).0);
+    if lifetime.is_some() {
+        p.bump();
+    }
+
     // Parse the return type (if this is a function), the subroutine name, and
     // the optional argument list.
     let (retty, (name, args)) = if kind == SubroutineKind::Func {
@@ -3088,6 +3094,7 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
     Ok(SubroutinePrototype {
         span: span,
         kind: kind,
+        lifetime: lifetime,
         name: name,
         args: args,
     })

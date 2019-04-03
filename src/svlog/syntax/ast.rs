@@ -1095,6 +1095,7 @@ pub struct SubroutineDecl {
 pub struct SubroutinePrototype {
     pub span: Span,
     pub kind: SubroutineKind,
+    pub lifetime: Option<Lifetime>,
     pub name: Identifier,
     pub args: Vec<SubroutinePort>,
 }
