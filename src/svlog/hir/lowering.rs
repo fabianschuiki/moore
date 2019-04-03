@@ -557,6 +557,14 @@ fn lower_type<'gcx>(
             }
             hir::TypeKind::Struct(fields)
         }
+        ast::ScopedType {
+            ref ty,
+            member: false,
+            name,
+        } => hir::TypeKind::Scope(
+            cx.map_ast_with_parent(AstNode::Type(ty.as_ref()), node_id),
+            Spanned::new(name.name, name.span),
+        ),
         _ => {
             error!("{:#?}", ty);
             return cx.unimp_msg("lowering of", ty);

@@ -480,6 +480,8 @@ pub enum TypeKind {
     ///
     /// Represented as `(inner_type, range_lhs, range_rhs)`.
     PackedArray(Box<TypeKind>, NodeId, NodeId),
+    /// A scope access such as `foo::bar`.
+    Scope(NodeId, Spanned<Name>),
 }
 
 impl HasDesc for TypeKind {

@@ -255,6 +255,10 @@ fn map_type_kind<'gcx>(
                 }
             }
         }
+        hir::TypeKind::Scope(scope_id, name) => {
+            trace!("would now resolve `{}` downwards from {:?}", name, scope_id);
+            cx.unimp_msg("scope resolution of", root)
+        }
         // We should never request mapping of an implicit type. Rather, the
         // actual type should be mapped. Arriving here is a bug in the
         // calling function.
