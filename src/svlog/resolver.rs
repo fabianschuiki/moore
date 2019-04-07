@@ -37,6 +37,8 @@ pub enum RibKind {
     Normal(Spanned<Name>, NodeId),
     /// A module.
     Module(HashMap<Name, NodeId>),
+    /// An enum type declaration.
+    Enum(HashMap<Name, NodeId>),
 }
 
 impl Rib {
@@ -51,7 +53,7 @@ impl RibKind {
     pub fn get(&self, name: Name) -> Option<NodeId> {
         match *self {
             RibKind::Normal(n, id) if n.value == name => Some(id),
-            RibKind::Module(ref defs) => defs.get(&name).cloned(),
+            RibKind::Module(ref defs) | RibKind::Enum(ref defs) => defs.get(&name).cloned(),
             _ => None,
         }
     }
@@ -113,6 +115,24 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
                     .collect(),
             ))
         }
+        AstNode::Type(ty) => match ty.data {
+            ast::EnumType(..) => {
+                let hir = match cx.hir_of(node_id)? {
+                    HirNode::Type(x) => x,
+                    _ => unreachable!(),
+                };
+                match hir.kind {
+                    hir::TypeKind::Enum(ref variants, _) => Some(RibKind::Enum(
+                        variants
+                            .iter()
+                            .map(|(name, id)| (name.value, *id))
+                            .collect(),
+                    )),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
         _ => None,
     };
     let kind = match kind {

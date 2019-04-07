@@ -140,6 +140,7 @@ pub(crate) fn type_of<'gcx>(
             }
         }
         HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
+        HirNode::EnumVariant(v) => cx.map_to_type(v.enum_id, env),
         _ => cx.unimp_msg("type analysis of", &hir),
     }
 }
@@ -255,6 +256,10 @@ fn map_type_kind<'gcx>(
                 }
             }
         }
+        hir::TypeKind::Enum(ref variants, repr) => match repr {
+            Some(repr) => cx.map_to_type(repr, env),
+            None => Ok(cx.mkty_int(variants.len().next_power_of_two().trailing_zeros() as usize)),
+        },
         // We should never request mapping of an implicit type. Rather, the
         // actual type should be mapped. Arriving here is a bug in the
         // calling function.

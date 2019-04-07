@@ -378,6 +378,20 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
         }
         AstNode::Package(p) => lower_package(cx, node_id, p),
+        AstNode::EnumVariant(var, decl, index) => {
+            let hir = hir::EnumVariant {
+                id: node_id,
+                name: Spanned::new(var.name.name, var.name.span),
+                span: var.name.span,
+                enum_id: decl,
+                index,
+                value: var
+                    .value
+                    .as_ref()
+                    .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), decl)),
+            };
+            Ok(HirNode::EnumVariant(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             error!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -566,6 +580,23 @@ fn lower_type<'gcx>(
             cx.map_ast_with_parent(AstNode::Type(ty.as_ref()), node_id),
             Spanned::new(name.name, name.span),
         ),
+        ast::EnumType(ref repr_ty, ref names) => {
+            let mut next_rib = node_id;
+            let ty = match repr_ty {
+                Some(ref ty) => {
+                    next_rib = cx.map_ast_with_parent(AstNode::Type(ty), next_rib);
+                    Some(next_rib)
+                }
+                None => None,
+            };
+            let mut variants = vec![];
+            for (index, name) in names.iter().enumerate() {
+                next_rib =
+                    cx.map_ast_with_parent(AstNode::EnumVariant(name, node_id, index), next_rib);
+                variants.push((Spanned::new(name.name.name, name.name.span), next_rib));
+            }
+            hir::TypeKind::Enum(variants, ty)
+        }
         _ => {
             error!("{:#?}", ty);
             return cx.unimp_msg("lowering of", ty);

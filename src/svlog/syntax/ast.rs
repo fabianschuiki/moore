@@ -394,6 +394,18 @@ pub struct EnumName {
     pub value: Option<Expr>,
 }
 
+impl HasSpan for EnumName {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for EnumName {
+    fn desc(&self) -> &'static str {
+        "enum variant"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum StructKind {
     Struct,

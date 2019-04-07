@@ -37,6 +37,7 @@ make_arenas!(
         typedefs: Typedef,
         assigns: Assign,
         packages: Package,
+        enum_variants: EnumVariant,
     }
 );
 
@@ -115,6 +116,7 @@ where
             Ok(HirNode::ValueParam(..)) => return false,
             Ok(HirNode::TypeParam(..)) => return false,
             Ok(HirNode::GenvarDecl(..)) => return false,
+            Ok(HirNode::EnumVariant(..)) => return false,
             Err(_) => return false,
             _ => (),
         }

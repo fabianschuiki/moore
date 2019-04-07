@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Parse cast expressions.
 - Accept ``` `` ```, `` `\ ``, and `` `" `` in preprocessor.
 - Parse optional lifetime specifiers after `task` or `function`.
+- Support for enum types. ([#79](https://github.com/fabianschuiki/moore/issues/79))
 
 ### Fixed
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))

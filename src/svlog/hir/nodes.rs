@@ -25,6 +25,7 @@ pub enum HirNode<'hir> {
     Typedef(&'hir Typedef),
     Assign(&'hir Assign),
     Package(&'hir Package),
+    EnumVariant(&'hir EnumVariant),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -47,6 +48,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Typedef(x) => x.span(),
             HirNode::Assign(x) => x.span(),
             HirNode::Package(x) => x.span(),
+            HirNode::EnumVariant(x) => x.span(),
         }
     }
 
@@ -69,6 +71,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Typedef(x) => x.human_span(),
             HirNode::Assign(x) => x.human_span(),
             HirNode::Package(x) => x.human_span(),
+            HirNode::EnumVariant(x) => x.human_span(),
         }
     }
 }
@@ -93,6 +96,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Typedef(x) => x.desc(),
             HirNode::Assign(x) => x.desc(),
             HirNode::Package(x) => x.desc(),
+            HirNode::EnumVariant(x) => x.desc(),
         }
     }
 
@@ -115,6 +119,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Typedef(x) => x.desc_full(),
             HirNode::Assign(x) => x.desc_full(),
             HirNode::Package(x) => x.desc_full(),
+            HirNode::EnumVariant(x) => x.desc_full(),
         }
     }
 }
@@ -487,6 +492,11 @@ pub enum TypeKind {
     PackedArray(Box<TypeKind>, NodeId, NodeId),
     /// A scope access such as `foo::bar`.
     Scope(NodeId, Spanned<Name>),
+    /// An enum type.
+    ///
+    /// Each element in the vector refers to a `EnumVariant`. The optional field
+    /// indicates the representation type.
+    Enum(Vec<(Spanned<Name>, NodeId)>, Option<NodeId>),
 }
 
 impl HasDesc for TypeKind {
@@ -1090,5 +1100,39 @@ impl HasDesc for Package {
 
     fn desc_full(&self) -> String {
         format!("package `{}`", self.name.value)
+    }
+}
+
+/// A single variant of an enum.
+#[derive(Debug, PartialEq, Eq)]
+pub struct EnumVariant {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    /// The enum type declaration that contains this variant.
+    pub enum_id: NodeId,
+    /// The index of the variant within the enum.
+    pub index: usize,
+    /// The optional expression that explicitly assigns a value to the variant.
+    pub value: Option<NodeId>,
+}
+
+impl HasSpan for EnumVariant {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for EnumVariant {
+    fn desc(&self) -> &'static str {
+        "enum variant"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("enum variant `{}`", self.name.value)
     }
 }

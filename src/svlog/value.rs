@@ -145,6 +145,10 @@ pub(crate) fn constant_value_of<'gcx>(
             );
             Err(())
         }
+        HirNode::EnumVariant(var) => match var.value {
+            Some(v) => cx.constant_value_of(v, env),
+            None => Ok(cx.intern_value(make_int(cx.type_of(node_id, env)?, var.index.into()))),
+        },
         _ => cx.unimp_msg("constant value computation of", &hir),
     }
 }
@@ -336,6 +340,7 @@ pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Res
     Ok(match hir {
         HirNode::ValueParam(_) => true,
         HirNode::GenvarDecl(_) => true,
+        HirNode::EnumVariant(_) => true,
         _ => false,
     })
 }
