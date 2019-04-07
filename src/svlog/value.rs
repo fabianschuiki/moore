@@ -225,7 +225,12 @@ fn const_expr<'gcx>(
                 ValueKind::Int(ref arg) => arg,
                 _ => unreachable!(),
             };
-            Ok(cx.intern_value(make_int(arg_val.ty, arg_int.bits().into())))
+            let value: BigInt = if arg_int <= &num::zero() {
+                num::zero()
+            } else {
+                arg_int.bits().into()
+            };
+            Ok(cx.intern_value(make_int(arg_val.ty, value)))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
             let ty = cx.type_of(arg, env)?;
