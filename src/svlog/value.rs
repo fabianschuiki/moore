@@ -166,7 +166,7 @@ fn const_expr<'gcx>(
         hir::ExprKind::UnsizedConst('0') => Ok(cx.intern_value(make_int(ty, num::zero()))),
         hir::ExprKind::UnsizedConst('1') => Ok(cx.intern_value(make_int(ty, num::one()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
-        hir::ExprKind::Ident(_) => {
+        hir::ExprKind::Ident(_) | hir::ExprKind::Scope(..) => {
             let binding = cx.resolve_node(expr.id, env)?;
             match cx.constant_value_of(binding, env) {
                 Ok(k) => Ok(k),
@@ -249,6 +249,11 @@ fn const_expr<'gcx>(
                 true => cx.constant_value_of(true_expr, env),
                 false => cx.constant_value_of(false_expr, env),
             }
+        }
+        hir::ExprKind::Field(target, field_name) => {
+            let (_, field_index, _) = cx.resolve_field_access(expr.id, env)?;
+            let target_value = cx.constant_value_of(target, env)?;
+            panic!("no idea how to field-access into {:#?}", target_value);
         }
         _ => cx.unimp_msg("constant value computation of", expr),
     }
