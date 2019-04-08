@@ -1018,53 +1018,38 @@ where
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
                 (self.emit_index_access(target, env, mode)?, Mode::Value)
             }
-            hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
-                let gen = match self.as_stmt_gen() {
-                    Some(gen) => gen,
-                    None => {
-                        let hir = self.hir_of(expr_id)?;
-                        self.emit(
-                            DiagBuilder2::error(format!(
-                                "ternary operator only supported in processes or functions",
-                            ))
-                            .span(hir.human_span()),
-                        );
-                        return Err(());
-                    }
-                };
-                let ty = gen.type_of(expr_id, env)?;
-                let ty = gen.emit_type(ty, env)?;
-                let true_blk = gen.add_named_block("ternary_true");
-                let false_blk = gen.add_named_block("ternary_false");
-                let result_var: llhd::ValueRef = gen
-                    .emit_named_inst("ternary", llhd::VariableInst(ty.clone()))
-                    .into();
-                let cond = gen.emit_rvalue(cond, env)?;
-                gen.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
-                    cond,
-                    true_blk.into(),
-                    false_blk.into(),
-                )));
-                let final_blk = gen.add_named_block("ternary_exit");
-                gen.append_to_block(true_blk);
-                let value = gen.emit_rvalue(true_expr, env)?;
-                gen.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
-                gen.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    final_blk.into(),
-                )));
-                gen.append_to_block(false_blk);
-                let value = gen.emit_rvalue(false_expr, env)?;
-                gen.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
-                gen.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    final_blk.into(),
-                )));
-                gen.append_to_block(final_blk);
-                (
-                    self.emit_nameless_inst(llhd::LoadInst(ty, result_var))
-                        .into(),
+            hir::ExprKind::Ternary(cond, true_expr, false_expr) => match self.as_stmt_gen() {
+                Some(gen) => (
+                    gen.emit_ternary_operator(expr_id, env, cond, true_expr, false_expr)?,
                     Mode::Value,
-                )
-            }
+                ),
+                None => {
+                    // TODO: This is a very hacky solution to emit ternary
+                    // operators in expressions. As soon as LLHD has a `mux`
+                    // instruction, get rid of all this and do things inline.
+                    let prok = self.emit_ternary_operator_process(
+                        expr_id, env, cond, true_expr, false_expr, "x",
+                    )?;
+                    use llhd::Context as LlhdContext;
+                    let ty = llhd::ModuleContext::new(&self.into)
+                        .ty(&prok.into())
+                        .clone();
+                    let result_signal = self.emit_nameless_inst(llhd::SignalInst(ty.clone(), None));
+                    let acc = self.accessed_nodes(expr_id)?;
+                    let inputs = acc
+                        .read
+                        .iter()
+                        .map(|&id| self.emitted_value(id).clone())
+                        .collect();
+                    self.emit_nameless_inst(llhd::InstanceInst(
+                        ty,
+                        prok.into(),
+                        inputs,
+                        vec![result_signal.into()],
+                    ));
+                    (result_signal.into(), Mode::Signal)
+                }
+            },
             hir::ExprKind::Builtin(_) => {
                 let k = self.constant_value_of(expr_id, env)?;
                 (self.emit_const(k)?.into(), Mode::Value)
@@ -1328,6 +1313,66 @@ where
             ),
         };
         llhd::ShiftInst(dir, ty, lhs, insert, rhs)
+    }
+
+    /// Emit a process to wrap a ternary operator.
+    fn emit_ternary_operator_process(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        cond: NodeId,
+        true_expr: NodeId,
+        false_expr: NodeId,
+        name_prefix: &str,
+    ) -> Result<llhd::ProcessRef> {
+        let ty = self.type_of(expr_id, env)?;
+        let ty = self.emit_type(ty, env)?;
+        let acc = self.accessed_nodes(expr_id)?;
+        let mut inputs = vec![];
+        for &id in &acc.read {
+            let ty = self.type_of(id, env)?;
+            inputs.push((id, llhd::signal_ty(self.emit_type(ty, env)?)));
+        }
+        let proc_name = format!("{}.ternary.{}.{}", name_prefix, expr_id.as_usize(), env.0);
+        let mut prok = llhd::Process::new(
+            proc_name,
+            llhd::entity_ty(
+                inputs.iter().map(|(_, ty)| ty.clone()).collect(),
+                vec![ty.clone()],
+            ),
+        );
+        let entry_blk = prok
+            .body_mut()
+            .add_block(llhd::Block::new(None), llhd::BlockPosition::Begin);
+        let mut values = HashMap::new();
+        for (&(id, _), arg) in inputs.iter().zip(prok.inputs()) {
+            values.insert(id, arg.as_ref().into());
+        }
+        let mut pg = ProcessGenerator {
+            gen: self,
+            prok: &mut prok,
+            pos: llhd::InstPosition::BlockEnd(entry_blk),
+            values: &mut values,
+        };
+        let body_blk = pg.add_named_block("body");
+        let check_blk = pg.add_named_block("check");
+        pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(body_blk)));
+        pg.append_to_block(check_blk);
+        let trigger_on = inputs
+            .iter()
+            .map(|(id, _)| pg.emitted_value(*id).clone())
+            .collect();
+        pg.emit_nameless_inst(llhd::WaitInst(body_blk, None, trigger_on));
+        pg.append_to_block(body_blk);
+        let head_blk = check_blk;
+        let result = pg.emit_ternary_operator(expr_id, env, cond, true_expr, false_expr)?;
+        pg.emit_nameless_inst(llhd::DriveInst(
+            pg.prok.outputs()[0].as_ref().into(),
+            result,
+            None,
+        ));
+        pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(head_blk)));
+        Ok(self.into.add_process(prok))
     }
 }
 
@@ -1835,6 +1880,43 @@ where
             ref t => panic!("value of type `{}` cannot be driven", t),
         }
         Ok(())
+    }
+
+    /// Emit the statements that implement the ternary operator.
+    fn emit_ternary_operator(
+        &mut self,
+        expr_id: NodeId,
+        env: ParamEnv,
+        cond: NodeId,
+        true_expr: NodeId,
+        false_expr: NodeId,
+    ) -> Result<llhd::ValueRef> {
+        let ty = self.type_of(expr_id, env)?;
+        let ty = self.emit_type(ty, env)?;
+        let true_blk = self.add_named_block("ternary_true");
+        let false_blk = self.add_named_block("ternary_false");
+        let result_var: llhd::ValueRef = self
+            .emit_named_inst("ternary", llhd::VariableInst(ty.clone()))
+            .into();
+        let cond = self.emit_rvalue(cond, env)?;
+        self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
+            cond,
+            true_blk.into(),
+            false_blk.into(),
+        )));
+        let final_blk = self.add_named_block("ternary_exit");
+        self.append_to_block(true_blk);
+        let value = self.emit_rvalue(true_expr, env)?;
+        self.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
+        self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())));
+        self.append_to_block(false_blk);
+        let value = self.emit_rvalue(false_expr, env)?;
+        self.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
+        self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())));
+        self.append_to_block(final_blk);
+        Ok(self
+            .emit_nameless_inst(llhd::LoadInst(ty, result_var))
+            .into())
     }
 }
 
