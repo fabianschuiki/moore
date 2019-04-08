@@ -169,6 +169,9 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
             visitor.visit_node_with_id(true_expr, lvalue);
             visitor.visit_node_with_id(false_expr, lvalue);
         }
+        ExprKind::Scope(expr, _) => {
+            visitor.visit_node_with_id(expr, false);
+        }
     }
 }
 

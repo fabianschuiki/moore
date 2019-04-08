@@ -117,6 +117,8 @@ where
             Ok(HirNode::TypeParam(..)) => return false,
             Ok(HirNode::GenvarDecl(..)) => return false,
             Ok(HirNode::EnumVariant(..)) => return false,
+            Ok(HirNode::Package(..)) => return false,
+            Ok(HirNode::Module(..)) => return false,
             Err(_) => return false,
             _ => (),
         }

@@ -596,6 +596,8 @@ pub enum ExprKind {
     Builtin(BuiltinCall),
     /// A ternary expression such as `a ? b : c`.
     Ternary(NodeId, NodeId, NodeId),
+    /// A scope expression such as `foo::bar`.
+    Scope(NodeId, Spanned<Name>),
 }
 
 /// The different unary operators.
@@ -1081,6 +1083,8 @@ pub struct Package {
     pub decls: Vec<NodeId>,
     /// The parameter declarations in the package.
     pub params: Vec<NodeId>,
+    /// The bottom of the name scope tree.
+    pub last_rib: NodeId,
 }
 
 impl HasSpan for Package {

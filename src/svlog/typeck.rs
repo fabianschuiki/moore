@@ -89,6 +89,7 @@ pub(crate) fn type_of<'gcx>(
             hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(cx.mkty_int(32)),
             hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
+            hir::ExprKind::Scope(..) => cx.type_of(cx.resolve_node(node_id, env)?, env),
             _ => {
                 error!("{:#?}", hir);
                 cx.unimp_msg("type analysis of", &hir)
@@ -141,6 +142,7 @@ pub(crate) fn type_of<'gcx>(
         }
         HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
         HirNode::EnumVariant(v) => cx.map_to_type(v.enum_id, env),
+        HirNode::Package(_) => Ok(cx.mkty_void()),
         _ => cx.unimp_msg("type analysis of", &hir),
     }
 }

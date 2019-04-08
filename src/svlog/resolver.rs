@@ -65,7 +65,8 @@ impl RibKind {
 /// up the hierarchy.
 pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<&'gcx Rib> {
     let ast = cx.ast_of(node_id)?;
-    let kind = match ast {
+    let mut parent = None;
+    let mut kind = match ast {
         AstNode::TypeParam(_, decl) => Some(RibKind::Normal(
             Spanned::new(decl.name.name, decl.name.span),
             node_id,
@@ -81,10 +82,6 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
         )),
         AstNode::GenvarDecl(decl) => Some(RibKind::Normal(
             Spanned::new(decl.name, decl.name_span),
-            node_id,
-        )),
-        AstNode::Typedef(def) => Some(RibKind::Normal(
-            Spanned::new(def.name.name, def.name.span),
             node_id,
         )),
         AstNode::Port(&ast::Port::Named { name, .. }) => {
@@ -103,18 +100,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             }
             _ => None,
         },
-        AstNode::Package(_) => {
-            let hir = match cx.hir_of(node_id)? {
-                HirNode::Package(x) => x,
-                _ => unreachable!(),
-            };
-            Some(RibKind::Module(
-                hir.names
-                    .iter()
-                    .map(|(name, id)| (name.value, *id))
-                    .collect(),
-            ))
-        }
+        AstNode::Package(_) => Some(RibKind::Module(HashMap::new())),
         AstNode::Type(ty) => match ty.data {
             ast::EnumType(..) => {
                 let hir = match cx.hir_of(node_id)? {
@@ -135,6 +121,19 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
         },
         _ => None,
     };
+    if kind.is_none() {
+        let hir = cx.hir_of(node_id)?;
+        kind = match hir {
+            HirNode::Typedef(def) => {
+                parent = Some(def.ty);
+                Some(RibKind::Normal(
+                    Spanned::new(def.name.value, def.name.span),
+                    node_id,
+                ))
+            }
+            _ => None,
+        };
+    }
     let kind = match kind {
         Some(kind) => kind,
         None => {
@@ -146,11 +145,46 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
     };
     let rib = Rib {
         node: node_id,
-        parent: match cx.parent_node_id(node_id) {
+        parent: match parent.or_else(|| cx.parent_node_id(node_id)) {
             Some(parent_id) => Some(cx.local_rib(parent_id)?.node),
             None => None,
         },
         kind: kind,
+    };
+    Ok(cx.arena().alloc_rib(rib))
+}
+
+/// Determine the hierarchical rib of a node.
+///
+/// This will return a rib containing the hierarchical names expose by a node.
+pub(crate) fn hierarchical_rib<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+) -> Result<&'gcx Rib> {
+    let hir = cx.hir_of(node_id)?;
+    let mut names = HashMap::new();
+    let mut rib_id = match hir {
+        HirNode::Package(pkg) => Some(pkg.last_rib),
+        _ => panic!("{} has no hierarchical rib", hir.desc_full()),
+    };
+    while let Some(id) = rib_id {
+        let rib = cx.local_rib(id)?;
+        match rib.kind {
+            RibKind::Normal(name, def) => {
+                names.insert(name.value, def);
+            }
+            RibKind::Module(ref defs) => names.extend(defs),
+            RibKind::Enum(ref defs) => names.extend(defs),
+        }
+        rib_id = rib.parent;
+        if rib_id == Some(node_id) {
+            rib_id = None;
+        }
+    }
+    let rib = Rib {
+        node: node_id,
+        parent: None,
+        kind: RibKind::Module(names),
     };
     Ok(cx.arena().alloc_rib(rib))
 }
@@ -188,8 +222,14 @@ pub(crate) fn resolve_downwards<'gcx>(
     name: Name,
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
-    let rib = cx.local_rib(start_at)?;
-    Ok(rib.get(name))
+    let rib = cx.hierarchical_rib(start_at)?;
+    Ok(match rib.get(name) {
+        Some(x) => Some(x),
+        None => {
+            debug!("name `{}` not found in {:#?}", name, rib);
+            None
+        }
+    })
 }
 
 /// Resolve a node to its target.
@@ -202,6 +242,10 @@ pub(crate) fn resolve_node<'gcx>(
     match hir {
         HirNode::Expr(expr) => match expr.kind {
             hir::ExprKind::Ident(ident) => return cx.resolve_upwards_or_error(ident, node_id),
+            hir::ExprKind::Scope(scope_id, name) => {
+                let within = cx.resolve_node(scope_id, env)?;
+                return cx.resolve_downwards_or_error(name, within);
+            }
             _ => (),
         },
         HirNode::Type(ty) => match ty.kind {

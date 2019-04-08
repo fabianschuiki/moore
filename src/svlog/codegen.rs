@@ -1042,17 +1042,26 @@ where
                         .map(|&id| self.emitted_value(id).clone())
                         .collect();
                     self.emit_nameless_inst(llhd::InstanceInst(
-                        ty,
+                        ty.clone(),
                         prok.into(),
                         inputs,
                         vec![result_signal.into()],
                     ));
-                    (result_signal.into(), Mode::Signal)
+                    (
+                        self.emit_nameless_inst(llhd::ProbeInst(ty, result_signal.into()))
+                            .into(),
+                        Mode::Value,
+                    )
                 }
             },
             hir::ExprKind::Builtin(_) => {
                 let k = self.constant_value_of(expr_id, env)?;
                 (self.emit_const(k)?.into(), Mode::Value)
+            }
+            hir::ExprKind::Scope(..) => {
+                let binding = self.resolve_node(expr_id, env)?;
+                let value = self.constant_value_of(binding, env)?;
+                (self.emit_const(value)?.into(), Mode::Value)
             }
             _ => return self.unimp_msg("code generation for", hir),
         };

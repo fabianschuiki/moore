@@ -499,7 +499,12 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
             Some(id) => Ok(id),
             None => {
                 self.emit(
-                    DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span),
+                    DiagBuilder2::error(format!(
+                        "`{}` not found in {}",
+                        name.value,
+                        self.ast_of(start_at)?.desc_full()
+                    ))
+                    .span(name.span),
                 );
                 Err(())
             }
@@ -572,6 +577,12 @@ pub(super) mod queries {
                 use fn resolver::local_rib;
             }
 
+            /// Determine the hierarchical rib of a node.
+            fn hierarchical_rib(node_id: NodeId) -> Result<&'a Rib> {
+                type HierarchicalRibQuery;
+                use fn resolver::hierarchical_rib;
+            }
+
             /// Resolve a name upwards through the ribs.
             fn resolve_upwards(name: Name, start_at: NodeId) -> Result<Option<NodeId>> {
                 type ResolveUpwardsQuery;
@@ -641,6 +652,7 @@ pub(super) mod queries {
                 fn type_of() for TypeOfQuery<'gcx>;
                 fn map_to_type() for MapToTypeQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
+                fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
                 fn resolve_downwards() for ResolveDownwardsQuery<'gcx>;
                 fn constant_value_of() for ConstantValueOfQuery<'gcx>;

@@ -351,7 +351,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 id: node_id,
                 span: def.span(),
                 name: Spanned::new(def.name.name, def.name.span),
-                ty: cx.map_ast_with_parent(AstNode::Type(&def.ty), node_id),
+                ty: cx.map_ast_with_parent(
+                    AstNode::Type(&def.ty),
+                    cx.parent_node_id(node_id).unwrap(),
+                ),
             };
             Ok(HirNode::Typedef(cx.arena().alloc_hir(hir)))
         }
@@ -877,6 +880,10 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(true_expr), parent),
             cx.map_ast_with_parent(AstNode::Expr(false_expr), parent),
         ),
+        ast::ScopeExpr(ref expr, name) => hir::ExprKind::Scope(
+            cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
+            Spanned::new(name.name, name.span),
+        ),
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);
@@ -1099,6 +1106,7 @@ fn lower_package<'gcx>(
         names,
         decls,
         params,
+        last_rib: next_rib,
     };
     Ok(HirNode::Package(cx.arena().alloc_hir(hir)))
 }
