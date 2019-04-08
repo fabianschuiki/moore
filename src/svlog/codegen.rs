@@ -1031,10 +1031,13 @@ where
                         expr_id, env, cond, true_expr, false_expr, "x",
                     )?;
                     use llhd::Context as LlhdContext;
-                    let ty = llhd::ModuleContext::new(&self.into)
+                    let expr_ty = self.type_of(expr_id, env)?;
+                    let expr_ty = self.emit_type(expr_ty, env)?;
+                    let prok_ty = llhd::ModuleContext::new(&self.into)
                         .ty(&prok.into())
                         .clone();
-                    let result_signal = self.emit_nameless_inst(llhd::SignalInst(ty.clone(), None));
+                    let result_signal =
+                        self.emit_nameless_inst(llhd::SignalInst(expr_ty.clone(), None));
                     let acc = self.accessed_nodes(expr_id)?;
                     let inputs = acc
                         .read
@@ -1042,13 +1045,13 @@ where
                         .map(|&id| self.emitted_value(id).clone())
                         .collect();
                     self.emit_nameless_inst(llhd::InstanceInst(
-                        ty.clone(),
+                        prok_ty,
                         prok.into(),
                         inputs,
                         vec![result_signal.into()],
                     ));
                     (
-                        self.emit_nameless_inst(llhd::ProbeInst(ty, result_signal.into()))
+                        self.emit_nameless_inst(llhd::ProbeInst(expr_ty, result_signal.into()))
                             .into(),
                         Mode::Value,
                     )
