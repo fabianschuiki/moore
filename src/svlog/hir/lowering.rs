@@ -657,7 +657,15 @@ fn lower_expr<'gcx>(
         ast::LiteralExpr(Lit::UnbasedUnsized(c)) => hir::ExprKind::UnsizedConst(c),
         ast::LiteralExpr(Lit::BasedInteger(maybe_size, _signed, base, value)) => {
             let parsed = BigInt::parse_bytes(
-                value.as_str().as_bytes(),
+                value
+                    .as_str()
+                    .chars()
+                    .map(|c| match c {
+                        'x' | 'X' | 'z' | 'Z' | '?' | '-' => '0',
+                        c => c,
+                    })
+                    .collect::<String>()
+                    .as_bytes(),
                 match base {
                     'h' => 16,
                     'd' => 10,
