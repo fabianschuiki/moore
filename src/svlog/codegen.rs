@@ -213,7 +213,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             };
             let lhs = gen.emit_lvalue(hir.lhs, env)?;
             let rhs = gen.emit_rvalue_mode(hir.rhs, env, Mode::Value)?;
-            let one_epsilon = llhd::const_time(num::zero(), 0, 0);
+            let one_epsilon = llhd::const_time(num::zero(), 0, 1);
             gen.emit_nameless_inst(llhd::DriveInst(lhs, rhs, Some(one_epsilon.clone().into())));
         }
 
@@ -1871,7 +1871,7 @@ where
         let rty = self.llhd_type(&rvalue);
         match *lty {
             llhd::SignalType(..) => {
-                let one_epsilon = llhd::const_time(num::zero(), 0, 0);
+                let one_epsilon = llhd::const_time(num::zero(), 0, 1);
                 self.emit_nameless_inst(llhd::DriveInst(
                     lvalue,
                     rvalue,
