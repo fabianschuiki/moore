@@ -215,8 +215,13 @@ fn map_type_kind<'gcx>(
         hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(cx.mkty_int(16)),
         hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(cx.mkty_int(32)),
         hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(cx.mkty_int(64)),
-        hir::TypeKind::Named(name) | hir::TypeKind::Scope(_, name) => {
-            let binding = cx.resolve_node(node_id, env)?;
+        hir::TypeKind::Named(name) => {
+            let binding = cx.resolve_upwards_or_error(name, node_id)?;
+            Ok(cx.mkty_named(name, (binding, env)))
+        }
+        hir::TypeKind::Scope(scope_id, name) => {
+            let within = cx.resolve_node(scope_id, env)?;
+            let binding = cx.resolve_downwards_or_error(name, within)?;
             Ok(cx.mkty_named(name, (binding, env)))
         }
         hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),

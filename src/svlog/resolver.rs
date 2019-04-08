@@ -258,7 +258,9 @@ pub(crate) fn resolve_node<'gcx>(
         },
         _ => (),
     }
-    panic!("cannot resolve {:?}", hir)
+    error!("{:#?}", hir);
+    cx.emit(DiagBuilder2::bug("cannot resolve node").span(hir.human_span()));
+    Err(())
 }
 
 /// Resolve the field name in a field access expression.
