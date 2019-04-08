@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Parsing of `inside` expressions. ([#93](https://github.com/fabianschuiki/moore/issues/93))
 - Support for the `**` operators. ([#94](https://github.com/fabianschuiki/moore/issues/94))
 - Support for the `::` operator.
+- Support for the `case` statement.
 - Parse cast expressions.
 - Accept ``` `` ```, `` `\ ``, and `` `" `` in preprocessor.
 - Parse optional lifetime specifiers after `task` or `function`.

@@ -129,6 +129,22 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
                 visitor.visit_node_with_id(stmt, false);
             }
         }
+        StmtKind::Case {
+            expr,
+            ref ways,
+            default,
+        } => {
+            visitor.visit_node_with_id(expr, false);
+            for &(ref exprs, stmt) in ways {
+                for &expr in exprs {
+                    visitor.visit_node_with_id(expr, false);
+                }
+                visitor.visit_node_with_id(stmt, false);
+            }
+            if let Some(default) = default {
+                visitor.visit_node_with_id(default, false);
+            }
+        }
     }
 }
 

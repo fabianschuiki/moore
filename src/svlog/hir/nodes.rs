@@ -884,6 +884,12 @@ pub enum StmtKind {
     /// by name. An inline group differs from a block in that its ribs are
     /// made visible, whereas a block keeps them local.
     InlineGroup { stmts: Vec<NodeId>, rib: NodeId },
+    /// A case statement.
+    Case {
+        expr: NodeId,
+        ways: Vec<(Vec<NodeId>, NodeId)>,
+        default: Option<NodeId>,
+    },
 }
 
 /// The different forms an assignment can take.

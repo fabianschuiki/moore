@@ -275,6 +275,45 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         None => hir::AssignKind::Nonblock,
                     },
                 },
+                ast::CaseStmt {
+                    ref expr,
+                    mode: ast::CaseMode::Normal,
+                    ref items,
+                    ..
+                } => {
+                    let expr = cx.map_ast_with_parent(AstNode::Expr(expr), node_id);
+                    let mut ways = vec![];
+                    let mut default = None;
+                    for item in items {
+                        match *item {
+                            ast::CaseItem::Default(ref stmt) => {
+                                if default.is_none() {
+                                    default =
+                                        Some(cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id));
+                                } else {
+                                    cx.emit(
+                                        DiagBuilder2::error("multiple default cases")
+                                            .span(stmt.human_span()),
+                                    );
+                                }
+                            }
+                            ast::CaseItem::Expr(ref exprs, ref stmt) => ways.push((
+                                exprs
+                                    .iter()
+                                    .map(|expr| {
+                                        cx.map_ast_with_parent(AstNode::Expr(expr), node_id)
+                                    })
+                                    .collect(),
+                                cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id),
+                            )),
+                        }
+                    }
+                    hir::StmtKind::Case {
+                        expr,
+                        ways,
+                        default,
+                    }
+                }
                 _ => {
                     error!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);

@@ -1736,6 +1736,58 @@ where
                     self.emit_stmt(stmt, env)?;
                 }
             }
+            hir::StmtKind::Case {
+                expr,
+                ref ways,
+                default,
+            } => {
+                let expr_ty = self.type_of(expr, env)?;
+                let expr_ty = self.emit_type(expr_ty, env)?;
+                let expr = self.emit_rvalue(expr, env)?;
+                let final_blk = self.add_named_block("case_exit");
+                for &(ref way_exprs, stmt) in ways {
+                    let mut last_check = llhd::const_int(1, num::zero()).into();
+                    for &way_expr in way_exprs {
+                        let way_expr = self.emit_rvalue(way_expr, env)?;
+                        let check = self
+                            .emit_nameless_inst(llhd::CompareInst(
+                                llhd::CompareOp::Eq,
+                                expr_ty.clone(),
+                                expr.clone(),
+                                way_expr,
+                            ))
+                            .into();
+                        last_check = self
+                            .emit_nameless_inst(llhd::BinaryInst(
+                                llhd::BinaryOp::Or,
+                                llhd::int_ty(1),
+                                last_check,
+                                check,
+                            ))
+                            .into();
+                    }
+                    let taken_blk = self.add_named_block("case_body");
+                    let untaken_blk = self.add_nameless_block();
+                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
+                        last_check,
+                        taken_blk.into(),
+                        untaken_blk.into(),
+                    )));
+                    self.append_to_block(taken_blk);
+                    self.emit_stmt(stmt, env)?;
+                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                        final_blk.clone(),
+                    )));
+                    self.append_to_block(untaken_blk);
+                }
+                if let Some(default) = default {
+                    self.emit_stmt(default, env)?;
+                }
+                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
+                    final_blk.into(),
+                )));
+                self.append_to_block(final_blk);
+            }
             _ => return self.unimp_msg("code generation for", hir),
         }
         Ok(())
