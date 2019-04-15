@@ -250,8 +250,8 @@ fn const_expr<'gcx>(
                 false => cx.constant_value_of(false_expr, env),
             }
         }
-        hir::ExprKind::Field(target, field_name) => {
-            let (_, field_index, _) = cx.resolve_field_access(expr.id, env)?;
+        hir::ExprKind::Field(target, _field_name) => {
+            let (_, _field_index, _) = cx.resolve_field_access(expr.id, env)?;
             let target_value = cx.constant_value_of(target, env)?;
             panic!("no idea how to field-access into {:#?}", target_value);
         }

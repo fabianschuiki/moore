@@ -598,6 +598,14 @@ pub enum ExprKind {
     Ternary(NodeId, NodeId, NodeId),
     /// A scope expression such as `foo::bar`.
     Scope(NodeId, Spanned<Name>),
+    /// A positional pattern such as `'{a, b, c}`.
+    PositionalPattern(Vec<NodeId>),
+    /// A named pattern such as `'{logic: a, foo: b, 31: c, default: d}`.
+    NamedPattern(Vec<(PatternMapping, NodeId)>),
+    /// A repeat pattern such as `'{32{a, b, c}}`.
+    RepeatPattern(NodeId, Vec<NodeId>),
+    /// The empty pattern `'{}`.
+    EmptyPattern,
 }
 
 /// The different unary operators.
@@ -1114,7 +1122,7 @@ impl HasDesc for Package {
 }
 
 /// A single variant of an enum.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnumVariant {
     pub id: NodeId,
     pub name: Spanned<Name>,
@@ -1145,4 +1153,15 @@ impl HasDesc for EnumVariant {
     fn desc_full(&self) -> String {
         format!("enum variant `{}`", self.name.value)
     }
+}
+
+/// A named pattern mapping.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PatternMapping {
+    /// A field with a type as key, e.g. `'{logic: ...}`.
+    Type(NodeId),
+    /// A field with an expression as key, e.g. `'{foo: ..., 31: ...}`.
+    Member(NodeId),
+    /// A default field, e.g. `'{default: ...}`.
+    Default,
 }

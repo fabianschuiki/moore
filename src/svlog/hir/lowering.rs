@@ -931,6 +931,98 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
             Spanned::new(name.name, name.span),
         ),
+        ast::PatternExpr(ref fields) if fields.is_empty() => hir::ExprKind::EmptyPattern,
+        ast::PatternExpr(ref fields) => {
+            let deciding_span = fields[0].span;
+            match fields[0].data {
+                ast::PatternFieldData::Expr(_) => {
+                    let mut mapping = vec![];
+                    for field in fields {
+                        mapping.push(match field.data {
+                            ast::PatternFieldData::Expr(ref expr) => {
+                                cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id)
+                            }
+                            _ => {
+                                cx.emit(
+                                    DiagBuilder2::error(format!(
+                                        "`{}` not a positional pattern",
+                                        field.span.extract()
+                                    ))
+                                    .span(field.span)
+                                    .add_note(
+                                        "required because first field was a positional pattern,
+                                             and all fields must be the same:",
+                                    )
+                                    .span(deciding_span),
+                                );
+                                continue;
+                            }
+                        });
+                    }
+                    hir::ExprKind::PositionalPattern(mapping)
+                }
+                ast::PatternFieldData::Repeat(ref count, ref exprs) => {
+                    for field in &fields[1..] {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` after repeat pattern",
+                                field.span.extract()
+                            ))
+                            .span(field.span)
+                            .add_note("repeat patterns must have the form `'{<expr>{...}}`"),
+                        );
+                    }
+                    hir::ExprKind::RepeatPattern(
+                        cx.map_ast_with_parent(AstNode::Expr(count), node_id),
+                        exprs
+                            .iter()
+                            .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
+                            .collect(),
+                    )
+                }
+                ast::PatternFieldData::Type(..)
+                | ast::PatternFieldData::Member(..)
+                | ast::PatternFieldData::Default(..) => {
+                    let mut mapping = vec![];
+                    for field in fields {
+                        mapping.push(match field.data {
+                            ast::PatternFieldData::Type(ref ty, ref expr) => (
+                                hir::PatternMapping::Type(
+                                    cx.map_ast_with_parent(AstNode::Type(ty), node_id),
+                                ),
+                                cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
+                            ),
+                            ast::PatternFieldData::Member(ref member, ref expr) => (
+                                hir::PatternMapping::Member(
+                                    cx.map_ast_with_parent(AstNode::Expr(member.as_ref()), node_id),
+                                ),
+                                cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
+                            ),
+                            ast::PatternFieldData::Default(ref expr) => (
+                                hir::PatternMapping::Default,
+                                cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
+                            ),
+                            _ => {
+                                cx.emit(
+                                    DiagBuilder2::error(format!(
+                                        "`{}` not a named pattern",
+                                        field.span.extract()
+                                    ))
+                                    .span(field.span)
+                                    .add_note(
+                                        "required because first field was a named pattern,
+                                             and all fields must be the same:",
+                                    )
+                                    .span(deciding_span),
+                                );
+                                continue;
+                            }
+                        });
+                    }
+                    hir::ExprKind::NamedPattern(mapping)
+                }
+            }
+        }
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);

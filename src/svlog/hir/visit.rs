@@ -188,6 +188,28 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         ExprKind::Scope(expr, _) => {
             visitor.visit_node_with_id(expr, false);
         }
+        ExprKind::PositionalPattern(ref exprs) => {
+            for &expr in exprs {
+                visitor.visit_node_with_id(expr, lvalue);
+            }
+        }
+        ExprKind::NamedPattern(ref mappings) => {
+            for &(key, value) in mappings {
+                match key {
+                    PatternMapping::Type(ty) => visitor.visit_node_with_id(ty, false),
+                    PatternMapping::Member(expr) => visitor.visit_node_with_id(expr, false),
+                    PatternMapping::Default => (),
+                }
+                visitor.visit_node_with_id(value, lvalue);
+            }
+        }
+        ExprKind::RepeatPattern(count, ref exprs) => {
+            visitor.visit_node_with_id(count, lvalue);
+            for &expr in exprs {
+                visitor.visit_node_with_id(expr, lvalue);
+            }
+        }
+        ExprKind::EmptyPattern => (),
     }
 }
 
