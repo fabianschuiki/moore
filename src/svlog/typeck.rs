@@ -90,6 +90,10 @@ pub(crate) fn type_of<'gcx>(
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(cx.mkty_int(32)),
             hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
             hir::ExprKind::Scope(..) => cx.type_of(cx.resolve_node(node_id, env)?, env),
+            hir::ExprKind::PositionalPattern(..)
+            | hir::ExprKind::NamedPattern(..)
+            | hir::ExprKind::RepeatPattern(..)
+            | hir::ExprKind::EmptyPattern => cx.type_of(cx.parent_node_id(node_id).unwrap(), env),
             _ => {
                 error!("{:#?}", hir);
                 cx.unimp_msg("type analysis of", &hir)
