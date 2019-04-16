@@ -34,7 +34,26 @@ impl<'t> TypeKind<'t> {
     /// Check if this is the void type.
     pub fn is_void(&self) -> bool {
         match *self {
+            TypeKind::Named(_, _, ty) => ty.is_void(),
             TypeKind::Void => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this is a struct type.
+    pub fn is_struct(&self) -> bool {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.is_struct(),
+            TypeKind::Struct(..) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this is an array type.
+    pub fn is_array(&self) -> bool {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.is_array(),
+            TypeKind::PackedArray(..) => true,
             _ => false,
         }
     }
@@ -48,6 +67,24 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(w, _) => w,
             TypeKind::Named(_, _, ty) => ty.width(),
             _ => panic!("{:?} has no width", self),
+        }
+    }
+}
+
+impl<'t> std::fmt::Display for TypeKind<'t> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            TypeKind::Void => write!(f, "void"),
+            TypeKind::Time => write!(f, "time"),
+            TypeKind::Bit(Domain::TwoValued) => write!(f, "bit"),
+            TypeKind::Bit(Domain::FourValued) => write!(f, "logic"),
+            TypeKind::Int(32, Domain::TwoValued) => write!(f, "int"),
+            TypeKind::Int(32, Domain::FourValued) => write!(f, "integer"),
+            TypeKind::Int(width, Domain::TwoValued) => write!(f, "int<{}>", width),
+            TypeKind::Int(width, Domain::FourValued) => write!(f, "integer<{}>", width),
+            TypeKind::Named(name, ..) => write!(f, "{}", name.value),
+            TypeKind::Struct(_) => write!(f, "struct"),
+            TypeKind::PackedArray(length, ty) => write!(f, "{}[{}:0]", ty, length - 1),
         }
     }
 }

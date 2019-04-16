@@ -28,18 +28,20 @@ pub struct ValueData<'t> {
     /// The type of the value.
     pub ty: Type<'t>,
     /// The actual value.
-    pub kind: ValueKind,
+    pub kind: ValueKind<'t>,
 }
 
 /// The different forms a value can assume.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ValueKind {
+pub enum ValueKind<'t> {
     /// The `void` value.
     Void,
     /// An arbitrary precision integer.
     Int(BigInt),
     /// An arbitrary precision time interval.
     Time(BigRational),
+    /// A struct.
+    StructOrArray(Vec<Value<'t>>),
 }
 
 impl<'t> ValueData<'t> {
@@ -54,6 +56,7 @@ impl<'t> ValueData<'t> {
             ValueKind::Void => true,
             ValueKind::Int(ref v) => v.is_zero(),
             ValueKind::Time(ref v) => v.is_zero(),
+            ValueKind::StructOrArray(_) => false,
         }
     }
 }
@@ -82,6 +85,24 @@ pub fn make_time(value: BigRational) -> ValueData<'static> {
     ValueData {
         ty: &ty::TIME_TYPE,
         kind: ValueKind::Time(value),
+    }
+}
+
+/// Create a new struct value.
+pub fn make_struct<'t>(ty: Type<'t>, fields: Vec<Value<'t>>) -> ValueData<'t> {
+    assert!(ty.is_struct());
+    ValueData {
+        ty: ty,
+        kind: ValueKind::StructOrArray(fields),
+    }
+}
+
+/// Create a new array value.
+pub fn make_array<'t>(ty: Type<'t>, elements: Vec<Value<'t>>) -> ValueData<'t> {
+    assert!(ty.is_array());
+    ValueData {
+        ty: ty,
+        kind: ValueKind::StructOrArray(elements),
     }
 }
 
@@ -251,9 +272,42 @@ fn const_expr<'gcx>(
             }
         }
         hir::ExprKind::Field(target, _field_name) => {
-            let (_, _field_index, _) = cx.resolve_field_access(expr.id, env)?;
+            let (_, field_index, _) = cx.resolve_field_access(expr.id, env)?;
             let target_value = cx.constant_value_of(target, env)?;
-            panic!("no idea how to field-access into {:#?}", target_value);
+            match target_value.kind {
+                ValueKind::StructOrArray(ref fields) => Ok(fields[field_index]),
+                _ => Err(()),
+            }
+        }
+        hir::ExprKind::PositionalPattern(..)
+        | hir::ExprKind::NamedPattern(..)
+        | hir::ExprKind::RepeatPattern(..) => {
+            let mut resolved = resolver::resolve_pattern(cx, expr.id, env)?;
+            resolved.sort_by(|(a, _), (b, _)| a.cmp(b));
+            trace!("resolved {:?} to {:#?}", expr.kind, resolved);
+            let fields = resolved
+                .into_iter()
+                .map(|(_, v)| cx.constant_value_of(v, env))
+                .collect::<Result<Vec<_>>>()?;
+            let ty = cx.type_of(expr.id, env)?;
+            let v = cx.intern_value(match *ty {
+                TypeKind::Named(_, _, TypeKind::Struct(..)) | TypeKind::Struct(..) => {
+                    make_struct(ty, fields)
+                }
+                TypeKind::Named(_, _, TypeKind::PackedArray(..)) | TypeKind::PackedArray(..) => {
+                    make_array(ty, fields)
+                }
+                _ => unreachable!(),
+            });
+            trace!("pattern yielded {:#?}", v);
+            Ok(v)
+        }
+        hir::ExprKind::EmptyPattern => {
+            cx.emit(
+                DiagBuilder2::error(format!("{} has no constant value", expr.desc_full()))
+                    .span(expr.span()),
+            );
+            Err(())
         }
         _ => cx.unimp_msg("constant value computation of", expr),
     }

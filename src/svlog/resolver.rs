@@ -6,7 +6,7 @@
 //! names in them.
 
 use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode, ty::TypeKind, ParamEnv};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 /// One local scope.
 ///
@@ -315,4 +315,177 @@ pub(crate) fn resolve_field_access<'gcx>(
         }
     };
     Ok((struct_def, index, struct_fields[index]))
+}
+
+/// Resolve the fields in an assignment pattern.
+pub(crate) fn resolve_pattern<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Result<Vec<(usize, NodeId)>> {
+    let hir = match cx.hir_of(node_id)? {
+        HirNode::Expr(x) => x,
+        _ => unreachable!(),
+    };
+    let ty = cx.type_of(node_id, env)?;
+    match ty {
+        &TypeKind::Named(_, _, &TypeKind::Struct(struct_id)) | &TypeKind::Struct(struct_id) => {
+            trace!("struct pattern: defined at {:?}", struct_id);
+            let struct_fields = match cx.hir_of(struct_id)? {
+                HirNode::Type(hir::Type {
+                    kind: hir::TypeKind::Struct(ref fields),
+                    ..
+                }) => fields,
+                _ => unreachable!(),
+            };
+            let struct_fields: Vec<_> = struct_fields
+                .iter()
+                .filter_map(|&id| match cx.hir_of(id) {
+                    Ok(HirNode::VarDecl(vd)) => Some(vd),
+                    _ => None,
+                })
+                .collect();
+            trace!("matching against fields: {:#?}", struct_fields);
+            let mut assigned = vec![];
+            let mut missing: BTreeSet<usize> = (0..struct_fields.len()).collect();
+            match hir.kind {
+                hir::ExprKind::PositionalPattern(ref fields) => {
+                    for (i, &expr_id) in fields.iter().enumerate() {
+                        if i >= struct_fields.len() {
+                            cx.emit(
+                                DiagBuilder2::error(format!(
+                                    "`{}` only has {} fields",
+                                    ty,
+                                    struct_fields.len()
+                                ))
+                                .span(cx.ast_of(expr_id)?.span()),
+                            );
+                            continue;
+                        }
+                        missing.remove(&i);
+                        assigned.push((i, expr_id));
+                    }
+                }
+                hir::ExprKind::NamedPattern(ref fields) => {
+                    let mut default = None;
+                    for &(mapping, expr_id) in fields {
+                        match mapping {
+                            hir::PatternMapping::Member(member_id) => {
+                                let ast = cx.ast_of(member_id)?;
+                                let name = match ast {
+                                    AstNode::Expr(&ast::Expr {
+                                        data: ast::IdentExpr(ident),
+                                        ..
+                                    }) => Spanned::new(ident.name, ident.span),
+                                    _ => {
+                                        cx.emit(
+                                            DiagBuilder2::error(format!(
+                                                "`{}` is not a valid field name",
+                                                ast.span().extract()
+                                            ))
+                                            .span(ast.span()),
+                                        );
+                                        continue;
+                                    }
+                                };
+                                let index = struct_fields
+                                    .iter()
+                                    .position(|&vd| vd.name.value == name.value);
+                                let index = match index {
+                                    Some(index) => index,
+                                    None => {
+                                        cx.emit(
+                                            DiagBuilder2::error(format!(
+                                                "`{}` has no field `{}`",
+                                                ty, name
+                                            ))
+                                            .span(name.span()),
+                                        );
+                                        continue;
+                                    }
+                                };
+                                if !missing.contains(&index) {
+                                    cx.emit(
+                                        DiagBuilder2::error(format!(
+                                            "`{}` assigned multiple times",
+                                            name
+                                        ))
+                                        .span(name.span()),
+                                    );
+                                    continue;
+                                }
+                                missing.remove(&index);
+                                assigned.push((index, expr_id));
+                            }
+                            hir::PatternMapping::Default if default.is_none() => {
+                                default = Some(expr_id);
+                            }
+                            hir::PatternMapping::Default => {
+                                cx.emit(
+                                    DiagBuilder2::error("multiple default assignments in pattern")
+                                        .span(hir.span()),
+                                );
+                                continue;
+                            }
+                            hir::PatternMapping::Type(type_id) => {
+                                cx.emit(
+                                    DiagBuilder2::bug("type pattern keys not implemented")
+                                        .span(cx.ast_of(type_id)?.span()),
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                    if let Some(expr_id) = default {
+                        for i in std::mem::replace(&mut missing, BTreeSet::new()) {
+                            assigned.push((i, expr_id))
+                        }
+                    }
+                }
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "`{}` cannot be accessed by a {}",
+                            ty,
+                            hir.desc_full()
+                        ))
+                        .span(hir.span),
+                    );
+                    return Err(());
+                }
+            }
+            if !missing.is_empty() {
+                let names: String = missing
+                    .into_iter()
+                    .map(|i| format!("`{}`", struct_fields[i].name.value))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                cx.emit(
+                    DiagBuilder2::error(format!("fields {} not assigned by pattern", names,))
+                        .span(hir.span),
+                );
+            }
+            return Ok(assigned);
+        }
+        &TypeKind::Named(_, _, &TypeKind::PackedArray(length, elem_ty))
+        | &TypeKind::PackedArray(length, elem_ty) => {
+            trace!("array pattern: {} elements of type {:?}", length, elem_ty);
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{}` cannot be accessed by a {}",
+                    ty,
+                    hir.desc_full()
+                ))
+                .span(hir.span),
+            );
+            return Err(());
+        }
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!("type `{}` cannot be used with a pattern", ty))
+                    .span(hir.span),
+            );
+            return Err(());
+        }
+    }
 }

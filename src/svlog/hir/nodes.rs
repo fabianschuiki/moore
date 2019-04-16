@@ -568,6 +568,10 @@ impl HasDesc for Expr {
             ExprKind::IntConst(_, ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::TimeConst(ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::Ident(n) => format!("`{}`", n.value),
+            ExprKind::PositionalPattern(..) => format!("positional pattern"),
+            ExprKind::NamedPattern(..) => format!("named pattern"),
+            ExprKind::RepeatPattern(..) => format!("repeat pattern"),
+            ExprKind::EmptyPattern => format!("empty pattern"),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
         }
     }
