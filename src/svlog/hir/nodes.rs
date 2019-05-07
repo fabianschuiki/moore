@@ -766,6 +766,10 @@ pub enum BuiltinCall {
     Clog2(NodeId),
     /// A call to the storage size function `$bits(x)`.
     Bits(NodeId),
+    /// A call to the convert-to-signed function `$signed(x)`.
+    Signed(NodeId),
+    /// A call to the convert-to-unsigned function `$unsigned(x)`.
+    Unsigned(NodeId),
 }
 
 /// A variable declaration.

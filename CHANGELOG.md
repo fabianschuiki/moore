@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Parse optional lifetime specifiers after `task` or `function`.
 - Support for enum types. ([#79](https://github.com/fabianschuiki/moore/issues/79))
 - Support for package declarations.
+- Support for the `$signed` and `$unsigned` builtin functions.
 
 ### Fixed
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))

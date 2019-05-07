@@ -1057,9 +1057,14 @@ where
                     )
                 }
             },
-            hir::ExprKind::Builtin(_) => {
+            hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
                 let k = self.constant_value_of(expr_id, env)?;
                 (self.emit_const(k)?.into(), Mode::Value)
+            }
+            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
+                (self.emit_rvalue(arg, env)?, Mode::Value)
             }
             hir::ExprKind::Scope(..) => {
                 let binding = self.resolve_node(expr_id, env)?;
@@ -1498,8 +1503,10 @@ where
                         self.emit_nameless_inst(llhd::DriveInst(lhs_value, rhs_value, Some(delay)));
                     }
                     _ => {
-                        return self
-                            .unimp_msg(format!("code generation for assignment {:?} in", kind), hir)
+                        return self.unimp_msg(
+                            format!("code generation for assignment {:?} in", kind),
+                            hir,
+                        )
                     }
                 }
             }

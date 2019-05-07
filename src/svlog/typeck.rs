@@ -88,6 +88,8 @@ pub(crate) fn type_of<'gcx>(
             }
             hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(cx.mkty_int(32)),
+            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx.type_of(arg, env),
             hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
             hir::ExprKind::Scope(..) => cx.type_of(cx.resolve_node(node_id, env)?, env),
             hir::ExprKind::PositionalPattern(..)

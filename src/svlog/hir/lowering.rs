@@ -874,44 +874,35 @@ fn lower_expr<'gcx>(
             hir::ExprKind::Index(indexee, mode)
         }
         ast::CallExpr(ref callee, ref args) => match callee.data {
-            ast::SysIdentExpr(ident) if &*ident.name.as_str() == "clog2" => {
-                let arg = match args.as_slice() {
-                    [ast::CallArg {
-                        expr: Some(ref arg),
-                        ..
-                    }] => cx.map_ast_with_parent(AstNode::Expr(arg), parent),
-                    _ => {
-                        cx.emit(
-                            DiagBuilder2::error("`$clog2` takes one argument")
-                                .span(expr.human_span()),
-                        );
-                        return Err(());
-                    }
-                };
-                hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg))
-            }
-            ast::SysIdentExpr(ident) if &*ident.name.as_str() == "bits" => {
-                let arg = match args.as_slice() {
-                    [ast::CallArg {
-                        expr: Some(ref arg),
-                        ..
-                    }] => cx.map_ast_with_parent(AstNode::Expr(arg), parent),
-                    _ => {
-                        cx.emit(
-                            DiagBuilder2::error("`$bits` takes one argument")
-                                .span(expr.human_span()),
-                        );
-                        return Err(());
-                    }
-                };
-                hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg))
-            }
             ast::SysIdentExpr(ident) => {
-                cx.emit(
-                    DiagBuilder2::error(format!("`{}` unknown", ident.name))
-                        .span(expr.human_span()),
-                );
-                return Err(());
+                let map_unary = || {
+                    Ok(match args.as_slice() {
+                        [ast::CallArg {
+                            expr: Some(ref arg),
+                            ..
+                        }] => cx.map_ast_with_parent(AstNode::Expr(arg), parent),
+                        _ => {
+                            cx.emit(
+                                DiagBuilder2::error(format!("`{}` takes one argument", ident.name))
+                                    .span(expr.human_span()),
+                            );
+                            return Err(());
+                        }
+                    })
+                };
+                hir::ExprKind::Builtin(match &*ident.name.as_str() {
+                    "clog2" => hir::BuiltinCall::Clog2(map_unary()?),
+                    "bits" => hir::BuiltinCall::Bits(map_unary()?),
+                    "signed" => hir::BuiltinCall::Signed(map_unary()?),
+                    "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error(format!("`${}` unknown", ident.name))
+                                .span(expr.human_span()),
+                        );
+                        return Err(());
+                    }
+                })
             }
             _ => {
                 error!("{:#?}", callee);
