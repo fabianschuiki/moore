@@ -112,13 +112,15 @@ pub(crate) fn compute<'gcx>(
                         }
                     }
                 }));
-            let port_iter = port_iter
-                .collect::<Vec<_>>()
-                .into_iter()
-                .collect::<Result<Vec<_>>>()?
-                .into_iter();
+            let ports = port_iter
+                .filter_map(|err| match err {
+                    Ok((port_id, (Some(assign_id), env))) => Some(Ok((port_id, (assign_id, env)))),
+                    Ok(_) => None,
+                    Err(()) => Some(Err(())),
+                })
+                .collect::<Result<Vec<_>>>()?;
 
-            Ok(Arc::new(PortMapping(port_iter.collect())))
+            Ok(Arc::new(PortMapping(ports)))
         }
     }
 }

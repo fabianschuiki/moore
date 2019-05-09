@@ -41,7 +41,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 let value_id = cx.map_ast_with_parent(AstNode::TypeOrExpr(&param.expr), node_id);
                 if let Some(name) = param.name {
                     is_pos = false;
-                    named_params.push((param.span, Spanned::new(name.name, name.span), value_id));
+                    named_params.push((
+                        param.span,
+                        Spanned::new(name.name, name.span),
+                        Some(value_id),
+                    ));
                 } else {
                     if !is_pos {
                         cx.emit(
@@ -53,7 +57,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                                 )),
                         );
                     }
-                    pos_params.push((param.span, value_id));
+                    pos_params.push((param.span, Some(value_id)));
                 }
             }
             let hir = hir::InstTarget {
@@ -74,15 +78,19 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 match port.kind {
                     ast::PortConnKind::Auto => has_wildcard_port = true,
                     ast::PortConnKind::Named(name, ref mode) => {
+                        let name = Spanned::new(name.name, name.span);
                         is_pos = false;
                         let value_id = match *mode {
-                            ast::PortConnMode::Auto => unimplemented!("auto-connected ports"),
-                            ast::PortConnMode::Unconnected => unimplemented!("unconnected ports"),
+                            ast::PortConnMode::Auto => Some(cx.resolve_upwards_or_error(
+                                name,
+                                cx.parent_node_id(node_id).unwrap(),
+                            )?),
+                            ast::PortConnMode::Unconnected => None,
                             ast::PortConnMode::Connected(ref expr) => {
-                                cx.map_ast_with_parent(AstNode::Expr(expr), node_id)
+                                Some(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
                             }
                         };
-                        named_ports.push((port.span, Spanned::new(name.name, name.span), value_id));
+                        named_ports.push((port.span, name, value_id));
                     }
                     ast::PortConnKind::Positional(ref expr) => {
                         if !is_pos {
@@ -96,7 +104,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                             );
                         }
                         let value_id = cx.map_ast_with_parent(AstNode::Expr(expr), node_id);
-                        pos_ports.push((port.span, value_id));
+                        pos_ports.push((port.span, Some(value_id)));
                     }
                 }
             }
@@ -1014,6 +1022,18 @@ fn lower_expr<'gcx>(
                 }
             }
         }
+        ast::ConcatExpr {
+            ref repeat,
+            ref exprs,
+        } => hir::ExprKind::Concat(
+            repeat
+                .as_ref()
+                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent)),
+            exprs
+                .iter()
+                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent))
+                .collect(),
+        ),
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);

@@ -3,7 +3,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{Type, TypeKind},
+    ty::{bit_size_of_type, Type, TypeKind},
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
@@ -34,7 +34,10 @@ pub(crate) fn type_of<'gcx>(
                     | hir::UnaryOp::PostInc
                     | hir::UnaryOp::PostDec => arg_ty,
                     hir::UnaryOp::LogicNot => cx.mkty_bit(),
-                    _ => return cx.unimp_msg("type analysis of", &hir),
+                    _ => {
+                        error!("{:#?}", hir);
+                        return cx.unimp_msg("type analysis of", &hir);
+                    }
                 })
             }
             hir::ExprKind::Binary(op, lhs, rhs) => {
@@ -50,7 +53,13 @@ pub(crate) fn type_of<'gcx>(
                     | hir::BinaryOp::LogicShL
                     | hir::BinaryOp::LogicShR
                     | hir::BinaryOp::ArithShL
-                    | hir::BinaryOp::ArithShR => lhs_ty,
+                    | hir::BinaryOp::ArithShR
+                    | hir::BinaryOp::BitAnd
+                    | hir::BinaryOp::BitNand
+                    | hir::BinaryOp::BitOr
+                    | hir::BinaryOp::BitNor
+                    | hir::BinaryOp::BitXor
+                    | hir::BinaryOp::BitXnor => lhs_ty,
                     hir::BinaryOp::Eq
                     | hir::BinaryOp::Neq
                     | hir::BinaryOp::Lt
@@ -59,7 +68,10 @@ pub(crate) fn type_of<'gcx>(
                     | hir::BinaryOp::Geq
                     | hir::BinaryOp::LogicAnd
                     | hir::BinaryOp::LogicOr => cx.mkty_bit(),
-                    _ => return cx.unimp_msg("type analysis of", &hir),
+                    _ => {
+                        error!("{:#?}", hir);
+                        return cx.unimp_msg("type analysis of", &hir);
+                    }
                 })
             }
             hir::ExprKind::Field(..) => {
@@ -71,6 +83,8 @@ pub(crate) fn type_of<'gcx>(
                 match mode {
                     hir::IndexMode::One(..) => match *target_ty {
                         TypeKind::PackedArray(_, ty) => Ok(ty),
+                        TypeKind::Int(_, ty::Domain::TwoValued) => Ok(cx.mkty_bit()),
+                        TypeKind::Int(_, ty::Domain::FourValued) => Ok(cx.mkty_logic()),
                         _ => {
                             let hir = cx.hir_of(target)?;
                             cx.emit(
@@ -96,6 +110,18 @@ pub(crate) fn type_of<'gcx>(
             | hir::ExprKind::NamedPattern(..)
             | hir::ExprKind::RepeatPattern(..)
             | hir::ExprKind::EmptyPattern => cx.type_of(cx.parent_node_id(node_id).unwrap(), env),
+            hir::ExprKind::Concat(repeat, ref exprs) => {
+                let mut bit_width = 0;
+                for &expr in exprs {
+                    let ty = cx.type_of(expr, env)?;
+                    bit_width += bit_size_of_type(cx, ty, env)?;
+                }
+                let repeat = match repeat {
+                    Some(repeat) => cx.constant_int_value_of(repeat, env)?.to_usize().unwrap(),
+                    None => 1,
+                };
+                Ok(cx.mkty_int(repeat * bit_width))
+            }
             _ => {
                 error!("{:#?}", hir);
                 cx.unimp_msg("type analysis of", &hir)
@@ -149,7 +175,10 @@ pub(crate) fn type_of<'gcx>(
         HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
         HirNode::EnumVariant(v) => cx.map_to_type(v.enum_id, env),
         HirNode::Package(_) => Ok(cx.mkty_void()),
-        _ => cx.unimp_msg("type analysis of", &hir),
+        _ => {
+            error!("{:#?}", hir);
+            cx.unimp_msg("type analysis of", &hir)
+        }
     }
 }
 
@@ -277,6 +306,9 @@ fn map_type_kind<'gcx>(
         // actual type should be mapped. Arriving here is a bug in the
         // calling function.
         hir::TypeKind::Implicit => unreachable!("implicit type not resolved"),
-        _ => cx.unimp_msg("type analysis of", root),
+        _ => {
+            error!("{:#?}", root);
+            cx.unimp_msg("type analysis of", root)
+        }
     }
 }

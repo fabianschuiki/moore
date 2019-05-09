@@ -32,7 +32,6 @@ use crate::{
     value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
-use llhd;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashMap, HashSet},

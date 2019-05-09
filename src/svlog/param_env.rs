@@ -164,6 +164,10 @@ pub(crate) fn compute<'gcx>(
             let mut types = vec![];
             let mut values = vec![];
             for (param_id, assign_id) in param_iter {
+                let assign_id = match assign_id {
+                    (Some(i), n) => (i, n),
+                    _ => continue,
+                };
                 match cx.ast_of(param_id)? {
                     AstNode::TypeParam(..) => {
                         cx.set_lowering_hint(assign_id.0, hir::Hint::Type);

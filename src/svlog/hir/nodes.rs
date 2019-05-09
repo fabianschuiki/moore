@@ -210,10 +210,10 @@ impl HasDesc for InstTarget {
 }
 
 /// A positional parameter.
-pub type PosParam = (Span, NodeId);
+pub type PosParam = (Span, Option<NodeId>);
 
 /// A named parameter.
-pub type NamedParam = (Span, Spanned<Name>, NodeId);
+pub type NamedParam = (Span, Spanned<Name>, Option<NodeId>);
 
 /// An instantiation.
 ///
@@ -610,6 +610,8 @@ pub enum ExprKind {
     RepeatPattern(NodeId, Vec<NodeId>),
     /// The empty pattern `'{}`.
     EmptyPattern,
+    /// A concatenation such as `{a,b}` or `{4{a,b}}`.
+    Concat(Option<NodeId>, Vec<NodeId>),
 }
 
 /// The different unary operators.

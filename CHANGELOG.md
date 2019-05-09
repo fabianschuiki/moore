@@ -17,10 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for enum types. ([#79](https://github.com/fabianschuiki/moore/issues/79))
 - Support for package declarations.
 - Support for the `$signed` and `$unsigned` builtin functions.
+- Support auto-connected and unconnected ports.
+- Support for the `{...}` concatenation and `{N{...}}` repetition operators.
 
 ### Fixed
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))
 - Ternary operator now also supported at entitiy-level.
+- Fix underscores in preprocessor macros.
 
 ## 0.4.0 - 2019-02-19
 ### Added

@@ -48,7 +48,7 @@ struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<llhd::EntityRef>>,
     module_types: HashMap<NodeEnvId, llhd::Type>,
     interned_types: HashMap<(Type<'gcx>, ParamEnv), Result<llhd::Type>>,
-    interned_values: HashMap<Value<'gcx>, Result<llhd::Const>>,
+    interned_values: HashMap<Value<'gcx>, Result<llhd::ValueRef>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -157,14 +157,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::Port(p) => p,
                 _ => unreachable!(),
             };
-            let default_value = self.emit_const(if let Some(default) = hir.default {
-                self.constant_value_of(default, env)?
-            } else {
-                self.type_default_value(self.type_of(port_id, env)?)
-            })?;
+            let default_value = self.emit_const(
+                if let Some(default) = hir.default {
+                    self.constant_value_of(default, env)?
+                } else {
+                    self.type_default_value(self.type_of(port_id, env)?)
+                },
+                env,
+            )?;
             let inst = llhd::Inst::new(
                 None,
-                llhd::DriveInst(values[&port_id].clone(), default_value.into(), None),
+                llhd::DriveInst(values[&port_id].clone(), default_value, None),
             );
             ent.add_inst(inst, llhd::InstPosition::End);
         }
@@ -192,7 +195,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             };
             let ty = self.emit_type(self.type_of(decl_id, env)?, env)?;
             let init = match hir.init {
-                Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?)?.into()),
+                Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?, env)?),
                 None => None,
             };
             let inst = llhd::Inst::new(Some(hir.name.value.into()), llhd::SignalInst(ty, init));
@@ -276,12 +279,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     ast::PortDir::Output => (false, true),
                     ast::PortDir::Inout => (true, true),
                 };
+                let mut gen = EntityGenerator {
+                    gen: self,
+                    ent,
+                    values,
+                };
                 if let Some(mapping) = mapping {
-                    let mut gen = EntityGenerator {
-                        gen: self,
-                        ent,
-                        values,
-                    };
                     if is_input {
                         inputs.push(gen.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?);
                     }
@@ -289,7 +292,22 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         outputs.push(gen.emit_lvalue(mapping.0, mapping.1)?);
                     }
                 } else {
-                    unimplemented!("unconnected port");
+                    let ty = gen.type_of(port_id, env)?;
+                    let value = match port.default {
+                        Some(default) => gen.emit_rvalue_mode(default, env, Mode::Signal)?,
+                        None => {
+                            let v = gen.type_default_value(ty.clone());
+                            gen.emit_const(v, env)?
+                        }
+                    };
+                    let lty = gen.emit_type(ty, env)?;
+                    let sig = gen.emit_nameless_inst(llhd::SignalInst(lty, Some(value)));
+                    if is_input {
+                        inputs.push(sig.clone().into());
+                    }
+                    if is_output {
+                        outputs.push(sig.into());
+                    }
                 }
             }
             trace!("inputs = {:#?}", inputs);
@@ -525,36 +543,50 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a value to an LLHD constant (interned).
-    fn emit_const(&mut self, value: Value<'gcx>) -> Result<llhd::Const> {
+    fn emit_const(&mut self, value: Value<'gcx>, env: ParamEnv) -> Result<llhd::ValueRef> {
         if let Some(x) = self.tables.interned_values.get(value) {
             x.clone()
         } else {
-            let x = self.emit_const_uninterned(value);
+            let x = self.emit_const_uninterned(value, env);
             self.tables.interned_values.insert(value, x.clone());
             x
         }
     }
 
     /// Map a value to an LLHD constant.
-    fn emit_const_uninterned(&mut self, value: Value<'gcx>) -> Result<llhd::Const> {
+    fn emit_const_uninterned(
+        &mut self,
+        value: Value<'gcx>,
+        env: ParamEnv,
+    ) -> Result<llhd::ValueRef> {
         match (value.ty, &value.kind) {
             (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
-                Ok(llhd::const_int(width, k.clone()))
+                Ok(llhd::const_int(width, k.clone()).into())
             }
-            (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(llhd::const_time(k.clone(), 0, 0)),
-            (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone())),
+            (&TypeKind::Time, &ValueKind::Time(ref k)) => {
+                Ok(llhd::const_time(k.clone(), 0, 0).into())
+            }
+            (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone()).into()),
+            (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {
+                Ok(llhd::const_array(
+                    self.emit_type(value.ty, env)?,
+                    v.iter()
+                        .map(|v| self.emit_const(v, env).map(Into::into))
+                        .collect::<Result<Vec<_>>>()?,
+                ))
+            }
             _ => panic!("invalid type/value combination {:#?}", value),
         }
     }
 
     /// Emit the value `1` for a type.
-    fn const_one_for_type(&mut self, ty: Type<'gcx>) -> Result<llhd::ValueRef> {
+    fn const_one_for_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::ValueRef> {
         use num::one;
         match *ty {
-            TypeKind::Bit(..) | TypeKind::Int(..) => Ok(self
-                .emit_const(self.intern_value(value::make_int(ty, one())))?
-                .into()),
-            TypeKind::Named(_, _, ty) => self.const_one_for_type(ty),
+            TypeKind::Bit(..) | TypeKind::Int(..) => {
+                Ok(self.emit_const(self.intern_value(value::make_int(ty, one())), env)?)
+            }
+            TypeKind::Named(_, _, ty) => self.const_one_for_type(ty, env),
             _ => panic!("no unit-value for type {:?}", ty),
         }
     }
@@ -809,7 +841,9 @@ where
     ) -> Result<llhd::ValueRef> {
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
-            _ => unreachable!(),
+            HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
+            HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
+            x => unreachable!("rvalue for {:#?}", x),
         };
         #[allow(unreachable_patterns)]
         let (value, actual_mode) = match hir.kind {
@@ -817,14 +851,14 @@ where
             | hir::ExprKind::UnsizedConst(..)
             | hir::ExprKind::TimeConst(_) => {
                 let k = self.constant_value_of(expr_id, env)?;
-                (self.emit_const(k).map(Into::into)?, Mode::Value)
+                (self.emit_const(k, env)?, Mode::Value)
             }
             hir::ExprKind::Ident(name) => {
                 let binding = self.resolve_node(expr_id, env)?;
                 let (value, is_const) = match self.is_constant(binding)? {
                     true => {
                         let k = self.constant_value_of(binding, env)?;
-                        (self.emit_const(k)?.into(), true)
+                        (self.emit_const(k, env)?, true)
                     }
                     false => (self.emitted_value(binding).clone(), false),
                 };
@@ -1060,7 +1094,7 @@ where
             hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
                 let k = self.constant_value_of(expr_id, env)?;
-                (self.emit_const(k)?.into(), Mode::Value)
+                (self.emit_const(k, env)?, Mode::Value)
             }
             hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
@@ -1069,7 +1103,54 @@ where
             hir::ExprKind::Scope(..) => {
                 let binding = self.resolve_node(expr_id, env)?;
                 let value = self.constant_value_of(binding, env)?;
-                (self.emit_const(value)?.into(), Mode::Value)
+                (self.emit_const(value, env)?, Mode::Value)
+            }
+            hir::ExprKind::Concat(repeat, ref exprs) => {
+                let bit_widths = exprs
+                    .iter()
+                    .cloned()
+                    .map(|expr| {
+                        let ty = self.type_of(expr, env)?;
+                        bit_size_of_type(self.cx, ty, env)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let bit_width = bit_widths.iter().sum();
+                let exprs = exprs
+                    .iter()
+                    .cloned()
+                    .map(|id| self.emit_rvalue(id, env))
+                    .collect::<Result<Vec<_>>>()?;
+                let repeat = match repeat {
+                    Some(repeat) => self.constant_int_value_of(repeat, env)?.to_usize().unwrap(),
+                    None => 1,
+                };
+                let ty = llhd::int_ty(bit_width);
+                let mut value: llhd::ValueRef = llhd::const_zero(&ty).into();
+                let mut offset = 0;
+                for (width, expr) in bit_widths.into_iter().zip(exprs.into_iter()) {
+                    value = self
+                        .emit_nameless_inst(llhd::InsertInst(
+                            ty.clone(),
+                            value,
+                            llhd::SliceMode::Slice(offset, width),
+                            expr,
+                        ))
+                        .into();
+                    offset += width;
+                }
+                let rep_ty = llhd::int_ty(bit_width * repeat);
+                let mut rep_value = llhd::const_zero(&rep_ty).into();
+                for i in 0..repeat {
+                    rep_value = self
+                        .emit_nameless_inst(llhd::InsertInst(
+                            rep_ty.clone(),
+                            rep_value,
+                            llhd::SliceMode::Slice(i * bit_width, bit_width),
+                            value.clone(),
+                        ))
+                        .into();
+                }
+                (rep_value, Mode::Value)
             }
             _ => return self.unimp_msg("code generation for", hir),
         };
@@ -1089,6 +1170,8 @@ where
     fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ValueRef> {
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
+            HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
+            HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
             _ => unreachable!(),
         };
         match hir.kind {
@@ -1151,7 +1234,7 @@ where
         let ty = self.type_of(expr_id, env)?;
         let now = self.emit_rvalue(expr_id, env)?;
         let llty = self.emit_type(ty, env)?;
-        let one = self.const_one_for_type(ty)?;
+        let one = self.const_one_for_type(ty, env)?;
         let next: llhd::ValueRef = self
             .emit_nameless_inst(llhd::BinaryInst(op, llty, now.clone(), one))
             .into();
@@ -1716,7 +1799,7 @@ where
                         let value = self
                             .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var.clone()))
                             .into();
-                        let one = self.const_one_for_type(ty)?;
+                        let one = self.const_one_for_type(ty, env)?;
                         let value = self
                             .emit_nameless_inst(llhd::BinaryInst(
                                 llhd::BinaryOp::Sub,
@@ -1816,8 +1899,8 @@ where
         self.set_emitted_value(decl_id, id.into());
         if let Some(expr) = hir.init {
             let k = self.constant_value_of(expr, env)?;
-            let k = self.emit_const(k)?;
-            self.emit_nameless_inst(llhd::StoreInst(ty, id.into(), k.into()));
+            let k = self.emit_const(k, env)?;
+            self.emit_nameless_inst(llhd::StoreInst(ty, id.into(), k));
         }
         Ok(())
     }

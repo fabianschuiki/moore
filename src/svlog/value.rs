@@ -417,8 +417,11 @@ pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) 
         TypeKind::Struct(_) => {
             unimplemented!("create a struct value and fill in defaults for each field")
         }
-        TypeKind::PackedArray(..) => {
-            unimplemented!("create a packed array value and fill in defaults for each element")
-        }
+        TypeKind::PackedArray(length, elem_ty) => cx.intern_value(make_array(
+            ty.clone(),
+            std::iter::repeat(cx.type_default_value(elem_ty.clone()))
+                .take(length)
+                .collect(),
+        )),
     }
 }
