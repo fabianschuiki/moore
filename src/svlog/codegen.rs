@@ -937,7 +937,14 @@ where
                 }
                 (rep_value, Mode::Value)
             }
-            _ => return self.unimp_msg("code generation for", hir),
+            hir::ExprKind::Cast(_ty, expr) => {
+                warn!("cast implemented as nop: {:?}", hir.kind);
+                return self.emit_rvalue_mode(expr, env, mode);
+            }
+            _ => {
+                error!("{:#?}", hir);
+                return self.unimp_msg("code generation for", hir);
+            }
         };
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {

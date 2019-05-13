@@ -122,6 +122,7 @@ pub(crate) fn type_of<'gcx>(
                 };
                 Ok(cx.mkty_int(repeat * bit_width))
             }
+            hir::ExprKind::Cast(ty, _) => cx.map_to_type(ty, env),
             _ => {
                 error!("{:#?}", hir);
                 cx.unimp_msg("type analysis of", &hir)

@@ -221,6 +221,10 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
                 visitor.visit_node_with_id(expr, lvalue);
             }
         }
+        ExprKind::Cast(ty, expr) => {
+            visitor.visit_node_with_id(ty, false);
+            visitor.visit_node_with_id(expr, false);
+        }
     }
 }
 

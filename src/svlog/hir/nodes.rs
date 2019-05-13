@@ -612,6 +612,8 @@ pub enum ExprKind {
     EmptyPattern,
     /// A concatenation such as `{a,b}` or `{4{a,b}}`.
     Concat(Option<NodeId>, Vec<NodeId>),
+    /// A cast `(ty, expr)` such as `foo'(bar)`.
+    Cast(NodeId, NodeId),
 }
 
 /// The different unary operators.

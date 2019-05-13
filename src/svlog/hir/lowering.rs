@@ -1034,6 +1034,10 @@ fn lower_expr<'gcx>(
                 .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent))
                 .collect(),
         ),
+        ast::CastExpr(ref ty, ref expr) => hir::ExprKind::Cast(
+            cx.map_ast_with_parent(AstNode::Type(ty), parent),
+            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+        ),
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);
