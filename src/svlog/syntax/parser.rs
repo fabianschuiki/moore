@@ -2122,6 +2122,16 @@ fn parse_expr_suffix(
             return parse_expr_suffix(p, expr, precedence);
         }
 
+        // expr "'" "(" expr ")"
+        Apostrophe if precedence <= Precedence::Postfix => {
+            p.bump();
+            let inner = flanked(p, Paren, |p| parse_expr(p))?;
+            let expr = Expr {
+                span: Span::union(prefix.span, p.last_span()),
+                data: CastSizeExpr(Box::new(prefix), Box::new(inner)),
+            };
+            return parse_expr_suffix(p, expr, precedence);
+        }
         _ => (),
     }
 
