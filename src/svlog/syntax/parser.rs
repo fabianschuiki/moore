@@ -2101,7 +2101,19 @@ fn parse_expr_suffix(
         Keyword(Kw::Inside) if precedence < Precedence::Ternary => {
             p.bump();
             let set = flanked(p, Brace, |p| {
-                comma_list_nonempty(p, CloseDelim(Brace), "range", |p| parse_expr(p))
+                comma_list_nonempty(p, CloseDelim(Brace), "range", |p| {
+                    if p.peek(0).0 == OpenDelim(Brack) {
+                        // TODO(fschuiki): This is utterly broken
+                        p.require_reported(OpenDelim(Brack))?;
+                        let expr = parse_expr(p)?;
+                        p.require_reported(Colon)?;
+                        parse_expr(p)?;
+                        p.require_reported(CloseDelim(Brack))?;
+                        Ok(expr)
+                    } else {
+                        parse_expr(p)
+                    }
+                })
             })?;
             let expr = Expr {
                 span: Span::union(prefix.span, p.last_span()),
@@ -3773,11 +3785,21 @@ fn parse_case(
         else {
             let mut exprs = Vec::new();
             loop {
-                match parse_expr(p) {
-                    Ok(x) => exprs.push(x),
-                    Err(()) => {
-                        p.recover_balanced(&[Colon], false);
-                        break;
+                if p.peek(0).0 == OpenDelim(Brack) {
+                    // TODO(fschuiki): Keep track of results
+                    // TODO(fschuiki): Error recovery
+                    p.require_reported(OpenDelim(Brack))?;
+                    parse_expr(p)?;
+                    p.require_reported(Colon)?;
+                    parse_expr(p)?;
+                    p.require_reported(CloseDelim(Brack))?;
+                } else {
+                    match parse_expr(p) {
+                        Ok(x) => exprs.push(x),
+                        Err(()) => {
+                            p.recover_balanced(&[Colon], false);
+                            break;
+                        }
                     }
                 }
 
