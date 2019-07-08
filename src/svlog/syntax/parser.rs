@@ -3682,17 +3682,6 @@ fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign>
         }
     })?;
 
-    // Parse the optional delay.
-    let delay = if p.try_eat(Hashtag) {
-        let q = p.last_span();
-        p.add_diag(
-            DiagBuilder2::error("Don't know how to parse delays on continuous assignments").span(q),
-        );
-        return Err(());
-    } else {
-        None
-    };
-
     // Parse the optional delay control.
     let delay_control = try_delay_control(p)?;
 
@@ -3704,7 +3693,7 @@ fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign>
     Ok(ContAssign {
         span: span,
         strength: strength,
-        delay: delay,
+        delay: None,
         delay_control: delay_control,
         assignments: assignments,
     })
