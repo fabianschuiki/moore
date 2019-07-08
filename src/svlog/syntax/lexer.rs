@@ -440,6 +440,22 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 }
+                // SystemVerilog Attributes
+                (CatTokenKind::Symbol('('), CatTokenKind::Symbol('*')) => {
+                    self.bump()?;
+                    self.bump()?;
+                    loop {
+                        match (self.peek[0].0, self.peek[1].0) {
+                            (CatTokenKind::Eof, _) => break,
+                            (CatTokenKind::Symbol('*'), CatTokenKind::Symbol(')')) => {
+                                self.bump()?;
+                                self.bump()?;
+                                break;
+                            }
+                            _ => self.bump()?,
+                        }
+                    }
+                }
                 _ => (),
             }
             match self.peek[0].0 {
