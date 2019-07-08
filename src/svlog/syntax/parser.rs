@@ -924,6 +924,9 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
     });
     let sp = p.peek(0).1;
     p.require_reported(Keyword(Kw::Endmodule))?;
+    if p.try_eat(Colon) {
+       p.eat_ident("module name")?;
+    }
     result
 }
 
@@ -971,6 +974,9 @@ fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
         })
     });
     p.require_reported(Keyword(Kw::Endpackage))?;
+    if p.try_eat(Colon) {
+        p.eat_ident("package name")?;
+    }
     result
 }
 
@@ -986,6 +992,12 @@ fn parse_program_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 }
 
 fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> {
+    // Consume optional leading label.
+    if p.is_ident() && p.peek(1).0 == Colon {
+        p.bump();
+        p.bump();
+    }
+
     // First attempt the simple cases where a keyword reliably identifies the
     // following item.
     match p.peek(0).0 {
@@ -3034,7 +3046,9 @@ fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDec
 
     // Consume the "endfunction" or "endtask" keywords.
     p.require_reported(term)?;
-
+    if p.try_eat(Colon) {
+        p.eat_ident("function/task name")?;
+    }
     span.expand(p.last_span());
     Ok(SubroutineDecl {
         span: span,
