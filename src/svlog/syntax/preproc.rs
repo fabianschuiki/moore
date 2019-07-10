@@ -179,7 +179,7 @@ impl<'a> Preprocessor<'a> {
                     None => {
                         return Err(
                             DiagBuilder2::fatal("Expected macro name after \"`define\"").span(span)
-                        )
+                        );
                     }
                 };
                 let mut makro = Macro::new(name.clone(), name_span);
@@ -205,7 +205,7 @@ impl<'a> Preprocessor<'a> {
                                 Some(x) => x,
                                 _ => {
                                     return Err(DiagBuilder2::fatal("Expected macro argument name")
-                                        .span(span))
+                                        .span(span));
                                 }
                             };
                             makro.args.push(MacroArg::new(name, name_span));
@@ -280,7 +280,7 @@ impl<'a> Preprocessor<'a> {
                             "Expected macro name after {}",
                             dir_name
                         ))
-                        .span(span))
+                        .span(span));
                     }
                 };
                 let exists = self.macro_defs.contains_key(&name);
@@ -368,7 +368,7 @@ impl<'a> Preprocessor<'a> {
                                 return Err(DiagBuilder2::fatal(
                                     "Expected macro parameters in parentheses '(...)'",
                                 )
-                                .span(span))
+                                .span(span));
                             }
                         }
 
@@ -389,7 +389,7 @@ impl<'a> Preprocessor<'a> {
                             let arg = match args.next() {
                                 Some(arg) => arg,
                                 None => {
-                                    return Err(DiagBuilder2::fatal("Superfluous macro parameters"))
+                                    return Err(DiagBuilder2::fatal("Superfluous macro parameters"));
                                 }
                             };
 
@@ -417,11 +417,13 @@ impl<'a> Preprocessor<'a> {
                                         params.insert(arg.name.clone(), param_tokens);
                                         break 'outer;
                                     }
-                                    Some((Symbol('('), _)) => {
+                                    Some(x @ (Symbol('('), _)) => {
+                                        param_tokens.push(x);
                                         self.bump();
                                         nesting += 1;
                                     }
-                                    Some((Symbol(')'), _)) if nesting > 0 => {
+                                    Some(x @ (Symbol(')'), _)) if nesting > 0 => {
+                                        param_tokens.push(x);
                                         self.bump();
                                         nesting -= 1;
                                     }
@@ -433,7 +435,7 @@ impl<'a> Preprocessor<'a> {
                                         return Err(DiagBuilder2::fatal(
                                             "Expected closing parenthesis after macro parameters",
                                         )
-                                        .span(span))
+                                        .span(span));
                                     }
                                 }
                             }
@@ -501,7 +503,7 @@ impl<'a> Preprocessor<'a> {
                     "Preprocessor directive {:?} not implemented",
                     x
                 ))
-                .span(span))
+                .span(span));
             }
         }
 

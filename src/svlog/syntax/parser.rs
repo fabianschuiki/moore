@@ -924,6 +924,9 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
     });
     let sp = p.peek(0).1;
     p.require_reported(Keyword(Kw::Endmodule))?;
+    if p.try_eat(Colon) {
+       p.eat_ident("module name")?;
+    }
     result
 }
 
@@ -971,6 +974,9 @@ fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
         })
     });
     p.require_reported(Keyword(Kw::Endpackage))?;
+    if p.try_eat(Colon) {
+        p.eat_ident("package name")?;
+    }
     result
 }
 
@@ -986,6 +992,12 @@ fn parse_program_decl(p: &mut AbstractParser) -> ReportedResult<()> {
 }
 
 fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> {
+    // Consume optional leading label.
+    if p.is_ident() && p.peek(1).0 == Colon {
+        p.bump();
+        p.bump();
+    }
+
     // First attempt the simple cases where a keyword reliably identifies the
     // following item.
     match p.peek(0).0 {
@@ -2089,7 +2101,19 @@ fn parse_expr_suffix(
         Keyword(Kw::Inside) if precedence < Precedence::Ternary => {
             p.bump();
             let set = flanked(p, Brace, |p| {
-                comma_list_nonempty(p, CloseDelim(Brace), "range", |p| parse_expr(p))
+                comma_list_nonempty(p, CloseDelim(Brace), "range", |p| {
+                    if p.peek(0).0 == OpenDelim(Brack) {
+                        // TODO(fschuiki): This is utterly broken
+                        p.require_reported(OpenDelim(Brack))?;
+                        let expr = parse_expr(p)?;
+                        p.require_reported(Colon)?;
+                        parse_expr(p)?;
+                        p.require_reported(CloseDelim(Brack))?;
+                        Ok(expr)
+                    } else {
+                        parse_expr(p)
+                    }
+                })
             })?;
             let expr = Expr {
                 span: Span::union(prefix.span, p.last_span()),
@@ -2098,6 +2122,16 @@ fn parse_expr_suffix(
             return parse_expr_suffix(p, expr, precedence);
         }
 
+        // expr "'" "(" expr ")"
+        Apostrophe if precedence <= Precedence::Postfix => {
+            p.bump();
+            let inner = flanked(p, Paren, |p| parse_expr(p))?;
+            let expr = Expr {
+                span: Span::union(prefix.span, p.last_span()),
+                data: CastSizeExpr(Box::new(prefix), Box::new(inner)),
+            };
+            return parse_expr_suffix(p, expr, precedence);
+        }
         _ => (),
     }
 
@@ -3034,7 +3068,9 @@ fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDec
 
     // Consume the "endfunction" or "endtask" keywords.
     p.require_reported(term)?;
-
+    if p.try_eat(Colon) {
+        p.eat_ident("function/task name")?;
+    }
     span.expand(p.last_span());
     Ok(SubroutineDecl {
         span: span,
@@ -3646,17 +3682,6 @@ fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign>
         }
     })?;
 
-    // Parse the optional delay.
-    let delay = if p.try_eat(Hashtag) {
-        let q = p.last_span();
-        p.add_diag(
-            DiagBuilder2::error("Don't know how to parse delays on continuous assignments").span(q),
-        );
-        return Err(());
-    } else {
-        None
-    };
-
     // Parse the optional delay control.
     let delay_control = try_delay_control(p)?;
 
@@ -3668,7 +3693,7 @@ fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign>
     Ok(ContAssign {
         span: span,
         strength: strength,
-        delay: delay,
+        delay: None,
         delay_control: delay_control,
         assignments: assignments,
     })
@@ -3759,11 +3784,21 @@ fn parse_case(
         else {
             let mut exprs = Vec::new();
             loop {
-                match parse_expr(p) {
-                    Ok(x) => exprs.push(x),
-                    Err(()) => {
-                        p.recover_balanced(&[Colon], false);
-                        break;
+                if p.peek(0).0 == OpenDelim(Brack) {
+                    // TODO(fschuiki): Keep track of results
+                    // TODO(fschuiki): Error recovery
+                    p.require_reported(OpenDelim(Brack))?;
+                    parse_expr(p)?;
+                    p.require_reported(Colon)?;
+                    parse_expr(p)?;
+                    p.require_reported(CloseDelim(Brack))?;
+                } else {
+                    match parse_expr(p) {
+                        Ok(x) => exprs.push(x),
+                        Err(()) => {
+                            p.recover_balanced(&[Colon], false);
+                            break;
+                        }
                     }
                 }
 
