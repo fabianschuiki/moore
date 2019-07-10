@@ -417,11 +417,13 @@ impl<'a> Preprocessor<'a> {
                                         params.insert(arg.name.clone(), param_tokens);
                                         break 'outer;
                                     }
-                                    Some((Symbol('('), _)) => {
+                                    Some(x @ (Symbol('('), _)) => {
+                                        param_tokens.push(x);
                                         self.bump();
                                         nesting += 1;
                                     }
-                                    Some((Symbol(')'), _)) if nesting > 0 => {
+                                    Some(x @ (Symbol(')'), _)) if nesting > 0 => {
+                                        param_tokens.push(x);
                                         self.bump();
                                         nesting -= 1;
                                     }

@@ -187,13 +187,11 @@ fn is_symbol(c: char) -> bool {
 		'`' |
 		'$' |
 		'\\' |
-		'_' |
+		// '_' |
 		'@' => true,
 		_ => false,
 	}
 }
-
-
 
 /// A token emitted by the categorizing lexer.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
