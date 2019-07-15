@@ -41,10 +41,39 @@ pub struct Preprocessor<'a> {
 
 impl<'a> Preprocessor<'a> {
     /// Create a new preprocessor for the given source file.
-    pub fn new(source: Source, include_paths: &'a [&'a Path]) -> Preprocessor<'a> {
+    pub fn new(
+        source: Source,
+        include_paths: &'a [&'a Path],
+        macro_defs: &'a [(&'a str, Option<&'a str>)],
+    ) -> Preprocessor<'a> {
         let content = source.get_content();
         let content_unbound = unsafe { &*(content.as_ref() as *const SourceContent) };
         let iter = content_unbound.iter();
+        let macro_defs = macro_defs
+            .into_iter()
+            .map(|(name, value)| {
+                let body = match value {
+                    Some(value) => {
+                        // Create dummy sources for each user defined macro.
+                        let src = get_source_manager().add(&format!("<MACRO {}>", name), value);
+                        let span = Span::new(src, 0, value.len());
+                        Cat::new(Box::new(value.char_indices()))
+                            .map(|x| (x.0, span))
+                            .collect()
+                    }
+                    None => Vec::new(),
+                };
+                (
+                    name.to_string(),
+                    Macro {
+                        name: name.to_string(),
+                        span: INVALID_SPAN,
+                        args: Vec::new(),
+                        body: body,
+                    },
+                )
+            })
+            .collect();
         Preprocessor {
             stack: vec![Stream {
                 source: source,
@@ -52,7 +81,7 @@ impl<'a> Preprocessor<'a> {
             }],
             contents: vec![content],
             token: None,
-            macro_defs: HashMap::new(),
+            macro_defs,
             macro_stack: Vec::new(),
             include_paths: include_paths,
             defcond_stack: Vec::new(),
