@@ -55,7 +55,7 @@ impl<'a> Preprocessor<'a> {
                 let body = match value {
                     Some(value) => {
                         // Create dummy sources for each user defined macro.
-                        let src = get_source_manager().add(&format!("<MACRO {}>", name), value);
+                        let src = get_source_manager().add_anonymous(*value);
                         let span = Span::new(src, 0, value.len());
                         Cat::new(Box::new(value.char_indices()))
                             .map(|x| (x.0, span))
