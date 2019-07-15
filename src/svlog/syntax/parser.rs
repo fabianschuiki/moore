@@ -925,7 +925,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
     let sp = p.peek(0).1;
     p.require_reported(Keyword(Kw::Endmodule))?;
     if p.try_eat(Colon) {
-       p.eat_ident("module name")?;
+        p.eat_ident("module name")?;
     }
     result
 }
@@ -1015,37 +1015,37 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
 
         // Structured procedures as per IEEE 1800-2009 section 9.2
         Keyword(Kw::Initial) => {
-            return parse_procedure(p, ProcedureKind::Initial).map(|x| HierarchyItem::Procedure(x))
+            return parse_procedure(p, ProcedureKind::Initial).map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::Always) => {
-            return parse_procedure(p, ProcedureKind::Always).map(|x| HierarchyItem::Procedure(x))
+            return parse_procedure(p, ProcedureKind::Always).map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::AlwaysComb) => {
             return parse_procedure(p, ProcedureKind::AlwaysComb)
-                .map(|x| HierarchyItem::Procedure(x))
+                .map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::AlwaysLatch) => {
             return parse_procedure(p, ProcedureKind::AlwaysLatch)
-                .map(|x| HierarchyItem::Procedure(x))
+                .map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::AlwaysFf) => {
-            return parse_procedure(p, ProcedureKind::AlwaysFf).map(|x| HierarchyItem::Procedure(x))
+            return parse_procedure(p, ProcedureKind::AlwaysFf).map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::Final) => {
-            return parse_procedure(p, ProcedureKind::Final).map(|x| HierarchyItem::Procedure(x))
+            return parse_procedure(p, ProcedureKind::Final).map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::Function) | Keyword(Kw::Task) => {
-            return parse_subroutine_decl(p).map(|x| HierarchyItem::SubroutineDecl(x))
+            return parse_subroutine_decl(p).map(|x| HierarchyItem::SubroutineDecl(x));
         }
 
         // Port declarations
         Keyword(Kw::Inout) | Keyword(Kw::Input) | Keyword(Kw::Output) | Keyword(Kw::Ref) => {
-            return parse_port_decl(p).map(|x| HierarchyItem::PortDecl(x))
+            return parse_port_decl(p).map(|x| HierarchyItem::PortDecl(x));
         }
 
         // Continuous assign
         Keyword(Kw::Assign) => {
-            return parse_continuous_assign(p).map(|x| HierarchyItem::ContAssign(x))
+            return parse_continuous_assign(p).map(|x| HierarchyItem::ContAssign(x));
         }
 
         // Genvar declaration
@@ -1075,7 +1075,10 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
         | Keyword(Kw::Cover)
         | Keyword(Kw::Expect)
         | Keyword(Kw::Restrict) => return parse_assertion(p).map(|x| HierarchyItem::Assertion(x)),
-
+        Semicolon => {
+            p.bump();
+            return Ok(HierarchyItem::Dummy);
+        }
         _ => (),
     }
 
@@ -4455,14 +4458,14 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
                 span: span,
                 qualifiers: Vec::new(),
                 data: ClassItemData::LocalparamDecl(parse_localparam_decl(p)?),
-            })
+            });
         }
         Keyword(Kw::Parameter) => {
             return Ok(ClassItem {
                 span: span,
                 qualifiers: Vec::new(),
                 data: ClassItemData::ParameterDecl(parse_parameter_decl(p)?),
-            })
+            });
         }
         _ => (),
     }
