@@ -67,6 +67,11 @@ fn main() {
                 .number_of_values(1),
         )
         .arg(
+            Arg::with_name("preproc")
+                .short("E")
+                .help("Write preprocessed input files to stdout"),
+        )
+        .arg(
             Arg::with_name("dump_ast")
                 .long("dump-ast")
                 .help("Dump the parsed abstract syntax tree"),
@@ -192,6 +197,13 @@ fn score(sess: &Session, matches: &ArgMatches) {
         match language {
             Language::SystemVerilog | Language::Verilog => {
                 let preproc = svlog::preproc::Preprocessor::new(source, &include_paths);
+                if matches.is_present("preproc") {
+                    for token in preproc {
+                        print!("{}", token.unwrap().1.extract());
+                    }
+                    return;
+                }
+
                 let lexer = svlog::lexer::Lexer::new(preproc);
                 match svlog::parser::parse(lexer) {
                     Ok(x) => asts.push(score::Ast::Svlog(x)),
