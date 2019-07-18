@@ -67,6 +67,20 @@ fn main() {
                 .number_of_values(1),
         )
         .arg(
+            Arg::with_name("def")
+                .short("D")
+                .value_name("DEFINE")
+                .help("Define a preprocesor macro")
+                .multiple(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name("preproc")
+                .short("E")
+                .help("Write preprocessed input files to stdout"),
+        )
+        .arg(
             Arg::with_name("dump_ast")
                 .long("dump-ast")
                 .help("Dump the parsed abstract syntax tree"),
@@ -164,6 +178,16 @@ fn score(sess: &Session, matches: &ArgMatches) {
         None => Vec::new(),
     };
 
+    let defines: Vec<_> = match matches.values_of("def") {
+        Some(args) => args
+            .map(|x| {
+                let mut iter = x.split("=");
+                (iter.next().unwrap(), iter.next())
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+
     // Establish into which library the entities will be compiled. Later on this
     // should be made configurable per entity.
     let lib = get_name_table().intern(matches.value_of("lib").unwrap_or("work"), true);
@@ -191,7 +215,14 @@ fn score(sess: &Session, matches: &ArgMatches) {
         // Parse the file.
         match language {
             Language::SystemVerilog | Language::Verilog => {
-                let preproc = svlog::preproc::Preprocessor::new(source, &include_paths);
+                let preproc = svlog::preproc::Preprocessor::new(source, &include_paths, &defines);
+                if matches.is_present("preproc") {
+                    for token in preproc {
+                        print!("{}", token.unwrap().1.extract());
+                    }
+                    return;
+                }
+
                 let lexer = svlog::lexer::Lexer::new(preproc);
                 match svlog::parser::parse(lexer) {
                     Ok(x) => asts.push(score::Ast::Svlog(x)),
