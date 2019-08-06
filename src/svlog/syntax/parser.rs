@@ -1008,7 +1008,9 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
             p.require_reported(Semicolon)?;
             return Ok(HierarchyItem::ParamDecl(decl));
         }
-        Keyword(Kw::Modport) => return parse_modport_decl(p).map(|x| HierarchyItem::ModportDecl(x)),
+        Keyword(Kw::Modport) => {
+            return parse_modport_decl(p).map(|x| HierarchyItem::ModportDecl(x))
+        }
         Keyword(Kw::Class) => return parse_class_decl(p).map(|x| HierarchyItem::ClassDecl(x)),
         Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| HierarchyItem::Typedef(x)),
         Keyword(Kw::Import) => return parse_import_decl(p).map(|x| HierarchyItem::ImportDecl(x)),
@@ -1029,7 +1031,8 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
                 .map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::AlwaysFf) => {
-            return parse_procedure(p, ProcedureKind::AlwaysFf).map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysFf)
+                .map(|x| HierarchyItem::Procedure(x));
         }
         Keyword(Kw::Final) => {
             return parse_procedure(p, ProcedureKind::Final).map(|x| HierarchyItem::Procedure(x));
@@ -5797,7 +5800,7 @@ mod tests {
             v
         });
         let source = sm.add(&format!("test_{}.sv", idx), input);
-        let pp = Preprocessor::new(source, &[]);
+        let pp = Preprocessor::new(source, &[], &[]);
         let lexer = Lexer::new(pp);
         super::parse(lexer).unwrap();
     }

@@ -233,8 +233,10 @@ impl<'a> Preprocessor<'a> {
                             let (name, name_span) = match self.try_eat_name() {
                                 Some(x) => x,
                                 _ => {
-                                    return Err(DiagBuilder2::fatal("Expected macro argument name")
-                                        .span(span));
+                                    return Err(DiagBuilder2::fatal(
+                                        "Expected macro argument name",
+                                    )
+                                    .span(span));
                                 }
                             };
                             makro.args.push(MacroArg::new(name, name_span));
@@ -418,7 +420,9 @@ impl<'a> Preprocessor<'a> {
                             let arg = match args.next() {
                                 Some(arg) => arg,
                                 None => {
-                                    return Err(DiagBuilder2::fatal("Superfluous macro parameters"));
+                                    return Err(DiagBuilder2::fatal(
+                                        "Superfluous macro parameters",
+                                    ));
                                 }
                             };
 
@@ -754,7 +758,7 @@ mod tests {
             v
         });
         let source = sm.add(&format!("test_{}.sv", idx), input);
-        Preprocessor::new(source, &[])
+        Preprocessor::new(source, &[], &[])
     }
 
     fn check_str(input: &str, expected: &str) {
@@ -768,7 +772,7 @@ mod tests {
         let sm = get_source_manager();
         sm.add("other.sv", "bar\n");
         sm.add("test.sv", "foo\n`include \"other.sv\"\nbaz");
-        let pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
+        let pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[], &[]);
         let actual: Vec<_> = pp.map(|x| x.unwrap().0).collect();
         assert_eq!(actual, &[Text, Newline, Text, Newline, Newline, Text,]);
     }
@@ -781,7 +785,7 @@ mod tests {
             "test.sv",
             "// Hello\n`include \"other.sv\"\n`foo something\n",
         );
-        let pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[]);
+        let pp = Preprocessor::new(sm.open("test.sv").unwrap(), &[], &[]);
         let actual: String = pp
             .map(|x| {
                 let x = x.unwrap();
@@ -797,7 +801,7 @@ mod tests {
     fn conditional_define() {
         let sm = get_source_manager();
         let source = sm.add("test.sv", "`ifdef FOO\n`define BAR\n`endif\n`BAR");
-        let mut pp = Preprocessor::new(source, &[]);
+        let mut pp = Preprocessor::new(source, &[], &[]);
         while let Some(tkn) = pp.next() {
             tkn.unwrap();
         }

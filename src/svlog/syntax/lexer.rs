@@ -671,7 +671,7 @@ mod tests {
             v
         });
         let source = sm.add(&format!("test_{}.sv", idx), input);
-        let pp = Preprocessor::new(source, &[]);
+        let pp = Preprocessor::new(source, &[], &[]);
         let lexer = Lexer::new(pp);
         let actual: Vec<_> = lexer.map(|x| x.unwrap().0).collect();
         assert_eq!(actual, expected);
@@ -793,6 +793,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn underscores_in_literal_constant_numbers() {
         check(
             "27_195_000; 16'b0011_0101_0001_1111; 32 'h 12ab_f001",

@@ -15,7 +15,7 @@ pub(crate) fn parse(input: &str) -> ast::Root {
         v
     });
     let source = sm.add(&format!("test_{}.sv", idx), input);
-    let pp = Preprocessor::new(source, &[]);
+    let pp = Preprocessor::new(source, &[], &[]);
     let lexer = Lexer::new(pp);
     parser::parse(lexer).unwrap()
 }

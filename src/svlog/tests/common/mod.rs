@@ -21,7 +21,7 @@ pub fn parse(input: &str) -> Vec<ast::Root> {
         v
     });
     let source = sm.add(&format!("test_{}.sv", idx), input);
-    let pp = preproc::Preprocessor::new(source, &[]);
+    let pp = preproc::Preprocessor::new(source, &[], &[]);
     let lexer = lexer::Lexer::new(pp);
     match parser::parse(lexer) {
         Ok(x) => vec![x],
