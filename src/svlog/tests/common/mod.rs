@@ -29,9 +29,6 @@ pub fn parse(input: &str) -> Vec<ast::Root> {
     }
 }
 
-pub(crate) fn module_to_string(module: &llhd::Module) -> String {
-    use crate::llhd::{assembly::Writer, Visitor};
-    let mut out = Vec::<u8>::new();
-    Writer::new(&mut out).visit_module(&module);
-    String::from_utf8(out).unwrap()
+pub(crate) fn module_to_string(module: &llhd::ir::Module) -> String {
+    llhd::assembly::write_module_string(module)
 }

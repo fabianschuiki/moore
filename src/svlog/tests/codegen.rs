@@ -21,7 +21,7 @@ fn compile_module(name: &str, code: &str) -> String {
 fn empty_module() {
     assert_eq!(
         compile_module("foo", "module foo; endmodule").trim(),
-        "entity @foo () () {\n}"
+        "entity @foo () -> () {\n}"
     );
 }
 
@@ -29,7 +29,7 @@ fn empty_module() {
 fn module_with_trivial_ports() {
     assert_eq!(
         compile_module("foo", "module foo (input bit a, output bit b); endmodule").trim(),
-        "entity @foo (i1$ %a) (i1$ %b) {\n    drv %b 0\n}"
+        "entity @foo (i1$ %a) -> (i1$ %b) {\n    %0 = const i1 0\n    %1 = const time 0s\n    drv i1$ %b, %0, %1\n}"
     );
 }
 
@@ -48,6 +48,6 @@ fn empty_instances() {
             "
         )
         .trim(),
-        "entity @bar () () {\n}\n\nentity @foo () () {\n    %b = inst @bar () ()\n}"
+        "entity @bar () -> () {\n}\n\nentity @foo () -> () {\n    inst @bar () -> ()\n}"
     );
 }
