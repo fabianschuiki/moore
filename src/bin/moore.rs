@@ -2,14 +2,11 @@
 
 //! A hardware description language compiler.
 
-extern crate clap;
-extern crate llhd;
-extern crate moore;
-extern crate sha1;
 #[macro_use]
 extern crate log;
 
 use clap::{App, Arg, ArgMatches};
+use llhd;
 use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
@@ -292,10 +289,11 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
     // Extract the populated LLHD modules from the scoreboards and link them
     // together.
-    let vhdl_module = vhdl_sb.llmod.into_inner();
+    let _vhdl_module = vhdl_sb.llmod.into_inner();
 
     // Emit the module.
-    llhd::assembly::write(&mut std::io::stdout().lock(), &vhdl_module);
+    // TODO: Re-enable this once the VHDL crate has been moved over to llhd v0.8.
+    // llhd::assembly::write_module(&mut std::io::stdout().lock(), &vhdl_module);
 
     if sess.failed() {
         std::process::exit(1);
@@ -415,7 +413,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             let mut cg = svlog::CodeGenerator::new(ctx.svlog);
             cg.emit_module(m)?;
             let code = cg.finalize();
-            llhd::assembly::write(&mut std::io::stdout().lock(), &code);
+            llhd::assembly::write_module(&mut std::io::stdout().lock(), &code);
         }
     }
     Ok(())

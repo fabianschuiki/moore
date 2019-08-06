@@ -5,10 +5,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-extern crate bincode;
-extern crate llhd;
-extern crate rustc_serialize;
-extern crate typed_arena;
 #[macro_use]
 extern crate log;
 

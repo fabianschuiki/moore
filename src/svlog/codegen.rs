@@ -9,6 +9,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
+use llhd::ir::{Unit, UnitBuilder};
 use num::{
     traits::{cast::ToPrimitive, sign::Signed},
     BigInt, One,
@@ -22,7 +23,7 @@ pub struct CodeGenerator<'gcx, C> {
     /// The compilation context.
     cx: C,
     /// The LLHD module to be populated.
-    into: llhd::Module,
+    into: llhd::ir::Module,
     /// Tables holding mappings and interned values.
     tables: Tables<'gcx>,
 }
@@ -32,23 +33,22 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
     pub fn new(cx: C) -> Self {
         CodeGenerator {
             cx,
-            into: llhd::Module::new(),
+            into: llhd::ir::Module::new(),
             tables: Default::default(),
         }
     }
 
     /// Finalize code generation and return the generated LLHD module.
-    pub fn finalize(self) -> llhd::Module {
+    pub fn finalize(self) -> llhd::ir::Module {
         self.into
     }
 }
 
 #[derive(Default)]
 struct Tables<'gcx> {
-    module_defs: HashMap<NodeEnvId, Result<llhd::EntityRef>>,
-    module_types: HashMap<NodeEnvId, llhd::Type>,
+    module_defs: HashMap<NodeEnvId, Result<llhd::ir::ModUnit>>,
+    module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
     interned_types: HashMap<(Type<'gcx>, ParamEnv), Result<llhd::Type>>,
-    interned_values: HashMap<Value<'gcx>, Result<llhd::ValueRef>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -61,12 +61,12 @@ impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
 
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::EntityRef> {
+    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::ir::ModUnit> {
         self.emit_module_with_env(id, self.default_param_env())
     }
 
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::EntityRef> {
+    pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ir::ModUnit> {
         if let Some(x) = self.tables.module_defs.get(&(id, env)) {
             return x.clone();
         }
@@ -77,10 +77,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         debug!("emit module `{}` with {:?}", hir.name, env);
 
         // Determine entity type and port names.
+        let mut sig = llhd::ir::Signature::new();
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        let mut input_tys = Vec::new();
-        let mut output_tys = Vec::new();
         let mut port_id_to_name = HashMap::new();
         for &port_id in hir.ports {
             let port = match self.hir_of(port_id)? {
@@ -99,16 +98,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             };
             match port.dir {
                 ast::PortDir::Input | ast::PortDir::Ref => {
-                    input_tys.push(ty);
+                    sig.add_input(ty);
                     inputs.push(port_id);
                 }
                 ast::PortDir::Output => {
-                    output_tys.push(ty);
+                    sig.add_output(ty);
                     outputs.push(port_id);
                 }
                 ast::PortDir::Inout => {
-                    input_tys.push(ty.clone());
-                    output_tys.push(ty);
+                    sig.add_input(ty.clone());
+                    sig.add_output(ty);
                     inputs.push(port_id);
                     outputs.push(port_id);
                 }
@@ -121,55 +120,73 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         if env != self.default_param_env() {
             entity_name.push_str(&format!(".param{}", env.0));
         }
+        let name = llhd::ir::UnitName::Global(entity_name.clone());
 
         // Create entity.
-        let ty = llhd::entity_ty(input_tys, output_tys.clone());
-        let mut ent = llhd::Entity::new(entity_name.clone(), ty.clone());
-        self.tables.module_types.insert((id, env), ty);
+        let mut ent = llhd::ir::Entity::new(name.clone(), sig.clone());
+        let mut builder = llhd::ir::EntityBuilder::new(&mut ent);
+        self.tables.module_signatures.insert((id, env), (name, sig));
+        let mut values = HashMap::<NodeId, llhd::ir::Value>::new();
+        let mut gen = UnitGenerator {
+            gen: self,
+            builder: &mut builder,
+            values: &mut values,
+            interned_consts: Default::default(),
+        };
 
         // Assign proper port names and collect ports into a lookup table.
-        let mut values = HashMap::<NodeId, llhd::ValueRef>::new();
         for (index, port_id) in inputs.into_iter().enumerate() {
-            ent.inputs_mut()[index].set_name(port_id_to_name[&port_id].value);
-            values.insert(port_id, ent.input(index).into());
+            let arg = gen.builder.entity.input_arg(index);
+            gen.builder
+                .dfg_mut()
+                .set_name(arg, port_id_to_name[&port_id].value.to_string());
+            gen.values.insert(port_id, arg);
         }
         for (index, &port_id) in outputs.iter().enumerate() {
-            ent.outputs_mut()[index].set_name(port_id_to_name[&port_id].value);
-            values.insert(port_id, ent.output(index).into());
+            let arg = gen.builder.entity.output_arg(index);
+            gen.builder
+                .dfg_mut()
+                .set_name(arg, port_id_to_name[&port_id].value.to_string());
+            gen.values.insert(port_id, arg);
         }
 
-        self.emit_module_block(id, env, &hir.block, &mut ent, &mut values, &entity_name)?;
+        // Emit the actual contents of the entity.
+        gen.emit_module_block(id, env, &hir.block, &entity_name)?;
 
         // Assign default values to undriven output ports.
         for port_id in outputs {
             let driven = {
-                let value = &values[&port_id];
-                ent.insts().any(|inst| match inst.kind() {
-                    llhd::DriveInst(target, ..) => target == value,
-                    llhd::InstanceInst(_, _, _, ref driven) => driven.contains(value),
-                    _ => false,
+                let value = gen.values[&port_id];
+                gen.builder.inst_layout().insts().any(|inst| {
+                    match gen.builder.dfg()[inst].opcode() {
+                        llhd::ir::Opcode::Drv => gen.builder.dfg()[inst].args()[0] == value,
+                        llhd::ir::Opcode::Inst => {
+                            gen.builder.dfg()[inst].output_args().contains(&value)
+                        }
+                        _ => false,
+                    }
                 })
             };
             if driven {
                 continue;
             }
-            let hir = match self.hir_of(port_id)? {
+            let hir = match gen.hir_of(port_id)? {
                 HirNode::Port(p) => p,
                 _ => unreachable!(),
             };
-            let default_value = self.emit_const(
+            let default_value = gen.emit_const(
                 if let Some(default) = hir.default {
-                    self.constant_value_of(default, env)?
+                    gen.constant_value_of(default, env)?
                 } else {
-                    self.type_default_value(self.type_of(port_id, env)?)
+                    gen.type_default_value(gen.type_of(port_id, env)?)
                 },
                 env,
             )?;
-            let inst = llhd::Inst::new(
-                None,
-                llhd::DriveInst(values[&port_id].clone(), default_value, None),
-            );
-            ent.add_inst(inst, llhd::InstPosition::End);
+            let zero_time = llhd::ConstTime::new(num::zero(), 0, 0);
+            let zero_time = gen.builder.ins().const_time(zero_time);
+            gen.builder
+                .ins()
+                .drv(gen.values[&port_id], default_value, zero_time);
         }
 
         let result = Ok(self.into.add_entity(ent));
@@ -177,14 +194,248 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         result
     }
 
+    /// Emit the code for a procedure.
+    fn emit_procedure(
+        &mut self,
+        id: NodeId,
+        env: ParamEnv,
+        name_prefix: &str,
+    ) -> Result<llhd::ir::ModUnit> {
+        let hir = match self.hir_of(id)? {
+            HirNode::Proc(x) => x,
+            _ => unreachable!(),
+        };
+
+        // Find the accessed nodes.
+        let acc = self.accessed_nodes(hir.stmt)?;
+        trace!("process accesses {:#?}", acc);
+        let mut sig = llhd::ir::Signature::new();
+        let mut inputs = vec![];
+        let mut outputs = vec![];
+        for &id in &acc.read {
+            sig.add_input(llhd::signal_ty(
+                self.emit_type(self.type_of(id, env)?, env)?,
+            ));
+            inputs.push(id);
+        }
+        for &id in &acc.written {
+            sig.add_output(llhd::signal_ty(
+                self.emit_type(self.type_of(id, env)?, env)?,
+            ));
+            outputs.push(id);
+        }
+        trace!("process inputs = {:#?}", inputs);
+        trace!("process outputs = {:#?}", outputs);
+
+        // Create process and entry block.
+        let proc_name = format!(
+            "{}.{}.{}.{}",
+            name_prefix,
+            match hir.kind {
+                ast::ProcedureKind::Initial => "initial",
+                ast::ProcedureKind::Always => "always",
+                ast::ProcedureKind::AlwaysComb => "always_comb",
+                ast::ProcedureKind::AlwaysLatch => "always_latch",
+                ast::ProcedureKind::AlwaysFf => "always_ff",
+                ast::ProcedureKind::Final => "final",
+            },
+            id.as_usize(),
+            env.0,
+        );
+        let mut prok = llhd::ir::Process::new(llhd::ir::UnitName::Local(proc_name), sig);
+        let mut builder = llhd::ir::ProcessBuilder::new(&mut prok);
+
+        // Create a mapping from read/written nodes to process parameters.
+        let mut values = HashMap::new();
+        for (&id, arg) in inputs
+            .iter()
+            .zip(builder.prok.input_args())
+            .chain(outputs.iter().zip(builder.prok.output_args()))
+        {
+            values.insert(id, arg);
+        }
+        let mut pg = UnitGenerator {
+            gen: self,
+            builder: &mut builder,
+            values: &mut values,
+            interned_consts: Default::default(),
+        };
+        let entry_blk = pg.add_nameless_block();
+        pg.builder.append_to(entry_blk);
+
+        // Emit prologue and determine which basic block to jump back to.
+        let head_blk = match hir.kind {
+            ast::ProcedureKind::AlwaysComb => {
+                let body_blk = pg.add_named_block("body");
+                let check_blk = pg.add_named_block("check");
+                pg.builder.ins().br(body_blk);
+                pg.builder.append_to(check_blk);
+                let trigger_on = inputs
+                    .iter()
+                    .map(|id| pg.emitted_value(*id).clone())
+                    .collect();
+                pg.builder.ins().wait(body_blk, trigger_on);
+                pg.builder.append_to(body_blk);
+                check_blk
+            }
+            _ => entry_blk,
+        };
+
+        // Emit the main statement.
+        pg.emit_stmt(hir.stmt, env)?;
+
+        // Emit epilogue.
+        match hir.kind {
+            ast::ProcedureKind::Initial => {
+                pg.builder.ins().halt();
+            }
+            ast::ProcedureKind::Always
+            | ast::ProcedureKind::AlwaysComb
+            | ast::ProcedureKind::AlwaysLatch
+            | ast::ProcedureKind::AlwaysFf => {
+                pg.builder.ins().br(head_blk);
+            }
+            _ => (),
+        }
+        Ok(self.into.add_process(prok))
+    }
+
+    /// Map a type to an LLHD type (interned).
+    fn emit_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
+        if let Some(x) = self.tables.interned_types.get(&(ty, env)) {
+            x.clone()
+        } else {
+            let x = self.emit_type_uninterned(ty, env);
+            self.tables.interned_types.insert((ty, env), x.clone());
+            x
+        }
+    }
+
+    /// Map a type to an LLHD type.
+    fn emit_type_uninterned(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
+        #[allow(unreachable_patterns)]
+        Ok(match *ty {
+            TypeKind::Void => llhd::void_ty(),
+            TypeKind::Bit(_) => llhd::int_ty(1),
+            TypeKind::Int(width, _) => llhd::int_ty(width),
+            TypeKind::Named(_, _, ty) => self.emit_type(ty, env)?,
+            TypeKind::Struct(id) => {
+                let fields = match self.hir_of(id)? {
+                    HirNode::Type(hir::Type {
+                        kind: hir::TypeKind::Struct(ref fields),
+                        ..
+                    }) => fields,
+                    _ => unreachable!(),
+                };
+                let mut types = vec![];
+                for &field_id in fields {
+                    types.push(self.emit_type(self.type_of(field_id, env)?, env)?);
+                }
+                llhd::struct_ty(types)
+            }
+            TypeKind::PackedArray(size, ty) => llhd::array_ty(size, self.emit_type(ty, env)?),
+            _ => unimplemented!("emit type {:?}", ty),
+        })
+    }
+
+    /// Execute the initialization step of a generate loop.
+    fn execute_genvar_init(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
+        let hir = self.hir_of(id)?;
+        match hir {
+            HirNode::GenvarDecl(_) => (),
+            _ => unreachable!(),
+        }
+        Ok(env)
+    }
+
+    /// Execute the iteration step of a generate loop.
+    fn execute_genvar_step(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
+        let hir = self.hir_of(id)?;
+        let mut env_data = self.param_env_data(env).clone();
+        let next = match hir {
+            HirNode::Expr(expr) => match expr.kind {
+                hir::ExprKind::Unary(op, target_id) => {
+                    let target_id = self.resolve_node(target_id, env)?;
+                    let current_value = self.constant_value_of(target_id, env)?;
+                    let next_value = match current_value.kind {
+                        ValueKind::Int(ref v) => match op {
+                            hir::UnaryOp::PostInc | hir::UnaryOp::PreInc => Some(v + 1),
+                            hir::UnaryOp::PostDec | hir::UnaryOp::PreDec => Some(v - 1),
+                            _ => None,
+                        }
+                        .map(|v| value::make_int(current_value.ty, v)),
+                        _ => unreachable!(),
+                    };
+                    next_value.map(|v| (target_id, v))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        match next {
+            Some((target_id, next_value)) => {
+                env_data.set_value(target_id, self.intern_value(next_value));
+                return Ok(self.intern_param_env(env_data));
+            }
+            None => {
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "{} is not a valid genvar iteration step",
+                        hir.desc_full()
+                    ))
+                    .span(hir.human_span()),
+                );
+                Err(())
+            }
+        }
+    }
+}
+
+/// A code generator for functions, processes, and entities.
+struct UnitGenerator<'a, 'gcx, C, UB> {
+    /// The global code generator.
+    gen: &'a mut CodeGenerator<'gcx, C>,
+    /// The builder into which instructions are emitted.
+    builder: &'a mut UB,
+    /// The emitted LLHD values for various nodes.
+    values: &'a mut HashMap<NodeId, llhd::ir::Value>,
+    /// The constant values emitted into the unit.
+    interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
+}
+
+impl<'a, 'gcx, C, UB> Deref for UnitGenerator<'a, 'gcx, C, UB> {
+    type Target = CodeGenerator<'gcx, C>;
+
+    fn deref(&self) -> &CodeGenerator<'gcx, C> {
+        &self.gen
+    }
+}
+
+impl<'a, 'gcx, C, UB> DerefMut for UnitGenerator<'a, 'gcx, C, UB> {
+    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
+        &mut self.gen
+    }
+}
+
+impl<'a, 'b, 'gcx, C, UB> UnitGenerator<'a, 'gcx, &'b C, UB>
+where
+    C: Context<'gcx> + 'b,
+    UB: UnitBuilder,
+{
+    fn emitted_value(&self, node_id: NodeId) -> llhd::ir::Value {
+        self.values[&node_id]
+    }
+
+    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ir::Value) {
+        self.values.insert(node_id, value);
+    }
+
     /// Emit the code for the contents of a module.
-    pub fn emit_module_block(
+    fn emit_module_block(
         &mut self,
         id: NodeId,
         env: ParamEnv,
         hir: &hir::ModuleBlock,
-        ent: &mut llhd::Entity,
-        values: &mut HashMap<NodeId, llhd::ValueRef>,
         name_prefix: &str,
     ) -> Result<()> {
         // Emit declarations.
@@ -193,31 +444,30 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 HirNode::VarDecl(x) => x,
                 _ => unreachable!(),
             };
-            let ty = self.emit_type(self.type_of(decl_id, env)?, env)?;
-            let init = match hir.init {
-                Some(expr) => Some(self.emit_const(self.constant_value_of(expr, env)?, env)?),
-                None => None,
-            };
-            let inst = llhd::Inst::new(Some(hir.name.value.into()), llhd::SignalInst(ty, init));
-            let id = ent.add_inst(inst, llhd::InstPosition::End);
-            values.insert(decl_id, id.into());
+            let ty = self.type_of(decl_id, env)?;
+            let init = self.emit_const(
+                match hir.init {
+                    Some(expr) => self.constant_value_of(expr, env)?,
+                    None => self.type_default_value(ty),
+                },
+                env,
+            )?;
+            let id = self.builder.ins().sig(init);
+            self.builder.dfg_mut().set_name(id, hir.name.value.into());
+            self.values.insert(decl_id, id.into());
         }
 
         // Emit assignments.
         for &assign_id in &hir.assigns {
-            let mut gen = EntityGenerator {
-                gen: self,
-                ent: ent,
-                values: values,
-            };
-            let hir = match gen.hir_of(assign_id)? {
+            let hir = match self.hir_of(assign_id)? {
                 HirNode::Assign(x) => x,
                 _ => unreachable!(),
             };
-            let lhs = gen.emit_lvalue(hir.lhs, env)?;
-            let rhs = gen.emit_rvalue_mode(hir.rhs, env, Mode::Value)?;
-            let one_epsilon = llhd::const_time(num::zero(), 0, 1);
-            gen.emit_nameless_inst(llhd::DriveInst(lhs, rhs, Some(one_epsilon.clone().into())));
+            let lhs = self.emit_lvalue(hir.lhs, env)?;
+            let rhs = self.emit_rvalue_mode(hir.rhs, env, Mode::Value)?;
+            let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
+            let one_epsilon = self.builder.ins().const_time(one_epsilon);
+            self.builder.ins().drv(lhs, rhs, one_epsilon);
         }
 
         // Emit instantiations.
@@ -279,46 +529,42 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     ast::PortDir::Output => (false, true),
                     ast::PortDir::Inout => (true, true),
                 };
-                let mut gen = EntityGenerator {
-                    gen: self,
-                    ent,
-                    values,
-                };
                 if let Some(mapping) = mapping {
                     if is_input {
-                        inputs.push(gen.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?);
+                        inputs.push(self.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?);
                     }
                     if is_output {
-                        outputs.push(gen.emit_lvalue(mapping.0, mapping.1)?);
+                        outputs.push(self.emit_lvalue(mapping.0, mapping.1)?);
                     }
                 } else {
-                    let ty = gen.type_of(port_id, env)?;
+                    let ty = self.type_of(port_id, env)?;
                     let value = match port.default {
-                        Some(default) => gen.emit_rvalue_mode(default, env, Mode::Signal)?,
+                        Some(default) => self.emit_rvalue_mode(default, env, Mode::Signal)?,
                         None => {
-                            let v = gen.type_default_value(ty.clone());
-                            gen.emit_const(v, env)?
+                            let v = self.type_default_value(ty.clone());
+                            self.emit_const(v, env)?
                         }
                     };
-                    let lty = gen.emit_type(ty, env)?;
-                    let sig = gen.emit_nameless_inst(llhd::SignalInst(lty, Some(value)));
+                    // let lty = self.emit_type(ty, env)?;
+                    let sig = self.builder.ins().sig(value);
                     if is_input {
-                        inputs.push(sig.clone().into());
+                        inputs.push(sig);
                     }
                     if is_output {
-                        outputs.push(sig.into());
+                        outputs.push(sig);
                     }
                 }
             }
             trace!("inputs = {:#?}", inputs);
             trace!("outputs = {:#?}", outputs);
             let target = self.emit_module_with_env(resolved, inst_env)?;
-            let ty = self.tables.module_types[&(resolved, inst_env)].clone();
-            let inst = llhd::Inst::new(
-                Some(hir.name.value.into()),
-                llhd::InstanceInst(ty, target.into(), inputs, outputs),
+            // let (name, sig) = self.tables.module_signatures[&(resolved, inst_env)].clone();
+            let ext_unit = self.builder.add_extern(
+                self.into[target].name().clone(),
+                self.into[target].sig().clone(),
             );
-            ent.add_inst(inst, llhd::InstPosition::End);
+            self.builder.ins().inst(ext_unit, inputs, outputs);
+            // self.builder.dfg_mut().set_name(inst, hir.name.value.into());
         }
 
         // Emit generate blocks.
@@ -337,10 +583,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     let k = self.constant_value_of(cond, env)?;
                     if k.is_false() {
                         if let Some(else_body) = else_body {
-                            self.emit_module_block(id, env, else_body, ent, values, name_prefix)?;
+                            self.emit_module_block(id, env, else_body, name_prefix)?;
                         }
                     } else {
-                        self.emit_module_block(id, env, main_body, ent, values, name_prefix)?;
+                        self.emit_module_block(id, env, main_body, name_prefix)?;
                     }
                 }
                 hir::GenKind::For {
@@ -354,7 +600,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         local_env = self.execute_genvar_init(i, local_env)?;
                     }
                     while self.constant_value_of(cond, local_env)?.is_true() {
-                        self.emit_module_block(id, local_env, body, ent, values, name_prefix)?;
+                        self.emit_module_block(id, local_env, body, name_prefix)?;
                         local_env = self.execute_genvar_step(step, local_env)?;
                     }
                 }
@@ -364,13 +610,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Emit and instantiate procedures.
         for &proc_id in &hir.procs {
-            use llhd::Context as LlhdContext;
             let prok = self.emit_procedure(proc_id, env, name_prefix)?;
-            let ty = llhd::ModuleContext::new(&self.into)
-                .ty(&prok.into())
-                .clone();
             let acc = self.accessed_nodes(proc_id)?;
-            let lookup_value = |&id| match values.get(&id) {
+            let lookup_value = |&id| match self.values.get(&id) {
                 Some(v) => v.clone(),
                 None => {
                     self.emit(
@@ -386,169 +628,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             };
             let inputs = acc.read.iter().map(lookup_value).collect();
             let outputs = acc.written.iter().map(lookup_value).collect();
-            let inst = llhd::Inst::new(None, llhd::InstanceInst(ty, prok.into(), inputs, outputs));
-            ent.add_inst(inst, llhd::InstPosition::End);
+            let ext_unit = self.builder.add_extern(
+                self.into[prok].name().clone(),
+                self.into[prok].sig().clone(),
+            );
+            self.builder.ins().inst(ext_unit, inputs, outputs);
         }
 
         Ok(())
     }
 
-    /// Emit the code for a procedure.
-    fn emit_procedure(
-        &mut self,
-        id: NodeId,
-        env: ParamEnv,
-        name_prefix: &str,
-    ) -> Result<llhd::ProcessRef> {
-        let hir = match self.hir_of(id)? {
-            HirNode::Proc(x) => x,
-            _ => unreachable!(),
-        };
-
-        // Find the accessed nodes.
-        let acc = self.accessed_nodes(hir.stmt)?;
-        trace!("process accesses {:#?}", acc);
-        let mut inputs = vec![];
-        let mut outputs = vec![];
-        for &id in &acc.read {
-            inputs.push((
-                id,
-                llhd::signal_ty(self.emit_type(self.type_of(id, env)?, env)?),
-            ));
-        }
-        for &id in &acc.written {
-            outputs.push((
-                id,
-                llhd::signal_ty(self.emit_type(self.type_of(id, env)?, env)?),
-            ));
-        }
-        trace!("process inputs = {:#?}", inputs);
-        trace!("process outputs = {:#?}", outputs);
-
-        // Create process and entry block.
-        let proc_name = format!(
-            "{}.{}.{}.{}",
-            name_prefix,
-            match hir.kind {
-                ast::ProcedureKind::Initial => "initial",
-                ast::ProcedureKind::Always => "always",
-                ast::ProcedureKind::AlwaysComb => "always_comb",
-                ast::ProcedureKind::AlwaysLatch => "always_latch",
-                ast::ProcedureKind::AlwaysFf => "always_ff",
-                ast::ProcedureKind::Final => "final",
-            },
-            id.as_usize(),
-            env.0,
-        );
-        let mut prok = llhd::Process::new(
-            proc_name,
-            llhd::entity_ty(
-                inputs.iter().map(|(_, ty)| ty.clone()).collect(),
-                outputs.iter().map(|(_, ty)| ty.clone()).collect(),
-            ),
-        );
-        let entry_blk = prok
-            .body_mut()
-            .add_block(llhd::Block::new(None), llhd::BlockPosition::Begin);
-
-        // Create a mapping from read/written nodes to process parameters.
-        let mut values = HashMap::new();
-        for (&(id, _), arg) in inputs
-            .iter()
-            .zip(prok.inputs())
-            .chain(outputs.iter().zip(prok.outputs()))
-        {
-            values.insert(id, arg.as_ref().into());
-        }
-        let mut pg = ProcessGenerator {
-            gen: self,
-            prok: &mut prok,
-            pos: llhd::InstPosition::BlockEnd(entry_blk),
-            values: &mut values,
-        };
-
-        // Emit prologue and determine which basic block to jump back to.
-        let head_blk = match hir.kind {
-            ast::ProcedureKind::AlwaysComb => {
-                let body_blk = pg.add_named_block("body");
-                let check_blk = pg.add_named_block("check");
-                pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(body_blk)));
-                pg.append_to_block(check_blk);
-                let trigger_on = inputs
-                    .iter()
-                    .map(|(id, _)| pg.emitted_value(*id).clone())
-                    .collect();
-                pg.emit_nameless_inst(llhd::WaitInst(body_blk, None, trigger_on));
-                pg.append_to_block(body_blk);
-                check_blk
-            }
-            _ => entry_blk,
-        };
-
-        // Emit the main statement.
-        pg.emit_stmt(hir.stmt, env)?;
-
-        // Emit epilogue.
-        match hir.kind {
-            ast::ProcedureKind::Initial => {
-                pg.emit_nameless_inst(llhd::HaltInst);
-            }
-            ast::ProcedureKind::Always
-            | ast::ProcedureKind::AlwaysComb
-            | ast::ProcedureKind::AlwaysLatch
-            | ast::ProcedureKind::AlwaysFf => {
-                pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(head_blk)));
-            }
-            _ => (),
-        }
-        Ok(self.into.add_process(prok))
-    }
-
-    /// Map a type to an LLHD type (interned).
-    fn emit_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
-        if let Some(x) = self.tables.interned_types.get(&(ty, env)) {
-            x.clone()
-        } else {
-            let x = self.emit_type_uninterned(ty, env);
-            self.tables.interned_types.insert((ty, env), x.clone());
-            x
-        }
-    }
-
-    /// Map a type to an LLHD type.
-    fn emit_type_uninterned(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
-        #[allow(unreachable_patterns)]
-        Ok(match *ty {
-            TypeKind::Void => llhd::void_ty(),
-            TypeKind::Bit(_) => llhd::int_ty(1),
-            TypeKind::Int(width, _) => llhd::int_ty(width),
-            TypeKind::Named(_, _, ty) => self.emit_type(ty, env)?,
-            TypeKind::Struct(id) => {
-                let fields = match self.hir_of(id)? {
-                    HirNode::Type(hir::Type {
-                        kind: hir::TypeKind::Struct(ref fields),
-                        ..
-                    }) => fields,
-                    _ => unreachable!(),
-                };
-                let mut types = vec![];
-                for &field_id in fields {
-                    types.push(self.emit_type(self.type_of(field_id, env)?, env)?);
-                }
-                llhd::struct_ty(types)
-            }
-            TypeKind::PackedArray(size, ty) => llhd::array_ty(size, self.emit_type(ty, env)?),
-            _ => unimplemented!("emit type {:?}", ty),
-        })
-    }
-
     /// Map a value to an LLHD constant (interned).
-    fn emit_const(&mut self, value: Value<'gcx>, env: ParamEnv) -> Result<llhd::ValueRef> {
-        if let Some(x) = self.tables.interned_values.get(value) {
+    fn emit_const(&mut self, value: Value<'gcx>, env: ParamEnv) -> Result<llhd::ir::Value> {
+        if let Some(x) = self.interned_consts.get(value) {
             x.clone()
         } else {
             let x = self.emit_const_uninterned(value, env);
-            self.tables.interned_values.insert(value, x.clone());
+            self.interned_consts.insert(value, x.clone());
             x
         }
     }
@@ -558,29 +654,31 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         &mut self,
         value: Value<'gcx>,
         env: ParamEnv,
-    ) -> Result<llhd::ValueRef> {
+    ) -> Result<llhd::ir::Value> {
         match (value.ty, &value.kind) {
             (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
-                Ok(llhd::const_int(width, k.clone()).into())
+                Ok(self.builder.ins().const_int(width, false, k.clone()))
             }
-            (&TypeKind::Time, &ValueKind::Time(ref k)) => {
-                Ok(llhd::const_time(k.clone(), 0, 0).into())
+            (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(self
+                .builder
+                .ins()
+                .const_time(llhd::ConstTime::new(k.clone(), 0, 0))),
+            (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => {
+                Ok(self.builder.ins().const_int(1, false, k.clone()))
             }
-            (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => Ok(llhd::const_int(1, k.clone()).into()),
             (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {
-                Ok(llhd::const_array(
-                    self.emit_type(value.ty, env)?,
-                    v.iter()
-                        .map(|v| self.emit_const(v, env).map(Into::into))
-                        .collect::<Result<Vec<_>>>()?,
-                ))
+                let fields: Result<Vec<_>> = v
+                    .iter()
+                    .map(|v| self.emit_const(v, env).map(Into::into))
+                    .collect();
+                Ok(self.builder.ins().array(fields?))
             }
             _ => panic!("invalid type/value combination {:#?}", value),
         }
     }
 
     /// Emit the value `1` for a type.
-    fn const_one_for_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::ValueRef> {
+    fn const_one_for_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::ir::Value> {
         use num::one;
         match *ty {
             TypeKind::Bit(..) | TypeKind::Int(..) => {
@@ -591,244 +689,40 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
     }
 
-    /// Execute the initialization step of a generate loop.
-    fn execute_genvar_init(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
-        let hir = self.hir_of(id)?;
-        match hir {
-            HirNode::GenvarDecl(_) => (),
-            _ => unreachable!(),
-        }
-        Ok(env)
-    }
-
-    /// Execute the iteration step of a generate loop.
-    fn execute_genvar_step(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
-        let hir = self.hir_of(id)?;
-        let mut env_data = self.param_env_data(env).clone();
-        let next = match hir {
-            HirNode::Expr(expr) => match expr.kind {
-                hir::ExprKind::Unary(op, target_id) => {
-                    let target_id = self.resolve_node(target_id, env)?;
-                    let current_value = self.constant_value_of(target_id, env)?;
-                    let next_value = match current_value.kind {
-                        ValueKind::Int(ref v) => match op {
-                            hir::UnaryOp::PostInc | hir::UnaryOp::PreInc => Some(v + 1),
-                            hir::UnaryOp::PostDec | hir::UnaryOp::PreDec => Some(v - 1),
-                            _ => None,
-                        }
-                        .map(|v| value::make_int(current_value.ty, v)),
-                        _ => unreachable!(),
-                    };
-                    next_value.map(|v| (target_id, v))
-                }
-                _ => None,
-            },
-            _ => None,
-        };
-        match next {
-            Some((target_id, next_value)) => {
-                env_data.set_value(target_id, self.intern_value(next_value));
-                return Ok(self.intern_param_env(env_data));
+    /// Emit the zero value for an LLHD type.
+    ///
+    /// This function is ultimately expected to be moved into LLHD.
+    fn emit_zero_for_type(&mut self, ty: &llhd::Type) -> llhd::ir::Value {
+        match **ty {
+            llhd::TimeType => {
+                self.builder
+                    .ins()
+                    .const_time(llhd::ConstTime::new(num::zero(), 0, 0))
             }
-            None => {
-                self.emit(
-                    DiagBuilder2::error(format!(
-                        "{} is not a valid genvar iteration step",
-                        hir.desc_full()
-                    ))
-                    .span(hir.human_span()),
-                );
-                Err(())
+            llhd::IntType(w) => self.builder.ins().const_int(w, false, 0),
+            llhd::SignalType(ref ty) => {
+                let inner = self.emit_zero_for_type(ty);
+                self.builder.ins().sig(inner)
             }
+            llhd::ArrayType(l, ref ty) => {
+                let inner = self.emit_zero_for_type(ty);
+                self.builder.ins().array_uniform(l, inner)
+            }
+            llhd::StructType(ref tys) => {
+                let inner = tys.iter().map(|ty| self.emit_zero_for_type(ty)).collect();
+                self.builder.ins().strukt(inner)
+            }
+            _ => panic!("no zero-value for type {}", ty),
         }
     }
-}
-
-/// A code generator for entities.
-struct EntityGenerator<'a, 'gcx, C> {
-    /// The global code generator.
-    gen: &'a mut CodeGenerator<'gcx, C>,
-    /// The entity into which instructions are emitted.
-    ent: &'a mut llhd::Entity,
-    /// The emitted values.
-    values: &'a mut HashMap<NodeId, llhd::ValueRef>,
-}
-
-impl<'a, 'gcx, C> Deref for EntityGenerator<'a, 'gcx, C> {
-    type Target = CodeGenerator<'gcx, C>;
-
-    fn deref(&self) -> &CodeGenerator<'gcx, C> {
-        &self.gen
-    }
-}
-
-impl<'a, 'gcx, C> DerefMut for EntityGenerator<'a, 'gcx, C> {
-    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
-        &mut self.gen
-    }
-}
-
-impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for EntityGenerator<'b, 'gcx, &'a C>
-where
-    C: Context<'gcx> + 'a,
-{
-    type AsStmtGen = DummyStmtGenerator<'b, 'gcx, &'a C>;
-
-    fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
-        self.ent.add_inst(inst, llhd::InstPosition::End)
-    }
-
-    fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef {
-        &self.values[&node_id]
-    }
-
-    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef) {
-        self.values.insert(node_id, value);
-    }
-
-    fn with_llhd_context<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&dyn llhd::Context) -> R,
-    {
-        let ctx = llhd::ModuleContext::new(&self.gen.into);
-        let ctx = llhd::EntityContext::new(&ctx, self.ent);
-        f(&ctx)
-    }
-}
-
-/// A code generator for processes.
-struct ProcessGenerator<'a, 'gcx, C> {
-    /// The global code generator.
-    gen: &'a mut CodeGenerator<'gcx, C>,
-    /// The process into which instructions are emitted.
-    prok: &'a mut llhd::Process,
-    /// The current insertion point for new instructions.
-    pos: llhd::InstPosition,
-    /// The emitted values.
-    values: &'a mut HashMap<NodeId, llhd::ValueRef>,
-}
-
-impl<'a, 'gcx, C> Deref for ProcessGenerator<'a, 'gcx, C> {
-    type Target = CodeGenerator<'gcx, C>;
-
-    fn deref(&self) -> &CodeGenerator<'gcx, C> {
-        &self.gen
-    }
-}
-
-impl<'a, 'gcx, C> DerefMut for ProcessGenerator<'a, 'gcx, C> {
-    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
-        &mut self.gen
-    }
-}
-
-impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, &'a C>
-where
-    C: Context<'gcx> + 'a,
-{
-    type AsStmtGen = Self;
-
-    fn as_stmt_gen(&mut self) -> Option<&mut Self::AsStmtGen> {
-        Some(self)
-    }
-
-    fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
-        self.prok.body_mut().add_inst(inst, self.pos)
-    }
-
-    fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef {
-        &self.values[&node_id]
-    }
-
-    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef) {
-        self.values.insert(node_id, value);
-    }
-
-    fn with_llhd_context<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&dyn llhd::Context) -> R,
-    {
-        let ctx = llhd::ModuleContext::new(&self.gen.into);
-        let ctx = llhd::ProcessContext::new(&ctx, self.prok);
-        f(&ctx)
-    }
-}
-
-impl<'a, 'b, 'gcx, C> StmtGenerator<'a, 'gcx, C> for ProcessGenerator<'b, 'gcx, &'a C>
-where
-    C: Context<'gcx> + 'a,
-{
-    fn set_insertion_point(&mut self, pos: llhd::InstPosition) {
-        self.pos = pos;
-    }
-
-    fn insertion_point(&self) -> llhd::InstPosition {
-        self.pos
-    }
-
-    fn add_block(&mut self, block: llhd::Block, pos: llhd::BlockPosition) -> llhd::BlockRef {
-        self.prok.body_mut().add_block(block, pos)
-    }
-}
-
-/// A generator for expressions.
-///
-/// This trait is implemented by everything that can accept the code emitted for
-/// an expression. This most prominently also includes entities, which have no
-/// means for control flow.
-trait ExprGenerator<'a, 'gcx, C>
-where
-    Self: DerefMut<Target = CodeGenerator<'gcx, &'a C>>,
-    C: Context<'gcx> + 'a,
-{
-    type AsStmtGen: StmtGenerator<'a, 'gcx, C>;
-
-    /// Try to convert to a statement generator.
-    ///
-    /// Returns `Some` if `self` can emit code for statements, `None` otherwise.
-    /// This function is useful for certain expressions such as `x++` which do
-    /// mutate state and have to emit certain sequential statements.
-    fn as_stmt_gen(&mut self) -> Option<&mut Self::AsStmtGen> {
-        None
-    }
-
-    /// Emit an instruction.
-    fn emit_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef;
-
-    /// Get a value emitted for a node.
-    ///
-    /// Panics if no value has been emitted.
-    fn emitted_value(&self, node_id: NodeId) -> &llhd::ValueRef;
-
-    /// Set the value emitted for a node.
-    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ValueRef);
-
-    /// Resolve an LLHD value reference.
-    fn with_llhd_context<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&dyn llhd::Context) -> R;
 
     /// Get the type of an LLHD value.
-    fn llhd_type(&self, value: &llhd::ValueRef) -> llhd::Type {
-        self.with_llhd_context(|ctx| ctx.ty(value))
-    }
-
-    /// Emit a nameless instruction.
-    ///
-    /// Constructs an instruction and calls [`emit_inst`].
-    fn emit_nameless_inst(&mut self, inst: llhd::InstKind) -> llhd::InstRef {
-        self.emit_inst(llhd::Inst::new(None, inst))
-    }
-
-    /// Emit a named instruction.
-    ///
-    /// Constructs an instruction and calls [`emit_inst`].
-    fn emit_named_inst(&mut self, name: impl Into<String>, inst: llhd::InstKind) -> llhd::InstRef {
-        self.emit_inst(llhd::Inst::new(Some(name.into()), inst))
+    fn llhd_type(&self, value: llhd::ir::Value) -> llhd::Type {
+        self.builder.dfg().value_type(value)
     }
 
     /// Emit the code for an rvalue.
-    fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ValueRef> {
+    fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         self.emit_rvalue_mode(expr_id, env, Mode::Value)
     }
 
@@ -838,7 +732,7 @@ where
         expr_id: NodeId,
         env: ParamEnv,
         mode: Mode,
-    ) -> Result<llhd::ValueRef> {
+    ) -> Result<llhd::ir::Value> {
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
@@ -862,7 +756,7 @@ where
                     }
                     false => (self.emitted_value(binding).clone(), false),
                 };
-                let ty = self.llhd_type(&value);
+                let ty = self.llhd_type(value);
                 let is_signal = match *ty {
                     llhd::SignalType(_) => true,
                     _ => false,
@@ -872,24 +766,14 @@ where
                 // need some more cleverness.
                 match (mode, is_signal, is_const) {
                     (Mode::Value, true, _) => {
-                        let ty = ty.unwrap_signal().clone();
-                        (
-                            self.emit_named_inst(format!("{}", name), llhd::ProbeInst(ty, value))
-                                .into(),
-                            Mode::Value,
-                        )
+                        let value = self.builder.ins().prb(value);
+                        self.builder.dfg_mut().set_name(value, format!("{}", name));
+                        (value, Mode::Value)
                     }
                     (Mode::Value, false, false) => {
-                        // let ty = ty.as_pointer().clone(); // TODO: fix this
-                        let ty = match *ty {
-                            llhd::PointerType(ref ty) => ty.clone(),
-                            _ => panic!("not a pointer"),
-                        };
-                        (
-                            self.emit_named_inst(format!("{}", name), llhd::LoadInst(ty, value))
-                                .into(),
-                            Mode::Value,
-                        )
+                        let value = self.builder.ins().ld(value);
+                        self.builder.dfg_mut().set_name(value, format!("{}", name));
+                        (value, Mode::Value)
                     }
                     (Mode::Value, false, true) => (value, Mode::Value),
                     (Mode::Signal, true, _) => (value, Mode::Signal),
@@ -900,197 +784,109 @@ where
                 match op {
                     hir::UnaryOp::Pos => self.emit_rvalue(arg, env)?,
                     hir::UnaryOp::Neg => {
-                        let ty = self.type_of(expr_id, env)?;
-                        let ty = self.emit_type(ty, env)?;
-                        let zero = llhd::const_zero(&ty).into();
                         let arg = self.emit_rvalue(arg, env)?;
-                        self.emit_nameless_inst(llhd::BinaryInst(
-                            llhd::BinaryOp::Sub,
-                            ty,
-                            zero,
-                            arg,
-                        ))
-                        .into()
+                        self.builder.ins().neg(arg).into()
                     }
                     hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
-                        let ty = self.type_of(expr_id, env)?;
-                        let ty = self.emit_type(ty, env)?;
                         let value = self.emit_rvalue(arg, env)?;
-                        self.emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, ty, value))
-                            .into()
+                        self.builder.ins().not(value)
                     }
-                    hir::UnaryOp::PreInc => {
-                        self.emit_incdec(arg, env, llhd::BinaryOp::Add, false)?
-                    }
-                    hir::UnaryOp::PreDec => {
-                        self.emit_incdec(arg, env, llhd::BinaryOp::Sub, false)?
-                    }
-                    hir::UnaryOp::PostInc => {
-                        self.emit_incdec(arg, env, llhd::BinaryOp::Add, true)?
-                    }
-                    hir::UnaryOp::PostDec => {
-                        self.emit_incdec(arg, env, llhd::BinaryOp::Sub, true)?
-                    }
-                    hir::UnaryOp::RedAnd => {
-                        self.emit_reduction(arg, env, llhd::BinaryOp::And, false)?
-                    }
-                    hir::UnaryOp::RedNand => {
-                        self.emit_reduction(arg, env, llhd::BinaryOp::And, true)?
-                    }
-                    hir::UnaryOp::RedOr => {
-                        self.emit_reduction(arg, env, llhd::BinaryOp::Or, false)?
-                    }
-                    hir::UnaryOp::RedNor => {
-                        self.emit_reduction(arg, env, llhd::BinaryOp::Or, true)?
-                    }
-                    hir::UnaryOp::RedXor => {
-                        self.emit_reduction(arg, env, llhd::BinaryOp::Xor, false)?
-                    }
-                    hir::UnaryOp::RedXnor => {
-                        self.emit_reduction(arg, env, llhd::BinaryOp::Xor, true)?
-                    }
+                    hir::UnaryOp::PreInc => self.emit_incdec(arg, env, BinaryOp::Add, false)?,
+                    hir::UnaryOp::PreDec => self.emit_incdec(arg, env, BinaryOp::Sub, false)?,
+                    hir::UnaryOp::PostInc => self.emit_incdec(arg, env, BinaryOp::Add, true)?,
+                    hir::UnaryOp::PostDec => self.emit_incdec(arg, env, BinaryOp::Sub, true)?,
+                    hir::UnaryOp::RedAnd => self.emit_reduction(arg, env, BinaryOp::And, false)?,
+                    hir::UnaryOp::RedNand => self.emit_reduction(arg, env, BinaryOp::And, true)?,
+                    hir::UnaryOp::RedOr => self.emit_reduction(arg, env, BinaryOp::Or, false)?,
+                    hir::UnaryOp::RedNor => self.emit_reduction(arg, env, BinaryOp::Or, true)?,
+                    hir::UnaryOp::RedXor => self.emit_reduction(arg, env, BinaryOp::Xor, false)?,
+                    hir::UnaryOp::RedXnor => self.emit_reduction(arg, env, BinaryOp::Xor, true)?,
                     _ => return self.unimp_msg("code generation for", hir),
                 },
                 Mode::Value,
             ),
             hir::ExprKind::Binary(op, lhs, rhs) => {
-                let ty = self.type_of(lhs, env)?;
-                let ty = self.emit_type(ty, env)?;
                 let lhs = self.emit_rvalue(lhs, env)?;
                 let rhs = self.emit_rvalue(rhs, env)?;
                 let inst = match op {
-                    hir::BinaryOp::Add => llhd::BinaryInst(llhd::BinaryOp::Add, ty, lhs, rhs),
-                    hir::BinaryOp::Sub => llhd::BinaryInst(llhd::BinaryOp::Sub, ty, lhs, rhs),
-                    hir::BinaryOp::Mul => llhd::BinaryInst(llhd::BinaryOp::Mul, ty, lhs, rhs),
-                    hir::BinaryOp::Div => llhd::BinaryInst(llhd::BinaryOp::Div, ty, lhs, rhs),
-                    hir::BinaryOp::Mod => llhd::BinaryInst(llhd::BinaryOp::Mod, ty, lhs, rhs),
-                    hir::BinaryOp::Pow => llhd::BinaryInst(llhd::BinaryOp::Mul, ty, lhs, rhs), // fix this
-                    hir::BinaryOp::Eq => llhd::CompareInst(llhd::CompareOp::Eq, ty, lhs, rhs),
-                    hir::BinaryOp::Neq => llhd::CompareInst(llhd::CompareOp::Neq, ty, lhs, rhs),
-                    hir::BinaryOp::Lt => llhd::CompareInst(llhd::CompareOp::Ult, ty, lhs, rhs),
-                    hir::BinaryOp::Leq => llhd::CompareInst(llhd::CompareOp::Ule, ty, lhs, rhs),
-                    hir::BinaryOp::Gt => llhd::CompareInst(llhd::CompareOp::Ugt, ty, lhs, rhs),
-                    hir::BinaryOp::Geq => llhd::CompareInst(llhd::CompareOp::Uge, ty, lhs, rhs),
+                    hir::BinaryOp::Add => self.builder.ins().add(lhs, rhs),
+                    hir::BinaryOp::Sub => self.builder.ins().sub(lhs, rhs),
+                    hir::BinaryOp::Mul => self.builder.ins().umul(lhs, rhs),
+                    hir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
+                    hir::BinaryOp::Mod => self.builder.ins().umod(lhs, rhs),
+                    hir::BinaryOp::Pow => self.builder.ins().umul(lhs, rhs), // fix this
+                    hir::BinaryOp::Eq => self.builder.ins().eq(lhs, rhs),
+                    hir::BinaryOp::Neq => self.builder.ins().neq(lhs, rhs),
+                    hir::BinaryOp::Lt => self.builder.ins().ult(lhs, rhs),
+                    hir::BinaryOp::Leq => self.builder.ins().ule(lhs, rhs),
+                    hir::BinaryOp::Gt => self.builder.ins().ugt(lhs, rhs),
+                    hir::BinaryOp::Geq => self.builder.ins().uge(lhs, rhs),
                     hir::BinaryOp::LogicAnd | hir::BinaryOp::BitAnd => {
-                        llhd::BinaryInst(llhd::BinaryOp::And, ty, lhs, rhs)
+                        self.builder.ins().and(lhs, rhs)
                     }
                     hir::BinaryOp::LogicOr | hir::BinaryOp::BitOr => {
-                        llhd::BinaryInst(llhd::BinaryOp::Or, ty, lhs, rhs)
+                        self.builder.ins().or(lhs, rhs)
                     }
-                    hir::BinaryOp::BitXor => llhd::BinaryInst(llhd::BinaryOp::Xor, ty, lhs, rhs),
+                    hir::BinaryOp::BitXor => self.builder.ins().xor(lhs, rhs),
                     hir::BinaryOp::BitNand => {
-                        let v = self.emit_nameless_inst(llhd::BinaryInst(
-                            llhd::BinaryOp::And,
-                            ty.clone(),
-                            lhs,
-                            rhs,
-                        ));
-                        llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
+                        let v = self.builder.ins().and(lhs, rhs);
+                        self.builder.ins().not(v)
                     }
                     hir::BinaryOp::BitNor => {
-                        let v = self.emit_nameless_inst(llhd::BinaryInst(
-                            llhd::BinaryOp::Or,
-                            ty.clone(),
-                            lhs,
-                            rhs,
-                        ));
-                        llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
+                        let v = self.builder.ins().or(lhs, rhs);
+                        self.builder.ins().not(v)
                     }
                     hir::BinaryOp::BitXnor => {
-                        let v = self.emit_nameless_inst(llhd::BinaryInst(
-                            llhd::BinaryOp::Xor,
-                            ty.clone(),
-                            lhs,
-                            rhs,
-                        ));
-                        llhd::UnaryInst(llhd::UnaryOp::Not, ty, v.into())
+                        let v = self.builder.ins().xor(lhs, rhs);
+                        self.builder.ins().not(v)
                     }
                     hir::BinaryOp::LogicShL => {
-                        self.emit_shift_operator(llhd::ShiftDir::Left, false, ty, lhs, rhs)
+                        self.emit_shift_operator(ShiftDir::Left, false, lhs, rhs)
                     }
                     hir::BinaryOp::LogicShR => {
-                        self.emit_shift_operator(llhd::ShiftDir::Right, false, ty, lhs, rhs)
+                        self.emit_shift_operator(ShiftDir::Right, false, lhs, rhs)
                     }
                     hir::BinaryOp::ArithShL => {
-                        self.emit_shift_operator(llhd::ShiftDir::Left, true, ty, lhs, rhs)
+                        self.emit_shift_operator(ShiftDir::Left, true, lhs, rhs)
                     }
                     hir::BinaryOp::ArithShR => {
-                        self.emit_shift_operator(llhd::ShiftDir::Right, true, ty, lhs, rhs)
+                        self.emit_shift_operator(ShiftDir::Right, true, lhs, rhs)
                     }
                     _ => {
                         error!("{:#?}", hir);
                         return self.unimp_msg("code generation for", hir);
                     }
                 };
-                (self.emit_nameless_inst(inst).into(), Mode::Value)
+                (inst, Mode::Value)
             }
             hir::ExprKind::Field(target_id, field_name) => {
                 let (_, index, _) = self.resolve_field_access(expr_id, env)?;
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-                (
-                    self.emit_named_inst(
-                        format!(
-                            "{}.{}",
-                            self.with_llhd_context(|ctx| ctx
-                                .try_value(&target)
-                                .and_then(|v| v.name())
-                                .map(String::from))
-                                .unwrap_or_else(|| "struct".into()),
-                            field_name
-                        ),
-                        llhd::ExtractInst(
-                            self.llhd_type(&target),
-                            target,
-                            llhd::SliceMode::Element(index),
-                        ),
-                    )
-                    .into(),
-                    Mode::Value,
-                )
+                let value = self.builder.ins().ext_field(target, index);
+                let name = format!(
+                    "{}.{}",
+                    self.builder
+                        .dfg()
+                        .get_name(target)
+                        .map(String::from)
+                        .unwrap_or_else(|| "struct".into()),
+                    field_name
+                );
+                self.builder.dfg_mut().set_name(value, name);
+                (value, Mode::Value)
             }
             hir::ExprKind::Index(target_id, mode) => {
                 let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
                 (self.emit_index_access(target, env, mode)?, Mode::Value)
             }
-            hir::ExprKind::Ternary(cond, true_expr, false_expr) => match self.as_stmt_gen() {
-                Some(gen) => (
-                    gen.emit_ternary_operator(expr_id, env, cond, true_expr, false_expr)?,
-                    Mode::Value,
-                ),
-                None => {
-                    // TODO: This is a very hacky solution to emit ternary
-                    // operators in expressions. As soon as LLHD has a `mux`
-                    // instruction, get rid of all this and do things inline.
-                    let prok = self.emit_ternary_operator_process(
-                        expr_id, env, cond, true_expr, false_expr, "x",
-                    )?;
-                    use llhd::Context as LlhdContext;
-                    let expr_ty = self.type_of(expr_id, env)?;
-                    let expr_ty = self.emit_type(expr_ty, env)?;
-                    let prok_ty = llhd::ModuleContext::new(&self.into)
-                        .ty(&prok.into())
-                        .clone();
-                    let result_signal =
-                        self.emit_nameless_inst(llhd::SignalInst(expr_ty.clone(), None));
-                    let acc = self.accessed_nodes(expr_id)?;
-                    let inputs = acc
-                        .read
-                        .iter()
-                        .map(|&id| self.emitted_value(id).clone())
-                        .collect();
-                    self.emit_nameless_inst(llhd::InstanceInst(
-                        prok_ty,
-                        prok.into(),
-                        inputs,
-                        vec![result_signal.into()],
-                    ));
-                    (
-                        self.emit_nameless_inst(llhd::ProbeInst(expr_ty, result_signal.into()))
-                            .into(),
-                        Mode::Value,
-                    )
-                }
-            },
+            hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
+                let cond = self.emit_rvalue(cond, env)?;
+                let true_expr = self.emit_rvalue(true_expr, env)?;
+                let false_expr = self.emit_rvalue(false_expr, env)?;
+                let array = self.builder.ins().array(vec![false_expr, true_expr]);
+                let value = self.builder.ins().mux(array, cond);
+                (value, Mode::Value)
+            }
             hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
                 let k = self.constant_value_of(expr_id, env)?;
@@ -1125,30 +921,19 @@ where
                     None => 1,
                 };
                 let ty = llhd::int_ty(bit_width);
-                let mut value: llhd::ValueRef = llhd::const_zero(&ty).into();
+                let mut value: llhd::ir::Value = self.emit_zero_for_type(&ty);
                 let mut offset = 0;
                 for (width, expr) in bit_widths.into_iter().zip(exprs.into_iter()) {
-                    value = self
-                        .emit_nameless_inst(llhd::InsertInst(
-                            ty.clone(),
-                            value,
-                            llhd::SliceMode::Slice(offset, width),
-                            expr,
-                        ))
-                        .into();
+                    value = self.builder.ins().ins_slice(value, expr, offset, width);
                     offset += width;
                 }
                 let rep_ty = llhd::int_ty(bit_width * repeat);
-                let mut rep_value = llhd::const_zero(&rep_ty).into();
+                let mut rep_value = self.emit_zero_for_type(&rep_ty);
                 for i in 0..repeat {
-                    rep_value = self
-                        .emit_nameless_inst(llhd::InsertInst(
-                            rep_ty.clone(),
-                            rep_value,
-                            llhd::SliceMode::Slice(i * bit_width, bit_width),
-                            value.clone(),
-                        ))
-                        .into();
+                    rep_value =
+                        self.builder
+                            .ins()
+                            .ins_slice(rep_value, value, i * bit_width, bit_width);
                 }
                 (rep_value, Mode::Value)
             }
@@ -1156,10 +941,13 @@ where
         };
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {
-                let ty = self.llhd_type(&value);
-                let sig = self.emit_nameless_inst(llhd::SignalInst(ty, None));
-                self.emit_nameless_inst(llhd::DriveInst(sig.clone().into(), value, None));
-                Ok(sig.into())
+                let ty = self.llhd_type(value);
+                let init = self.emit_zero_for_type(&ty);
+                let sig = self.builder.ins().sig(init);
+                let delay = llhd::ConstTime::new(num::zero(), 0, 0);
+                let delay_const = self.builder.ins().const_time(delay);
+                self.builder.ins().drv(sig, value, delay_const);
+                Ok(sig)
             }
             (Mode::Value, Mode::Signal) => unreachable!(),
             _ => Ok(value),
@@ -1167,7 +955,7 @@ where
     }
 
     /// Emit the code for an lvalue.
-    fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ValueRef> {
+    fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
@@ -1193,22 +981,18 @@ where
             hir::ExprKind::Field(target, field_name) => {
                 let (_, field_index, _) = self.resolve_field_access(expr_id, env)?;
                 let target_val = self.emit_lvalue(target, env)?;
-                let extracted = self.emit_named_inst(
-                    format!(
-                        "{}.{}",
-                        self.with_llhd_context(|ctx| ctx
-                            .try_value(&target_val)
-                            .and_then(|v| v.name().map(String::from)))
-                            .unwrap_or_else(|| "struct".into()),
-                        field_name
-                    ),
-                    llhd::ExtractInst(
-                        self.llhd_type(&target_val),
-                        target_val,
-                        llhd::SliceMode::Element(field_index),
-                    ),
+                let extracted = self.builder.ins().ext_field(target_val, field_index);
+                let name = format!(
+                    "{}.{}",
+                    self.builder
+                        .dfg()
+                        .get_name(target_val)
+                        .map(String::from)
+                        .unwrap_or_else(|| "struct".into()),
+                    field_name
                 );
-                return Ok(extracted.into());
+                self.builder.dfg_mut().set_name(extracted, name);
+                return Ok(extracted);
             }
             hir::ExprKind::Index(target_id, mode) => {
                 let target = self.emit_lvalue(target_id, env)?;
@@ -1228,51 +1012,48 @@ where
         &mut self,
         expr_id: NodeId,
         env: ParamEnv,
-        op: llhd::BinaryOp,
+        op: BinaryOp,
         postfix: bool,
-    ) -> Result<llhd::ValueRef> {
+    ) -> Result<llhd::ir::Value> {
         let ty = self.type_of(expr_id, env)?;
         let now = self.emit_rvalue(expr_id, env)?;
-        let llty = self.emit_type(ty, env)?;
         let one = self.const_one_for_type(ty, env)?;
-        let next: llhd::ValueRef = self
-            .emit_nameless_inst(llhd::BinaryInst(op, llty, now.clone(), one))
-            .into();
-        match self.as_stmt_gen() {
-            Some(gen) => {
-                gen.emit_blocking_assign(expr_id, next.clone(), env)?;
-                match postfix {
-                    true => Ok(now),
-                    false => Ok(next),
-                }
-            }
-            None => {
-                let hir = self.hir_of(expr_id)?;
-                self.emit(
-                    DiagBuilder2::error(format!(
-                        "inc/dec operator can only be used in processes, tasks, and functions",
-                    ))
-                    .span(hir.human_span()),
-                );
-                Err(())
-            }
+        let next = match op {
+            BinaryOp::Add => self.builder.ins().add(now, one),
+            BinaryOp::Sub => self.builder.ins().sub(now, one),
+            _ => unreachable!("incdec not supported for {:?}", op),
+        };
+        if self.builder.unit().is_entity() {
+            let hir = self.hir_of(expr_id)?;
+            self.emit(
+                DiagBuilder2::error(format!(
+                    "inc/dec operator can only be used in processes, tasks, and functions",
+                ))
+                .span(hir.human_span()),
+            );
+            return Err(());
+        }
+        self.emit_blocking_assign(expr_id, next, env)?;
+        match postfix {
+            true => Ok(now),
+            false => Ok(next),
         }
     }
 
     /// Emit the code to index into an integer or array.
     fn emit_index_access(
         &mut self,
-        target: llhd::ValueRef,
+        target: llhd::ir::Value,
         env: ParamEnv,
         mode: hir::IndexMode,
-    ) -> Result<llhd::ValueRef> {
+    ) -> Result<llhd::ir::Value> {
         let basename = self
-            .with_llhd_context(|ctx| {
-                ctx.try_value(&target)
-                    .and_then(|v| v.name().map(String::from))
-            })
+            .builder
+            .dfg()
+            .get_name(target)
+            .map(String::from)
             .unwrap_or_else(|| "".into());
-        let target_ty = self.llhd_type(&target);
+        let target_ty = self.llhd_type(target);
         let shift = match mode {
             hir::IndexMode::One(index) => self.emit_rvalue(index, env)?,
             hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, _delta) => {
@@ -1281,9 +1062,7 @@ where
             hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
                 let base = self.emit_rvalue(base, env)?;
                 let delta = self.emit_rvalue(delta, env)?;
-                let ty = self.llhd_type(&base);
-                self.emit_nameless_inst(llhd::BinaryInst(llhd::BinaryOp::Sub, ty, base, delta))
-                    .into()
+                self.builder.ins().sub(base, delta)
             }
             hir::IndexMode::Many(ast::RangeMode::Absolute, lhs, rhs) => {
                 let lhs_int = self.constant_int_value_of(lhs, env)?;
@@ -1292,57 +1071,41 @@ where
                 let length = ((lhs_int - rhs_int).abs() + BigInt::one())
                     .to_usize()
                     .unwrap();
-                return Ok(self
-                    .emit_named_inst(
-                        format!("{}.const_slice", basename),
-                        llhd::ExtractInst(
-                            self.llhd_type(&target),
-                            target,
-                            llhd::SliceMode::Slice(base, length),
-                        ),
-                    )
-                    .into());
-            }
-        };
-        let single_element_ty = |ty: &llhd::Type| -> llhd::Type {
-            match **ty {
-                llhd::IntType(_) => llhd::int_ty(1),
-                llhd::ArrayType(_, ref ty) => ty.clone(),
-                _ => panic!("variable index access into target of type {}", ty),
+                let value = self.builder.ins().ext_slice(target, base, length);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, format!("{}.const_slice", basename));
+                return Ok(value);
             }
         };
         let dummy = match *target_ty {
-            llhd::PointerType(ref ty) => self
-                .emit_named_inst("dummy", llhd::VariableInst(single_element_ty(ty)))
-                .into(),
-            llhd::SignalType(ref ty) => self
-                .emit_named_inst("dummy", llhd::SignalInst(single_element_ty(ty), None))
-                .into(),
-            _ => llhd::const_zero(&single_element_ty(&target_ty)).into(),
+            llhd::PointerType(ref ty) => {
+                let zero = self.emit_zero_for_type(ty);
+                self.builder.ins().var(zero)
+            }
+            llhd::SignalType(ref ty) => {
+                let zero = self.emit_zero_for_type(ty);
+                self.builder.ins().sig(zero)
+            }
+            _ => self.emit_zero_for_type(&target_ty),
         };
-        let shifted = self
-            .emit_nameless_inst(llhd::ShiftInst(
-                llhd::ShiftDir::Right,
-                target_ty.clone(),
-                target,
-                dummy,
-                shift,
-            ))
-            .into();
+        self.builder.dfg_mut().set_name(dummy, "dummy".to_string());
+        let shifted = self.builder.ins().shr(target, dummy, shift);
         let sliced = match mode {
-            hir::IndexMode::One(_) => self
-                .emit_named_inst(
-                    format!("{}.element", basename),
-                    llhd::ExtractInst(target_ty, shifted, llhd::SliceMode::Element(0)),
-                )
-                .into(),
+            hir::IndexMode::One(_) => {
+                let value = self.builder.ins().ext_field(shifted, 0);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, format!("{}.element", basename));
+                value
+            }
             hir::IndexMode::Many(_, _, delta) => {
                 let delta = self.constant_int_value_of(delta, env)?.to_usize().unwrap();
-                self.emit_named_inst(
-                    format!("{}.slice", basename),
-                    llhd::ExtractInst(target_ty, shifted, llhd::SliceMode::Slice(0, delta)),
-                )
-                .into()
+                let value = self.builder.ins().ext_slice(shifted, 0, delta);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, format!("{}.slice", basename));
+                value
             }
         };
         Ok(sliced)
@@ -1353,37 +1116,25 @@ where
         &mut self,
         target: NodeId,
         env: ParamEnv,
-        op: llhd::BinaryOp,
+        op: BinaryOp,
         negate: bool,
-    ) -> Result<llhd::ValueRef> {
+    ) -> Result<llhd::ir::Value> {
         let input_ty = self.type_of(target, env)?;
         let input_bits = bit_size_of_type(self.cx, input_ty, env)?;
-        let input_ty = self.emit_type(input_ty, env)?;
         let input_value = self.emit_rvalue(target, env)?;
-        let mut result: llhd::ValueRef = self
-            .emit_nameless_inst(llhd::ExtractInst(
-                input_ty.clone(),
-                input_value.clone(),
-                llhd::SliceMode::Element(0),
-            ))
-            .into();
-        let bit_ty = self.llhd_type(&result);
+        let mut result: llhd::ir::Value = self.builder.ins().ext_field(input_value, 0);
         for i in 1..input_bits {
-            let bit = self
-                .emit_nameless_inst(llhd::ExtractInst(
-                    input_ty.clone(),
-                    input_value.clone(),
-                    llhd::SliceMode::Element(i),
-                ))
-                .into();
-            result = self
-                .emit_nameless_inst(llhd::BinaryInst(op, bit_ty.clone(), result, bit))
-                .into();
+            let bit = self.builder.ins().ext_field(input_value, i);
+            result = match op {
+                BinaryOp::Add => self.builder.ins().add(result, bit),
+                BinaryOp::Sub => self.builder.ins().sub(result, bit),
+                BinaryOp::And => self.builder.ins().and(result, bit),
+                BinaryOp::Or => self.builder.ins().or(result, bit),
+                BinaryOp::Xor => self.builder.ins().xor(result, bit),
+            };
         }
         if negate {
-            Ok(self
-                .emit_nameless_inst(llhd::UnaryInst(llhd::UnaryOp::Not, bit_ty, result))
-                .into())
+            Ok(self.builder.ins().not(result))
         } else {
             Ok(result)
         }
@@ -1392,123 +1143,37 @@ where
     /// Emit a binary shift operator.
     fn emit_shift_operator(
         &mut self,
-        dir: llhd::ShiftDir,
+        dir: ShiftDir,
         arith: bool,
-        ty: llhd::Type,
-        lhs: llhd::ValueRef,
-        rhs: llhd::ValueRef,
-    ) -> llhd::InstKind {
-        let insert = match *ty {
-            llhd::IntType(w) if arith && dir == llhd::ShiftDir::Right => self
-                .emit_nameless_inst(llhd::ExtractInst(
-                    ty.clone(),
-                    lhs.clone(),
-                    llhd::SliceMode::Element(w - 1),
-                ))
-                .into(),
-            llhd::IntType(_) => llhd::const_int(1, num::zero()).into(),
-            _ => panic!(
-                "shift operator on target of type {}; target is {:?}",
-                ty, lhs
-            ),
+        lhs: llhd::ir::Value,
+        rhs: llhd::ir::Value,
+    ) -> llhd::ir::Value {
+        let ty = self.builder.dfg().value_type(lhs);
+        let zeros = self.builder.ins().const_int(ty.unwrap_int(), false, 0);
+        let hidden = if arith && dir == ShiftDir::Right {
+            let ones = self.builder.ins().not(zeros);
+            let sign = self.builder.ins().ext_slice(lhs, ty.unwrap_int() - 1, 1);
+            let array = self.builder.ins().array(vec![zeros, ones]);
+            self.builder.ins().mux(array, sign)
+        } else {
+            zeros
         };
-        llhd::ShiftInst(dir, ty, lhs, insert, rhs)
-    }
-
-    /// Emit a process to wrap a ternary operator.
-    fn emit_ternary_operator_process(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        cond: NodeId,
-        true_expr: NodeId,
-        false_expr: NodeId,
-        name_prefix: &str,
-    ) -> Result<llhd::ProcessRef> {
-        let ty = self.type_of(expr_id, env)?;
-        let ty = self.emit_type(ty, env)?;
-        let acc = self.accessed_nodes(expr_id)?;
-        let mut inputs = vec![];
-        for &id in &acc.read {
-            let ty = self.type_of(id, env)?;
-            inputs.push((id, llhd::signal_ty(self.emit_type(ty, env)?)));
+        match dir {
+            ShiftDir::Left => self.builder.ins().shl(lhs, hidden, rhs),
+            ShiftDir::Right => self.builder.ins().shr(lhs, hidden, rhs),
         }
-        let proc_name = format!("{}.ternary.{}.{}", name_prefix, expr_id.as_usize(), env.0);
-        let mut prok = llhd::Process::new(
-            proc_name,
-            llhd::entity_ty(
-                inputs.iter().map(|(_, ty)| ty.clone()).collect(),
-                vec![ty.clone()],
-            ),
-        );
-        let entry_blk = prok
-            .body_mut()
-            .add_block(llhd::Block::new(None), llhd::BlockPosition::Begin);
-        let mut values = HashMap::new();
-        for (&(id, _), arg) in inputs.iter().zip(prok.inputs()) {
-            values.insert(id, arg.as_ref().into());
-        }
-        let mut pg = ProcessGenerator {
-            gen: self,
-            prok: &mut prok,
-            pos: llhd::InstPosition::BlockEnd(entry_blk),
-            values: &mut values,
-        };
-        let body_blk = pg.add_named_block("body");
-        let check_blk = pg.add_named_block("check");
-        pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(body_blk)));
-        pg.append_to_block(check_blk);
-        let trigger_on = inputs
-            .iter()
-            .map(|(id, _)| pg.emitted_value(*id).clone())
-            .collect();
-        pg.emit_nameless_inst(llhd::WaitInst(body_blk, None, trigger_on));
-        pg.append_to_block(body_blk);
-        let head_blk = check_blk;
-        let result = pg.emit_ternary_operator(expr_id, env, cond, true_expr, false_expr)?;
-        pg.emit_nameless_inst(llhd::DriveInst(
-            pg.prok.outputs()[0].as_ref().into(),
-            result,
-            None,
-        ));
-        pg.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(head_blk)));
-        Ok(self.into.add_process(prok))
-    }
-}
-
-/// A generator for statements.
-///
-/// This trait is implemented by everything that can accept the code emitted for
-/// a statement. This excludes entities which have no means for control flow.
-trait StmtGenerator<'a, 'gcx, C>: ExprGenerator<'a, 'gcx, C>
-where
-    C: Context<'gcx> + 'a,
-{
-    /// Change the insertion point for new instructions.
-    fn set_insertion_point(&mut self, pos: llhd::InstPosition);
-
-    /// Get the insertion point for new instructions.
-    fn insertion_point(&self) -> llhd::InstPosition;
-
-    /// Add a block.
-    fn add_block(&mut self, block: llhd::Block, pos: llhd::BlockPosition) -> llhd::BlockRef;
-
-    /// Append new instructions at the end of a block.
-    fn append_to_block(&mut self, block: llhd::BlockRef) {
-        self.set_insertion_point(llhd::InstPosition::BlockEnd(block));
     }
 
     /// Add a nameless block.
-    fn add_nameless_block(&mut self) -> llhd::BlockRef {
-        self.add_block(llhd::Block::new(None), llhd::BlockPosition::End)
+    fn add_nameless_block(&mut self) -> llhd::ir::Block {
+        self.builder.block()
     }
 
     /// Add a named block.
-    fn add_named_block(&mut self, name: impl Into<String>) -> llhd::BlockRef {
-        self.add_block(
-            llhd::Block::new(Some(name.into())),
-            llhd::BlockPosition::End,
-        )
+    fn add_named_block(&mut self, name: impl Into<String>) -> llhd::ir::Block {
+        let bb = self.builder.block();
+        self.builder.cfg_mut().set_name(bb, name.into());
+        bb
     }
 
     /// Emit the code for a statement.
@@ -1543,47 +1208,50 @@ where
                     }
                     hir::AssignKind::Block(op) => {
                         let lhs_value = self.emit_rvalue(lhs, env)?;
-                        let ty = self.type_of(lhs, env)?;
-                        let ty = self.emit_type(ty, env)?;
-                        let binop = |op| -> llhd::InstKind {
-                            llhd::BinaryInst(op, ty.clone(), lhs_value.clone(), rhs_value.clone())
-                        };
-                        let mut shift = |dir, arith| -> llhd::InstKind {
-                            self.emit_shift_operator(
-                                dir,
-                                arith,
-                                ty.clone(),
-                                lhs_value.clone(),
-                                rhs_value.clone(),
-                            )
-                        };
-                        let inst = match op {
+                        let value = match op {
                             ast::AssignOp::Identity => unreachable!(),
-                            ast::AssignOp::Add => binop(llhd::BinaryOp::Add),
-                            ast::AssignOp::Sub => binop(llhd::BinaryOp::Sub),
-                            ast::AssignOp::Mul => binop(llhd::BinaryOp::Mul),
-                            ast::AssignOp::Div => binop(llhd::BinaryOp::Div),
-                            ast::AssignOp::Mod => binop(llhd::BinaryOp::Mod),
-                            ast::AssignOp::BitAnd => binop(llhd::BinaryOp::And),
-                            ast::AssignOp::BitOr => binop(llhd::BinaryOp::Or),
-                            ast::AssignOp::BitXor => binop(llhd::BinaryOp::Xor),
-                            ast::AssignOp::LogicShL => shift(llhd::ShiftDir::Left, false),
-                            ast::AssignOp::LogicShR => shift(llhd::ShiftDir::Right, false),
-                            ast::AssignOp::ArithShL => shift(llhd::ShiftDir::Left, true),
-                            ast::AssignOp::ArithShR => shift(llhd::ShiftDir::Right, true),
+                            ast::AssignOp::Add => self.builder.ins().add(lhs_value, rhs_value),
+                            ast::AssignOp::Sub => self.builder.ins().sub(lhs_value, rhs_value),
+                            ast::AssignOp::Mul => self.builder.ins().umul(lhs_value, rhs_value),
+                            ast::AssignOp::Div => self.builder.ins().udiv(lhs_value, rhs_value),
+                            ast::AssignOp::Mod => self.builder.ins().umod(lhs_value, rhs_value),
+                            ast::AssignOp::BitAnd => self.builder.ins().and(lhs_value, rhs_value),
+                            ast::AssignOp::BitOr => self.builder.ins().or(lhs_value, rhs_value),
+                            ast::AssignOp::BitXor => self.builder.ins().xor(lhs_value, rhs_value),
+                            ast::AssignOp::LogicShL => self.emit_shift_operator(
+                                ShiftDir::Left,
+                                false,
+                                lhs_value,
+                                rhs_value,
+                            ),
+                            ast::AssignOp::LogicShR => self.emit_shift_operator(
+                                ShiftDir::Right,
+                                false,
+                                lhs_value,
+                                rhs_value,
+                            ),
+                            ast::AssignOp::ArithShL => {
+                                self.emit_shift_operator(ShiftDir::Left, true, lhs_value, rhs_value)
+                            }
+                            ast::AssignOp::ArithShR => self.emit_shift_operator(
+                                ShiftDir::Right,
+                                true,
+                                lhs_value,
+                                rhs_value,
+                            ),
                         };
-                        let value = self.emit_nameless_inst(inst).into();
                         self.emit_blocking_assign(lhs, value, env)?;
                     }
                     hir::AssignKind::Nonblock => {
                         let lhs_value = self.emit_lvalue(lhs, env)?;
-                        let delay = llhd::const_time(num::zero(), 1, 0).into();
-                        self.emit_nameless_inst(llhd::DriveInst(lhs_value, rhs_value, Some(delay)));
+                        let delay = llhd::ConstTime::new(num::zero(), 1, 0);
+                        let delay_const = self.builder.ins().const_time(delay);
+                        self.builder.ins().drv(lhs_value, rhs_value, delay_const);
                     }
                     hir::AssignKind::NonblockDelay(delay) => {
                         let lhs_value = self.emit_lvalue(lhs, env)?;
                         let delay = self.emit_rvalue(delay, env)?;
-                        self.emit_nameless_inst(llhd::DriveInst(lhs_value, rhs_value, Some(delay)));
+                        self.builder.ins().drv(lhs_value, rhs_value, delay);
                     }
                     _ => {
                         return self.unimp_msg(
@@ -1599,8 +1267,8 @@ where
             } => {
                 let resume_blk = self.add_nameless_block();
                 let duration = self.emit_rvalue(expr_id, env)?.into();
-                self.emit_nameless_inst(llhd::WaitInst(resume_blk, Some(duration), vec![]));
-                self.append_to_block(resume_blk);
+                self.builder.ins().wait_time(resume_blk, duration, vec![]);
+                self.builder.append_to(resume_blk);
                 self.emit_stmt(stmt, env)?;
             }
             hir::StmtKind::Timed {
@@ -1616,10 +1284,8 @@ where
                 // Store initial values of the expressions the event is
                 // sensitive to.
                 let init_blk = self.add_named_block("init");
-                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    init_blk.into(),
-                )));
-                self.append_to_block(init_blk);
+                self.builder.ins().br(init_blk);
+                self.builder.append_to(init_blk);
                 let mut init_values = vec![];
                 for event in &expr_hir.events {
                     init_values.push(self.emit_rvalue(event.expr, env)?);
@@ -1634,8 +1300,8 @@ where
                         trigger_on.push(self.emitted_value(id).clone());
                     }
                 }
-                self.emit_nameless_inst(llhd::WaitInst(check_blk, None, trigger_on));
-                self.append_to_block(check_blk);
+                self.builder.ins().wait(check_blk, trigger_on);
+                self.builder.append_to(check_blk);
 
                 // Check if any of the events happened and produce a single bit
                 // value that represents this.
@@ -1650,30 +1316,17 @@ where
                     let mut trigger = self.emit_event_trigger(event.edge, init_value, now_value)?;
                     for &iff in &event.iff {
                         let iff_value = self.emit_rvalue(iff, env)?;
-                        trigger = self
-                            .emit_named_inst(
-                                "iff",
-                                llhd::BinaryInst(
-                                    llhd::BinaryOp::And,
-                                    llhd::int_ty(1),
-                                    trigger,
-                                    iff_value,
-                                ),
-                            )
-                            .into();
+                        trigger = self.builder.ins().and(trigger, iff_value);
+                        self.builder.dfg_mut().set_name(trigger, "iff".to_string());
                     }
                     event_cond = Some(match event_cond {
-                        Some(chain) => self
-                            .emit_named_inst(
-                                "event_or",
-                                llhd::BinaryInst(
-                                    llhd::BinaryOp::Or,
-                                    llhd::int_ty(1),
-                                    chain,
-                                    trigger,
-                                ),
-                            )
-                            .into(),
+                        Some(chain) => {
+                            let value = self.builder.ins().or(chain, trigger);
+                            self.builder
+                                .dfg_mut()
+                                .set_name(value, "event_or".to_string());
+                            value
+                        }
                         None => trigger,
                     });
                 }
@@ -1683,12 +1336,8 @@ where
                 // the initial block.
                 if let Some(event_cond) = event_cond {
                     let event_blk = self.add_named_block("event");
-                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
-                        event_cond,
-                        event_blk.into(),
-                        init_blk.into(),
-                    )));
-                    self.append_to_block(event_blk);
+                    self.builder.ins().br_cond(event_cond, init_blk, event_blk);
+                    self.builder.append_to(event_blk);
                 }
 
                 // Emit the actual statement.
@@ -1705,25 +1354,17 @@ where
                 let main_blk = self.add_named_block("if_true");
                 let else_blk = self.add_named_block("if_false");
                 let cond = self.emit_rvalue(cond, env)?;
-                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
-                    cond,
-                    main_blk.into(),
-                    else_blk.into(),
-                )));
+                self.builder.ins().br_cond(cond, else_blk, main_blk);
                 let final_blk = self.add_named_block("if_exit");
-                self.append_to_block(main_blk);
+                self.builder.append_to(main_blk);
                 self.emit_stmt(main_stmt, env)?;
-                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    final_blk.into(),
-                )));
-                self.append_to_block(else_blk);
+                self.builder.ins().br(final_blk);
+                self.builder.append_to(else_blk);
                 if let Some(else_stmt) = else_stmt {
                     self.emit_stmt(else_stmt, env)?;
                 };
-                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    final_blk.into(),
-                )));
-                self.append_to_block(final_blk);
+                self.builder.ins().br(final_blk);
+                self.builder.append_to(final_blk);
             }
             hir::StmtKind::Loop { kind, body } => {
                 let body_blk = self.add_named_block("loop_body");
@@ -1734,12 +1375,11 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(count) => {
                         let ty = self.type_of(count, env)?;
-                        let lty = self.emit_type(ty, env)?;
                         let count = self.emit_rvalue(count, env)?;
-                        let var: llhd::ValueRef = self
-                            .emit_named_inst("loop_count", llhd::VariableInst(lty.clone()))
-                            .into();
-                        self.emit_nameless_inst(llhd::StoreInst(lty, var.clone(), count));
+                        let var = self.builder.ins().var(count);
+                        self.builder
+                            .dfg_mut()
+                            .set_name(var, "loop_count".to_string());
                         Some((var, ty))
                     }
                     hir::LoopKind::While(_) => None,
@@ -1751,27 +1391,16 @@ where
                 };
 
                 // Emit the loop prologue.
-                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    body_blk.into(),
-                )));
-                self.append_to_block(body_blk);
+                self.builder.ins().br(body_blk);
+                self.builder.append_to(body_blk);
                 let enter_cond = match kind {
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
                         let lty = self.emit_type(ty, env)?;
-                        let value = self
-                            .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var))
-                            .into();
-                        Some(
-                            self.emit_nameless_inst(llhd::CompareInst(
-                                llhd::CompareOp::Neq,
-                                lty.clone(),
-                                value,
-                                llhd::const_zero(&lty).into(),
-                            ))
-                            .into(),
-                        )
+                        let value = self.builder.ins().ld(repeat_var);
+                        let zero = self.emit_zero_for_type(&lty);
+                        Some(self.builder.ins().neq(value, zero))
                     }
                     hir::LoopKind::While(cond) => Some(self.emit_rvalue(cond, env)?),
                     hir::LoopKind::Do(_) => None,
@@ -1779,12 +1408,8 @@ where
                 };
                 if let Some(enter_cond) = enter_cond {
                     let entry_blk = self.add_named_block("loop_continue");
-                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
-                        enter_cond,
-                        entry_blk.into(),
-                        exit_blk.into(),
-                    )));
-                    self.append_to_block(entry_blk);
+                    self.builder.ins().br_cond(enter_cond, exit_blk, entry_blk);
+                    self.builder.append_to(entry_blk);
                 }
 
                 // Emit the loop body.
@@ -1795,20 +1420,10 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty, env)?;
-                        let value = self
-                            .emit_nameless_inst(llhd::LoadInst(lty.clone(), repeat_var.clone()))
-                            .into();
+                        let value = self.builder.ins().ld(repeat_var);
                         let one = self.const_one_for_type(ty, env)?;
-                        let value = self
-                            .emit_nameless_inst(llhd::BinaryInst(
-                                llhd::BinaryOp::Sub,
-                                lty.clone(),
-                                value,
-                                one,
-                            ))
-                            .into();
-                        self.emit_nameless_inst(llhd::StoreInst(lty, repeat_var, value));
+                        let value = self.builder.ins().sub(value, one);
+                        self.builder.ins().st(repeat_var, value);
                         None
                     }
                     hir::LoopKind::While(_) => None,
@@ -1818,11 +1433,11 @@ where
                         None
                     }
                 };
-                self.emit_nameless_inst(llhd::BranchInst(match continue_cond {
-                    Some(cond) => llhd::BranchKind::Cond(cond, body_blk.into(), exit_blk.into()),
-                    None => llhd::BranchKind::Uncond(body_blk.into()),
-                }));
-                self.append_to_block(exit_blk);
+                match continue_cond {
+                    Some(cond) => self.builder.ins().br_cond(cond, exit_blk, body_blk),
+                    None => self.builder.ins().br(body_blk),
+                };
+                self.builder.append_to(exit_blk);
             }
             hir::StmtKind::InlineGroup { ref stmts, .. } => {
                 for &stmt in stmts {
@@ -1834,52 +1449,30 @@ where
                 ref ways,
                 default,
             } => {
-                let expr_ty = self.type_of(expr, env)?;
-                let expr_ty = self.emit_type(expr_ty, env)?;
                 let expr = self.emit_rvalue(expr, env)?;
                 let final_blk = self.add_named_block("case_exit");
                 for &(ref way_exprs, stmt) in ways {
-                    let mut last_check = llhd::const_int(1, num::zero()).into();
+                    let mut last_check = self.builder.ins().const_int(1, false, 0);
                     for &way_expr in way_exprs {
                         let way_expr = self.emit_rvalue(way_expr, env)?;
-                        let check = self
-                            .emit_nameless_inst(llhd::CompareInst(
-                                llhd::CompareOp::Eq,
-                                expr_ty.clone(),
-                                expr.clone(),
-                                way_expr,
-                            ))
-                            .into();
-                        last_check = self
-                            .emit_nameless_inst(llhd::BinaryInst(
-                                llhd::BinaryOp::Or,
-                                llhd::int_ty(1),
-                                last_check,
-                                check,
-                            ))
-                            .into();
+                        let check = self.builder.ins().eq(expr.clone(), way_expr);
+                        last_check = self.builder.ins().or(last_check, check);
                     }
                     let taken_blk = self.add_named_block("case_body");
                     let untaken_blk = self.add_nameless_block();
-                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
-                        last_check,
-                        taken_blk.into(),
-                        untaken_blk.into(),
-                    )));
-                    self.append_to_block(taken_blk);
+                    self.builder
+                        .ins()
+                        .br_cond(last_check, untaken_blk, taken_blk);
+                    self.builder.append_to(taken_blk);
                     self.emit_stmt(stmt, env)?;
-                    self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                        final_blk.clone(),
-                    )));
-                    self.append_to_block(untaken_blk);
+                    self.builder.ins().br(final_blk);
+                    self.builder.append_to(untaken_blk);
                 }
                 if let Some(default) = default {
                     self.emit_stmt(default, env)?;
                 }
-                self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(
-                    final_blk.into(),
-                )));
-                self.append_to_block(final_blk);
+                self.builder.ins().br(final_blk);
+                self.builder.append_to(final_blk);
             }
             _ => return self.unimp_msg("code generation for", hir),
         }
@@ -1895,13 +1488,18 @@ where
     ) -> Result<()> {
         let ty = self.type_of(decl_id, env)?;
         let ty = self.emit_type(ty, env)?;
-        let id = self.emit_named_inst(hir.name.value, llhd::VariableInst(ty.clone()));
-        self.set_emitted_value(decl_id, id.into());
-        if let Some(expr) = hir.init {
-            let k = self.constant_value_of(expr, env)?;
-            let k = self.emit_const(k, env)?;
-            self.emit_nameless_inst(llhd::StoreInst(ty, id.into(), k));
-        }
+        let init = match hir.init {
+            Some(expr) => {
+                let k = self.constant_value_of(expr, env)?;
+                self.emit_const(k, env)?
+            }
+            None => self.emit_zero_for_type(&ty),
+        };
+        let value = self.builder.ins().var(init);
+        self.builder
+            .dfg_mut()
+            .set_name(value, hir.name.value.to_string());
+        self.set_emitted_value(decl_id, value);
         Ok(())
     }
 
@@ -1909,42 +1507,22 @@ where
     fn emit_event_trigger(
         &mut self,
         edge: ast::EdgeIdent,
-        prev: llhd::ValueRef,
-        now: llhd::ValueRef,
-    ) -> Result<llhd::ValueRef> {
-        let ty = self.llhd_type(&now);
+        prev: llhd::ir::Value,
+        now: llhd::ir::Value,
+    ) -> Result<llhd::ir::Value> {
+        let ty = self.llhd_type(now);
 
         // Check if a posedge happened.
         let posedge = match edge {
             ast::EdgeIdent::Posedge | ast::EdgeIdent::Edge => {
-                let prev_eq_0 = self
-                    .emit_nameless_inst(llhd::CompareInst(
-                        llhd::CompareOp::Eq,
-                        ty.clone(),
-                        prev.clone(),
-                        llhd::const_zero(&ty).into(),
-                    ))
-                    .into();
-                let now_neq_0 = self
-                    .emit_nameless_inst(llhd::CompareInst(
-                        llhd::CompareOp::Neq,
-                        ty.clone(),
-                        now.clone(),
-                        llhd::const_zero(&ty).into(),
-                    ))
-                    .into();
-                Some(
-                    self.emit_named_inst(
-                        "posedge",
-                        llhd::BinaryInst(
-                            llhd::BinaryOp::And,
-                            llhd::int_ty(1),
-                            prev_eq_0,
-                            now_neq_0,
-                        ),
-                    )
-                    .into(),
-                )
+                let zero = self.emit_zero_for_type(&ty);
+                let prev_eq_0 = self.builder.ins().eq(prev, zero);
+                let now_neq_0 = self.builder.ins().neq(now, zero);
+                let value = self.builder.ins().and(prev_eq_0, now_neq_0);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, "posedge".to_string());
+                Some(value)
             }
             _ => None,
         };
@@ -1952,34 +1530,14 @@ where
         // Check if a negedge happened.
         let negedge = match edge {
             ast::EdgeIdent::Negedge | ast::EdgeIdent::Edge => {
-                let now_eq_0 = self
-                    .emit_nameless_inst(llhd::CompareInst(
-                        llhd::CompareOp::Eq,
-                        ty.clone(),
-                        now.clone(),
-                        llhd::const_zero(&ty).into(),
-                    ))
-                    .into();
-                let prev_neq_0 = self
-                    .emit_nameless_inst(llhd::CompareInst(
-                        llhd::CompareOp::Neq,
-                        ty.clone(),
-                        prev.clone(),
-                        llhd::const_zero(&ty).into(),
-                    ))
-                    .into();
-                Some(
-                    self.emit_named_inst(
-                        "negedge",
-                        llhd::BinaryInst(
-                            llhd::BinaryOp::And,
-                            llhd::int_ty(1),
-                            now_eq_0,
-                            prev_neq_0,
-                        ),
-                    )
-                    .into(),
-                )
+                let zero = self.emit_zero_for_type(&ty);
+                let prev_neq_0 = self.builder.ins().neq(prev, zero);
+                let now_eq_0 = self.builder.ins().eq(now, zero);
+                let value = self.builder.ins().and(now_eq_0, prev_neq_0);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, "negedge".to_string());
+                Some(value)
             }
             _ => None,
         };
@@ -1987,20 +1545,20 @@ where
         // Combine the two edge triggers, or emit an implicit edge check if none
         // of the above edges was checked.
         Ok(match (posedge, negedge) {
-            (Some(a), Some(b)) => self
-                .emit_named_inst(
-                    "edge",
-                    llhd::BinaryInst(llhd::BinaryOp::Or, llhd::int_ty(1), a, b),
-                )
-                .into(),
+            (Some(a), Some(b)) => {
+                let value = self.builder.ins().or(a, b);
+                self.builder.dfg_mut().set_name(value, "edge".to_string());
+                value
+            }
             (Some(a), None) => a,
             (None, Some(b)) => b,
-            (None, None) => self
-                .emit_named_inst(
-                    "impledge",
-                    llhd::CompareInst(llhd::CompareOp::Neq, ty, prev, now),
-                )
-                .into(),
+            (None, None) => {
+                let value = self.builder.ins().neq(prev, now);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, "impledge".to_string());
+                value
+            }
         })
     }
 
@@ -2008,128 +1566,28 @@ where
     fn emit_blocking_assign(
         &mut self,
         lvalue_id: NodeId,
-        rvalue: llhd::ValueRef,
+        rvalue: llhd::ir::Value,
         env: ParamEnv,
     ) -> Result<()> {
         let lvalue = self.emit_lvalue(lvalue_id, env)?;
-        let lty = self.llhd_type(&lvalue);
-        let rty = self.llhd_type(&rvalue);
+        let lty = self.llhd_type(lvalue);
         match *lty {
             llhd::SignalType(..) => {
-                let one_epsilon = llhd::const_time(num::zero(), 0, 1);
-                self.emit_nameless_inst(llhd::DriveInst(
-                    lvalue,
-                    rvalue,
-                    Some(one_epsilon.clone().into()),
-                ));
+                let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
+                let one_epsilon = self.builder.ins().const_time(one_epsilon);
+                self.builder.ins().drv(lvalue, rvalue, one_epsilon);
                 // Emit a wait statement to allow for the assignment to take
                 // effect.
                 let blk = self.add_nameless_block();
-                self.emit_nameless_inst(llhd::WaitInst(blk, Some(one_epsilon.into()), vec![]));
-                self.append_to_block(blk);
+                self.builder.ins().wait_time(blk, one_epsilon, vec![]);
+                self.builder.append_to(blk);
             }
             llhd::PointerType(..) => {
-                self.emit_nameless_inst(llhd::StoreInst(rty, lvalue, rvalue));
+                self.builder.ins().st(lvalue, rvalue);
             }
             ref t => panic!("value of type `{}` cannot be driven", t),
         }
         Ok(())
-    }
-
-    /// Emit the statements that implement the ternary operator.
-    fn emit_ternary_operator(
-        &mut self,
-        expr_id: NodeId,
-        env: ParamEnv,
-        cond: NodeId,
-        true_expr: NodeId,
-        false_expr: NodeId,
-    ) -> Result<llhd::ValueRef> {
-        let ty = self.type_of(expr_id, env)?;
-        let ty = self.emit_type(ty, env)?;
-        let true_blk = self.add_named_block("ternary_true");
-        let false_blk = self.add_named_block("ternary_false");
-        let result_var: llhd::ValueRef = self
-            .emit_named_inst("ternary", llhd::VariableInst(ty.clone()))
-            .into();
-        let cond = self.emit_rvalue(cond, env)?;
-        self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Cond(
-            cond,
-            true_blk.into(),
-            false_blk.into(),
-        )));
-        let final_blk = self.add_named_block("ternary_exit");
-        self.append_to_block(true_blk);
-        let value = self.emit_rvalue(true_expr, env)?;
-        self.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
-        self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())));
-        self.append_to_block(false_blk);
-        let value = self.emit_rvalue(false_expr, env)?;
-        self.emit_nameless_inst(llhd::StoreInst(ty.clone(), result_var.clone(), value));
-        self.emit_nameless_inst(llhd::BranchInst(llhd::BranchKind::Uncond(final_blk.into())));
-        self.append_to_block(final_blk);
-        Ok(self
-            .emit_nameless_inst(llhd::LoadInst(ty, result_var))
-            .into())
-    }
-}
-
-struct DummyStmtGenerator<'a, 'gcx, C>(std::marker::PhantomData<(&'a (), &'gcx (), C)>);
-
-impl<'a, 'gcx, C> Deref for DummyStmtGenerator<'a, 'gcx, C> {
-    type Target = CodeGenerator<'gcx, C>;
-
-    fn deref(&self) -> &CodeGenerator<'gcx, C> {
-        unreachable!()
-    }
-}
-
-impl<'a, 'gcx, C> DerefMut for DummyStmtGenerator<'a, 'gcx, C> {
-    fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
-        unreachable!()
-    }
-}
-
-impl<'a, 'b, 'gcx, C> ExprGenerator<'a, 'gcx, C> for DummyStmtGenerator<'b, 'gcx, &'a C>
-where
-    C: Context<'gcx> + 'a,
-{
-    type AsStmtGen = Self;
-
-    fn emit_inst(&mut self, _inst: llhd::Inst) -> llhd::InstRef {
-        unreachable!()
-    }
-
-    fn emitted_value(&self, _node_id: NodeId) -> &llhd::ValueRef {
-        unreachable!()
-    }
-
-    fn set_emitted_value(&mut self, _node_id: NodeId, _value: llhd::ValueRef) {
-        unreachable!()
-    }
-
-    fn with_llhd_context<F, R>(&self, _f: F) -> R
-    where
-        F: FnOnce(&dyn llhd::Context) -> R,
-    {
-        unreachable!()
-    }
-}
-
-impl<'a, 'b, 'gcx, C> StmtGenerator<'a, 'gcx, C> for DummyStmtGenerator<'b, 'gcx, &'a C>
-where
-    C: Context<'gcx> + 'a,
-{
-    fn set_insertion_point(&mut self, _pos: llhd::InstPosition) {
-        unreachable!()
-    }
-
-    fn insertion_point(&self) -> llhd::InstPosition {
-        unreachable!()
-    }
-
-    fn add_block(&mut self, _block: llhd::Block, _pos: llhd::BlockPosition) -> llhd::BlockRef {
-        unreachable!()
     }
 }
 
@@ -2143,4 +1601,21 @@ enum Mode {
     Value,
     // Pointer,
     Signal,
+}
+
+/// Different binary ops that may be emitted.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum BinaryOp {
+    Add,
+    Sub,
+    And,
+    Or,
+    Xor,
+}
+
+/// Directions of the shift operation.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ShiftDir {
+    Left,
+    Right,
 }
