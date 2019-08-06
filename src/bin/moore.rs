@@ -88,6 +88,13 @@ fn main() {
                 .help("Dump VHDL packages for debugging"),
         )
         .arg(
+            Arg::with_name("opt-level")
+                .short("O")
+                .help("Sets optimization level applied to the output")
+                .default_value("0")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("lib")
                 .short("l")
                 .long("lib")
@@ -161,6 +168,7 @@ fn main() {
             _ => unreachable!(),
         };
     }
+    session.opts.opt_level = matches.value_of("opt-level").unwrap().parse().unwrap();
 
     // Invoke the compiler.
     score(&session, &matches);
@@ -412,8 +420,12 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Elaborate::Svlog(m) => {
             let mut cg = svlog::CodeGenerator::new(ctx.svlog);
             cg.emit_module(m)?;
-            let code = cg.finalize();
-            llhd::assembly::write_module(&mut std::io::stdout().lock(), &code);
+            let mut module = cg.finalize();
+            if ctx.sess.opts.opt_level > 0 {
+                llhd::pass::const_folding::run_on_module(&mut module);
+                llhd::pass::dead_code_elim::run_on_module(&mut module);
+            }
+            llhd::assembly::write_module(&mut std::io::stdout().lock(), &module);
         }
     }
     Ok(())

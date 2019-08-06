@@ -76,6 +76,8 @@ pub struct SessionOptions {
     pub trace_scoreboard: bool,
     /// The verbosity options.
     pub verbosity: Verbosity,
+    /// The optimization level.
+    pub opt_level: usize,
 }
 
 bitflags! {
