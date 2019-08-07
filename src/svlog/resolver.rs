@@ -119,6 +119,9 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             }
             _ => None,
         },
+        AstNode::Import(import) => {
+            unimplemented!("import statement local rib");
+        }
         _ => None,
     };
     if kind.is_none() {
@@ -156,7 +159,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
 
 /// Determine the hierarchical rib of a node.
 ///
-/// This will return a rib containing the hierarchical names expose by a node.
+/// This will return a rib containing the hierarchical names exposed by a node.
 pub(crate) fn hierarchical_rib<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,

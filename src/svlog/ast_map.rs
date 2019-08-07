@@ -78,6 +78,8 @@ pub enum AstNode<'ast> {
     Package(&'ast ast::PackageDecl),
     /// An enum variant, given as `(variant, enum_def, index)`.
     EnumVariant(&'ast ast::EnumName, NodeId, usize),
+    /// An import.
+    Import(&'ast ast::ImportItem),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -104,6 +106,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::StructMember(_, x, _) => x.span(),
             AstNode::Package(x) => x.span(),
             AstNode::EnumVariant(x, _, _) => x.span(),
+            AstNode::Import(x) => x.span(),
         }
     }
 
@@ -130,6 +133,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::StructMember(x, _, _) => x.human_span(),
             AstNode::Package(x) => x.human_span(),
             AstNode::EnumVariant(x, _, _) => x.human_span(),
+            AstNode::Import(x) => x.human_span(),
         }
     }
 }
@@ -158,6 +162,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::StructMember(x, _, _) => x.desc(),
             AstNode::Package(x) => x.desc(),
             AstNode::EnumVariant(x, _, _) => x.desc(),
+            AstNode::Import(x) => x.desc(),
         }
     }
 
@@ -184,6 +189,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::StructMember(x, _, _) => x.desc_full(),
             AstNode::Package(x) => x.desc_full(),
             AstNode::EnumVariant(x, _, _) => x.desc_full(),
+            AstNode::Import(x) => x.desc_full(),
         }
     }
 }

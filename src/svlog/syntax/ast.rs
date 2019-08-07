@@ -1251,6 +1251,22 @@ pub struct ImportItem {
     pub name: Option<Identifier>, // None means `import pkg::*`
 }
 
+impl HasSpan for ImportItem {
+    fn span(&self) -> Span {
+        let mut sp = self.pkg.span;
+        if let Some(name) = self.name {
+            sp.expand(name.span);
+        }
+        sp
+    }
+}
+
+impl HasDesc for ImportItem {
+    fn desc(&self) -> &'static str {
+        "import"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Assertion {
     pub span: Span,

@@ -442,6 +442,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             };
             Ok(HirNode::EnumVariant(cx.arena().alloc_hir(hir)))
         }
+        AstNode::Import(import) => unreachable!("import should never be lowered: {:#?}", import),
         _ => {
             error!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
@@ -554,6 +555,12 @@ fn lower_module_block<'gcx>(
                         cx.map_ast_with_parent(AstNode::ContAssign(assign, lhs, rhs), next_rib);
                     next_rib = id;
                     assigns.push(id);
+                }
+            }
+            ast::HierarchyItem::ImportDecl(ref decl) => {
+                for item in &decl.items {
+                    let id = cx.map_ast_with_parent(AstNode::Import(item), next_rib);
+                    next_rib = id;
                 }
             }
             // _ => return cx.unimp_msg("lowering of", item),
