@@ -5,7 +5,14 @@
 //! This module implements the infrastructure to describe scopes and resolve
 //! names in them.
 
-use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode, ty::TypeKind, ParamEnv};
+use crate::{
+    ast_map::AstNode,
+    common::{SessionContext, Verbosity},
+    crate_prelude::*,
+    hir::HirNode,
+    ty::TypeKind,
+    ParamEnv,
+};
 use std::collections::{BTreeSet, HashMap};
 
 /// One local scope.
@@ -65,6 +72,7 @@ impl RibKind {
 /// up the hierarchy.
 pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<&'gcx Rib> {
     let ast = cx.ast_of(node_id)?;
+    trace!("local_rib for {} ({:?})", ast.desc_full(), node_id);
     let mut parent = None;
     let mut kind = match ast {
         AstNode::TypeParam(_, decl) => Some(RibKind::Normal(
@@ -101,25 +109,14 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             _ => None,
         },
         AstNode::Package(_) => Some(RibKind::Module(HashMap::new())),
-        AstNode::Type(ty) => match ty.data {
-            ast::EnumType(..) => {
-                let hir = match cx.hir_of(node_id)? {
-                    HirNode::Type(x) => x,
-                    _ => unreachable!(),
-                };
-                match hir.kind {
-                    hir::TypeKind::Enum(ref variants, _) => Some(RibKind::Enum(
-                        variants
-                            .iter()
-                            .map(|(name, id)| (name.value, *id))
-                            .collect(),
-                    )),
-                    _ => None,
-                }
-            }
-            _ => None,
-        },
-        AstNode::Import(import) => {
+        AstNode::Type(_) => {
+            let hir = match cx.hir_of(node_id)? {
+                HirNode::Type(x) => x,
+                _ => unreachable!(),
+            };
+            local_rib_kind_for_type(cx, &hir.kind)
+        }
+        AstNode::Import(_import) => {
             unimplemented!("import statement local rib");
         }
         _ => None,
@@ -154,7 +151,35 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
         },
         kind: kind,
     };
+    if cx.sess().has_verbosity(Verbosity::NAMES) {
+        let mut d = DiagBuilder2::note(format!(
+            "created local rib for {}",
+            cx.ast_of(node_id)?.desc_full()
+        ))
+        .span(cx.span(node_id))
+        .add_note(format!("{:?}", rib.kind));
+        if let Some(parent) = rib.parent {
+            d = d
+                .add_note("Parent is here:".to_string())
+                .span(cx.span(parent));
+        }
+        cx.emit(d);
+    }
     Ok(cx.arena().alloc_rib(rib))
+}
+
+fn local_rib_kind_for_type<'gcx>(cx: &impl Context<'gcx>, kind: &hir::TypeKind) -> Option<RibKind> {
+    trace!("creating local rib for type {:#?}", kind);
+    match kind {
+        hir::TypeKind::PackedArray(inner, ..) => local_rib_kind_for_type(cx, inner.as_ref()),
+        hir::TypeKind::Enum(ref variants, _) => Some(RibKind::Enum(
+            variants
+                .iter()
+                .map(|(name, id)| (name.value, *id))
+                .collect(),
+        )),
+        _ => None,
+    }
 }
 
 /// Determine the hierarchical rib of a node.
@@ -200,8 +225,14 @@ pub(crate) fn resolve_upwards<'gcx>(
     name: Name,
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
+    if cx.sess().has_verbosity(Verbosity::NAMES) {
+        cx.emit(DiagBuilder2::note(format!("resolving `{}`", name)).span(cx.span(start_at)));
+    }
     let mut next_id = Some(start_at);
     while let Some(rib_id) = next_id {
+        if cx.sess().has_verbosity(Verbosity::NAMES) {
+            cx.emit(DiagBuilder2::note(format!("resolving `{}` here", name)).span(cx.span(rib_id)));
+        }
         let rib = cx.local_rib(rib_id)?;
         if let id @ Some(_) = rib.get(name) {
             return Ok(id);

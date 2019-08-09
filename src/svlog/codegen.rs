@@ -1129,9 +1129,9 @@ where
         let input_ty = self.type_of(target, env)?;
         let input_bits = bit_size_of_type(self.cx, input_ty, env)?;
         let input_value = self.emit_rvalue(target, env)?;
-        let mut result: llhd::ir::Value = self.builder.ins().ext_field(input_value, 0);
+        let mut result = self.builder.ins().ext_slice(input_value, 0, 1);
         for i in 1..input_bits {
-            let bit = self.builder.ins().ext_field(input_value, i);
+            let bit = self.builder.ins().ext_slice(input_value, i, 1);
             result = match op {
                 BinaryOp::Add => self.builder.ins().add(result, bit),
                 BinaryOp::Sub => self.builder.ins().sub(result, bit),
