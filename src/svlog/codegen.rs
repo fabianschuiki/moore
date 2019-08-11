@@ -1100,7 +1100,14 @@ where
         let shifted = self.builder.ins().shr(target, dummy, shift);
         let sliced = match mode {
             hir::IndexMode::One(_) => {
-                let value = self.builder.ins().ext_field(shifted, 0);
+                let value = if target_ty.is_int()
+                    || (target_ty.is_pointer() && target_ty.unwrap_pointer().is_int())
+                    || (target_ty.is_signal() && target_ty.unwrap_signal().is_int())
+                {
+                    self.builder.ins().ext_slice(shifted, 0, 1)
+                } else {
+                    self.builder.ins().ext_field(shifted, 0)
+                };
                 self.builder
                     .dfg_mut()
                     .set_name(value, format!("{}.element", basename));
