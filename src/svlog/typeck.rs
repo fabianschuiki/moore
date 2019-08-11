@@ -174,7 +174,25 @@ pub(crate) fn type_of<'gcx>(
             }
         }
         HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
-        HirNode::EnumVariant(v) => cx.map_to_type(v.enum_id, env),
+        HirNode::EnumVariant(v) => {
+            // TODO: This is ultra hacky. The enum itself does not get its own
+            // node ID, but rather shares this with the associated array dims.
+            // So we nee to unpack those here again. This is horribly ugly and
+            // should rather be done differently. E.g. by having the AST be more
+            // of an ID-based graph.
+            let hir = match cx.hir_of(v.enum_id)? {
+                HirNode::Type(hir) => hir,
+                _ => unreachable!(),
+            };
+            let mut kind = &hir.kind;
+            loop {
+                kind = match kind {
+                    hir::TypeKind::PackedArray(ref inner, ..) => inner.as_ref(),
+                    _ => break,
+                }
+            }
+            map_type_kind(cx, v.enum_id, env, hir, kind)
+        }
         HirNode::Package(_) => Ok(cx.mkty_void()),
         _ => {
             error!("{:#?}", hir);
