@@ -891,6 +891,14 @@ where
                 let true_expr = self.emit_rvalue(true_expr, env)?;
                 let false_expr = self.emit_rvalue(false_expr, env)?;
                 let array = self.builder.ins().array(vec![false_expr, true_expr]);
+                trace!(
+                    "llhd array `{}` is of type `{}`",
+                    self.builder
+                        .dfg()
+                        .value_inst(array)
+                        .dump(self.builder.dfg()),
+                    self.builder.unit().value_type(array)
+                );
                 let value = self.builder.ins().mux(array, cond);
                 (value, Mode::Value)
             }
