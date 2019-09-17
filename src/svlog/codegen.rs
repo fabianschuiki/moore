@@ -673,6 +673,13 @@ where
                     .collect();
                 Ok(self.builder.ins().array(fields?))
             }
+            (&TypeKind::Struct(..), &ValueKind::StructOrArray(ref v)) => {
+                let fields: Result<Vec<_>> = v
+                    .iter()
+                    .map(|v| self.emit_const(v, env).map(Into::into))
+                    .collect();
+                Ok(self.builder.ins().strukt(fields?))
+            }
             _ => panic!("invalid type/value combination {:#?}", value),
         }
     }

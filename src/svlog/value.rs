@@ -406,6 +406,7 @@ pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Res
 
 /// Determine the default value of a type.
 pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Value<'gcx> {
+    // TODO(fschuiki): Make this function return `Result<Value<_>>`.
     match *ty {
         TypeKind::Void => cx.intern_value(ValueData {
             ty: &ty::VOID_TYPE,
@@ -414,8 +415,19 @@ pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) 
         TypeKind::Time => cx.intern_value(make_time(Zero::zero())),
         TypeKind::Bit(..) | TypeKind::Int(..) => cx.intern_value(make_int(ty, Zero::zero())),
         TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
-        TypeKind::Struct(_) => {
-            unimplemented!("create a struct value and fill in defaults for each field")
+        TypeKind::Struct(id) => {
+            let def = cx.struct_def(id).unwrap();
+            let fields = def
+                .fields
+                .iter()
+                .map(|field| {
+                    type_default_value(
+                        cx,
+                        cx.map_to_type(field.ty, cx.default_param_env()).unwrap(),
+                    )
+                })
+                .collect();
+            cx.intern_value(make_struct(ty, fields))
         }
         TypeKind::PackedArray(length, elem_ty) => cx.intern_value(make_array(
             ty.clone(),

@@ -13,7 +13,10 @@ use crate::{
     ty::TypeKind,
     ParamEnv,
 };
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 
 /// One local scope.
 ///
@@ -295,6 +298,50 @@ pub(crate) fn resolve_node<'gcx>(
     error!("{:#?}", hir);
     cx.emit(DiagBuilder2::bug("cannot resolve node").span(hir.human_span()));
     Err(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructDef {
+    pub packed: bool,
+    pub fields: Vec<StructField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructField {
+    pub name: Spanned<Name>,
+    pub ty: NodeId,
+}
+
+/// Obtain the details of a struct definition.
+pub(crate) fn struct_def<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<Arc<StructDef>> {
+    let hir = cx.hir_of(node_id)?;
+    let struct_fields = match hir {
+        HirNode::Type(hir::Type {
+            kind: hir::TypeKind::Struct(ref fields),
+            ..
+        }) => fields,
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!("{} is not a struct", hir.desc_full()))
+                    .span(hir.human_span()),
+            );
+            return Err(());
+        }
+    };
+    let fields = struct_fields
+        .iter()
+        .flat_map(|&id| match cx.hir_of(id) {
+            Ok(HirNode::VarDecl(vd)) => Some(StructField {
+                name: vd.name,
+                ty: vd.ty,
+            }),
+            _ => None,
+        })
+        .collect();
+    Ok(Arc::new(StructDef {
+        packed: true,
+        fields,
+    }))
 }
 
 /// Resolve the field name in a field access expression.

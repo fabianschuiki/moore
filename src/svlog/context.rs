@@ -28,6 +28,7 @@ use crate::{
     common::{arenas::Alloc, arenas::TypedArena, Session},
     crate_prelude::*,
     hir::{self, AccessTable, HirNode},
+    resolver::StructDef,
     ty::{Type, TypeKind},
     value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
@@ -630,6 +631,12 @@ pub(super) mod queries {
                 use fn port_mapping::compute;
             }
 
+            /// Obtain the details of a struct definition.
+            fn struct_def(node_id: NodeId) -> Result<Arc<StructDef>> {
+                type StructDefQuery;
+                use fn resolver::struct_def;
+            }
+
             /// Resolve the field name in a field access expression.
             ///
             /// Returns the node id of the corresponding struct definition, the
@@ -660,6 +667,7 @@ pub(super) mod queries {
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn accessed_nodes() for AccessedNodesQuery<'gcx>;
                 fn port_mapping() for PortMappingQuery<'gcx>;
+                fn struct_def() for StructDefQuery<'gcx>;
                 fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
             }
         }
