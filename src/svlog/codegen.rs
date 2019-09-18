@@ -189,6 +189,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 .drv(gen.values[&port_id], default_value, zero_time);
         }
 
+        trace!("{}", ent.dump());
         let result = Ok(self.into.add_entity(ent));
         self.tables.module_defs.insert((id, env), result.clone());
         result
@@ -452,9 +453,27 @@ where
                 },
                 env,
             )?;
-            let id = self.builder.ins().sig(init);
-            self.builder.dfg_mut().set_name(id, hir.name.value.into());
-            self.values.insert(decl_id, id.into());
+            let value = self.builder.ins().sig(init);
+            self.builder
+                .dfg_mut()
+                .set_name(value, hir.name.value.into());
+            trace!(
+                "{}",
+                DiagBuilder2::note("declaration emitted")
+                    .span(self.span(decl_id))
+                    .add_note(format!(
+                        "llhd value: {}",
+                        self.builder
+                            .dfg()
+                            .value_inst(value)
+                            .dump(self.builder.dfg())
+                    ))
+                    .add_note(format!(
+                        "llhd type: {}",
+                        self.builder.dfg().value_type(value)
+                    ))
+            );
+            self.values.insert(decl_id, value.into());
         }
 
         // Emit assignments.
@@ -1018,6 +1037,22 @@ where
             }
             hir::ExprKind::Index(target_id, mode) => {
                 let target = self.emit_lvalue(target_id, env)?;
+                // trace!(
+                //     "{}",
+                //     DiagBuilder2::note("emitting index into lvalue")
+                //         .span(self.span(target_id))
+                //         .add_note(format!(
+                //             "llhd value: {}",
+                //             self.builder
+                //                 .dfg()
+                //                 .value_inst(target)
+                //                 .dump(self.builder.dfg())
+                //         ))
+                //         .add_note(format!(
+                //             "llhd type: {}",
+                //             self.builder.dfg().value_type(target)
+                //         ))
+                // );
                 return self.emit_index_access(target, env, mode);
             }
             _ => (),
@@ -1121,6 +1156,7 @@ where
                 {
                     self.builder.ins().ext_slice(shifted, 0, 1)
                 } else {
+                    trace!("indexing into {}", target_ty);
                     self.builder.ins().ext_field(shifted, 0)
                 };
                 self.builder
@@ -1178,10 +1214,15 @@ where
         rhs: llhd::ir::Value,
     ) -> llhd::ir::Value {
         let ty = self.builder.dfg().value_type(lhs);
-        let zeros = self.builder.ins().const_int(ty.unwrap_int(), false, 0);
+        let width = if ty.is_signal() {
+            ty.unwrap_signal().unwrap_int()
+        } else {
+            ty.unwrap_int()
+        };
+        let zeros = self.builder.ins().const_int(width, false, 0);
         let hidden = if arith && dir == ShiftDir::Right {
             let ones = self.builder.ins().not(zeros);
-            let sign = self.builder.ins().ext_slice(lhs, ty.unwrap_int() - 1, 1);
+            let sign = self.builder.ins().ext_slice(lhs, width - 1, 1);
             let array = self.builder.ins().array(vec![zeros, ones]);
             self.builder.ins().mux(array, sign)
         } else {
