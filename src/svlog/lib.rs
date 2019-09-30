@@ -15,6 +15,7 @@ mod ast_map;
 mod codegen;
 mod context;
 pub mod hir;
+pub mod mir;
 mod param_env;
 mod port_mapping;
 mod resolver;
@@ -43,7 +44,7 @@ mod crate_prelude {
         common::util::{HasDesc, HasSpan},
         common::NodeId,
         context::{BaseContext, Context, GlobalContext},
-        hir, param_env, port_mapping,
+        hir, mir, param_env, port_mapping,
         resolver::{self, Rib, RibKind},
         ty, typeck, value, NodeEnvId,
     };

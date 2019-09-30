@@ -795,6 +795,11 @@ where
         env: ParamEnv,
         mode: Mode,
     ) -> Result<llhd::ir::Value> {
+        // TODO: Remove the following. This simply maps the expression to an MIR
+        // rvalue. This should become the standard in the future.
+        let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
+        debug!("mir: {:#?}", mir);
+
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),

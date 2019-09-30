@@ -194,6 +194,7 @@ pub(crate) fn type_of<'gcx>(
             map_type_kind(cx, v.enum_id, env, hir, kind)
         }
         HirNode::Package(_) => Ok(cx.mkty_void()),
+        HirNode::Assign(a) => cx.type_of(a.lhs, env),
         _ => {
             error!("{:#?}", hir);
             cx.unimp_msg("type analysis of", &hir)
@@ -309,8 +310,8 @@ fn map_type_kind<'gcx>(
                 }
             };
             match **inner {
-                hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_int(size)),
-                hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_integer(size)),
+                // hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_int(size)),
+                // hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_integer(size)),
                 _ => {
                     let inner_ty = map_type_kind(cx, node_id, env, root, inner)?;
                     Ok(cx.mkty_packed_array(size, inner_ty))
