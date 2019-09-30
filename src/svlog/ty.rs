@@ -58,6 +58,24 @@ impl<'t> TypeKind<'t> {
         }
     }
 
+    /// Get the element type of an array.
+    pub fn get_array_element(&self) -> Option<Type<'t>> {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.get_array_element(),
+            TypeKind::PackedArray(_, e) => Some(e),
+            _ => None,
+        }
+    }
+
+    /// Get the length of an array.
+    pub fn get_array_length(&self) -> Option<usize> {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.get_array_length(),
+            TypeKind::PackedArray(l, _) => Some(l),
+            _ => None,
+        }
+    }
+
     /// Get the width of the type.
     ///
     /// Panics if the type is not an integer.
@@ -67,6 +85,14 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(w, _) => w,
             TypeKind::Named(_, _, ty) => ty.width(),
             _ => panic!("{:?} has no width", self),
+        }
+    }
+
+    /// Remove all typedefs and reveal the concrete fundamental type.
+    pub fn resolve_name(&'t self) -> Type<'t> {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.resolve_name(),
+            _ => self,
         }
     }
 }
@@ -90,7 +116,7 @@ impl<'t> std::fmt::Display for TypeKind<'t> {
 }
 
 /// The number of values each bit of a type can assume.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Domain {
     /// Two-valued types such as `bit` or `int`.
     TwoValued,
