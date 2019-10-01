@@ -132,6 +132,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             builder: &mut builder,
             values: &mut values,
             interned_consts: Default::default(),
+            interned_rvalues: Default::default(),
         };
 
         // Assign proper port names and collect ports into a lookup table.
@@ -260,6 +261,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             builder: &mut builder,
             values: &mut values,
             interned_consts: Default::default(),
+            interned_rvalues: Default::default(),
         };
         let entry_blk = pg.add_nameless_block();
         pg.builder.append_to(entry_blk);
@@ -402,6 +404,8 @@ struct UnitGenerator<'a, 'gcx, C, UB> {
     values: &'a mut HashMap<NodeId, llhd::ir::Value>,
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
+    /// The MIR rvalues emitted into the unit.
+    interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
 }
 
 impl<'a, 'gcx, C, UB> Deref for UnitGenerator<'a, 'gcx, C, UB> {
@@ -980,6 +984,10 @@ where
                 warn!("cast implemented as nop: {:?}", hir.kind);
                 return self.emit_rvalue_mode(expr, env, mode);
             }
+            hir::ExprKind::NamedPattern(..) => {
+                let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
+                (self.emit_mir_rvalue(mir)?, Mode::Value)
+            }
             _ => {
                 error!("{:#?}", hir);
                 return self.unimp_msg("code generation for", hir);
@@ -997,6 +1005,46 @@ where
             }
             (Mode::Value, Mode::Signal) => unreachable!(),
             _ => Ok(value),
+        }
+    }
+
+    fn emit_mir_rvalue(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+        if let Some(x) = self.interned_rvalues.get(&mir.id) {
+            x.clone()
+        } else {
+            let x = self.emit_mir_rvalue_uninterned(mir);
+            self.interned_rvalues.insert(mir.id, x.clone());
+            x
+        }
+    }
+
+    fn emit_mir_rvalue_uninterned(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+        match mir.kind {
+            mir::RvalueKind::CastValueDomain { value, .. } => {
+                // TODO(fschuiki): Turn this into an actual `iN` to `lN` cast.
+                self.emit_mir_rvalue(value)
+            }
+            mir::RvalueKind::CastVectorToAtom { value, .. }
+            | mir::RvalueKind::CastAtomToVector { value, .. } => {
+                // Vector to atom conversions are no-ops since we represent the
+                // atom type as a single-element vector anyway.
+                self.emit_mir_rvalue(value)
+            }
+            mir::RvalueKind::Truncate {
+                target_width,
+                value,
+            } => {
+                let llvalue = self.emit_mir_rvalue(value)?;
+                Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
+            }
+            mir::RvalueKind::ConstructArray(ref indices) => {
+                let llvalue = (0..indices.len())
+                    .map(|i| self.emit_mir_rvalue(indices[&i]))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(self.builder.ins().array(llvalue))
+            }
+            mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
+            mir::RvalueKind::Error => Err(()),
         }
     }
 
