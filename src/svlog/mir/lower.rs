@@ -23,14 +23,49 @@ use std::collections::HashMap;
 
 // TODO(fschuiki): Maybe move most of the functions below into the rvalue mod?
 
+struct Builder {
+    span: Span,
+    expr: NodeId,
+    env: ParamEnv,
+}
+
+impl Builder {
+    /// Intern an MIR node.
+    fn build<'a>(
+        &self,
+        cx: &impl Context<'a>,
+        ty: Type<'a>,
+        kind: RvalueKind<'a>,
+    ) -> &'a Rvalue<'a> {
+        cx.arena().alloc_mir_rvalue(Rvalue {
+            span: self.span,
+            ty,
+            kind: kind,
+        })
+    }
+
+    /// Create an error node.
+    ///
+    /// This is usually called when something goes wrong during MIR construction
+    /// and a marker node is needed to indicate that part of the MIR is invalid.
+    fn error<'a>(&self, cx: &impl Context<'a>) -> &'a Rvalue<'a> {
+        self.build(cx, cx.mkty_void(), RvalueKind::Error)
+    }
+}
+
 /// Lower an expression to an rvalue in the MIR.
 pub fn lower_expr_to_mir_rvalue<'gcx>(
     cx: &impl Context<'gcx>,
     expr_id: NodeId,
     env: ParamEnv,
-) -> Rvalue<'gcx> {
+) -> &'gcx Rvalue<'gcx> {
     let span = cx.span(expr_id);
-    let result = move || -> Result<Rvalue> {
+    let builder = Builder {
+        span,
+        expr: expr_id,
+        env,
+    };
+    let result = || -> Result<&Rvalue> {
         let hir = match cx.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             HirNode::VarDecl(decl) => unimplemented!("mir rvalue for {:?}", decl),
@@ -44,11 +79,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             | hir::ExprKind::TimeConst(_) => {
                 let k = cx.constant_value_of(expr_id, env)?;
                 trace!("const mir node for {:?}", k);
-                Ok(Rvalue {
-                    span,
-                    ty: k.ty,
-                    kind: RvalueKind::Error,
-                })
+                Ok(builder.build(cx, k.ty, RvalueKind::Error))
             }
             // hir::ExprKind::Ident(name) => {
             //     let binding = cx.resolve_node(expr_id, env)?;
@@ -62,19 +93,9 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             // }
             hir::ExprKind::NamedPattern(ref mapping) => {
                 if ty.is_array() {
-                    let elem_ty = ty.get_array_element().unwrap();
-                    let length = ty.get_array_length().unwrap();
-                    Ok(Rvalue {
-                        span,
-                        ty,
-                        kind: lower_array_pattern(cx, mapping, env, elem_ty, length),
-                    })
+                    Ok(lower_array_pattern(cx, &builder, mapping, ty))
                 } else if ty.is_struct() {
-                    Ok(Rvalue {
-                        span,
-                        ty,
-                        kind: lower_struct_pattern(cx, mapping),
-                    })
+                    Ok(builder.build(cx, ty, lower_struct_pattern(cx, mapping)))
                 } else {
                     cx.emit(
                         DiagBuilder2::error(format!(
@@ -89,11 +110,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             _ => unreachable!("lowering to mir rvalue of {:?}", hir),
         }
     }();
-    result.unwrap_or(Rvalue {
-        span,
-        ty: cx.mkty_void(), // TODO(fschuiki): This should be an error type.
-        kind: RvalueKind::Error,
-    })
+    result.unwrap_or_else(|_| builder.error(cx))
 }
 
 fn lower_expr_and_cast<'gcx>(
@@ -101,9 +118,14 @@ fn lower_expr_and_cast<'gcx>(
     expr_id: NodeId,
     env: ParamEnv,
     target_ty: Type<'gcx>,
-) -> Rvalue<'gcx> {
+) -> &'gcx Rvalue<'gcx> {
     let inner = lower_expr_to_mir_rvalue(cx, expr_id, env);
-    lower_implicit_cast(cx, inner, target_ty)
+    let builder = Builder {
+        span: inner.span,
+        expr: expr_id,
+        env,
+    };
+    lower_implicit_cast(cx, &builder, inner, target_ty)
 }
 
 /// Generate the nodes necessary to implicitly cast and rvalue to a type.
@@ -111,9 +133,10 @@ fn lower_expr_and_cast<'gcx>(
 /// If the cast is not possible, emit some helpful diagnostics.
 fn lower_implicit_cast<'gcx>(
     cx: &impl Context<'gcx>,
-    value: Rvalue<'gcx>,
+    builder: &Builder,
+    value: &'gcx Rvalue<'gcx>,
     to: Type<'gcx>,
-) -> Rvalue<'gcx> {
+) -> &'gcx Rvalue<'gcx> {
     let from = value.ty;
 
     // Catch the easy case where the types already line up.
@@ -138,60 +161,59 @@ fn lower_implicit_cast<'gcx>(
         | (&TypeKind::Int(fw, fd), &TypeKind::Bit(td))
             if fd != td =>
         {
-            trace!("int domain transfer {:?} to {:?}", fd, td);
-            return lower_implicit_cast(
+            // trace!("int domain transfer {:?} to {:?}", fd, td);
+            let inner = builder.build(
                 cx,
-                Rvalue {
-                    span: value.span,
-                    ty: cx.intern_type(TypeKind::Int(fw, td)),
-                    kind: RvalueKind::Error, // TODO(fschuiki): Replace!
+                cx.intern_type(TypeKind::Int(fw, td)),
+                RvalueKind::CastValueDomain {
+                    from: fd,
+                    to: td,
+                    value,
                 },
-                to,
             );
+            return lower_implicit_cast(cx, builder, inner, to);
         }
 
         // Bit domain transfer; e.g. `bit` to `logic`.
         (&TypeKind::Bit(fd), &TypeKind::Int(_, td)) | (&TypeKind::Bit(fd), &TypeKind::Bit(td))
             if fd != td =>
         {
-            trace!("bit domain transfer {:?} to {:?}", fd, td);
-            return lower_implicit_cast(
+            // trace!("bit domain transfer {:?} to {:?}", fd, td);
+            let inner = builder.build(
                 cx,
-                Rvalue {
-                    span: value.span,
-                    ty: cx.intern_type(TypeKind::Bit(td)),
-                    kind: RvalueKind::Error, // TODO(fschuiki): Replace!
+                cx.intern_type(TypeKind::Bit(td)),
+                RvalueKind::CastValueDomain {
+                    from: fd,
+                    to: td,
+                    value,
                 },
-                to,
             );
+            return lower_implicit_cast(cx, builder, inner, to);
         }
 
         // Integer to bit truncation; e.g. `int` to `bit`.
         (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw > 1 => {
-            trace!("would narrow {} int to 1 bit", fw);
-            return lower_implicit_cast(
+            // trace!("would narrow {} int to 1 bit", fw);
+            let inner = builder.build(
                 cx,
-                Rvalue {
-                    span: value.span,
-                    ty: cx.intern_type(TypeKind::Int(1, fd)),
-                    kind: RvalueKind::Error, // TODO(fschuiki): Replace!
+                cx.intern_type(TypeKind::Int(1, fd)),
+                RvalueKind::Truncate {
+                    target_width: 1,
+                    value,
                 },
-                to,
             );
+            return lower_implicit_cast(cx, builder, inner, to);
         }
 
         // Integer to bit conversion; e.g. `bit [0:0]` to `bit`.
         (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw == 1 => {
-            trace!("would map int to bit");
-            return lower_implicit_cast(
+            // trace!("would map int to bit");
+            let inner = builder.build(
                 cx,
-                Rvalue {
-                    span: value.span,
-                    ty: cx.intern_type(TypeKind::Bit(fd)),
-                    kind: RvalueKind::Error, // TODO(fschuiki): Replace!
-                },
-                to,
+                cx.intern_type(TypeKind::Bit(fd)),
+                RvalueKind::CastVectorToAtom { domain: fd, value },
             );
+            return lower_implicit_cast(cx, builder, inner, to);
         }
 
         // TODO(fschuiki): Packing structs into bit vectors.
@@ -212,24 +234,21 @@ fn lower_implicit_cast<'gcx>(
         ))
         .span(value.span),
     );
-    Rvalue {
-        span: value.span,
-        ty: cx.mkty_void(),
-        kind: RvalueKind::Error,
-    }
+    builder.error(cx)
 }
 
 /// Lower an `'{...}` array pattern.
 fn lower_array_pattern<'gcx>(
     cx: &impl Context<'gcx>,
+    builder: &Builder,
     mapping: &[(PatternMapping, NodeId)],
-    env: ParamEnv,
-    elem_ty: Type<'gcx>,
-    length: usize,
-) -> RvalueKind {
+    ty: Type<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    let length = ty.get_array_length().unwrap();
+    let elem_ty = ty.get_array_element().unwrap();
     let mut failed = false;
-    let mut default: Option<Rvalue> = None;
-    let mut values = HashMap::<usize, Rvalue>::new();
+    let mut default: Option<&Rvalue> = None;
+    let mut values = HashMap::<usize, &Rvalue>::new();
     for &(map, to) in mapping {
         match map {
             PatternMapping::Type(type_id) => {
@@ -242,7 +261,7 @@ fn lower_array_pattern<'gcx>(
             PatternMapping::Member(member_id) => {
                 // Determine the index for the mapping.
                 let index = match || -> Result<usize> {
-                    let index = cx.constant_value_of(member_id, env)?;
+                    let index = cx.constant_value_of(member_id, builder.env)?;
                     let index = match &index.kind {
                         ValueKind::Int(i) => i,
                         _ => {
@@ -273,7 +292,7 @@ fn lower_array_pattern<'gcx>(
                 };
 
                 // Determine the value and insert into the mappings.
-                let value = lower_expr_and_cast(cx, to, env, elem_ty);
+                let value = lower_expr_and_cast(cx, to, builder.env, elem_ty);
                 let span = value.span;
                 if let Some(prev) = values.insert(index, value) {
                     cx.emit(
@@ -301,24 +320,48 @@ fn lower_array_pattern<'gcx>(
                     continue;
                 }
                 None => {
-                    default = Some(lower_expr_and_cast(cx, to, env, elem_ty));
+                    default = Some(lower_expr_and_cast(cx, to, builder.env, elem_ty));
                 }
             },
         }
     }
-    trace!(
-        "emit array with values {:#?} default {:#?}",
-        values,
-        default
-    );
-    error!("missing array pattern");
-    RvalueKind::Error // TODO(fschuiki): Replace!
+
+    // In case the list of indices provided by the user is incomplete, use the
+    // default to fill in the other elements.
+    if values.len() != length {
+        let default = if let Some(default) = default {
+            default
+        } else {
+            cx.emit(
+                DiagBuilder2::error("`default:` missing in non-exhaustive array pattern")
+                    .span(builder.span)
+                    .add_note("Array patterns must assign a value to every index."),
+            );
+            return builder.error(cx);
+        };
+        for i in 0..length {
+            if values.contains_key(&i) {
+                continue;
+            }
+            values.insert(i, default);
+        }
+    }
+
+    if failed {
+        builder.error(cx)
+    } else {
+        builder.build(
+            cx,
+            cx.mkty_packed_array(length, elem_ty),
+            RvalueKind::ConstructArray(values),
+        )
+    }
 }
 
 fn lower_struct_pattern<'gcx>(
     cx: &impl Context<'gcx>,
     mapping: &[(PatternMapping, NodeId)],
-) -> RvalueKind {
+) -> RvalueKind<'gcx> {
     error!("missing struct pattern");
     RvalueKind::Error
 }
