@@ -5,12 +5,18 @@
 //! An MIR representation for all expressions that may appear on the right-hand
 //! side of an assignment.
 
-use crate::{crate_prelude::*, ty::Type};
+use crate::{crate_prelude::*, ty::Type, ParamEnv};
 use std::collections::HashMap;
 
 /// An rvalue expression.
 #[derive(Debug, Clone)]
 pub struct Rvalue<'a> {
+    /// A unique id.
+    pub id: NodeId,
+    /// The expression node which spawned this rvalue.
+    pub origin: NodeId,
+    /// The environment within which the rvalue lives.
+    pub env: ParamEnv,
     /// The span in the source file where the rvalue originates from.
     pub span: Span,
     /// The type of the expression.
@@ -49,6 +55,8 @@ pub enum RvalueKind<'a> {
     },
     /// Constructor for an array.
     ConstructArray(HashMap<usize, &'a Rvalue<'a>>),
+    /// A constant value.
+    Const(value::Value<'a>),
     /// An error occurred during lowering.
     Error,
 }

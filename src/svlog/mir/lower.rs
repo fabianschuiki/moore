@@ -38,6 +38,9 @@ impl Builder {
         kind: RvalueKind<'a>,
     ) -> &'a Rvalue<'a> {
         cx.arena().alloc_mir_rvalue(Rvalue {
+            id: cx.alloc_id(self.span),
+            origin: self.expr,
+            env: self.env,
             span: self.span,
             ty,
             kind: kind,
@@ -78,8 +81,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             | hir::ExprKind::UnsizedConst(..)
             | hir::ExprKind::TimeConst(_) => {
                 let k = cx.constant_value_of(expr_id, env)?;
-                trace!("const mir node for {:?}", k);
-                Ok(builder.build(cx, k.ty, RvalueKind::Error))
+                Ok(builder.build(cx, k.ty, RvalueKind::Const(k)))
             }
             // hir::ExprKind::Ident(name) => {
             //     let binding = cx.resolve_node(expr_id, env)?;
