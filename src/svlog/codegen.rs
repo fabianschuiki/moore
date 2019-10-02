@@ -1081,6 +1081,7 @@ where
             }
             mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
             mir::RvalueKind::Error => Err(()),
+            _ => unimplemented!(),
         }
     }
 

@@ -83,16 +83,18 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 let k = cx.constant_value_of(expr_id, env)?;
                 Ok(builder.build(cx, k.ty, RvalueKind::Const(k)))
             }
-            // hir::ExprKind::Ident(name) => {
-            //     let binding = cx.resolve_node(expr_id, env)?;
-            //     if cx.is_constant(binding)? {
-            //         let k = cx.constant_value_of(binding, env)?;
-            //         // TODO: Map to const
-            //         return Err(());
-            //     }
-            //     // TODO: Check what the binding actually is and emit a node.
-            //     Err(())
-            // }
+            hir::ExprKind::Ident(name) => {
+                //     let binding = cx.resolve_node(expr_id, env)?;
+                //     if cx.is_constant(binding)? {
+                //         let k = cx.constant_value_of(binding, env)?;
+                //         // TODO: Map to const
+                //         return Err(());
+                //     }
+                //     // TODO: Check what the binding actually is and emit a node.
+                //     Err(())
+                Ok(builder.build(cx, ty, RvalueKind::Error))
+            }
+            hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(cx, &builder, ty, op, lhs, rhs)),
             hir::ExprKind::NamedPattern(ref mapping) => {
                 if ty.is_array() {
                     Ok(lower_array_pattern(cx, &builder, mapping, ty))
@@ -366,4 +368,81 @@ fn lower_struct_pattern<'gcx>(
 ) -> RvalueKind<'gcx> {
     error!("missing struct pattern");
     RvalueKind::Error
+}
+
+/// Try to convert a type to its equivalent simple bit vector type.
+///
+/// All *integral* data types have an equivalent *simple bit vector type*. These
+/// include the following:
+///
+/// - all basic integers
+/// - packed arrays
+/// - packed structures
+/// - packed unions
+/// - enums
+/// - time (excluded in this implementation)
+fn map_to_simple_bit_vector_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    ty: Type<'gcx>,
+    env: ParamEnv,
+) -> Option<Type<'gcx>> {
+    let bits = match *ty {
+        TypeKind::Void => return None,
+        TypeKind::Time => return None,
+        TypeKind::Named(_, _, ty) => return map_to_simple_bit_vector_type(cx, ty, env),
+        TypeKind::Bit(..)
+        | TypeKind::Int(..)
+        | TypeKind::Struct(..)
+        | TypeKind::PackedArray(..) => ty::bit_size_of_type(cx, ty, env).ok()?,
+    };
+    Some(cx.mkty_int(bits))
+}
+
+fn lower_binary<'gcx>(
+    cx: &impl Context<'gcx>,
+    builder: &Builder,
+    ty: Type<'gcx>,
+    op: hir::BinaryOp,
+    lhs: NodeId,
+    rhs: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let result_ty = match map_to_simple_bit_vector_type(cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
+                    .span(builder.span),
+            );
+            return builder.error(cx);
+        }
+    };
+
+    // Cast the operands to the operator type.
+    trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
+    let lhs = lower_expr_and_cast(cx, lhs, builder.env, result_ty);
+    let rhs = lower_expr_and_cast(cx, rhs, builder.env, result_ty);
+
+    // Determine the operation.
+    let op = match op {
+        hir::BinaryOp::Add => IntBinaryArithOp::Add,
+        hir::BinaryOp::Sub => IntBinaryArithOp::Sub,
+        hir::BinaryOp::Mul => IntBinaryArithOp::Mul,
+        hir::BinaryOp::Div => IntBinaryArithOp::Div,
+        hir::BinaryOp::Mod => IntBinaryArithOp::Mod,
+        hir::BinaryOp::Pow => IntBinaryArithOp::Pow,
+        _ => unimplemented!("mir for integral operator {:?}", op),
+    };
+
+    // Assemble the node.
+    builder.build(
+        cx,
+        result_ty,
+        RvalueKind::IntBinaryArith {
+            op,
+            width: ty::bit_size_of_type(cx, result_ty, builder.env).unwrap(),
+            lhs,
+            rhs,
+        },
+    )
 }

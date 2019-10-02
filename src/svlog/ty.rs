@@ -110,7 +110,7 @@ impl<'t> std::fmt::Display for TypeKind<'t> {
             TypeKind::Int(width, Domain::FourValued) => write!(f, "integer<{}>", width),
             TypeKind::Named(name, ..) => write!(f, "{}", name.value),
             TypeKind::Struct(_) => write!(f, "struct"),
-            TypeKind::PackedArray(length, ty) => write!(f, "{}[{}:0]", ty, length - 1),
+            TypeKind::PackedArray(length, ty) => write!(f, "{} [{}:0]", ty, length - 1),
         }
     }
 }
