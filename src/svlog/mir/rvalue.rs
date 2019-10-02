@@ -57,6 +57,28 @@ pub enum RvalueKind<'a> {
     ConstructArray(HashMap<usize, &'a Rvalue<'a>>),
     /// A constant value.
     Const(value::Value<'a>),
+    /// An integral binary arithmetic operator.
+    ///
+    /// If any bit of the operands are x/z, the entire result is x.
+    IntBinaryArith {
+        op: IntBinaryArithOp,
+        width: usize,
+        lhs: &'a Rvalue<'a>,
+        rhs: &'a Rvalue<'a>,
+        // TODO(fschuiki): Add sign of the operation.
+    },
     /// An error occurred during lowering.
     Error,
+}
+
+/// The integer binary arithmetic operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum IntBinaryArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
 }
