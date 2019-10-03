@@ -1577,7 +1577,7 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
         }
         Keyword(Kw::Integer) => {
             p.bump();
-            Ok(ast::IntType)
+            Ok(ast::IntegerType)
         }
         Keyword(Kw::Time) => {
             p.bump();

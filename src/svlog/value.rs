@@ -66,10 +66,14 @@ impl<'t> ValueData<'t> {
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
 pub fn make_int(ty: Type, mut value: BigInt) -> ValueData {
     match *ty {
-        TypeKind::Int(width, _) => {
+        TypeKind::Int(width, _)
+        | TypeKind::BitVector {
+            range: ty::Range { size: width, .. },
+            ..
+        } => {
             value = value % (BigInt::from(1) << width);
         }
-        TypeKind::Bit(_) => {
+        TypeKind::Bit(_) | TypeKind::BitScalar { .. } => {
             value = value % 2;
         }
         _ => panic!("create int value `{}` with non-int type {:?}", value, ty),
@@ -413,7 +417,10 @@ pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) 
             kind: ValueKind::Void,
         }),
         TypeKind::Time => cx.intern_value(make_time(Zero::zero())),
-        TypeKind::Bit(..) | TypeKind::Int(..) => cx.intern_value(make_int(ty, Zero::zero())),
+        TypeKind::Bit(..)
+        | TypeKind::Int(..)
+        | TypeKind::BitVector { .. }
+        | TypeKind::BitScalar { .. } => cx.intern_value(make_int(ty, Zero::zero())),
         TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
         TypeKind::Struct(id) => {
             let def = cx.struct_def(id).unwrap();

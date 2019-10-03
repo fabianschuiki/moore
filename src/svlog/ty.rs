@@ -3,6 +3,7 @@
 //! An implementation of the verilog type system.
 
 use crate::{crate_prelude::*, hir::HirNode, ParamEnv};
+use std::fmt::{self, Display, Formatter};
 
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;
@@ -28,6 +29,55 @@ pub enum TypeKind<'t> {
     Struct(NodeId),
     /// A packed array type.
     PackedArray(usize, Type<'t>),
+    /// A single bit type.
+    BitScalar { domain: Domain, sign: Sign },
+    /// A simple bit vector type (SBVT).
+    ///
+    /// The innermost dimension of a multi-dimensional bit vector type is always
+    /// represented as a SBVT.
+    BitVector {
+        domain: Domain,
+        sign: Sign,
+        range: Range,
+        dubbed: bool,
+    },
+}
+
+/// The number of values each bit of a type can assume.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Domain {
+    /// Two-valued types such as `bit` or `int`.
+    TwoValued,
+    /// Four-valued types such as `logic` or `integer`.
+    FourValued,
+}
+
+/// Whether a type is signed or unsigned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[allow(missing_docs)]
+pub enum Sign {
+    Signed,
+    Unsigned,
+}
+
+/// The `[a:b]` part in a vector/array type such as `logic [a:b]`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Range {
+    /// The total number of bits, given as `|a-b|+1`.
+    pub size: usize,
+    /// The direction of the vector, i.e. whether `a > b` or `a < b`.
+    pub dir: RangeDir,
+    /// The starting offset of the range.
+    pub offset: isize,
+}
+
+/// Which side is greater in a range `[a:b]`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RangeDir {
+    /// `a < b`
+    Up,
+    /// `a > b`
+    Down,
 }
 
 impl<'t> TypeKind<'t> {
@@ -97,8 +147,8 @@ impl<'t> TypeKind<'t> {
     }
 }
 
-impl<'t> std::fmt::Display for TypeKind<'t> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<'t> Display for TypeKind<'t> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             TypeKind::Void => write!(f, "void"),
             TypeKind::Time => write!(f, "time"),
@@ -111,27 +161,156 @@ impl<'t> std::fmt::Display for TypeKind<'t> {
             TypeKind::Named(name, ..) => write!(f, "{}", name.value),
             TypeKind::Struct(_) => write!(f, "struct"),
             TypeKind::PackedArray(length, ty) => write!(f, "{} [{}:0]", ty, length - 1),
+            TypeKind::BitScalar { domain, sign } => {
+                write!(f, "{}", domain.bit_name())?;
+                if sign == Sign::Signed {
+                    write!(f, " signed")?;
+                }
+                Ok(())
+            }
+            TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed,
+            } => {
+                // Use the builtin name if called such by the user.
+                if dubbed {
+                    let dub = match range.size {
+                        8 if domain == Domain::TwoValued => Some("byte"),
+                        16 if domain == Domain::TwoValued => Some("shortint"),
+                        32 if domain == Domain::TwoValued => Some("int"),
+                        32 if domain == Domain::FourValued => Some("integer"),
+                        64 if domain == Domain::TwoValued => Some("longint"),
+                        _ => None,
+                    };
+                    if let Some(dub) = dub {
+                        write!(f, "{}", dub)?;
+                        if sign != Sign::Signed {
+                            write!(f, " {}", sign)?;
+                        }
+                        return Ok(());
+                    }
+                }
+
+                // Otherwise use the regular bit name with vector range.
+                write!(f, "{}", domain.bit_name())?;
+                if sign != Sign::Unsigned {
+                    write!(f, " {}", sign)?;
+                }
+                write!(f, " {}", range)
+            }
         }
     }
 }
 
-/// The number of values each bit of a type can assume.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Domain {
-    /// Two-valued types such as `bit` or `int`.
-    TwoValued,
-    /// Four-valued types such as `logic` or `integer`.
-    FourValued,
+impl Domain {
+    /// Return the single-bit name for this type (`bit` or `logic`).
+    pub fn bit_name(&self) -> &'static str {
+        match self {
+            Domain::TwoValued => "bit",
+            Domain::FourValued => "logic",
+        }
+    }
+}
+
+impl Display for Sign {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Sign::Signed => write!(f, "signed"),
+            Sign::Unsigned => write!(f, "unsigned"),
+        }
+    }
+}
+
+impl Display for Range {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let lo = self.offset;
+        let hi = lo + self.size as isize - 1;
+        let (lhs, rhs) = match self.dir {
+            RangeDir::Up => (lo, hi),
+            RangeDir::Down => (hi, lo),
+        };
+        write!(f, "[{}:{}]", lhs, rhs)
+    }
 }
 
 /// The `void` type.
 pub static VOID_TYPE: TypeKind<'static> = TypeKind::Void;
 /// The `time` type.
 pub static TIME_TYPE: TypeKind<'static> = TypeKind::Time;
+
 /// The `bit` type.
-pub static BIT_TYPE: TypeKind<'static> = TypeKind::Bit(ty::Domain::TwoValued);
+pub static BIT_TYPE: TypeKind<'static> = TypeKind::BitScalar {
+    domain: ty::Domain::TwoValued,
+    sign: Sign::Unsigned,
+};
+
 /// The `logic` type.
-pub static LOGIC_TYPE: TypeKind<'static> = TypeKind::Bit(ty::Domain::FourValued);
+pub static LOGIC_TYPE: TypeKind<'static> = TypeKind::BitScalar {
+    domain: ty::Domain::FourValued,
+    sign: Sign::Unsigned,
+};
+
+/// The `byte` type.
+pub static BYTE_TYPE: TypeKind<'static> = TypeKind::BitVector {
+    domain: Domain::TwoValued,
+    sign: Sign::Signed,
+    range: Range {
+        size: 8,
+        dir: RangeDir::Down,
+        offset: 0isize,
+    },
+    dubbed: true,
+};
+
+/// The `shortint` type.
+pub static SHORTINT_TYPE: TypeKind<'static> = TypeKind::BitVector {
+    domain: Domain::TwoValued,
+    sign: Sign::Signed,
+    range: Range {
+        size: 16,
+        dir: RangeDir::Down,
+        offset: 0isize,
+    },
+    dubbed: true,
+};
+
+/// The `int` type.
+pub static INT_TYPE: TypeKind<'static> = TypeKind::BitVector {
+    domain: Domain::TwoValued,
+    sign: Sign::Signed,
+    range: Range {
+        size: 32,
+        dir: RangeDir::Down,
+        offset: 0isize,
+    },
+    dubbed: true,
+};
+
+/// The `integer` type.
+pub static INTEGER_TYPE: TypeKind<'static> = TypeKind::BitVector {
+    domain: Domain::FourValued,
+    sign: Sign::Signed,
+    range: Range {
+        size: 32,
+        dir: RangeDir::Down,
+        offset: 0isize,
+    },
+    dubbed: true,
+};
+
+/// The `longint` type.
+pub static LONGINT_TYPE: TypeKind<'static> = TypeKind::BitVector {
+    domain: Domain::TwoValued,
+    sign: Sign::Signed,
+    range: Range {
+        size: 64,
+        dir: RangeDir::Down,
+        offset: 0isize,
+    },
+    dubbed: true,
+};
 
 // Compute the size of a type in bits.
 pub fn bit_size_of_type<'gcx>(
@@ -160,5 +339,127 @@ pub fn bit_size_of_type<'gcx>(
             Ok(size)
         }
         TypeKind::PackedArray(elements, ty) => Ok(elements * bit_size_of_type(cx, ty, env)?),
+        TypeKind::BitScalar { .. } => Ok(1),
+        TypeKind::BitVector {
+            range: Range { size, .. },
+            ..
+        } => Ok(size),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_type_names() {
+        // Check the builtint dubbed types.
+        assert_eq!(format!("{}", BYTE_TYPE), "byte");
+        assert_eq!(format!("{}", SHORTINT_TYPE), "shortint");
+        assert_eq!(format!("{}", INT_TYPE), "int");
+        assert_eq!(format!("{}", INTEGER_TYPE), "integer");
+        assert_eq!(format!("{}", LONGINT_TYPE), "longint");
+
+        // Check the direction and offset.
+        assert_eq!(
+            format!(
+                "{}",
+                TypeKind::BitVector {
+                    domain: Domain::TwoValued,
+                    sign: Sign::Unsigned,
+                    range: Range {
+                        size: 42,
+                        dir: RangeDir::Up,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }
+            ),
+            "bit [0:41]"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                TypeKind::BitVector {
+                    domain: Domain::TwoValued,
+                    sign: Sign::Unsigned,
+                    range: Range {
+                        size: 42,
+                        dir: RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }
+            ),
+            "bit [41:0]"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                TypeKind::BitVector {
+                    domain: Domain::TwoValued,
+                    sign: Sign::Unsigned,
+                    range: Range {
+                        size: 42,
+                        dir: RangeDir::Down,
+                        offset: -2isize,
+                    },
+                    dubbed: false,
+                }
+            ),
+            "bit [38:-2]"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                TypeKind::BitVector {
+                    domain: Domain::TwoValued,
+                    sign: Sign::Unsigned,
+                    range: Range {
+                        size: 42,
+                        dir: RangeDir::Down,
+                        offset: 3isize,
+                    },
+                    dubbed: false,
+                }
+            ),
+            "bit [44:3]"
+        );
+
+        // Check the domain.
+        assert_eq!(
+            format!(
+                "{}",
+                TypeKind::BitVector {
+                    domain: Domain::FourValued,
+                    sign: Sign::Unsigned,
+                    range: Range {
+                        size: 42,
+                        dir: RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }
+            ),
+            "logic [41:0]"
+        );
+
+        // Check the sign.
+        assert_eq!(
+            format!(
+                "{}",
+                TypeKind::BitVector {
+                    domain: Domain::FourValued,
+                    sign: Sign::Signed,
+                    range: Range {
+                        size: 42,
+                        dir: RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }
+            ),
+            "logic signed [41:0]"
+        );
     }
 }

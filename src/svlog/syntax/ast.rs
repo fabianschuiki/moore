@@ -331,6 +331,7 @@ pub enum TypeData {
     ByteType,
     ShortIntType,
     IntType,
+    IntegerType,
     LongIntType,
     TimeType,
 

@@ -201,10 +201,7 @@ fn lower_implicit_cast<'gcx>(
             let inner = builder.build(
                 cx,
                 cx.intern_type(TypeKind::Int(1, fd)),
-                RvalueKind::Truncate {
-                    target_width: 1,
-                    value,
-                },
+                RvalueKind::Truncate(1, value),
             );
             return lower_implicit_cast(cx, builder, inner, to);
         }
@@ -220,10 +217,37 @@ fn lower_implicit_cast<'gcx>(
             return lower_implicit_cast(cx, builder, inner, to);
         }
 
+        // Bit vector truncation and zero and sign extension.
+        (
+            &TypeKind::BitVector {
+                domain,
+                sign,
+                range: ty::Range { size: fw, .. },
+                ..
+            },
+            &TypeKind::BitVector { range, .. },
+        ) if fw != range.size => {
+            let ty = cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed: false,
+            });
+            let kind = if fw < range.size {
+                match sign {
+                    ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
+                    ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
+                }
+            } else {
+                RvalueKind::Truncate(range.size, value)
+            };
+            let inner = builder.build(cx, ty, kind);
+            return lower_implicit_cast(cx, builder, inner, to);
+        }
+
         // TODO(fschuiki): Packing structs into bit vectors.
         // TODO(fschuiki): Unpacking structs from bit vectors.
         // TODO(fschuiki): Integer truncation.
-        // TODO(fschuiki): Integer extension.
         // TODO(fschuiki): Array truncation.
         // TODO(fschuiki): Array extension.
         // TODO(fschuiki): Signed/unsigned conversion.
@@ -231,6 +255,8 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Complain and abort.
+    error!("failed implicit cast from {:?} to {:?}", from, to);
+    info!("failed implicit cast from {:?}", value);
     cx.emit(
         DiagBuilder2::error(format!(
             "type `{}` required, but expression has type `{}`",
@@ -390,6 +416,8 @@ fn map_to_simple_bit_vector_type<'gcx>(
         TypeKind::Void => return None,
         TypeKind::Time => return None,
         TypeKind::Named(_, _, ty) => return map_to_simple_bit_vector_type(cx, ty, env),
+        TypeKind::BitVector { .. } => return Some(ty),
+        TypeKind::BitScalar { .. } => return Some(ty),
         TypeKind::Bit(..)
         | TypeKind::Int(..)
         | TypeKind::Struct(..)
@@ -398,6 +426,7 @@ fn map_to_simple_bit_vector_type<'gcx>(
     Some(cx.mkty_int(bits))
 }
 
+/// Map a binary operator to MIR.
 fn lower_binary<'gcx>(
     cx: &impl Context<'gcx>,
     builder: &Builder,

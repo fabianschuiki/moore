@@ -510,6 +510,7 @@ impl HasDesc for TypeKind {
             TypeKind::Builtin(BuiltinType::Byte) => "byte type",
             TypeKind::Builtin(BuiltinType::ShortInt) => "short int type",
             TypeKind::Builtin(BuiltinType::Int) => "int type",
+            TypeKind::Builtin(BuiltinType::Integer) => "integer type",
             TypeKind::Builtin(BuiltinType::LongInt) => "long int type",
             TypeKind::Struct(_) => "struct type",
             TypeKind::PackedArray(..) => "packed array type",
@@ -534,6 +535,7 @@ pub enum BuiltinType {
     Byte,
     ShortInt,
     Int,
+    Integer,
     LongInt,
 }
 
