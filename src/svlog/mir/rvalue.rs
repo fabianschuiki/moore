@@ -49,10 +49,13 @@ pub enum RvalueKind<'a> {
         value: &'a Rvalue<'a>,
     },
     /// Shrink the width of a vector type. E.g. `bit [31:0]` to `bit [7:0]`.
-    Truncate {
-        target_width: usize,
-        value: &'a Rvalue<'a>,
-    },
+    Truncate(usize, &'a Rvalue<'a>),
+    /// Increase the width of a vector by zero extension. E.g. `bit [7:0]` to
+    /// `bit [31:0]`.
+    ZeroExtend(usize, &'a Rvalue<'a>),
+    /// Increase the width of a vector by sign extension. E.g. `bit signed
+    /// [7:0]` to `bit signed [31:0]`.
+    SignExtend(usize, &'a Rvalue<'a>),
     /// Constructor for an array.
     ConstructArray(HashMap<usize, &'a Rvalue<'a>>),
     /// A constant value.

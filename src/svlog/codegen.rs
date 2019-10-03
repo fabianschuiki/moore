@@ -679,14 +679,20 @@ where
         env: ParamEnv,
     ) -> Result<llhd::ir::Value> {
         match (value.ty, &value.kind) {
-            (&TypeKind::Int(width, _), &ValueKind::Int(ref k)) => {
-                Ok(self.builder.ins().const_int(width, false, k.clone()))
-            }
+            (&TypeKind::Int(width, _), &ValueKind::Int(ref k))
+            | (
+                &TypeKind::BitVector {
+                    range: ty::Range { size: width, .. },
+                    ..
+                },
+                &ValueKind::Int(ref k),
+            ) => Ok(self.builder.ins().const_int(width, false, k.clone())),
             (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(self
                 .builder
                 .ins()
                 .const_time(llhd::ConstTime::new(k.clone(), 0, 0))),
-            (&TypeKind::Bit(_), &ValueKind::Int(ref k)) => {
+            (&TypeKind::Bit(_), &ValueKind::Int(ref k))
+            | (&TypeKind::BitScalar { .. }, &ValueKind::Int(ref k)) => {
                 Ok(self.builder.ins().const_int(1, false, k.clone()))
             }
             (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {
@@ -1030,10 +1036,7 @@ where
                 // atom type as a single-element vector anyway.
                 self.emit_mir_rvalue(value)
             }
-            mir::RvalueKind::Truncate {
-                target_width,
-                value,
-            } => {
+            mir::RvalueKind::Truncate(target_width, value) => {
                 let llvalue = self.emit_mir_rvalue(value)?;
                 Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
             }

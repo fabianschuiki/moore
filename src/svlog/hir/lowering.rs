@@ -619,6 +619,7 @@ fn lower_type<'gcx>(
         ast::ByteType => hir::TypeKind::Builtin(hir::BuiltinType::Byte),
         ast::ShortIntType => hir::TypeKind::Builtin(hir::BuiltinType::ShortInt),
         ast::IntType => hir::TypeKind::Builtin(hir::BuiltinType::Int),
+        ast::IntegerType => hir::TypeKind::Builtin(hir::BuiltinType::Integer),
         ast::LongIntType => hir::TypeKind::Builtin(hir::BuiltinType::LongInt),
         ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
         ast::StructType { ref members, .. } => {

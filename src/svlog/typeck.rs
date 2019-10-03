@@ -7,7 +7,7 @@ use crate::{
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
-use num::traits::{cast::ToPrimitive, sign::Signed};
+use num::{cast::ToPrimitive, One};
 
 /// Determine the type of a node.
 pub(crate) fn type_of<'gcx>(
@@ -264,12 +264,13 @@ fn map_type_kind<'gcx>(
     #[allow(unreachable_patterns)]
     match *kind {
         hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
-        hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_bit()),
-        hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_logic()),
-        hir::TypeKind::Builtin(hir::BuiltinType::Byte) => Ok(cx.mkty_int(8)),
-        hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(cx.mkty_int(16)),
-        hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(cx.mkty_int(32)),
-        hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(cx.mkty_int(64)),
+        hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(&ty::BIT_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(&ty::LOGIC_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::Byte) => Ok(&ty::BYTE_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(&ty::SHORTINT_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(&ty::INT_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::Integer) => Ok(&ty::INTEGER_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(&ty::LONGINT_TYPE),
         hir::TypeKind::Named(name) => {
             let binding = cx.resolve_upwards_or_error(name, node_id)?;
             Ok(cx.mkty_named(name, (binding, env)))
@@ -297,9 +298,16 @@ fn map_type_kind<'gcx>(
                     }
                 }
             };
-            let size: num::BigInt = (map_bound(lhs)? - map_bound(rhs)?).abs();
+            let lhs = map_bound(lhs)?;
+            let rhs = map_bound(rhs)?;
+            let (dir, lo, hi) = if lhs < rhs {
+                (ty::RangeDir::Up, lhs, rhs)
+            } else {
+                (ty::RangeDir::Down, rhs, lhs)
+            };
+            let size = (hi - lo) + num::BigInt::one();
             let size = match size.to_usize() {
-                Some(i) => i + 1,
+                Some(i) => i,
                 None => {
                     cx.emit(
                         DiagBuilder2::error(format!("{} is too large", kind.desc_full()))
@@ -309,9 +317,24 @@ fn map_type_kind<'gcx>(
                     return Err(());
                 }
             };
+            let offset = lo.to_isize().unwrap();
             match **inner {
-                // hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx.mkty_int(size)),
-                // hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(cx.mkty_integer(size)),
+                hir::TypeKind::Builtin(hir::BuiltinType::Bit) => {
+                    Ok(cx.intern_type(TypeKind::BitVector {
+                        domain: ty::Domain::TwoValued,
+                        sign: ty::Sign::Unsigned,
+                        range: ty::Range { size, dir, offset },
+                        dubbed: false,
+                    }))
+                }
+                hir::TypeKind::Builtin(hir::BuiltinType::Logic) => {
+                    Ok(cx.intern_type(TypeKind::BitVector {
+                        domain: ty::Domain::FourValued,
+                        sign: ty::Sign::Unsigned,
+                        range: ty::Range { size, dir, offset },
+                        dubbed: false,
+                    }))
+                }
                 _ => {
                     let inner_ty = map_type_kind(cx, node_id, env, root, inner)?;
                     Ok(cx.mkty_packed_array(size, inner_ty))
