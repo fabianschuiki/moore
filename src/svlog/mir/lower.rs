@@ -14,13 +14,6 @@ use crate::{
 use num::ToPrimitive;
 use std::collections::HashMap;
 
-// TODO(fschuiki): The result of these functions should be interned into the
-// context and the resulting reference should be thrown around as desired.
-
-// TODO(fschuiki): Decide whether to create an rvalue lowering struct that keeps
-// track of the current span/origin/parent/ty context and makes it easier to
-// emit multiple mir nodes per hir expression.
-
 // TODO(fschuiki): Maybe move most of the functions below into the rvalue mod?
 
 struct Builder {
