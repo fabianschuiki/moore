@@ -83,7 +83,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 let k = cx.constant_value_of(expr_id, env)?;
                 Ok(builder.build(cx, k.ty, RvalueKind::Const(k)))
             }
-            hir::ExprKind::Ident(name) => {
+            hir::ExprKind::Ident(_name) => {
                 //     let binding = cx.resolve_node(expr_id, env)?;
                 //     if cx.is_constant(binding)? {
                 //         let k = cx.constant_value_of(binding, env)?;
@@ -110,6 +110,73 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     );
                     Err(())
                 }
+            }
+            hir::ExprKind::Concat(repeat, ref exprs) => {
+                // Compute the SBVT for each expression and lower it to MIR,
+                // implicitly casting to the SBVT.
+                let exprs = exprs
+                    .iter()
+                    .map(|&expr| {
+                        let ty = cx.type_of(expr, env)?;
+                        let flat_ty = match map_to_simple_bit_vector_type(cx, ty, env) {
+                            Some(ty) => ty,
+                            None => {
+                                cx.emit(
+                                    DiagBuilder2::error(format!(
+                                        "`{}` cannot be used in concatenation",
+                                        ty
+                                    ))
+                                    .span(cx.span(expr)),
+                                );
+                                return Err(());
+                            }
+                        };
+                        Ok((
+                            ty::bit_size_of_type(cx, ty, env)?,
+                            lower_expr_and_cast(cx, expr, env, flat_ty),
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                // Compute the result type of the concatenation.
+                let total_width = exprs.iter().map(|(w, _)| w).sum();
+                let result_ty = cx.intern_type(TypeKind::BitVector {
+                    domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
+                    sign: ty::Sign::Unsigned,       // fixed by standard
+                    range: ty::Range {
+                        size: total_width,
+                        dir: ty::RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                });
+
+                // Assemble the concatenation.
+                let concat = builder.build(
+                    cx,
+                    result_ty,
+                    RvalueKind::Concat(exprs.into_iter().map(|(_, v)| v).collect()),
+                );
+
+                // If a repetition is present, apply that.
+                let repeat = if let Some(repeat) = repeat {
+                    let count = cx.constant_int_value_of(repeat, env)?.to_usize().unwrap();
+                    let total_width = total_width * count;
+                    let result_ty = cx.intern_type(TypeKind::BitVector {
+                        domain: ty::Domain::FourValued,
+                        sign: ty::Sign::Unsigned,
+                        range: ty::Range {
+                            size: total_width,
+                            dir: ty::RangeDir::Down,
+                            offset: 0isize,
+                        },
+                        dubbed: false,
+                    });
+                    builder.build(cx, result_ty, RvalueKind::Repeat(count, concat))
+                } else {
+                    concat
+                };
+                Ok(repeat)
             }
             _ => unreachable!("lowering to mir rvalue of {:?}", hir),
         }

@@ -70,6 +70,17 @@ pub enum RvalueKind<'a> {
         rhs: &'a Rvalue<'a>,
         // TODO(fschuiki): Add sign of the operation.
     },
+    /// Concatenate multiple values.
+    ///
+    /// The values are cast to and treated as packed bit vectors, and the result
+    /// is yet another packed bit vector.
+    Concat(Vec<&'a Rvalue<'a>>),
+    /// Repeat a value multiple times.
+    ///
+    /// The value is cast to and treated as a packed bit vector, and the result
+    /// is yet another packed bit vector.
+    Repeat(usize, &'a Rvalue<'a>),
+    /// Conatenate arrays.
     /// An error occurred during lowering.
     Error,
 }
