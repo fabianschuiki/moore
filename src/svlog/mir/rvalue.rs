@@ -80,6 +80,10 @@ pub enum RvalueKind<'a> {
     /// The value is cast to and treated as a packed bit vector, and the result
     /// is yet another packed bit vector.
     Repeat(usize, &'a Rvalue<'a>),
+    /// A reference to a variable declaration.
+    Var(NodeId),
+    /// A reference to a port declaration.
+    Port(NodeId),
     /// Conatenate arrays.
     /// An error occurred during lowering.
     Error,
