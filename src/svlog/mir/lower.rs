@@ -84,15 +84,21 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 Ok(builder.build(cx, k.ty, RvalueKind::Const(k)))
             }
             hir::ExprKind::Ident(_name) => {
-                //     let binding = cx.resolve_node(expr_id, env)?;
-                //     if cx.is_constant(binding)? {
-                //         let k = cx.constant_value_of(binding, env)?;
-                //         // TODO: Map to const
-                //         return Err(());
-                //     }
-                //     // TODO: Check what the binding actually is and emit a node.
-                //     Err(())
-                Ok(builder.build(cx, ty, RvalueKind::Error))
+                let binding = cx.resolve_node(expr_id, env)?;
+                match cx.hir_of(binding)? {
+                    HirNode::VarDecl(decl) => Ok(builder.build(cx, ty, RvalueKind::Var(decl.id))),
+                    HirNode::Port(port) => Ok(builder.build(cx, ty, RvalueKind::Port(port.id))),
+                    x => {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "{} cannot be used in expression",
+                                x.desc_full()
+                            ))
+                            .span(span),
+                        );
+                        Err(())
+                    }
+                }
             }
             hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(cx, &builder, ty, op, lhs, rhs)),
             hir::ExprKind::NamedPattern(ref mapping) => {
