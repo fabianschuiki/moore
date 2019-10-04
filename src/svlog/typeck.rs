@@ -43,6 +43,10 @@ pub(crate) fn type_of<'gcx>(
             hir::ExprKind::Binary(op, lhs, rhs) => {
                 let lhs_ty = cx.type_of(lhs, env)?;
                 let _rhs_ty = cx.type_of(rhs, env)?;
+                // TODO(fschuiki): Actually use lhs and rhs, and query the type
+                // context (optional) from the parent node, to determine the
+                // width of the result (max over all bit widths). This requires
+                // mapping the types to the equivalent simple bit vector type.
                 Ok(match op {
                     hir::BinaryOp::Add
                     | hir::BinaryOp::Sub
