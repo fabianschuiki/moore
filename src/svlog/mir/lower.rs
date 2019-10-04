@@ -16,22 +16,18 @@ use std::collections::HashMap;
 
 // TODO(fschuiki): Maybe move most of the functions below into the rvalue mod?
 
-struct Builder {
+struct Builder<'a, C> {
+    cx: &'a C,
     span: Span,
     expr: NodeId,
     env: ParamEnv,
 }
 
-impl Builder {
+impl<'a, C: Context<'a>> Builder<'_, C> {
     /// Intern an MIR node.
-    fn build<'a>(
-        &self,
-        cx: &impl Context<'a>,
-        ty: Type<'a>,
-        kind: RvalueKind<'a>,
-    ) -> &'a Rvalue<'a> {
-        cx.arena().alloc_mir_rvalue(Rvalue {
-            id: cx.alloc_id(self.span),
+    fn build(&self, ty: Type<'a>, kind: RvalueKind<'a>) -> &'a Rvalue<'a> {
+        self.cx.arena().alloc_mir_rvalue(Rvalue {
+            id: self.cx.alloc_id(self.span),
             origin: self.expr,
             env: self.env,
             span: self.span,
@@ -44,8 +40,8 @@ impl Builder {
     ///
     /// This is usually called when something goes wrong during MIR construction
     /// and a marker node is needed to indicate that part of the MIR is invalid.
-    fn error<'a>(&self, cx: &impl Context<'a>) -> &'a Rvalue<'a> {
-        self.build(cx, cx.mkty_void(), RvalueKind::Error)
+    fn error(&self) -> &'a Rvalue<'a> {
+        self.build(self.cx.mkty_void(), RvalueKind::Error)
     }
 }
 
@@ -57,32 +53,33 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
 ) -> &'gcx Rvalue<'gcx> {
     let span = cx.span(expr_id);
     let builder = Builder {
+        cx,
         span,
         expr: expr_id,
         env,
     };
     let result = || -> Result<&Rvalue> {
-        let hir = match cx.hir_of(expr_id)? {
+        let hir = match builder.cx.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             HirNode::VarDecl(decl) => unimplemented!("mir rvalue for {:?}", decl),
             HirNode::Port(port) => unimplemented!("mir rvalue for {:?}", port),
             x => unreachable!("rvalue for {:#?}", x),
         };
-        let ty = cx.type_of(expr_id, env)?;
+        let ty = builder.cx.type_of(expr_id, env)?;
         match hir.kind {
             hir::ExprKind::IntConst(..)
             | hir::ExprKind::UnsizedConst(..)
             | hir::ExprKind::TimeConst(_) => {
-                let k = cx.constant_value_of(expr_id, env)?;
-                Ok(builder.build(cx, k.ty, RvalueKind::Const(k)))
+                let k = builder.cx.constant_value_of(expr_id, env)?;
+                Ok(builder.build(k.ty, RvalueKind::Const(k)))
             }
             hir::ExprKind::Ident(_name) => {
-                let binding = cx.resolve_node(expr_id, env)?;
-                match cx.hir_of(binding)? {
-                    HirNode::VarDecl(decl) => Ok(builder.build(cx, ty, RvalueKind::Var(decl.id))),
-                    HirNode::Port(port) => Ok(builder.build(cx, ty, RvalueKind::Port(port.id))),
+                let binding = builder.cx.resolve_node(expr_id, env)?;
+                match builder.cx.hir_of(binding)? {
+                    HirNode::VarDecl(decl) => Ok(builder.build(ty, RvalueKind::Var(decl.id))),
+                    HirNode::Port(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
                     x => {
-                        cx.emit(
+                        builder.cx.emit(
                             DiagBuilder2::error(format!(
                                 "{} cannot be used in expression",
                                 x.desc_full()
@@ -93,14 +90,14 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     }
                 }
             }
-            hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(cx, &builder, ty, op, lhs, rhs)),
+            hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
             hir::ExprKind::NamedPattern(ref mapping) => {
                 if ty.is_array() {
-                    Ok(lower_array_pattern(cx, &builder, mapping, ty))
+                    Ok(lower_array_pattern(&builder, mapping, ty))
                 } else if ty.is_struct() {
-                    Ok(builder.build(cx, ty, lower_struct_pattern(cx, mapping)))
+                    Ok(builder.build(ty, lower_struct_pattern(builder.cx, mapping)))
                 } else {
-                    cx.emit(
+                    builder.cx.emit(
                         DiagBuilder2::error(format!(
                             "`'{{...}}` cannot construct a value of type {}",
                             ty
@@ -116,30 +113,30 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 let exprs = exprs
                     .iter()
                     .map(|&expr| {
-                        let ty = cx.type_of(expr, env)?;
-                        let flat_ty = match map_to_simple_bit_vector_type(cx, ty, env) {
+                        let ty = builder.cx.type_of(expr, env)?;
+                        let flat_ty = match map_to_simple_bit_vector_type(builder.cx, ty, env) {
                             Some(ty) => ty,
                             None => {
-                                cx.emit(
+                                builder.cx.emit(
                                     DiagBuilder2::error(format!(
                                         "`{}` cannot be used in concatenation",
                                         ty
                                     ))
-                                    .span(cx.span(expr)),
+                                    .span(builder.cx.span(expr)),
                                 );
                                 return Err(());
                             }
                         };
                         Ok((
-                            ty::bit_size_of_type(cx, ty, env)?,
-                            lower_expr_and_cast(cx, expr, env, flat_ty),
+                            ty::bit_size_of_type(builder.cx, ty, env)?,
+                            lower_expr_and_cast(builder.cx, expr, env, flat_ty),
                         ))
                     })
                     .collect::<Result<Vec<_>>>()?;
 
                 // Compute the result type of the concatenation.
                 let total_width = exprs.iter().map(|(w, _)| w).sum();
-                let result_ty = cx.intern_type(TypeKind::BitVector {
+                let result_ty = builder.cx.intern_type(TypeKind::BitVector {
                     domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
                     sign: ty::Sign::Unsigned,       // fixed by standard
                     range: ty::Range {
@@ -152,16 +149,19 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
 
                 // Assemble the concatenation.
                 let concat = builder.build(
-                    cx,
                     result_ty,
                     RvalueKind::Concat(exprs.into_iter().map(|(_, v)| v).collect()),
                 );
 
                 // If a repetition is present, apply that.
                 let repeat = if let Some(repeat) = repeat {
-                    let count = cx.constant_int_value_of(repeat, env)?.to_usize().unwrap();
+                    let count = builder
+                        .cx
+                        .constant_int_value_of(repeat, env)?
+                        .to_usize()
+                        .unwrap();
                     let total_width = total_width * count;
-                    let result_ty = cx.intern_type(TypeKind::BitVector {
+                    let result_ty = builder.cx.intern_type(TypeKind::BitVector {
                         domain: ty::Domain::FourValued,
                         sign: ty::Sign::Unsigned,
                         range: ty::Range {
@@ -171,7 +171,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                         },
                         dubbed: false,
                     });
-                    builder.build(cx, result_ty, RvalueKind::Repeat(count, concat))
+                    builder.build(result_ty, RvalueKind::Repeat(count, concat))
                 } else {
                     concat
                 };
@@ -180,7 +180,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             _ => unreachable!("lowering to mir rvalue of {:?}", hir),
         }
     }();
-    result.unwrap_or_else(|_| builder.error(cx))
+    result.unwrap_or_else(|_| builder.error())
 }
 
 fn lower_expr_and_cast<'gcx>(
@@ -191,19 +191,19 @@ fn lower_expr_and_cast<'gcx>(
 ) -> &'gcx Rvalue<'gcx> {
     let inner = lower_expr_to_mir_rvalue(cx, expr_id, env);
     let builder = Builder {
+        cx,
         span: inner.span,
         expr: expr_id,
         env,
     };
-    lower_implicit_cast(cx, &builder, inner, target_ty)
+    lower_implicit_cast(&builder, inner, target_ty)
 }
 
 /// Generate the nodes necessary to implicitly cast and rvalue to a type.
 ///
 /// If the cast is not possible, emit some helpful diagnostics.
 fn lower_implicit_cast<'gcx>(
-    cx: &impl Context<'gcx>,
-    builder: &Builder,
+    builder: &Builder<'_, impl Context<'gcx>>,
     value: &'gcx Rvalue<'gcx>,
     to: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
@@ -233,15 +233,14 @@ fn lower_implicit_cast<'gcx>(
         {
             // trace!("int domain transfer {:?} to {:?}", fd, td);
             let inner = builder.build(
-                cx,
-                cx.intern_type(TypeKind::Int(fw, td)),
+                builder.cx.intern_type(TypeKind::Int(fw, td)),
                 RvalueKind::CastValueDomain {
                     from: fd,
                     to: td,
                     value,
                 },
             );
-            return lower_implicit_cast(cx, builder, inner, to);
+            return lower_implicit_cast(builder, inner, to);
         }
 
         // Bit domain transfer; e.g. `bit` to `logic`.
@@ -250,37 +249,34 @@ fn lower_implicit_cast<'gcx>(
         {
             // trace!("bit domain transfer {:?} to {:?}", fd, td);
             let inner = builder.build(
-                cx,
-                cx.intern_type(TypeKind::Bit(td)),
+                builder.cx.intern_type(TypeKind::Bit(td)),
                 RvalueKind::CastValueDomain {
                     from: fd,
                     to: td,
                     value,
                 },
             );
-            return lower_implicit_cast(cx, builder, inner, to);
+            return lower_implicit_cast(builder, inner, to);
         }
 
         // Integer to bit truncation; e.g. `int` to `bit`.
         (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw > 1 => {
             // trace!("would narrow {} int to 1 bit", fw);
             let inner = builder.build(
-                cx,
-                cx.intern_type(TypeKind::Int(1, fd)),
+                builder.cx.intern_type(TypeKind::Int(1, fd)),
                 RvalueKind::Truncate(1, value),
             );
-            return lower_implicit_cast(cx, builder, inner, to);
+            return lower_implicit_cast(builder, inner, to);
         }
 
         // Integer to bit conversion; e.g. `bit [0:0]` to `bit`.
         (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw == 1 => {
             // trace!("would map int to bit");
             let inner = builder.build(
-                cx,
-                cx.intern_type(TypeKind::Bit(fd)),
+                builder.cx.intern_type(TypeKind::Bit(fd)),
                 RvalueKind::CastVectorToAtom { domain: fd, value },
             );
-            return lower_implicit_cast(cx, builder, inner, to);
+            return lower_implicit_cast(builder, inner, to);
         }
 
         // Bit vector truncation and zero and sign extension.
@@ -293,7 +289,7 @@ fn lower_implicit_cast<'gcx>(
             },
             &TypeKind::BitVector { range, .. },
         ) if fw != range.size => {
-            let ty = cx.intern_type(TypeKind::BitVector {
+            let ty = builder.cx.intern_type(TypeKind::BitVector {
                 domain,
                 sign,
                 range,
@@ -307,8 +303,8 @@ fn lower_implicit_cast<'gcx>(
             } else {
                 RvalueKind::Truncate(range.size, value)
             };
-            let inner = builder.build(cx, ty, kind);
-            return lower_implicit_cast(cx, builder, inner, to);
+            let inner = builder.build(ty, kind);
+            return lower_implicit_cast(builder, inner, to);
         }
 
         // TODO(fschuiki): Packing structs into bit vectors.
@@ -323,20 +319,19 @@ fn lower_implicit_cast<'gcx>(
     // Complain and abort.
     error!("failed implicit cast from {:?} to {:?}", from, to);
     info!("failed implicit cast from {:?}", value);
-    cx.emit(
+    builder.cx.emit(
         DiagBuilder2::error(format!(
             "type `{}` required, but expression has type `{}`",
             to, from
         ))
         .span(value.span),
     );
-    builder.error(cx)
+    builder.error()
 }
 
 /// Lower an `'{...}` array pattern.
 fn lower_array_pattern<'gcx>(
-    cx: &impl Context<'gcx>,
-    builder: &Builder,
+    builder: &Builder<'_, impl Context<'gcx>>,
     mapping: &[(PatternMapping, NodeId)],
     ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
@@ -348,8 +343,9 @@ fn lower_array_pattern<'gcx>(
     for &(map, to) in mapping {
         match map {
             PatternMapping::Type(type_id) => {
-                cx.emit(
-                    DiagBuilder2::error("types cannot index into an array").span(cx.span(type_id)),
+                builder.cx.emit(
+                    DiagBuilder2::error("types cannot index into an array")
+                        .span(builder.cx.span(type_id)),
                 );
                 failed = true;
                 continue;
@@ -357,13 +353,13 @@ fn lower_array_pattern<'gcx>(
             PatternMapping::Member(member_id) => {
                 // Determine the index for the mapping.
                 let index = match || -> Result<usize> {
-                    let index = cx.constant_value_of(member_id, builder.env)?;
+                    let index = builder.cx.constant_value_of(member_id, builder.env)?;
                     let index = match &index.kind {
                         ValueKind::Int(i) => i,
                         _ => {
-                            cx.emit(
+                            builder.cx.emit(
                                 DiagBuilder2::error("array index must be a constant integer")
-                                    .span(cx.span(member_id)),
+                                    .span(builder.cx.span(member_id)),
                             );
                             return Err(());
                         }
@@ -371,9 +367,9 @@ fn lower_array_pattern<'gcx>(
                     let index = match index.to_usize() {
                         Some(i) if i < length => i,
                         _ => {
-                            cx.emit(
+                            builder.cx.emit(
                                 DiagBuilder2::error(format!("index `{}` out of bounds", index))
-                                    .span(cx.span(member_id)),
+                                    .span(builder.cx.span(member_id)),
                             );
                             return Err(());
                         }
@@ -388,10 +384,10 @@ fn lower_array_pattern<'gcx>(
                 };
 
                 // Determine the value and insert into the mappings.
-                let value = lower_expr_and_cast(cx, to, builder.env, elem_ty);
+                let value = lower_expr_and_cast(builder.cx, to, builder.env, elem_ty);
                 let span = value.span;
                 if let Some(prev) = values.insert(index, value) {
-                    cx.emit(
+                    builder.cx.emit(
                         DiagBuilder2::warning(format!(
                             "`{}` overwrites previous value `{}` at index {}",
                             span.extract(),
@@ -406,9 +402,9 @@ fn lower_array_pattern<'gcx>(
             }
             PatternMapping::Default => match default {
                 Some(ref default) => {
-                    cx.emit(
+                    builder.cx.emit(
                         DiagBuilder2::error("pattern has multiple default mappings")
-                            .span(cx.span(to))
+                            .span(builder.cx.span(to))
                             .add_note("Previous mapping default mapping was here:")
                             .span(default.span),
                     );
@@ -416,7 +412,7 @@ fn lower_array_pattern<'gcx>(
                     continue;
                 }
                 None => {
-                    default = Some(lower_expr_and_cast(cx, to, builder.env, elem_ty));
+                    default = Some(lower_expr_and_cast(builder.cx, to, builder.env, elem_ty));
                 }
             },
         }
@@ -428,12 +424,12 @@ fn lower_array_pattern<'gcx>(
         let default = if let Some(default) = default {
             default
         } else {
-            cx.emit(
+            builder.cx.emit(
                 DiagBuilder2::error("`default:` missing in non-exhaustive array pattern")
                     .span(builder.span)
                     .add_note("Array patterns must assign a value to every index."),
             );
-            return builder.error(cx);
+            return builder.error();
         };
         for i in 0..length {
             if values.contains_key(&i) {
@@ -444,11 +440,10 @@ fn lower_array_pattern<'gcx>(
     }
 
     if failed {
-        builder.error(cx)
+        builder.error()
     } else {
         builder.build(
-            cx,
-            cx.mkty_packed_array(length, elem_ty),
+            builder.cx.mkty_packed_array(length, elem_ty),
             RvalueKind::ConstructArray(values),
         )
     }
@@ -494,29 +489,28 @@ fn map_to_simple_bit_vector_type<'gcx>(
 
 /// Map a binary operator to MIR.
 fn lower_binary<'gcx>(
-    cx: &impl Context<'gcx>,
-    builder: &Builder,
+    builder: &Builder<'_, impl Context<'gcx>>,
     ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_vector_type(cx, ty, builder.env) {
+    let result_ty = match map_to_simple_bit_vector_type(builder.cx, ty, builder.env) {
         Some(ty) => ty,
         None => {
-            cx.emit(
+            builder.cx.emit(
                 DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
                     .span(builder.span),
             );
-            return builder.error(cx);
+            return builder.error();
         }
     };
 
     // Cast the operands to the operator type.
     trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
-    let lhs = lower_expr_and_cast(cx, lhs, builder.env, result_ty);
-    let rhs = lower_expr_and_cast(cx, rhs, builder.env, result_ty);
+    let lhs = lower_expr_and_cast(builder.cx, lhs, builder.env, result_ty);
+    let rhs = lower_expr_and_cast(builder.cx, rhs, builder.env, result_ty);
 
     // Determine the operation.
     let op = match op {
@@ -531,11 +525,10 @@ fn lower_binary<'gcx>(
 
     // Assemble the node.
     builder.build(
-        cx,
         result_ty,
         RvalueKind::IntBinaryArith {
             op,
-            width: ty::bit_size_of_type(cx, result_ty, builder.env).unwrap(),
+            width: ty::bit_size_of_type(builder.cx, result_ty, builder.env).unwrap(),
             lhs,
             rhs,
         },
