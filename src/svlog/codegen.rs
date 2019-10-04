@@ -337,6 +337,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 llhd::struct_ty(types)
             }
             TypeKind::PackedArray(size, ty) => llhd::array_ty(size, self.emit_type(ty, env)?),
+            // TODO(fschuiki): emit logic type depending on value domain
+            TypeKind::BitScalar { .. } => llhd::int_ty(1),
+            // TODO(fschuiki): emit logic type depending on value domain
+            TypeKind::BitVector { range, .. } => llhd::int_ty(range.size),
             _ => unimplemented!("emit type {:?}", ty),
         })
     }
