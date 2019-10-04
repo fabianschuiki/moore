@@ -484,7 +484,16 @@ fn map_to_simple_bit_vector_type<'gcx>(
         | TypeKind::Struct(..)
         | TypeKind::PackedArray(..) => ty::bit_size_of_type(cx, ty, env).ok()?,
     };
-    Some(cx.mkty_int(bits))
+    Some(cx.intern_type(TypeKind::BitVector {
+        domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
+        sign: ty::Sign::Unsigned,
+        range: ty::Range {
+            size: bits,
+            dir: ty::RangeDir::Down,
+            offset: 0isize,
+        },
+        dubbed: false,
+    }))
 }
 
 /// Map a binary operator to MIR.
