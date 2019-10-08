@@ -134,7 +134,27 @@ impl<'t> TypeKind<'t> {
             TypeKind::Bit(_) => 1,
             TypeKind::Int(w, _) => w,
             TypeKind::Named(_, _, ty) => ty.width(),
+            TypeKind::BitScalar { .. } => 1,
+            TypeKind::BitVector { range, .. } => range.size,
             _ => panic!("{:?} has no width", self),
+        }
+    }
+
+    /// Check if this is a bit vector type.
+    pub fn is_bit_vector(&self) -> bool {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.is_bit_vector(),
+            TypeKind::BitVector { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this is a bit scalar type.
+    pub fn is_bit_scalar(&self) -> bool {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.is_bit_scalar(),
+            TypeKind::BitScalar { .. } => true,
+            _ => false,
         }
     }
 
@@ -143,6 +163,28 @@ impl<'t> TypeKind<'t> {
         match *self {
             TypeKind::Named(_, _, ty) => ty.resolve_name(),
             _ => self,
+        }
+    }
+
+    /// Return the domain of the type, if it has one.
+    pub fn get_value_domain(&self) -> Option<Domain> {
+        match *self {
+            TypeKind::Bit(d) => Some(d),
+            TypeKind::Int(_, d) => Some(d),
+            TypeKind::BitScalar { domain, .. } => Some(domain),
+            TypeKind::BitVector { domain, .. } => Some(domain),
+            _ => None,
+        }
+    }
+
+    /// Return the sign of the type, if it has one.
+    pub fn get_sign(&self) -> Option<Sign> {
+        match *self {
+            TypeKind::Bit(..) => Some(Sign::Unsigned),
+            TypeKind::Int(..) => Some(Sign::Unsigned),
+            TypeKind::BitScalar { sign, .. } => Some(sign),
+            TypeKind::BitVector { sign, .. } => Some(sign),
+            _ => None,
         }
     }
 }
@@ -205,11 +247,19 @@ impl<'t> Display for TypeKind<'t> {
 }
 
 impl Domain {
-    /// Return the single-bit name for this type (`bit` or `logic`).
+    /// Return the single-bit name for this domain (`bit` or `logic`).
     pub fn bit_name(&self) -> &'static str {
         match self {
             Domain::TwoValued => "bit",
             Domain::FourValued => "logic",
+        }
+    }
+
+    /// Return the single-bit type for this domain (`bit` or `logic`).
+    pub fn bit_type(&self) -> &'static TypeKind<'static> {
+        match self {
+            Domain::TwoValued => &BIT_TYPE,
+            Domain::FourValued => &LOGIC_TYPE,
         }
     }
 }
