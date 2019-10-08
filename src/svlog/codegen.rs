@@ -246,6 +246,25 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut prok = llhd::ir::Process::new(llhd::ir::UnitName::Local(proc_name), sig);
         let mut builder = llhd::ir::ProcessBuilder::new(&mut prok);
 
+        // Assign names to inputs and outputs.
+        let guess_name = |id| match self.hir_of(id).ok()? {
+            hir::HirNode::VarDecl(x) => Some(x.name),
+            hir::HirNode::Port(x) => Some(x.name),
+            _ => None,
+        };
+        for (i, &id) in acc.read.iter().enumerate() {
+            if let Some(name) = guess_name(id) {
+                let value = builder.prok.input_arg(i);
+                builder.dfg_mut().set_name(value, format!("{}", name));
+            }
+        }
+        for (i, &id) in acc.written.iter().enumerate() {
+            if let Some(name) = guess_name(id) {
+                let value = builder.prok.output_arg(i);
+                builder.dfg_mut().set_name(value, format!("{}", name));
+            }
+        }
+
         // Create a mapping from read/written nodes to process parameters.
         let mut values = HashMap::new();
         for (&id, arg) in inputs
@@ -266,7 +285,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Emit prologue and determine which basic block to jump back to.
         let head_blk = match hir.kind {
-            ast::ProcedureKind::AlwaysComb => {
+            ast::ProcedureKind::AlwaysComb | ast::ProcedureKind::AlwaysLatch => {
                 let body_blk = pg.add_named_block("body");
                 let check_blk = pg.add_named_block("check");
                 pg.builder.ins().br(body_blk);
@@ -278,6 +297,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 pg.builder.ins().wait(body_blk, trigger_on);
                 pg.builder.append_to(body_blk);
                 check_blk
+            }
+            ast::ProcedureKind::Final => {
+                // TODO(fschuiki): Replace this with a cleverer way to implement a trigger-on-end.
+                let body_blk = pg.add_named_block("body");
+                let endtimes = pg.builder.ins().const_time(llhd::ConstTime::new(
+                    "9001".parse().unwrap(),
+                    0,
+                    0,
+                ));
+                pg.builder
+                    .dfg_mut()
+                    .set_name(endtimes, "endtimes".to_string());
+                pg.builder.ins().wait_time(body_blk, endtimes, vec![]);
+                pg.builder.append_to(body_blk);
+                entry_blk // This block is ignored for final blocks
             }
             _ => entry_blk,
         };
@@ -296,7 +330,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             | ast::ProcedureKind::AlwaysFf => {
                 pg.builder.ins().br(head_blk);
             }
-            _ => (),
+            ast::ProcedureKind::Final => {
+                pg.builder.ins().halt();
+            }
         }
         Ok(self.into.add_process(prok))
     }
@@ -1324,10 +1360,11 @@ where
                         self.builder.ins().drv(lhs_value, rhs_value, delay);
                     }
                     _ => {
+                        error!("{:#?}", hir);
                         return self.unimp_msg(
                             format!("code generation for assignment {:?} in", kind),
                             hir,
-                        )
+                        );
                     }
                 }
             }
@@ -1409,6 +1446,23 @@ where
                     self.builder.ins().br_cond(event_cond, init_blk, event_blk);
                     self.builder.append_to(event_blk);
                 }
+
+                // Emit the actual statement.
+                self.emit_stmt(stmt, env)?;
+            }
+            hir::StmtKind::Timed {
+                control: hir::TimingControl::ImplicitEvent,
+                stmt,
+            } => {
+                // Wait for any of the inputs to the statement to change.
+                let trigger_blk = self.add_named_block("trigger");
+                let mut trigger_on = vec![];
+                let acc = self.accessed_nodes(stmt)?;
+                for &id in &acc.read {
+                    trigger_on.push(self.emitted_value(id).clone());
+                }
+                self.builder.ins().wait(trigger_blk, trigger_on);
+                self.builder.append_to(trigger_blk);
 
                 // Emit the actual statement.
                 self.emit_stmt(stmt, env)?;
@@ -1544,7 +1598,10 @@ where
                 self.builder.ins().br(final_blk);
                 self.builder.append_to(final_blk);
             }
-            _ => return self.unimp_msg("code generation for", hir),
+            _ => {
+                error!("{:#?}", hir);
+                return self.unimp_msg("code generation for", hir);
+            }
         }
         Ok(())
     }

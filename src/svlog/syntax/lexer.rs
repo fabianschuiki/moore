@@ -441,7 +441,9 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 // SystemVerilog Attributes
-                (CatTokenKind::Symbol('('), CatTokenKind::Symbol('*')) => {
+                (CatTokenKind::Symbol('('), CatTokenKind::Symbol('*'))
+                    if self.peek[2].0 != CatTokenKind::Symbol(')') =>
+                {
                     self.bump()?;
                     self.bump()?;
                     loop {

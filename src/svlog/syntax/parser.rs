@@ -3920,7 +3920,7 @@ fn try_event_control(p: &mut AbstractParser) -> ReportedResult<Option<EventContr
     }
     let mut span = p.last_span();
 
-    // @* and @ (*)
+    // @*
     if p.peek(0).0 == Operator(Op::Mul) {
         p.bump();
         span.expand(p.last_span());
@@ -3929,6 +3929,8 @@ fn try_event_control(p: &mut AbstractParser) -> ReportedResult<Option<EventContr
             data: EventControlData::Implicit,
         }));
     }
+
+    // @(*)
     if p.peek(0).0 == OpenDelim(Paren)
         && p.peek(1).0 == Operator(Op::Mul)
         && p.peek(2).0 == CloseDelim(Paren)
