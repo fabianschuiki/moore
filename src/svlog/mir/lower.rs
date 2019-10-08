@@ -92,7 +92,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             }
             hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
             hir::ExprKind::NamedPattern(ref mapping) => {
-                if ty.is_array() {
+                if ty.is_array() || ty.is_bit_vector() {
                     Ok(lower_array_pattern(&builder, mapping, ty))
                 } else if ty.is_struct() {
                     Ok(builder.build(ty, lower_struct_pattern(builder.cx, mapping)))
@@ -114,7 +114,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     .iter()
                     .map(|&expr| {
                         let ty = builder.cx.type_of(expr, env)?;
-                        let flat_ty = match map_to_simple_bit_vector_type(builder.cx, ty, env) {
+                        let flat_ty = match map_to_simple_bit_type(builder.cx, ty, env) {
                             Some(ty) => ty,
                             None => {
                                 builder.cx.emit(
@@ -224,41 +224,152 @@ fn lower_implicit_cast<'gcx>(
         to_raw
     );
 
+    // Try a value domain cast.
+    let from_domain = from_raw.get_value_domain();
+    let to_domain = to_raw.get_value_domain();
+    if from_domain.is_some() && to_domain.is_some() && from_domain != to_domain {
+        let fd = from_domain.unwrap();
+        let td = to_domain.unwrap();
+        let target_ty = match *from_raw {
+            TypeKind::Bit(_) => builder.cx.intern_type(TypeKind::Bit(td)),
+            TypeKind::Int(w, _) => builder.cx.intern_type(TypeKind::Int(w, td)),
+            TypeKind::BitScalar { sign, .. } => builder
+                .cx
+                .intern_type(TypeKind::BitScalar { domain: td, sign }),
+            TypeKind::BitVector {
+                sign,
+                range,
+                dubbed,
+                ..
+            } => builder.cx.intern_type(TypeKind::BitVector {
+                domain: td,
+                sign,
+                range,
+                dubbed,
+            }),
+            _ => unreachable!(),
+        };
+        let inner = builder.build(
+            target_ty,
+            RvalueKind::CastValueDomain {
+                from: fd,
+                to: td,
+                value,
+            },
+        );
+        return lower_implicit_cast(builder, inner, to);
+    }
+
+    // Try a truncation or extension cast.
+    // let get_width_and_sign = |ty: Type| match *ty {
+    //     TypeKind::Bit(_) => Some((1, ty::Sign::Unsigned)),
+    //     TypeKind::Int(w, _) => Some((w, ty::Sign::Unsigned)),
+    //     TypeKind::BitScalar { sign, .. } => Some((1, sign)),
+    //     TypeKind::BitVector { sign, range, .. } => Some((range.size, sign)),
+    //     _ => None,
+    // };
+    let from_sbvt = map_to_simple_bit_vector_type(builder.cx, from_raw, builder.env);
+    let to_sbvt = map_to_simple_bit_vector_type(builder.cx, to_raw, builder.env);
+    let from_size = from_sbvt.map(|ty| ty.width());
+    let to_size = to_sbvt.map(|ty| ty.width());
+
+    if from_size.is_some() && to_size.is_some() && from_size != to_size {
+        let from_sbvt = from_sbvt.unwrap();
+        let value = lower_implicit_cast(builder, value, from_sbvt);
+        let from_size = from_size.unwrap();
+        let to_size = to_size.unwrap();
+        let range = match *to_sbvt.unwrap() {
+            TypeKind::BitVector { range, .. } => range,
+            _ => unreachable!(),
+        };
+        let sign = from_sbvt.get_sign().unwrap();
+        let ty = builder.cx.intern_type(TypeKind::BitVector {
+            domain: from_sbvt.get_value_domain().unwrap(),
+            sign,
+            range,
+            dubbed: false,
+        });
+        let kind = if from_size < to_size {
+            match sign {
+                ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
+                ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
+            }
+        } else {
+            RvalueKind::Truncate(range.size, value)
+        };
+        let inner = builder.build(ty, kind);
+        return lower_implicit_cast(builder, inner, to);
+    }
+
+    // Try a single-bit atom/vector conversion.
+    let from_sbt = map_to_simple_bit_type(builder.cx, from_raw, builder.env);
+    let to_sbt = map_to_simple_bit_type(builder.cx, to_raw, builder.env);
+    match (from_sbt, to_sbt) {
+        (
+            Some(&TypeKind::BitVector {
+                domain,
+                sign,
+                range: ty::Range { size: 1, .. },
+                ..
+            }),
+            Some(&TypeKind::BitScalar { .. }),
+        ) => {
+            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
+            let inner = builder.build(
+                builder.cx.intern_type(TypeKind::BitScalar { domain, sign }),
+                RvalueKind::CastVectorToAtom { domain, value },
+            );
+            return lower_implicit_cast(builder, inner, to);
+        }
+        (Some(&TypeKind::BitScalar { domain, sign }), Some(&TypeKind::BitVector { .. })) => {
+            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
+            let inner = builder.build(
+                builder.cx.intern_type(TypeKind::BitVector {
+                    domain,
+                    sign,
+                    range: ty::Range {
+                        size: 1,
+                        dir: ty::RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }),
+                RvalueKind::CastAtomToVector { domain, value },
+            );
+            return lower_implicit_cast(builder, inner, to);
+        }
+        _ => (),
+    }
+
+    // Try a sign cast.
+    let from_sign = from_sbt.and_then(|ty| ty.get_sign());
+    let to_sign = to_sbt.and_then(|ty| ty.get_sign());
+    if from_sign.is_some() && to_sign.is_some() && from_sign != to_sign {
+        let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
+        let ty = match *from_sbt.unwrap() {
+            TypeKind::BitScalar { domain, .. } => builder.cx.intern_type(TypeKind::BitScalar {
+                domain,
+                sign: to_sign.unwrap(),
+            }),
+            TypeKind::BitVector {
+                domain,
+                range,
+                dubbed,
+                ..
+            } => builder.cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign: to_sign.unwrap(),
+                range,
+                dubbed,
+            }),
+            _ => unreachable!(),
+        };
+        let inner = builder.build(ty, RvalueKind::CastSign(to_sign.unwrap(), value));
+        return lower_implicit_cast(builder, inner, to);
+    }
+
     // Try to make the cast happen.
     match (from_raw, to_raw) {
-        // Integer domain transfer; e.g. `int` to `integer`.
-        (&TypeKind::Int(fw, fd), &TypeKind::Int(_, td))
-        | (&TypeKind::Int(fw, fd), &TypeKind::Bit(td))
-            if fd != td =>
-        {
-            // trace!("int domain transfer {:?} to {:?}", fd, td);
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::Int(fw, td)),
-                RvalueKind::CastValueDomain {
-                    from: fd,
-                    to: td,
-                    value,
-                },
-            );
-            return lower_implicit_cast(builder, inner, to);
-        }
-
-        // Bit domain transfer; e.g. `bit` to `logic`.
-        (&TypeKind::Bit(fd), &TypeKind::Int(_, td)) | (&TypeKind::Bit(fd), &TypeKind::Bit(td))
-            if fd != td =>
-        {
-            // trace!("bit domain transfer {:?} to {:?}", fd, td);
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::Bit(td)),
-                RvalueKind::CastValueDomain {
-                    from: fd,
-                    to: td,
-                    value,
-                },
-            );
-            return lower_implicit_cast(builder, inner, to);
-        }
-
         // Integer to bit truncation; e.g. `int` to `bit`.
         (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw > 1 => {
             // trace!("would narrow {} int to 1 bit", fw);
@@ -269,43 +380,43 @@ fn lower_implicit_cast<'gcx>(
             return lower_implicit_cast(builder, inner, to);
         }
 
-        // Integer to bit conversion; e.g. `bit [0:0]` to `bit`.
-        (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw == 1 => {
-            // trace!("would map int to bit");
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::Bit(fd)),
-                RvalueKind::CastVectorToAtom { domain: fd, value },
-            );
-            return lower_implicit_cast(builder, inner, to);
-        }
+        // // Integer to bit conversion; e.g. `bit [0:0]` to `bit`.
+        // (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw == 1 => {
+        //     // trace!("would map int to bit");
+        //     let inner = builder.build(
+        //         builder.cx.intern_type(TypeKind::Bit(fd)),
+        //         RvalueKind::CastVectorToAtom { domain: fd, value },
+        //     );
+        //     return lower_implicit_cast(builder, inner, to);
+        // }
 
-        // Bit vector truncation and zero and sign extension.
-        (
-            &TypeKind::BitVector {
-                domain,
-                sign,
-                range: ty::Range { size: fw, .. },
-                ..
-            },
-            &TypeKind::BitVector { range, .. },
-        ) if fw != range.size => {
-            let ty = builder.cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed: false,
-            });
-            let kind = if fw < range.size {
-                match sign {
-                    ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
-                    ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
-                }
-            } else {
-                RvalueKind::Truncate(range.size, value)
-            };
-            let inner = builder.build(ty, kind);
-            return lower_implicit_cast(builder, inner, to);
-        }
+        // // Bit vector truncation and zero and sign extension.
+        // (
+        //     &TypeKind::BitVector {
+        //         domain,
+        //         sign,
+        //         range: ty::Range { size: fw, .. },
+        //         ..
+        //     },
+        //     &TypeKind::BitVector { range, .. },
+        // ) if fw != range.size => {
+        //     let ty = builder.cx.intern_type(TypeKind::BitVector {
+        //         domain,
+        //         sign,
+        //         range,
+        //         dubbed: false,
+        //     });
+        //     let kind = if fw < range.size {
+        //         match sign {
+        //             ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
+        //             ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
+        //         }
+        //     } else {
+        //         RvalueKind::Truncate(range.size, value)
+        //     };
+        //     let inner = builder.build(ty, kind);
+        //     return lower_implicit_cast(builder, inner, to);
+        // }
 
         // TODO(fschuiki): Packing structs into bit vectors.
         // TODO(fschuiki): Unpacking structs from bit vectors.
@@ -335,8 +446,12 @@ fn lower_array_pattern<'gcx>(
     mapping: &[(PatternMapping, NodeId)],
     ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    let length = ty.get_array_length().unwrap();
-    let elem_ty = ty.get_array_element().unwrap();
+    let (length, offset, elem_ty) = match *ty {
+        TypeKind::PackedArray(w, t) => (w, 0isize, t),
+        TypeKind::BitScalar { domain, .. } => (1, 0isize, domain.bit_type()),
+        TypeKind::BitVector { domain, range, .. } => (range.size, range.offset, domain.bit_type()),
+        _ => unreachable!("array pattern with invalid input type"),
+    };
     let mut failed = false;
     let mut default: Option<&Rvalue> = None;
     let mut values = HashMap::<usize, &Rvalue>::new();
@@ -355,7 +470,7 @@ fn lower_array_pattern<'gcx>(
                 let index = match || -> Result<usize> {
                     let index = builder.cx.constant_value_of(member_id, builder.env)?;
                     let index = match &index.kind {
-                        ValueKind::Int(i) => i,
+                        ValueKind::Int(i) => i - num::BigInt::from(offset),
                         _ => {
                             builder.cx.emit(
                                 DiagBuilder2::error("array index must be a constant integer")
@@ -364,8 +479,8 @@ fn lower_array_pattern<'gcx>(
                             return Err(());
                         }
                     };
-                    let index = match index.to_usize() {
-                        Some(i) if i < length => i,
+                    let index = match index.to_isize() {
+                        Some(i) if i >= 0 && i < length as isize => i as usize,
                         _ => {
                             builder.cx.emit(
                                 DiagBuilder2::error(format!("index `{}` out of bounds", index))
@@ -468,7 +583,7 @@ fn lower_struct_pattern<'gcx>(
 /// - packed unions
 /// - enums
 /// - time (excluded in this implementation)
-fn map_to_simple_bit_vector_type<'gcx>(
+fn map_to_simple_bit_type<'gcx>(
     cx: &impl Context<'gcx>,
     ty: Type<'gcx>,
     env: ParamEnv,
@@ -476,7 +591,7 @@ fn map_to_simple_bit_vector_type<'gcx>(
     let bits = match *ty {
         TypeKind::Void => return None,
         TypeKind::Time => return None,
-        TypeKind::Named(_, _, ty) => return map_to_simple_bit_vector_type(cx, ty, env),
+        TypeKind::Named(_, _, ty) => return map_to_simple_bit_type(cx, ty, env),
         TypeKind::BitVector { .. } => return Some(ty),
         TypeKind::BitScalar { .. } => return Some(ty),
         TypeKind::Bit(..)
@@ -496,6 +611,30 @@ fn map_to_simple_bit_vector_type<'gcx>(
     }))
 }
 
+/// Same as `map_to_simple_bit_type`, but forces the result to be a vector.
+///
+/// This operation would commonly be used to cast the operand of an operator
+/// which expects a vector. E.g. `foo[4]`.
+fn map_to_simple_bit_vector_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    ty: Type<'gcx>,
+    env: ParamEnv,
+) -> Option<Type<'gcx>> {
+    match map_to_simple_bit_type(cx, ty, env) {
+        Some(&TypeKind::BitScalar { domain, sign }) => Some(cx.intern_type(TypeKind::BitVector {
+            domain,
+            sign,
+            range: ty::Range {
+                size: 1,
+                dir: ty::RangeDir::Down,
+                offset: 0isize,
+            },
+            dubbed: false,
+        })),
+        x => x,
+    }
+}
+
 /// Map a binary operator to MIR.
 fn lower_binary<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
@@ -505,7 +644,7 @@ fn lower_binary<'gcx>(
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_vector_type(builder.cx, ty, builder.env) {
+    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
         Some(ty) => ty,
         None => {
             builder.cx.emit(

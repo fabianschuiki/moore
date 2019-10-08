@@ -1076,6 +1076,11 @@ where
                 // atom type as a single-element vector anyway.
                 self.emit_mir_rvalue(value)
             }
+            mir::RvalueKind::CastSign(_, value) => {
+                // Sign conversions are no-ops in LLHD since they merely
+                // influence the type system.
+                self.emit_mir_rvalue(value)
+            }
             mir::RvalueKind::Truncate(target_width, value) => {
                 let llvalue = self.emit_mir_rvalue(value)?;
                 Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
@@ -1088,7 +1093,7 @@ where
             }
             mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
             mir::RvalueKind::Error => Err(()),
-            _ => unimplemented!(),
+            _ => unimplemented!("codegen for mir rvalue {:?}", mir),
         }
     }
 

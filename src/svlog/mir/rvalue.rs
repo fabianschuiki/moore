@@ -48,6 +48,9 @@ pub enum RvalueKind<'a> {
         domain: ty::Domain,
         value: &'a Rvalue<'a>,
     },
+    /// A cast from one sign to another. E.g. `logic signed` to
+    /// `logic unsigned`.
+    CastSign(ty::Sign, &'a Rvalue<'a>),
     /// Shrink the width of a vector type. E.g. `bit [31:0]` to `bit [7:0]`.
     Truncate(usize, &'a Rvalue<'a>),
     /// Increase the width of a vector by zero extension. E.g. `bit [7:0]` to
