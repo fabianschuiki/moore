@@ -177,7 +177,13 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 };
                 Ok(repeat)
             }
-            _ => unreachable!("lowering to mir rvalue of {:?}", hir),
+            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(id)) => {
+                Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Signed))
+            }
+            hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(id)) => {
+                Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Unsigned))
+            }
+            _ => unimplemented!("lowering to mir rvalue of {:?}", hir),
         }
     }();
     result.unwrap_or_else(|_| builder.error())
@@ -197,6 +203,23 @@ fn lower_expr_and_cast<'gcx>(
         env,
     };
     lower_implicit_cast(&builder, inner, target_ty)
+}
+
+fn lower_expr_and_cast_sign<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    expr_id: NodeId,
+    sign: ty::Sign,
+) -> &'gcx Rvalue<'gcx> {
+    let inner = lower_expr_to_mir_rvalue(builder.cx, expr_id, builder.env);
+    if let Some(ty) = map_to_simple_bit_type(builder.cx, inner.ty.resolve_name(), builder.env) {
+        let ty = change_type_sign(builder.cx, ty, sign);
+        lower_implicit_cast(builder, inner, ty)
+    } else {
+        builder
+            .cx
+            .emit(DiagBuilder2::error("expr cannot be sign-cast").span(builder.cx.span(expr_id)));
+        builder.error()
+    }
 }
 
 /// Generate the nodes necessary to implicitly cast and rvalue to a type.
@@ -346,24 +369,7 @@ fn lower_implicit_cast<'gcx>(
     let to_sign = to_sbt.and_then(|ty| ty.get_sign());
     if from_sign.is_some() && to_sign.is_some() && from_sign != to_sign {
         let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-        let ty = match *from_sbt.unwrap() {
-            TypeKind::BitScalar { domain, .. } => builder.cx.intern_type(TypeKind::BitScalar {
-                domain,
-                sign: to_sign.unwrap(),
-            }),
-            TypeKind::BitVector {
-                domain,
-                range,
-                dubbed,
-                ..
-            } => builder.cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign: to_sign.unwrap(),
-                range,
-                dubbed,
-            }),
-            _ => unreachable!(),
-        };
+        let ty = change_type_sign(builder.cx, from_sbt.unwrap(), to_sign.unwrap());
         let inner = builder.build(ty, RvalueKind::CastSign(to_sign.unwrap(), value));
         return lower_implicit_cast(builder, inner, to);
     }
@@ -438,6 +444,25 @@ fn lower_implicit_cast<'gcx>(
         .span(value.span),
     );
     builder.error()
+}
+
+/// Change the sign of a simple bit type.
+fn change_type_sign<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>, sign: ty::Sign) -> Type<'gcx> {
+    match *ty {
+        TypeKind::BitScalar { domain, .. } => cx.intern_type(TypeKind::BitScalar { domain, sign }),
+        TypeKind::BitVector {
+            domain,
+            range,
+            dubbed,
+            ..
+        } => cx.intern_type(TypeKind::BitVector {
+            domain,
+            sign,
+            range,
+            dubbed,
+        }),
+        _ => ty,
+    }
 }
 
 /// Lower an `'{...}` array pattern.
