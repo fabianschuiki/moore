@@ -35,3 +35,12 @@ module a1;
 	logic [8:0] z;
 	assign z = {a, b[3:0], w, 3'b101};
 endmodule
+
+// Sign casts
+module a2;
+	logic unsigned [7:0] a;
+	logic signed [7:0] b;
+	logic [7:0] z;
+	assign z = $signed(a);
+	assign z = $unsigned(b);
+endmodule
