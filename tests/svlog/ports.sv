@@ -54,3 +54,15 @@ endmodule
 //| entity @D (i1$ %x) (i1$ %y) {
 //|     inst @D.initial.238.0 (%x) (%y)
 //| }
+
+
+module E (
+    input x,
+    input [2:0] y = 42
+);
+endmodule
+
+//@ elab E
+//| entity @E (i1$ %x, i1$ %y) -> () {
+//| }
+

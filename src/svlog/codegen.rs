@@ -12,7 +12,7 @@ use crate::{
 use llhd::ir::{Unit, UnitBuilder};
 use num::{
     traits::{cast::ToPrimitive, sign::Signed},
-    BigInt, One,
+    BigInt, One, Zero,
 };
 use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
@@ -956,10 +956,10 @@ where
                 self.builder.dfg_mut().set_name(value, name);
                 (value, Mode::Value)
             }
-            hir::ExprKind::Index(target_id, mode) => {
-                let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-                (self.emit_index_access(target, env, mode)?, Mode::Value)
-            }
+            // hir::ExprKind::Index(target_id, mode) => {
+            //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
+            //     (self.emit_index_access(target, env, mode)?, Mode::Value)
+            // }
             hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
                 let cond = self.emit_rvalue(cond, env)?;
                 let true_expr = self.emit_rvalue(true_expr, env)?;
@@ -981,10 +981,10 @@ where
                 let k = self.constant_value_of(expr_id, env)?;
                 (self.emit_const(k, env)?, Mode::Value)
             }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
-                (self.emit_rvalue(arg, env)?, Mode::Value)
-            }
+            // hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+            // | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
+            //     (self.emit_rvalue(arg, env)?, Mode::Value)
+            // }
             hir::ExprKind::Scope(..) => {
                 let binding = self.resolve_node(expr_id, env)?;
                 let value = self.constant_value_of(binding, env)?;
@@ -1030,7 +1030,10 @@ where
                 warn!("cast implemented as nop: {:?}", hir.kind);
                 return self.emit_rvalue_mode(expr, env, mode);
             }
-            hir::ExprKind::NamedPattern(..) => {
+            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(..))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(..))
+            | hir::ExprKind::Index(..)
+            | hir::ExprKind::NamedPattern(..) => {
                 let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
                 (self.emit_mir_rvalue(mir)?, Mode::Value)
             }
@@ -1066,6 +1069,14 @@ where
 
     fn emit_mir_rvalue_uninterned(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         match mir.kind {
+            mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
+                let value = self.emitted_value(id).clone();
+                let value = self.builder.ins().prb(value);
+                self.builder
+                    .dfg_mut()
+                    .set_name(value, format!("{}", mir.span.extract()));
+                Ok(value)
+            }
             mir::RvalueKind::CastValueDomain { value, .. } => {
                 // TODO(fschuiki): Turn this into an actual `iN` to `lN` cast.
                 self.emit_mir_rvalue(value)
@@ -1092,8 +1103,46 @@ where
                 Ok(self.builder.ins().array(llvalue))
             }
             mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
+            mir::RvalueKind::Index {
+                value,
+                base,
+                length,
+            } => {
+                let target = self.emit_mir_rvalue(value)?;
+                let base = self.emit_mir_rvalue(base)?;
+                let hidden = self.builder.ins().const_int(length, false, BigInt::zero());
+                // TODO(fschuiki): make the above a constant of all `x`.
+                let shifted = self.builder.ins().shr(target, hidden, base);
+                Ok(self.builder.ins().ext_slice(shifted, 0, length))
+            }
+            mir::RvalueKind::IntBinaryArith { op, lhs, rhs, .. } => {
+                let lhs = self.emit_mir_rvalue(lhs)?;
+                let rhs = self.emit_mir_rvalue(rhs)?;
+                let signed = mir.ty.is_signed();
+                Ok(match op {
+                    mir::IntBinaryArithOp::Add => self.builder.ins().add(lhs, rhs),
+                    mir::IntBinaryArithOp::Sub => self.builder.ins().sub(lhs, rhs),
+                    mir::IntBinaryArithOp::Mul if signed => self.builder.ins().smul(lhs, rhs),
+                    mir::IntBinaryArithOp::Div if signed => self.builder.ins().sdiv(lhs, rhs),
+                    mir::IntBinaryArithOp::Mod if signed => self.builder.ins().smod(lhs, rhs),
+                    mir::IntBinaryArithOp::Mul => self.builder.ins().umul(lhs, rhs),
+                    mir::IntBinaryArithOp::Div => self.builder.ins().udiv(lhs, rhs),
+                    mir::IntBinaryArithOp::Mod => self.builder.ins().umod(lhs, rhs),
+                    mir::IntBinaryArithOp::Pow => {
+                        self.emit(
+                            DiagBuilder2::error("`**` operator on non-constants not supported")
+                                .span(mir.span),
+                        );
+                        return Err(());
+                    }
+                })
+            }
             mir::RvalueKind::Error => Err(()),
-            _ => unimplemented!("codegen for mir rvalue {:?}", mir),
+            _ => {
+                error!("{:#?}", mir);
+                self.emit(DiagBuilder2::bug("codegen for mir").span(mir.span));
+                Err(())
+            }
         }
     }
 
