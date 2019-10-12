@@ -11,8 +11,8 @@ use crate::{
     value::ValueKind,
     ParamEnv,
 };
-use num::ToPrimitive;
-use std::collections::HashMap;
+use num::{BigInt, One, Signed, ToPrimitive};
+use std::{cmp::max, collections::HashMap};
 
 // TODO(fschuiki): Maybe move most of the functions below into the rvalue mod?
 
@@ -177,18 +177,96 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 };
                 Ok(repeat)
             }
+
             hir::ExprKind::Builtin(hir::BuiltinCall::Signed(id)) => {
                 Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Signed))
             }
             hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(id)) => {
                 Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Unsigned))
             }
-            _ => unimplemented!("lowering to mir rvalue of {:?}", hir),
+
+            hir::ExprKind::Index(target, mode) => {
+                // Determine the index of the LSB and the width of the
+                // selection. Note that bit-selects are mapped to part-selects
+                // of length 1.
+                let (base, length): (&Rvalue, usize) = match mode {
+                    hir::IndexMode::One(index) => (lower_expr_to_mir_rvalue(cx, index, env), 1),
+                    hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, delta) => (
+                        lower_expr_to_mir_rvalue(cx, base, env),
+                        cx.constant_int_value_of(delta, env)?.to_usize().unwrap(),
+                    ),
+                    hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
+                        let base = lower_expr_to_mir_rvalue(cx, base, env);
+                        let delta_rvalue = lower_expr_and_cast(cx, delta, env, base.ty);
+                        let base = builder.build(
+                            base.ty,
+                            RvalueKind::IntBinaryArith {
+                                op: IntBinaryArithOp::Sub,
+                                width: 0,
+                                lhs: base,
+                                rhs: delta_rvalue,
+                            },
+                        );
+                        let length = cx.constant_int_value_of(delta, env)?.to_usize().unwrap();
+                        (base, length)
+                    }
+                    hir::IndexMode::Many(ast::RangeMode::Absolute, lhs, rhs) => {
+                        let lhs_int = cx.constant_int_value_of(lhs, env)?;
+                        let rhs_int = cx.constant_int_value_of(rhs, env)?;
+                        let base = std::cmp::min(lhs_int, rhs_int).clone();
+                        let base_ty = cx.mkty_int(max(base.bits(), 1));
+                        let base = cx.intern_value(value::make_int(base_ty, base));
+                        let base = builder.build(base_ty, RvalueKind::Const(base));
+                        let length = ((lhs_int - rhs_int).abs() + BigInt::one())
+                            .to_usize()
+                            .unwrap();
+                        (base, length)
+                    }
+                };
+
+                // Cast the indexed array to a simple bit vector type.
+                let target_ty = cx.type_of(target, env)?;
+                let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
+                    Some(ty) => ty,
+                    None => {
+                        let span = builder.cx.span(target);
+                        builder.cx.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` cannot be index into",
+                                span.extract()
+                            ))
+                            .span(span)
+                            .add_note(format!(
+                                "`{}` cannot has no simple bit-vector type representation",
+                                target_ty
+                            )),
+                        );
+                        return Ok(builder.error());
+                    }
+                };
+                let target = lower_expr_and_cast(cx, target, env, sbvt);
+
+                // Build the cast rvalue.
+                Ok(builder.build(
+                    ty,
+                    RvalueKind::Index {
+                        value: target,
+                        base,
+                        length,
+                    },
+                ))
+            }
+
+            _ => {
+                error!("{:#?}", hir);
+                cx.unimp_msg("lowering to mir rvalue of", hir)
+            }
         }
     }();
     result.unwrap_or_else(|_| builder.error())
 }
 
+/// Lower an HIR expression and implicitly cast to a target type.
 fn lower_expr_and_cast<'gcx>(
     cx: &impl Context<'gcx>,
     expr_id: NodeId,
@@ -205,6 +283,7 @@ fn lower_expr_and_cast<'gcx>(
     lower_implicit_cast(&builder, inner, target_ty)
 }
 
+/// Lower an HIR expression and implicitly cast to a different sign.
 fn lower_expr_and_cast_sign<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     expr_id: NodeId,
@@ -215,9 +294,10 @@ fn lower_expr_and_cast_sign<'gcx>(
         let ty = change_type_sign(builder.cx, ty, sign);
         lower_implicit_cast(builder, inner, ty)
     } else {
-        builder
-            .cx
-            .emit(DiagBuilder2::error("expr cannot be sign-cast").span(builder.cx.span(expr_id)));
+        let span = builder.cx.span(expr_id);
+        builder.cx.emit(
+            DiagBuilder2::error(format!("`{}` cannot be sign-cast", span.extract())).span(span),
+        );
         builder.error()
     }
 }

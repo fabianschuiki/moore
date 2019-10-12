@@ -87,7 +87,12 @@ pub enum RvalueKind<'a> {
     Var(NodeId),
     /// A reference to a port declaration.
     Port(NodeId),
-    /// Conatenate arrays.
+    /// A bit- or part-select.
+    Index {
+        value: &'a Rvalue<'a>,
+        base: &'a Rvalue<'a>,
+        length: usize,
+    },
     /// An error occurred during lowering.
     Error,
 }

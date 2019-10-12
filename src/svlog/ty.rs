@@ -187,6 +187,20 @@ impl<'t> TypeKind<'t> {
             _ => None,
         }
     }
+
+    /// Check whether the type is unsigned.
+    ///
+    /// Returns false for types which have no sign.
+    pub fn is_unsigned(&self) -> bool {
+        self.get_sign() == Some(Sign::Unsigned)
+    }
+
+    /// Check whether the type is signed.
+    ///
+    /// Returns false for types which have no sign.
+    pub fn is_signed(&self) -> bool {
+        self.get_sign() == Some(Sign::Signed)
+    }
 }
 
 impl<'t> Display for TypeKind<'t> {

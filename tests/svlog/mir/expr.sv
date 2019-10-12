@@ -44,3 +44,31 @@ module a2;
 	assign z = $signed(a);
 	assign z = $unsigned(b);
 endmodule
+
+// 11.5.1 Vector bit-select and part-select addressing
+module a3;
+	logic [31: 0] a_vect;
+	logic [0 :31] b_vect;
+	logic [63: 0] dword;
+	integer sel;
+	logic [7:0] z;
+	logic y;
+
+	assign z = a_vect[ 7 : 0];
+	assign z = a_vect[15 : 8];
+	assign z = b_vect[0 : 7];
+	assign z = b_vect[8 :15];
+
+	assign z = a_vect[ 0 +: 8];
+    assign z = a_vect[15 -: 8];
+    assign z = b_vect[ 0 +: 8];
+    assign z = b_vect[15 -: 8];
+    assign z = dword[8*sel +: 8];
+
+    assign y = a_vect[15];
+    assign y = b_vect[15];
+    assign y = dword[15];
+    assign y = a_vect[sel];
+    assign y = b_vect[sel];
+    assign y = dword[sel];
+endmodule

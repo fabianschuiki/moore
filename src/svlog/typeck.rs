@@ -98,6 +98,10 @@ pub(crate) fn type_of<'gcx>(
                         TypeKind::PackedArray(_, ty) => Ok(ty),
                         TypeKind::Int(_, ty::Domain::TwoValued) => Ok(cx.mkty_bit()),
                         TypeKind::Int(_, ty::Domain::FourValued) => Ok(cx.mkty_logic()),
+                        TypeKind::BitScalar { .. } => Ok(target_ty),
+                        TypeKind::BitVector { domain, sign, .. } => {
+                            Ok(cx.intern_type(TypeKind::BitScalar { domain, sign }))
+                        }
                         _ => {
                             let hir = cx.hir_of(target)?;
                             cx.emit(
