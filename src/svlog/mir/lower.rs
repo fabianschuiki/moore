@@ -545,7 +545,7 @@ fn change_type_sign<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>, sign: ty::Sig
     }
 }
 
-/// Lower an `'{...}` array pattern.
+/// Lower a `'{...}` array pattern.
 fn lower_array_pattern<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     mapping: &[(PatternMapping, NodeId)],
@@ -659,16 +659,22 @@ fn lower_array_pattern<'gcx>(
         }
     }
 
-    if failed {
-        builder.error()
-    } else {
-        builder.build(
-            builder.cx.mkty_packed_array(length, elem_ty),
-            RvalueKind::ConstructArray(values),
-        )
+    match *ty {
+        _ if failed => builder.error(),
+        TypeKind::PackedArray(..) => builder.build(ty, RvalueKind::ConstructArray(values)),
+        TypeKind::BitScalar { .. } => {
+            assert_eq!(values.len(), 1);
+            values[&0]
+        }
+        TypeKind::BitVector { .. } => builder.build(
+            ty,
+            RvalueKind::Concat((0..length).rev().map(|i| values[&i]).collect()),
+        ),
+        _ => unreachable!("array pattern with invalid input type"),
     }
 }
 
+/// Lower a `'{...}` struct pattern.
 fn lower_struct_pattern<'gcx>(
     cx: &impl Context<'gcx>,
     mapping: &[(PatternMapping, NodeId)],
