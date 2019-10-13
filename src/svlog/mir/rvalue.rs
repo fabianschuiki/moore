@@ -95,6 +95,8 @@ pub enum RvalueKind<'a> {
         base: &'a Rvalue<'a>,
         length: usize,
     },
+    /// A struct field access.
+    Member { value: &'a Rvalue<'a>, field: usize },
     /// An error occurred during lowering.
     Error,
 }
