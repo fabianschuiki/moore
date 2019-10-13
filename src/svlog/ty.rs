@@ -108,6 +108,14 @@ impl<'t> TypeKind<'t> {
         }
     }
 
+    /// Get the definition of a struct.
+    pub fn get_struct_def(&self) -> Option<NodeId> {
+        match *self {
+            TypeKind::Struct(id) => Some(id),
+            _ => None,
+        }
+    }
+
     /// Get the element type of an array.
     pub fn get_array_element(&self) -> Option<Type<'t>> {
         match *self {

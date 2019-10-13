@@ -61,6 +61,8 @@ pub enum RvalueKind<'a> {
     SignExtend(usize, &'a Rvalue<'a>),
     /// Constructor for an array.
     ConstructArray(HashMap<usize, &'a Rvalue<'a>>),
+    /// Constructor for a struct.
+    ConstructStruct(Vec<&'a Rvalue<'a>>),
     /// A constant value.
     Const(value::Value<'a>),
     /// An integral binary arithmetic operator.

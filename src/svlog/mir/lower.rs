@@ -95,7 +95,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 if ty.is_array() || ty.is_bit_vector() {
                     Ok(lower_array_pattern(&builder, mapping, ty))
                 } else if ty.is_struct() {
-                    Ok(builder.build(ty, lower_struct_pattern(builder.cx, mapping)))
+                    Ok(lower_struct_pattern(&builder, mapping, ty))
                 } else {
                     builder.cx.emit(
                         DiagBuilder2::error(format!(
@@ -676,11 +676,166 @@ fn lower_array_pattern<'gcx>(
 
 /// Lower a `'{...}` struct pattern.
 fn lower_struct_pattern<'gcx>(
-    cx: &impl Context<'gcx>,
+    builder: &Builder<'_, impl Context<'gcx>>,
     mapping: &[(PatternMapping, NodeId)],
-) -> RvalueKind<'gcx> {
-    error!("missing struct pattern");
-    RvalueKind::Error
+    ty: Type<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the field names and types for the struct to be assembled.
+    let def_id = ty.get_struct_def().unwrap();
+    let def = match builder.cx.struct_def(def_id) {
+        Ok(d) => d,
+        Err(()) => return builder.error(),
+    };
+    let fields: Vec<_> = match def
+        .fields
+        .iter()
+        .map(|f| Ok((f.name, builder.cx.map_to_type(f.ty, builder.env)?)))
+        .collect::<Result<Vec<_>>>()
+    {
+        Ok(d) => d,
+        Err(()) => return builder.error(),
+    };
+    let name_lookup: HashMap<Name, usize> = fields
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.0.value, i))
+        .collect();
+    trace!("struct fields are {:?}", fields);
+    trace!("struct field names are {:?}", name_lookup);
+
+    // Disassemble the user's mapping into actual field bindings and defaults.
+    let mut failed = false;
+    let mut default: Option<NodeId> = None;
+    let mut type_defaults = HashMap::<Type, &Rvalue>::new();
+    let mut values = HashMap::<usize, &Rvalue>::new();
+    for &(map, to) in mapping {
+        match map {
+            PatternMapping::Type(type_id) => match builder.cx.map_to_type(type_id, builder.env) {
+                Ok(ty) => {
+                    let value = lower_expr_and_cast(builder.cx, to, builder.env, ty);
+                    type_defaults.insert(ty, value);
+                }
+                Err(()) => {
+                    failed = true;
+                    continue;
+                }
+            },
+            PatternMapping::Member(member_id) => match builder.cx.hir_of(member_id) {
+                Ok(HirNode::Expr(&hir::Expr {
+                    kind: hir::ExprKind::Ident(name),
+                    ..
+                })) => {
+                    // Determine the index for the mapping.
+                    let index = match name_lookup.get(&name.value) {
+                        Some(&index) => index,
+                        None => {
+                            builder.cx.emit(
+                                DiagBuilder2::error(format!("`{}` member does not exist", name))
+                                    .span(name.span)
+                                    .add_note("Struct definition was here:")
+                                    .span(builder.cx.span(def_id)),
+                            );
+                            failed = true;
+                            continue;
+                        }
+                    };
+
+                    // Determine the value and insert into the mappings.
+                    let value = lower_expr_and_cast(builder.cx, to, builder.env, fields[index].1);
+                    let span = value.span;
+                    if let Some(prev) = values.insert(index, value) {
+                        builder.cx.emit(
+                            DiagBuilder2::warning(format!(
+                                "`{}` overwrites previous value `{}` for member `{}`",
+                                span.extract(),
+                                prev.span.extract(),
+                                name
+                            ))
+                            .span(span)
+                            .add_note("Previous value was here:")
+                            .span(prev.span),
+                        );
+                    }
+                }
+                Ok(_) => {
+                    let span = builder.cx.span(member_id);
+                    builder.cx.emit(
+                        DiagBuilder2::error(format!(
+                            "`{}` is not a valid struct member name",
+                            span.extract()
+                        ))
+                        .span(span),
+                    );
+                    failed = true;
+                    continue;
+                }
+                Err(()) => {
+                    failed = true;
+                    continue;
+                }
+            },
+            PatternMapping::Default => match default {
+                Some(default) => {
+                    builder.cx.emit(
+                        DiagBuilder2::error("pattern has multiple default mappings")
+                            .span(builder.cx.span(to))
+                            .add_note("Previous mapping default mapping was here:")
+                            .span(builder.cx.span(default)),
+                    );
+                    failed = true;
+                    continue;
+                }
+                None => {
+                    default = Some(to);
+                }
+            },
+        }
+    }
+
+    // In case the list of members provided by the user is incomplete, use the
+    // defaults to fill in the other members.
+    for (index, &(field_name, field_ty)) in fields.iter().enumerate() {
+        if values.contains_key(&index) {
+            continue;
+        }
+
+        // Try the type-based defaults first.
+        // TODO(fschuiki): Use better type comparison mechanism that is
+        // transparent to user defined types, etc.
+        if let Some(default) = type_defaults.get(field_ty) {
+            trace!(
+                "applying type default to member `{}`: {:?}",
+                field_name,
+                default
+            );
+            values.insert(index, default);
+            continue;
+        }
+
+        // Try to assign a default value.
+        let default = if let Some(default) = default {
+            default
+        } else {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{}` member missing in struct pattern", field_name))
+                    .span(builder.span)
+                    .add_note("Struct patterns must assign a value to every member."),
+            );
+            failed = true;
+            continue;
+        };
+        let value = lower_expr_and_cast(builder.cx, default, builder.env, field_ty);
+        values.insert(index, value);
+    }
+
+    if failed {
+        builder.error()
+    } else {
+        builder.build(
+            ty,
+            RvalueKind::ConstructStruct((0..values.len()).map(|i| values[&i]).collect()),
+        )
+    }
 }
 
 /// Try to convert a type to its equivalent simple bit vector type.
