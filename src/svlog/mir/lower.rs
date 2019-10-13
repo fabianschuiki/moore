@@ -78,6 +78,10 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 match builder.cx.hir_of(binding)? {
                     HirNode::VarDecl(decl) => Ok(builder.build(ty, RvalueKind::Var(decl.id))),
                     HirNode::Port(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
+                    HirNode::EnumVariant(..) => {
+                        let k = builder.cx.constant_value_of(expr_id, env)?;
+                        Ok(builder.build(k.ty, RvalueKind::Const(k)))
+                    }
                     x => {
                         builder.cx.emit(
                             DiagBuilder2::error(format!(
@@ -224,27 +228,32 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     }
                 };
 
-                // Cast the indexed array to a simple bit vector type.
+                // Cast the target to a simple bit vector type if needed.
                 let target_ty = cx.type_of(target, env)?;
-                let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
-                    Some(ty) => ty,
-                    None => {
-                        let span = builder.cx.span(target);
-                        builder.cx.emit(
-                            DiagBuilder2::error(format!(
-                                "`{}` cannot be index into",
-                                span.extract()
-                            ))
-                            .span(span)
-                            .add_note(format!(
-                                "`{}` cannot has no simple bit-vector type representation",
-                                target_ty
-                            )),
-                        );
-                        return Ok(builder.error());
-                    }
+                let target = if target_ty.is_array() {
+                    // No need to cast arrays.
+                    lower_expr_to_mir_rvalue(cx, target, env)
+                } else {
+                    let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
+                        Some(ty) => ty,
+                        None => {
+                            let span = builder.cx.span(target);
+                            builder.cx.emit(
+                                DiagBuilder2::error(format!(
+                                    "`{}` cannot be index into",
+                                    span.extract()
+                                ))
+                                .span(span)
+                                .add_note(format!(
+                                    "`{}` cannot has no simple bit-vector type representation",
+                                    target_ty
+                                )),
+                            );
+                            return Ok(builder.error());
+                        }
+                    };
+                    lower_expr_and_cast(cx, target, env, sbvt)
                 };
-                let target = lower_expr_and_cast(cx, target, env, sbvt);
 
                 // Build the cast rvalue.
                 Ok(builder.build(
