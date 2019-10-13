@@ -1,11 +1,9 @@
 module a0;
 	logic [5:0] a;
-	struct { logic x; logic y; } b;
-	byte c;
+	struct { logic x; logic y; logic [5:0] z; } b;
 
 	assign a = '{3: 42, 4: 29, default: 0};
-	// assign b = '{default: 0};
-	assign c = '{3: 42, 4: 29, default: 0};
+	assign b = '{logic: 1, y: 0, default: 42};
 endmodule
 
 // 10.9.2 Structure assignment patterns

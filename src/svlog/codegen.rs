@@ -1066,6 +1066,13 @@ where
                     .collect::<Result<Vec<_>>>()?;
                 Ok(self.builder.ins().array(llvalue))
             }
+            mir::RvalueKind::ConstructStruct(ref members) => {
+                let members = members
+                    .iter()
+                    .map(|&v| self.emit_mir_rvalue(v))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(self.builder.ins().strukt(members))
+            }
             mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
             mir::RvalueKind::Index {
                 value,
