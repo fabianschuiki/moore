@@ -940,22 +940,22 @@ where
                 };
                 (inst, Mode::Value)
             }
-            hir::ExprKind::Field(target_id, field_name) => {
-                let (_, index, _) = self.resolve_field_access(expr_id, env)?;
-                let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-                let value = self.builder.ins().ext_field(target, index);
-                let name = format!(
-                    "{}.{}",
-                    self.builder
-                        .dfg()
-                        .get_name(target)
-                        .map(String::from)
-                        .unwrap_or_else(|| "struct".into()),
-                    field_name
-                );
-                self.builder.dfg_mut().set_name(value, name);
-                (value, Mode::Value)
-            }
+            // hir::ExprKind::Field(target_id, field_name) => {
+            //     let (_, index, _) = self.resolve_field_access(expr_id, env)?;
+            //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
+            //     let value = self.builder.ins().ext_field(target, index);
+            //     let name = format!(
+            //         "{}.{}",
+            //         self.builder
+            //             .dfg()
+            //             .get_name(target)
+            //             .map(String::from)
+            //             .unwrap_or_else(|| "struct".into()),
+            //         field_name
+            //     );
+            //     self.builder.dfg_mut().set_name(value, name);
+            //     (value, Mode::Value)
+            // }
             // hir::ExprKind::Index(target_id, mode) => {
             //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
             //     (self.emit_index_access(target, env, mode)?, Mode::Value)
@@ -1033,6 +1033,7 @@ where
             hir::ExprKind::Builtin(hir::BuiltinCall::Signed(..))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(..))
             | hir::ExprKind::Index(..)
+            | hir::ExprKind::Field(..)
             | hir::ExprKind::NamedPattern(..) => {
                 let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
                 (self.emit_mir_rvalue(mir)?, Mode::Value)
@@ -1121,6 +1122,21 @@ where
                 // TODO(fschuiki): make the above a constant of all `x`.
                 let shifted = self.builder.ins().shr(target, hidden, base);
                 Ok(self.builder.ins().ext_slice(shifted, 0, length))
+            }
+            mir::RvalueKind::Member { value, field } => {
+                let target = self.emit_mir_rvalue(value)?;
+                let value = self.builder.ins().ext_field(target, field);
+                // let name = format!(
+                //     "{}.{}",
+                //     self.builder
+                //         .dfg()
+                //         .get_name(target)
+                //         .map(String::from)
+                //         .unwrap_or_else(|| "struct".into()),
+                //     field
+                // );
+                // self.builder.dfg_mut().set_name(value, name);
+                Ok(value)
             }
             mir::RvalueKind::IntBinaryArith { op, lhs, rhs, .. } => {
                 let lhs = self.emit_mir_rvalue(lhs)?;

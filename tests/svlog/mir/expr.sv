@@ -72,3 +72,15 @@ module a3;
     assign y = b_vect[sel];
     assign y = dword[sel];
 endmodule
+
+// Member accesses
+module a4;
+	struct packed {
+		logic [1:0] a;
+		logic [4:0] b;
+	} s;
+	logic [1:0] y;
+	logic [4:0] z;
+	assign y = s.a;
+	assign z = s.b;
+endmodule

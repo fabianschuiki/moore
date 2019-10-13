@@ -266,6 +266,12 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 ))
             }
 
+            hir::ExprKind::Field(target, _) => {
+                let value = lower_expr_to_mir_rvalue(cx, target, env);
+                let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
+                Ok(builder.build(ty, RvalueKind::Member { value, field }))
+            }
+
             _ => {
                 error!("{:#?}", hir);
                 cx.unimp_msg("lowering to mir rvalue of", hir)
