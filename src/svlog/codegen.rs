@@ -1137,6 +1137,18 @@ where
                     }
                 })
             }
+            mir::RvalueKind::Concat(ref values) => {
+                let mut offset = 0;
+                let llty = self.emit_type(mir.ty, mir.env)?;
+                let mut value = self.emit_zero_for_type(&llty);
+                for v in values {
+                    let w = v.ty.width();
+                    let v = self.emit_mir_rvalue(v)?;
+                    value = self.builder.ins().ins_slice(value, v, offset, w);
+                    offset += w;
+                }
+                Ok(value)
+            }
             mir::RvalueKind::Error => Err(()),
             _ => {
                 error!("{:#?}", mir);

@@ -5,7 +5,7 @@ module a0;
 
 	assign a = '{3: 42, 4: 29, default: 0};
 	// assign b = '{default: 0};
-	// assign c = '{3: 42, 4: 29, default: 0};
+	assign c = '{3: 42, 4: 29, default: 0};
 endmodule
 
 // 10.9.2 Structure assignment patterns
