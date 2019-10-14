@@ -55,6 +55,8 @@ pub enum RvalueKind<'a> {
     /// A cast from one sign to another. E.g. `logic signed` to
     /// `logic unsigned`.
     CastSign(ty::Sign, &'a Rvalue<'a>),
+    /// A cast from a simple bit type to a boolean.
+    CastToBool(&'a Rvalue<'a>),
     /// Shrink the width of a vector type. E.g. `bit [31:0]` to `bit [7:0]`.
     Truncate(usize, &'a Rvalue<'a>),
     /// Increase the width of a vector by zero extension. E.g. `bit [7:0]` to
@@ -122,6 +124,12 @@ pub enum RvalueKind<'a> {
     },
     /// A struct field access.
     Member { value: &'a Rvalue<'a>, field: usize },
+    /// The ternary operator.
+    Ternary {
+        cond: &'a Rvalue<'a>,
+        if_true: &'a Rvalue<'a>,
+        if_false: &'a Rvalue<'a>,
+    },
     /// An error occurred during lowering.
     Error,
 }

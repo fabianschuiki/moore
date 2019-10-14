@@ -96,6 +96,30 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             }
             hir::ExprKind::Unary(op, arg) => Ok(lower_unary(&builder, ty, op, arg)),
             hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
+            hir::ExprKind::Ternary(cond, if_true, if_false) => {
+                let cond = {
+                    let subbuilder = Builder {
+                        cx,
+                        span: cx.span(cond),
+                        expr: cond,
+                        env,
+                    };
+                    implicit_cast_to_bool(
+                        &subbuilder,
+                        lower_expr_to_mir_rvalue(subbuilder.cx, cond, subbuilder.env),
+                    )
+                };
+                let if_true = lower_expr_and_cast(cx, if_true, env, ty);
+                let if_false = lower_expr_and_cast(cx, if_false, env, ty);
+                Ok(builder.build(
+                    ty,
+                    RvalueKind::Ternary {
+                        cond,
+                        if_true,
+                        if_false,
+                    },
+                ))
+            }
             hir::ExprKind::NamedPattern(ref mapping) => {
                 if ty.is_array() || ty.is_bit_vector() {
                     Ok(lower_array_pattern(&builder, mapping, ty))
@@ -1165,5 +1189,38 @@ fn lower_binary_bitwise<'gcx>(
         )
     } else {
         value
+    }
+}
+
+/// Generate the nodes necessary to implicitly cast an rvalue to a boolean.
+///
+/// If the cast is not possible, emit some helpful diagnostics.
+fn implicit_cast_to_bool<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    value: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Map the value to a simple bit type.
+    let sbvt = match map_to_simple_bit_type(builder.cx, value.ty, builder.env) {
+        Some(sbvt) => sbvt,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{:?}` cannot be cast to a boolean",
+                    value.span.extract()
+                ))
+                .span(value.span),
+            );
+            return builder.error();
+        }
+    };
+
+    // Cast to the simple bit type.
+    let value = lower_implicit_cast(builder, value, sbvt);
+
+    // If the value already has the equivalent of a one bit value, use that.
+    if sbvt.width() == 1 {
+        value
+    } else {
+        builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value))
     }
 }
