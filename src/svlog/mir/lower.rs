@@ -41,7 +41,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     /// This is usually called when something goes wrong during MIR construction
     /// and a marker node is needed to indicate that part of the MIR is invalid.
     fn error(&self) -> &'a Rvalue<'a> {
-        self.build(self.cx.mkty_void(), RvalueKind::Error)
+        self.build(&ty::ERROR_TYPE, RvalueKind::Error)
     }
 }
 
@@ -94,6 +94,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     }
                 }
             }
+            hir::ExprKind::Unary(op, arg) => Ok(lower_unary(&builder, ty, op, arg)),
             hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
             hir::ExprKind::NamedPattern(ref mapping) => {
                 if ty.is_array() || ty.is_bit_vector() {
@@ -206,7 +207,8 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                             base.ty,
                             RvalueKind::IntBinaryArith {
                                 op: IntBinaryArithOp::Sub,
-                                width: 0,
+                                sign: base.ty.get_sign().unwrap(),
+                                domain: base.ty.get_value_domain().unwrap(),
                                 lhs: base,
                                 rhs: delta_rvalue,
                             },
@@ -328,7 +330,7 @@ fn lower_implicit_cast<'gcx>(
     let from = value.ty;
 
     // Catch the easy case where the types already line up.
-    if from == to {
+    if from == to || from.is_error() || to.is_error() {
         return value;
     }
 
@@ -870,8 +872,7 @@ fn map_to_simple_bit_type<'gcx>(
     env: ParamEnv,
 ) -> Option<Type<'gcx>> {
     let bits = match *ty {
-        TypeKind::Void => return None,
-        TypeKind::Time => return None,
+        TypeKind::Error | TypeKind::Void | TypeKind::Time => return None,
         TypeKind::Named(_, _, ty) => return map_to_simple_bit_type(cx, ty, env),
         TypeKind::BitVector { .. } => return Some(ty),
         TypeKind::BitScalar { .. } => return Some(ty),
@@ -916,8 +917,53 @@ fn map_to_simple_bit_vector_type<'gcx>(
     }
 }
 
+/// Map a unary operator to MIR.
+fn lower_unary<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the category of the operation.
+    match op {
+        hir::UnaryOp::BitNot => lower_unary_bitwise(builder, ty, op, arg),
+        _ => unimplemented!("mir for unary {:?}", op),
+    }
+}
+
 /// Map a binary operator to MIR.
 fn lower_binary<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::BinaryOp,
+    lhs: NodeId,
+    rhs: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    match op {
+        hir::BinaryOp::Add
+        | hir::BinaryOp::Sub
+        | hir::BinaryOp::Mul
+        | hir::BinaryOp::Div
+        | hir::BinaryOp::Mod
+        | hir::BinaryOp::Pow => lower_int_binary_arith(builder, ty, op, lhs, rhs),
+        hir::BinaryOp::Eq
+        | hir::BinaryOp::Neq
+        | hir::BinaryOp::Lt
+        | hir::BinaryOp::Leq
+        | hir::BinaryOp::Gt
+        | hir::BinaryOp::Geq => lower_int_comparison(builder, ty, op, lhs, rhs),
+        hir::BinaryOp::BitAnd
+        | hir::BinaryOp::BitOr
+        | hir::BinaryOp::BitXor
+        | hir::BinaryOp::BitNand
+        | hir::BinaryOp::BitNor
+        | hir::BinaryOp::BitXnor => lower_binary_bitwise(builder, ty, op, lhs, rhs),
+        _ => unimplemented!("mir for binary {:?}", op),
+    }
+}
+
+/// Map an integer binary arithmetic operator to MIR.
+fn lower_int_binary_arith<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     ty: Type<'gcx>,
     op: hir::BinaryOp,
@@ -949,7 +995,7 @@ fn lower_binary<'gcx>(
         hir::BinaryOp::Div => IntBinaryArithOp::Div,
         hir::BinaryOp::Mod => IntBinaryArithOp::Mod,
         hir::BinaryOp::Pow => IntBinaryArithOp::Pow,
-        _ => unimplemented!("mir for integral operator {:?}", op),
+        _ => unreachable!("{:?} is not an integer binary arithmetic operator", op),
     };
 
     // Assemble the node.
@@ -957,9 +1003,167 @@ fn lower_binary<'gcx>(
         result_ty,
         RvalueKind::IntBinaryArith {
             op,
-            width: ty::bit_size_of_type(builder.cx, result_ty, builder.env).unwrap(),
+            sign: result_ty.get_sign().unwrap(),
+            domain: result_ty.get_value_domain().unwrap(),
             lhs,
             rhs,
         },
     )
+}
+
+/// Map an integer comparison operator to MIR.
+fn lower_int_comparison<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::BinaryOp,
+    lhs: NodeId,
+    rhs: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the common type of both operands.
+    let (lhs_ty, rhs_ty) = (
+        builder.cx.type_of(lhs, builder.env),
+        builder.cx.type_of(rhs, builder.env),
+    );
+    let (lhs_ty, rhs_ty) = match (lhs_ty, rhs_ty) {
+        (Ok(l), Ok(r)) => (l, r),
+        _ => return builder.error(),
+    };
+    let (lhs_sbt, rhs_sbt) = (
+        map_to_simple_bit_type(builder.cx, lhs_ty, builder.env),
+        map_to_simple_bit_type(builder.cx, rhs_ty, builder.env),
+    );
+    let (lhs_sbt, rhs_sbt) = match (lhs_sbt, rhs_sbt) {
+        (Some(l), Some(r)) => (l, r),
+        _ => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{:?}` cannot operate on `{}` and `{}`",
+                    op, lhs_ty, rhs_ty
+                ))
+                .span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+    let union_ty = builder.cx.intern_type(TypeKind::BitVector {
+        domain: ty::Domain::FourValued,
+        sign: ty::Sign::Unsigned,
+        range: ty::Range {
+            size: max(lhs_sbt.width(), rhs_sbt.width()),
+            dir: ty::RangeDir::Down,
+            offset: 0isize,
+        },
+        dubbed: false,
+    });
+
+    // Cast the operands to the operator type.
+    trace!("binary {:?} on {} maps to {}", op, ty, union_ty);
+    let lhs = lower_expr_and_cast(builder.cx, lhs, builder.env, union_ty);
+    let rhs = lower_expr_and_cast(builder.cx, rhs, builder.env, union_ty);
+
+    // Determine the operation.
+    let op = match op {
+        hir::BinaryOp::Eq => IntCompOp::Eq,
+        hir::BinaryOp::Neq => IntCompOp::Neq,
+        hir::BinaryOp::Lt => IntCompOp::Lt,
+        hir::BinaryOp::Leq => IntCompOp::Leq,
+        hir::BinaryOp::Gt => IntCompOp::Gt,
+        hir::BinaryOp::Geq => IntCompOp::Geq,
+        _ => unreachable!("{:?} is not an integer binary comparison operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(
+        union_ty.get_value_domain().unwrap().bit_type(),
+        RvalueKind::IntComp {
+            op,
+            sign: union_ty.get_sign().unwrap(),
+            domain: union_ty.get_value_domain().unwrap(),
+            lhs,
+            rhs,
+        },
+    )
+}
+
+/// Map a bitwise unary operator to MIR.
+fn lower_unary_bitwise<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
+                    .span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+
+    // Map the argument.
+    let arg = lower_expr_and_cast(builder.cx, arg, builder.env, result_ty);
+
+    // Determine the operation.
+    let op = match op {
+        hir::UnaryOp::BitNot => UnaryBitwiseOp::Not,
+        _ => unreachable!("{:?} is not a unary bitwise operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(result_ty, RvalueKind::UnaryBitwise { op, arg })
+}
+
+/// Map a bitwise binary operator to MIR.
+fn lower_binary_bitwise<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::BinaryOp,
+    lhs: NodeId,
+    rhs: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
+                    .span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+
+    // Cast the operands to the operator type.
+    trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
+    let lhs = lower_expr_and_cast(builder.cx, lhs, builder.env, result_ty);
+    let rhs = lower_expr_and_cast(builder.cx, rhs, builder.env, result_ty);
+
+    // Determine the operation.
+    let (op, negate) = match op {
+        hir::BinaryOp::BitAnd => (BinaryBitwiseOp::And, false),
+        hir::BinaryOp::BitOr => (BinaryBitwiseOp::Or, false),
+        hir::BinaryOp::BitXor => (BinaryBitwiseOp::Xor, false),
+        hir::BinaryOp::BitNand => (BinaryBitwiseOp::And, true),
+        hir::BinaryOp::BitNor => (BinaryBitwiseOp::Or, true),
+        hir::BinaryOp::BitXnor => (BinaryBitwiseOp::Xor, true),
+        _ => unreachable!("{:?} is not a binary bitwise operator", op),
+    };
+
+    // Assemble the node.
+    let value = builder.build(result_ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
+    if negate {
+        builder.build(
+            result_ty,
+            RvalueKind::UnaryBitwise {
+                op: UnaryBitwiseOp::Not,
+                arg: value,
+            },
+        )
+    } else {
+        value
+    }
 }

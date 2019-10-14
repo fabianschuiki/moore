@@ -5,7 +5,11 @@
 //! An MIR representation for all expressions that may appear on the right-hand
 //! side of an assignment.
 
-use crate::{crate_prelude::*, ty::Type, ParamEnv};
+use crate::{
+    crate_prelude::*,
+    ty::{Domain, Sign, Type},
+    ParamEnv,
+};
 use std::collections::HashMap;
 
 /// An rvalue expression.
@@ -65,15 +69,36 @@ pub enum RvalueKind<'a> {
     ConstructStruct(Vec<&'a Rvalue<'a>>),
     /// A constant value.
     Const(value::Value<'a>),
+    /// A unary bitwise operator.
+    UnaryBitwise {
+        op: UnaryBitwiseOp,
+        arg: &'a Rvalue<'a>,
+    },
+    /// A binary bitwise operator.
+    BinaryBitwise {
+        op: BinaryBitwiseOp,
+        lhs: &'a Rvalue<'a>,
+        rhs: &'a Rvalue<'a>,
+    },
     /// An integral binary arithmetic operator.
     ///
     /// If any bit of the operands are x/z, the entire result is x.
     IntBinaryArith {
         op: IntBinaryArithOp,
-        width: usize,
+        sign: Sign,
+        domain: Domain,
         lhs: &'a Rvalue<'a>,
         rhs: &'a Rvalue<'a>,
-        // TODO(fschuiki): Add sign of the operation.
+    },
+    /// An integral comparison operator.
+    ///
+    /// If any bit of the operands are x/z, the entire result is x.
+    IntComp {
+        op: IntCompOp,
+        sign: Sign,
+        domain: Domain,
+        lhs: &'a Rvalue<'a>,
+        rhs: &'a Rvalue<'a>,
     },
     /// Concatenate multiple values.
     ///
@@ -101,6 +126,22 @@ pub enum RvalueKind<'a> {
     Error,
 }
 
+/// The unary bitwise operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum UnaryBitwiseOp {
+    Not,
+}
+
+/// The binary bitwise operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum BinaryBitwiseOp {
+    And,
+    Or,
+    Xor,
+}
+
 /// The integer binary arithmetic operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -111,4 +152,16 @@ pub enum IntBinaryArithOp {
     Div,
     Mod,
     Pow,
+}
+
+/// The integer comparison operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum IntCompOp {
+    Eq,
+    Neq,
+    Lt,
+    Leq,
+    Gt,
+    Geq,
 }
