@@ -412,6 +412,10 @@ pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Res
 pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Value<'gcx> {
     // TODO(fschuiki): Make this function return `Result<Value<_>>`.
     match *ty {
+        TypeKind::Error => cx.intern_value(ValueData {
+            ty: &ty::ERROR_TYPE,
+            kind: ValueKind::Void,
+        }),
         TypeKind::Void => cx.intern_value(ValueData {
             ty: &ty::VOID_TYPE,
             kind: ValueKind::Void,

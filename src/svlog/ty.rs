@@ -11,6 +11,8 @@ pub type Type<'t> = &'t TypeKind<'t>;
 /// Type data.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind<'t> {
+    /// An error occurred during type computation.
+    Error,
     /// The `void` type.
     Void,
     /// The `time` type.
@@ -81,6 +83,15 @@ pub enum RangeDir {
 }
 
 impl<'t> TypeKind<'t> {
+    /// Check if this is the error type.
+    pub fn is_error(&self) -> bool {
+        match *self {
+            TypeKind::Named(_, _, ty) => ty.is_error(),
+            TypeKind::Error => true,
+            _ => false,
+        }
+    }
+
     /// Check if this is the void type.
     pub fn is_void(&self) -> bool {
         match *self {
@@ -214,6 +225,7 @@ impl<'t> TypeKind<'t> {
 impl<'t> Display for TypeKind<'t> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
+            TypeKind::Error => write!(f, "<error>"),
             TypeKind::Void => write!(f, "void"),
             TypeKind::Time => write!(f, "time"),
             TypeKind::Bit(Domain::TwoValued) => write!(f, "bit"),
@@ -307,8 +319,12 @@ impl Display for Range {
     }
 }
 
+/// The `<error>` type.
+pub static ERROR_TYPE: TypeKind<'static> = TypeKind::Error;
+
 /// The `void` type.
 pub static VOID_TYPE: TypeKind<'static> = TypeKind::Void;
+
 /// The `time` type.
 pub static TIME_TYPE: TypeKind<'static> = TypeKind::Time;
 
@@ -391,7 +407,7 @@ pub fn bit_size_of_type<'gcx>(
     env: ParamEnv,
 ) -> Result<usize> {
     match *ty {
-        TypeKind::Void => Ok(0),
+        TypeKind::Error | TypeKind::Void => Ok(0),
         TypeKind::Time => panic!("time value has no bit size"),
         TypeKind::Bit(_) => Ok(1),
         TypeKind::Int(width, _) => Ok(width),
