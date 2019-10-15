@@ -1316,12 +1316,22 @@ where
                 Ok(self.builder.ins().mux(array, cond))
             }
 
-            mir::RvalueKind::Error => Err(()),
-            _ => {
-                error!("{:#?}", mir);
-                self.emit(DiagBuilder2::bug("codegen for mir").span(mir.span));
-                Err(())
+            mir::RvalueKind::Reduction { op, arg } => {
+                let width = arg.ty.width();
+                let arg = self.emit_mir_rvalue(arg)?;
+                let mut value = self.builder.ins().ext_slice(arg, 0, 1);
+                for i in 1..width {
+                    let bit = self.builder.ins().ext_slice(arg, i, 1);
+                    value = match op {
+                        mir::BinaryBitwiseOp::And => self.builder.ins().and(value, bit),
+                        mir::BinaryBitwiseOp::Or => self.builder.ins().or(value, bit),
+                        mir::BinaryBitwiseOp::Xor => self.builder.ins().xor(value, bit),
+                    };
+                }
+                Ok(value)
             }
+
+            mir::RvalueKind::Error => Err(()),
         }
     }
 
