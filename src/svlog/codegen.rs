@@ -1317,6 +1317,16 @@ where
 
     /// Emit the code for an lvalue.
     fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
+        // TODO(fschuiki): Remove the following, which is just here for
+        // debugging purposes.
+        let mir = mir::lower::lvalue::lower_expr(self.cx, expr_id, env);
+        debug!(
+            "{}",
+            DiagBuilder2::note("lvalue mir")
+                .span(self.span(expr_id))
+                .add_note(format!("{:#?}", mir))
+        );
+
         let hir = match self.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
             HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),

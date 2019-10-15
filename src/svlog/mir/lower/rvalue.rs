@@ -250,44 +250,7 @@ pub fn lower_expr<'gcx>(
             }
 
             hir::ExprKind::Index(target, mode) => {
-                // Determine the index of the LSB and the width of the
-                // selection. Note that bit-selects are mapped to part-selects
-                // of length 1.
-                let (base, length): (&Rvalue, usize) = match mode {
-                    hir::IndexMode::One(index) => (lower_expr(cx, index, env), 1),
-                    hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, delta) => (
-                        lower_expr(cx, base, env),
-                        cx.constant_int_value_of(delta, env)?.to_usize().unwrap(),
-                    ),
-                    hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
-                        let base = lower_expr(cx, base, env);
-                        let delta_rvalue = lower_expr_and_cast(cx, delta, env, base.ty);
-                        let base = builder.build(
-                            base.ty,
-                            RvalueKind::IntBinaryArith {
-                                op: IntBinaryArithOp::Sub,
-                                sign: base.ty.get_sign().unwrap(),
-                                domain: base.ty.get_value_domain().unwrap(),
-                                lhs: base,
-                                rhs: delta_rvalue,
-                            },
-                        );
-                        let length = cx.constant_int_value_of(delta, env)?.to_usize().unwrap();
-                        (base, length)
-                    }
-                    hir::IndexMode::Many(ast::RangeMode::Absolute, lhs, rhs) => {
-                        let lhs_int = cx.constant_int_value_of(lhs, env)?;
-                        let rhs_int = cx.constant_int_value_of(rhs, env)?;
-                        let base = std::cmp::min(lhs_int, rhs_int).clone();
-                        let base_ty = cx.mkty_int(max(base.bits(), 1));
-                        let base = cx.intern_value(value::make_int(base_ty, base));
-                        let base = builder.build(base_ty, RvalueKind::Const(base));
-                        let length = ((lhs_int - rhs_int).abs() + BigInt::one())
-                            .to_usize()
-                            .unwrap();
-                        (base, length)
-                    }
-                };
+                let (base, length) = compute_indexing(cx, builder.expr, env, mode)?;
 
                 // Cast the target to a simple bit vector type if needed.
                 let target_ty = cx.type_of(target, env)?;
@@ -345,6 +308,67 @@ pub fn lower_expr<'gcx>(
         }
     }();
     result.unwrap_or_else(|_| builder.error())
+}
+
+/// Compute the base and length of an indexing operation.
+///
+/// Determine the index of the LSB and the width of the selection. Note that
+/// bit-selects are mapped to part-selects of length 1.
+pub(crate) fn compute_indexing<'gcx>(
+    cx: &impl Context<'gcx>,
+    origin: NodeId,
+    env: ParamEnv,
+    mode: hir::IndexMode,
+) -> Result<(&'gcx Rvalue<'gcx>, usize)> {
+    let builder = Builder {
+        cx,
+        span: cx.span(origin),
+        expr: origin,
+        env,
+    };
+    Ok(match mode {
+        hir::IndexMode::One(index) => (lower_expr(cx, index, env), 1),
+        hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, delta) => (
+            lower_expr(cx, base, env),
+            builder
+                .cx
+                .constant_int_value_of(delta, env)?
+                .to_usize()
+                .unwrap(),
+        ),
+        hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
+            let base = lower_expr(cx, base, env);
+            let delta_rvalue = lower_expr_and_cast(cx, delta, env, base.ty);
+            let base = builder.build(
+                base.ty,
+                RvalueKind::IntBinaryArith {
+                    op: IntBinaryArithOp::Sub,
+                    sign: base.ty.get_sign().unwrap(),
+                    domain: base.ty.get_value_domain().unwrap(),
+                    lhs: base,
+                    rhs: delta_rvalue,
+                },
+            );
+            let length = builder
+                .cx
+                .constant_int_value_of(delta, env)?
+                .to_usize()
+                .unwrap();
+            (base, length)
+        }
+        hir::IndexMode::Many(ast::RangeMode::Absolute, lhs, rhs) => {
+            let lhs_int = cx.constant_int_value_of(lhs, env)?;
+            let rhs_int = cx.constant_int_value_of(rhs, env)?;
+            let base = std::cmp::min(lhs_int, rhs_int).clone();
+            let base_ty = cx.mkty_int(max(base.bits(), 1));
+            let base = cx.intern_value(value::make_int(base_ty, base));
+            let base = builder.build(base_ty, RvalueKind::Const(base));
+            let length = ((lhs_int - rhs_int).abs() + BigInt::one())
+                .to_usize()
+                .unwrap();
+            (base, length)
+        }
+    })
 }
 
 /// Lower an HIR expression and implicitly cast to a target type.

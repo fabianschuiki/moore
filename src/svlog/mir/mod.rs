@@ -8,6 +8,8 @@
 #![deny(missing_docs)]
 
 pub mod lower;
+mod lvalue;
 mod rvalue;
 
+pub use lvalue::*;
 pub use rvalue::*;
