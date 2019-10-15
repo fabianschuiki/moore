@@ -947,6 +947,12 @@ fn lower_unary<'gcx>(
     match op {
         hir::UnaryOp::BitNot => lower_unary_bitwise(builder, ty, op, arg),
         hir::UnaryOp::LogicNot => lower_unary_logic(builder, op, arg),
+        hir::UnaryOp::RedAnd
+        | hir::UnaryOp::RedOr
+        | hir::UnaryOp::RedXor
+        | hir::UnaryOp::RedNand
+        | hir::UnaryOp::RedNor
+        | hir::UnaryOp::RedXnor => lower_reduction(builder, ty, op, arg),
         _ => unimplemented!("mir for unary {:?}", op),
     }
 }
@@ -1319,6 +1325,54 @@ fn lower_unary_logic<'gcx>(
 
     // Assemble the node.
     builder.build(&ty::LOGIC_TYPE, RvalueKind::UnaryBitwise { op, arg })
+}
+
+/// Map a reduction operator to MIR.
+fn lower_reduction<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let inner_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{}` cannot be reduced", ty)).span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+
+    // Map the argument.
+    let arg = lower_expr_and_cast(builder.cx, arg, builder.env, inner_ty);
+
+    // Determine the operation.
+    let (op, negate) = match op {
+        hir::UnaryOp::RedAnd => (BinaryBitwiseOp::And, false),
+        hir::UnaryOp::RedOr => (BinaryBitwiseOp::Or, false),
+        hir::UnaryOp::RedXor => (BinaryBitwiseOp::Xor, false),
+        hir::UnaryOp::RedNand => (BinaryBitwiseOp::And, true),
+        hir::UnaryOp::RedNor => (BinaryBitwiseOp::Or, true),
+        hir::UnaryOp::RedXnor => (BinaryBitwiseOp::Xor, true),
+        _ => unreachable!("{:?} is not a reduction operator", op),
+    };
+
+    // Assemble the node.
+    let bit_ty = inner_ty.get_value_domain().unwrap().bit_type();
+    let value = builder.build(bit_ty, RvalueKind::Reduction { op, arg });
+    if negate {
+        builder.build(
+            bit_ty,
+            RvalueKind::UnaryBitwise {
+                op: UnaryBitwiseOp::Not,
+                arg: value,
+            },
+        )
+    } else {
+        value
+    }
 }
 
 /// Generate the nodes necessary to implicitly cast an rvalue to a boolean.

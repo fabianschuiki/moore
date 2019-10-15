@@ -37,16 +37,19 @@ pub(crate) fn type_of<'gcx>(
                 let arg_ty = cx.type_of(arg, env)?;
                 Ok(match op {
                     hir::UnaryOp::Neg
+                    | hir::UnaryOp::Pos
                     | hir::UnaryOp::BitNot
                     | hir::UnaryOp::PreInc
                     | hir::UnaryOp::PreDec
                     | hir::UnaryOp::PostInc
                     | hir::UnaryOp::PostDec => arg_ty,
-                    hir::UnaryOp::LogicNot => cx.mkty_bit(),
-                    _ => {
-                        error!("{:#?}", hir);
-                        return cx.unimp_msg("type analysis of", &hir);
-                    }
+                    hir::UnaryOp::LogicNot
+                    | hir::UnaryOp::RedAnd
+                    | hir::UnaryOp::RedOr
+                    | hir::UnaryOp::RedXor
+                    | hir::UnaryOp::RedNand
+                    | hir::UnaryOp::RedNor
+                    | hir::UnaryOp::RedXnor => cx.mkty_bit(),
                 })
             }
             hir::ExprKind::Binary(op, lhs, rhs) => {
