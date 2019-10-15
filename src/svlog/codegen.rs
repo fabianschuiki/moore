@@ -1114,6 +1114,14 @@ where
                 // influence the type system.
                 self.emit_mir_rvalue(value)
             }
+
+            mir::RvalueKind::CastToBool(value) => {
+                let value = self.emit_mir_rvalue(value)?;
+                let ty = self.llhd_type(value);
+                let zero = self.emit_zero_for_type(&ty);
+                Ok(self.builder.ins().neq(value, zero))
+            }
+
             mir::RvalueKind::Truncate(target_width, value) => {
                 let llvalue = self.emit_mir_rvalue(value)?;
                 Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
