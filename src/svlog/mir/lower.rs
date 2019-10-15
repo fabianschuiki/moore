@@ -104,7 +104,9 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
         match hir.kind {
             hir::ExprKind::IntConst(..)
             | hir::ExprKind::UnsizedConst(..)
-            | hir::ExprKind::TimeConst(_) => {
+            | hir::ExprKind::TimeConst(_)
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
                 let k = builder.cx.constant_value_of(expr_id, env)?;
                 Ok(builder.build(k.ty, RvalueKind::Const(k)))
             }
@@ -330,6 +332,11 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 let value = lower_expr_to_mir_rvalue(cx, target, env);
                 let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
                 Ok(builder.build(ty, RvalueKind::Member { value, field }))
+            }
+
+            hir::ExprKind::Cast(ty, expr) => {
+                let ty = cx.type_of(ty, env)?;
+                Ok(lower_expr_and_cast(cx, expr, env, ty))
             }
 
             _ => {
