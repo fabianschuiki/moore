@@ -108,7 +108,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 let k = builder.cx.constant_value_of(expr_id, env)?;
                 Ok(builder.build(k.ty, RvalueKind::Const(k)))
             }
-            hir::ExprKind::Ident(_name) => {
+            hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
                 let binding = builder.cx.resolve_node(expr_id, env)?;
                 match builder.cx.hir_of(binding)? {
                     HirNode::VarDecl(..)
