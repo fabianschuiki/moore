@@ -1126,6 +1126,27 @@ where
                 let llvalue = self.emit_mir_rvalue(value)?;
                 Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
             }
+
+            mir::RvalueKind::ZeroExtend(_, value) => {
+                let width = value.ty.width();
+                let llty = self.emit_type(mir.ty, mir.env)?;
+                let result = self.emit_zero_for_type(&llty);
+                let value = self.emit_mir_rvalue(value)?;
+                Ok(self.builder.ins().ins_slice(result, value, 0, width))
+            }
+
+            mir::RvalueKind::SignExtend(_, value) => {
+                let width = value.ty.width();
+                let llty = self.emit_type(mir.ty, mir.env)?;
+                let value = self.emit_mir_rvalue(value)?;
+                let sign = self.builder.ins().ext_slice(value, width - 1, 1);
+                let zeros = self.emit_zero_for_type(&llty);
+                let ones = self.builder.ins().not(zeros);
+                let mux = self.builder.ins().array(vec![zeros, ones]);
+                let mux = self.builder.ins().mux(mux, sign);
+                Ok(self.builder.ins().ins_slice(mux, value, 0, width))
+            }
+
             mir::RvalueKind::ConstructArray(ref indices) => {
                 let llvalue = (0..indices.len())
                     .map(|i| self.emit_mir_rvalue(indices[&i]))
