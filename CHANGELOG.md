@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support auto-connected and unconnected ports.
 - Support for the `{...}` concatenation and `{N{...}}` repetition operators.
 - Add `-On` switch to control optimization level.
+- Add MIR for rvalues. ([#104](https://github.com/fabianschuiki/moore/issues/104))
 
 ### Changed
 - Update llhd to v0.8.0.
