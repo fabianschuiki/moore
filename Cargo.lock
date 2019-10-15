@@ -318,7 +318,7 @@ dependencies = [
 [[package]]
 name = "llhd"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "git+https://github.com/fabianschuiki/llhd?rev=1afbd1b#1afbd1b8ddf878a654f1dac8771ed0a6fd236af3"
 dependencies = [
  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -367,7 +367,7 @@ version = "0.4.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "llhd 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "llhd 0.8.0 (git+https://github.com/fabianschuiki/llhd?rev=1afbd1b)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.4.0",
  "moore-svlog 0.4.0",
@@ -397,7 +397,7 @@ dependencies = [
 name = "moore-svlog"
 version = "0.4.0"
 dependencies = [
- "llhd 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "llhd 0.8.0 (git+https://github.com/fabianschuiki/llhd?rev=1afbd1b)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.4.0",
  "moore-svlog-syntax 0.4.0",
@@ -1127,7 +1127,7 @@ dependencies = [
 "checksum lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a374c89b9db55895453a74c1e38861d9deec0b01b405a82516e9d5de4820dea1"
 "checksum libc 0.2.45 (registry+https://github.com/rust-lang/crates.io-index)" = "2d2857ec59fadc0773853c664d2d18e7198e83883e7060b63c924cb077bd5c74"
 "checksum llhd 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fc44ccd39c2df6abc427c196dc256c34407b7bc81a0598accd1153ffe0418f6e"
-"checksum llhd 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7d108c2a222b2caad5c3c19f48b65d94a68ceda52c40d346d6b0f763764e2099"
+"checksum llhd 0.8.0 (git+https://github.com/fabianschuiki/llhd?rev=1afbd1b)" = "<none>"
 "checksum lock_api 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "62ebf1391f6acad60e5c8b43706dde4582df75c06698ab44511d15016bc2442c"
 "checksum log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "c84ec4b527950aa83a329754b01dbe3f58361d1c5efacd1f6d68c494d08a17c6"
 "checksum memchr 2.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "88579771288728879b57485cc7d6b07d648c9f0141eb955f8ab7f9d45394468e"

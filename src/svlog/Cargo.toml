@@ -14,7 +14,7 @@ path = "lib.rs"
 [dependencies]
 moore-common = { path = "../common", version = "0.4.0" }
 moore-svlog-syntax = { path = "syntax", version = "0.4.0" }
-llhd = "0.8"
+llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "1afbd1b", version = "0.8" }
 log = "0.4"
 salsa = { git = "https://github.com/fabianschuiki/salsa", branch = "database-lifetimes" }
 num = "0.2"

@@ -726,14 +726,14 @@ where
                     ..
                 },
                 &ValueKind::Int(ref k),
-            ) => Ok(self.builder.ins().const_int(width, false, k.clone())),
+            ) => Ok(self.builder.ins().const_int(width, k.clone())),
             (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(self
                 .builder
                 .ins()
                 .const_time(llhd::ConstTime::new(k.clone(), 0, 0))),
             (&TypeKind::Bit(_), &ValueKind::Int(ref k))
             | (&TypeKind::BitScalar { .. }, &ValueKind::Int(ref k)) => {
-                Ok(self.builder.ins().const_int(1, false, k.clone()))
+                Ok(self.builder.ins().const_int(1, k.clone()))
             }
             (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {
                 let fields: Result<Vec<_>> = v
@@ -775,7 +775,7 @@ where
                     .ins()
                     .const_time(llhd::ConstTime::new(num::zero(), 0, 0))
             }
-            llhd::IntType(w) => self.builder.ins().const_int(w, false, 0),
+            llhd::IntType(w) => self.builder.ins().const_int(w, 0),
             llhd::SignalType(ref ty) => {
                 let inner = self.emit_zero_for_type(ty);
                 self.builder.ins().sig(inner)
@@ -1182,7 +1182,7 @@ where
             } => {
                 let target = self.emit_mir_rvalue(value)?;
                 let base = self.emit_mir_rvalue(base)?;
-                let hidden = self.builder.ins().const_int(length, false, BigInt::zero());
+                let hidden = self.builder.ins().const_int(length, BigInt::zero());
                 // TODO(fschuiki): make the above a constant of all `x`.
                 let shifted = self.builder.ins().shr(target, hidden, base);
                 Ok(self.builder.ins().ext_slice(shifted, 0, length))
@@ -1575,7 +1575,7 @@ where
         } else {
             ty.unwrap_int()
         };
-        let zeros = self.builder.ins().const_int(width, false, 0);
+        let zeros = self.builder.ins().const_int(width, 0);
         let hidden = if arith && dir == ShiftDir::Right {
             let ones = self.builder.ins().not(zeros);
             let sign = self.builder.ins().ext_slice(lhs, width - 1, 1);
@@ -1896,7 +1896,7 @@ where
                 let expr = self.emit_rvalue(expr, env)?;
                 let final_blk = self.add_named_block("case_exit");
                 for &(ref way_exprs, stmt) in ways {
-                    let mut last_check = self.builder.ins().const_int(1, false, 0);
+                    let mut last_check = self.builder.ins().const_int(1, 0);
                     for &way_expr in way_exprs {
                         let way_expr = self.emit_rvalue(way_expr, env)?;
                         let check = self.builder.ins().eq(expr.clone(), way_expr);
