@@ -1226,6 +1226,21 @@ where
                 }
                 Ok(value)
             }
+
+            mir::RvalueKind::Repeat(times, value) => {
+                let width = value.ty.width();
+                let value = self.emit_mir_rvalue(value)?;
+                let llty = self.emit_type(mir.ty, mir.env)?;
+                let mut result = self.emit_zero_for_type(&llty);
+                for i in 0..times {
+                    result = self
+                        .builder
+                        .ins()
+                        .ins_slice(result, value, i * width, width);
+                }
+                Ok(result)
+            }
+
             mir::RvalueKind::Shift {
                 op,
                 arith,
