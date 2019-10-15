@@ -130,6 +130,13 @@ pub enum RvalueKind<'a> {
         if_true: &'a Rvalue<'a>,
         if_false: &'a Rvalue<'a>,
     },
+    /// A shift operation.
+    Shift {
+        op: ShiftOp,
+        arith: bool,
+        value: &'a Rvalue<'a>,
+        amount: &'a Rvalue<'a>,
+    },
     /// An error occurred during lowering.
     Error,
 }
@@ -172,4 +179,12 @@ pub enum IntCompOp {
     Leq,
     Gt,
     Geq,
+}
+
+/// The shift operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum ShiftOp {
+    Left,
+    Right,
 }

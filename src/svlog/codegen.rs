@@ -1172,6 +1172,32 @@ where
                 }
                 Ok(value)
             }
+            mir::RvalueKind::Shift {
+                op,
+                arith,
+                value,
+                amount,
+            } => {
+                let value = self.emit_mir_rvalue(value)?;
+                let amount = self.emit_mir_rvalue(amount)?;
+                let value_ty = self.builder.unit().value_type(value);
+                let hidden = self.emit_zero_for_type(&value_ty);
+                let hidden = if arith && op == mir::ShiftOp::Right {
+                    let ones = self.builder.ins().not(hidden);
+                    let sign = self
+                        .builder
+                        .ins()
+                        .ext_slice(value, value_ty.unwrap_int() - 1, 1);
+                    let mux = self.builder.ins().array(vec![hidden, ones]);
+                    self.builder.ins().mux(mux, sign)
+                } else {
+                    hidden
+                };
+                Ok(match op {
+                    mir::ShiftOp::Left => self.builder.ins().shl(value, hidden, amount),
+                    mir::ShiftOp::Right => self.builder.ins().shr(value, hidden, amount),
+                })
+            }
             mir::RvalueKind::Error => Err(()),
             _ => {
                 error!("{:#?}", mir);
