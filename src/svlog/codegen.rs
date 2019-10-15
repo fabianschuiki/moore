@@ -773,241 +773,17 @@ where
         env: ParamEnv,
         mode: Mode,
     ) -> Result<llhd::ir::Value> {
-        // TODO: Remove the following. This simply maps the expression to an MIR
-        // rvalue. This should become the standard in the future.
-        let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
-        debug!("mir: {:#?}", mir);
+        // let hir = match self.hir_of(expr_id)? {
+        //     HirNode::Expr(x) => x,
+        //     HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
+        //     HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
+        //     x => unreachable!("rvalue for {:#?}", x),
+        // };
 
-        let hir = match self.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
-            HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
-            x => unreachable!("rvalue for {:#?}", x),
-        };
-        #[allow(unreachable_patterns)]
-        let (value, actual_mode) = match hir.kind {
-            hir::ExprKind::IntConst(..)
-            | hir::ExprKind::UnsizedConst(..)
-            | hir::ExprKind::TimeConst(_) => {
-                let k = self.constant_value_of(expr_id, env)?;
-                (self.emit_const(k, env)?, Mode::Value)
-            }
-            hir::ExprKind::Ident(name) => {
-                let binding = self.resolve_node(expr_id, env)?;
-                let (value, is_const) = match self.is_constant(binding)? {
-                    true => {
-                        let k = self.constant_value_of(binding, env)?;
-                        (self.emit_const(k, env)?, true)
-                    }
-                    false => (self.emitted_value(binding).clone(), false),
-                };
-                let ty = self.llhd_type(value);
-                let is_signal = match *ty {
-                    llhd::SignalType(_) => true,
-                    _ => false,
-                };
-                // We currently just assume that the value above is a signal.
-                // As soon as we have actual variable declarations, this will
-                // need some more cleverness.
-                match (mode, is_signal, is_const) {
-                    (Mode::Value, true, _) => {
-                        let value = self.builder.ins().prb(value);
-                        self.builder.dfg_mut().set_name(value, format!("{}", name));
-                        (value, Mode::Value)
-                    }
-                    (Mode::Value, false, false) => {
-                        let value = self.builder.ins().ld(value);
-                        self.builder.dfg_mut().set_name(value, format!("{}", name));
-                        (value, Mode::Value)
-                    }
-                    (Mode::Value, false, true) => (value, Mode::Value),
-                    (Mode::Signal, true, _) => (value, Mode::Signal),
-                    (Mode::Signal, false, _) => (value, Mode::Value),
-                }
-            }
-            hir::ExprKind::Unary(op, arg) => (
-                match op {
-                    hir::UnaryOp::Pos => self.emit_rvalue(arg, env)?,
-                    hir::UnaryOp::Neg => {
-                        let arg = self.emit_rvalue(arg, env)?;
-                        self.builder.ins().neg(arg).into()
-                    }
-                    hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
-                        let value = self.emit_rvalue(arg, env)?;
-                        self.builder.ins().not(value)
-                    }
-                    hir::UnaryOp::PreInc => self.emit_incdec(arg, env, BinaryOp::Add, false)?,
-                    hir::UnaryOp::PreDec => self.emit_incdec(arg, env, BinaryOp::Sub, false)?,
-                    hir::UnaryOp::PostInc => self.emit_incdec(arg, env, BinaryOp::Add, true)?,
-                    hir::UnaryOp::PostDec => self.emit_incdec(arg, env, BinaryOp::Sub, true)?,
-                    hir::UnaryOp::RedAnd => self.emit_reduction(arg, env, BinaryOp::And, false)?,
-                    hir::UnaryOp::RedNand => self.emit_reduction(arg, env, BinaryOp::And, true)?,
-                    hir::UnaryOp::RedOr => self.emit_reduction(arg, env, BinaryOp::Or, false)?,
-                    hir::UnaryOp::RedNor => self.emit_reduction(arg, env, BinaryOp::Or, true)?,
-                    hir::UnaryOp::RedXor => self.emit_reduction(arg, env, BinaryOp::Xor, false)?,
-                    hir::UnaryOp::RedXnor => self.emit_reduction(arg, env, BinaryOp::Xor, true)?,
-                    _ => return self.unimp_msg("code generation for", hir),
-                },
-                Mode::Value,
-            ),
-            hir::ExprKind::Binary(op, lhs, rhs) => {
-                let lhs = self.emit_rvalue(lhs, env)?;
-                let rhs = self.emit_rvalue(rhs, env)?;
-                let inst = match op {
-                    hir::BinaryOp::Add => self.builder.ins().add(lhs, rhs),
-                    hir::BinaryOp::Sub => self.builder.ins().sub(lhs, rhs),
-                    hir::BinaryOp::Mul => self.builder.ins().umul(lhs, rhs),
-                    hir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
-                    hir::BinaryOp::Mod => self.builder.ins().umod(lhs, rhs),
-                    hir::BinaryOp::Pow => self.builder.ins().umul(lhs, rhs), // fix this
-                    hir::BinaryOp::Eq => self.builder.ins().eq(lhs, rhs),
-                    hir::BinaryOp::Neq => self.builder.ins().neq(lhs, rhs),
-                    hir::BinaryOp::Lt => self.builder.ins().ult(lhs, rhs),
-                    hir::BinaryOp::Leq => self.builder.ins().ule(lhs, rhs),
-                    hir::BinaryOp::Gt => self.builder.ins().ugt(lhs, rhs),
-                    hir::BinaryOp::Geq => self.builder.ins().uge(lhs, rhs),
-                    hir::BinaryOp::LogicAnd | hir::BinaryOp::BitAnd => {
-                        self.builder.ins().and(lhs, rhs)
-                    }
-                    hir::BinaryOp::LogicOr | hir::BinaryOp::BitOr => {
-                        self.builder.ins().or(lhs, rhs)
-                    }
-                    hir::BinaryOp::BitXor => self.builder.ins().xor(lhs, rhs),
-                    hir::BinaryOp::BitNand => {
-                        let v = self.builder.ins().and(lhs, rhs);
-                        self.builder.ins().not(v)
-                    }
-                    hir::BinaryOp::BitNor => {
-                        let v = self.builder.ins().or(lhs, rhs);
-                        self.builder.ins().not(v)
-                    }
-                    hir::BinaryOp::BitXnor => {
-                        let v = self.builder.ins().xor(lhs, rhs);
-                        self.builder.ins().not(v)
-                    }
-                    hir::BinaryOp::LogicShL => {
-                        self.emit_shift_operator(ShiftDir::Left, false, lhs, rhs)
-                    }
-                    hir::BinaryOp::LogicShR => {
-                        self.emit_shift_operator(ShiftDir::Right, false, lhs, rhs)
-                    }
-                    hir::BinaryOp::ArithShL => {
-                        self.emit_shift_operator(ShiftDir::Left, true, lhs, rhs)
-                    }
-                    hir::BinaryOp::ArithShR => {
-                        self.emit_shift_operator(ShiftDir::Right, true, lhs, rhs)
-                    }
-                    _ => {
-                        error!("{:#?}", hir);
-                        return self.unimp_msg("code generation for", hir);
-                    }
-                };
-                (inst, Mode::Value)
-            }
-            // hir::ExprKind::Field(target_id, field_name) => {
-            //     let (_, index, _) = self.resolve_field_access(expr_id, env)?;
-            //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-            //     let value = self.builder.ins().ext_field(target, index);
-            //     let name = format!(
-            //         "{}.{}",
-            //         self.builder
-            //             .dfg()
-            //             .get_name(target)
-            //             .map(String::from)
-            //             .unwrap_or_else(|| "struct".into()),
-            //         field_name
-            //     );
-            //     self.builder.dfg_mut().set_name(value, name);
-            //     (value, Mode::Value)
-            // }
-            // hir::ExprKind::Index(target_id, mode) => {
-            //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-            //     (self.emit_index_access(target, env, mode)?, Mode::Value)
-            // }
-            // hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
-            //     let cond = self.emit_rvalue(cond, env)?;
-            //     let true_expr = self.emit_rvalue(true_expr, env)?;
-            //     let false_expr = self.emit_rvalue(false_expr, env)?;
-            //     let array = self.builder.ins().array(vec![false_expr, true_expr]);
-            //     trace!(
-            //         "llhd array `{}` is of type `{}`",
-            //         self.builder
-            //             .dfg()
-            //             .value_inst(array)
-            //             .dump(self.builder.dfg()),
-            //         self.builder.unit().value_type(array)
-            //     );
-            //     let value = self.builder.ins().mux(array, cond);
-            //     (value, Mode::Value)
-            // }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
-                let k = self.constant_value_of(expr_id, env)?;
-                (self.emit_const(k, env)?, Mode::Value)
-            }
-            // hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
-            // | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
-            //     (self.emit_rvalue(arg, env)?, Mode::Value)
-            // }
-            hir::ExprKind::Scope(..) => {
-                let binding = self.resolve_node(expr_id, env)?;
-                let value = self.constant_value_of(binding, env)?;
-                (self.emit_const(value, env)?, Mode::Value)
-            }
-            hir::ExprKind::Concat(repeat, ref exprs) => {
-                let bit_widths = exprs
-                    .iter()
-                    .cloned()
-                    .map(|expr| {
-                        let ty = self.type_of(expr, env)?;
-                        bit_size_of_type(self.cx, ty, env)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                let bit_width = bit_widths.iter().sum();
-                let exprs = exprs
-                    .iter()
-                    .cloned()
-                    .map(|id| self.emit_rvalue(id, env))
-                    .collect::<Result<Vec<_>>>()?;
-                let repeat = match repeat {
-                    Some(repeat) => self.constant_int_value_of(repeat, env)?.to_usize().unwrap(),
-                    None => 1,
-                };
-                let ty = llhd::int_ty(bit_width);
-                let mut value: llhd::ir::Value = self.emit_zero_for_type(&ty);
-                let mut offset = 0;
-                for (width, expr) in bit_widths.into_iter().zip(exprs.into_iter()) {
-                    value = self.builder.ins().ins_slice(value, expr, offset, width);
-                    offset += width;
-                }
-                let rep_ty = llhd::int_ty(bit_width * repeat);
-                let mut rep_value = self.emit_zero_for_type(&rep_ty);
-                for i in 0..repeat {
-                    rep_value =
-                        self.builder
-                            .ins()
-                            .ins_slice(rep_value, value, i * bit_width, bit_width);
-                }
-                (rep_value, Mode::Value)
-            }
-            hir::ExprKind::Cast(_ty, expr) => {
-                warn!("cast implemented as nop: {:?}", hir.kind);
-                return self.emit_rvalue_mode(expr, env, mode);
-            }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(..))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(..))
-            | hir::ExprKind::Index(..)
-            | hir::ExprKind::Field(..)
-            | hir::ExprKind::NamedPattern(..)
-            | hir::ExprKind::Ternary(..) => {
-                let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
-                (self.emit_mir_rvalue(mir)?, Mode::Value)
-            }
-            _ => {
-                error!("{:#?}", hir);
-                return self.unimp_msg("code generation for", hir);
-            }
-        };
+        let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
+        let value = self.emit_mir_rvalue(mir)?;
+        let actual_mode = Mode::Value;
+
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {
                 let ty = self.llhd_type(value);
@@ -1021,6 +797,237 @@ where
             (Mode::Value, Mode::Signal) => unreachable!(),
             _ => Ok(value),
         }
+
+        // #[allow(unreachable_patterns)]
+        // let (value, actual_mode) = match hir.kind {
+        // hir::ExprKind::IntConst(..)
+        // | hir::ExprKind::UnsizedConst(..)
+        // | hir::ExprKind::TimeConst(_) => {
+        //     let k = self.constant_value_of(expr_id, env)?;
+        //     (self.emit_const(k, env)?, Mode::Value)
+        // }
+        // hir::ExprKind::Ident(name) => {
+        //     let binding = self.resolve_node(expr_id, env)?;
+        //     let (value, is_const) = match self.is_constant(binding)? {
+        //         true => {
+        //             let k = self.constant_value_of(binding, env)?;
+        //             (self.emit_const(k, env)?, true)
+        //         }
+        //         false => (self.emitted_value(binding).clone(), false),
+        //     };
+        //     let ty = self.llhd_type(value);
+        //     let is_signal = match *ty {
+        //         llhd::SignalType(_) => true,
+        //         _ => false,
+        //     };
+        //     // We currently just assume that the value above is a signal.
+        //     // As soon as we have actual variable declarations, this will
+        //     // need some more cleverness.
+        //     match (mode, is_signal, is_const) {
+        //         (Mode::Value, true, _) => {
+        //             let value = self.builder.ins().prb(value);
+        //             self.builder.dfg_mut().set_name(value, format!("{}", name));
+        //             (value, Mode::Value)
+        //         }
+        //         (Mode::Value, false, false) => {
+        //             let value = self.builder.ins().ld(value);
+        //             self.builder.dfg_mut().set_name(value, format!("{}", name));
+        //             (value, Mode::Value)
+        //         }
+        //         (Mode::Value, false, true) => (value, Mode::Value),
+        //         (Mode::Signal, true, _) => (value, Mode::Signal),
+        //         (Mode::Signal, false, _) => (value, Mode::Value),
+        //     }
+        // }
+        // hir::ExprKind::Unary(op, arg) => (
+        //     match op {
+        //         hir::UnaryOp::Pos => self.emit_rvalue(arg, env)?,
+        //         hir::UnaryOp::Neg => {
+        //             let arg = self.emit_rvalue(arg, env)?;
+        //             self.builder.ins().neg(arg).into()
+        //         }
+        //         hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
+        //             let value = self.emit_rvalue(arg, env)?;
+        //             self.builder.ins().not(value)
+        //         }
+        //         hir::UnaryOp::PreInc => self.emit_incdec(arg, env, BinaryOp::Add, false)?,
+        //         hir::UnaryOp::PreDec => self.emit_incdec(arg, env, BinaryOp::Sub, false)?,
+        //         hir::UnaryOp::PostInc => self.emit_incdec(arg, env, BinaryOp::Add, true)?,
+        //         hir::UnaryOp::PostDec => self.emit_incdec(arg, env, BinaryOp::Sub, true)?,
+        //         hir::UnaryOp::RedAnd => self.emit_reduction(arg, env, BinaryOp::And, false)?,
+        //         hir::UnaryOp::RedNand => self.emit_reduction(arg, env, BinaryOp::And, true)?,
+        //         hir::UnaryOp::RedOr => self.emit_reduction(arg, env, BinaryOp::Or, false)?,
+        //         hir::UnaryOp::RedNor => self.emit_reduction(arg, env, BinaryOp::Or, true)?,
+        //         hir::UnaryOp::RedXor => self.emit_reduction(arg, env, BinaryOp::Xor, false)?,
+        //         hir::UnaryOp::RedXnor => self.emit_reduction(arg, env, BinaryOp::Xor, true)?,
+        //         _ => return self.unimp_msg("code generation for", hir),
+        //     },
+        //     Mode::Value,
+        // ),
+        // hir::ExprKind::Binary(op, lhs, rhs) => {
+        //     let lhs = self.emit_rvalue(lhs, env)?;
+        //     let rhs = self.emit_rvalue(rhs, env)?;
+        //     let inst = match op {
+        //         hir::BinaryOp::Add => self.builder.ins().add(lhs, rhs),
+        //         hir::BinaryOp::Sub => self.builder.ins().sub(lhs, rhs),
+        //         hir::BinaryOp::Mul => self.builder.ins().umul(lhs, rhs),
+        //         hir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
+        //         hir::BinaryOp::Mod => self.builder.ins().umod(lhs, rhs),
+        //         hir::BinaryOp::Pow => self.builder.ins().umul(lhs, rhs), // fix this
+        //         hir::BinaryOp::Eq => self.builder.ins().eq(lhs, rhs),
+        //         hir::BinaryOp::Neq => self.builder.ins().neq(lhs, rhs),
+        //         hir::BinaryOp::Lt => self.builder.ins().ult(lhs, rhs),
+        //         hir::BinaryOp::Leq => self.builder.ins().ule(lhs, rhs),
+        //         hir::BinaryOp::Gt => self.builder.ins().ugt(lhs, rhs),
+        //         hir::BinaryOp::Geq => self.builder.ins().uge(lhs, rhs),
+        //         hir::BinaryOp::LogicAnd | hir::BinaryOp::BitAnd => {
+        //             self.builder.ins().and(lhs, rhs)
+        //         }
+        //         hir::BinaryOp::LogicOr | hir::BinaryOp::BitOr => {
+        //             self.builder.ins().or(lhs, rhs)
+        //         }
+        //         hir::BinaryOp::BitXor => self.builder.ins().xor(lhs, rhs),
+        //         hir::BinaryOp::BitNand => {
+        //             let v = self.builder.ins().and(lhs, rhs);
+        //             self.builder.ins().not(v)
+        //         }
+        //         hir::BinaryOp::BitNor => {
+        //             let v = self.builder.ins().or(lhs, rhs);
+        //             self.builder.ins().not(v)
+        //         }
+        //         hir::BinaryOp::BitXnor => {
+        //             let v = self.builder.ins().xor(lhs, rhs);
+        //             self.builder.ins().not(v)
+        //         }
+        //         hir::BinaryOp::LogicShL => {
+        //             self.emit_shift_operator(ShiftDir::Left, false, lhs, rhs)
+        //         }
+        //         hir::BinaryOp::LogicShR => {
+        //             self.emit_shift_operator(ShiftDir::Right, false, lhs, rhs)
+        //         }
+        //         hir::BinaryOp::ArithShL => {
+        //             self.emit_shift_operator(ShiftDir::Left, true, lhs, rhs)
+        //         }
+        //         hir::BinaryOp::ArithShR => {
+        //             self.emit_shift_operator(ShiftDir::Right, true, lhs, rhs)
+        //         }
+        //         _ => {
+        //             error!("{:#?}", hir);
+        //             return self.unimp_msg("code generation for", hir);
+        //         }
+        //     };
+        //     (inst, Mode::Value)
+        // }
+        // hir::ExprKind::Field(target_id, field_name) => {
+        //     let (_, index, _) = self.resolve_field_access(expr_id, env)?;
+        //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
+        //     let value = self.builder.ins().ext_field(target, index);
+        //     let name = format!(
+        //         "{}.{}",
+        //         self.builder
+        //             .dfg()
+        //             .get_name(target)
+        //             .map(String::from)
+        //             .unwrap_or_else(|| "struct".into()),
+        //         field_name
+        //     );
+        //     self.builder.dfg_mut().set_name(value, name);
+        //     (value, Mode::Value)
+        // }
+        // hir::ExprKind::Index(target_id, mode) => {
+        //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
+        //     (self.emit_index_access(target, env, mode)?, Mode::Value)
+        // }
+        // hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
+        //     let cond = self.emit_rvalue(cond, env)?;
+        //     let true_expr = self.emit_rvalue(true_expr, env)?;
+        //     let false_expr = self.emit_rvalue(false_expr, env)?;
+        //     let array = self.builder.ins().array(vec![false_expr, true_expr]);
+        //     trace!(
+        //         "llhd array `{}` is of type `{}`",
+        //         self.builder
+        //             .dfg()
+        //             .value_inst(array)
+        //             .dump(self.builder.dfg()),
+        //         self.builder.unit().value_type(array)
+        //     );
+        //     let value = self.builder.ins().mux(array, cond);
+        //     (value, Mode::Value)
+        // }
+        // hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+        // | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
+        //     let k = self.constant_value_of(expr_id, env)?;
+        //     (self.emit_const(k, env)?, Mode::Value)
+        // }
+        // hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+        // | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
+        //     (self.emit_rvalue(arg, env)?, Mode::Value)
+        // }
+        // hir::ExprKind::Scope(..) => {
+        //     let binding = self.resolve_node(expr_id, env)?;
+        //     let value = self.constant_value_of(binding, env)?;
+        //     (self.emit_const(value, env)?, Mode::Value)
+        // }
+        // hir::ExprKind::Concat(repeat, ref exprs) => {
+        //     let bit_widths = exprs
+        //         .iter()
+        //         .cloned()
+        //         .map(|expr| {
+        //             let ty = self.type_of(expr, env)?;
+        //             bit_size_of_type(self.cx, ty, env)
+        //         })
+        //         .collect::<Result<Vec<_>>>()?;
+        //     let bit_width = bit_widths.iter().sum();
+        //     let exprs = exprs
+        //         .iter()
+        //         .cloned()
+        //         .map(|id| self.emit_rvalue(id, env))
+        //         .collect::<Result<Vec<_>>>()?;
+        //     let repeat = match repeat {
+        //         Some(repeat) => self.constant_int_value_of(repeat, env)?.to_usize().unwrap(),
+        //         None => 1,
+        //     };
+        //     let ty = llhd::int_ty(bit_width);
+        //     let mut value: llhd::ir::Value = self.emit_zero_for_type(&ty);
+        //     let mut offset = 0;
+        //     for (width, expr) in bit_widths.into_iter().zip(exprs.into_iter()) {
+        //         value = self.builder.ins().ins_slice(value, expr, offset, width);
+        //         offset += width;
+        //     }
+        //     let rep_ty = llhd::int_ty(bit_width * repeat);
+        //     let mut rep_value = self.emit_zero_for_type(&rep_ty);
+        //     for i in 0..repeat {
+        //         rep_value =
+        //             self.builder
+        //                 .ins()
+        //                 .ins_slice(rep_value, value, i * bit_width, bit_width);
+        //     }
+        //     (rep_value, Mode::Value)
+        // }
+        // hir::ExprKind::Cast(_ty, expr) => {
+        //     warn!("cast implemented as nop: {:?}", hir.kind);
+        //     return self.emit_rvalue_mode(expr, env, mode);
+        // }
+        // hir::ExprKind::IntConst(..)
+        // | hir::ExprKind::UnsizedConst(..)
+        // | hir::ExprKind::TimeConst(_)
+        // | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(..))
+        // | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(..))
+        // | hir::ExprKind::Index(..)
+        // | hir::ExprKind::Field(..)
+        // | hir::ExprKind::NamedPattern(..)
+        // | hir::ExprKind::Ternary(..)
+        // | hir::ExprKind::Ident(..)
+        // | hir::ExprKind::Scope(..)
+        // | hir::ExprKind::Concat(..) => {
+        //     let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
+        //     (self.emit_mir_rvalue(mir)?, Mode::Value)
+        // }
+        // _ => {
+        //     error!("{:#?}", hir);
+        //     return self.unimp_msg("code generation for", hir);
+        // }
+        // };
     }
 
     fn emit_mir_rvalue(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
