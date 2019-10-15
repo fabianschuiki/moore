@@ -59,12 +59,37 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
         env,
     };
     let result = || -> Result<&Rvalue> {
+        // Check whether the node has a constant value. This will allow us to
+        // quickly emit parameters and genvars.
+        let is_const = builder.cx.is_constant(expr_id).unwrap_or(false);
+
+        // Try to extract the expr HIR for this node. Handle a few special cases
+        // where the node is not technically an expression, but can be used as a
+        // rvalue.
         let hir = match builder.cx.hir_of(expr_id)? {
             HirNode::Expr(x) => x,
-            HirNode::VarDecl(decl) => unimplemented!("mir rvalue for {:?}", decl),
-            HirNode::Port(port) => unimplemented!("mir rvalue for {:?}", port),
+            HirNode::VarDecl(decl) => {
+                return Ok(
+                    builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id))
+                )
+            }
+            HirNode::Port(port) => {
+                return Ok(
+                    builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id))
+                )
+            }
+            HirNode::EnumVariant(..) => {
+                let k = builder.cx.constant_value_of(expr_id, env)?;
+                return Ok(builder.build(k.ty, RvalueKind::Const(k)));
+            }
+            _ if is_const => {
+                let k = builder.cx.constant_value_of(expr_id, env)?;
+                return Ok(builder.build(k.ty, RvalueKind::Const(k)));
+            }
             x => unreachable!("rvalue for {:#?}", x),
         };
+
+        // Determine the expression type and match on the various forms.
         let ty = builder.cx.type_of(expr_id, env)?;
         match hir.kind {
             hir::ExprKind::IntConst(..)
@@ -76,12 +101,11 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             hir::ExprKind::Ident(_name) => {
                 let binding = builder.cx.resolve_node(expr_id, env)?;
                 match builder.cx.hir_of(binding)? {
-                    HirNode::VarDecl(decl) => Ok(builder.build(ty, RvalueKind::Var(decl.id))),
-                    HirNode::Port(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
-                    HirNode::EnumVariant(..) => {
-                        let k = builder.cx.constant_value_of(expr_id, env)?;
-                        Ok(builder.build(k.ty, RvalueKind::Const(k)))
-                    }
+                    HirNode::VarDecl(..)
+                    | HirNode::Port(..)
+                    | HirNode::EnumVariant(..)
+                    | HirNode::ValueParam(..)
+                    | HirNode::GenvarDecl(..) => Ok(lower_expr_to_mir_rvalue(cx, binding, env)),
                     x => {
                         builder.cx.emit(
                             DiagBuilder2::error(format!(
