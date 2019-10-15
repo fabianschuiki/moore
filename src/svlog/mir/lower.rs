@@ -970,6 +970,8 @@ fn lower_int_binary_arith<'gcx>(
             return builder.error();
         }
     };
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
 
     // Cast the operands to the operator type.
     trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
@@ -1044,6 +1046,8 @@ fn lower_int_comparison<'gcx>(
         },
         dubbed: false,
     });
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
 
     // Cast the operands to the operator type.
     trace!("binary {:?} on {} maps to {}", op, ty, union_ty);
@@ -1158,6 +1162,8 @@ fn lower_unary_bitwise<'gcx>(
             return builder.error();
         }
     };
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
 
     // Map the argument.
     let arg = lower_expr_and_cast(builder.cx, arg, builder.env, result_ty);
@@ -1191,6 +1197,8 @@ fn lower_binary_bitwise<'gcx>(
             return builder.error();
         }
     };
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
 
     // Cast the operands to the operator type.
     trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
