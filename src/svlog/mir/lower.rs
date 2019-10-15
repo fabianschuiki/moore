@@ -368,6 +368,26 @@ fn lower_implicit_cast<'gcx>(
         to_raw
     );
 
+    // Bit vectors may look different because one is "dubbed" and the other
+    // is not. In this case simply return.
+    match (from_raw, to_raw) {
+        (
+            TypeKind::BitVector {
+                domain: da,
+                sign: sa,
+                range: ra,
+                ..
+            },
+            TypeKind::BitVector {
+                domain: db,
+                sign: sb,
+                range: rb,
+                ..
+            },
+        ) if da == db && sa == sb && ra == rb => return value,
+        _ => (),
+    }
+
     // Try a value domain cast.
     let from_domain = from_raw.get_value_domain();
     let to_domain = to_raw.get_value_domain();
@@ -493,65 +513,6 @@ fn lower_implicit_cast<'gcx>(
         let ty = change_type_sign(builder.cx, from_sbt.unwrap(), to_sign.unwrap());
         let inner = builder.build(ty, RvalueKind::CastSign(to_sign.unwrap(), value));
         return lower_implicit_cast(builder, inner, to);
-    }
-
-    // Try to make the cast happen.
-    match (from_raw, to_raw) {
-        // Integer to bit truncation; e.g. `int` to `bit`.
-        (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw > 1 => {
-            // trace!("would narrow {} int to 1 bit", fw);
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::Int(1, fd)),
-                RvalueKind::Truncate(1, value),
-            );
-            return lower_implicit_cast(builder, inner, to);
-        }
-
-        // // Integer to bit conversion; e.g. `bit [0:0]` to `bit`.
-        // (&TypeKind::Int(fw, fd), &TypeKind::Bit(_)) if fw == 1 => {
-        //     // trace!("would map int to bit");
-        //     let inner = builder.build(
-        //         builder.cx.intern_type(TypeKind::Bit(fd)),
-        //         RvalueKind::CastVectorToAtom { domain: fd, value },
-        //     );
-        //     return lower_implicit_cast(builder, inner, to);
-        // }
-
-        // // Bit vector truncation and zero and sign extension.
-        // (
-        //     &TypeKind::BitVector {
-        //         domain,
-        //         sign,
-        //         range: ty::Range { size: fw, .. },
-        //         ..
-        //     },
-        //     &TypeKind::BitVector { range, .. },
-        // ) if fw != range.size => {
-        //     let ty = builder.cx.intern_type(TypeKind::BitVector {
-        //         domain,
-        //         sign,
-        //         range,
-        //         dubbed: false,
-        //     });
-        //     let kind = if fw < range.size {
-        //         match sign {
-        //             ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
-        //             ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
-        //         }
-        //     } else {
-        //         RvalueKind::Truncate(range.size, value)
-        //     };
-        //     let inner = builder.build(ty, kind);
-        //     return lower_implicit_cast(builder, inner, to);
-        // }
-
-        // TODO(fschuiki): Packing structs into bit vectors.
-        // TODO(fschuiki): Unpacking structs from bit vectors.
-        // TODO(fschuiki): Integer truncation.
-        // TODO(fschuiki): Array truncation.
-        // TODO(fschuiki): Array extension.
-        // TODO(fschuiki): Signed/unsigned conversion.
-        _ => (),
     }
 
     // Complain and abort.
