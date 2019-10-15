@@ -924,22 +924,22 @@ where
             //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
             //     (self.emit_index_access(target, env, mode)?, Mode::Value)
             // }
-            hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
-                let cond = self.emit_rvalue(cond, env)?;
-                let true_expr = self.emit_rvalue(true_expr, env)?;
-                let false_expr = self.emit_rvalue(false_expr, env)?;
-                let array = self.builder.ins().array(vec![false_expr, true_expr]);
-                trace!(
-                    "llhd array `{}` is of type `{}`",
-                    self.builder
-                        .dfg()
-                        .value_inst(array)
-                        .dump(self.builder.dfg()),
-                    self.builder.unit().value_type(array)
-                );
-                let value = self.builder.ins().mux(array, cond);
-                (value, Mode::Value)
-            }
+            // hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
+            //     let cond = self.emit_rvalue(cond, env)?;
+            //     let true_expr = self.emit_rvalue(true_expr, env)?;
+            //     let false_expr = self.emit_rvalue(false_expr, env)?;
+            //     let array = self.builder.ins().array(vec![false_expr, true_expr]);
+            //     trace!(
+            //         "llhd array `{}` is of type `{}`",
+            //         self.builder
+            //             .dfg()
+            //             .value_inst(array)
+            //             .dump(self.builder.dfg()),
+            //         self.builder.unit().value_type(array)
+            //     );
+            //     let value = self.builder.ins().mux(array, cond);
+            //     (value, Mode::Value)
+            // }
             hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
                 let k = self.constant_value_of(expr_id, env)?;
@@ -998,7 +998,8 @@ where
             | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(..))
             | hir::ExprKind::Index(..)
             | hir::ExprKind::Field(..)
-            | hir::ExprKind::NamedPattern(..) => {
+            | hir::ExprKind::NamedPattern(..)
+            | hir::ExprKind::Ternary(..) => {
                 let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
                 (self.emit_mir_rvalue(mir)?, Mode::Value)
             }
@@ -1182,6 +1183,19 @@ where
                     mir::ShiftOp::Right => self.builder.ins().shr(value, hidden, amount),
                 })
             }
+
+            mir::RvalueKind::Ternary {
+                cond,
+                true_value,
+                false_value,
+            } => {
+                let cond = self.emit_mir_rvalue(cond)?;
+                let true_value = self.emit_mir_rvalue(true_value)?;
+                let false_value = self.emit_mir_rvalue(false_value)?;
+                let array = self.builder.ins().array(vec![false_value, true_value]);
+                Ok(self.builder.ins().mux(array, cond))
+            }
+
             mir::RvalueKind::Error => Err(()),
             _ => {
                 error!("{:#?}", mir);
