@@ -1188,10 +1188,50 @@ where
                 // self.builder.dfg_mut().set_name(value, name);
                 Ok(value)
             }
-            mir::RvalueKind::IntBinaryArith { op, lhs, rhs, .. } => {
+
+            mir::RvalueKind::UnaryBitwise { op, arg } => {
+                let arg = self.emit_mir_rvalue(arg)?;
+                Ok(match op {
+                    mir::UnaryBitwiseOp::Not => self.builder.ins().not(arg),
+                })
+            }
+
+            mir::RvalueKind::BinaryBitwise { op, lhs, rhs } => {
                 let lhs = self.emit_mir_rvalue(lhs)?;
                 let rhs = self.emit_mir_rvalue(rhs)?;
-                let signed = mir.ty.is_signed();
+                Ok(match op {
+                    mir::BinaryBitwiseOp::And => self.builder.ins().and(lhs, rhs),
+                    mir::BinaryBitwiseOp::Or => self.builder.ins().or(lhs, rhs),
+                    mir::BinaryBitwiseOp::Xor => self.builder.ins().xor(lhs, rhs),
+                })
+            }
+
+            mir::RvalueKind::IntComp {
+                op, lhs, rhs, sign, ..
+            } => {
+                let lhs = self.emit_mir_rvalue(lhs)?;
+                let rhs = self.emit_mir_rvalue(rhs)?;
+                let signed = sign.is_signed();
+                Ok(match op {
+                    mir::IntCompOp::Eq => self.builder.ins().eq(lhs, rhs),
+                    mir::IntCompOp::Neq => self.builder.ins().neq(lhs, rhs),
+                    mir::IntCompOp::Lt if signed => self.builder.ins().slt(lhs, rhs),
+                    mir::IntCompOp::Leq if signed => self.builder.ins().sle(lhs, rhs),
+                    mir::IntCompOp::Gt if signed => self.builder.ins().sgt(lhs, rhs),
+                    mir::IntCompOp::Geq if signed => self.builder.ins().sge(lhs, rhs),
+                    mir::IntCompOp::Lt => self.builder.ins().ult(lhs, rhs),
+                    mir::IntCompOp::Leq => self.builder.ins().ule(lhs, rhs),
+                    mir::IntCompOp::Gt => self.builder.ins().ugt(lhs, rhs),
+                    mir::IntCompOp::Geq => self.builder.ins().uge(lhs, rhs),
+                })
+            }
+
+            mir::RvalueKind::IntBinaryArith {
+                op, lhs, rhs, sign, ..
+            } => {
+                let lhs = self.emit_mir_rvalue(lhs)?;
+                let rhs = self.emit_mir_rvalue(rhs)?;
+                let signed = sign.is_signed();
                 Ok(match op {
                     mir::IntBinaryArithOp::Add => self.builder.ins().add(lhs, rhs),
                     mir::IntBinaryArithOp::Sub => self.builder.ins().sub(lhs, rhs),
