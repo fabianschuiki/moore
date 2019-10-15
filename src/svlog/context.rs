@@ -145,6 +145,7 @@ pub struct GlobalArenas<'t> {
     ribs: TypedArena<Rib>,
     types: TypedArena<TypeKind<'t>>,
     values: TypedArena<ValueData<'t>>,
+    mir_lvalue: TypedArena<mir::Lvalue<'t>>,
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
 }
 
@@ -157,6 +158,7 @@ impl Default for GlobalArenas<'_> {
             ribs: TypedArena::new(),
             types: TypedArena::new(),
             values: TypedArena::new(),
+            mir_lvalue: TypedArena::new(),
             mir_rvalue: TypedArena::new(),
         }
     }
@@ -180,6 +182,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate a rib.
     pub fn alloc_rib(&'t self, rib: Rib) -> &'t Rib {
         self.ribs.alloc(rib)
+    }
+
+    /// Allocate an MIR lvalue.
+    pub fn alloc_mir_lvalue(&'t self, mir: mir::Lvalue<'t>) -> &'t mir::Lvalue<'t> {
+        self.mir_lvalue.alloc(mir)
     }
 
     /// Allocate an MIR rvalue.

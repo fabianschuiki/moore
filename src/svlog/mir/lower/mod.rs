@@ -2,4 +2,5 @@
 
 //! Lowering to MIR.
 
+pub mod lvalue;
 pub mod rvalue;
