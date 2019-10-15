@@ -976,6 +976,10 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::Leq
         | hir::BinaryOp::Gt
         | hir::BinaryOp::Geq => lower_int_comparison(builder, ty, op, lhs, rhs),
+        hir::BinaryOp::LogicShL
+        | hir::BinaryOp::LogicShR
+        | hir::BinaryOp::ArithShL
+        | hir::BinaryOp::ArithShR => lower_shift(builder, ty, op, lhs, rhs),
         hir::BinaryOp::BitAnd
         | hir::BinaryOp::BitOr
         | hir::BinaryOp::BitXor
@@ -1105,6 +1109,72 @@ fn lower_int_comparison<'gcx>(
             domain: union_ty.get_value_domain().unwrap(),
             lhs,
             rhs,
+        },
+    )
+}
+
+/// Map an integer shift operator to MIR.
+fn lower_shift<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::BinaryOp,
+    value: NodeId,
+    amount: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{}` cannot be shifted", ty)).span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
+
+    // Determine the simple bit vector type for the shift amount.
+    let shift_ty = match builder.cx.type_of(amount, builder.env) {
+        Ok(t) => t,
+        Err(()) => return builder.error(),
+    };
+    let shift_ty = match map_to_simple_bit_vector_type(builder.cx, shift_ty, builder.env) {
+        Some(t) => t,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{}` is not a valid type for a shift amount",
+                    shift_ty
+                ))
+                .span(builder.cx.span(amount)),
+            );
+            return builder.error();
+        }
+    };
+
+    // Cast the operands to the operator type.
+    trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
+    let value = lower_expr_and_cast(builder.cx, value, builder.env, result_ty);
+    let amount = lower_expr_and_cast(builder.cx, amount, builder.env, shift_ty);
+
+    // Determine the operation.
+    let (op, arith) = match op {
+        hir::BinaryOp::LogicShL => (ShiftOp::Left, false),
+        hir::BinaryOp::LogicShR => (ShiftOp::Right, false),
+        hir::BinaryOp::ArithShL => (ShiftOp::Left, result_ty.is_signed()),
+        hir::BinaryOp::ArithShR => (ShiftOp::Right, result_ty.is_signed()),
+        _ => unreachable!("{:?} is not an integer shift operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(
+        result_ty,
+        RvalueKind::Shift {
+            op,
+            arith,
+            value,
+            amount,
         },
     )
 }
