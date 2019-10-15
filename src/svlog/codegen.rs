@@ -1070,7 +1070,27 @@ where
 
     fn emit_mir_rvalue_uninterned(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         match mir.kind {
-            mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
+            mir::RvalueKind::Var(id) => {
+                let value = self.emitted_value(id).clone();
+                Ok(match *self.llhd_type(value) {
+                    llhd::SignalType(_) => {
+                        let value = self.builder.ins().prb(value);
+                        self.builder
+                            .dfg_mut()
+                            .set_name(value, format!("{}", mir.span.extract()));
+                        value
+                    }
+                    llhd::PointerType(_) => {
+                        let value = self.builder.ins().ld(value);
+                        self.builder
+                            .dfg_mut()
+                            .set_name(value, format!("{}", mir.span.extract()));
+                        value
+                    }
+                    _ => value,
+                })
+            }
+            mir::RvalueKind::Port(id) => {
                 let value = self.emitted_value(id).clone();
                 let value = self.builder.ins().prb(value);
                 self.builder
