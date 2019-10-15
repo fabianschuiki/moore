@@ -298,6 +298,22 @@ impl Domain {
     }
 }
 
+impl Sign {
+    /// Check whether the type is unsigned.
+    ///
+    /// Returns false for types which have no sign.
+    pub fn is_unsigned(&self) -> bool {
+        *self == Sign::Unsigned
+    }
+
+    /// Check whether the type is signed.
+    ///
+    /// Returns false for types which have no sign.
+    pub fn is_signed(&self) -> bool {
+        *self == Sign::Signed
+    }
+}
+
 impl Display for Sign {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
