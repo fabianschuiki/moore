@@ -137,6 +137,11 @@ pub enum RvalueKind<'a> {
         value: &'a Rvalue<'a>,
         amount: &'a Rvalue<'a>,
     },
+    /// A reduction operator.
+    Reduction {
+        op: BinaryBitwiseOp,
+        arg: &'a Rvalue<'a>,
+    },
     /// An error occurred during lowering.
     Error,
 }
