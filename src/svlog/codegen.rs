@@ -1055,6 +1055,7 @@ where
                     _ => value,
                 })
             }
+
             mir::RvalueKind::Port(id) => {
                 let value = self.emitted_value(id).clone();
                 let value = self.builder.ins().prb(value);
@@ -1063,16 +1064,19 @@ where
                     .set_name(value, format!("{}", mir.span.extract()));
                 Ok(value)
             }
+
             mir::RvalueKind::CastValueDomain { value, .. } => {
                 // TODO(fschuiki): Turn this into an actual `iN` to `lN` cast.
                 self.emit_mir_rvalue(value)
             }
+
             mir::RvalueKind::CastVectorToAtom { value, .. }
             | mir::RvalueKind::CastAtomToVector { value, .. } => {
                 // Vector to atom conversions are no-ops since we represent the
                 // atom type as a single-element vector anyway.
                 self.emit_mir_rvalue(value)
             }
+
             mir::RvalueKind::CastSign(_, value) => {
                 // Sign conversions are no-ops in LLHD since they merely
                 // influence the type system.
@@ -1117,6 +1121,7 @@ where
                     .collect::<Result<Vec<_>>>()?;
                 Ok(self.builder.ins().array(llvalue))
             }
+
             mir::RvalueKind::ConstructStruct(ref members) => {
                 let members = members
                     .iter()
@@ -1124,7 +1129,9 @@ where
                     .collect::<Result<Vec<_>>>()?;
                 Ok(self.builder.ins().strukt(members))
             }
+
             mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
+
             mir::RvalueKind::Index {
                 value,
                 base,
@@ -1137,6 +1144,7 @@ where
                 let shifted = self.builder.ins().shr(target, hidden, base);
                 Ok(self.builder.ins().ext_slice(shifted, 0, length))
             }
+
             mir::RvalueKind::Member { value, field } => {
                 let target = self.emit_mir_rvalue(value)?;
                 let value = self.builder.ins().ext_field(target, field);
@@ -1214,6 +1222,7 @@ where
                     }
                 })
             }
+
             mir::RvalueKind::Concat(ref values) => {
                 let mut offset = 0;
                 let llty = self.emit_type(mir.ty, mir.env)?;
