@@ -1,6 +1,6 @@
 // Copyright (c) 2016-2019 Fabian Schuiki
 
-//! Lowering to MIR.
+//! Expression rvalue lowering to MIR.
 
 use crate::{
     crate_prelude::*,
@@ -14,8 +14,7 @@ use crate::{
 use num::{BigInt, One, Signed, ToPrimitive};
 use std::{cmp::max, collections::HashMap};
 
-// TODO(fschuiki): Maybe move most of the functions below into the rvalue mod?
-
+/// An internal builder for rvalue lowering.
 struct Builder<'a, C> {
     cx: &'a C,
     span: Span,
@@ -56,7 +55,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
 }
 
 /// Lower an expression to an rvalue in the MIR.
-pub fn lower_expr_to_mir_rvalue<'gcx>(
+pub fn lower_expr<'gcx>(
     cx: &impl Context<'gcx>,
     expr_id: NodeId,
     env: ParamEnv,
@@ -117,7 +116,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     | HirNode::Port(..)
                     | HirNode::EnumVariant(..)
                     | HirNode::ValueParam(..)
-                    | HirNode::GenvarDecl(..) => Ok(lower_expr_to_mir_rvalue(cx, binding, env)),
+                    | HirNode::GenvarDecl(..) => Ok(lower_expr(cx, binding, env)),
                     x => {
                         builder.cx.emit(
                             DiagBuilder2::error(format!(
@@ -142,7 +141,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                     };
                     implicit_cast_to_bool(
                         &subbuilder,
-                        lower_expr_to_mir_rvalue(subbuilder.cx, cond, subbuilder.env),
+                        lower_expr(subbuilder.cx, cond, subbuilder.env),
                     )
                 };
                 let true_value = lower_expr_and_cast(cx, true_value, env, ty);
@@ -255,13 +254,13 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 // selection. Note that bit-selects are mapped to part-selects
                 // of length 1.
                 let (base, length): (&Rvalue, usize) = match mode {
-                    hir::IndexMode::One(index) => (lower_expr_to_mir_rvalue(cx, index, env), 1),
+                    hir::IndexMode::One(index) => (lower_expr(cx, index, env), 1),
                     hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, delta) => (
-                        lower_expr_to_mir_rvalue(cx, base, env),
+                        lower_expr(cx, base, env),
                         cx.constant_int_value_of(delta, env)?.to_usize().unwrap(),
                     ),
                     hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
-                        let base = lower_expr_to_mir_rvalue(cx, base, env);
+                        let base = lower_expr(cx, base, env);
                         let delta_rvalue = lower_expr_and_cast(cx, delta, env, base.ty);
                         let base = builder.build(
                             base.ty,
@@ -294,7 +293,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                 let target_ty = cx.type_of(target, env)?;
                 let target = if target_ty.is_array() {
                     // No need to cast arrays.
-                    lower_expr_to_mir_rvalue(cx, target, env)
+                    lower_expr(cx, target, env)
                 } else {
                     let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
                         Some(ty) => ty,
@@ -329,7 +328,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             }
 
             hir::ExprKind::Field(target, _) => {
-                let value = lower_expr_to_mir_rvalue(cx, target, env);
+                let value = lower_expr(cx, target, env);
                 let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
                 Ok(builder.build(ty, RvalueKind::Member { value, field }))
             }
@@ -355,7 +354,7 @@ fn lower_expr_and_cast<'gcx>(
     env: ParamEnv,
     target_ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner = lower_expr_to_mir_rvalue(cx, expr_id, env);
+    let inner = lower_expr(cx, expr_id, env);
     let builder = Builder {
         cx,
         span: inner.span,
@@ -371,7 +370,7 @@ fn lower_expr_and_cast_sign<'gcx>(
     expr_id: NodeId,
     sign: ty::Sign,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner = lower_expr_to_mir_rvalue(builder.cx, expr_id, builder.env);
+    let inner = lower_expr(builder.cx, expr_id, builder.env);
     if let Some(ty) = map_to_simple_bit_type(builder.cx, inner.ty.resolve_name(), builder.env) {
         let ty = change_type_sign(builder.cx, ty, sign);
         lower_implicit_cast(builder, inner, ty)
@@ -1291,12 +1290,12 @@ fn lower_binary_logic<'gcx>(
     // Cast the operands to a boolean.
     let lhs = {
         let builder = &builder.with(lhs);
-        let v = lower_expr_to_mir_rvalue(builder.cx, lhs, builder.env);
+        let v = lower_expr(builder.cx, lhs, builder.env);
         implicit_cast_to_bool(builder, v)
     };
     let rhs = {
         let builder = &builder.with(rhs);
-        let v = lower_expr_to_mir_rvalue(builder.cx, rhs, builder.env);
+        let v = lower_expr(builder.cx, rhs, builder.env);
         implicit_cast_to_bool(builder, v)
     };
 
@@ -1320,7 +1319,7 @@ fn lower_unary_logic<'gcx>(
     // Cast the operand to a boolean.
     let arg = {
         let builder = &builder.with(arg);
-        let v = lower_expr_to_mir_rvalue(builder.cx, arg, builder.env);
+        let v = lower_expr(builder.cx, arg, builder.env);
         implicit_cast_to_bool(builder, v)
     };
 
