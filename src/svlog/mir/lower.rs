@@ -130,7 +130,7 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
             }
             hir::ExprKind::Unary(op, arg) => Ok(lower_unary(&builder, ty, op, arg)),
             hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
-            hir::ExprKind::Ternary(cond, if_true, if_false) => {
+            hir::ExprKind::Ternary(cond, true_value, false_value) => {
                 let cond = {
                     let subbuilder = Builder {
                         cx,
@@ -143,14 +143,14 @@ pub fn lower_expr_to_mir_rvalue<'gcx>(
                         lower_expr_to_mir_rvalue(subbuilder.cx, cond, subbuilder.env),
                     )
                 };
-                let if_true = lower_expr_and_cast(cx, if_true, env, ty);
-                let if_false = lower_expr_and_cast(cx, if_false, env, ty);
+                let true_value = lower_expr_and_cast(cx, true_value, env, ty);
+                let false_value = lower_expr_and_cast(cx, false_value, env, ty);
                 Ok(builder.build(
                     ty,
                     RvalueKind::Ternary {
                         cond,
-                        if_true,
-                        if_false,
+                        true_value,
+                        false_value,
                     },
                 ))
             }

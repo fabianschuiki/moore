@@ -127,8 +127,8 @@ pub enum RvalueKind<'a> {
     /// The ternary operator.
     Ternary {
         cond: &'a Rvalue<'a>,
-        if_true: &'a Rvalue<'a>,
-        if_false: &'a Rvalue<'a>,
+        true_value: &'a Rvalue<'a>,
+        false_value: &'a Rvalue<'a>,
     },
     /// A shift operation.
     Shift {
