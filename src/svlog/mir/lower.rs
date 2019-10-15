@@ -24,6 +24,16 @@ struct Builder<'a, C> {
 }
 
 impl<'a, C: Context<'a>> Builder<'_, C> {
+    /// Create a new builder for a different node.
+    fn with(&self, expr: NodeId) -> Self {
+        Builder {
+            cx: self.cx,
+            span: self.cx.span(expr),
+            expr,
+            env: self.env,
+        }
+    }
+
     /// Intern an MIR node.
     fn build(&self, ty: Type<'a>, kind: RvalueKind<'a>) -> &'a Rvalue<'a> {
         self.cx.arena().alloc_mir_rvalue(Rvalue {
@@ -936,6 +946,7 @@ fn lower_unary<'gcx>(
     // Determine the category of the operation.
     match op {
         hir::UnaryOp::BitNot => lower_unary_bitwise(builder, ty, op, arg),
+        hir::UnaryOp::LogicNot => lower_unary_logic(builder, op, arg),
         _ => unimplemented!("mir for unary {:?}", op),
     }
 }
@@ -965,13 +976,15 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::LogicShR
         | hir::BinaryOp::ArithShL
         | hir::BinaryOp::ArithShR => lower_shift(builder, ty, op, lhs, rhs),
+        hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => {
+            lower_binary_logic(builder, op, lhs, rhs)
+        }
         hir::BinaryOp::BitAnd
         | hir::BinaryOp::BitOr
         | hir::BinaryOp::BitXor
         | hir::BinaryOp::BitNand
         | hir::BinaryOp::BitNor
         | hir::BinaryOp::BitXnor => lower_binary_bitwise(builder, ty, op, lhs, rhs),
-        _ => unimplemented!("mir for binary {:?}", op),
     }
 }
 
@@ -1253,6 +1266,59 @@ fn lower_binary_bitwise<'gcx>(
     } else {
         value
     }
+}
+
+/// Map a bitwise binary operator to MIR.
+fn lower_binary_logic<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    op: hir::BinaryOp,
+    lhs: NodeId,
+    rhs: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Cast the operands to a boolean.
+    let lhs = {
+        let builder = &builder.with(lhs);
+        let v = lower_expr_to_mir_rvalue(builder.cx, lhs, builder.env);
+        implicit_cast_to_bool(builder, v)
+    };
+    let rhs = {
+        let builder = &builder.with(rhs);
+        let v = lower_expr_to_mir_rvalue(builder.cx, rhs, builder.env);
+        implicit_cast_to_bool(builder, v)
+    };
+
+    // Determine the operation.
+    let op = match op {
+        hir::BinaryOp::LogicAnd => BinaryBitwiseOp::And,
+        hir::BinaryOp::LogicOr => BinaryBitwiseOp::Or,
+        _ => unreachable!("{:?} is not a binary logic operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(&ty::LOGIC_TYPE, RvalueKind::BinaryBitwise { op, lhs, rhs })
+}
+
+/// Map a bitwise unary operator to MIR.
+fn lower_unary_logic<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Cast the operand to a boolean.
+    let arg = {
+        let builder = &builder.with(arg);
+        let v = lower_expr_to_mir_rvalue(builder.cx, arg, builder.env);
+        implicit_cast_to_bool(builder, v)
+    };
+
+    // Determine the operation.
+    let op = match op {
+        hir::UnaryOp::LogicNot => UnaryBitwiseOp::Not,
+        _ => unreachable!("{:?} is not a unary logic operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(&ty::LOGIC_TYPE, RvalueKind::UnaryBitwise { op, arg })
 }
 
 /// Generate the nodes necessary to implicitly cast an rvalue to a boolean.
