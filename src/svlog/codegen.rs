@@ -816,7 +816,7 @@ where
         //     x => unreachable!("rvalue for {:#?}", x),
         // };
 
-        let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
+        let mir = mir::lower::rvalue::lower_expr(self.cx, expr_id, env);
         let value = self.emit_mir_rvalue(mir)?;
         let actual_mode = Mode::Value;
 
@@ -1056,7 +1056,7 @@ where
         // | hir::ExprKind::Ident(..)
         // | hir::ExprKind::Scope(..)
         // | hir::ExprKind::Concat(..) => {
-        //     let mir = crate::mir::lower::lower_expr_to_mir_rvalue(self.cx, expr_id, env);
+        //     let mir = crate::mir::lower::lower_expr(self.cx, expr_id, env);
         //     (self.emit_mir_rvalue(mir)?, Mode::Value)
         // }
         // _ => {
