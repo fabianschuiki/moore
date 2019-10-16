@@ -74,9 +74,9 @@ test_file() {
 		LOG="$SRCFILE(${TOPS[@]})"
 		check elaborate "$LOG" $MOORE "${ARGS[@]}" $SRCFILE
 		cp $TMPOUT $TMPDIFFACT
-		if [ -s $TMPDIFFEXP ]; then
-			check codegen "$LOG" check_diff $TMPDIFFEXP $TMPDIFFACT
-		fi
+		# if [ -s $TMPDIFFEXP ]; then
+		# 	check codegen "$LOG" check_diff $TMPDIFFEXP $TMPDIFFACT
+		# fi
 	fi
 }
 

@@ -22,7 +22,7 @@ module A;
 		#1ns a = b - c;
 		#1ns a = b * c;
 		#1ns a = b / c;
-		#1ns a = b ** c;
+		// #1ns a = b ** c; // not yet supported
 		#1ns a = b & c;
 		#1ns a = b | c;
 		#1ns a = b ^ c;
