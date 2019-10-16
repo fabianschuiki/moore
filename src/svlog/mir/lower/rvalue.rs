@@ -67,142 +67,173 @@ pub fn lower_expr<'gcx>(
         expr: expr_id,
         env,
     };
-    let result = || -> Result<&Rvalue> {
-        // Check whether the node has a constant value. This will allow us to
-        // quickly emit parameters and genvars.
-        let is_const = builder.cx.is_constant(expr_id).unwrap_or(false);
+    try_lower_expr(&builder, expr_id).unwrap_or_else(|_| builder.error())
+}
 
-        // Try to extract the expr HIR for this node. Handle a few special cases
-        // where the node is not technically an expression, but can be used as a
-        // rvalue.
-        let hir = match builder.cx.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            HirNode::VarDecl(decl) => {
-                return Ok(
-                    builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id))
-                )
-            }
-            HirNode::Port(port) => {
-                return Ok(
-                    builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id))
-                )
-            }
-            HirNode::EnumVariant(..) => {
-                let k = builder.cx.constant_value_of(expr_id, env)?;
-                return Ok(builder.build(k.ty, RvalueKind::Const(k)));
-            }
-            _ if is_const => {
-                let k = builder.cx.constant_value_of(expr_id, env)?;
-                return Ok(builder.build(k.ty, RvalueKind::Const(k)));
-            }
-            x => unreachable!("rvalue for {:#?}", x),
-        };
+/// Lower an expression to an rvalue in the MIR.
+///
+/// May return an error if any of the database queries break.
+fn try_lower_expr<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    expr_id: NodeId,
+) -> Result<&'gcx Rvalue<'gcx>> {
+    let cx = builder.cx;
+    let span = cx.span(expr_id);
+    let env = builder.env;
 
-        // Determine the expression type and match on the various forms.
-        let ty = builder.cx.type_of(expr_id, env)?;
-        match hir.kind {
-            hir::ExprKind::IntConst(..)
-            | hir::ExprKind::UnsizedConst(..)
-            | hir::ExprKind::TimeConst(_)
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
-                let k = builder.cx.constant_value_of(expr_id, env)?;
-                Ok(builder.build(k.ty, RvalueKind::Const(k)))
-            }
-            hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
-                let binding = builder.cx.resolve_node(expr_id, env)?;
-                match builder.cx.hir_of(binding)? {
-                    HirNode::VarDecl(..)
-                    | HirNode::Port(..)
-                    | HirNode::EnumVariant(..)
-                    | HirNode::ValueParam(..)
-                    | HirNode::GenvarDecl(..) => Ok(lower_expr(cx, binding, env)),
-                    x => {
-                        builder.cx.emit(
-                            DiagBuilder2::error(format!(
-                                "{} cannot be used in expression",
-                                x.desc_full()
-                            ))
-                            .span(span),
-                        );
-                        Err(())
-                    }
-                }
-            }
-            hir::ExprKind::Unary(op, arg) => Ok(lower_unary(&builder, ty, op, arg)),
-            hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
-            hir::ExprKind::Ternary(cond, true_value, false_value) => {
-                let cond = {
-                    let subbuilder = Builder {
-                        cx,
-                        span: cx.span(cond),
-                        expr: cond,
-                        env,
-                    };
-                    implicit_cast_to_bool(
-                        &subbuilder,
-                        lower_expr(subbuilder.cx, cond, subbuilder.env),
-                    )
-                };
-                let true_value = lower_expr_and_cast(cx, true_value, env, ty);
-                let false_value = lower_expr_and_cast(cx, false_value, env, ty);
-                Ok(builder.build(
-                    ty,
-                    RvalueKind::Ternary {
-                        cond,
-                        true_value,
-                        false_value,
-                    },
-                ))
-            }
-            hir::ExprKind::NamedPattern(ref mapping) => {
-                if ty.is_array() || ty.is_bit_vector() {
-                    Ok(lower_array_pattern(&builder, mapping, ty))
-                } else if ty.is_struct() {
-                    Ok(lower_struct_pattern(&builder, mapping, ty))
-                } else {
+    // Check whether the node has a constant value. This will allow us to
+    // quickly emit parameters and genvars.
+    let is_const = builder.cx.is_constant(expr_id).unwrap_or(false);
+
+    // Try to extract the expr HIR for this node. Handle a few special cases
+    // where the node is not technically an expression, but can be used as a
+    // rvalue.
+    let hir = match builder.cx.hir_of(expr_id)? {
+        HirNode::Expr(x) => x,
+        HirNode::VarDecl(decl) => {
+            return Ok(builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id)))
+        }
+        HirNode::Port(port) => {
+            return Ok(builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id)))
+        }
+        HirNode::EnumVariant(..) => {
+            let k = builder.cx.constant_value_of(expr_id, env)?;
+            return Ok(builder.build(k.ty, RvalueKind::Const(k)));
+        }
+        _ if is_const => {
+            let k = builder.cx.constant_value_of(expr_id, env)?;
+            return Ok(builder.build(k.ty, RvalueKind::Const(k)));
+        }
+        x => unreachable!("rvalue for {:#?}", x),
+    };
+
+    // Determine the expression type and match on the various forms.
+    let ty = builder.cx.type_of(expr_id, env)?;
+    match hir.kind {
+        hir::ExprKind::IntConst(..)
+        | hir::ExprKind::UnsizedConst(..)
+        | hir::ExprKind::TimeConst(_)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
+            let k = builder.cx.constant_value_of(expr_id, env)?;
+            Ok(builder.build(k.ty, RvalueKind::Const(k)))
+        }
+        hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
+            let binding = builder.cx.resolve_node(expr_id, env)?;
+            match builder.cx.hir_of(binding)? {
+                HirNode::VarDecl(..)
+                | HirNode::Port(..)
+                | HirNode::EnumVariant(..)
+                | HirNode::ValueParam(..)
+                | HirNode::GenvarDecl(..) => Ok(lower_expr(cx, binding, env)),
+                x => {
                     builder.cx.emit(
                         DiagBuilder2::error(format!(
-                            "`'{{...}}` cannot construct a value of type {}",
-                            ty
+                            "{} cannot be used in expression",
+                            x.desc_full()
                         ))
                         .span(span),
                     );
                     Err(())
                 }
             }
-            hir::ExprKind::Concat(repeat, ref exprs) => {
-                // Compute the SBVT for each expression and lower it to MIR,
-                // implicitly casting to the SBVT.
-                let exprs = exprs
-                    .iter()
-                    .map(|&expr| {
-                        let ty = builder.cx.type_of(expr, env)?;
-                        let flat_ty = match map_to_simple_bit_type(builder.cx, ty, env) {
-                            Some(ty) => ty,
-                            None => {
-                                builder.cx.emit(
-                                    DiagBuilder2::error(format!(
-                                        "`{}` cannot be used in concatenation",
-                                        ty
-                                    ))
-                                    .span(builder.cx.span(expr)),
-                                );
-                                return Err(());
-                            }
-                        };
-                        Ok((
-                            ty::bit_size_of_type(builder.cx, ty, env)?,
-                            lower_expr_and_cast(builder.cx, expr, env, flat_ty),
-                        ))
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+        }
+        hir::ExprKind::Unary(op, arg) => Ok(lower_unary(&builder, ty, op, arg)),
+        hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
+        hir::ExprKind::Ternary(cond, true_value, false_value) => {
+            let cond = {
+                let subbuilder = Builder {
+                    cx,
+                    span: cx.span(cond),
+                    expr: cond,
+                    env,
+                };
+                implicit_cast_to_bool(&subbuilder, lower_expr(subbuilder.cx, cond, subbuilder.env))
+            };
+            let true_value = lower_expr_and_cast(cx, true_value, env, ty);
+            let false_value = lower_expr_and_cast(cx, false_value, env, ty);
+            Ok(builder.build(
+                ty,
+                RvalueKind::Ternary {
+                    cond,
+                    true_value,
+                    false_value,
+                },
+            ))
+        }
+        hir::ExprKind::NamedPattern(ref mapping) => {
+            if ty.is_array() || ty.is_bit_vector() {
+                Ok(lower_array_pattern(&builder, mapping, ty))
+            } else if ty.is_struct() {
+                Ok(lower_struct_pattern(&builder, mapping, ty))
+            } else {
+                builder.cx.emit(
+                    DiagBuilder2::error(format!(
+                        "`'{{...}}` cannot construct a value of type {}",
+                        ty
+                    ))
+                    .span(span),
+                );
+                Err(())
+            }
+        }
+        hir::ExprKind::Concat(repeat, ref exprs) => {
+            // Compute the SBVT for each expression and lower it to MIR,
+            // implicitly casting to the SBVT.
+            let exprs = exprs
+                .iter()
+                .map(|&expr| {
+                    let ty = builder.cx.type_of(expr, env)?;
+                    let flat_ty = match map_to_simple_bit_type(builder.cx, ty, env) {
+                        Some(ty) => ty,
+                        None => {
+                            builder.cx.emit(
+                                DiagBuilder2::error(format!(
+                                    "`{}` cannot be used in concatenation",
+                                    ty
+                                ))
+                                .span(builder.cx.span(expr)),
+                            );
+                            return Err(());
+                        }
+                    };
+                    Ok((
+                        ty::bit_size_of_type(builder.cx, ty, env)?,
+                        lower_expr_and_cast(builder.cx, expr, env, flat_ty),
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
 
-                // Compute the result type of the concatenation.
-                let total_width = exprs.iter().map(|(w, _)| w).sum();
+            // Compute the result type of the concatenation.
+            let total_width = exprs.iter().map(|(w, _)| w).sum();
+            let result_ty = builder.cx.intern_type(TypeKind::BitVector {
+                domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
+                sign: ty::Sign::Unsigned,       // fixed by standard
+                range: ty::Range {
+                    size: total_width,
+                    dir: ty::RangeDir::Down,
+                    offset: 0isize,
+                },
+                dubbed: false,
+            });
+
+            // Assemble the concatenation.
+            let concat = builder.build(
+                result_ty,
+                RvalueKind::Concat(exprs.into_iter().map(|(_, v)| v).collect()),
+            );
+
+            // If a repetition is present, apply that.
+            let repeat = if let Some(repeat) = repeat {
+                let count = builder
+                    .cx
+                    .constant_int_value_of(repeat, env)?
+                    .to_usize()
+                    .unwrap();
+                let total_width = total_width * count;
                 let result_ty = builder.cx.intern_type(TypeKind::BitVector {
-                    domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
-                    sign: ty::Sign::Unsigned,       // fixed by standard
+                    domain: ty::Domain::FourValued,
+                    sign: ty::Sign::Unsigned,
                     range: ty::Range {
                         size: total_width,
                         dir: ty::RangeDir::Down,
@@ -210,104 +241,77 @@ pub fn lower_expr<'gcx>(
                     },
                     dubbed: false,
                 });
-
-                // Assemble the concatenation.
-                let concat = builder.build(
-                    result_ty,
-                    RvalueKind::Concat(exprs.into_iter().map(|(_, v)| v).collect()),
-                );
-
-                // If a repetition is present, apply that.
-                let repeat = if let Some(repeat) = repeat {
-                    let count = builder
-                        .cx
-                        .constant_int_value_of(repeat, env)?
-                        .to_usize()
-                        .unwrap();
-                    let total_width = total_width * count;
-                    let result_ty = builder.cx.intern_type(TypeKind::BitVector {
-                        domain: ty::Domain::FourValued,
-                        sign: ty::Sign::Unsigned,
-                        range: ty::Range {
-                            size: total_width,
-                            dir: ty::RangeDir::Down,
-                            offset: 0isize,
-                        },
-                        dubbed: false,
-                    });
-                    builder.build(result_ty, RvalueKind::Repeat(count, concat))
-                } else {
-                    concat
-                };
-                Ok(repeat)
-            }
-
-            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(id)) => {
-                Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Signed))
-            }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(id)) => {
-                Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Unsigned))
-            }
-
-            hir::ExprKind::Index(target, mode) => {
-                let (base, length) = compute_indexing(cx, builder.expr, env, mode)?;
-
-                // Cast the target to a simple bit vector type if needed.
-                let target_ty = cx.type_of(target, env)?;
-                let target = if target_ty.is_array() {
-                    // No need to cast arrays.
-                    lower_expr(cx, target, env)
-                } else {
-                    let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
-                        Some(ty) => ty,
-                        None => {
-                            let span = builder.cx.span(target);
-                            builder.cx.emit(
-                                DiagBuilder2::error(format!(
-                                    "`{}` cannot be index into",
-                                    span.extract()
-                                ))
-                                .span(span)
-                                .add_note(format!(
-                                    "`{}` cannot has no simple bit-vector type representation",
-                                    target_ty
-                                )),
-                            );
-                            return Ok(builder.error());
-                        }
-                    };
-                    lower_expr_and_cast(cx, target, env, sbvt)
-                };
-
-                // Build the cast rvalue.
-                Ok(builder.build(
-                    ty,
-                    RvalueKind::Index {
-                        value: target,
-                        base,
-                        length,
-                    },
-                ))
-            }
-
-            hir::ExprKind::Field(target, _) => {
-                let value = lower_expr(cx, target, env);
-                let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
-                Ok(builder.build(ty, RvalueKind::Member { value, field }))
-            }
-
-            hir::ExprKind::Cast(ty, expr) => {
-                let ty = cx.type_of(ty, env)?;
-                Ok(lower_expr_and_cast(cx, expr, env, ty))
-            }
-
-            _ => {
-                error!("{:#?}", hir);
-                cx.unimp_msg("lowering to mir rvalue of", hir)
-            }
+                builder.build(result_ty, RvalueKind::Repeat(count, concat))
+            } else {
+                concat
+            };
+            Ok(repeat)
         }
-    }();
-    result.unwrap_or_else(|_| builder.error())
+
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(id)) => {
+            Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Signed))
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(id)) => {
+            Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Unsigned))
+        }
+
+        hir::ExprKind::Index(target, mode) => {
+            let (base, length) = compute_indexing(cx, builder.expr, env, mode)?;
+
+            // Cast the target to a simple bit vector type if needed.
+            let target_ty = cx.type_of(target, env)?;
+            let target = if target_ty.is_array() {
+                // No need to cast arrays.
+                lower_expr(cx, target, env)
+            } else {
+                let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
+                    Some(ty) => ty,
+                    None => {
+                        let span = builder.cx.span(target);
+                        builder.cx.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` cannot be index into",
+                                span.extract()
+                            ))
+                            .span(span)
+                            .add_note(format!(
+                                "`{}` cannot has no simple bit-vector type representation",
+                                target_ty
+                            )),
+                        );
+                        return Ok(builder.error());
+                    }
+                };
+                lower_expr_and_cast(cx, target, env, sbvt)
+            };
+
+            // Build the cast rvalue.
+            Ok(builder.build(
+                ty,
+                RvalueKind::Index {
+                    value: target,
+                    base,
+                    length,
+                },
+            ))
+        }
+
+        hir::ExprKind::Field(target, _) => {
+            let value = lower_expr(cx, target, env);
+            let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
+            Ok(builder.build(ty, RvalueKind::Member { value, field }))
+        }
+
+        hir::ExprKind::Cast(ty, expr) => {
+            let ty = cx.type_of(ty, env)?;
+            Ok(lower_expr_and_cast(cx, expr, env, ty))
+        }
+
+        _ => {
+            error!("{:#?}", hir);
+            cx.unimp_msg("lowering to mir rvalue of", hir)
+        }
+    }
 }
 
 /// Compute the base and length of an indexing operation.
@@ -1352,7 +1356,30 @@ fn lower_binary_bitwise<'gcx>(
     }
 }
 
-/// Map a bitwise binary operator to MIR.
+/// Map a unary logic operator to MIR.
+fn lower_unary_logic<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Cast the operand to a boolean.
+    let arg = {
+        let builder = &builder.with(arg);
+        let v = lower_expr(builder.cx, arg, builder.env);
+        implicit_cast_to_bool(builder, v)
+    };
+
+    // Determine the operation.
+    let op = match op {
+        hir::UnaryOp::LogicNot => UnaryBitwiseOp::Not,
+        _ => unreachable!("{:?} is not a unary logic operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(&ty::LOGIC_TYPE, RvalueKind::UnaryBitwise { op, arg })
+}
+
+/// Map a binary logic operator to MIR.
 fn lower_binary_logic<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     op: hir::BinaryOp,
@@ -1380,29 +1407,6 @@ fn lower_binary_logic<'gcx>(
 
     // Assemble the node.
     builder.build(&ty::LOGIC_TYPE, RvalueKind::BinaryBitwise { op, lhs, rhs })
-}
-
-/// Map a bitwise unary operator to MIR.
-fn lower_unary_logic<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    op: hir::UnaryOp,
-    arg: NodeId,
-) -> &'gcx Rvalue<'gcx> {
-    // Cast the operand to a boolean.
-    let arg = {
-        let builder = &builder.with(arg);
-        let v = lower_expr(builder.cx, arg, builder.env);
-        implicit_cast_to_bool(builder, v)
-    };
-
-    // Determine the operation.
-    let op = match op {
-        hir::UnaryOp::LogicNot => UnaryBitwiseOp::Not,
-        _ => unreachable!("{:?} is not a unary logic operator", op),
-    };
-
-    // Assemble the node.
-    builder.build(&ty::LOGIC_TYPE, RvalueKind::UnaryBitwise { op, arg })
 }
 
 /// Map a reduction operator to MIR.
