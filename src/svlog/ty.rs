@@ -122,6 +122,7 @@ impl<'t> TypeKind<'t> {
     /// Get the definition of a struct.
     pub fn get_struct_def(&self) -> Option<NodeId> {
         match *self {
+            TypeKind::Named(_, _, ty) => ty.get_struct_def(),
             TypeKind::Struct(id) => Some(id),
             _ => None,
         }
