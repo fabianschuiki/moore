@@ -20,6 +20,7 @@ struct Builder<'a, C> {
 
 impl<'a, C: Context<'a>> Builder<'_, C> {
     /// Create a new builder for a different node.
+    #[allow(dead_code)]
     fn with(&self, expr: NodeId) -> Self {
         Builder {
             cx: self.cx,
