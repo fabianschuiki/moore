@@ -132,6 +132,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             builder: &mut builder,
             values: &mut values,
             interned_consts: Default::default(),
+            interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
         };
 
@@ -261,6 +262,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             builder: &mut builder,
             values: &mut values,
             interned_consts: Default::default(),
+            interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
         };
         let entry_blk = pg.add_nameless_block();
@@ -408,6 +410,8 @@ struct UnitGenerator<'a, 'gcx, C, UB> {
     values: &'a mut HashMap<NodeId, llhd::ir::Value>,
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
+    /// The MIR lvalues emitted into the unit.
+    interned_lvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
     /// The MIR rvalues emitted into the unit.
     interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
 }
@@ -773,13 +777,6 @@ where
         env: ParamEnv,
         mode: Mode,
     ) -> Result<llhd::ir::Value> {
-        // let hir = match self.hir_of(expr_id)? {
-        //     HirNode::Expr(x) => x,
-        //     HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
-        //     HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
-        //     x => unreachable!("rvalue for {:#?}", x),
-        // };
-
         let mir = mir::lower::rvalue::lower_expr(self.cx, expr_id, env);
         let value = self.emit_mir_rvalue(mir)?;
         let actual_mode = Mode::Value;
@@ -797,239 +794,9 @@ where
             (Mode::Value, Mode::Signal) => unreachable!(),
             _ => Ok(value),
         }
-
-        // #[allow(unreachable_patterns)]
-        // let (value, actual_mode) = match hir.kind {
-        // hir::ExprKind::IntConst(..)
-        // | hir::ExprKind::UnsizedConst(..)
-        // | hir::ExprKind::TimeConst(_) => {
-        //     let k = self.constant_value_of(expr_id, env)?;
-        //     (self.emit_const(k, env)?, Mode::Value)
-        // }
-        // hir::ExprKind::Ident(name) => {
-        //     let binding = self.resolve_node(expr_id, env)?;
-        //     let (value, is_const) = match self.is_constant(binding)? {
-        //         true => {
-        //             let k = self.constant_value_of(binding, env)?;
-        //             (self.emit_const(k, env)?, true)
-        //         }
-        //         false => (self.emitted_value(binding).clone(), false),
-        //     };
-        //     let ty = self.llhd_type(value);
-        //     let is_signal = match *ty {
-        //         llhd::SignalType(_) => true,
-        //         _ => false,
-        //     };
-        //     // We currently just assume that the value above is a signal.
-        //     // As soon as we have actual variable declarations, this will
-        //     // need some more cleverness.
-        //     match (mode, is_signal, is_const) {
-        //         (Mode::Value, true, _) => {
-        //             let value = self.builder.ins().prb(value);
-        //             self.builder.dfg_mut().set_name(value, format!("{}", name));
-        //             (value, Mode::Value)
-        //         }
-        //         (Mode::Value, false, false) => {
-        //             let value = self.builder.ins().ld(value);
-        //             self.builder.dfg_mut().set_name(value, format!("{}", name));
-        //             (value, Mode::Value)
-        //         }
-        //         (Mode::Value, false, true) => (value, Mode::Value),
-        //         (Mode::Signal, true, _) => (value, Mode::Signal),
-        //         (Mode::Signal, false, _) => (value, Mode::Value),
-        //     }
-        // }
-        // hir::ExprKind::Unary(op, arg) => (
-        //     match op {
-        //         hir::UnaryOp::Pos => self.emit_rvalue(arg, env)?,
-        //         hir::UnaryOp::Neg => {
-        //             let arg = self.emit_rvalue(arg, env)?;
-        //             self.builder.ins().neg(arg).into()
-        //         }
-        //         hir::UnaryOp::BitNot | hir::UnaryOp::LogicNot => {
-        //             let value = self.emit_rvalue(arg, env)?;
-        //             self.builder.ins().not(value)
-        //         }
-        //         hir::UnaryOp::PreInc => self.emit_incdec(arg, env, BinaryOp::Add, false)?,
-        //         hir::UnaryOp::PreDec => self.emit_incdec(arg, env, BinaryOp::Sub, false)?,
-        //         hir::UnaryOp::PostInc => self.emit_incdec(arg, env, BinaryOp::Add, true)?,
-        //         hir::UnaryOp::PostDec => self.emit_incdec(arg, env, BinaryOp::Sub, true)?,
-        //         hir::UnaryOp::RedAnd => self.emit_reduction(arg, env, BinaryOp::And, false)?,
-        //         hir::UnaryOp::RedNand => self.emit_reduction(arg, env, BinaryOp::And, true)?,
-        //         hir::UnaryOp::RedOr => self.emit_reduction(arg, env, BinaryOp::Or, false)?,
-        //         hir::UnaryOp::RedNor => self.emit_reduction(arg, env, BinaryOp::Or, true)?,
-        //         hir::UnaryOp::RedXor => self.emit_reduction(arg, env, BinaryOp::Xor, false)?,
-        //         hir::UnaryOp::RedXnor => self.emit_reduction(arg, env, BinaryOp::Xor, true)?,
-        //         _ => return self.unimp_msg("code generation for", hir),
-        //     },
-        //     Mode::Value,
-        // ),
-        // hir::ExprKind::Binary(op, lhs, rhs) => {
-        //     let lhs = self.emit_rvalue(lhs, env)?;
-        //     let rhs = self.emit_rvalue(rhs, env)?;
-        //     let inst = match op {
-        //         hir::BinaryOp::Add => self.builder.ins().add(lhs, rhs),
-        //         hir::BinaryOp::Sub => self.builder.ins().sub(lhs, rhs),
-        //         hir::BinaryOp::Mul => self.builder.ins().umul(lhs, rhs),
-        //         hir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
-        //         hir::BinaryOp::Mod => self.builder.ins().umod(lhs, rhs),
-        //         hir::BinaryOp::Pow => self.builder.ins().umul(lhs, rhs), // fix this
-        //         hir::BinaryOp::Eq => self.builder.ins().eq(lhs, rhs),
-        //         hir::BinaryOp::Neq => self.builder.ins().neq(lhs, rhs),
-        //         hir::BinaryOp::Lt => self.builder.ins().ult(lhs, rhs),
-        //         hir::BinaryOp::Leq => self.builder.ins().ule(lhs, rhs),
-        //         hir::BinaryOp::Gt => self.builder.ins().ugt(lhs, rhs),
-        //         hir::BinaryOp::Geq => self.builder.ins().uge(lhs, rhs),
-        //         hir::BinaryOp::LogicAnd | hir::BinaryOp::BitAnd => {
-        //             self.builder.ins().and(lhs, rhs)
-        //         }
-        //         hir::BinaryOp::LogicOr | hir::BinaryOp::BitOr => {
-        //             self.builder.ins().or(lhs, rhs)
-        //         }
-        //         hir::BinaryOp::BitXor => self.builder.ins().xor(lhs, rhs),
-        //         hir::BinaryOp::BitNand => {
-        //             let v = self.builder.ins().and(lhs, rhs);
-        //             self.builder.ins().not(v)
-        //         }
-        //         hir::BinaryOp::BitNor => {
-        //             let v = self.builder.ins().or(lhs, rhs);
-        //             self.builder.ins().not(v)
-        //         }
-        //         hir::BinaryOp::BitXnor => {
-        //             let v = self.builder.ins().xor(lhs, rhs);
-        //             self.builder.ins().not(v)
-        //         }
-        //         hir::BinaryOp::LogicShL => {
-        //             self.emit_shift_operator(ShiftDir::Left, false, lhs, rhs)
-        //         }
-        //         hir::BinaryOp::LogicShR => {
-        //             self.emit_shift_operator(ShiftDir::Right, false, lhs, rhs)
-        //         }
-        //         hir::BinaryOp::ArithShL => {
-        //             self.emit_shift_operator(ShiftDir::Left, true, lhs, rhs)
-        //         }
-        //         hir::BinaryOp::ArithShR => {
-        //             self.emit_shift_operator(ShiftDir::Right, true, lhs, rhs)
-        //         }
-        //         _ => {
-        //             error!("{:#?}", hir);
-        //             return self.unimp_msg("code generation for", hir);
-        //         }
-        //     };
-        //     (inst, Mode::Value)
-        // }
-        // hir::ExprKind::Field(target_id, field_name) => {
-        //     let (_, index, _) = self.resolve_field_access(expr_id, env)?;
-        //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-        //     let value = self.builder.ins().ext_field(target, index);
-        //     let name = format!(
-        //         "{}.{}",
-        //         self.builder
-        //             .dfg()
-        //             .get_name(target)
-        //             .map(String::from)
-        //             .unwrap_or_else(|| "struct".into()),
-        //         field_name
-        //     );
-        //     self.builder.dfg_mut().set_name(value, name);
-        //     (value, Mode::Value)
-        // }
-        // hir::ExprKind::Index(target_id, mode) => {
-        //     let target = self.emit_rvalue_mode(target_id, env, Mode::Value)?;
-        //     (self.emit_index_access(target, env, mode)?, Mode::Value)
-        // }
-        // hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
-        //     let cond = self.emit_rvalue(cond, env)?;
-        //     let true_expr = self.emit_rvalue(true_expr, env)?;
-        //     let false_expr = self.emit_rvalue(false_expr, env)?;
-        //     let array = self.builder.ins().array(vec![false_expr, true_expr]);
-        //     trace!(
-        //         "llhd array `{}` is of type `{}`",
-        //         self.builder
-        //             .dfg()
-        //             .value_inst(array)
-        //             .dump(self.builder.dfg()),
-        //         self.builder.unit().value_type(array)
-        //     );
-        //     let value = self.builder.ins().mux(array, cond);
-        //     (value, Mode::Value)
-        // }
-        // hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-        // | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
-        //     let k = self.constant_value_of(expr_id, env)?;
-        //     (self.emit_const(k, env)?, Mode::Value)
-        // }
-        // hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
-        // | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
-        //     (self.emit_rvalue(arg, env)?, Mode::Value)
-        // }
-        // hir::ExprKind::Scope(..) => {
-        //     let binding = self.resolve_node(expr_id, env)?;
-        //     let value = self.constant_value_of(binding, env)?;
-        //     (self.emit_const(value, env)?, Mode::Value)
-        // }
-        // hir::ExprKind::Concat(repeat, ref exprs) => {
-        //     let bit_widths = exprs
-        //         .iter()
-        //         .cloned()
-        //         .map(|expr| {
-        //             let ty = self.type_of(expr, env)?;
-        //             bit_size_of_type(self.cx, ty, env)
-        //         })
-        //         .collect::<Result<Vec<_>>>()?;
-        //     let bit_width = bit_widths.iter().sum();
-        //     let exprs = exprs
-        //         .iter()
-        //         .cloned()
-        //         .map(|id| self.emit_rvalue(id, env))
-        //         .collect::<Result<Vec<_>>>()?;
-        //     let repeat = match repeat {
-        //         Some(repeat) => self.constant_int_value_of(repeat, env)?.to_usize().unwrap(),
-        //         None => 1,
-        //     };
-        //     let ty = llhd::int_ty(bit_width);
-        //     let mut value: llhd::ir::Value = self.emit_zero_for_type(&ty);
-        //     let mut offset = 0;
-        //     for (width, expr) in bit_widths.into_iter().zip(exprs.into_iter()) {
-        //         value = self.builder.ins().ins_slice(value, expr, offset, width);
-        //         offset += width;
-        //     }
-        //     let rep_ty = llhd::int_ty(bit_width * repeat);
-        //     let mut rep_value = self.emit_zero_for_type(&rep_ty);
-        //     for i in 0..repeat {
-        //         rep_value =
-        //             self.builder
-        //                 .ins()
-        //                 .ins_slice(rep_value, value, i * bit_width, bit_width);
-        //     }
-        //     (rep_value, Mode::Value)
-        // }
-        // hir::ExprKind::Cast(_ty, expr) => {
-        //     warn!("cast implemented as nop: {:?}", hir.kind);
-        //     return self.emit_rvalue_mode(expr, env, mode);
-        // }
-        // hir::ExprKind::IntConst(..)
-        // | hir::ExprKind::UnsizedConst(..)
-        // | hir::ExprKind::TimeConst(_)
-        // | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(..))
-        // | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(..))
-        // | hir::ExprKind::Index(..)
-        // | hir::ExprKind::Field(..)
-        // | hir::ExprKind::NamedPattern(..)
-        // | hir::ExprKind::Ternary(..)
-        // | hir::ExprKind::Ident(..)
-        // | hir::ExprKind::Scope(..)
-        // | hir::ExprKind::Concat(..) => {
-        //     let mir = crate::mir::lower::lower_expr(self.cx, expr_id, env);
-        //     (self.emit_mir_rvalue(mir)?, Mode::Value)
-        // }
-        // _ => {
-        //     error!("{:#?}", hir);
-        //     return self.unimp_msg("code generation for", hir);
-        // }
-        // };
     }
 
+    /// Emit the code for an MIR rvalue.
     fn emit_mir_rvalue(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         if let Some(x) = self.interned_rvalues.get(&mir.id) {
             x.clone()
@@ -1040,6 +807,7 @@ where
         }
     }
 
+    /// Emit the code for an MIR rvalue.
     fn emit_mir_rvalue_uninterned(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         match mir.kind {
             mir::RvalueKind::Var(id) => {
@@ -1317,81 +1085,73 @@ where
 
     /// Emit the code for an lvalue.
     fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
-        // TODO(fschuiki): Remove the following, which is just here for
-        // debugging purposes.
         let mir = mir::lower::lvalue::lower_expr(self.cx, expr_id, env);
-        debug!(
-            "{}",
-            DiagBuilder2::note("lvalue mir")
-                .span(self.span(expr_id))
-                .add_note(format!("{:#?}", mir))
-        );
+        self.emit_mir_lvalue(mir)
+    }
 
-        let hir = match self.hir_of(expr_id)? {
-            HirNode::Expr(x) => x,
-            HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
-            HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
-            _ => unreachable!(),
-        };
-        match hir.kind {
-            hir::ExprKind::Ident(_) => {
-                let binding = self.hir_of(self.resolve_node(expr_id, env)?)?;
-                match binding {
-                    HirNode::VarDecl(decl) => return Ok(self.emitted_value(decl.id).clone()),
-                    HirNode::Port(port) => return Ok(self.emitted_value(port.id).clone()),
-                    _ => (),
-                }
-                self.emit(
-                    DiagBuilder2::error(format!("{} cannot be assigned to", binding.desc_full()))
-                        .span(hir.span())
-                        .add_note(format!("{} declared here", binding.desc_full()))
-                        .span(binding.human_span()),
-                );
-                return Err(());
-            }
-            hir::ExprKind::Field(target, field_name) => {
-                let (_, field_index, _) = self.resolve_field_access(expr_id, env)?;
-                let target_val = self.emit_lvalue(target, env)?;
-                let extracted = self.builder.ins().ext_field(target_val, field_index);
-                let name = format!(
-                    "{}.{}",
-                    self.builder
-                        .dfg()
-                        .get_name(target_val)
-                        .map(String::from)
-                        .unwrap_or_else(|| "struct".into()),
-                    field_name
-                );
-                self.builder.dfg_mut().set_name(extracted, name);
-                return Ok(extracted);
-            }
-            hir::ExprKind::Index(target_id, mode) => {
-                let target = self.emit_lvalue(target_id, env)?;
-                // trace!(
-                //     "{}",
-                //     DiagBuilder2::note("emitting index into lvalue")
-                //         .span(self.span(target_id))
-                //         .add_note(format!(
-                //             "llhd value: {}",
-                //             self.builder
-                //                 .dfg()
-                //                 .value_inst(target)
-                //                 .dump(self.builder.dfg())
-                //         ))
-                //         .add_note(format!(
-                //             "llhd type: {}",
-                //             self.builder.dfg().value_type(target)
-                //         ))
-                // );
-                return self.emit_index_access(target, env, mode);
-            }
-            _ => (),
+    /// Emit the code for an MIR lvalue.
+    fn emit_mir_lvalue(&mut self, mir: &mir::Lvalue<'gcx>) -> Result<llhd::ir::Value> {
+        if let Some(x) = self.interned_lvalues.get(&mir.id) {
+            x.clone()
+        } else {
+            let x = self.emit_mir_lvalue_uninterned(mir);
+            self.interned_lvalues.insert(mir.id, x.clone());
+            x
         }
-        self.emit(
-            DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
-                .span(hir.span()),
-        );
-        Err(())
+    }
+
+    /// Emit the code for an MIR lvalue.
+    fn emit_mir_lvalue_uninterned(&mut self, mir: &mir::Lvalue<'gcx>) -> Result<llhd::ir::Value> {
+        match mir.kind {
+            // Variables and ports trivially return their declaration value.
+            // This is either the `var` or `sig` instruction which introduced
+            // them.
+            mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => {
+                Ok(self.emitted_value(id).clone())
+            }
+
+            // Member accesses simply look up their inner lvalue and extract the
+            // signal or pointer to the respective subfield.
+            mir::LvalueKind::Member { value, field } => {
+                let target = self.emit_mir_lvalue(value)?;
+                let value = self.builder.ins().ext_field(target, field);
+                Ok(value)
+            }
+
+            // Index accesses shift and extract the accessed slice as a signal
+            // or pointer.
+            mir::LvalueKind::Index {
+                value,
+                base,
+                length,
+            } => {
+                let target = self.emit_mir_lvalue(value)?;
+                let target_ty = self.llhd_type(target);
+                let base = self.emit_mir_rvalue(base)?;
+                let hidden = self.builder.ins().const_int(length, BigInt::zero());
+                let hidden = if target_ty.is_signal() {
+                    self.builder.ins().sig(hidden)
+                } else if target_ty.is_pointer() {
+                    self.builder.ins().var(hidden)
+                } else {
+                    hidden
+                };
+                let shifted = self.builder.ins().shr(target, hidden, base);
+                Ok(self.builder.ins().ext_slice(shifted, 0, length))
+            }
+
+            // Errors from MIR lowering have already been reported. Just abort.
+            mir::LvalueKind::Error => Err(()),
+
+            _ => {
+                unimplemented!(
+                    "{}",
+                    DiagBuilder2::bug("codegen for mir lvalue")
+                        .span(mir.span)
+                        .add_note(format!("{:#?}", mir))
+                );
+            }
+        }
     }
 
     /// Emit the code for a post-increment or -decrement operation.
