@@ -5,14 +5,10 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    hir::PatternMapping,
     mir::{lower::rvalue::compute_indexing, lvalue::*},
-    ty::{Type, TypeKind},
-    value::ValueKind,
+    ty::Type,
     ParamEnv,
 };
-use num::{BigInt, One, Signed, ToPrimitive};
-use std::{cmp::max, collections::HashMap};
 
 /// An internal builder for lvalue lowering.
 struct Builder<'a, C> {
