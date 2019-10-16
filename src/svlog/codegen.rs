@@ -745,7 +745,10 @@ where
     fn const_one_for_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::ir::Value> {
         use num::one;
         match *ty {
-            TypeKind::Bit(..) | TypeKind::Int(..) => {
+            TypeKind::Bit(..)
+            | TypeKind::Int(..)
+            | TypeKind::BitScalar { .. }
+            | TypeKind::BitVector { .. } => {
                 Ok(self.emit_const(self.intern_value(value::make_int(ty, one())), env)?)
             }
             TypeKind::Named(_, _, ty) => self.const_one_for_type(ty, env),
