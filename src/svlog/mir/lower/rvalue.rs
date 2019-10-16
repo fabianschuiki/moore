@@ -984,7 +984,10 @@ fn lower_unary<'gcx>(
         | hir::UnaryOp::RedNand
         | hir::UnaryOp::RedNor
         | hir::UnaryOp::RedXnor => lower_reduction(builder, ty, op, arg),
-        _ => unimplemented!("mir for unary {:?}", op),
+        hir::UnaryOp::PreInc
+        | hir::UnaryOp::PreDec
+        | hir::UnaryOp::PostInc
+        | hir::UnaryOp::PostDec => lower_int_incdec(builder, ty, op, arg),
     }
 }
 
@@ -1481,4 +1484,74 @@ fn implicit_cast_to_bool<'gcx>(
     } else {
         builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value))
     }
+}
+
+/// Map an increment/decrement operator to MIR.
+fn lower_int_incdec<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Map the argument to an lvalue and an rvalue.
+    let lv = crate::mir::lower::lvalue::lower_expr(builder.cx, arg, builder.env);
+    let rv = lower_expr(builder.cx, arg, builder.env);
+
+    // Compute the new value, depending on the operand type.
+    let new = if lv.ty.is_bit_scalar() {
+        // Single bit values simply toggle the bit.
+        builder.build(
+            lv.ty,
+            RvalueKind::UnaryBitwise {
+                op: UnaryBitwiseOp::Not,
+                arg: rv,
+            },
+        )
+    } else if lv.ty.is_bit_vector() {
+        // Bit vector values add/subtract one.
+        let op = match op {
+            hir::UnaryOp::PreInc | hir::UnaryOp::PostInc => IntBinaryArithOp::Add,
+            hir::UnaryOp::PreDec | hir::UnaryOp::PostDec => IntBinaryArithOp::Sub,
+            _ => unreachable!(),
+        };
+        let one = builder.build(
+            lv.ty,
+            RvalueKind::Const(builder.cx.intern_value(value::make_int(lv.ty, One::one()))),
+        );
+        builder.build(
+            lv.ty,
+            RvalueKind::IntBinaryArith {
+                op,
+                sign: lv.ty.get_sign().unwrap(),
+                domain: lv.ty.get_value_domain().unwrap(),
+                lhs: rv,
+                rhs: one,
+            },
+        )
+    } else {
+        // Everything else we cannot do.
+        // TODO(fschuiki): Technically `real` supports this operator as well...
+        builder.cx.emit(
+            DiagBuilder2::error(format!("`{}` cannot be incremented/decremented", lv.ty))
+                .span(builder.span),
+        );
+        return builder.error();
+    };
+
+    // Determine which value to yield as a result.
+    let result = match op {
+        hir::UnaryOp::PreInc | hir::UnaryOp::PreDec => new,
+        hir::UnaryOp::PostInc | hir::UnaryOp::PostDec => rv,
+        _ => unreachable!(),
+    };
+
+    // Assemble the final assignment node.
+    builder.build(
+        lv.ty,
+        RvalueKind::Assignment {
+            lvalue: lv,
+            rvalue: new,
+            result,
+        },
+    )
 }

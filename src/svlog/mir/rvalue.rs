@@ -7,6 +7,7 @@
 
 use crate::{
     crate_prelude::*,
+    mir::lvalue::Lvalue,
     ty::{Domain, Sign, Type},
     ParamEnv,
 };
@@ -150,6 +151,14 @@ pub enum RvalueKind<'a> {
     Reduction {
         op: BinaryBitwiseOp,
         arg: &'a Rvalue<'a>,
+    },
+    /// An assignment operator.
+    Assignment {
+        lvalue: &'a Lvalue<'a>,
+        rvalue: &'a Rvalue<'a>,
+        /// What value is produced as the assignment's value. This is usually
+        /// the rvalue, but may be different (e.g. for the `i++` or `i--`).
+        result: &'a Rvalue<'a>,
     },
     /// An error occurred during lowering.
     Error,

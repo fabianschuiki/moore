@@ -14,3 +14,39 @@ module a0;
 	assign b.y = 5;
 	assign b.y[9:2] = 5;
 endmodule
+
+module a1;
+	int a;
+	int b;
+
+	initial a = b++;
+	initial a = b--;
+	initial a = ++b;
+	initial a = --b;
+
+	initial a += 2;
+	initial a -= 2;
+	initial a *= 2;
+	initial a /= 2;
+	initial a %= 2;
+	initial a &= 2;
+	initial a |= 2;
+	initial a ^= 2;
+	initial a <<= 2;
+	initial a >>= 2;
+	initial a <<<= 2;
+	initial a >>>= 2;
+
+	// assign a = (b += 4) + 1;
+	// assign a = (b -= 4) + 1;
+	// assign a = (b *= 4) + 1;
+	// assign a = (b /= 4) + 1;
+	// assign a = (b %= 4) + 1;
+	// assign a = (b &= 4) + 1;
+	// assign a = (b |= 4) + 1;
+	// assign a = (b ^= 4) + 1;
+	// assign a = (b <<= 4) + 1;
+	// assign a = (b >>= 4) + 1;
+	// assign a = (b <<<= 4) + 1;
+	// assign a = (b >>>= 4) + 1;
+endmodule

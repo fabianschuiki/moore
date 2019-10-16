@@ -1086,6 +1086,15 @@ where
                 Ok(value)
             }
 
+            mir::RvalueKind::Assignment {
+                lvalue,
+                rvalue,
+                result,
+            } => {
+                self.emit_mir_blocking_assign(lvalue, rvalue)?;
+                self.emit_mir_rvalue(result)
+            }
+
             mir::RvalueKind::Error => Err(()),
         }
     }
@@ -1729,6 +1738,17 @@ where
         })
     }
 
+    /// Emit a blocking assignment on MIR nodes.
+    fn emit_mir_blocking_assign(
+        &mut self,
+        lvalue: &mir::Lvalue<'gcx>,
+        rvalue: &mir::Rvalue<'gcx>,
+    ) -> Result<()> {
+        let lv = self.emit_mir_lvalue(lvalue)?;
+        let rv = self.emit_mir_rvalue(rvalue)?;
+        self.emit_blocking_assign_llhd(lv, rv, lvalue.env)
+    }
+
     /// Emit a blocking assignment to a variable or signal.
     fn emit_blocking_assign(
         &mut self,
@@ -1737,6 +1757,16 @@ where
         env: ParamEnv,
     ) -> Result<()> {
         let lvalue = self.emit_lvalue(lvalue_id, env)?;
+        self.emit_blocking_assign_llhd(lvalue, rvalue, env)
+    }
+
+    /// Emit a blocking assignment to a variable or signal.
+    fn emit_blocking_assign_llhd(
+        &mut self,
+        lvalue: llhd::ir::Value,
+        rvalue: llhd::ir::Value,
+        env: ParamEnv,
+    ) -> Result<()> {
         let lty = self.llhd_type(lvalue);
         match *lty {
             llhd::SignalType(..) => {
