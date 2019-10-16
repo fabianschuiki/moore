@@ -8,4 +8,5 @@ module bar;
 	initial baz = magic;
 endmodule
 
+//@exclude
 //@ elab bar

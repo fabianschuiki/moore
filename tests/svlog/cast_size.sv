@@ -4,4 +4,5 @@ module A;
 	end
 endmodule
 
+//@exclude
 //@ elab A

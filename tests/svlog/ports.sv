@@ -62,7 +62,6 @@ module E (
 );
 endmodule
 
-//@ elab E
 //| entity @E (i1$ %x, i1$ %y) -> () {
 //| }
 
