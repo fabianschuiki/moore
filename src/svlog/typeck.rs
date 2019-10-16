@@ -30,7 +30,7 @@ pub(crate) fn type_of<'gcx>(
                 },
                 dubbed: true,
             })),
-            hir::ExprKind::UnsizedConst(_) => Ok(cx.mkty_int(1)),
+            hir::ExprKind::UnsizedConst(_) => Ok(&ty::LOGIC_TYPE),
             hir::ExprKind::TimeConst(_) => Ok(cx.mkty_time()),
             hir::ExprKind::Ident(_) => cx.type_of(cx.resolve_node(node_id, env)?, env),
             hir::ExprKind::Unary(op, arg) => {
@@ -49,7 +49,7 @@ pub(crate) fn type_of<'gcx>(
                     | hir::UnaryOp::RedXor
                     | hir::UnaryOp::RedNand
                     | hir::UnaryOp::RedNor
-                    | hir::UnaryOp::RedXnor => cx.mkty_bit(),
+                    | hir::UnaryOp::RedXnor => &ty::LOGIC_TYPE,
                 })
             }
             hir::ExprKind::Binary(op, lhs, rhs) => {
@@ -83,7 +83,7 @@ pub(crate) fn type_of<'gcx>(
                     | hir::BinaryOp::Gt
                     | hir::BinaryOp::Geq
                     | hir::BinaryOp::LogicAnd
-                    | hir::BinaryOp::LogicOr => cx.mkty_bit(),
+                    | hir::BinaryOp::LogicOr => &ty::LOGIC_TYPE,
                     _ => {
                         error!("{:#?}", hir);
                         return cx.unimp_msg("type analysis of", &hir);
@@ -99,8 +99,10 @@ pub(crate) fn type_of<'gcx>(
                 match mode {
                     hir::IndexMode::One(..) => match *target_ty {
                         TypeKind::PackedArray(_, ty) => Ok(ty),
-                        TypeKind::Int(_, ty::Domain::TwoValued) => Ok(cx.mkty_bit()),
-                        TypeKind::Int(_, ty::Domain::FourValued) => Ok(cx.mkty_logic()),
+                        TypeKind::Int(_, domain) => Ok(cx.intern_type(TypeKind::BitScalar {
+                            domain,
+                            sign: ty::Sign::Unsigned,
+                        })),
                         TypeKind::BitScalar { .. } => Ok(target_ty),
                         TypeKind::BitVector { domain, sign, .. } => {
                             Ok(cx.intern_type(TypeKind::BitScalar { domain, sign }))
@@ -121,7 +123,7 @@ pub(crate) fn type_of<'gcx>(
                 }
             }
             hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(cx.mkty_int(32)),
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(&ty::INT_TYPE),
             hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx.type_of(arg, env),
             hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
@@ -193,7 +195,7 @@ pub(crate) fn type_of<'gcx>(
                 Err(())
             }
         }
-        HirNode::GenvarDecl(_) => Ok(cx.mkty_int(32)),
+        HirNode::GenvarDecl(_) => Ok(&ty::INT_TYPE),
         HirNode::EnumVariant(v) => {
             // TODO: This is ultra hacky. The enum itself does not get its own
             // node ID, but rather shares this with the associated array dims.
@@ -213,7 +215,7 @@ pub(crate) fn type_of<'gcx>(
             }
             map_type_kind(cx, v.enum_id, env, hir, kind)
         }
-        HirNode::Package(_) => Ok(cx.mkty_void()),
+        HirNode::Package(_) => Ok(&ty::VOID_TYPE),
         HirNode::Assign(a) => cx.type_of(a.lhs, env),
         _ => {
             error!("{:#?}", hir);
