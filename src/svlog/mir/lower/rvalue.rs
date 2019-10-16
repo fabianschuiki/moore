@@ -125,7 +125,7 @@ fn try_lower_expr<'gcx>(
                 | HirNode::Port(..)
                 | HirNode::EnumVariant(..)
                 | HirNode::ValueParam(..)
-                | HirNode::GenvarDecl(..) => Ok(lower_expr(cx, binding, env)),
+                | HirNode::GenvarDecl(..) => try_lower_expr(builder, binding),
                 x => {
                     builder.cx.emit(
                         DiagBuilder2::error(format!(
