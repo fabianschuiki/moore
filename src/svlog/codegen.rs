@@ -973,6 +973,13 @@ where
                 })
             }
 
+            mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
+                let arg = self.emit_mir_rvalue(arg)?;
+                Ok(match op {
+                    mir::IntUnaryArithOp::Neg => self.builder.ins().neg(arg),
+                })
+            }
+
             mir::RvalueKind::IntBinaryArith {
                 op, lhs, rhs, sign, ..
             } => {

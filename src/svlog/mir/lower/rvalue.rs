@@ -975,6 +975,7 @@ fn lower_unary<'gcx>(
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the category of the operation.
     match op {
+        hir::UnaryOp::Pos | hir::UnaryOp::Neg => lower_int_unary_arith(builder, ty, op, arg),
         hir::UnaryOp::BitNot => lower_unary_bitwise(builder, ty, op, arg),
         hir::UnaryOp::LogicNot => lower_unary_logic(builder, op, arg),
         hir::UnaryOp::RedAnd
@@ -1022,6 +1023,50 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::BitNor
         | hir::BinaryOp::BitXnor => lower_binary_bitwise(builder, ty, op, lhs, rhs),
     }
+}
+
+/// Map an integer unary arithmetic operator to MIR.
+fn lower_int_unary_arith<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: hir::UnaryOp,
+    arg: NodeId,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
+                    .span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
+
+    // Cast the operands to the operator type.
+    trace!("unary {:?} on {} maps to {}", op, ty, result_ty);
+    let arg = lower_expr_and_cast(builder.cx, arg, builder.env, result_ty);
+
+    // Determine the operation.
+    let op = match op {
+        hir::UnaryOp::Pos => return arg,
+        hir::UnaryOp::Neg => IntUnaryArithOp::Neg,
+        _ => unreachable!("{:?} is not an integer unary arithmetic operator", op),
+    };
+
+    // Assemble the node.
+    builder.build(
+        result_ty,
+        RvalueKind::IntUnaryArith {
+            op,
+            sign: result_ty.get_sign().unwrap(),
+            domain: result_ty.get_value_domain().unwrap(),
+            arg,
+        },
+    )
 }
 
 /// Map an integer binary arithmetic operator to MIR.

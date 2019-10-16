@@ -82,6 +82,15 @@ pub enum RvalueKind<'a> {
         lhs: &'a Rvalue<'a>,
         rhs: &'a Rvalue<'a>,
     },
+    /// An integral unary arithmetic operator.
+    ///
+    /// If any bit of the operand is x/z, the entire result is x.
+    IntUnaryArith {
+        op: IntUnaryArithOp,
+        sign: Sign,
+        domain: Domain,
+        arg: &'a Rvalue<'a>,
+    },
     /// An integral binary arithmetic operator.
     ///
     /// If any bit of the operands are x/z, the entire result is x.
@@ -160,6 +169,13 @@ pub enum BinaryBitwiseOp {
     And,
     Or,
     Xor,
+}
+
+/// The integer unary arithmetic operators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum IntUnaryArithOp {
+    Neg,
 }
 
 /// The integer binary arithmetic operators.
