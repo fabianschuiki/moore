@@ -422,7 +422,7 @@ fn lower_implicit_cast<'gcx>(
     let from = value.ty;
 
     // Catch the easy case where the types already line up.
-    if from == to || from.is_error() || to.is_error() {
+    if ty::identical(from, to) || from.is_error() || to.is_error() {
         return value;
     }
 
@@ -435,26 +435,6 @@ fn lower_implicit_cast<'gcx>(
         from_raw,
         to_raw
     );
-
-    // Bit vectors may look different because one is "dubbed" and the other
-    // is not. In this case simply return.
-    match (from_raw, to_raw) {
-        (
-            TypeKind::BitVector {
-                domain: da,
-                sign: sa,
-                range: ra,
-                ..
-            },
-            TypeKind::BitVector {
-                domain: db,
-                sign: sb,
-                range: rb,
-                ..
-            },
-        ) if da == db && sa == sb && ra == rb => return value,
-        _ => (),
-    }
 
     // Try a value domain cast.
     let from_domain = from_raw.get_value_domain();
