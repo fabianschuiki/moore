@@ -545,7 +545,7 @@ mod tests {
                     dubbed: false,
                 }
             ),
-            "bit [38:-2]"
+            "bit [39:-2]"
         );
         assert_eq!(
             format!(
