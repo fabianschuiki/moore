@@ -505,22 +505,6 @@ where
             self.builder
                 .dfg_mut()
                 .set_name(value, hir.name.value.into());
-            trace!(
-                "{}",
-                DiagBuilder2::note("declaration emitted")
-                    .span(self.span(decl_id))
-                    .add_note(format!(
-                        "llhd value: {}",
-                        self.builder
-                            .dfg()
-                            .value_inst(value)
-                            .dump(self.builder.dfg())
-                    ))
-                    .add_note(format!(
-                        "llhd type: {}",
-                        self.builder.dfg().value_type(value)
-                    ))
-            );
             self.values.insert(decl_id, value.into());
         }
 
