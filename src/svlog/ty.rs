@@ -452,6 +452,39 @@ pub fn bit_size_of_type<'gcx>(
     }
 }
 
+/// Check if two types are identical.
+///
+/// This is not the same as a check for equality, since the types may contain
+/// names and spans in the source code which are different, yet still refer to
+/// the same type.
+pub fn identical(a: Type, b: Type) -> bool {
+    let a = a.resolve_name();
+    let b = b.resolve_name();
+    debug!("identical {:#?} and {:#?}?", a, b);
+    match (a, b) {
+        (
+            TypeKind::BitVector {
+                domain: da,
+                sign: sa,
+                range: ra,
+                ..
+            },
+            TypeKind::BitVector {
+                domain: db,
+                sign: sb,
+                range: rb,
+                ..
+            },
+        ) => da == db && sa == sb && ra == rb,
+
+        (TypeKind::PackedArray(sa, ta), TypeKind::PackedArray(sb, tb)) => {
+            sa == sb && identical(ta, tb)
+        }
+
+        _ => a == b,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
