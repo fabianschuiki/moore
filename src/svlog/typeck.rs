@@ -259,6 +259,28 @@ pub(crate) fn map_to_type<'gcx>(
             Err(())
         }
         HirNode::Typedef(def) => cx.map_to_type(def.ty, env),
+
+        // Certain expressions are actually types. In that case we also support
+        // a mapping to a type.
+        HirNode::Expr(hir) => match hir.kind {
+            hir::ExprKind::Ident(name) => {
+                let binding = cx.resolve_upwards_or_error(name, node_id)?;
+                Ok(cx.mkty_named(name, (binding, env)))
+            }
+            hir::ExprKind::Scope(scope_id, name) => {
+                let within = cx.resolve_node(scope_id, env)?;
+                let binding = cx.resolve_downwards_or_error(name, within)?;
+                Ok(cx.mkty_named(name, (binding, env)))
+            }
+            _ => {
+                error!("{:#?}", hir);
+                cx.emit(
+                    DiagBuilder2::error(format!("{} is not a type", hir.desc_full()))
+                        .span(hir.span()),
+                );
+                Err(())
+            }
+        },
         _ => cx.unimp_msg("conversion to type of", &hir),
     }
 }

@@ -21,17 +21,19 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
     match ast {
         AstNode::Module(m) => lower_module(cx, node_id, m),
         AstNode::Port(p) => lower_port(cx, node_id, p),
-        AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty))
-            if cx.lowering_hint(node_id) == Some(Hint::Type) =>
-        {
-            lower_type(cx, node_id, ty)
-        }
         AstNode::Type(ty) => lower_type(cx, node_id, ty),
-        AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr))
-            if cx.lowering_hint(node_id) == Some(Hint::Expr) =>
-        {
-            lower_expr(cx, node_id, expr)
-        }
+        AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty)) => lower_type(cx, node_id, ty),
+        AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr)) => lower_expr(cx, node_id, expr),
+        // AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty))
+        //     if cx.lowering_hint(node_id) == Some(Hint::Type) =>
+        // {
+        //     lower_type(cx, node_id, ty)
+        // }
+        // AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr))
+        //     if cx.lowering_hint(node_id) == Some(Hint::Expr) =>
+        // {
+        //     lower_expr(cx, node_id, expr)
+        // }
         AstNode::Expr(expr) => lower_expr(cx, node_id, expr),
         AstNode::InstTarget(ast) => {
             let mut named_params = vec![];
