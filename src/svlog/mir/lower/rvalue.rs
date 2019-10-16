@@ -971,7 +971,7 @@ fn lower_unary<'gcx>(
         hir::UnaryOp::PreInc
         | hir::UnaryOp::PreDec
         | hir::UnaryOp::PostInc
-        | hir::UnaryOp::PostDec => lower_int_incdec(builder, ty, op, arg),
+        | hir::UnaryOp::PostDec => lower_int_incdec(builder, op, arg),
     }
 }
 
@@ -1473,7 +1473,6 @@ fn implicit_cast_to_bool<'gcx>(
 /// Map an increment/decrement operator to MIR.
 fn lower_int_incdec<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
