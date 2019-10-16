@@ -324,6 +324,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         default,
                     }
                 }
+                ast::AssertionStmt { .. } => {
+                    warn!("ignoring unsupported assertion `{}`", stmt.span.extract());
+                    hir::StmtKind::Null
+                }
                 _ => {
                     error!("{:#?}", stmt);
                     return cx.unimp_msg("lowering of", stmt);
