@@ -84,3 +84,16 @@ module a4;
 	assign y = s.a;
 	assign z = s.b;
 endmodule
+
+// Packing and unpacking of arrays and structs.
+module a5;
+	initial begin
+		struct { logic [3:0] a; logic [5:0] b; } x;
+		logic [1:0][4:0] y;
+		logic [9:0] z;
+		z = z + x;  // implicit struct packing of x
+		z = z + y;  // implicit array packing of y
+		// x = x + z;  // implicit struct unpacking of z
+		// y = y + z;  // implicit array unpacking of z
+	end
+endmodule

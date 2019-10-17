@@ -615,6 +615,28 @@ fn lower_implicit_cast<'gcx>(
         return lower_implicit_cast(builder, inner, to);
     }
 
+    // Try struct/array packing.
+    let packed = if from_raw.is_struct() {
+        Some(pack_struct(builder, value))
+    } else if from_raw.is_array() {
+        Some(pack_array(builder, value))
+    } else {
+        None
+    };
+    if let Some(packed) = packed {
+        if verbose {
+            builder.cx.emit(
+                DiagBuilder2::note("implicit cast: struct/array packing")
+                    .span(builder.span)
+                    .add_note(format!(
+                        "from `{}` to `{}`; eventually `{}`",
+                        from_raw, packed.ty, to
+                    )),
+            );
+        }
+        return lower_implicit_cast(builder, packed, to);
+    }
+
     // Complain and abort.
     error!("failed implicit cast from {:?} to {:?}", from, to);
     info!("failed implicit cast from {:?}", value);
@@ -645,6 +667,112 @@ fn change_type_sign<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>, sign: ty::Sig
         }),
         _ => ty,
     }
+}
+
+/// Pack a struct as a simple bit vector.
+fn pack_struct<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    value: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    let mut failed = false;
+
+    // Get the field names and types.
+    let def_id = value.ty.get_struct_def().unwrap();
+    let def = match builder.cx.struct_def(def_id) {
+        Ok(d) => d,
+        Err(()) => return builder.error(),
+    };
+
+    // Pack each of the fields.
+    let mut packed_fields = vec![];
+    for (i, field) in def.fields.iter().enumerate() {
+        let field_ty = match builder.cx.map_to_type(field.ty, builder.env) {
+            Ok(t) => t,
+            Err(()) => {
+                failed = true;
+                continue;
+            }
+        };
+        let sbvt = map_to_simple_bit_vector_type(builder.cx, field_ty, builder.env);
+        let sbvt = match sbvt {
+            Some(x) => x,
+            None => {
+                builder.cx.emit(
+                    DiagBuilder2::error(format!(
+                        "field `{}` cannot be cast to a simple bit vector",
+                        field.name
+                    ))
+                    .span(builder.span),
+                );
+                continue;
+            }
+        };
+        let field_value = builder.build(field_ty, RvalueKind::Member { value, field: i });
+        let field_value = lower_implicit_cast(builder, field_value, sbvt);
+        packed_fields.push(field_value);
+    }
+
+    // Concatenate the fields.
+    if failed {
+        builder.error()
+    } else {
+        let ty = map_to_simple_bit_vector_type(builder.cx, value.ty, builder.env)
+            .expect("struct must have sbvt");
+        builder.build(ty, RvalueKind::Concat(packed_fields))
+    }
+}
+
+/// Pack an array as a simple bit vector.
+fn pack_array<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    value: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Unpack the outermost array dimension.
+    let length = value.ty.get_array_length().expect("array length");
+
+    // Map the element type to its simple bit vector equivalent.
+    let elem_ty = value.ty.get_array_element().expect("array element type");
+    let sbvt = match map_to_simple_bit_vector_type(builder.cx, elem_ty, builder.env) {
+        Some(x) => x,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!(
+                    "element type `{}` cannot be cast to a simple bit vector",
+                    elem_ty
+                ))
+                .span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+
+    // Cast each element.
+    let mut packed_elements = vec![];
+    for i in 0..length {
+        let i = builder.build(
+            &ty::INT_TYPE,
+            RvalueKind::Const(
+                builder
+                    .cx
+                    .intern_value(value::make_int(&ty::INT_TYPE, i.into())),
+            ),
+        );
+        let elem = builder.build(
+            elem_ty,
+            RvalueKind::Index {
+                value,
+                base: i,
+                length: 0,
+            },
+        );
+        let elem = lower_implicit_cast(builder, elem, sbvt);
+        packed_elements.push(elem);
+    }
+
+    // Concatenate the elements.
+    let ty = map_to_simple_bit_vector_type(builder.cx, value.ty, builder.env)
+        .expect("array must have sbvt");
+    builder.build(ty, RvalueKind::Concat(packed_elements))
 }
 
 /// Lower a `'{...}` array pattern.
