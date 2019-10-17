@@ -472,7 +472,7 @@ fn lower_implicit_cast<'gcx>(
         if verbose {
             builder.cx.emit(
                 DiagBuilder2::note(format!(
-                    "cast size from {:?} to {:?}, {:?}",
+                    "implicit cast: size from {:?} to {:?}, {:?}",
                     from_size, to_size, sign
                 ))
                 .span(builder.span)
@@ -505,7 +505,7 @@ fn lower_implicit_cast<'gcx>(
             );
             if verbose {
                 builder.cx.emit(
-                    DiagBuilder2::note("cast vector to atom")
+                    DiagBuilder2::note("implicit cast: vector to atom")
                         .span(builder.span)
                         .add_note(format!(
                             "from `{}` to `{}`; eventually `{}`",
@@ -532,7 +532,7 @@ fn lower_implicit_cast<'gcx>(
             );
             if verbose {
                 builder.cx.emit(
-                    DiagBuilder2::note("cast atom to vector")
+                    DiagBuilder2::note("implicit cast: atom to vector")
                         .span(builder.span)
                         .add_note(format!(
                             "from `{}` to `{}`; eventually `{}`",
@@ -580,7 +580,7 @@ fn lower_implicit_cast<'gcx>(
         );
         if verbose {
             builder.cx.emit(
-                DiagBuilder2::note(format!("cast from {:?} to {:?}", fd, td))
+                DiagBuilder2::note(format!("implicit cast: from {:?} to {:?}", fd, td))
                     .span(builder.span)
                     .add_note(format!(
                         "from `{}` to `{}`; eventually `{}`",
@@ -601,7 +601,7 @@ fn lower_implicit_cast<'gcx>(
         if verbose {
             builder.cx.emit(
                 DiagBuilder2::note(format!(
-                    "cast sign from {:?} to {:?}",
+                    "implicit cast: sign from {:?} to {:?}",
                     from_sign.unwrap(),
                     to_sign.unwrap()
                 ))

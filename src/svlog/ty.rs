@@ -460,7 +460,6 @@ pub fn bit_size_of_type<'gcx>(
 pub fn identical(a: Type, b: Type) -> bool {
     let a = a.resolve_name();
     let b = b.resolve_name();
-    debug!("identical {:#?} and {:#?}?", a, b);
     match (a, b) {
         (
             TypeKind::BitVector {
