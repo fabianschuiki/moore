@@ -3,6 +3,7 @@
 //! Expression rvalue lowering to MIR.
 
 use crate::{
+    common::{SessionContext, Verbosity},
     crate_prelude::*,
     hir::HirNode,
     hir::PatternMapping,
@@ -420,9 +421,10 @@ fn lower_implicit_cast<'gcx>(
     to: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     let from = value.ty;
+    let verbose = builder.cx.sess().has_verbosity(Verbosity::CASTS);
 
     // Catch the easy case where the types already line up.
-    if ty::identical(from, to) || from.is_error() || to.is_error() {
+    if ty::identical(from, to) || value.kind.is_error() || from.is_error() || to.is_error() {
         return value;
     }
 
@@ -435,6 +437,113 @@ fn lower_implicit_cast<'gcx>(
         from_raw,
         to_raw
     );
+
+    // Try a truncation or extension cast.
+    let from_sbvt = map_to_simple_bit_vector_type(builder.cx, from_raw, builder.env);
+    let to_sbvt = map_to_simple_bit_vector_type(builder.cx, to_raw, builder.env);
+    let from_size = from_sbvt.map(|ty| ty.width());
+    let to_size = to_sbvt.map(|ty| ty.width());
+
+    if from_size.is_some() && to_size.is_some() && from_size != to_size {
+        let from_sbvt = from_sbvt.unwrap();
+        let value = lower_implicit_cast(builder, value, from_sbvt);
+        let from_size = from_size.unwrap();
+        let to_size = to_size.unwrap();
+        let range = match *to_sbvt.unwrap() {
+            TypeKind::BitVector { range, .. } => range,
+            _ => unreachable!(),
+        };
+        let sign = from_sbvt.get_sign().unwrap();
+        let ty = builder.cx.intern_type(TypeKind::BitVector {
+            domain: from_sbvt.get_value_domain().unwrap(),
+            sign,
+            range,
+            dubbed: false,
+        });
+        let kind = if from_size < to_size {
+            match sign {
+                ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
+                ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
+            }
+        } else {
+            RvalueKind::Truncate(range.size, value)
+        };
+        let inner = builder.build(ty, kind);
+        if verbose {
+            builder.cx.emit(
+                DiagBuilder2::note(format!(
+                    "cast size from {:?} to {:?}, {:?}",
+                    from_size, to_size, sign
+                ))
+                .span(builder.span)
+                .add_note(format!(
+                    "from `{}` to `{}`; eventually `{}`",
+                    from_raw, inner.ty, to
+                )),
+            );
+        }
+        return lower_implicit_cast(builder, inner, to);
+    }
+
+    // Try a single-bit atom/vector conversion.
+    let from_sbt = map_to_simple_bit_type(builder.cx, from_raw, builder.env);
+    let to_sbt = map_to_simple_bit_type(builder.cx, to_raw, builder.env);
+    match (from_sbt, to_sbt) {
+        (
+            Some(&TypeKind::BitVector {
+                domain,
+                sign,
+                range: ty::Range { size: 1, .. },
+                ..
+            }),
+            Some(&TypeKind::BitScalar { .. }),
+        ) => {
+            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
+            let inner = builder.build(
+                builder.cx.intern_type(TypeKind::BitScalar { domain, sign }),
+                RvalueKind::CastVectorToAtom { domain, value },
+            );
+            if verbose {
+                builder.cx.emit(
+                    DiagBuilder2::note("cast vector to atom")
+                        .span(builder.span)
+                        .add_note(format!(
+                            "from `{}` to `{}`; eventually `{}`",
+                            from_raw, inner.ty, to
+                        )),
+                );
+            }
+            return lower_implicit_cast(builder, inner, to);
+        }
+        (Some(&TypeKind::BitScalar { domain, sign }), Some(&TypeKind::BitVector { .. })) => {
+            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
+            let inner = builder.build(
+                builder.cx.intern_type(TypeKind::BitVector {
+                    domain,
+                    sign,
+                    range: ty::Range {
+                        size: 1,
+                        dir: ty::RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }),
+                RvalueKind::CastAtomToVector { domain, value },
+            );
+            if verbose {
+                builder.cx.emit(
+                    DiagBuilder2::note("cast atom to vector")
+                        .span(builder.span)
+                        .add_note(format!(
+                            "from `{}` to `{}`; eventually `{}`",
+                            from_raw, inner.ty, to
+                        )),
+                );
+            }
+            return lower_implicit_cast(builder, inner, to);
+        }
+        _ => (),
+    }
 
     // Try a value domain cast.
     let from_domain = from_raw.get_value_domain();
@@ -469,88 +578,17 @@ fn lower_implicit_cast<'gcx>(
                 value,
             },
         );
-        return lower_implicit_cast(builder, inner, to);
-    }
-
-    // Try a truncation or extension cast.
-    // let get_width_and_sign = |ty: Type| match *ty {
-    //     TypeKind::Bit(_) => Some((1, ty::Sign::Unsigned)),
-    //     TypeKind::Int(w, _) => Some((w, ty::Sign::Unsigned)),
-    //     TypeKind::BitScalar { sign, .. } => Some((1, sign)),
-    //     TypeKind::BitVector { sign, range, .. } => Some((range.size, sign)),
-    //     _ => None,
-    // };
-    let from_sbvt = map_to_simple_bit_vector_type(builder.cx, from_raw, builder.env);
-    let to_sbvt = map_to_simple_bit_vector_type(builder.cx, to_raw, builder.env);
-    let from_size = from_sbvt.map(|ty| ty.width());
-    let to_size = to_sbvt.map(|ty| ty.width());
-
-    if from_size.is_some() && to_size.is_some() && from_size != to_size {
-        let from_sbvt = from_sbvt.unwrap();
-        let value = lower_implicit_cast(builder, value, from_sbvt);
-        let from_size = from_size.unwrap();
-        let to_size = to_size.unwrap();
-        let range = match *to_sbvt.unwrap() {
-            TypeKind::BitVector { range, .. } => range,
-            _ => unreachable!(),
-        };
-        let sign = from_sbvt.get_sign().unwrap();
-        let ty = builder.cx.intern_type(TypeKind::BitVector {
-            domain: from_sbvt.get_value_domain().unwrap(),
-            sign,
-            range,
-            dubbed: false,
-        });
-        let kind = if from_size < to_size {
-            match sign {
-                ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
-                ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
-            }
-        } else {
-            RvalueKind::Truncate(range.size, value)
-        };
-        let inner = builder.build(ty, kind);
-        return lower_implicit_cast(builder, inner, to);
-    }
-
-    // Try a single-bit atom/vector conversion.
-    let from_sbt = map_to_simple_bit_type(builder.cx, from_raw, builder.env);
-    let to_sbt = map_to_simple_bit_type(builder.cx, to_raw, builder.env);
-    match (from_sbt, to_sbt) {
-        (
-            Some(&TypeKind::BitVector {
-                domain,
-                sign,
-                range: ty::Range { size: 1, .. },
-                ..
-            }),
-            Some(&TypeKind::BitScalar { .. }),
-        ) => {
-            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::BitScalar { domain, sign }),
-                RvalueKind::CastVectorToAtom { domain, value },
+        if verbose {
+            builder.cx.emit(
+                DiagBuilder2::note(format!("cast from {:?} to {:?}", fd, td))
+                    .span(builder.span)
+                    .add_note(format!(
+                        "from `{}` to `{}`; eventually `{}`",
+                        from_raw, inner.ty, to
+                    )),
             );
-            return lower_implicit_cast(builder, inner, to);
         }
-        (Some(&TypeKind::BitScalar { domain, sign }), Some(&TypeKind::BitVector { .. })) => {
-            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::BitVector {
-                    domain,
-                    sign,
-                    range: ty::Range {
-                        size: 1,
-                        dir: ty::RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }),
-                RvalueKind::CastAtomToVector { domain, value },
-            );
-            return lower_implicit_cast(builder, inner, to);
-        }
-        _ => (),
+        return lower_implicit_cast(builder, inner, to);
     }
 
     // Try a sign cast.
@@ -560,6 +598,20 @@ fn lower_implicit_cast<'gcx>(
         let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
         let ty = change_type_sign(builder.cx, from_sbt.unwrap(), to_sign.unwrap());
         let inner = builder.build(ty, RvalueKind::CastSign(to_sign.unwrap(), value));
+        if verbose {
+            builder.cx.emit(
+                DiagBuilder2::note(format!(
+                    "cast sign from {:?} to {:?}",
+                    from_sign.unwrap(),
+                    to_sign.unwrap()
+                ))
+                .span(builder.span)
+                .add_note(format!(
+                    "from `{}` to `{}`; eventually `{}`",
+                    from_raw, inner.ty, to
+                )),
+            );
+        }
         return lower_implicit_cast(builder, inner, to);
     }
 

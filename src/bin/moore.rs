@@ -51,7 +51,14 @@ fn main() {
                 .takes_value(true)
                 .multiple(true)
                 .number_of_values(1)
-                .possible_values(&["types", "expr-types", "type-contexts", "typeck", "names"])
+                .possible_values(&[
+                    "types",
+                    "expr-types",
+                    "type-contexts",
+                    "typeck",
+                    "names",
+                    "casts",
+                ])
                 .global(true),
         )
         .arg(
@@ -165,6 +172,7 @@ fn main() {
             "type-contexts" => Verbosity::TYPE_CONTEXTS,
             "typeck" => Verbosity::TYPECK,
             "names" => Verbosity::NAMES,
+            "casts" => Verbosity::CASTS,
             _ => unreachable!(),
         };
     }

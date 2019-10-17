@@ -164,6 +164,16 @@ pub enum RvalueKind<'a> {
     Error,
 }
 
+impl<'a> RvalueKind<'a> {
+    /// Check whether the rvalue represents a lowering error tombstone.
+    pub fn is_error(&self) -> bool {
+        match self {
+            RvalueKind::Error => true,
+            _ => false,
+        }
+    }
+}
+
 /// The unary bitwise operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
