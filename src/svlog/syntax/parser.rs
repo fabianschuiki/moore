@@ -2104,20 +2104,21 @@ fn parse_expr_suffix(
         }
 
         // expr "inside" "{" open_range_list "}"
-        Keyword(Kw::Inside) if precedence < Precedence::Ternary => {
+        Keyword(Kw::Inside) if precedence <= Precedence::Relational => {
             p.bump();
             let set = flanked(p, Brace, |p| {
                 comma_list_nonempty(p, CloseDelim(Brace), "range", |p| {
                     if p.peek(0).0 == OpenDelim(Brack) {
-                        // TODO(fschuiki): This is utterly broken
                         p.require_reported(OpenDelim(Brack))?;
-                        let expr = parse_expr(p)?;
+                        let mut sp = p.last_span();
+                        let lo = parse_expr(p)?;
                         p.require_reported(Colon)?;
-                        parse_expr(p)?;
+                        let hi = parse_expr(p)?;
                         p.require_reported(CloseDelim(Brack))?;
-                        Ok(expr)
+                        sp.expand(p.last_span());
+                        Ok(ValueRange::Range { lo, hi, span: sp })
                     } else {
-                        parse_expr(p)
+                        Ok(ValueRange::Single(parse_expr(p)?))
                     }
                 })
             })?;

@@ -890,7 +890,7 @@ pub enum ExprData {
         name: Identifier,
     },
     PatternExpr(Vec<PatternField>),
-    InsideExpr(Box<Expr>, Vec<Expr>),
+    InsideExpr(Box<Expr>, Vec<ValueRange>),
     CastExpr(Type, Box<Expr>),
     CastSizeExpr(Box<Expr>, Box<Expr>),
 }
@@ -931,6 +931,12 @@ impl HasDesc for TypeOrExpr {
             TypeOrExpr::Expr(ref x) => x.desc_full(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum ValueRange {
+    Single(Expr),
+    Range { lo: Expr, hi: Expr, span: Span },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
