@@ -130,6 +130,7 @@ pub enum RvalueKind<'a> {
     Index {
         value: &'a Rvalue<'a>,
         base: &'a Rvalue<'a>,
+        /// Length of the selection. Bit-select if zero.
         length: usize,
     },
     /// A struct field access.

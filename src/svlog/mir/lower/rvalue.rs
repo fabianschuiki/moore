@@ -318,7 +318,7 @@ fn try_lower_expr<'gcx>(
 /// Compute the base and length of an indexing operation.
 ///
 /// Determine the index of the LSB and the width of the selection. Note that
-/// bit-selects are mapped to part-selects of length 1.
+/// bit-selects are mapped to part-selects of length 0.
 pub(crate) fn compute_indexing<'gcx>(
     cx: &impl Context<'gcx>,
     origin: NodeId,
@@ -332,7 +332,7 @@ pub(crate) fn compute_indexing<'gcx>(
         env,
     };
     Ok(match mode {
-        hir::IndexMode::One(index) => (lower_expr(cx, index, env), 1),
+        hir::IndexMode::One(index) => (lower_expr(cx, index, env), 0),
         hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, delta) => (
             lower_expr(cx, base, env),
             builder

@@ -10,7 +10,6 @@ use crate::{
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
 use llhd::ir::{Unit, UnitBuilder};
-use num::{BigInt, Zero};
 use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
 /// A code generator.
@@ -934,10 +933,19 @@ where
             } => {
                 let target = self.emit_mir_rvalue(value)?;
                 let base = self.emit_mir_rvalue(base)?;
-                let hidden = self.builder.ins().const_int(length, BigInt::zero());
+                let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                 // TODO(fschuiki): make the above a constant of all `x`.
                 let shifted = self.builder.ins().shr(target, hidden, base);
-                Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                if value.ty.is_array() {
+                    if length == 0 {
+                        Ok(self.builder.ins().ext_field(shifted, 0))
+                    } else {
+                        Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                    }
+                } else {
+                    let length = std::cmp::max(1, length);
+                    Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                }
             }
 
             mir::RvalueKind::Member { value, field } => {
@@ -1164,7 +1172,7 @@ where
                 let target = self.emit_mir_lvalue(value)?;
                 let target_ty = self.llhd_type(target);
                 let base = self.emit_mir_rvalue(base)?;
-                let hidden = self.builder.ins().const_int(length, BigInt::zero());
+                let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                 let hidden = if target_ty.is_signal() {
                     self.builder.ins().sig(hidden)
                 } else if target_ty.is_pointer() {
@@ -1173,7 +1181,16 @@ where
                     hidden
                 };
                 let shifted = self.builder.ins().shr(target, hidden, base);
-                Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                if value.ty.is_array() {
+                    if length == 0 {
+                        Ok(self.builder.ins().ext_field(shifted, 0))
+                    } else {
+                        Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                    }
+                } else {
+                    let length = std::cmp::max(1, length);
+                    Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                }
             }
 
             // Errors from MIR lowering have already been reported. Just abort.
