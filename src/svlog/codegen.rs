@@ -796,7 +796,7 @@ where
         env: ParamEnv,
         mode: Mode,
     ) -> Result<llhd::ir::Value> {
-        let mir = mir::lower::rvalue::lower_expr(self.cx, expr_id, env);
+        let mir = self.mir_rvalue(expr_id, env);
         let value = self.emit_mir_rvalue(mir)?;
         let actual_mode = Mode::Value;
 
@@ -1129,7 +1129,7 @@ where
 
     /// Emit the code for an lvalue.
     fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
-        let mir = mir::lower::lvalue::lower_expr(self.cx, expr_id, env);
+        let mir = self.mir_lvalue(expr_id, env);
         self.emit_mir_lvalue(mir)
     }
 

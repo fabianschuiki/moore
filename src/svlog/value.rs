@@ -323,7 +323,7 @@ fn const_expr<'gcx>(
             Err(())
         }
         hir::ExprKind::Concat(..) => {
-            let mir = mir::lower::rvalue::lower_expr(cx, expr.id, env);
+            let mir = cx.mir_rvalue(expr.id, env);
             const_mir(cx, mir)
         }
         _ => cx.unimp_msg("constant value computation of", expr),

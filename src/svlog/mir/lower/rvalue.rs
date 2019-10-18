@@ -150,7 +150,7 @@ fn try_lower_expr<'gcx>(
                     expr: cond,
                     env,
                 };
-                implicit_cast_to_bool(&subbuilder, lower_expr(subbuilder.cx, cond, subbuilder.env))
+                implicit_cast_to_bool(&subbuilder, cx.mir_rvalue(cond, subbuilder.env))
             };
             let true_value = lower_expr_and_cast(cx, true_value, env, ty);
             let false_value = lower_expr_and_cast(cx, false_value, env, ty);
@@ -264,7 +264,7 @@ fn try_lower_expr<'gcx>(
             let target_ty = cx.type_of(target, env)?;
             let target = if target_ty.is_array() {
                 // No need to cast arrays.
-                lower_expr(cx, target, env)
+                cx.mir_rvalue(target, env)
             } else {
                 let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
                     Some(ty) => ty,
@@ -299,7 +299,7 @@ fn try_lower_expr<'gcx>(
         }
 
         hir::ExprKind::Field(target, _) => {
-            let value = lower_expr(cx, target, env);
+            let value = cx.mir_rvalue(target, env);
             let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
             Ok(builder.build(ty, RvalueKind::Member { value, field }))
         }
@@ -317,18 +317,18 @@ fn try_lower_expr<'gcx>(
             );
 
             // Compare the LHS against all ranges.
-            let lhs = lower_expr(cx, expr, env);
+            let lhs = cx.mir_rvalue(expr, env);
             for r in ranges {
                 let arg = match r.value {
                     hir::InsideRange::Single(expr) => {
                         // Check if the value matches the LHS.
-                        let expr_rv = lower_expr(cx, expr, env);
+                        let expr_rv = cx.mir_rvalue(expr, env);
                         make_int_comparison(&builder.with(expr), IntCompOp::Eq, lhs, expr_rv)
                     }
                     hir::InsideRange::Range(lo, hi) => {
                         // Check if the LHS is within [lo:hi], inclusive.
-                        let lo_rv = lower_expr(cx, lo, env);
-                        let hi_rv = lower_expr(cx, hi, env);
+                        let lo_rv = cx.mir_rvalue(lo, env);
+                        let hi_rv = cx.mir_rvalue(hi, env);
                         let lo_chk =
                             make_int_comparison(&builder.with(lo), IntCompOp::Geq, lhs, lo_rv);
                         let hi_chk =
@@ -373,9 +373,9 @@ pub(crate) fn compute_indexing<'gcx>(
         env,
     };
     Ok(match mode {
-        hir::IndexMode::One(index) => (lower_expr(cx, index, env), 0),
+        hir::IndexMode::One(index) => (cx.mir_rvalue(index, env), 0),
         hir::IndexMode::Many(ast::RangeMode::RelativeUp, base, delta) => (
-            lower_expr(cx, base, env),
+            cx.mir_rvalue(base, env),
             builder
                 .cx
                 .constant_int_value_of(delta, env)?
@@ -383,7 +383,7 @@ pub(crate) fn compute_indexing<'gcx>(
                 .unwrap(),
         ),
         hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
-            let base = lower_expr(cx, base, env);
+            let base = cx.mir_rvalue(base, env);
             let delta_rvalue = lower_expr_and_cast(cx, delta, env, base.ty);
             let base = builder.build(
                 base.ty,
@@ -424,7 +424,7 @@ fn lower_expr_and_cast<'gcx>(
     env: ParamEnv,
     target_ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner = lower_expr(cx, expr_id, env);
+    let inner = cx.mir_rvalue(expr_id, env);
     let builder = Builder {
         cx,
         span: inner.span,
@@ -440,7 +440,7 @@ fn lower_expr_and_cast_sign<'gcx>(
     expr_id: NodeId,
     sign: ty::Sign,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner = lower_expr(builder.cx, expr_id, builder.env);
+    let inner = builder.cx.mir_rvalue(expr_id, builder.env);
     if let Some(ty) = map_to_simple_bit_type(builder.cx, inner.ty.resolve_name(), builder.env) {
         let ty = change_type_sign(builder.cx, ty, sign);
         lower_implicit_cast(builder, inner, ty)
@@ -1481,8 +1481,8 @@ fn lower_int_comparison<'gcx>(
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Lower the operands.
-    let lhs = lower_expr(builder.cx, lhs, builder.env);
-    let rhs = lower_expr(builder.cx, rhs, builder.env);
+    let lhs = builder.cx.mir_rvalue(lhs, builder.env);
+    let rhs = builder.cx.mir_rvalue(rhs, builder.env);
 
     // Determine the operation.
     let op = match op {
@@ -1663,8 +1663,8 @@ fn lower_binary_bitwise<'gcx>(
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Lower the operands.
-    let lhs = lower_expr(builder.cx, lhs, builder.env);
-    let rhs = lower_expr(builder.cx, rhs, builder.env);
+    let lhs = builder.cx.mir_rvalue(lhs, builder.env);
+    let rhs = builder.cx.mir_rvalue(rhs, builder.env);
 
     // Determine the operation.
     let (op, negate) = match op {
@@ -1732,7 +1732,7 @@ fn lower_unary_logic<'gcx>(
     // Cast the operand to a boolean.
     let arg = {
         let builder = &builder.with(arg);
-        let v = lower_expr(builder.cx, arg, builder.env);
+        let v = builder.cx.mir_rvalue(arg, builder.env);
         implicit_cast_to_bool(builder, v)
     };
 
@@ -1756,12 +1756,12 @@ fn lower_binary_logic<'gcx>(
     // Cast the operands to a boolean.
     let lhs = {
         let builder = &builder.with(lhs);
-        let v = lower_expr(builder.cx, lhs, builder.env);
+        let v = builder.cx.mir_rvalue(lhs, builder.env);
         implicit_cast_to_bool(builder, v)
     };
     let rhs = {
         let builder = &builder.with(rhs);
-        let v = lower_expr(builder.cx, rhs, builder.env);
+        let v = builder.cx.mir_rvalue(rhs, builder.env);
         implicit_cast_to_bool(builder, v)
     };
 
@@ -1784,7 +1784,7 @@ fn lower_reduction<'gcx>(
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Lower the operand.
-    let arg = lower_expr(builder.cx, arg, builder.env);
+    let arg = builder.cx.mir_rvalue(arg, builder.env);
 
     // Determine the operation.
     let (op, negate) = match op {
@@ -1881,8 +1881,8 @@ fn lower_int_incdec<'gcx>(
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Map the argument to an lvalue and an rvalue.
-    let lv = crate::mir::lower::lvalue::lower_expr(builder.cx, arg, builder.env);
-    let rv = lower_expr(builder.cx, arg, builder.env);
+    let lv = builder.cx.mir_lvalue(arg, builder.env);
+    let rv = builder.cx.mir_rvalue(arg, builder.env);
 
     // Compute the new value, depending on the operand type.
     let new = if lv.ty.is_bit_scalar() {

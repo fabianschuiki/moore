@@ -14,7 +14,7 @@ use crate::{
 use std::collections::HashMap;
 
 /// An rvalue expression.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Rvalue<'a> {
     /// A unique id.
     pub id: NodeId,
@@ -31,7 +31,7 @@ pub struct Rvalue<'a> {
 }
 
 /// The different forms an rvalue expression may take.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
 pub enum RvalueKind<'a> {
     /// A cast from a four-valued type to a two-valued type, or vice versa.

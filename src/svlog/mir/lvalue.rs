@@ -9,7 +9,7 @@ use crate::{crate_prelude::*, mir::Rvalue, ty::Type, ParamEnv};
 use std::collections::HashMap;
 
 /// An lvalue expression.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Lvalue<'a> {
     /// A unique id.
     pub id: NodeId,
@@ -26,7 +26,7 @@ pub struct Lvalue<'a> {
 }
 
 /// The different forms an lvalue expression may take.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
 pub enum LvalueKind<'a> {
     /// Destructor for an array.

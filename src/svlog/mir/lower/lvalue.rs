@@ -106,7 +106,7 @@ fn try_lower_expr<'gcx>(
             let (base, length) = compute_indexing(builder.cx, builder.expr, builder.env, mode)?;
 
             // Lower the indexee and make sure it can be indexed into.
-            let target = lower_expr(builder.cx, target, builder.env);
+            let target = builder.cx.mir_lvalue(target, builder.env);
             if !target.ty.is_array() && !target.ty.is_bit_vector() {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
@@ -130,7 +130,7 @@ fn try_lower_expr<'gcx>(
         }
 
         hir::ExprKind::Field(target, _) => {
-            let value = lower_expr(builder.cx, target, builder.env);
+            let value = builder.cx.mir_lvalue(target, builder.env);
             let (_, field, _) = builder.cx.resolve_field_access(expr_id, builder.env)?;
             return Ok(builder.build(ty, LvalueKind::Member { value, field }));
         }

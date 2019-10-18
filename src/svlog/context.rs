@@ -660,6 +660,24 @@ pub(super) mod queries {
                 type ResolveFieldAccessQuery;
                 use fn resolver::resolve_field_access;
             }
+
+            /// Lower an expression to an lvalue in the MIR.
+            fn mir_lvalue(
+                expr_id: NodeId,
+                env: ParamEnv,
+            ) -> &'a mir::Lvalue<'a> {
+                type MirLvalueQuery;
+                use fn mir::lower::lvalue::lower_expr;
+            }
+
+            /// Lower an expression to an rvalue in the MIR.
+            fn mir_rvalue(
+                expr_id: NodeId,
+                env: ParamEnv,
+            ) -> &'a mir::Rvalue<'a> {
+                type MirRvalueQuery;
+                use fn mir::lower::rvalue::lower_expr;
+            }
         }
     }
 
@@ -683,6 +701,8 @@ pub(super) mod queries {
                 fn port_mapping() for PortMappingQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
                 fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
+                fn mir_lvalue() for MirLvalueQuery<'gcx>;
+                fn mir_rvalue() for MirRvalueQuery<'gcx>;
             }
         }
     }
