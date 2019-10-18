@@ -677,6 +677,28 @@ fn lower_implicit_cast<'gcx>(
         return lower_implicit_cast(builder, packed, to);
     }
 
+    // Try struct/array unpacking.
+    let unpacked = if to_raw.is_struct() {
+        Some(unpack_struct(builder, to, value))
+    } else if to_raw.is_array() {
+        Some(unpack_array(builder, to, value))
+    } else {
+        None
+    };
+    if let Some(unpacked) = unpacked {
+        if verbose {
+            builder.cx.emit(
+                DiagBuilder2::note("implicit cast: struct/array unpacking")
+                    .span(builder.span)
+                    .add_note(format!(
+                        "from `{}` to `{}`; eventually `{}`",
+                        from_raw, unpacked.ty, to
+                    )),
+            );
+        }
+        return lower_implicit_cast(builder, unpacked, to);
+    }
+
     // Complain and abort.
     error!("failed implicit cast from {:?} to {:?}", from, to);
     info!("failed implicit cast from {:?}", value);
@@ -813,6 +835,129 @@ fn pack_array<'gcx>(
     let ty = map_to_simple_bit_vector_type(builder.cx, value.ty, builder.env)
         .expect("array must have sbvt");
     builder.build(ty, RvalueKind::Concat(packed_elements))
+}
+
+/// Unpack a struct from a simple bit vector.
+fn unpack_struct<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    value: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    let mut failed = false;
+
+    // Get the field names and types.
+    let def_id = ty.get_struct_def().unwrap();
+    let def = match builder.cx.struct_def(def_id) {
+        Ok(d) => d,
+        Err(()) => return builder.error(),
+    };
+
+    // Unpack each of the fields.
+    let mut offset = 0;
+    let mut unpacked_fields = vec![];
+    for field in &def.fields {
+        let field_ty = match builder.cx.map_to_type(field.ty, builder.env) {
+            Ok(t) => t,
+            Err(()) => {
+                failed = true;
+                continue;
+            }
+        };
+        let sbvt = map_to_simple_bit_vector_type(builder.cx, field_ty, builder.env);
+        let sbvt = match sbvt {
+            Some(x) => x,
+            None => {
+                builder.cx.emit(
+                    DiagBuilder2::error(format!(
+                        "field `{}` cannot be cast to a simple bit vector",
+                        field.name
+                    ))
+                    .span(builder.span),
+                );
+                continue;
+            }
+        };
+        let w = sbvt.width();
+        let i = builder.build(
+            &ty::INT_TYPE,
+            RvalueKind::Const(
+                builder
+                    .cx
+                    .intern_value(value::make_int(&ty::INT_TYPE, offset.into())),
+            ),
+        );
+        let field_value = builder.build(
+            sbvt,
+            RvalueKind::Index {
+                value,
+                base: i,
+                length: w,
+            },
+        );
+        let field_value = lower_implicit_cast(builder, field_value, field_ty);
+        unpacked_fields.push(field_value);
+        offset += w;
+    }
+
+    // Construct the struct.
+    if failed {
+        builder.error()
+    } else {
+        builder.build(ty, RvalueKind::ConstructStruct(unpacked_fields))
+    }
+}
+
+/// Unpack an array from a simple bit vector.
+fn unpack_array<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    value: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Unpack the outermost array dimension.
+    let length = ty.get_array_length().expect("array length");
+
+    // Map the element type to its simple bit vector equivalent.
+    let elem_ty = ty.get_array_element().expect("array element type");
+    let sbvt = match map_to_simple_bit_vector_type(builder.cx, elem_ty, builder.env) {
+        Some(x) => x,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!(
+                    "element type `{}` cannot be cast to a simple bit vector",
+                    elem_ty
+                ))
+                .span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+    let w = sbvt.width();
+
+    // Unpack each element.
+    let mut unpacked_elements = HashMap::new();
+    for i in 0..length {
+        let base = builder.build(
+            &ty::INT_TYPE,
+            RvalueKind::Const(
+                builder
+                    .cx
+                    .intern_value(value::make_int(&ty::INT_TYPE, (i * w).into())),
+            ),
+        );
+        let elem = builder.build(
+            elem_ty,
+            RvalueKind::Index {
+                value,
+                base: base,
+                length: w,
+            },
+        );
+        let elem = lower_implicit_cast(builder, elem, elem_ty);
+        unpacked_elements.insert(i, elem);
+    }
+
+    // Concatenate the elements.
+    builder.build(ty, RvalueKind::ConstructArray(unpacked_elements))
 }
 
 /// Lower a `'{...}` array pattern.
