@@ -304,7 +304,7 @@ fn try_lower_expr<'gcx>(
         }
 
         hir::ExprKind::Cast(ty, expr) => {
-            let ty = cx.type_of(ty, env)?;
+            let ty = cx.map_to_type(ty, env)?;
             Ok(lower_expr_and_cast(cx, expr, env, ty))
         }
 
