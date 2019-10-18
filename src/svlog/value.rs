@@ -59,6 +59,14 @@ impl<'t> ValueData<'t> {
             ValueKind::StructOrArray(_) => false,
         }
     }
+
+    /// Convert the value to an integer.
+    pub fn get_int(&self) -> Option<&BigInt> {
+        match self.kind {
+            ValueKind::Int(ref v) => Some(v),
+            _ => None,
+        }
+    }
 }
 
 /// Create a new integer value.
@@ -210,7 +218,6 @@ fn const_expr<'gcx>(
         }
         hir::ExprKind::Unary(op, arg) => {
             let arg_val = cx.constant_value_of(arg, env)?;
-            debug!("exec {:?}({:?})", op, arg_val);
             match arg_val.kind {
                 ValueKind::Int(ref arg) => Ok(cx.intern_value(make_int(
                     ty,
@@ -231,7 +238,6 @@ fn const_expr<'gcx>(
         hir::ExprKind::Binary(op, lhs, rhs) => {
             let lhs_val = cx.constant_value_of(lhs, env)?;
             let rhs_val = cx.constant_value_of(rhs, env)?;
-            debug!("exec {:?}({:?}, {:?})", op, lhs_val, rhs_val);
             match (&lhs_val.kind, &rhs_val.kind) {
                 (&ValueKind::Int(ref lhs), &ValueKind::Int(ref rhs)) => Ok(cx.intern_value(
                     make_int(ty, const_binary_op_on_int(cx, expr.span, ty, op, lhs, rhs)?),
@@ -315,6 +321,10 @@ fn const_expr<'gcx>(
                     .span(expr.span()),
             );
             Err(())
+        }
+        hir::ExprKind::Concat(..) => {
+            let mir = mir::lower::rvalue::lower_expr(cx, expr.id, env);
+            const_mir(cx, mir)
         }
         _ => cx.unimp_msg("constant value computation of", expr),
     }
@@ -410,6 +420,23 @@ fn const_binary_op_on_int<'gcx>(
             return Err(());
         }
     })
+}
+
+fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Result<Value<'gcx>> {
+    match mir.kind {
+        mir::RvalueKind::Concat(ref values) => {
+            let mut result = BigInt::zero();
+            for value in values {
+                result <<= value.ty.width();
+                result |= const_mir(cx, value)?.get_int().expect("concat non-integer");
+            }
+            Ok(cx.intern_value(make_int(mir.ty, result)))
+        }
+
+        // By default fall back to the usual method of constant value
+        // computation.
+        _ => cx.constant_value_of(mir.origin, mir.env),
+    }
 }
 
 /// Check if a node has a constant value.
