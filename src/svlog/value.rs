@@ -349,7 +349,7 @@ fn const_unary_op_on_int<'gcx>(
 fn const_binary_op_on_int<'gcx>(
     cx: &impl Context<'gcx>,
     span: Span,
-    _ty: Type<'gcx>,
+    ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: &BigInt,
     rhs: &BigInt,
@@ -385,10 +385,22 @@ fn const_binary_op_on_int<'gcx>(
             Some(sh) => lhs >> sh as usize,
             None => num::zero(),
         },
+        hir::BinaryOp::BitAnd => lhs & rhs,
+        hir::BinaryOp::BitOr => lhs | rhs,
+        hir::BinaryOp::BitXor => lhs ^ rhs,
+        hir::BinaryOp::BitNand => {
+            const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs & rhs))?
+        }
+        hir::BinaryOp::BitNor => {
+            const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs | rhs))?
+        }
+        hir::BinaryOp::BitXnor => {
+            const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs ^ rhs))?
+        }
         _ => {
             cx.emit(
                 DiagBuilder2::error(format!(
-                    "{} cannot be applied to integers `{}` and `{}`",
+                    "{} cannot be applied to constant integers `{}` and `{}`",
                     op.desc_full(),
                     lhs,
                     rhs
