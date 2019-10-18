@@ -372,14 +372,13 @@ fn map_type_kind<'gcx>(
             };
             let offset = lo.to_isize().unwrap();
             match **inner {
-                hir::TypeKind::Builtin(hir::BuiltinType::Bit) => {
-                    Ok(cx.intern_type(TypeKind::BitVector {
+                hir::TypeKind::Implicit | hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx
+                    .intern_type(TypeKind::BitVector {
                         domain: ty::Domain::TwoValued,
                         sign: ty::Sign::Unsigned,
                         range: ty::Range { size, dir, offset },
                         dubbed: false,
-                    }))
-                }
+                    })),
                 hir::TypeKind::Builtin(hir::BuiltinType::Logic) => {
                     Ok(cx.intern_type(TypeKind::BitVector {
                         domain: ty::Domain::FourValued,
@@ -401,7 +400,13 @@ fn map_type_kind<'gcx>(
         // We should never request mapping of an implicit type. Rather, the
         // actual type should be mapped. Arriving here is a bug in the
         // calling function.
-        hir::TypeKind::Implicit => unreachable!("implicit type not resolved"),
+        hir::TypeKind::Implicit => {
+            error!("{:#?}", root);
+            unreachable!(
+                "{}",
+                DiagBuilder2::bug("implicit type not resolved").span(root.span)
+            )
+        }
         _ => {
             error!("{:#?}", root);
             cx.unimp_msg("type analysis of", root)
