@@ -919,10 +919,13 @@ fn lower_expr<'gcx>(
                     "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
                     _ => {
                         cx.emit(
-                            DiagBuilder2::error(format!("`${}` unknown", ident.name))
-                                .span(expr.human_span()),
+                            DiagBuilder2::warning(format!(
+                                "`${}` not supported; ignored",
+                                ident.name
+                            ))
+                            .span(expr.human_span()),
                         );
-                        return Err(());
+                        hir::BuiltinCall::Unsupported
                     }
                 })
             }

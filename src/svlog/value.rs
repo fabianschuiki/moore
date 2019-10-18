@@ -248,6 +248,9 @@ fn const_expr<'gcx>(
                 }
             }
         }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
+            Ok(cx.intern_value(make_int(ty, num::zero())))
+        }
         hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
             let arg_val = cx.constant_value_of(arg, env)?;
             let arg_int = match arg_val.kind {

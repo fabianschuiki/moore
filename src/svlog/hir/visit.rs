@@ -151,7 +151,10 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
 /// Walk the contents of an expression.
 pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: bool) {
     match expr.kind {
-        ExprKind::IntConst(..) | ExprKind::UnsizedConst(_) | ExprKind::TimeConst(_) => (),
+        ExprKind::Builtin(BuiltinCall::Unsupported)
+        | ExprKind::IntConst(..)
+        | ExprKind::UnsizedConst(_)
+        | ExprKind::TimeConst(_) => (),
         ExprKind::Ident(x) => {
             visitor.visit_ident(x);
         }

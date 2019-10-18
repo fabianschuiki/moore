@@ -770,6 +770,8 @@ pub enum IndexMode {
 /// The different builtin function calls that are supported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinCall {
+    /// An unsupported builtin. Will yield constant 0.
+    Unsupported,
     /// A call to the ceil-log2 function `$clog2(x)`.
     Clog2(NodeId),
     /// A call to the storage size function `$bits(x)`.

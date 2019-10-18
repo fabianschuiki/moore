@@ -114,6 +114,7 @@ fn try_lower_expr<'gcx>(
         hir::ExprKind::IntConst(..)
         | hir::ExprKind::UnsizedConst(..)
         | hir::ExprKind::TimeConst(_)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
             let k = builder.cx.constant_value_of(expr_id, env)?;

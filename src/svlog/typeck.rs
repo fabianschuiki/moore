@@ -122,7 +122,8 @@ pub(crate) fn type_of<'gcx>(
                     hir::IndexMode::Many(..) => Ok(target_ty),
                 }
             }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+            hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(&ty::INT_TYPE),
             hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx.type_of(arg, env),
@@ -220,7 +221,14 @@ pub(crate) fn type_of<'gcx>(
         HirNode::Assign(a) => cx.type_of(a.lhs, env),
         _ => {
             error!("{:#?}", hir);
-            cx.unimp_msg("type analysis of", &hir)
+            panic!(
+                "{}",
+                DiagBuilder2::bug(format!(
+                    "type analysis of {} not implemented",
+                    hir.desc_full()
+                ))
+                .span(hir.span())
+            )
         }
     }
 }
