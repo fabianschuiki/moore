@@ -1052,6 +1052,27 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Type(ty), parent),
             cx.map_ast_with_parent(AstNode::Expr(expr), parent),
         ),
+        ast::InsideExpr(ref expr, ref ranges) => hir::ExprKind::Inside(
+            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+            ranges
+                .iter()
+                .map(|vr| match vr {
+                    ast::ValueRange::Single(expr) => Spanned::new(
+                        hir::InsideRange::Single(
+                            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+                        ),
+                        expr.span,
+                    ),
+                    ast::ValueRange::Range { lo, hi, span } => Spanned::new(
+                        hir::InsideRange::Range(
+                            cx.map_ast_with_parent(AstNode::Expr(lo), parent),
+                            cx.map_ast_with_parent(AstNode::Expr(hi), parent),
+                        ),
+                        *span,
+                    ),
+                })
+                .collect(),
+        ),
         _ => {
             error!("{:#?}", expr);
             return cx.unimp_msg("lowering of", expr);

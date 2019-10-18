@@ -225,6 +225,18 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
             visitor.visit_node_with_id(ty, false);
             visitor.visit_node_with_id(expr, false);
         }
+        ExprKind::Inside(expr, ref ranges) => {
+            visitor.visit_node_with_id(expr, false);
+            for r in ranges {
+                match r.value {
+                    InsideRange::Single(expr) => visitor.visit_node_with_id(expr, false),
+                    InsideRange::Range(lo, hi) => {
+                        visitor.visit_node_with_id(lo, false);
+                        visitor.visit_node_with_id(hi, false);
+                    }
+                }
+            }
+        }
     }
 }
 

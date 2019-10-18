@@ -97,3 +97,13 @@ module a5;
 		// y = y + z;  // implicit array unpacking of z
 	end
 endmodule
+
+// 11.4.13 Set membership operator
+module a6;
+	initial begin
+		int a, b, c, d;
+		bit z;
+		z = a inside {b, [c:d]};
+		// z = a inside {[3'b000:3'b100], 3'b111};
+	end
+endmodule

@@ -12,7 +12,7 @@ use crate::{
     value::ValueKind,
     ParamEnv,
 };
-use num::{BigInt, One, Signed, ToPrimitive};
+use num::{BigInt, One, Signed, ToPrimitive, Zero};
 use std::{cmp::max, collections::HashMap};
 
 /// An internal builder for rvalue lowering.
@@ -306,6 +306,46 @@ fn try_lower_expr<'gcx>(
         hir::ExprKind::Cast(ty, expr) => {
             let ty = cx.type_of(ty, env)?;
             Ok(lower_expr_and_cast(cx, expr, env, ty))
+        }
+
+        hir::ExprKind::Inside(expr, ref ranges) => {
+            // By default nothing matches.
+            let mut check = builder.build(
+                ty,
+                RvalueKind::Const(cx.intern_value(value::make_int(ty, Zero::zero()))),
+            );
+
+            // Compare the LHS against all ranges.
+            let lhs = lower_expr(cx, expr, env);
+            for r in ranges {
+                let arg = match r.value {
+                    hir::InsideRange::Single(expr) => {
+                        // Check if the value matches the LHS.
+                        let expr_rv = lower_expr(cx, expr, env);
+                        make_int_comparison(&builder.with(expr), IntCompOp::Eq, lhs, expr_rv)
+                    }
+                    hir::InsideRange::Range(lo, hi) => {
+                        // Check if the LHS is within [lo:hi], inclusive.
+                        let lo_rv = lower_expr(cx, lo, env);
+                        let hi_rv = lower_expr(cx, hi, env);
+                        let lo_chk =
+                            make_int_comparison(&builder.with(lo), IntCompOp::Geq, lhs, lo_rv);
+                        let hi_chk =
+                            make_int_comparison(&builder.with(hi), IntCompOp::Leq, lhs, hi_rv);
+                        make_binary_bitwise(
+                            builder,
+                            ty,
+                            BinaryBitwiseOp::And,
+                            false,
+                            lo_chk,
+                            hi_chk,
+                        )
+                    }
+                };
+                check = make_binary_bitwise(builder, ty, BinaryBitwiseOp::Or, false, check, arg);
+            }
+
+            Ok(check)
         }
 
         _ => {
@@ -1175,7 +1215,7 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::Lt
         | hir::BinaryOp::Leq
         | hir::BinaryOp::Gt
-        | hir::BinaryOp::Geq => lower_int_comparison(builder, ty, op, lhs, rhs),
+        | hir::BinaryOp::Geq => lower_int_comparison(builder, op, lhs, rhs),
         hir::BinaryOp::LogicShL
         | hir::BinaryOp::LogicShR
         | hir::BinaryOp::ArithShL
@@ -1290,23 +1330,40 @@ fn lower_int_binary_arith<'gcx>(
 /// Map an integer comparison operator to MIR.
 fn lower_int_comparison<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the common type of both operands.
-    let (lhs_ty, rhs_ty) = (
-        builder.cx.type_of(lhs, builder.env),
-        builder.cx.type_of(rhs, builder.env),
-    );
-    let (lhs_ty, rhs_ty) = match (lhs_ty, rhs_ty) {
-        (Ok(l), Ok(r)) => (l, r),
-        _ => return builder.error(),
+    // Lower the operands.
+    let lhs = lower_expr(builder.cx, lhs, builder.env);
+    let rhs = lower_expr(builder.cx, rhs, builder.env);
+
+    // Determine the operation.
+    let op = match op {
+        hir::BinaryOp::Eq => IntCompOp::Eq,
+        hir::BinaryOp::Neq => IntCompOp::Neq,
+        hir::BinaryOp::Lt => IntCompOp::Lt,
+        hir::BinaryOp::Leq => IntCompOp::Leq,
+        hir::BinaryOp::Gt => IntCompOp::Gt,
+        hir::BinaryOp::Geq => IntCompOp::Geq,
+        _ => unreachable!("{:?} is not an integer binary comparison operator", op),
     };
+
+    // Assemble the node.
+    make_int_comparison(builder, op, lhs, rhs)
+}
+
+/// Map an integer comparison operator to MIR.
+fn make_int_comparison<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    op: IntCompOp,
+    lhs: &'gcx Rvalue<'gcx>,
+    rhs: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the common type of both operands.
     let (lhs_sbt, rhs_sbt) = (
-        map_to_simple_bit_type(builder.cx, lhs_ty, builder.env),
-        map_to_simple_bit_type(builder.cx, rhs_ty, builder.env),
+        map_to_simple_bit_type(builder.cx, lhs.ty, builder.env),
+        map_to_simple_bit_type(builder.cx, rhs.ty, builder.env),
     );
     let (lhs_sbt, rhs_sbt) = match (lhs_sbt, rhs_sbt) {
         (Some(l), Some(r)) => (l, r),
@@ -1314,7 +1371,7 @@ fn lower_int_comparison<'gcx>(
             builder.cx.emit(
                 DiagBuilder2::error(format!(
                     "`{:?}` cannot operate on `{}` and `{}`",
-                    op, lhs_ty, rhs_ty
+                    op, lhs.ty, rhs.ty
                 ))
                 .span(builder.span),
             );
@@ -1335,20 +1392,8 @@ fn lower_int_comparison<'gcx>(
     // type.
 
     // Cast the operands to the operator type.
-    trace!("binary {:?} on {} maps to {}", op, ty, union_ty);
-    let lhs = lower_expr_and_cast(builder.cx, lhs, builder.env, union_ty);
-    let rhs = lower_expr_and_cast(builder.cx, rhs, builder.env, union_ty);
-
-    // Determine the operation.
-    let op = match op {
-        hir::BinaryOp::Eq => IntCompOp::Eq,
-        hir::BinaryOp::Neq => IntCompOp::Neq,
-        hir::BinaryOp::Lt => IntCompOp::Lt,
-        hir::BinaryOp::Leq => IntCompOp::Leq,
-        hir::BinaryOp::Gt => IntCompOp::Gt,
-        hir::BinaryOp::Geq => IntCompOp::Geq,
-        _ => unreachable!("{:?} is not an integer binary comparison operator", op),
-    };
+    let lhs = lower_implicit_cast(builder, lhs, union_ty);
+    let rhs = lower_implicit_cast(builder, rhs, union_ty);
 
     // Assemble the node.
     builder.build(
@@ -1471,6 +1516,34 @@ fn lower_binary_bitwise<'gcx>(
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
+    // Lower the operands.
+    let lhs = lower_expr(builder.cx, lhs, builder.env);
+    let rhs = lower_expr(builder.cx, rhs, builder.env);
+
+    // Determine the operation.
+    let (op, negate) = match op {
+        hir::BinaryOp::BitAnd => (BinaryBitwiseOp::And, false),
+        hir::BinaryOp::BitOr => (BinaryBitwiseOp::Or, false),
+        hir::BinaryOp::BitXor => (BinaryBitwiseOp::Xor, false),
+        hir::BinaryOp::BitNand => (BinaryBitwiseOp::And, true),
+        hir::BinaryOp::BitNor => (BinaryBitwiseOp::Or, true),
+        hir::BinaryOp::BitXnor => (BinaryBitwiseOp::Xor, true),
+        _ => unreachable!("{:?} is not a binary bitwise operator", op),
+    };
+
+    // Assemble the node.
+    make_binary_bitwise(builder, ty, op, negate, lhs, rhs)
+}
+
+/// Map a bitwise binary operator to MIR.
+fn make_binary_bitwise<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: BinaryBitwiseOp,
+    negate: bool,
+    lhs: &'gcx Rvalue<'gcx>,
+    rhs: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
     let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
         Some(ty) => ty,
@@ -1486,20 +1559,8 @@ fn lower_binary_bitwise<'gcx>(
     // type.
 
     // Cast the operands to the operator type.
-    trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
-    let lhs = lower_expr_and_cast(builder.cx, lhs, builder.env, result_ty);
-    let rhs = lower_expr_and_cast(builder.cx, rhs, builder.env, result_ty);
-
-    // Determine the operation.
-    let (op, negate) = match op {
-        hir::BinaryOp::BitAnd => (BinaryBitwiseOp::And, false),
-        hir::BinaryOp::BitOr => (BinaryBitwiseOp::Or, false),
-        hir::BinaryOp::BitXor => (BinaryBitwiseOp::Xor, false),
-        hir::BinaryOp::BitNand => (BinaryBitwiseOp::And, true),
-        hir::BinaryOp::BitNor => (BinaryBitwiseOp::Or, true),
-        hir::BinaryOp::BitXnor => (BinaryBitwiseOp::Xor, true),
-        _ => unreachable!("{:?} is not a binary bitwise operator", op),
-    };
+    let lhs = lower_implicit_cast(builder, lhs, result_ty);
+    let rhs = lower_implicit_cast(builder, rhs, result_ty);
 
     // Assemble the node.
     let value = builder.build(result_ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
@@ -1576,19 +1637,8 @@ fn lower_reduction<'gcx>(
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let inner_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{}` cannot be reduced", ty)).span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-
-    // Map the argument.
-    let arg = lower_expr_and_cast(builder.cx, arg, builder.env, inner_ty);
+    // Lower the operand.
+    let arg = lower_expr(builder.cx, arg, builder.env);
 
     // Determine the operation.
     let (op, negate) = match op {
@@ -1600,6 +1650,34 @@ fn lower_reduction<'gcx>(
         hir::UnaryOp::RedXnor => (BinaryBitwiseOp::Xor, true),
         _ => unreachable!("{:?} is not a reduction operator", op),
     };
+
+    // Assemble the node.
+    make_reduction(builder, ty, op, negate, arg)
+}
+
+/// Map a reduction operator to MIR.
+fn make_reduction<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
+    op: BinaryBitwiseOp,
+    negate: bool,
+    arg: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Determine the simple bit vector type for the operator.
+    let inner_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+        Some(ty) => ty,
+        None => {
+            builder.cx.emit(
+                DiagBuilder2::error(format!("`{}` cannot be reduced", ty)).span(builder.span),
+            );
+            return builder.error();
+        }
+    };
+    // TODO(fschuiki): Replace this with a query to the operator's internal
+    // type.
+
+    // Cast the argument.
+    let arg = lower_implicit_cast(builder, arg, inner_ty);
 
     // Assemble the node.
     let bit_ty = inner_ty.get_value_domain().unwrap().bit_type();

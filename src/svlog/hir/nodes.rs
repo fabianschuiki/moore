@@ -616,6 +616,8 @@ pub enum ExprKind {
     Concat(Option<NodeId>, Vec<NodeId>),
     /// A cast `(ty, expr)` such as `foo'(bar)`.
     Cast(NodeId, NodeId),
+    /// An inside expression such as `a inside {b, c}`.
+    Inside(NodeId, Vec<Spanned<InsideRange>>),
 }
 
 /// The different unary operators.
@@ -1178,4 +1180,11 @@ pub enum PatternMapping {
     Member(NodeId),
     /// A default field, e.g. `'{default: ...}`.
     Default,
+}
+
+/// Single values or value ranges admissible in `inside` sets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsideRange {
+    Single(NodeId),
+    Range(NodeId, NodeId),
 }
