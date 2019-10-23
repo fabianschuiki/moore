@@ -584,15 +584,14 @@ where
                         outputs.push(self.emit_lvalue(mapping.0, mapping.1)?);
                     }
                 } else {
-                    let ty = self.type_of(port_id, env)?;
+                    let ty = self.type_of(port_id, inst_env)?;
                     let value = match port.default {
-                        Some(default) => self.emit_rvalue_mode(default, env, Mode::Signal)?,
+                        Some(default) => self.emit_rvalue_mode(default, inst_env, Mode::Signal)?,
                         None => {
                             let v = self.type_default_value(ty.clone());
-                            self.emit_const(v, env)?
+                            self.emit_const(v, inst_env)?
                         }
                     };
-                    // let lty = self.emit_type(ty, env)?;
                     let sig = self.builder.ins().sig(value);
                     if is_input {
                         inputs.push(sig);
