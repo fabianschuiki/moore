@@ -212,7 +212,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
         // Detect the file type.
         let language = match Path::new(&filename).extension().and_then(|s| s.to_str()) {
             Some("sv") | Some("svh") => Language::SystemVerilog,
-            Some("v") => Language::Verilog,
+            Some("v") | Some("vh") => Language::Verilog,
             Some("vhd") | Some("vhdl") => Language::Vhdl,
             Some(_) => panic!("Unrecognized extension of file '{}'", filename),
             None => panic!("Unable to determine language of file '{}'", filename),
