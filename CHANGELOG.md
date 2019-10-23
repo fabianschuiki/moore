@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))
 - Ternary operator now also supported at entitiy-level.
 - Fix underscores in preprocessor macros.
+- Fix parsing of size cast expressions, e.g. `32'(x)`. ([#113](https://github.com/fabianschuiki/moore/issues/113))
 
 ## 0.4.0 - 2019-02-19
 ### Added

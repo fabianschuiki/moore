@@ -331,8 +331,9 @@ impl<'a> Lexer<'a> {
                         return Ok((Literal(Number(value, frac)), sp));
                     }
                     self.skip_noise()?; // whitespace allowed after size indication
-                    match self.peek[0] {
-                        (CatTokenKind::Symbol('\''), _) => {
+                    match (self.peek[0].0, self.peek[1].0) {
+                        (CatTokenKind::Symbol('\''), CatTokenKind::Text)
+                        | (CatTokenKind::Symbol('\''), CatTokenKind::Digits) => {
                             self.bump()?; // eat the apostrophe
                             return self.match_based_number(Some(value), sp);
                         }
