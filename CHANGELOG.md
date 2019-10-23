@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Inline the [salsa](https://github.com/fabianschuiki/salsa/tree/moore) crate.
 
 ### Changed
-- Update llhd to v0.8.0.
+- Update llhd to v0.9.0.
 - Support for the `ty'(expr)` cast expression.
 - Increase minimum rustc version to 1.36.
 
