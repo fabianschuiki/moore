@@ -589,15 +589,15 @@ where
                         Some(default) => self.emit_rvalue_mode(default, inst_env, Mode::Signal)?,
                         None => {
                             let v = self.type_default_value(ty.clone());
-                            self.emit_const(v, inst_env)?
+                            let v = self.emit_const(v, inst_env)?;
+                            self.builder.ins().sig(v)
                         }
                     };
-                    let sig = self.builder.ins().sig(value);
                     if is_input {
-                        inputs.push(sig);
+                        inputs.push(value);
                     }
                     if is_output {
-                        outputs.push(sig);
+                        outputs.push(value);
                     }
                 }
             }
@@ -1172,13 +1172,6 @@ where
                 let target_ty = self.llhd_type(target);
                 let base = self.emit_mir_rvalue(base)?;
                 let hidden = self.emit_zero_for_type(&self.llhd_type(target));
-                let hidden = if target_ty.is_signal() {
-                    self.builder.ins().sig(hidden)
-                } else if target_ty.is_pointer() {
-                    self.builder.ins().var(hidden)
-                } else {
-                    hidden
-                };
                 let shifted = self.builder.ins().shr(target, hidden, base);
                 if value.ty.is_array() {
                     if length == 0 {
