@@ -214,8 +214,23 @@ fn score(sess: &Session, matches: &ArgMatches) {
             Some("sv") | Some("svh") => Language::SystemVerilog,
             Some("v") | Some("vh") => Language::Verilog,
             Some("vhd") | Some("vhdl") => Language::Vhdl,
-            Some(_) => panic!("Unrecognized extension of file '{}'", filename),
-            None => panic!("Unable to determine language of file '{}'", filename),
+            Some(ext) => {
+                sess.emit(
+                    DiagBuilder2::warning(format!("ignoring `{}`", filename)).add_note(format!(
+                        "Cannot determine language from extension `.{}`",
+                        ext
+                    )),
+                );
+                continue;
+            }
+            None => {
+                sess.emit(
+                    DiagBuilder2::warning(format!("ignoring `{}`", filename)).add_note(format!(
+                        "No file extension that can be used to guess language"
+                    )),
+                );
+                continue;
+            }
         };
 
         // Add the file to the source manager.
