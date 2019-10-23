@@ -7,9 +7,7 @@
 use crate::cat::*;
 use moore_common::errors::{DiagBuilder2, DiagResult2};
 use moore_common::source::*;
-use std::collections::HashMap;
-use std::path::Path;
-use std::rc::Rc;
+use std::{collections::HashMap, fmt, path::Path, rc::Rc};
 
 type TokenAndSpan = (CatTokenKind, Span);
 
@@ -296,6 +294,39 @@ impl<'a> Preprocessor<'a> {
                 return Ok(());
             }
 
+            Directive::Undef => {
+                if self.is_inactive() {
+                    return Ok(());
+                }
+
+                // Skip leading whitespace.
+                match self.token {
+                    Some((Whitespace, _)) => self.bump(),
+                    _ => (),
+                }
+
+                // Consume the macro name.
+                let (name, _) = match self.try_eat_name() {
+                    Some(x) => x,
+                    None => {
+                        return Err(
+                            DiagBuilder2::fatal("expected macro name after \"`undef\"").span(span)
+                        );
+                    }
+                };
+
+                // Remove the macro definition.
+                self.macro_defs.remove(&name);
+                return Ok(());
+            }
+
+            Directive::Undefineall => {
+                if self.is_inactive() {
+                    return Ok(());
+                }
+                self.macro_defs.clear();
+            }
+
             Directive::Ifdef | Directive::Ifndef | Directive::Elsif => {
                 // Skip leading whitespace.
                 match self.token {
@@ -530,14 +561,6 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
-
-            x => {
-                return Err(DiagBuilder2::fatal(format!(
-                    "preprocessor directive {:?} not implemented",
-                    x
-                ))
-                .span(span));
-            }
         }
 
         return Err(
@@ -686,6 +709,24 @@ enum Directive {
     Endif,
     Timescale,
     Unknown,
+}
+
+impl fmt::Display for Directive {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Directive::Include => write!(f, "`include"),
+            Directive::Define => write!(f, "`define"),
+            Directive::Undef => write!(f, "`undef"),
+            Directive::Undefineall => write!(f, "`undefineall"),
+            Directive::Ifdef => write!(f, "`ifdef"),
+            Directive::Ifndef => write!(f, "`ifndef"),
+            Directive::Else => write!(f, "`else"),
+            Directive::Elsif => write!(f, "`elsif"),
+            Directive::Endif => write!(f, "`endif"),
+            Directive::Timescale => write!(f, "`timescale"),
+            Directive::Unknown => write!(f, "unknown"),
+        }
+    }
 }
 
 thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {

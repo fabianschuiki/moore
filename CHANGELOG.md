@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Support for the `{...}` concatenation and `{N{...}}` repetition operators.
 - Add `-On` switch to control optimization level.
 - Add MIR for rvalues and lvalues. ([#104](https://github.com/fabianschuiki/moore/issues/104))
+- Support for the ``` `undef ``` and ``` `undefineall ``` directives.
 
 ### Changed
 - Update llhd to v0.8.0.
