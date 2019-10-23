@@ -8,6 +8,8 @@ description = "The SystemVerilog implementation of the moore compiler framework.
 repository = "https://github.com/fabianschuiki/moore"
 license = "Apache-2.0 OR MIT"
 
+include = ["**.rs", "*.toml"]
+
 [lib]
 path = "lib.rs"
 
