@@ -136,7 +136,7 @@ impl<'a> Preprocessor<'a> {
                 let closing = match self.token {
                     Some((Symbol('"'), sp)) => { name_p = sp.end(); self.bump(); '"' },
                     Some((Symbol('<'), sp)) => { name_p = sp.end(); self.bump(); '>' },
-                    _ => { return Err(DiagBuilder2::fatal("Expected filename inside double quotes (\"...\") or angular brackets (<...>) after `include").span(span))}
+                    _ => { return Err(DiagBuilder2::fatal("expected filename inside double quotes (\"...\") or angular brackets (<...>) after `include").span(span))}
                 };
 
                 // Accumulate the include path until the closing symbol.
@@ -149,7 +149,7 @@ impl<'a> Preprocessor<'a> {
                         }
                         Some((Newline, sp)) => {
                             return Err(DiagBuilder2::fatal(
-                                "Expected end of included file's name before line break",
+                                "expected end of included file's name before line break",
                             )
                             .span(sp));
                         }
@@ -158,7 +158,7 @@ impl<'a> Preprocessor<'a> {
                             self.bump();
                         }
                         None => {
-                            return Err(DiagBuilder2::fatal("Expected filename after `include directive before the end of the input").span(span));
+                            return Err(DiagBuilder2::fatal("expected filename after `include directive before the end of the input").span(span));
                         }
                     }
                 }
@@ -171,7 +171,7 @@ impl<'a> Preprocessor<'a> {
                     None => {
                         // TODO: Add notes to the message indicating which files have been tried.
                         return Err(DiagBuilder2::fatal(format!(
-                            "Cannot open included file \"{}\"",
+                            "cannot open included file \"{}\"",
                             filename
                         ))
                         .span(Span::union(name_p, name_q)));
@@ -207,7 +207,7 @@ impl<'a> Preprocessor<'a> {
                     Some(x) => x,
                     None => {
                         return Err(
-                            DiagBuilder2::fatal("Expected macro name after \"`define\"").span(span)
+                            DiagBuilder2::fatal("expected macro name after \"`define\"").span(span)
                         );
                     }
                 };
@@ -234,7 +234,7 @@ impl<'a> Preprocessor<'a> {
                                 Some(x) => x,
                                 _ => {
                                     return Err(DiagBuilder2::fatal(
-                                        "Expected macro argument name",
+                                        "expected macro argument name",
                                     )
                                     .span(span));
                                 }
@@ -252,8 +252,8 @@ impl<'a> Preprocessor<'a> {
                             match self.token {
                                 Some((Symbol(','), _)) => self.bump(),
                                 Some((Symbol(')'), _)) => break,
-                                Some((_, sp)) => return Err(DiagBuilder2::fatal("Expected , or ) after macro argument name").span(sp)),
-                                None => return Err(DiagBuilder2::fatal("Expected closing parenthesis at the end of the macro definition").span(span)),
+                                Some((_, sp)) => return Err(DiagBuilder2::fatal("expected , or ) after macro argument name").span(sp)),
+                                None => return Err(DiagBuilder2::fatal("expected closing parenthesis at the end of the macro definition").span(span)),
                             }
                         }
                         self.bump();
@@ -308,7 +308,7 @@ impl<'a> Preprocessor<'a> {
                     Some((x, _)) => x,
                     _ => {
                         return Err(DiagBuilder2::fatal(format!(
-                            "Expected macro name after {}",
+                            "expected macro name after {}",
                             dir_name
                         ))
                         .span(span));
@@ -340,7 +340,7 @@ impl<'a> Preprocessor<'a> {
                                     self.defcond_stack.push(Defcond::Disabled);
                                 }
                             },
-                            None => return Err(DiagBuilder2::fatal("Found `elsif without any preceeding `ifdef, `ifndef, or `elsif directive").span(span))
+                            None => return Err(DiagBuilder2::fatal("found `elsif without any preceeding `ifdef, `ifndef, or `elsif directive").span(span))
                         };
                     }
                     _ => unreachable!(),
@@ -356,7 +356,7 @@ impl<'a> Preprocessor<'a> {
                         self.defcond_stack.push(Defcond::Done)
                     }
                     None => return Err(DiagBuilder2::fatal(
-                        "Found `else without any preceeding `ifdef, `ifndef, or `elsif directive",
+                        "found `else without any preceeding `ifdef, `ifndef, or `elsif directive",
                     )
                     .span(span)),
                 }
@@ -365,7 +365,7 @@ impl<'a> Preprocessor<'a> {
 
             Directive::Endif => {
                 if self.defcond_stack.pop().is_none() {
-                    return Err(DiagBuilder2::fatal("Found `endif without any preceeding `ifdef, `ifndef, `else, or `elsif directive").span(span));
+                    return Err(DiagBuilder2::fatal("found `endif without any preceeding `ifdef, `ifndef, `else, or `elsif directive").span(span));
                 }
                 return Ok(());
             }
@@ -397,7 +397,7 @@ impl<'a> Preprocessor<'a> {
                             Some((Symbol('('), _)) => self.bump(),
                             _ => {
                                 return Err(DiagBuilder2::fatal(
-                                    "Expected macro parameters in parentheses '(...)'",
+                                    "expected macro parameters in parentheses '(...)'",
                                 )
                                 .span(span));
                             }
@@ -421,7 +421,7 @@ impl<'a> Preprocessor<'a> {
                                 Some(arg) => arg,
                                 None => {
                                     return Err(DiagBuilder2::fatal(
-                                        "Superfluous macro parameters",
+                                        "superfluous macro parameters",
                                     ));
                                 }
                             };
@@ -466,7 +466,7 @@ impl<'a> Preprocessor<'a> {
                                     }
                                     None => {
                                         return Err(DiagBuilder2::fatal(
-                                            "Expected closing parenthesis after macro parameters",
+                                            "expected closing parenthesis after macro parameters",
                                         )
                                         .span(span));
                                     }
@@ -533,7 +533,7 @@ impl<'a> Preprocessor<'a> {
 
             x => {
                 return Err(DiagBuilder2::fatal(format!(
-                    "Preprocessor directive {:?} not implemented",
+                    "preprocessor directive {:?} not implemented",
                     x
                 ))
                 .span(span));
@@ -541,7 +541,7 @@ impl<'a> Preprocessor<'a> {
         }
 
         return Err(
-            DiagBuilder2::fatal(format!("Unknown compiler directive '`{}'", dir_name)).span(span),
+            DiagBuilder2::fatal(format!("unknown compiler directive '`{}'", dir_name)).span(span),
         );
     }
 
@@ -645,7 +645,7 @@ impl<'a> Iterator for Preprocessor<'a> {
                         self.bump(); // consume the second backtick and ignore
                     } else {
                         return Some(Err(DiagBuilder2::fatal(
-                            "Expected compiler directive after '`', or '``', '`\"', or '`\\'",
+                            "expected compiler directive after '`', or '``', '`\"', or '`\\'",
                         )
                         .span(sp_backtick)));
                     }
@@ -797,7 +797,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Unknown compiler directive")]
+    #[should_panic(expected = "unknown compiler directive")]
     fn conditional_define() {
         let sm = get_source_manager();
         let source = sm.add("test.sv", "`ifdef FOO\n`define BAR\n`endif\n`BAR");
