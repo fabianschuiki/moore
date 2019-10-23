@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Update llhd to v0.8.0.
 - Support for the `ty'(expr)` cast expression.
+- Increase minimum rustc version to 1.36.
 
 ### Fixed
 - Continuous assignments resolve in epsilon time. ([#89](https://github.com/fabianschuiki/moore/issues/89))
