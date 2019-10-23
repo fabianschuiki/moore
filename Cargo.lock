@@ -318,7 +318,7 @@ dependencies = [
 [[package]]
 name = "llhd"
 version = "0.9.0"
-source = "git+https://github.com/fabianschuiki/llhd?rev=master#8887fc7c396ddc77ff7e2c80c6c0dd1dfdf03970"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -363,15 +363,15 @@ dependencies = [
 
 [[package]]
 name = "moore"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "llhd 0.9.0 (git+https://github.com/fabianschuiki/llhd?rev=master)",
+ "llhd 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.4.0",
- "moore-svlog 0.4.0",
- "moore-vhdl 0.4.0",
+ "moore-common 0.5.0",
+ "moore-svlog 0.5.0",
+ "moore-vhdl 0.5.0",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.84 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "moore-common"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -395,15 +395,15 @@ dependencies = [
 
 [[package]]
 name = "moore-svlog"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "derive-new 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "indexmap 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "llhd 0.9.0 (git+https://github.com/fabianschuiki/llhd?rev=master)",
+ "llhd 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lock_api 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.4.0",
- "moore-svlog-syntax 0.4.0",
+ "moore-common 0.5.0",
+ "moore-svlog-syntax 0.5.0",
  "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-hash 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -413,23 +413,23 @@ dependencies = [
 
 [[package]]
 name = "moore-svlog-syntax"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.4.0",
+ "moore-common 0.5.0",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "moore-vhdl"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "llhd 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.4.0",
- "moore-vhdl-syntax 0.4.0",
+ "moore-common 0.5.0",
+ "moore-vhdl-syntax 0.5.0",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -438,10 +438,10 @@ dependencies = [
 
 [[package]]
 name = "moore-vhdl-syntax"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.4.0",
+ "moore-common 0.5.0",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1118,7 +1118,7 @@ dependencies = [
 "checksum lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a374c89b9db55895453a74c1e38861d9deec0b01b405a82516e9d5de4820dea1"
 "checksum libc 0.2.45 (registry+https://github.com/rust-lang/crates.io-index)" = "2d2857ec59fadc0773853c664d2d18e7198e83883e7060b63c924cb077bd5c74"
 "checksum llhd 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fc44ccd39c2df6abc427c196dc256c34407b7bc81a0598accd1153ffe0418f6e"
-"checksum llhd 0.9.0 (git+https://github.com/fabianschuiki/llhd?rev=master)" = "<none>"
+"checksum llhd 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9424a061f2a5ffc98de2533bbf4a0fdbd223ee7b6fb3417dc9c9f260544e80d4"
 "checksum lock_api 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "62ebf1391f6acad60e5c8b43706dde4582df75c06698ab44511d15016bc2442c"
 "checksum log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "c84ec4b527950aa83a329754b01dbe3f58361d1c5efacd1f6d68c494d08a17c6"
 "checksum memchr 2.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "88579771288728879b57485cc7d6b07d648c9f0141eb955f8ab7f9d45394468e"

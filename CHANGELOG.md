@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## 0.5.0 - 2019-10-24
 ### Added
 - Parsing of `timeunit` and `timeprecision` statements. ([#92](https://github.com/fabianschuiki/moore/issues/92))
 - Parsing of `inside` expressions. ([#93](https://github.com/fabianschuiki/moore/issues/93))

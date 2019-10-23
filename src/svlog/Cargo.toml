@@ -1,6 +1,6 @@
 [package]
 name = "moore-svlog"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
@@ -12,9 +12,10 @@ license = "Apache-2.0 OR MIT"
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../common", version = "0.4.0" }
-moore-svlog-syntax = { path = "syntax", version = "0.4.0" }
-llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "master", version = "0.9" }
+moore-common = { path = "../common", version = "0.5.0" }
+moore-svlog-syntax = { path = "syntax", version = "0.5.0" }
+# llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "master", version = "0.9" }
+llhd = "0.9"
 log = "0.4"
 # salsa = { git = "https://github.com/fabianschuiki/salsa", branch = "database-lifetimes" }
 num = "0.2"

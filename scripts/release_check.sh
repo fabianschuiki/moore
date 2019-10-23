@@ -2,7 +2,7 @@
 VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)
 TMP=`mktemp`
 echo "Checking for version `tput bold`$VERSION`tput sgr0`"
-for FILE in $(find . -name Cargo.toml | grep -v '/target/'); do
+for FILE in $(find . -name Cargo.toml | grep -v '/target/' | grep -v '/salsa/'); do
 	if rg -e '^version = ' -e '^moore-[^\s]+ = ' "$FILE" | rg -v "version = \"$VERSION\"" > $TMP; then
 		echo
 		echo "`tput bold``tput setaf 1`${FILE#./}:`tput sgr0`"
