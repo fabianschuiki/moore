@@ -11,6 +11,12 @@ extern crate log;
 
 pub(crate) use moore_common as common;
 
+// Inline the salsa crate as a module, since we use a very esoteric branch for
+// now.
+// TODO(fschuiki): Remove this once salsa is regular dep again
+#[macro_use]
+mod salsa;
+
 mod ast_map;
 mod codegen;
 mod context;

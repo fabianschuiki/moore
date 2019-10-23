@@ -16,8 +16,17 @@ moore-common = { path = "../common", version = "0.4.0" }
 moore-svlog-syntax = { path = "syntax", version = "0.4.0" }
 llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "master", version = "0.8" }
 log = "0.4"
-salsa = { git = "https://github.com/fabianschuiki/salsa", branch = "database-lifetimes" }
+# salsa = { git = "https://github.com/fabianschuiki/salsa", branch = "database-lifetimes" }
 num = "0.2"
+
+# salsa inlined dependencies
+# TODO(fschuiki): Remove this once salsa is a regular dependency again.
+derive-new = "0.5.5"
+rustc-hash = "1.0"
+parking_lot = "0.7.0"
+lock_api = "0.1.4"
+indexmap = "1.0.1"
+smallvec = "0.6.5"
 
 [dev-dependencies]
 simple_logger = "1"

@@ -22,6 +22,7 @@
 //! let gcx = GlobalContext::new(&sess, &arena);
 //! ```
 
+use crate::salsa; // TODO(fschuiki): Remove this once salsa is regular dep again
 use crate::{
     ast,
     ast_map::{AstMap, AstNode},
@@ -558,7 +559,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
 pub(super) mod queries {
     use super::*;
 
-    salsa::query_group! {
+    query_group! {
         /// A collection of compiler queries.
         pub trait Context<'a>: BaseContext<'a> {
             /// Lower an AST node to HIR.
@@ -681,7 +682,7 @@ pub(super) mod queries {
         }
     }
 
-    salsa::database_storage! {
+    database_storage! {
         /// The query result storage embedded in the global context.
         pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
             impl Context<'gcx> {

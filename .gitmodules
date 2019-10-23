@@ -1,0 +1,3 @@
+[submodule "src/svlog/salsa"]
+	path = src/svlog/salsa
+	url = https://github.com/fabianschuiki/salsa
