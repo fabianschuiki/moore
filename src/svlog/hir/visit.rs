@@ -28,12 +28,14 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_node(&mut self, node: HirNode<'a>, lvalue: bool) {
         match node {
+            HirNode::Module(x) => self.visit_module(x),
             HirNode::Proc(x) => self.visit_proc(x),
             HirNode::Stmt(x) => self.visit_stmt(x),
             HirNode::Expr(x) => self.visit_expr(x, lvalue),
             HirNode::EventExpr(x) => self.visit_event_expr(x),
             HirNode::Typedef(x) => self.visit_typedef(x),
             HirNode::VarDecl(x) => self.visit_var_decl(x),
+            HirNode::Assign(x) => self.visit_assign(x),
             _ => (),
         }
     }
@@ -41,6 +43,10 @@ pub trait Visitor<'a>: Sized {
     fn visit_ident(&mut self, _ident: Spanned<Name>) {}
     fn visit_unary_op(&mut self, _op: UnaryOp) {}
     fn visit_binary_op(&mut self, _op: BinaryOp) {}
+
+    fn visit_module(&mut self, module: &'a Module) {
+        walk_module(self, module)
+    }
 
     fn visit_proc(&mut self, prok: &'a Proc) {
         walk_proc(self, prok)
@@ -72,6 +78,43 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_var_decl(&mut self, decl: &'a VarDecl) {
         walk_var_decl(self, decl);
+    }
+
+    fn visit_assign(&mut self, assign: &'a Assign) {
+        walk_assign(self, assign);
+    }
+}
+
+/// Walk the contents of a module.
+pub fn walk_module<'a>(visitor: &mut impl Visitor<'a>, module: &'a Module) {
+    for &id in module.ports {
+        visitor.visit_node_with_id(id, false);
+    }
+    for &id in module.params {
+        visitor.visit_node_with_id(id, false);
+    }
+    walk_module_block(visitor, &module.block);
+}
+
+/// Walk the contents of a module block.
+pub fn walk_module_block<'a>(visitor: &mut impl Visitor<'a>, blk: &'a ModuleBlock) {
+    for &id in &blk.insts {
+        visitor.visit_node_with_id(id, false);
+    }
+    for &id in &blk.decls {
+        visitor.visit_node_with_id(id, false);
+    }
+    for &id in &blk.procs {
+        visitor.visit_node_with_id(id, false);
+    }
+    for &id in &blk.gens {
+        visitor.visit_node_with_id(id, false);
+    }
+    for &id in &blk.params {
+        visitor.visit_node_with_id(id, false);
+    }
+    for &id in &blk.assigns {
+        visitor.visit_node_with_id(id, false);
     }
 }
 
@@ -278,4 +321,10 @@ pub fn walk_var_decl<'a>(visitor: &mut impl Visitor<'a>, decl: &'a VarDecl) {
     if let Some(init) = decl.init {
         visitor.visit_node_with_id(init, false);
     }
+}
+
+/// Walk the contents of an assignment.
+pub fn walk_assign<'a>(visitor: &mut impl Visitor<'a>, assign: &'a Assign) {
+    visitor.visit_node_with_id(assign.lhs, true);
+    visitor.visit_node_with_id(assign.rhs, false);
 }
