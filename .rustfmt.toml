@@ -7,3 +7,4 @@ normalize_comments = false
 merge_derives = true
 force_explicit_abi = true
 unstable_features = false
+format_strings = true
