@@ -558,5 +558,10 @@ impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
         if let Ok(ty) = self.0.type_of(id, self.1) {
             println!("{}: type({}) = {}", line, ext, ty);
         }
+
+        // Report the self-determined type.
+        if let Some(ty) = self.0.self_determined_type(id, self.1) {
+            println!("{}: self_type({}) = {}", line, ext, ty);
+        }
     }
 }

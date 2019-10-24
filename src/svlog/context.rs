@@ -586,6 +586,12 @@ pub(super) mod queries {
                 use fn typeck::map_to_type;
             }
 
+            /// Get the self-determined type of a node.
+            fn self_determined_type(node_id: NodeId, env: ParamEnv) -> Option<Type<'a>> {
+                type SelfDeterminedTypeQuery;
+                use fn typeck::self_determined_type;
+            }
+
             /// Determine the local rib that applies to a node.
             fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
                 type LocalRibQuery;
@@ -690,6 +696,7 @@ pub(super) mod queries {
                 fn param_env() for ParamEnvQuery<'gcx>;
                 fn type_of() for TypeOfQuery<'gcx>;
                 fn map_to_type() for MapToTypeQuery<'gcx>;
+                fn self_determined_type() for SelfDeterminedTypeQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;

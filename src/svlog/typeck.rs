@@ -20,19 +20,21 @@ pub(crate) fn type_of<'gcx>(
     match hir {
         HirNode::Port(p) => cx.map_to_type(p.ty, env),
         HirNode::Expr(e) => match e.kind {
-            hir::ExprKind::IntConst(width, _) => Ok(cx.intern_type(TypeKind::BitVector {
-                domain: ty::Domain::TwoValued, // TODO(fschuiki): Is this correct?
-                sign: ty::Sign::Signed,        // TODO(fschuiki): Should depend on literal!
-                range: ty::Range {
-                    size: width,
-                    dir: ty::RangeDir::Down,
-                    offset: 0isize,
-                },
-                dubbed: true,
-            })),
-            hir::ExprKind::UnsizedConst(_) => Ok(&ty::LOGIC_TYPE),
-            hir::ExprKind::TimeConst(_) => Ok(cx.mkty_time()),
-            hir::ExprKind::Ident(_) => cx.type_of(cx.resolve_node(node_id, env)?, env),
+            // These expressions are have a fully self-determined type.
+            hir::ExprKind::UnsizedConst(..)
+            | hir::ExprKind::IntConst(..)
+            | hir::ExprKind::TimeConst(..)
+            | hir::ExprKind::Ident(..)
+            | hir::ExprKind::Scope(..)
+            | hir::ExprKind::Concat(..)
+            | hir::ExprKind::Cast(..)
+            | hir::ExprKind::Inside(..)
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
+            | hir::ExprKind::Field(..)
+            | hir::ExprKind::Index(..) => Ok(need_self_determined_type(cx, node_id, env)),
+
             hir::ExprKind::Unary(op, arg) => {
                 let arg_ty = cx.type_of(arg, env)?;
                 Ok(match op {
@@ -90,67 +92,16 @@ pub(crate) fn type_of<'gcx>(
                     }
                 })
             }
-            hir::ExprKind::Field(..) => {
-                let (_, _, field_id) = cx.resolve_field_access(node_id, env)?;
-                cx.type_of(field_id, env)
-            }
-            hir::ExprKind::Index(target, mode) => {
-                let target_ty = cx.type_of(target, env)?;
-                match mode {
-                    hir::IndexMode::One(..) => match *target_ty {
-                        TypeKind::PackedArray(_, ty) => Ok(ty),
-                        TypeKind::Int(_, domain) => Ok(cx.intern_type(TypeKind::BitScalar {
-                            domain,
-                            sign: ty::Sign::Unsigned,
-                        })),
-                        TypeKind::BitScalar { .. } => Ok(target_ty),
-                        TypeKind::BitVector { domain, sign, .. } => {
-                            Ok(cx.intern_type(TypeKind::BitScalar { domain, sign }))
-                        }
-                        _ => {
-                            let hir = cx.hir_of(target)?;
-                            cx.emit(
-                                DiagBuilder2::error(format!(
-                                    "{} cannot be indexed into",
-                                    hir.desc_full()
-                                ))
-                                .span(hir.human_span()),
-                            );
-                            Err(())
-                        }
-                    },
-                    hir::IndexMode::Many(..) => Ok(target_ty),
-                }
-            }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Ok(&ty::INT_TYPE),
             hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
             | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx.type_of(arg, env),
             hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
-            hir::ExprKind::Scope(..) => cx.type_of(cx.resolve_node(node_id, env)?, env),
+
+            // These expressions actually require a type context.
+            // TODO(fschuiki): Make use of a new type_context query.
             hir::ExprKind::PositionalPattern(..)
             | hir::ExprKind::NamedPattern(..)
             | hir::ExprKind::RepeatPattern(..)
             | hir::ExprKind::EmptyPattern => cx.type_of(cx.parent_node_id(node_id).unwrap(), env),
-            hir::ExprKind::Concat(repeat, ref exprs) => {
-                let mut bit_width = 0;
-                for &expr in exprs {
-                    let ty = cx.type_of(expr, env)?;
-                    bit_width += bit_size_of_type(cx, ty, env)?;
-                }
-                let repeat = match repeat {
-                    Some(repeat) => cx.constant_int_value_of(repeat, env)?.to_usize().unwrap(),
-                    None => 1,
-                };
-                Ok(cx.mkty_int(repeat * bit_width))
-            }
-            hir::ExprKind::Cast(ty, _) => cx.map_to_type(ty, env),
-            hir::ExprKind::Inside(..) => Ok(&ty::LOGIC_TYPE),
-            _ => {
-                error!("{:#?}", hir);
-                cx.unimp_msg("type analysis of", &hir)
-            }
         },
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
@@ -411,5 +362,193 @@ fn map_type_kind<'gcx>(
             error!("{:#?}", root);
             cx.unimp_msg("type analysis of", root)
         }
+    }
+}
+
+/// Get the self-determined type of a node.
+pub(crate) fn self_determined_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Option<Type<'gcx>> {
+    let hir = match cx.hir_of(node_id) {
+        Ok(x) => x,
+        Err(()) => return Some(&ty::ERROR_TYPE),
+    };
+    match hir {
+        HirNode::Expr(e) => self_determined_expr_type(cx, e, env),
+        _ => None,
+    }
+}
+
+/// Require a node to have a self-determined type.
+///
+/// Emits an error if the node has no self-determined type.
+pub(crate) fn need_self_determined_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Type<'gcx> {
+    match cx.self_determined_type(node_id, env) {
+        Some(ty) => ty,
+        None => {
+            let extract = cx.span(node_id).extract();
+            let desc = cx
+                .ast_of(node_id)
+                .map(|x| x.desc_full())
+                .unwrap_or_else(|_| format!("`{}`", extract));
+            cx.emit(
+                DiagBuilder2::error(format!("{} has no self-determined type", desc))
+                    .span(cx.span(node_id))
+                    .add_note(format!(
+                        "The type of {} must be inferred from \
+                         context, but the location where you used it does not \
+                         provide such information.",
+                        desc
+                    ))
+                    .add_note(format!("Try a cast: `T'({})`", extract)),
+            );
+            &ty::ERROR_TYPE
+        }
+    }
+}
+
+/// Get the self-determined type of an expression.
+fn self_determined_expr_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx hir::Expr,
+    env: ParamEnv,
+) -> Option<Type<'gcx>> {
+    match expr.kind {
+        // Unsized constants fall back to their single bit equivalent.
+        hir::ExprKind::UnsizedConst(_) => Some(&ty::LOGIC_TYPE),
+
+        // Sized integer constants have a well-defined type.
+        // TODO(fschuiki): Inherit signedness from `s` character in base.
+        hir::ExprKind::IntConst(width, _) => Some(cx.intern_type(TypeKind::BitVector {
+            domain: ty::Domain::TwoValued, // TODO(fschuiki): Is this correct?
+            sign: ty::Sign::Signed,
+            range: ty::Range {
+                size: width,
+                dir: ty::RangeDir::Down,
+                offset: 0isize,
+            },
+            dubbed: true,
+        })),
+
+        // Time constants are of time type.
+        hir::ExprKind::TimeConst(_) => Some(cx.mkty_time()),
+
+        // Identifiers and scoped identifiers inherit their type from the bound
+        // node.
+        hir::ExprKind::Ident(_) | hir::ExprKind::Scope(..) => Some(
+            cx.resolve_node(expr.id, env)
+                .and_then(|x| cx.type_of(x, env))
+                .unwrap_or(&ty::ERROR_TYPE),
+        ),
+
+        // Concatenation yields an unsigned logic vector whose bit width is the
+        // sum of the simple bit vector types of each argument.
+        //
+        // See "11.8.1 Rules for expression types".
+        hir::ExprKind::Concat(repeat, ref exprs) => {
+            let mut failed = false;
+
+            // Determine the cumulative width of all fields.
+            // TODO(fschuiki): Use a more benign function that does not fail,
+            // but returns an option which can be used to hint the user at the
+            // fact that the concatenation only accepts packable types.
+            let mut bit_width = 0;
+            for &expr in exprs {
+                match cx
+                    .type_of(expr, env)
+                    .and_then(|ty| bit_size_of_type(cx, ty, env))
+                {
+                    Ok(w) => bit_width += w,
+                    Err(()) => failed = true,
+                }
+            }
+
+            // Determine the repetition factor.
+            let repeat = match repeat.map(|r| cx.constant_int_value_of(r, env)) {
+                Some(Ok(r)) => r.to_usize().unwrap(),
+                Some(Err(_)) => {
+                    failed = true;
+                    0
+                }
+                None => 1,
+            };
+
+            // Package up the result.
+            Some(if failed {
+                &ty::ERROR_TYPE
+            } else {
+                cx.mkty_int(repeat * bit_width)
+            })
+        }
+
+        // Casts trivially evaluate to the cast type.
+        hir::ExprKind::Cast(ty, _) => Some(cx.map_to_type(ty, env).unwrap_or(&ty::ERROR_TYPE)),
+
+        // The `inside` expression evaluates to a boolean.
+        hir::ExprKind::Inside(..) => Some(&ty::LOGIC_TYPE),
+
+        // Most builtin functions evaluate to the integer type.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Some(&ty::INT_TYPE),
+
+        // Sign casts reflect their argument.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
+            cx.self_determined_type(arg, env)
+        }
+
+        // Member field accesses resolve to the type of the member.
+        hir::ExprKind::Field(..) => Some(
+            cx.resolve_field_access(expr.id, env)
+                .and_then(|(_, _, field_id)| cx.type_of(field_id, env))
+                .unwrap_or(&ty::ERROR_TYPE),
+        ),
+
+        // Bit- and part-select expressions
+        hir::ExprKind::Index(target, mode) => Some({
+            let target_ty = cx.type_of(target, env).unwrap_or(&ty::ERROR_TYPE);
+            match mode {
+                hir::IndexMode::One(..) => match *target_ty {
+                    TypeKind::PackedArray(_, ty) => (ty),
+                    // TODO(fschuiki): Call a function which returns an option
+                    // of a type's simple bit vector equivalent. After checking
+                    // all the types with special access rules, check if the
+                    // type has an SBVT equivalent and perform the access there.
+                    // If it does not, break with the error message below.
+                    TypeKind::Int(_, domain) => cx.intern_type(TypeKind::BitScalar {
+                        domain,
+                        sign: ty::Sign::Unsigned,
+                    }),
+                    TypeKind::BitScalar { .. } => target_ty,
+                    TypeKind::BitVector { domain, sign, .. } => {
+                        cx.intern_type(TypeKind::BitScalar { domain, sign })
+                    }
+                    TypeKind::Error => (target_ty),
+                    _ => {
+                        let desc = cx
+                            .hir_of(target)
+                            .map(|x| x.desc_full())
+                            .unwrap_or_else(|_| cx.span(target).extract());
+                        cx.emit(
+                            DiagBuilder2::error(format!("{} cannot be indexed into", desc))
+                                .span(expr.span()),
+                        );
+                        &ty::ERROR_TYPE
+                    }
+                },
+                // TODO(fschuiki): I'm pretty sure part-selects evaluate to
+                // narrower types given the constant bounds in the select.
+                hir::IndexMode::Many(..) => target_ty,
+            }
+        }),
+
+        _ => None,
     }
 }
