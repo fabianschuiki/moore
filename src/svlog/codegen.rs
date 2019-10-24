@@ -1169,7 +1169,6 @@ where
                 length,
             } => {
                 let target = self.emit_mir_lvalue(value)?;
-                let target_ty = self.llhd_type(target);
                 let base = self.emit_mir_rvalue(base)?;
                 let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                 let shifted = self.builder.ins().shr(target, hidden, base);
