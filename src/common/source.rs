@@ -4,8 +4,8 @@
 //! source file. This helps keeping the source location lean and allow for
 //! simple querying of information.
 
-use memmap::Mmap;
 use crate::name::RcStr;
+use memmap::Mmap;
 use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std;
 use std::borrow::Borrow;
@@ -387,6 +387,56 @@ impl Location {
     /// Obtain an iterator into the source file at this location.
     pub fn iter<'a>(self, content: &'a Rc<SourceContent>) -> Box<CharIter<'a>> {
         content.iter_from(self.offset)
+    }
+
+    /// Determine the line and column information at this location.
+    ///
+    /// Returns a tuple `(line, column, line_offset)`.
+    pub fn human(self) -> (usize, usize, usize) {
+        let c = self.source.get_content();
+        let mut iter = c.extract_iter(0, self.offset);
+
+        // Look for the start of the line.
+        let mut col = 1;
+        let mut line = 1;
+        let mut line_offset = self.offset;
+        while let Some(c) = iter.next_back() {
+            match c.1 {
+                '\n' => {
+                    line += 1;
+                    break;
+                }
+                '\r' => continue,
+                _ => {
+                    col += 1;
+                    line_offset = c.0;
+                }
+            }
+        }
+
+        // Count the number of lines.
+        while let Some(c) = iter.next_back() {
+            if c.1 == '\n' {
+                line += 1;
+            }
+        }
+
+        (line, col, line_offset)
+    }
+
+    /// Determine the line at this location.
+    pub fn human_line(self) -> usize {
+        self.human().0
+    }
+
+    /// Determine the column at this location.
+    pub fn human_column(self) -> usize {
+        self.human().1
+    }
+
+    /// Determine the line offset at this location.
+    pub fn human_line_offset(self) -> usize {
+        self.human().2
     }
 }
 

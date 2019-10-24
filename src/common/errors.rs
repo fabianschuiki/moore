@@ -195,29 +195,7 @@ impl fmt::Display for DiagBuilder2 {
                     let mut iter = c.extract_iter(0, sp.begin);
 
                     // Look for the start of the line.
-                    let mut col = 1;
-                    let mut line = 1;
-                    let mut line_offset = sp.begin;
-                    while let Some(c) = iter.next_back() {
-                        match c.1 {
-                            '\n' => {
-                                line += 1;
-                                break;
-                            }
-                            '\r' => continue,
-                            _ => {
-                                col += 1;
-                                line_offset = c.0;
-                            }
-                        }
-                    }
-
-                    // Count the number of lines.
-                    while let Some(c) = iter.next_back() {
-                        if c.1 == '\n' {
-                            line += 1;
-                        }
-                    }
+                    let (line, col, line_offset) = sp.begin().human();
 
                     // Print the line in question.
                     let text: String = c
