@@ -441,6 +441,13 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             // ctx.vhdl().codegen(pkg, &mut ())?;
         }
         Elaborate::Svlog(m) => {
+            // Emit the detailed type analysis if requested.
+            if ctx.sess.has_verbosity(Verbosity::TYPES) {
+                use svlog::{hir::Visitor, BaseContext};
+                TypeVerbosityVisitor(ctx.svlog, ctx.svlog.default_param_env())
+                    .visit_node_with_id(m, false);
+            }
+
             let mut cg = svlog::CodeGenerator::new(ctx.svlog);
             cg.emit_module(m)?;
             let mut module = cg.finalize();
@@ -517,4 +524,39 @@ fn parse_elaborate_name<S: AsRef<str>>(name: S) -> Result<(Option<Name>, Name, O
     };
 
     Ok((lib, ent, third))
+}
+
+/// A visitor that emits detailed type information to stdout.
+pub struct TypeVerbosityVisitor<'a, 'gcx>(&'a svlog::GlobalContext<'gcx>, svlog::ParamEnv);
+
+impl<'a, 'gcx> svlog::hir::Visitor<'gcx> for TypeVerbosityVisitor<'a, 'gcx> {
+    type Context = svlog::GlobalContext<'gcx>;
+
+    fn context(&self) -> &Self::Context {
+        self.0
+    }
+
+    fn visit_expr(&mut self, expr: &'gcx svlog::hir::Expr, lvalue: bool) {
+        self.print(expr.id);
+        svlog::hir::walk_expr(self, expr, lvalue);
+    }
+
+    fn visit_var_decl(&mut self, decl: &'gcx svlog::hir::VarDecl) {
+        self.print(decl.id);
+        svlog::hir::walk_var_decl(self, decl);
+    }
+}
+
+impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
+    fn print(&mut self, id: NodeId) {
+        use svlog::{BaseContext, Context};
+        let span = self.0.span(id);
+        let ext = span.extract();
+        let line = span.begin().human_line();
+
+        // Report the type.
+        if let Ok(ty) = self.0.type_of(id, self.1) {
+            println!("{}: type({}) = {}", line, ext, ty);
+        }
+    }
 }
