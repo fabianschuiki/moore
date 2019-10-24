@@ -15,7 +15,7 @@ path = "lib.rs"
 moore-common = { path = "../common", version = "0.5.0" }
 moore-vhdl-syntax = { path = "syntax", version = "0.5.0" }
 bincode = "0.6"
-lazy_static = "0.2"
+lazy_static = "1.4"
 llhd = "0.5"
 num = "0.1"
 rustc-serialize = "0.3"
