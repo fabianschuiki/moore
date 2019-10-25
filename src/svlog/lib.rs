@@ -26,7 +26,7 @@ mod param_env;
 mod port_mapping;
 mod resolver;
 pub mod ty;
-mod typeck;
+pub mod typeck;
 pub mod value;
 
 pub use crate::{

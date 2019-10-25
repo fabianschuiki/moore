@@ -3,7 +3,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{bit_size_of_type, Type, TypeKind},
+    ty::{bit_size_of_type, Domain, Sign, Type, TypeKind},
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
@@ -19,90 +19,7 @@ pub(crate) fn type_of<'gcx>(
     #[allow(unreachable_patterns)]
     match hir {
         HirNode::Port(p) => cx.map_to_type(p.ty, env),
-        HirNode::Expr(e) => match e.kind {
-            // These expressions are have a fully self-determined type.
-            hir::ExprKind::UnsizedConst(..)
-            | hir::ExprKind::IntConst(..)
-            | hir::ExprKind::TimeConst(..)
-            | hir::ExprKind::Ident(..)
-            | hir::ExprKind::Scope(..)
-            | hir::ExprKind::Concat(..)
-            | hir::ExprKind::Cast(..)
-            | hir::ExprKind::Inside(..)
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
-            | hir::ExprKind::Field(..)
-            | hir::ExprKind::Index(..) => Ok(need_self_determined_type(cx, node_id, env)),
-
-            hir::ExprKind::Unary(op, arg) => {
-                let arg_ty = cx.type_of(arg, env)?;
-                Ok(match op {
-                    hir::UnaryOp::Neg
-                    | hir::UnaryOp::Pos
-                    | hir::UnaryOp::BitNot
-                    | hir::UnaryOp::PreInc
-                    | hir::UnaryOp::PreDec
-                    | hir::UnaryOp::PostInc
-                    | hir::UnaryOp::PostDec => arg_ty,
-                    hir::UnaryOp::LogicNot
-                    | hir::UnaryOp::RedAnd
-                    | hir::UnaryOp::RedOr
-                    | hir::UnaryOp::RedXor
-                    | hir::UnaryOp::RedNand
-                    | hir::UnaryOp::RedNor
-                    | hir::UnaryOp::RedXnor => &ty::LOGIC_TYPE,
-                })
-            }
-            hir::ExprKind::Binary(op, lhs, rhs) => {
-                let lhs_ty = cx.type_of(lhs, env)?;
-                let _rhs_ty = cx.type_of(rhs, env)?;
-                // TODO(fschuiki): Actually use lhs and rhs, and query the type
-                // context (optional) from the parent node, to determine the
-                // width of the result (max over all bit widths). This requires
-                // mapping the types to the equivalent simple bit vector type.
-                Ok(match op {
-                    hir::BinaryOp::Add
-                    | hir::BinaryOp::Sub
-                    | hir::BinaryOp::Mul
-                    | hir::BinaryOp::Div
-                    | hir::BinaryOp::Mod
-                    | hir::BinaryOp::Pow
-                    | hir::BinaryOp::LogicShL
-                    | hir::BinaryOp::LogicShR
-                    | hir::BinaryOp::ArithShL
-                    | hir::BinaryOp::ArithShR
-                    | hir::BinaryOp::BitAnd
-                    | hir::BinaryOp::BitNand
-                    | hir::BinaryOp::BitOr
-                    | hir::BinaryOp::BitNor
-                    | hir::BinaryOp::BitXor
-                    | hir::BinaryOp::BitXnor => lhs_ty,
-                    hir::BinaryOp::Eq
-                    | hir::BinaryOp::Neq
-                    | hir::BinaryOp::Lt
-                    | hir::BinaryOp::Leq
-                    | hir::BinaryOp::Gt
-                    | hir::BinaryOp::Geq
-                    | hir::BinaryOp::LogicAnd
-                    | hir::BinaryOp::LogicOr => &ty::LOGIC_TYPE,
-                    _ => {
-                        error!("{:#?}", hir);
-                        return cx.unimp_msg("type analysis of", &hir);
-                    }
-                })
-            }
-            hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
-            | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx.type_of(arg, env),
-            hir::ExprKind::Ternary(_cond, true_expr, _false_expr) => cx.type_of(true_expr, env),
-
-            // These expressions actually require a type context.
-            // TODO(fschuiki): Make use of a new type_context query.
-            hir::ExprKind::PositionalPattern(..)
-            | hir::ExprKind::NamedPattern(..)
-            | hir::ExprKind::RepeatPattern(..)
-            | hir::ExprKind::EmptyPattern => cx.type_of(cx.parent_node_id(node_id).unwrap(), env),
-        },
+        HirNode::Expr(e) => Ok(type_of_expr(cx, e, env)),
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
                 return cx.map_to_type(p.ty, env);
@@ -169,7 +86,7 @@ pub(crate) fn type_of<'gcx>(
             map_type_kind(cx, v.enum_id, env, hir, kind)
         }
         HirNode::Package(_) => Ok(&ty::VOID_TYPE),
-        HirNode::Assign(a) => cx.type_of(a.lhs, env),
+        HirNode::Assign(_) => unreachable!("has no type: {:?}", hir),
         _ => {
             error!("{:#?}", hir);
             panic!(
@@ -181,6 +98,105 @@ pub(crate) fn type_of<'gcx>(
                 .span(hir.span())
             )
         }
+    }
+}
+
+/// Determine the type of an expression.
+fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: ParamEnv) -> Type<'gcx> {
+    match expr.kind {
+        // These expressions are have a fully self-determined type.
+        hir::ExprKind::IntConst(..)
+        | hir::ExprKind::TimeConst(..)
+        | hir::ExprKind::Ident(..)
+        | hir::ExprKind::Scope(..)
+        | hir::ExprKind::Concat(..)
+        | hir::ExprKind::Cast(..)
+        | hir::ExprKind::Inside(..)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
+        | hir::ExprKind::Field(..)
+        | hir::ExprKind::Index(..) => cx.need_self_determined_type(expr.id, env),
+
+        // Unsized constants infer their type from the context if possible, and
+        // otherwise fall back to a self-determined mode.
+        hir::ExprKind::UnsizedConst(..) => cx
+            .type_context(expr.id, env)
+            .map(|x| x.ty())
+            .unwrap_or_else(|| cx.need_self_determined_type(expr.id, env)),
+
+        // Unary operators either return their internal operation type, or they
+        // evaluate to a fully self-determined type.
+        hir::ExprKind::Unary(op, _) => {
+            match op {
+                // Most operators simply evaluate to their operation type.
+                hir::UnaryOp::Neg
+                | hir::UnaryOp::Pos
+                | hir::UnaryOp::BitNot
+                | hir::UnaryOp::PreInc
+                | hir::UnaryOp::PreDec
+                | hir::UnaryOp::PostInc
+                | hir::UnaryOp::PostDec => cx.need_operation_type(expr.id, env),
+
+                // And some have a fixed return type.
+                hir::UnaryOp::LogicNot
+                | hir::UnaryOp::RedAnd
+                | hir::UnaryOp::RedOr
+                | hir::UnaryOp::RedXor
+                | hir::UnaryOp::RedNand
+                | hir::UnaryOp::RedNor
+                | hir::UnaryOp::RedXnor => cx.need_self_determined_type(expr.id, env),
+            }
+        }
+
+        // Binary operators either return their internal operation type, or they
+        // evaluate to a fully self-determined type.
+        hir::ExprKind::Binary(op, _, _) => {
+            match op {
+                // Most operators simply evaluate to their operation type.
+                hir::BinaryOp::Add
+                | hir::BinaryOp::Sub
+                | hir::BinaryOp::Mul
+                | hir::BinaryOp::Div
+                | hir::BinaryOp::Mod
+                | hir::BinaryOp::Pow
+                | hir::BinaryOp::LogicShL
+                | hir::BinaryOp::LogicShR
+                | hir::BinaryOp::ArithShL
+                | hir::BinaryOp::ArithShR
+                | hir::BinaryOp::BitAnd
+                | hir::BinaryOp::BitNand
+                | hir::BinaryOp::BitOr
+                | hir::BinaryOp::BitNor
+                | hir::BinaryOp::BitXor
+                | hir::BinaryOp::BitXnor => cx.need_operation_type(expr.id, env),
+
+                // And some have a fixed return type.
+                hir::BinaryOp::Eq
+                | hir::BinaryOp::Neq
+                | hir::BinaryOp::Lt
+                | hir::BinaryOp::Leq
+                | hir::BinaryOp::Gt
+                | hir::BinaryOp::Geq
+                | hir::BinaryOp::LogicAnd
+                | hir::BinaryOp::LogicOr => cx.need_self_determined_type(expr.id, env),
+            }
+        }
+
+        // Ternary operators return their internal operation type.
+        hir::ExprKind::Ternary(..) => cx.need_operation_type(expr.id, env),
+
+        // Sign casts "forward" the type of their argument.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
+            cx.type_of(arg, env).unwrap_or(&ty::ERROR_TYPE)
+        }
+
+        // Pattern expressions require a type context.
+        hir::ExprKind::PositionalPattern(..)
+        | hir::ExprKind::NamedPattern(..)
+        | hir::ExprKind::RepeatPattern(..)
+        | hir::ExprKind::EmptyPattern => cx.need_type_context(expr.id, env).ty(),
     }
 }
 
@@ -483,7 +499,16 @@ fn self_determined_expr_type<'gcx>(
             Some(if failed {
                 &ty::ERROR_TYPE
             } else {
-                cx.mkty_int(repeat * bit_width)
+                cx.intern_type(TypeKind::BitVector {
+                    sign: Sign::Unsigned,
+                    domain: Domain::FourValued,
+                    range: ty::Range {
+                        size: repeat * bit_width,
+                        dir: ty::RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                })
             })
         }
 
@@ -548,6 +573,418 @@ fn self_determined_expr_type<'gcx>(
                 hir::IndexMode::Many(..) => target_ty,
             }
         }),
+
+        // Some unary operators have a fully self-determined type.
+        hir::ExprKind::Unary(op, arg) => match op {
+            // Handle the self-determined cases.
+            hir::UnaryOp::LogicNot
+            | hir::UnaryOp::RedAnd
+            | hir::UnaryOp::RedOr
+            | hir::UnaryOp::RedXor
+            | hir::UnaryOp::RedNand
+            | hir::UnaryOp::RedNor
+            | hir::UnaryOp::RedXnor => Some(&ty::LOGIC_TYPE),
+
+            // For all other cases we try to infer the argument's type.
+            hir::UnaryOp::Neg
+            | hir::UnaryOp::Pos
+            | hir::UnaryOp::BitNot
+            | hir::UnaryOp::PreInc
+            | hir::UnaryOp::PreDec
+            | hir::UnaryOp::PostInc
+            | hir::UnaryOp::PostDec => {
+                unify_operator_types(cx, env, cx.self_determined_type(arg, env).into_iter())
+            }
+        },
+
+        // Some binary operators have a fully self-determined type.
+        hir::ExprKind::Binary(op, lhs, rhs) => match op {
+            // Handle the self-determined cases.
+            hir::BinaryOp::Eq
+            | hir::BinaryOp::Neq
+            | hir::BinaryOp::Lt
+            | hir::BinaryOp::Leq
+            | hir::BinaryOp::Gt
+            | hir::BinaryOp::Geq
+            | hir::BinaryOp::LogicAnd
+            | hir::BinaryOp::LogicOr => Some(&ty::LOGIC_TYPE),
+
+            // For all other cases we try to infer a type based on the maximum
+            // over the operand's self-determined types.
+            hir::BinaryOp::Add
+            | hir::BinaryOp::Sub
+            | hir::BinaryOp::Mul
+            | hir::BinaryOp::Div
+            | hir::BinaryOp::Mod
+            | hir::BinaryOp::BitAnd
+            | hir::BinaryOp::BitNand
+            | hir::BinaryOp::BitOr
+            | hir::BinaryOp::BitNor
+            | hir::BinaryOp::BitXor
+            | hir::BinaryOp::BitXnor => {
+                let tlhs = cx.self_determined_type(lhs, env);
+                let trhs = cx.self_determined_type(rhs, env);
+                unify_operator_types(cx, env, tlhs.into_iter().chain(trhs.into_iter()))
+            }
+
+            // Exponentiation and shifts operate on the left-hand side type.
+            hir::BinaryOp::Pow
+            | hir::BinaryOp::LogicShL
+            | hir::BinaryOp::LogicShR
+            | hir::BinaryOp::ArithShL
+            | hir::BinaryOp::ArithShR => cx.self_determined_type(lhs, env),
+        },
+
+        _ => None,
+    }
+}
+
+/// Get the operation type of an expression.
+pub(crate) fn operation_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Option<Type<'gcx>> {
+    let hir = match cx.hir_of(node_id) {
+        Ok(x) => x,
+        Err(_) => return Some(&ty::ERROR_TYPE),
+    };
+    let expr = match hir {
+        HirNode::Expr(x) => x,
+        _ => return None,
+    };
+    match expr.kind {
+        // Unary operators all have an inherent operation type.
+        hir::ExprKind::Unary(op, arg) => {
+            let ty = match op {
+                // Most operators operate on the maximum bitwidth given by their
+                // argument (self-determined type) and the type context.
+                hir::UnaryOp::RedAnd
+                | hir::UnaryOp::RedOr
+                | hir::UnaryOp::RedXor
+                | hir::UnaryOp::RedNand
+                | hir::UnaryOp::RedNor
+                | hir::UnaryOp::RedXnor
+                | hir::UnaryOp::Neg
+                | hir::UnaryOp::Pos
+                | hir::UnaryOp::BitNot
+                | hir::UnaryOp::PreInc
+                | hir::UnaryOp::PreDec
+                | hir::UnaryOp::PostInc
+                | hir::UnaryOp::PostDec => {
+                    let tc = cx.type_context(node_id, env).map(|x| x.ty());
+                    let targ = cx.self_determined_type(arg, env);
+                    unify_operator_types(cx, env, tc.into_iter().chain(targ.into_iter()))
+                }
+
+                // Handle the self-determined cases.
+                hir::UnaryOp::LogicNot => Some(&ty::LOGIC_TYPE),
+            };
+            if ty.is_none() {
+                cx.emit(
+                    DiagBuilder2::error(format!("type of {} cannot be inferred", expr.desc_full()))
+                        .span(expr.human_span())
+                        .add_note(
+                            "The operand does not have a self-determined type, \
+                             and the type cannot be inferred from the context.",
+                        )
+                        .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
+                );
+                Some(&ty::ERROR_TYPE)
+            } else {
+                ty
+            }
+        }
+
+        // Binary operators all have an inherent operation type.
+        hir::ExprKind::Binary(op, lhs, rhs) => {
+            let ty = match op {
+                // Most arithmetic operators and comparisons operate on the
+                // maximum bitwidth given by their arguments (self-determined
+                // type) and the type context.
+                hir::BinaryOp::Add
+                | hir::BinaryOp::Sub
+                | hir::BinaryOp::Mul
+                | hir::BinaryOp::Div
+                | hir::BinaryOp::Mod
+                | hir::BinaryOp::BitAnd
+                | hir::BinaryOp::BitNand
+                | hir::BinaryOp::BitOr
+                | hir::BinaryOp::BitNor
+                | hir::BinaryOp::BitXor
+                | hir::BinaryOp::BitXnor
+                | hir::BinaryOp::Eq
+                | hir::BinaryOp::Neq
+                | hir::BinaryOp::Lt
+                | hir::BinaryOp::Leq
+                | hir::BinaryOp::Gt
+                | hir::BinaryOp::Geq => {
+                    let tc = cx.type_context(node_id, env).map(|x| x.ty());
+                    let tlhs = cx.self_determined_type(lhs, env);
+                    let trhs = cx.self_determined_type(rhs, env);
+                    unify_operator_types(
+                        cx,
+                        env,
+                        tc.into_iter()
+                            .chain(tlhs.into_iter())
+                            .chain(trhs.into_iter()),
+                    )
+                }
+
+                // The boolean logic operators simply operate on bits.
+                hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(&ty::LOGIC_TYPE),
+
+                // Exponentiation and shifts operate on the left-hand side type.
+                hir::BinaryOp::Pow
+                | hir::BinaryOp::LogicShL
+                | hir::BinaryOp::LogicShR
+                | hir::BinaryOp::ArithShL
+                | hir::BinaryOp::ArithShR => {
+                    let tc = cx.type_context(node_id, env).map(|x| x.ty());
+                    let sdt = cx.self_determined_type(lhs, env);
+                    unify_operator_types(cx, env, tc.into_iter().chain(sdt.into_iter()))
+                }
+            };
+            if ty.is_none() {
+                cx.emit(
+                    DiagBuilder2::error(format!("type of {} cannot be inferred", expr.desc_full()))
+                        .span(expr.human_span())
+                        .add_note(
+                            "Neither of the operands has a self-determined type, \
+                             and the type cannot be inferred from the context.",
+                        )
+                        .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
+                );
+                Some(&ty::ERROR_TYPE)
+            } else {
+                ty
+            }
+        }
+
+        _ => None,
+    }
+}
+
+/// Determine the bit length, sign, and value domain of the types that influence
+/// an expression.
+fn unify_operator_types<'gcx>(
+    cx: &impl Context<'gcx>,
+    env: ParamEnv,
+    types: impl Iterator<Item = Type<'gcx>>,
+) -> Option<Type<'gcx>> {
+    // Map the iterator to a sequence of sign, domain, and bit width tuples.
+    let inner: Vec<_> = types
+        .flat_map(|ty| {
+            bit_size_of_type(cx, ty, env).map(|w| ((ty.get_sign(), ty.get_value_domain(), w)))
+        })
+        .collect();
+
+    // Determine the maximum width, sign, and domain.
+    let width: Option<usize> = inner.iter().map(|&(_, _, w)| w).max();
+    let sign = match inner.iter().all(|&(s, _, _)| s == Some(Sign::Signed)) {
+        true => Sign::Signed,
+        false => Sign::Unsigned,
+    };
+    let domain = match inner.iter().all(|&(_, d, _)| d == Some(Domain::TwoValued)) {
+        true => Domain::TwoValued,
+        false => Domain::FourValued,
+    };
+
+    // Construct the type.
+    width.map(|w| {
+        cx.intern_type(TypeKind::BitVector {
+            sign,
+            domain,
+            range: ty::Range {
+                size: w,
+                dir: ty::RangeDir::Down,
+                offset: 0isize,
+            },
+            dubbed: false,
+        })
+    })
+}
+
+/// Require a node to have an operation type.
+///
+/// Emits an error if the node has no operation type.
+pub(crate) fn need_operation_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Type<'gcx> {
+    match cx.operation_type(node_id, env) {
+        Some(x) => x,
+        None => {
+            let span = cx.span(node_id);
+            cx.emit(
+                DiagBuilder2::bug(format!("`{}` has no operation type", span.extract())).span(span),
+            );
+            &ty::ERROR_TYPE
+        }
+    }
+}
+
+/// Get the type context of a node.
+pub(crate) fn type_context<'gcx>(
+    cx: &impl Context<'gcx>,
+    onto: NodeId,
+    env: ParamEnv,
+) -> Option<TypeContext<'gcx>> {
+    let hir = match cx.hir_of(cx.parent_node_id(onto).unwrap()) {
+        Ok(x) => x,
+        Err(()) => return None,
+    };
+    match hir {
+        HirNode::Expr(e) => type_context_imposed_by_expr(cx, onto, e, env),
+        HirNode::Assign(a) => {
+            if a.lhs == onto {
+                cx.self_determined_type(a.rhs, env).map(Into::into)
+            } else if a.rhs == onto {
+                cx.self_determined_type(a.lhs, env).map(Into::into)
+            } else {
+                None
+            }
+        }
+        // TODO(fschuiki): Ports
+        // TODO(fschuiki): Variable declarations
+        // TODO(fschuiki): Parameters
+        // TODO(fschuiki): Statements
+        _ => None,
+    }
+}
+
+/// Get the type context of a node.
+pub(crate) fn need_type_context<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> TypeContext<'gcx> {
+    match cx.type_context(node_id, env) {
+        Some(ty) => ty,
+        None => {
+            let extract = cx.span(node_id).extract();
+            let desc = cx
+                .ast_of(node_id)
+                .map(|x| x.desc_full())
+                .unwrap_or_else(|_| format!("`{}`", extract));
+            cx.emit(
+                DiagBuilder2::error(format!("type of {} cannot be inferred from context", desc))
+                    .span(cx.span(node_id))
+                    .add_note(format!(
+                        "The type of {} must be inferred from \
+                         context, but the location where you used it does not \
+                         provide such information.",
+                        desc
+                    ))
+                    .add_note(format!("Try a cast: `T'({})`", extract)),
+            );
+            TypeContext::Type(&ty::ERROR_TYPE)
+        }
+    }
+}
+
+/// A type context imposed by a node's surroundings.
+///
+/// This is used to treat things such as assignment-like contexts.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum TypeContext<'a> {
+    /// The surroundings impose a regular type.
+    Type(Type<'a>),
+    /// The surroundings ask for implicit boolean mapping (not truncation).
+    Bool,
+}
+
+impl<'a> TypeContext<'a> {
+    /// Convert the type context to an actual type.
+    ///
+    /// This resolves implicit boolean casts to the `bit` type.
+    pub fn ty(&self) -> Type<'a> {
+        match *self {
+            TypeContext::Type(t) => t,
+            TypeContext::Bool => &ty::BIT_TYPE,
+        }
+    }
+}
+
+impl<'a> From<Type<'a>> for TypeContext<'a> {
+    fn from(ty: Type<'a>) -> Self {
+        TypeContext::Type(ty)
+    }
+}
+
+/// Get the type context imposed by an expression.
+///
+/// Determine the type context `expr` imposes on `onto`.
+fn type_context_imposed_by_expr<'gcx>(
+    cx: &impl Context<'gcx>,
+    onto: NodeId,
+    expr: &'gcx hir::Expr,
+    env: ParamEnv,
+) -> Option<TypeContext<'gcx>> {
+    match expr.kind {
+        hir::ExprKind::Unary(op, _) => match op {
+            // The unary operators whose output type does not depend on the
+            // operands also do not impose a type context on their operands.
+            hir::UnaryOp::LogicNot
+            | hir::UnaryOp::RedAnd
+            | hir::UnaryOp::RedOr
+            | hir::UnaryOp::RedXor
+            | hir::UnaryOp::RedNand
+            | hir::UnaryOp::RedNor
+            | hir::UnaryOp::RedXnor => None,
+
+            // For all other cases we impose our self-determined type as
+            // context.
+            hir::UnaryOp::Neg
+            | hir::UnaryOp::Pos
+            | hir::UnaryOp::BitNot
+            | hir::UnaryOp::PreInc
+            | hir::UnaryOp::PreDec
+            | hir::UnaryOp::PostInc
+            | hir::UnaryOp::PostDec => cx.self_determined_type(expr.id, env).map(Into::into),
+        },
+
+        hir::ExprKind::Binary(op, lhs, _) => match op {
+            // The binary operators whose output type does not depend on the
+            // operands also do not impose a type context on their operands.
+            hir::BinaryOp::Eq
+            | hir::BinaryOp::Neq
+            | hir::BinaryOp::Lt
+            | hir::BinaryOp::Leq
+            | hir::BinaryOp::Gt
+            | hir::BinaryOp::Geq
+            | hir::BinaryOp::LogicAnd
+            | hir::BinaryOp::LogicOr => None,
+
+            // Exponentiation and shifts impose a type context on their left
+            // hand side.
+            hir::BinaryOp::Pow
+            | hir::BinaryOp::LogicShL
+            | hir::BinaryOp::LogicShR
+            | hir::BinaryOp::ArithShL
+            | hir::BinaryOp::ArithShR => {
+                if onto == lhs {
+                    cx.self_determined_type(expr.id, env).map(Into::into)
+                } else {
+                    None
+                }
+            }
+
+            // For all other cases we impose our self-determined type as
+            // context.
+            hir::BinaryOp::Add
+            | hir::BinaryOp::Sub
+            | hir::BinaryOp::Mul
+            | hir::BinaryOp::Div
+            | hir::BinaryOp::Mod
+            | hir::BinaryOp::BitAnd
+            | hir::BinaryOp::BitNand
+            | hir::BinaryOp::BitOr
+            | hir::BinaryOp::BitNor
+            | hir::BinaryOp::BitXor
+            | hir::BinaryOp::BitXnor => cx.self_determined_type(expr.id, env).map(Into::into),
+        },
 
         _ => None,
     }

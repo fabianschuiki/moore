@@ -563,5 +563,23 @@ impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
         if let Some(ty) = self.0.self_determined_type(id, self.1) {
             println!("{}: self_type({}) = {}", line, ext, ty);
         }
+
+        // Report the operation type.
+        if let Some(ty) = self.0.operation_type(id, self.1) {
+            println!("{}: operation_type({}) = {}", line, ext, ty);
+        }
+
+        // Report the type context.
+        if let Some(ty) = self.0.type_context(id, self.1) {
+            println!(
+                "{}: type_context({}) = {}",
+                line,
+                ext,
+                match ty {
+                    svlog::typeck::TypeContext::Type(ty) => format!("{}", ty),
+                    svlog::typeck::TypeContext::Bool => "<bool>".to_string(),
+                }
+            );
+        }
     }
 }

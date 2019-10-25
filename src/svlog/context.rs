@@ -31,6 +31,7 @@ use crate::{
     hir::{self, AccessTable, HirNode},
     resolver::StructDef,
     ty::{Type, TypeKind},
+    typeck::TypeContext,
     value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
@@ -592,6 +593,42 @@ pub(super) mod queries {
                 use fn typeck::self_determined_type;
             }
 
+            /// Require a node to have a self-determined type.
+            ///
+            /// Emits an error if the node has no self-determined type.
+            fn need_self_determined_type(node_id: NodeId, env: ParamEnv) -> Type<'a> {
+                type NeedSelfDeterminedTypeQuery;
+                use fn typeck::need_self_determined_type;
+            }
+
+            /// Get the operation type of an expression.
+            fn operation_type(node_id: NodeId, env: ParamEnv) -> Option<Type<'a>> {
+                type OperationTypeQuery;
+                use fn typeck::operation_type;
+            }
+
+            /// Require a node to have an operation type.
+            ///
+            /// Emits an error if the node has no operation type.
+            fn need_operation_type(node_id: NodeId, env: ParamEnv) -> Type<'a> {
+                type NeedOperationTypeQuery;
+                use fn typeck::need_operation_type;
+            }
+
+            /// Get the type context of a node.
+            fn type_context(node_id: NodeId, env: ParamEnv) -> Option<TypeContext<'a>> {
+                type TypeContextQuery;
+                use fn typeck::type_context;
+            }
+
+            /// Require a node to have a type context.
+            ///
+            /// Emits an error if the node has no type context.
+            fn need_type_context(node_id: NodeId, env: ParamEnv) -> TypeContext<'a> {
+                type NeedTypeContextQuery;
+                use fn typeck::need_type_context;
+            }
+
             /// Determine the local rib that applies to a node.
             fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
                 type LocalRibQuery;
@@ -697,6 +734,11 @@ pub(super) mod queries {
                 fn type_of() for TypeOfQuery<'gcx>;
                 fn map_to_type() for MapToTypeQuery<'gcx>;
                 fn self_determined_type() for SelfDeterminedTypeQuery<'gcx>;
+                fn need_self_determined_type() for NeedSelfDeterminedTypeQuery<'gcx>;
+                fn operation_type() for OperationTypeQuery<'gcx>;
+                fn need_operation_type() for NeedOperationTypeQuery<'gcx>;
+                fn type_context() for TypeContextQuery<'gcx>;
+                fn need_type_context() for NeedTypeContextQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
