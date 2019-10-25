@@ -635,6 +635,14 @@ fn self_determined_expr_type<'gcx>(
             | hir::BinaryOp::ArithShR => cx.self_determined_type(lhs, env),
         },
 
+        // Ternary operators infer a type based on the maximum over the
+        // operand's self-determined types.
+        hir::ExprKind::Ternary(_, lhs, rhs) => {
+            let tlhs = cx.self_determined_type(lhs, env);
+            let trhs = cx.self_determined_type(rhs, env);
+            unify_operator_types(cx, env, tlhs.into_iter().chain(trhs.into_iter()))
+        }
+
         _ => None,
     }
 }
@@ -759,6 +767,21 @@ pub(crate) fn operation_type<'gcx>(
             } else {
                 ty
             }
+        }
+
+        // Ternary operators operate on the maximum bitwidth given by their
+        // arguments (self-determined type) and the type context.
+        hir::ExprKind::Ternary(_, lhs, rhs) => {
+            let tc = cx.type_context(node_id, env).map(|x| x.ty());
+            let tlhs = cx.self_determined_type(lhs, env);
+            let trhs = cx.self_determined_type(rhs, env);
+            unify_operator_types(
+                cx,
+                env,
+                tc.into_iter()
+                    .chain(tlhs.into_iter())
+                    .chain(trhs.into_iter()),
+            )
         }
 
         _ => None,
@@ -985,6 +1008,11 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::BinaryOp::BitXor
             | hir::BinaryOp::BitXnor => cx.self_determined_type(expr.id, env).map(Into::into),
         },
+
+        // The ternary operator imposes its self-determined type as a context.
+        hir::ExprKind::Ternary(_, lhs, rhs) if onto == lhs || onto == rhs => {
+            cx.self_determined_type(expr.id, env).map(Into::into)
+        }
 
         _ => None,
     }
