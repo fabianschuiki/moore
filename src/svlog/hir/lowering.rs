@@ -702,7 +702,6 @@ fn lower_expr<'gcx>(
     expr: &'gcx ast::Expr,
 ) -> Result<HirNode<'gcx>> {
     use crate::syntax::token::{Lit, Op};
-    let parent = cx.parent_node_id(node_id).unwrap();
     let kind = match expr.data {
         ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
             Ok(v) => hir::ExprKind::IntConst(32, v),
@@ -828,7 +827,7 @@ fn lower_expr<'gcx>(
                     return Err(());
                 }
             },
-            cx.map_ast_with_parent(AstNode::Expr(arg), parent),
+            cx.map_ast_with_parent(AstNode::Expr(arg), node_id),
         ),
         ast::BinaryExpr {
             op,
@@ -869,18 +868,18 @@ fn lower_expr<'gcx>(
                     return Err(());
                 }
             },
-            cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
-            cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
+            cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+            cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
         ),
         ast::MemberExpr { ref expr, name } => hir::ExprKind::Field(
-            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
             Spanned::new(name.name, name.span),
         ),
         ast::IndexExpr {
             ref indexee,
             ref index,
         } => {
-            let indexee = cx.map_ast_with_parent(AstNode::Expr(indexee), parent);
+            let indexee = cx.map_ast_with_parent(AstNode::Expr(indexee), node_id);
             let mode = match index.data {
                 ast::RangeExpr {
                     mode,
@@ -888,10 +887,10 @@ fn lower_expr<'gcx>(
                     ref rhs,
                 } => hir::IndexMode::Many(
                     mode,
-                    cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
-                    cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
+                    cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+                    cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
                 ),
-                _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), parent)),
+                _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), node_id)),
             };
             hir::ExprKind::Index(indexee, mode)
         }
@@ -902,7 +901,7 @@ fn lower_expr<'gcx>(
                         [ast::CallArg {
                             expr: Some(ref arg),
                             ..
-                        }] => cx.map_ast_with_parent(AstNode::Expr(arg), parent),
+                        }] => cx.map_ast_with_parent(AstNode::Expr(arg), node_id),
                         _ => {
                             cx.emit(
                                 DiagBuilder2::error(format!("`{}` takes one argument", ident.name))
@@ -939,9 +938,9 @@ fn lower_expr<'gcx>(
             ref true_expr,
             ref false_expr,
         } => hir::ExprKind::Ternary(
-            cx.map_ast_with_parent(AstNode::Expr(cond), parent),
-            cx.map_ast_with_parent(AstNode::Expr(true_expr), parent),
-            cx.map_ast_with_parent(AstNode::Expr(false_expr), parent),
+            cx.map_ast_with_parent(AstNode::Expr(cond), node_id),
+            cx.map_ast_with_parent(AstNode::Expr(true_expr), node_id),
+            cx.map_ast_with_parent(AstNode::Expr(false_expr), node_id),
         ),
         ast::ScopeExpr(ref expr, name) => hir::ExprKind::Scope(
             cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
@@ -1045,31 +1044,31 @@ fn lower_expr<'gcx>(
         } => hir::ExprKind::Concat(
             repeat
                 .as_ref()
-                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent)),
+                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id)),
             exprs
                 .iter()
-                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent))
+                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
                 .collect(),
         ),
         ast::CastExpr(ref ty, ref expr) => hir::ExprKind::Cast(
-            cx.map_ast_with_parent(AstNode::Type(ty), parent),
-            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+            cx.map_ast_with_parent(AstNode::Type(ty), node_id),
+            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
         ),
         ast::InsideExpr(ref expr, ref ranges) => hir::ExprKind::Inside(
-            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
             ranges
                 .iter()
                 .map(|vr| match vr {
                     ast::ValueRange::Single(expr) => Spanned::new(
                         hir::InsideRange::Single(
-                            cx.map_ast_with_parent(AstNode::Expr(expr), parent),
+                            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
                         ),
                         expr.span,
                     ),
                     ast::ValueRange::Range { lo, hi, span } => Spanned::new(
                         hir::InsideRange::Range(
-                            cx.map_ast_with_parent(AstNode::Expr(lo), parent),
-                            cx.map_ast_with_parent(AstNode::Expr(hi), parent),
+                            cx.map_ast_with_parent(AstNode::Expr(lo), node_id),
+                            cx.map_ast_with_parent(AstNode::Expr(hi), node_id),
                         ),
                         *span,
                     ),
