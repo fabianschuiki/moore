@@ -13,7 +13,6 @@ module B #(int K);
 	int x = K;
 endmodule
 
-//@ elab A
 //| entity @B.param1 () () {
 //|     %x = sig i32 6
 //| }
