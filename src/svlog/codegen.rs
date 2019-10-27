@@ -1807,17 +1807,6 @@ where
     }
 
     /// Emit a blocking assignment to a variable or signal.
-    fn emit_blocking_assign(
-        &mut self,
-        lvalue_id: NodeId,
-        rvalue: llhd::ir::Value,
-        env: ParamEnv,
-    ) -> Result<()> {
-        let lvalue = self.emit_lvalue(lvalue_id, env)?;
-        self.emit_blocking_assign_llhd(lvalue, rvalue)
-    }
-
-    /// Emit a blocking assignment to a variable or signal.
     fn emit_blocking_assign_llhd(
         &mut self,
         lvalue: llhd::ir::Value,
