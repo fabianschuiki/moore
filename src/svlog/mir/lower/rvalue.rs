@@ -1865,6 +1865,23 @@ fn implicit_cast_to_bool<'gcx>(
     }
 }
 
+/// Cast an rvalue to a boolean.
+pub fn cast_to_bool<'gcx>(
+    cx: &impl Context<'gcx>,
+    value: &'gcx Rvalue<'gcx>,
+    env: ParamEnv,
+) -> &'gcx Rvalue<'gcx> {
+    implicit_cast_to_bool(
+        &Builder {
+            cx,
+            span: value.span,
+            expr: value.origin,
+            env,
+        },
+        value,
+    )
+}
+
 /// Map an increment/decrement operator to MIR.
 fn lower_int_incdec<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,

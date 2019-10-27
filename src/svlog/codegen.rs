@@ -1126,6 +1126,13 @@ where
         }
     }
 
+    /// Emit the code for an rvalue converted to a boolean..
+    fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
+        let mir = self.mir_rvalue(expr_id, env);
+        let mir = mir::lower::rvalue::cast_to_bool(self.cx, mir, env);
+        self.emit_mir_rvalue(mir)
+    }
+
     /// Emit the code for an lvalue.
     fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         let mir = self.mir_lvalue(expr_id, env);
@@ -1520,7 +1527,7 @@ where
                     let now_value = self.emit_rvalue(event.expr, env)?;
                     let mut trigger = self.emit_event_trigger(event.edge, init_value, now_value)?;
                     for &iff in &event.iff {
-                        let iff_value = self.emit_rvalue(iff, env)?;
+                        let iff_value = self.emit_rvalue_bool(iff, env)?;
                         trigger = self.builder.ins().and(trigger, iff_value);
                         self.builder.dfg_mut().set_name(trigger, "iff".to_string());
                     }
@@ -1575,7 +1582,7 @@ where
             } => {
                 let main_blk = self.add_named_block("if_true");
                 let else_blk = self.add_named_block("if_false");
-                let cond = self.emit_rvalue(cond, env)?;
+                let cond = self.emit_rvalue_bool(cond, env)?;
                 self.builder.ins().br_cond(cond, else_blk, main_blk);
                 let final_blk = self.add_named_block("if_exit");
                 self.builder.append_to(main_blk);
@@ -1624,9 +1631,9 @@ where
                         let zero = self.emit_zero_for_type(&lty);
                         Some(self.builder.ins().neq(value, zero))
                     }
-                    hir::LoopKind::While(cond) => Some(self.emit_rvalue(cond, env)?),
+                    hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool(cond, env)?),
                     hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue(cond, env)?),
+                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool(cond, env)?),
                 };
                 if let Some(enter_cond) = enter_cond {
                     let entry_blk = self.add_named_block("loop_continue");
@@ -1649,9 +1656,9 @@ where
                         None
                     }
                     hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue(cond, env)?),
+                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool(cond, env)?),
                     hir::LoopKind::For(_, _, step) => {
-                        self.emit_rvalue(step, env)?;
+                        self.emit_rvalue_bool(step, env)?;
                         None
                     }
                 };
