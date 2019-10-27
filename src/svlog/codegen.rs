@@ -510,8 +510,13 @@ where
                 HirNode::Assign(x) => x,
                 _ => unreachable!(),
             };
-            let lhs = self.emit_lvalue(hir.lhs, env)?;
-            let rhs = self.emit_rvalue_mode(hir.rhs, env, Mode::Value)?;
+            let lhs = self.mir_lvalue(hir.lhs, env);
+            let rhs = self.mir_rvalue(hir.rhs, env);
+            // TODO(fschuiki): The following should happen in a lowering of the
+            // assignment to its own MIR.
+            let rhs = mir::lower::rvalue::cast_to_type(self.cx, rhs, env, lhs.ty);
+            let lhs = self.emit_mir_lvalue(lhs)?;
+            let rhs = self.emit_mir_rvalue(rhs)?;
             let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
             let one_epsilon = self.builder.ins().const_time(one_epsilon);
             self.builder.ins().drv(lhs, rhs, one_epsilon);
@@ -1412,57 +1417,53 @@ where
                 }
             }
             hir::StmtKind::Assign { lhs, rhs, kind } => {
-                let rhs_value = self.emit_rvalue(rhs, env)?;
+                // TODO(fschuiki): The following should happen in a lowering of the
+                // assignment to its own MIR.
+                let lhs_mir = self.mir_lvalue(lhs, env);
+                let rhs_mir = self.mir_rvalue(rhs, env);
+                let rhs_mir = mir::lower::rvalue::cast_to_type(self.cx, rhs_mir, env, lhs_mir.ty);
+                let lhs_lv = self.emit_mir_lvalue(lhs_mir)?;
+                let rhs_rv = self.emit_mir_rvalue(rhs_mir)?;
+
                 match kind {
                     hir::AssignKind::Block(ast::AssignOp::Identity) => {
-                        self.emit_blocking_assign(lhs, rhs_value, env)?;
+                        self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
                     }
                     hir::AssignKind::Block(op) => {
-                        let lhs_value = self.emit_rvalue(lhs, env)?;
+                        let lhs_rv = self.emit_rvalue(lhs, env)?;
                         let value = match op {
                             ast::AssignOp::Identity => unreachable!(),
-                            ast::AssignOp::Add => self.builder.ins().add(lhs_value, rhs_value),
-                            ast::AssignOp::Sub => self.builder.ins().sub(lhs_value, rhs_value),
-                            ast::AssignOp::Mul => self.builder.ins().umul(lhs_value, rhs_value),
-                            ast::AssignOp::Div => self.builder.ins().udiv(lhs_value, rhs_value),
-                            ast::AssignOp::Mod => self.builder.ins().umod(lhs_value, rhs_value),
-                            ast::AssignOp::BitAnd => self.builder.ins().and(lhs_value, rhs_value),
-                            ast::AssignOp::BitOr => self.builder.ins().or(lhs_value, rhs_value),
-                            ast::AssignOp::BitXor => self.builder.ins().xor(lhs_value, rhs_value),
-                            ast::AssignOp::LogicShL => self.emit_shift_operator(
-                                ShiftDir::Left,
-                                false,
-                                lhs_value,
-                                rhs_value,
-                            ),
-                            ast::AssignOp::LogicShR => self.emit_shift_operator(
-                                ShiftDir::Right,
-                                false,
-                                lhs_value,
-                                rhs_value,
-                            ),
-                            ast::AssignOp::ArithShL => {
-                                self.emit_shift_operator(ShiftDir::Left, true, lhs_value, rhs_value)
+                            ast::AssignOp::Add => self.builder.ins().add(lhs_rv, rhs_rv),
+                            ast::AssignOp::Sub => self.builder.ins().sub(lhs_rv, rhs_rv),
+                            ast::AssignOp::Mul => self.builder.ins().umul(lhs_rv, rhs_rv),
+                            ast::AssignOp::Div => self.builder.ins().udiv(lhs_rv, rhs_rv),
+                            ast::AssignOp::Mod => self.builder.ins().umod(lhs_rv, rhs_rv),
+                            ast::AssignOp::BitAnd => self.builder.ins().and(lhs_rv, rhs_rv),
+                            ast::AssignOp::BitOr => self.builder.ins().or(lhs_rv, rhs_rv),
+                            ast::AssignOp::BitXor => self.builder.ins().xor(lhs_rv, rhs_rv),
+                            ast::AssignOp::LogicShL => {
+                                self.emit_shift_operator(ShiftDir::Left, false, lhs_rv, rhs_rv)
                             }
-                            ast::AssignOp::ArithShR => self.emit_shift_operator(
-                                ShiftDir::Right,
-                                true,
-                                lhs_value,
-                                rhs_value,
-                            ),
+                            ast::AssignOp::LogicShR => {
+                                self.emit_shift_operator(ShiftDir::Right, false, lhs_rv, rhs_rv)
+                            }
+                            ast::AssignOp::ArithShL => {
+                                self.emit_shift_operator(ShiftDir::Left, true, lhs_rv, rhs_rv)
+                            }
+                            ast::AssignOp::ArithShR => {
+                                self.emit_shift_operator(ShiftDir::Right, true, lhs_rv, rhs_rv)
+                            }
                         };
-                        self.emit_blocking_assign(lhs, value, env)?;
+                        self.emit_blocking_assign_llhd(lhs_lv, value)?;
                     }
                     hir::AssignKind::Nonblock => {
-                        let lhs_value = self.emit_lvalue(lhs, env)?;
                         let delay = llhd::ConstTime::new(num::zero(), 1, 0);
                         let delay_const = self.builder.ins().const_time(delay);
-                        self.builder.ins().drv(lhs_value, rhs_value, delay_const);
+                        self.builder.ins().drv(lhs_lv, rhs_rv, delay_const);
                     }
                     hir::AssignKind::NonblockDelay(delay) => {
-                        let lhs_value = self.emit_lvalue(lhs, env)?;
                         let delay = self.emit_rvalue(delay, env)?;
-                        self.builder.ins().drv(lhs_value, rhs_value, delay);
+                        self.builder.ins().drv(lhs_lv, rhs_rv, delay);
                     }
                     _ => {
                         error!("{:#?}", hir);

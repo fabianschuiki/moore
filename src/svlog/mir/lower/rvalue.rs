@@ -1863,6 +1863,25 @@ pub fn cast_to_bool<'gcx>(
     )
 }
 
+/// Cast an rvalue to a type.
+pub fn cast_to_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    value: &'gcx Rvalue<'gcx>,
+    env: ParamEnv,
+    ty: Type<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    lower_implicit_cast(
+        &Builder {
+            cx,
+            span: value.span,
+            expr: value.origin,
+            env,
+        },
+        value,
+        ty,
+    )
+}
+
 /// Map an increment/decrement operator to MIR.
 fn lower_int_incdec<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
