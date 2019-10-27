@@ -461,7 +461,7 @@ fn lower_expr_and_cast_sign<'gcx>(
 ) -> &'gcx Rvalue<'gcx> {
     let inner = builder.cx.mir_rvalue(expr_id, builder.env);
     if let Some(ty) = map_to_simple_bit_type(builder.cx, inner.ty.resolve_name(), builder.env) {
-        let ty = change_type_sign(builder.cx, ty, sign);
+        let ty = ty.change_sign(builder.cx, sign);
         lower_implicit_cast(builder, inner, ty)
     } else {
         let span = builder.cx.span(expr_id);
@@ -656,7 +656,7 @@ fn lower_implicit_cast<'gcx>(
     let to_sign = to_sbt.and_then(|ty| ty.get_sign());
     if from_sign.is_some() && to_sign.is_some() && from_sign != to_sign {
         let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-        let ty = change_type_sign(builder.cx, from_sbt.unwrap(), to_sign.unwrap());
+        let ty = from_sbt.unwrap().change_sign(builder.cx, to_sign.unwrap());
         let inner = builder.build(ty, RvalueKind::CastSign(to_sign.unwrap(), value));
         if verbose {
             builder.cx.emit(
@@ -730,25 +730,6 @@ fn lower_implicit_cast<'gcx>(
         .span(value.span),
     );
     builder.error()
-}
-
-/// Change the sign of a simple bit type.
-fn change_type_sign<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>, sign: ty::Sign) -> Type<'gcx> {
-    match *ty {
-        TypeKind::BitScalar { domain, .. } => cx.intern_type(TypeKind::BitScalar { domain, sign }),
-        TypeKind::BitVector {
-            domain,
-            range,
-            dubbed,
-            ..
-        } => cx.intern_type(TypeKind::BitVector {
-            domain,
-            sign,
-            range,
-            dubbed,
-        }),
-        _ => ty,
-    }
 }
 
 /// Pack a struct as a simple bit vector.

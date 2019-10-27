@@ -186,11 +186,16 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         // Ternary operators return their internal operation type.
         hir::ExprKind::Ternary(..) => cx.need_operation_type(expr.id, env),
 
-        // Sign casts "forward" the type of their argument.
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
-            cx.type_of(arg, env).unwrap_or(&ty::ERROR_TYPE)
-        }
+        // Sign casts "forward" the type of their argument, with the sign
+        // replaced.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx
+            .type_of(arg, env)
+            .unwrap_or(&ty::ERROR_TYPE)
+            .change_sign(cx, Sign::Signed),
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx
+            .type_of(arg, env)
+            .unwrap_or(&ty::ERROR_TYPE)
+            .change_sign(cx, Sign::Unsigned),
 
         // Pattern expressions require a type context.
         hir::ExprKind::PositionalPattern(..)
@@ -523,11 +528,13 @@ fn self_determined_expr_type<'gcx>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Some(&ty::INT_TYPE),
 
-        // Sign casts reflect their argument.
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
-            cx.self_determined_type(arg, env)
-        }
+        // Sign casts reflect their argument, but with the sign changed.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx
+            .self_determined_type(arg, env)
+            .map(|x| x.change_sign(cx, Sign::Signed)),
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx
+            .self_determined_type(arg, env)
+            .map(|x| x.change_sign(cx, Sign::Unsigned)),
 
         // Member field accesses resolve to the type of the member.
         hir::ExprKind::Field(..) => Some(
@@ -1086,6 +1093,12 @@ fn type_context_imposed_by_expr<'gcx>(
 
         // The ternary operator imposes its self-determined type as a context.
         hir::ExprKind::Ternary(_, lhs, rhs) if onto == lhs || onto == rhs => {
+            cx.self_determined_type(expr.id, env).map(Into::into)
+        }
+
+        // Sign casts forward their type context to the argument..
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(_)) => {
             cx.self_determined_type(expr.id, env).map(Into::into)
         }
 

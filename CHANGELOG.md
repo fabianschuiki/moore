@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Use operation type for comparisons and inside expressions.
 - Don't consider type context for comparison operations.
 - Fix implicit boolean casts in if, for, while, do/while, and event statements.
+- Fix `$unsigned` and `$signed` type checking.
 
 ## 0.5.0 - 2019-10-24
 ### Added

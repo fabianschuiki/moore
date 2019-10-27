@@ -15,3 +15,9 @@ module a1;
 	assign sumB = a + b;
 	assign sumB = {a + b};
 endmodule
+
+module a2;
+  logic [31:0] inst_data_i;
+  logic [31:0] iimm;
+  assign iimm = $signed({inst_data_i[31:20]});
+endmodule

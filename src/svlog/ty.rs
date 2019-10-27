@@ -221,6 +221,27 @@ impl<'t> TypeKind<'t> {
     pub fn is_signed(&self) -> bool {
         self.get_sign() == Some(Sign::Signed)
     }
+
+    /// Change the sign of a simple bit type.
+    pub fn change_sign<'gcx>(&'gcx self, cx: &impl Context<'gcx>, sign: Sign) -> Type<'gcx> {
+        match *self {
+            TypeKind::BitScalar { domain, .. } => {
+                cx.intern_type(TypeKind::BitScalar { domain, sign })
+            }
+            TypeKind::BitVector {
+                domain,
+                range,
+                dubbed,
+                ..
+            } => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed,
+            }),
+            _ => self,
+        }
+    }
 }
 
 impl<'t> Display for TypeKind<'t> {
