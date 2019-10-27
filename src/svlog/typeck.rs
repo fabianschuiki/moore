@@ -771,13 +771,7 @@ pub(crate) fn operation_type<'gcx>(
                 | hir::BinaryOp::BitOr
                 | hir::BinaryOp::BitNor
                 | hir::BinaryOp::BitXor
-                | hir::BinaryOp::BitXnor
-                | hir::BinaryOp::Eq
-                | hir::BinaryOp::Neq
-                | hir::BinaryOp::Lt
-                | hir::BinaryOp::Leq
-                | hir::BinaryOp::Gt
-                | hir::BinaryOp::Geq => {
+                | hir::BinaryOp::BitXnor => {
                     let tc = cx.type_context(node_id, env).map(|x| x.ty());
                     let tlhs = cx.self_determined_type(lhs, env);
                     let trhs = cx.self_determined_type(rhs, env);
@@ -788,6 +782,19 @@ pub(crate) fn operation_type<'gcx>(
                             .chain(tlhs.into_iter())
                             .chain(trhs.into_iter()),
                     )
+                }
+
+                // Comparison operations do not consider their type context, but
+                // use the maximum bit width of the operands.
+                hir::BinaryOp::Eq
+                | hir::BinaryOp::Neq
+                | hir::BinaryOp::Lt
+                | hir::BinaryOp::Leq
+                | hir::BinaryOp::Gt
+                | hir::BinaryOp::Geq => {
+                    let tlhs = cx.self_determined_type(lhs, env);
+                    let trhs = cx.self_determined_type(rhs, env);
+                    unify_operator_types(cx, env, tlhs.into_iter().chain(trhs.into_iter()))
                 }
 
                 // The boolean logic operators simply operate on bits.
