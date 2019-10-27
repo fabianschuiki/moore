@@ -7,7 +7,7 @@ use crate::{
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
-use num::{cast::ToPrimitive, One};
+use num::{cast::ToPrimitive, BigInt, One, Signed};
 
 /// Determine the type of a node.
 pub(crate) fn type_of<'gcx>(
@@ -538,39 +538,90 @@ fn self_determined_expr_type<'gcx>(
 
         // Bit- and part-select expressions
         hir::ExprKind::Index(target, mode) => Some({
+            // Determine the width of the accessed slice. `None` indicates a
+            // single element access, which needs to be treated differently in
+            // some cases.
+            let width = || -> Result<_> {
+                Ok(match mode {
+                    hir::IndexMode::One(..) => None,
+                    hir::IndexMode::Many(ast::RangeMode::RelativeUp, _, delta)
+                    | hir::IndexMode::Many(ast::RangeMode::RelativeDown, _, delta) => {
+                        Some(cx.constant_int_value_of(delta, env)?.to_usize().unwrap())
+                    }
+                    hir::IndexMode::Many(ast::RangeMode::Absolute, lhs, rhs) => {
+                        let lhs_int = cx.constant_int_value_of(lhs, env)?;
+                        let rhs_int = cx.constant_int_value_of(rhs, env)?;
+                        let length = (lhs_int - rhs_int).abs() + BigInt::one();
+                        Some(length.to_usize().unwrap())
+                    }
+                })
+            }();
+            let width = match width {
+                Ok(w) => w,
+                Err(_) => return Some(&ty::ERROR_TYPE),
+            };
+
+            // TODO(fschuiki): In case the target type is not something we can
+            // directly index into, map it to the equivalent simple bit vector
+            // type first.
             let target_ty = cx.type_of(target, env).unwrap_or(&ty::ERROR_TYPE);
-            match mode {
-                hir::IndexMode::One(..) => match *target_ty {
-                    TypeKind::PackedArray(_, ty) => (ty),
-                    // TODO(fschuiki): Call a function which returns an option
-                    // of a type's simple bit vector equivalent. After checking
-                    // all the types with special access rules, check if the
-                    // type has an SBVT equivalent and perform the access there.
-                    // If it does not, break with the error message below.
-                    TypeKind::Int(_, domain) => cx.intern_type(TypeKind::BitScalar {
+            match *target_ty {
+                TypeKind::PackedArray(_, ty) => {
+                    if let Some(width) = width {
+                        cx.intern_type(TypeKind::PackedArray(width, ty))
+                    } else {
+                        ty
+                    }
+                }
+                TypeKind::Bit(domain) | TypeKind::Int(_, domain) => {
+                    cx.intern_type(TypeKind::BitVector {
                         domain,
-                        sign: ty::Sign::Unsigned,
-                    }),
-                    TypeKind::BitScalar { .. } => target_ty,
-                    TypeKind::BitVector { domain, sign, .. } => {
-                        cx.intern_type(TypeKind::BitScalar { domain, sign })
-                    }
-                    TypeKind::Error => (target_ty),
-                    _ => {
-                        let desc = cx
-                            .hir_of(target)
-                            .map(|x| x.desc_full())
-                            .unwrap_or_else(|_| cx.span(target).extract());
-                        cx.emit(
-                            DiagBuilder2::error(format!("{} cannot be indexed into", desc))
-                                .span(expr.span()),
-                        );
-                        &ty::ERROR_TYPE
-                    }
-                },
-                // TODO(fschuiki): I'm pretty sure part-selects evaluate to
-                // narrower types given the constant bounds in the select.
-                hir::IndexMode::Many(..) => target_ty,
+                        sign: Sign::Signed,
+                        range: ty::Range {
+                            size: width.unwrap_or(1),
+                            dir: ty::RangeDir::Down,
+                            offset: 0isize,
+                        },
+                        dubbed: false,
+                    })
+                }
+                TypeKind::BitScalar { domain, sign } => cx.intern_type(TypeKind::BitVector {
+                    domain,
+                    sign,
+                    range: ty::Range {
+                        size: width.unwrap_or(1),
+                        dir: ty::RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }),
+                TypeKind::BitVector {
+                    domain,
+                    sign,
+                    range,
+                    ..
+                } => cx.intern_type(TypeKind::BitVector {
+                    domain,
+                    sign,
+                    range: ty::Range {
+                        size: width.unwrap_or(1),
+                        dir: range.dir,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                }),
+                TypeKind::Error => (target_ty),
+                _ => {
+                    let desc = cx
+                        .hir_of(target)
+                        .map(|x| x.desc_full())
+                        .unwrap_or_else(|_| cx.span(target).extract());
+                    cx.emit(
+                        DiagBuilder2::error(format!("{} cannot be indexed into", desc))
+                            .span(expr.span()),
+                    );
+                    &ty::ERROR_TYPE
+                }
             }
         }),
 

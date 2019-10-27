@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 - Parent relationship of HIR nodes lowered from AST.
+- Type of part-selects now reflects length of selection.
 
 ## 0.5.0 - 2019-10-24
 ### Added
