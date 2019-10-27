@@ -21,3 +21,14 @@ module a2;
   logic [31:0] iimm;
   assign iimm = $signed({inst_data_i[31:20]});
 endmodule
+
+module a3;
+	typedef struct packed {
+		logic a;
+		logic [3:0] b;
+		logic [2:0] c;
+	} str_t;
+	str_t [0:0] x;
+
+	initial x = '1;
+endmodule

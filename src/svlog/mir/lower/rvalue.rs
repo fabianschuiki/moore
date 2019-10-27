@@ -492,8 +492,8 @@ fn lower_implicit_cast<'gcx>(
     let from_raw = from.resolve_name();
     let to_raw = to.resolve_name();
     trace!(
-        "trying implicit cast {:?} from {:?} to {:?}",
-        value,
+        "implicitly casting `{}` from {} to {}",
+        value.span.extract(),
         from_raw,
         to_raw
     );
@@ -946,7 +946,7 @@ fn unpack_array<'gcx>(
             ),
         );
         let elem = builder.build(
-            elem_ty,
+            sbvt,
             RvalueKind::Index {
                 value,
                 base: base,
