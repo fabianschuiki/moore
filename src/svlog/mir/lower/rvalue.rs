@@ -277,7 +277,7 @@ fn try_lower_expr<'gcx>(
                             ))
                             .span(span)
                             .add_note(format!(
-                                "`{}` cannot has no simple bit-vector type representation",
+                                "`{}` has no simple bit-vector type representation",
                                 target_ty
                             )),
                         );
@@ -316,6 +316,9 @@ fn try_lower_expr<'gcx>(
                 RvalueKind::Const(cx.intern_value(value::make_int(ty, Zero::zero()))),
             );
 
+            // Determine the intermediate type for the comparisons.
+            let comp_ty = cx.need_operation_type(expr_id, env);
+
             // Compare the LHS against all ranges.
             let lhs = cx.mir_rvalue(expr, env);
             for r in ranges {
@@ -323,16 +326,32 @@ fn try_lower_expr<'gcx>(
                     hir::InsideRange::Single(expr) => {
                         // Check if the value matches the LHS.
                         let expr_rv = cx.mir_rvalue(expr, env);
-                        make_int_comparison(&builder.with(expr), IntCompOp::Eq, lhs, expr_rv)
+                        make_int_comparison(
+                            &builder.with(expr),
+                            IntCompOp::Eq,
+                            comp_ty,
+                            lhs,
+                            expr_rv,
+                        )
                     }
                     hir::InsideRange::Range(lo, hi) => {
                         // Check if the LHS is within [lo:hi], inclusive.
                         let lo_rv = cx.mir_rvalue(lo, env);
                         let hi_rv = cx.mir_rvalue(hi, env);
-                        let lo_chk =
-                            make_int_comparison(&builder.with(lo), IntCompOp::Geq, lhs, lo_rv);
-                        let hi_chk =
-                            make_int_comparison(&builder.with(hi), IntCompOp::Leq, lhs, hi_rv);
+                        let lo_chk = make_int_comparison(
+                            &builder.with(lo),
+                            IntCompOp::Geq,
+                            comp_ty,
+                            lhs,
+                            lo_rv,
+                        );
+                        let hi_chk = make_int_comparison(
+                            &builder.with(hi),
+                            IntCompOp::Leq,
+                            comp_ty,
+                            lhs,
+                            hi_rv,
+                        );
                         make_binary_bitwise(
                             builder,
                             ty,
@@ -1480,6 +1499,8 @@ fn lower_int_comparison<'gcx>(
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
+    let ty = builder.cx.need_operation_type(builder.expr, builder.env);
+
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
@@ -1496,58 +1517,28 @@ fn lower_int_comparison<'gcx>(
     };
 
     // Assemble the node.
-    make_int_comparison(builder, op, lhs, rhs)
+    make_int_comparison(builder, op, ty, lhs, rhs)
 }
 
 /// Map an integer comparison operator to MIR.
 fn make_int_comparison<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     op: IntCompOp,
+    ty: Type<'gcx>,
     lhs: &'gcx Rvalue<'gcx>,
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the common type of both operands.
-    let (lhs_sbt, rhs_sbt) = (
-        map_to_simple_bit_type(builder.cx, lhs.ty, builder.env),
-        map_to_simple_bit_type(builder.cx, rhs.ty, builder.env),
-    );
-    let (lhs_sbt, rhs_sbt) = match (lhs_sbt, rhs_sbt) {
-        (Some(l), Some(r)) => (l, r),
-        _ => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!(
-                    "`{:?}` cannot operate on `{}` and `{}`",
-                    op, lhs.ty, rhs.ty
-                ))
-                .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    let union_ty = builder.cx.intern_type(TypeKind::BitVector {
-        domain: ty::Domain::FourValued,
-        sign: ty::Sign::Unsigned,
-        range: ty::Range {
-            size: max(lhs_sbt.width(), rhs_sbt.width()),
-            dir: ty::RangeDir::Down,
-            offset: 0isize,
-        },
-        dubbed: false,
-    });
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
-
     // Cast the operands to the operator type.
-    let lhs = lower_implicit_cast(builder, lhs, union_ty);
-    let rhs = lower_implicit_cast(builder, rhs, union_ty);
+    let lhs = lower_implicit_cast(builder, lhs, ty);
+    let rhs = lower_implicit_cast(builder, rhs, ty);
 
     // Assemble the node.
     builder.build(
-        union_ty.get_value_domain().unwrap().bit_type(),
+        ty.get_value_domain().unwrap().bit_type(),
         RvalueKind::IntComp {
             op,
-            sign: union_ty.get_sign().unwrap(),
-            domain: union_ty.get_value_domain().unwrap(),
+            sign: ty.get_sign().unwrap(),
+            domain: ty.get_value_domain().unwrap(),
             lhs,
             rhs,
         },

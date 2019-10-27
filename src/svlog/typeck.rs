@@ -835,6 +835,23 @@ pub(crate) fn operation_type<'gcx>(
             )
         }
 
+        // The inside expression uses an operation type for its comparisons. It
+        // is determined in the same way as for comparisons.
+        hir::ExprKind::Inside(lhs, ref ranges) => {
+            let tlhs = cx.self_determined_type(lhs, env);
+            let tranges = ranges.iter().flat_map(|r| {
+                let (a, b) = match r.value {
+                    hir::InsideRange::Single(rhs) => (cx.self_determined_type(rhs, env), None),
+                    hir::InsideRange::Range(lo, hi) => (
+                        cx.self_determined_type(lo, env),
+                        cx.self_determined_type(hi, env),
+                    ),
+                };
+                a.into_iter().chain(b.into_iter())
+            });
+            unify_operator_types(cx, env, tlhs.into_iter().chain(tranges))
+        }
+
         _ => None,
     }
 }
