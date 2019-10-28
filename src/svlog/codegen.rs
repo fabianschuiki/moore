@@ -695,7 +695,7 @@ where
             x.clone()
         } else {
             let x = self.emit_const_uninterned(value, env);
-            self.interned_consts.insert(value, x.clone());
+            // self.interned_consts.insert(value, x.clone());
             x
         }
     }
@@ -809,7 +809,7 @@ where
                 let ty = self.llhd_type(value);
                 let init = self.emit_zero_for_type(&ty);
                 let sig = self.builder.ins().sig(init);
-                let delay = llhd::ConstTime::new(num::zero(), 0, 0);
+                let delay = llhd::ConstTime::new(num::zero(), 0, 1);
                 let delay_const = self.builder.ins().const_time(delay);
                 self.builder.ins().drv(sig, value, delay_const);
                 Ok(sig)
@@ -825,7 +825,7 @@ where
             x.clone()
         } else {
             let x = self.emit_mir_rvalue_uninterned(mir);
-            self.interned_rvalues.insert(mir.id, x.clone());
+            // self.interned_rvalues.insert(mir.id, x.clone());
             x
         }
     }
@@ -1150,7 +1150,7 @@ where
             x.clone()
         } else {
             let x = self.emit_mir_lvalue_uninterned(mir);
-            self.interned_lvalues.insert(mir.id, x.clone());
+            // self.interned_lvalues.insert(mir.id, x.clone());
             x
         }
     }
