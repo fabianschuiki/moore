@@ -399,7 +399,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     let target_id = self.resolve_node(target_id, env)?;
                     let current_value = self.constant_value_of(target_id, env)?;
                     let next_value = match current_value.kind {
-                        ValueKind::Int(ref v) => match op {
+                        ValueKind::Int(ref v, ..) => match op {
                             hir::UnaryOp::PostInc | hir::UnaryOp::PreInc => Some(v + 1),
                             hir::UnaryOp::PostDec | hir::UnaryOp::PreDec => Some(v - 1),
                             _ => None,
@@ -707,20 +707,20 @@ where
         env: ParamEnv,
     ) -> Result<llhd::ir::Value> {
         match (value.ty, &value.kind) {
-            (&TypeKind::Int(width, _), &ValueKind::Int(ref k))
+            (&TypeKind::Int(width, _), &ValueKind::Int(ref k, ..))
             | (
                 &TypeKind::BitVector {
                     range: ty::Range { size: width, .. },
                     ..
                 },
-                &ValueKind::Int(ref k),
+                &ValueKind::Int(ref k, ..),
             ) => Ok(self.builder.ins().const_int(width, k.clone())),
             (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(self
                 .builder
                 .ins()
                 .const_time(llhd::ConstTime::new(k.clone(), 0, 0))),
-            (&TypeKind::Bit(_), &ValueKind::Int(ref k))
-            | (&TypeKind::BitScalar { .. }, &ValueKind::Int(ref k)) => {
+            (&TypeKind::Bit(_), &ValueKind::Int(ref k, ..))
+            | (&TypeKind::BitScalar { .. }, &ValueKind::Int(ref k, ..)) => {
                 Ok(self.builder.ins().const_int(1, k.clone()))
             }
             (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {

@@ -17,6 +17,7 @@ use crate::{
     ty::{bit_size_of_type, Type, TypeKind},
     ParamEnv, ParamEnvBinding,
 };
+use bit_vec::BitVec;
 use num::{BigInt, BigRational, One, ToPrimitive, Zero};
 
 /// A verilog value.
@@ -37,7 +38,10 @@ pub enum ValueKind<'t> {
     /// The `void` value.
     Void,
     /// An arbitrary precision integer.
-    Int(BigInt),
+    ///
+    /// The first field contains the value. The second field indicates the
+    /// special bits (x or z), and the third indicates the x bits.
+    Int(BigInt, BitVec, BitVec),
     /// An arbitrary precision time interval.
     Time(BigRational),
     /// A struct.
@@ -54,7 +58,7 @@ impl<'t> ValueData<'t> {
     pub fn is_false(&self) -> bool {
         match self.kind {
             ValueKind::Void => true,
-            ValueKind::Int(ref v) => v.is_zero(),
+            ValueKind::Int(ref v, ..) => v.is_zero(),
             ValueKind::Time(ref v) => v.is_zero(),
             ValueKind::StructOrArray(_) => false,
         }
@@ -63,7 +67,7 @@ impl<'t> ValueData<'t> {
     /// Convert the value to an integer.
     pub fn get_int(&self) -> Option<&BigInt> {
         match self.kind {
-            ValueKind::Int(ref v) => Some(v),
+            ValueKind::Int(ref v, ..) => Some(v),
             _ => None,
         }
     }
@@ -72,7 +76,25 @@ impl<'t> ValueData<'t> {
 /// Create a new integer value.
 ///
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
-pub fn make_int(ty: Type, mut value: BigInt) -> ValueData {
+pub fn make_int(ty: Type, value: BigInt) -> ValueData {
+    let w = ty.width();
+    make_int_special(
+        ty,
+        value,
+        BitVec::from_elem(w, false),
+        BitVec::from_elem(w, false),
+    )
+}
+
+/// Create a new integer value with special bits.
+///
+/// Panics if `ty` is not an integer type. Truncates the value to `ty`.
+pub fn make_int_special(
+    ty: Type,
+    mut value: BigInt,
+    special_bits: BitVec,
+    x_bits: BitVec,
+) -> ValueData {
     match *ty {
         TypeKind::Int(width, _)
         | TypeKind::BitVector {
@@ -88,7 +110,7 @@ pub fn make_int(ty: Type, mut value: BigInt) -> ValueData {
     }
     ValueData {
         ty: ty,
-        kind: ValueKind::Int(value),
+        kind: ValueKind::Int(value, special_bits, x_bits),
     }
 }
 
@@ -195,7 +217,17 @@ fn const_expr<'gcx>(
     let ty = cx.type_of(expr.id, env)?;
     #[allow(unreachable_patterns)]
     match expr.kind {
-        hir::ExprKind::IntConst(_, ref k) => Ok(cx.intern_value(make_int(ty, k.clone()))),
+        hir::ExprKind::IntConst {
+            value: ref k,
+            ref special_bits,
+            ref x_bits,
+            ..
+        } => Ok(cx.intern_value(make_int_special(
+            ty,
+            k.clone(),
+            special_bits.clone(),
+            x_bits.clone(),
+        ))),
         hir::ExprKind::UnsizedConst('0') => Ok(cx.intern_value(make_int(ty, num::zero()))),
         hir::ExprKind::UnsizedConst('1') => Ok(cx.intern_value(make_int(ty, num::one()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
@@ -219,7 +251,7 @@ fn const_expr<'gcx>(
         hir::ExprKind::Unary(op, arg) => {
             let arg_val = cx.constant_value_of(arg, env)?;
             match arg_val.kind {
-                ValueKind::Int(ref arg) => Ok(cx.intern_value(make_int(
+                ValueKind::Int(ref arg, ..) => Ok(cx.intern_value(make_int(
                     ty,
                     const_unary_op_on_int(cx, expr.span, ty, op, arg)?,
                 ))),
@@ -239,9 +271,11 @@ fn const_expr<'gcx>(
             let lhs_val = cx.constant_value_of(lhs, env)?;
             let rhs_val = cx.constant_value_of(rhs, env)?;
             match (&lhs_val.kind, &rhs_val.kind) {
-                (&ValueKind::Int(ref lhs), &ValueKind::Int(ref rhs)) => Ok(cx.intern_value(
-                    make_int(ty, const_binary_op_on_int(cx, expr.span, ty, op, lhs, rhs)?),
-                )),
+                (&ValueKind::Int(ref lhs, ..), &ValueKind::Int(ref rhs, ..)) => Ok(cx
+                    .intern_value(make_int(
+                        ty,
+                        const_binary_op_on_int(cx, expr.span, ty, op, lhs, rhs)?,
+                    ))),
                 _ => {
                     cx.emit(
                         DiagBuilder2::error(format!(
@@ -260,7 +294,7 @@ fn const_expr<'gcx>(
         hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
             let arg_val = cx.constant_value_of(arg, env)?;
             let arg_int = match arg_val.kind {
-                ValueKind::Int(ref arg) => arg,
+                ValueKind::Int(ref arg, ..) => arg,
                 _ => unreachable!(),
             };
             let value: BigInt = if arg_int <= &num::zero() {

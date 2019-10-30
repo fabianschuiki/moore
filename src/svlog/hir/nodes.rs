@@ -3,6 +3,7 @@
 //! This module contains the nodes of the tree structure that is the HIR.
 
 use crate::crate_prelude::*;
+use bit_vec::BitVec;
 use num::{BigInt, BigRational};
 
 /// A reference to an HIR node.
@@ -557,7 +558,7 @@ impl HasDesc for Expr {
     fn desc(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self.kind {
-            ExprKind::IntConst(..) => "integer constant",
+            ExprKind::IntConst { .. } => "integer constant",
             ExprKind::TimeConst(_) => "time constant",
             ExprKind::Ident(_) => "identifier",
             _ => "expression",
@@ -567,7 +568,7 @@ impl HasDesc for Expr {
     fn desc_full(&self) -> String {
         #[allow(unreachable_patterns)]
         match self.kind {
-            ExprKind::IntConst(_, ref k) => format!("{} `{}`", self.desc(), k),
+            ExprKind::IntConst { value: ref k, .. } => format!("{} `{}`", self.desc(), k),
             ExprKind::TimeConst(ref k) => format!("{} `{}`", self.desc(), k),
             ExprKind::Ident(n) => format!("`{}`", n.value),
             ExprKind::PositionalPattern(..) => format!("positional pattern"),
@@ -583,7 +584,16 @@ impl HasDesc for Expr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
     /// An integer constant literal such as `42` or `'d42` or `32'd42`.
-    IntConst(usize, BigInt),
+    ///
+    /// The `special_bits` mask keeps track of which bits in the number are `x`
+    /// or `z`. The `x_bits` mask tracks which of these special bits are `x`.
+    IntConst {
+        width: usize,
+        value: BigInt,
+        signed: bool,
+        special_bits: BitVec,
+        x_bits: BitVec,
+    },
     /// An unsized and unbased constant literal such as `'0`.
     UnsizedConst(char),
     /// A time constant literal.

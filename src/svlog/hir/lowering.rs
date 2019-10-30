@@ -3,6 +3,7 @@
 //! Lowering of AST nodes to HIR nodes.
 
 use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
+use bit_vec::BitVec;
 use num::BigInt;
 
 /// A hint about how a node should be lowered to HIR.
@@ -704,7 +705,13 @@ fn lower_expr<'gcx>(
     use crate::syntax::token::{Lit, Op};
     let kind = match expr.data {
         ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
-            Ok(v) => hir::ExprKind::IntConst(32, v),
+            Ok(v) => hir::ExprKind::IntConst {
+                width: 32,
+                value: v,
+                signed: true,
+                special_bits: BitVec::from_elem(32, false),
+                x_bits: BitVec::from_elem(32, false),
+            },
             Err(e) => {
                 cx.emit(
                     DiagBuilder2::error(format!("`{}` is not a valid integer literal", v))
@@ -715,13 +722,16 @@ fn lower_expr<'gcx>(
             }
         },
         ast::LiteralExpr(Lit::UnbasedUnsized(c)) => hir::ExprKind::UnsizedConst(c),
-        ast::LiteralExpr(Lit::BasedInteger(maybe_size, _signed, base, value)) => {
+
+        ast::LiteralExpr(Lit::BasedInteger(maybe_size, signed, base, value)) => {
+            let value_str = value.as_str();
+
+            // Parse the number's value.
             let parsed = BigInt::parse_bytes(
-                value
-                    .as_str()
+                value_str
                     .chars()
                     .map(|c| match c {
-                        'x' | 'X' | 'z' | 'Z' | '?' | '-' => '0',
+                        'x' | 'X' | 'z' | 'Z' | '?' => '0',
                         c => c,
                     })
                     .collect::<String>()
@@ -751,6 +761,8 @@ fn lower_expr<'gcx>(
                     return Err(());
                 }
             };
+
+            // Parse the size and verify the number fits.
             let size_needed = parsed.bits();
             let size = match maybe_size {
                 Some(size) => match size.as_str().parse() {
@@ -772,8 +784,42 @@ fn lower_expr<'gcx>(
                     value,
                 )).span(expr.span).add_note(format!("constant is {} bits wide, but the value `{}{}` needs {} bits to not be truncated", size, base, value, size_needed)));
             }
-            hir::ExprKind::IntConst(size, parsed)
+
+            // Identify the special bits (x and z) in the input.
+            // TODO(fschuiki): Decimal literals are not handled properly.
+            let bit_iter = value_str.chars().flat_map(|c| {
+                std::iter::repeat(c).take(match base {
+                    'h' => 4,
+                    'o' => 3,
+                    'b' => 1,
+                    _ => 0,
+                })
+            });
+            let special_bits: BitVec = bit_iter
+                .clone()
+                .map(|c| match c {
+                    'x' | 'X' | 'z' | 'Z' | '?' => true,
+                    _ => false,
+                })
+                .collect();
+            let x_bits: BitVec = bit_iter
+                .clone()
+                .map(|c| match c {
+                    'x' | 'X' => true,
+                    _ => false,
+                })
+                .collect();
+
+            // Assemble the HIR node.
+            hir::ExprKind::IntConst {
+                width: size,
+                value: parsed,
+                signed,
+                special_bits,
+                x_bits,
+            }
         }
+
         ast::LiteralExpr(Lit::Time(int, frac, unit)) => {
             use syntax::token::TimeUnit;
             let mut value = parse_fixed_point_number(cx, expr.span, int, frac)?;

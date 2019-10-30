@@ -105,7 +105,7 @@ pub(crate) fn type_of<'gcx>(
 fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: ParamEnv) -> Type<'gcx> {
     match expr.kind {
         // These expressions are have a fully self-determined type.
-        hir::ExprKind::IntConst(..)
+        hir::ExprKind::IntConst { .. }
         | hir::ExprKind::TimeConst(..)
         | hir::ExprKind::Ident(..)
         | hir::ExprKind::Scope(..)
@@ -309,7 +309,7 @@ fn map_type_kind<'gcx>(
         hir::TypeKind::PackedArray(ref inner, lhs, rhs) => {
             let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
                 match cx.constant_value_of(bound, env)?.kind {
-                    ValueKind::Int(ref int) => Ok(int),
+                    ValueKind::Int(ref int, ..) => Ok(int),
                     _ => {
                         let span = cx.span(bound);
                         cx.emit(
@@ -446,16 +446,22 @@ fn self_determined_expr_type<'gcx>(
 
         // Sized integer constants have a well-defined type.
         // TODO(fschuiki): Inherit signedness from `s` character in base.
-        hir::ExprKind::IntConst(width, _) => Some(cx.intern_type(TypeKind::BitVector {
-            domain: ty::Domain::TwoValued, // TODO(fschuiki): Is this correct?
-            sign: ty::Sign::Signed,
-            range: ty::Range {
-                size: width,
-                dir: ty::RangeDir::Down,
-                offset: 0isize,
-            },
-            dubbed: true,
-        })),
+        hir::ExprKind::IntConst { width, signed, .. } => {
+            Some(cx.intern_type(TypeKind::BitVector {
+                domain: ty::Domain::TwoValued, // TODO(fschuiki): Is this correct?
+                sign: if signed {
+                    ty::Sign::Signed
+                } else {
+                    ty::Sign::Unsigned
+                },
+                range: ty::Range {
+                    size: width,
+                    dir: ty::RangeDir::Down,
+                    offset: 0isize,
+                },
+                dubbed: true,
+            }))
+        }
 
         // Time constants are of time type.
         hir::ExprKind::TimeConst(_) => Some(cx.mkty_time()),

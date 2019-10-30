@@ -111,7 +111,7 @@ fn try_lower_expr<'gcx>(
     // Determine the expression type and match on the various forms.
     let ty = builder.cx.type_of(expr_id, env)?;
     match hir.kind {
-        hir::ExprKind::IntConst(..)
+        hir::ExprKind::IntConst { .. }
         | hir::ExprKind::UnsizedConst(..)
         | hir::ExprKind::TimeConst(_)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
@@ -991,7 +991,7 @@ fn lower_array_pattern<'gcx>(
                 let index = match || -> Result<usize> {
                     let index = builder.cx.constant_value_of(member_id, builder.env)?;
                     let index = match &index.kind {
-                        ValueKind::Int(i) => i - num::BigInt::from(offset),
+                        ValueKind::Int(i, ..) => i - num::BigInt::from(offset),
                         _ => {
                             builder.cx.emit(
                                 DiagBuilder2::error("array index must be a constant integer")

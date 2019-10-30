@@ -176,6 +176,7 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
             expr,
             ref ways,
             default,
+            ..
         } => {
             visitor.visit_node_with_id(expr, false);
             for &(ref exprs, stmt) in ways {
@@ -195,7 +196,7 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
 pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: bool) {
     match expr.kind {
         ExprKind::Builtin(BuiltinCall::Unsupported)
-        | ExprKind::IntConst(..)
+        | ExprKind::IntConst { .. }
         | ExprKind::UnsizedConst(_)
         | ExprKind::TimeConst(_) => (),
         ExprKind::Ident(x) => {

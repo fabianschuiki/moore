@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Added
 - Add bit-vec dependency.
+- Add support for `x` and `z` bits in literals.
 
 ### Changed
 - Improved output of `-Vtypes` verbosity option.
