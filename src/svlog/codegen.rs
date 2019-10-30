@@ -1041,7 +1041,7 @@ where
                 let mut offset = 0;
                 let llty = self.emit_type(mir.ty, mir.env)?;
                 let mut value = self.emit_zero_for_type(&llty);
-                for v in values {
+                for v in values.iter().rev() {
                     let w = v.ty.width();
                     let v = self.emit_mir_rvalue(v)?;
                     value = self.builder.ins().ins_slice(value, v, offset, w);

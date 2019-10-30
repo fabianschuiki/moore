@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix `$unsigned` and `$signed` type checking.
 - Fix right-hand side casting in assignments.
 - Fix implicit array unpacking.
+- Fix code generated for concatenation.
 
 ## 0.5.0 - 2019-10-24
 ### Added
