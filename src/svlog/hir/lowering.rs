@@ -290,6 +290,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     ref expr,
                     mode: ast::CaseMode::Normal,
                     ref items,
+                    kind,
                     ..
                 } => {
                     let expr = cx.map_ast_with_parent(AstNode::Expr(expr), node_id);
@@ -323,6 +324,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         expr,
                         ways,
                         default,
+                        kind,
                     }
                 }
                 ast::AssertionStmt { .. } => {

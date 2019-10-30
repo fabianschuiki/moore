@@ -10,7 +10,12 @@ use crate::{
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
 use llhd::ir::{Unit, UnitBuilder};
-use std::{collections::HashMap, ops::Deref, ops::DerefMut};
+use num::{BigInt, One, Zero};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+    ops::DerefMut,
+};
 
 /// A code generator.
 ///
@@ -1533,18 +1538,64 @@ where
                     self.emit_stmt(stmt, env)?;
                 }
             }
+
             hir::StmtKind::Case {
                 expr,
                 ref ways,
                 default,
+                kind,
             } => {
                 let expr = self.emit_rvalue(expr, env)?;
                 let final_blk = self.add_named_block("case_exit");
                 for &(ref way_exprs, stmt) in ways {
                     let mut last_check = self.builder.ins().const_int(1, 0);
                     for &way_expr in way_exprs {
-                        let way_expr = self.emit_rvalue(way_expr, env)?;
-                        let check = self.builder.ins().eq(expr.clone(), way_expr);
+                        // Determine the constant value of the label.
+                        let way_const = self.constant_value_of(way_expr, env)?;
+                        let (_, special_bits, x_bits) = match &way_const.kind {
+                            ValueKind::Int(v, s, x) => (v, s, x),
+                            _ => panic!("case constant evaluates to non-integer"),
+                        };
+                        let way_expr = self.emit_const(way_const, env)?;
+                        let way_width = self.llhd_type(way_expr).unwrap_int();
+
+                        // Generate the comparison mask based on the case kind.
+                        let mask = match kind {
+                            ast::CaseKind::Normal => None,
+                            ast::CaseKind::DontCareZ => {
+                                let mut mask = special_bits.clone();
+                                mask.difference(x_bits);
+                                mask.negate();
+                                Some(mask)
+                            }
+                            ast::CaseKind::DontCareXZ => {
+                                let mut mask = special_bits.clone();
+                                mask.negate();
+                                Some(mask)
+                            }
+                        };
+                        let mask = mask.map(|bits| {
+                            let mut mask = BigInt::zero();
+                            for b in &bits {
+                                mask <<= 1;
+                                if b {
+                                    mask |= BigInt::one();
+                                }
+                            }
+                            self.builder.ins().const_int(way_width, mask)
+                        });
+
+                        // Filter the comparison values through the mask.
+                        let (lhs, rhs) = match mask {
+                            Some(mask) => (
+                                self.builder.ins().and(expr, mask),
+                                self.builder.ins().and(way_expr, mask),
+                            ),
+                            None => (expr, way_expr),
+                        };
+
+                        // Perform the comparison and branch.
+                        let check = self.builder.ins().eq(lhs, rhs);
                         last_check = self.builder.ins().or(last_check, check);
                     }
                     let taken_blk = self.add_named_block("case_body");
@@ -1563,6 +1614,7 @@ where
                 self.builder.ins().br(final_blk);
                 self.builder.append_to(final_blk);
             }
+
             _ => {
                 error!("{:#?}", hir);
                 return self.unimp_msg("code generation for", hir);

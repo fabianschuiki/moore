@@ -925,6 +925,7 @@ pub enum StmtKind {
         expr: NodeId,
         ways: Vec<(Vec<NodeId>, NodeId)>,
         default: Option<NodeId>,
+        kind: ast::CaseKind,
     },
 }
 
