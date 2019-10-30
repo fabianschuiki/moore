@@ -2051,9 +2051,10 @@ fn parse_expr_suffix(
         // expr "::" ident
         Namespace if precedence <= Precedence::Scope => {
             p.bump();
+            let ident = parse_identifier(p, "scope name")?;
             let expr = Expr {
                 span: Span::union(prefix.span, p.last_span()),
-                data: ScopeExpr(Box::new(prefix), parse_identifier(p, "scope name")?),
+                data: ScopeExpr(Box::new(prefix), ident),
             };
             return parse_expr_suffix(p, expr, precedence);
         }
