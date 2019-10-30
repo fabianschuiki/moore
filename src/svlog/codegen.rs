@@ -135,6 +135,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
+            shadows: Default::default(),
         };
 
         // Assign proper port names and collect ports into a lookup table.
@@ -284,9 +285,29 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
+            shadows: Default::default(),
         };
         let entry_blk = pg.add_nameless_block();
         pg.builder.append_to(entry_blk);
+
+        // Determine which values are both read and written. These require
+        // shadow variables to emulate the expected behaviour under blocking
+        // assignments.
+        let input_set: HashSet<_> = inputs.iter().cloned().collect();
+        let output_set: HashSet<_> = outputs.iter().cloned().collect();
+        for &id in input_set.intersection(&output_set) {
+            let init = pg.builder.ins().prb(pg.values[&id]);
+            let shadow = pg.builder.ins().var(init);
+            if let Some(name) = pg
+                .builder
+                .dfg()
+                .get_name(pg.values[&id])
+                .map(|name| format!("{}.shadow", name))
+            {
+                pg.builder.dfg_mut().set_name(shadow, name);
+            }
+            pg.shadows.insert(id, shadow);
+        }
 
         // Emit prologue and determine which basic block to jump back to.
         let head_blk = match hir.kind {
@@ -301,6 +322,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     .collect();
                 pg.builder.ins().wait(body_blk, trigger_on);
                 pg.builder.append_to(body_blk);
+                pg.emit_shadow_update();
                 check_blk
             }
             ast::ProcedureKind::Final => {
@@ -316,6 +338,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     .set_name(endtimes, "endtimes".to_string());
                 pg.builder.ins().wait_time(body_blk, endtimes, vec![]);
                 pg.builder.append_to(body_blk);
+                pg.emit_shadow_update();
                 entry_blk // This block is ignored for final blocks
             }
             _ => entry_blk,
@@ -448,9 +471,13 @@ struct UnitGenerator<'a, 'gcx, C, UB> {
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
     /// The MIR lvalues emitted into the unit.
+    #[allow(dead_code)]
     interned_lvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
     /// The MIR rvalues emitted into the unit.
     interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
+    /// The shadow variables introduced to handle signals which are both read
+    /// and written in a process.
+    shadows: HashMap<NodeId, llhd::ir::Value>,
 }
 
 impl<'a, 'gcx, C, UB> Deref for UnitGenerator<'a, 'gcx, C, UB> {
@@ -520,7 +547,7 @@ where
             // TODO(fschuiki): The following should happen in a lowering of the
             // assignment to its own MIR.
             let rhs = mir::lower::rvalue::cast_to_type(self.cx, rhs, env, lhs.ty);
-            let lhs = self.emit_mir_lvalue(lhs)?;
+            let lhs = self.emit_mir_lvalue(lhs)?.0;
             let rhs = self.emit_mir_rvalue(rhs)?;
             let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
             let one_epsilon = self.builder.ins().const_time(one_epsilon);
@@ -839,7 +866,11 @@ where
     fn emit_mir_rvalue_uninterned(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         match mir.kind {
             mir::RvalueKind::Var(id) => {
-                let value = self.emitted_value(id).clone();
+                let value = self
+                    .shadows
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or_else(|| self.emitted_value(id));
                 Ok(match *self.llhd_type(value) {
                     llhd::SignalType(_) => {
                         let value = self.builder.ins().prb(value);
@@ -860,7 +891,11 @@ where
             }
 
             mir::RvalueKind::Port(id) => {
-                let value = self.emitted_value(id).clone();
+                let value = self
+                    .shadows
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or_else(|| self.emitted_value(id));
                 let value = self.builder.ins().prb(value);
                 self.builder
                     .dfg_mut()
@@ -1146,36 +1181,49 @@ where
     /// Emit the code for an lvalue.
     fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         let mir = self.mir_lvalue(expr_id, env);
-        self.emit_mir_lvalue(mir)
+        self.emit_mir_lvalue(mir).map(|(x, _)| x)
     }
 
     /// Emit the code for an MIR lvalue.
-    fn emit_mir_lvalue(&mut self, mir: &mir::Lvalue<'gcx>) -> Result<llhd::ir::Value> {
-        if let Some(x) = self.interned_lvalues.get(&mir.id) {
-            x.clone()
-        } else {
-            let x = self.emit_mir_lvalue_uninterned(mir);
-            // self.interned_lvalues.insert(mir.id, x.clone());
-            x
-        }
+    fn emit_mir_lvalue(
+        &mut self,
+        mir: &mir::Lvalue<'gcx>,
+    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+        // if let Some(x) = self.interned_lvalues.get(&mir.id) {
+        //     x.clone()
+        // } else {
+        let x = self.emit_mir_lvalue_uninterned(mir);
+        // self.interned_lvalues.insert(mir.id, x.clone());
+        x
+        // }
     }
 
     /// Emit the code for an MIR lvalue.
-    fn emit_mir_lvalue_uninterned(&mut self, mir: &mir::Lvalue<'gcx>) -> Result<llhd::ir::Value> {
+    ///
+    /// The first returned value is the actually targeted lvalue. The second is
+    /// a potential shadow variable that must be kept up-to-date.
+    fn emit_mir_lvalue_uninterned(
+        &mut self,
+        mir: &mir::Lvalue<'gcx>,
+    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
         match mir.kind {
             // Variables and ports trivially return their declaration value.
             // This is either the `var` or `sig` instruction which introduced
             // them.
-            mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => {
-                Ok(self.emitted_value(id).clone())
-            }
+            mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => Ok((
+                self.emitted_value(id).clone(),
+                self.shadows.get(&id).cloned(),
+            )),
 
             // Member accesses simply look up their inner lvalue and extract the
             // signal or pointer to the respective subfield.
             mir::LvalueKind::Member { value, field } => {
                 let target = self.emit_mir_lvalue(value)?;
-                let value = self.builder.ins().ext_field(target, field);
-                Ok(value)
+                let value_real = self.builder.ins().ext_field(target.0, field);
+                let value_shadow = target
+                    .1
+                    .map(|target| self.builder.ins().ext_field(target, field));
+                Ok((value_real, value_shadow))
             }
 
             // Index accesses shift and extract the accessed slice as a signal
@@ -1185,19 +1233,34 @@ where
                 base,
                 length,
             } => {
-                let target = self.emit_mir_lvalue(value)?;
+                let (target_real, target_shadow) = self.emit_mir_lvalue(value)?;
                 let base = self.emit_mir_rvalue(base)?;
-                let hidden = self.emit_zero_for_type(&self.llhd_type(target));
-                let shifted = self.builder.ins().shr(target, hidden, base);
+                let shifted_real = {
+                    let hidden = self.emit_zero_for_type(&self.llhd_type(target_real));
+                    self.builder.ins().shr(target_real, hidden, base)
+                };
+                let shifted_shadow = target_shadow.map(|target| {
+                    let hidden = self.emit_zero_for_type(&self.llhd_type(target));
+                    self.builder.ins().shr(target, hidden, base)
+                });
                 if value.ty.is_array() {
                     if length == 0 {
-                        Ok(self.builder.ins().ext_field(shifted, 0))
+                        Ok((
+                            self.builder.ins().ext_field(shifted_real, 0),
+                            shifted_shadow.map(|s| self.builder.ins().ext_field(s, 0)),
+                        ))
                     } else {
-                        Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                        Ok((
+                            self.builder.ins().ext_slice(shifted_real, 0, length),
+                            shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+                        ))
                     }
                 } else {
                     let length = std::cmp::max(1, length);
-                    Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                    Ok((
+                        self.builder.ins().ext_slice(shifted_real, 0, length),
+                        shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+                    ))
                 }
             }
 
@@ -1323,11 +1386,11 @@ where
                     hir::AssignKind::Nonblock => {
                         let delay = llhd::ConstTime::new(num::zero(), 1, 0);
                         let delay_const = self.builder.ins().const_time(delay);
-                        self.builder.ins().drv(lhs_lv, rhs_rv, delay_const);
+                        self.builder.ins().drv(lhs_lv.0, rhs_rv, delay_const);
                     }
                     hir::AssignKind::NonblockDelay(delay) => {
                         let delay = self.emit_rvalue(delay, env)?;
-                        self.builder.ins().drv(lhs_lv, rhs_rv, delay);
+                        self.builder.ins().drv(lhs_lv.0, rhs_rv, delay);
                     }
                     _ => {
                         error!("{:#?}", hir);
@@ -1346,6 +1409,7 @@ where
                 let duration = self.emit_rvalue(expr_id, env)?.into();
                 self.builder.ins().wait_time(resume_blk, duration, vec![]);
                 self.builder.append_to(resume_blk);
+                self.emit_shadow_update();
                 self.emit_stmt(stmt, env)?;
             }
             hir::StmtKind::Timed {
@@ -1379,6 +1443,7 @@ where
                 }
                 self.builder.ins().wait(check_blk, trigger_on);
                 self.builder.append_to(check_blk);
+                self.emit_shadow_update();
 
                 // Check if any of the events happened and produce a single bit
                 // value that represents this.
@@ -1433,6 +1498,7 @@ where
                 }
                 self.builder.ins().wait(trigger_blk, trigger_on);
                 self.builder.append_to(trigger_blk);
+                self.emit_shadow_update();
 
                 // Emit the actual statement.
                 self.emit_stmt(stmt, env)?;
@@ -1720,27 +1786,41 @@ where
     /// Emit a blocking assignment to a variable or signal.
     fn emit_blocking_assign_llhd(
         &mut self,
-        lvalue: llhd::ir::Value,
+        lvalue: (llhd::ir::Value, Option<llhd::ir::Value>),
         rvalue: llhd::ir::Value,
     ) -> Result<()> {
-        let lty = self.llhd_type(lvalue);
-        match *lty {
-            llhd::SignalType(..) => {
-                let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
-                let one_epsilon = self.builder.ins().const_time(one_epsilon);
-                self.builder.ins().drv(lvalue, rvalue, one_epsilon);
-                // Emit a wait statement to allow for the assignment to take
-                // effect.
-                let blk = self.add_nameless_block();
-                self.builder.ins().wait_time(blk, one_epsilon, vec![]);
-                self.builder.append_to(blk);
+        let mut assign = |lvalue| {
+            let lty = self.llhd_type(lvalue);
+            match *lty {
+                llhd::SignalType(..) => {
+                    let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
+                    let one_epsilon = self.builder.ins().const_time(one_epsilon);
+                    self.builder.ins().drv(lvalue, rvalue, one_epsilon);
+                    // // Emit a wait statement to allow for the assignment to take
+                    // // effect.
+                    // let blk = self.add_nameless_block();
+                    // self.builder.ins().wait_time(blk, one_epsilon, vec![]);
+                    // self.builder.append_to(blk);
+                }
+                llhd::PointerType(..) => {
+                    self.builder.ins().st(lvalue, rvalue);
+                }
+                ref t => panic!("value of type `{}` cannot be driven", t),
             }
-            llhd::PointerType(..) => {
-                self.builder.ins().st(lvalue, rvalue);
-            }
-            ref t => panic!("value of type `{}` cannot be driven", t),
+        };
+        assign(lvalue.0);
+        if let Some(lv) = lvalue.1 {
+            assign(lv);
         }
         Ok(())
+    }
+
+    /// Emit the code to update the shadow variables of signals.
+    fn emit_shadow_update(&mut self) {
+        for (id, &shadow) in &self.shadows {
+            let value = self.builder.ins().prb(self.values[id]);
+            self.builder.ins().st(shadow, value);
+        }
     }
 }
 
