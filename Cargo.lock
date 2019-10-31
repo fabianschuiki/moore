@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "moore"
-version = "0.5.0"
+version = "0.6.0-dev"
 dependencies = [
  "bincode 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
