@@ -297,10 +297,10 @@ fn const_expr<'gcx>(
                 ValueKind::Int(ref arg, ..) => arg,
                 _ => unreachable!(),
             };
-            let value: BigInt = if arg_int <= &num::zero() {
-                num::zero()
+            let value = if arg_int <= &num::zero() {
+                BigInt::zero()
             } else {
-                arg_int.bits().into()
+                BigInt::from((arg_int - BigInt::one()).bits())
             };
             Ok(cx.intern_value(make_int(arg_val.ty, value)))
         }
