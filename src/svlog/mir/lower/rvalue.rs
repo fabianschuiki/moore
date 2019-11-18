@@ -1751,10 +1751,12 @@ fn lower_binary_logic<'gcx>(
 /// Map a reduction operator to MIR.
 fn lower_reduction<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+    _ty: Type<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
+    let inner_ty = builder.cx.need_operation_type(builder.expr, builder.env);
+
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);
 
@@ -1770,7 +1772,7 @@ fn lower_reduction<'gcx>(
     };
 
     // Assemble the node.
-    make_reduction(builder, ty, op, negate, arg)
+    make_reduction(builder, inner_ty, op, negate, arg)
 }
 
 /// Map a reduction operator to MIR.
@@ -1781,24 +1783,11 @@ fn make_reduction<'gcx>(
     negate: bool,
     arg: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let inner_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{}` cannot be reduced", ty)).span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
-
     // Cast the argument.
-    let arg = lower_implicit_cast(builder, arg, inner_ty);
+    let arg = lower_implicit_cast(builder, arg, ty);
 
     // Assemble the node.
-    let bit_ty = inner_ty.get_value_domain().unwrap().bit_type();
+    let bit_ty = ty.get_value_domain().unwrap().bit_type();
     let value = builder.build(bit_ty, RvalueKind::Reduction { op, arg });
     if negate {
         builder.build(
