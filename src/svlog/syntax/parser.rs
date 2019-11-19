@@ -2163,7 +2163,7 @@ fn parse_expr_suffix(
     // Try to parse binary operations.
     if let Some(op) = as_binary_operator(tkn) {
         let prec = op.get_precedence();
-        if precedence <= prec {
+        if precedence < prec {
             p.bump();
             let rhs = parse_expr_prec(p, prec)?;
             let expr = Expr {

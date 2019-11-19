@@ -297,7 +297,7 @@ fn const_expr<'gcx>(
                 ValueKind::Int(ref arg, ..) => arg,
                 _ => unreachable!(),
             };
-            let value = if arg_int <= &num::zero() {
+            let value = if arg_int <= &BigInt::one() {
                 BigInt::zero()
             } else {
                 BigInt::from((arg_int - BigInt::one()).bits())
