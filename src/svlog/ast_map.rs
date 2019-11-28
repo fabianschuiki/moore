@@ -56,6 +56,8 @@ pub enum AstNode<'ast> {
     TypeOrExpr(&'ast ast::TypeOrExpr),
     /// A variable declaration.
     VarDecl(&'ast ast::VarDeclName, &'ast ast::VarDecl, NodeId),
+    /// A net declaration.
+    NetDecl(&'ast ast::VarDeclName, &'ast ast::NetDecl, NodeId),
     /// A procedure.
     Proc(&'ast ast::Procedure),
     /// A statement.
@@ -95,6 +97,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::ValueParam(x, _) => x.span(),
             AstNode::TypeOrExpr(x) => x.span(),
             AstNode::VarDecl(_, x, _) => x.span(),
+            AstNode::NetDecl(_, x, _) => x.span(),
             AstNode::Proc(x) => x.span(),
             AstNode::Stmt(x) => x.span(),
             AstNode::EventExpr(x) => x.span(),
@@ -122,6 +125,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::ValueParam(_, x) => x.human_span(),
             AstNode::TypeOrExpr(x) => x.human_span(),
             AstNode::VarDecl(x, _, _) => x.human_span(),
+            AstNode::NetDecl(x, _, _) => x.human_span(),
             AstNode::Proc(x) => x.human_span(),
             AstNode::Stmt(x) => x.human_span(),
             AstNode::EventExpr(x) => x.human_span(),
@@ -151,6 +155,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::ValueParam(_, x) => x.desc(),
             AstNode::TypeOrExpr(x) => x.desc(),
             AstNode::VarDecl(x, _, _) => x.desc(),
+            AstNode::NetDecl(x, _, _) => x.desc(),
             AstNode::Proc(x) => x.desc(),
             AstNode::Stmt(x) => x.desc(),
             AstNode::EventExpr(x) => x.desc(),
@@ -178,6 +183,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::ValueParam(_, x) => x.desc_full(),
             AstNode::TypeOrExpr(x) => x.desc_full(),
             AstNode::VarDecl(x, _, _) => x.desc_full(),
+            AstNode::NetDecl(x, _, _) => x.desc_full(),
             AstNode::Proc(x) => x.desc_full(),
             AstNode::Stmt(x) => x.desc_full(),
             AstNode::EventExpr(x) => x.desc_full(),

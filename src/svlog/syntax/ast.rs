@@ -1197,6 +1197,18 @@ pub struct NetDecl {
     pub names: Vec<VarDeclName>,
 }
 
+impl HasSpan for NetDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for NetDecl {
+    fn desc(&self) -> &'static str {
+        "net declaration"
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum NetKind {
     Vectored,

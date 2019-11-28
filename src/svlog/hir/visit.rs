@@ -198,7 +198,8 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         ExprKind::Builtin(BuiltinCall::Unsupported)
         | ExprKind::IntConst { .. }
         | ExprKind::UnsizedConst(_)
-        | ExprKind::TimeConst(_) => (),
+        | ExprKind::TimeConst(_)
+        | ExprKind::StringConst(_) => (),
         ExprKind::Ident(x) => {
             visitor.visit_ident(x);
         }

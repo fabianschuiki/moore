@@ -538,6 +538,8 @@ pub enum BuiltinType {
     Int,
     Integer,
     LongInt,
+    Time,
+    String,
 }
 
 /// An expression.
@@ -598,6 +600,8 @@ pub enum ExprKind {
     UnsizedConst(char),
     /// A time constant literal.
     TimeConst(BigRational),
+    /// A string constant literal.
+    StringConst(Spanned<Name>),
     /// An identifier.
     Ident(Spanned<Name>),
     /// A unary operator.

@@ -87,7 +87,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             node_id,
         )),
         AstNode::Module(_) => Some(RibKind::Module(HashMap::new())),
-        AstNode::VarDecl(decl, _, _) => Some(RibKind::Normal(
+        AstNode::VarDecl(decl, _, _) | AstNode::NetDecl(decl, _, _) => Some(RibKind::Normal(
             Spanned::new(decl.name, decl.name_span),
             node_id,
         )),

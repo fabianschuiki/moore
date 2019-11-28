@@ -107,6 +107,7 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         // These expressions are have a fully self-determined type.
         hir::ExprKind::IntConst { .. }
         | hir::ExprKind::TimeConst(..)
+        | hir::ExprKind::StringConst(..)
         | hir::ExprKind::Ident(..)
         | hir::ExprKind::Scope(..)
         | hir::ExprKind::Concat(..)
@@ -296,6 +297,10 @@ fn map_type_kind<'gcx>(
         hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(&ty::INT_TYPE),
         hir::TypeKind::Builtin(hir::BuiltinType::Integer) => Ok(&ty::INTEGER_TYPE),
         hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(&ty::LONGINT_TYPE),
+        hir::TypeKind::Builtin(hir::BuiltinType::Time) => Ok(&ty::LONGINT_TYPE), // TODO(fschuiki): Fix this
+        hir::TypeKind::Builtin(hir::BuiltinType::String) => {
+            Ok(cx.mkty_packed_array(1, &ty::BYTE_TYPE))
+        }
         hir::TypeKind::Named(name) => {
             let binding = cx.resolve_upwards_or_error(name, node_id)?;
             Ok(cx.mkty_named(name, (binding, env)))
@@ -465,6 +470,9 @@ fn self_determined_expr_type<'gcx>(
 
         // Time constants are of time type.
         hir::ExprKind::TimeConst(_) => Some(cx.mkty_time()),
+
+        // String literals are of string type.
+        hir::ExprKind::StringConst(_) => Some(cx.mkty_packed_array(1, &ty::BYTE_TYPE)),
 
         // Identifiers and scoped identifiers inherit their type from the bound
         // node.
@@ -958,8 +966,12 @@ pub(crate) fn type_context<'gcx>(
             }
         }
         // TODO(fschuiki): Ports
-        // TODO(fschuiki): Variable declarations
-        // TODO(fschuiki): Parameters
+        HirNode::VarDecl(v) if v.init == Some(onto) => {
+            Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
+        }
+        HirNode::ValueParam(v) if v.default == Some(onto) => {
+            Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
+        }
         // TODO(fschuiki): Statements
         _ => None,
     }

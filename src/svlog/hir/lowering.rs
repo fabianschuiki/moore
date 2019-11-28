@@ -129,9 +129,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 name: Spanned::new(decl.name.name, decl.name.span),
                 span: Span::union(param.span, decl.span),
                 local: param.local,
-                default: decl.ty.as_ref().map(|ty| {
-                    cx.map_ast_with_parent(AstNode::Type(ty), cx.parent_node_id(node_id).unwrap())
-                }),
+                default: decl
+                    .ty
+                    .as_ref()
+                    .map(|ty| cx.map_ast_with_parent(AstNode::Type(ty), node_id)),
             };
             Ok(HirNode::TypeParam(cx.arena().alloc_hir(hir)))
         }
@@ -141,13 +142,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 name: Spanned::new(decl.name.name, decl.name.span),
                 span: Span::union(param.span, decl.span),
                 local: param.local,
-                ty: cx.map_ast_with_parent(
-                    AstNode::Type(&decl.ty),
-                    cx.parent_node_id(node_id).unwrap(),
-                ),
-                default: decl.expr.as_ref().map(|expr| {
-                    cx.map_ast_with_parent(AstNode::Expr(expr), cx.parent_node_id(node_id).unwrap())
-                }),
+                ty: cx.map_ast_with_parent(AstNode::Type(&decl.ty), node_id),
+                default: decl
+                    .expr
+                    .as_ref()
+                    .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id)),
             };
             Ok(HirNode::ValueParam(cx.arena().alloc_hir(hir)))
         }
@@ -160,7 +159,21 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 init: name
                     .init
                     .as_ref()
-                    .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), ty)),
+                    .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id)),
+            };
+            Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
+        }
+        AstNode::NetDecl(name, decl, ty) => {
+            // TODO(fschuiki): Map this to something different than a variable.
+            let hir = hir::VarDecl {
+                id: node_id,
+                name: Spanned::new(name.name, name.name_span),
+                span: Span::union(name.span, decl.span),
+                ty: ty,
+                init: name
+                    .init
+                    .as_ref()
+                    .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id)),
             };
             Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
         }
@@ -536,6 +549,9 @@ fn lower_module_block<'gcx>(
             ast::HierarchyItem::VarDecl(ref decl) => {
                 next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
             }
+            ast::HierarchyItem::NetDecl(ref decl) => {
+                next_rib = alloc_net_decl(cx, decl, next_rib, &mut decls);
+            }
             ast::HierarchyItem::Procedure(ref prok) => {
                 let id = cx.map_ast_with_parent(AstNode::Proc(prok), next_rib);
                 next_rib = id;
@@ -624,12 +640,15 @@ fn lower_type<'gcx>(
         ast::ImplicitType => hir::TypeKind::Implicit,
         ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
         ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
+        ast::RegType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
         ast::LogicType => hir::TypeKind::Builtin(hir::BuiltinType::Logic),
         ast::ByteType => hir::TypeKind::Builtin(hir::BuiltinType::Byte),
         ast::ShortIntType => hir::TypeKind::Builtin(hir::BuiltinType::ShortInt),
         ast::IntType => hir::TypeKind::Builtin(hir::BuiltinType::Int),
         ast::IntegerType => hir::TypeKind::Builtin(hir::BuiltinType::Integer),
         ast::LongIntType => hir::TypeKind::Builtin(hir::BuiltinType::LongInt),
+        ast::StringType => hir::TypeKind::Builtin(hir::BuiltinType::String),
+        ast::TimeType => hir::TypeKind::Builtin(hir::BuiltinType::Time),
         ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
         ast::StructType { ref members, .. } => {
             let mut fields = vec![];
@@ -838,6 +857,11 @@ fn lower_expr<'gcx>(
             }
             hir::ExprKind::TimeConst(value)
         }
+
+        ast::LiteralExpr(Lit::Str(value)) => {
+            hir::ExprKind::StringConst(Spanned::new(value, expr.span))
+        }
+
         ast::IdentExpr(ident) => hir::ExprKind::Ident(Spanned::new(ident.name, ident.span)),
         ast::UnaryExpr {
             op,
@@ -1275,6 +1299,23 @@ fn alloc_var_decl<'gcx>(
     next_rib = type_id;
     for name in &decl.names {
         let decl_id = cx.map_ast_with_parent(AstNode::VarDecl(name, decl, type_id), next_rib);
+        next_rib = decl_id;
+        into.push(decl_id);
+    }
+    next_rib
+}
+
+/// Allocate node IDs for a net declaration.
+fn alloc_net_decl<'gcx>(
+    cx: &impl Context<'gcx>,
+    decl: &'gcx ast::NetDecl,
+    mut next_rib: NodeId,
+    into: &mut Vec<NodeId>,
+) -> NodeId {
+    let type_id = cx.map_ast_with_parent(AstNode::Type(&decl.ty), next_rib);
+    next_rib = type_id;
+    for name in &decl.names {
+        let decl_id = cx.map_ast_with_parent(AstNode::NetDecl(name, decl, type_id), next_rib);
         next_rib = decl_id;
         into.push(decl_id);
     }

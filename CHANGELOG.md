@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add support for `x` and `z` bits in literals.
 - Add support for `casex` and `casez` statements.
 - Add shadow variables for blocking assignments.
+- Interpret `reg` type as `logic`.
 
 ### Changed
 - Improved output of `-Vtypes` verbosity option.

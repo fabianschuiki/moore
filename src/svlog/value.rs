@@ -231,6 +231,11 @@ fn const_expr<'gcx>(
         hir::ExprKind::UnsizedConst('0') => Ok(cx.intern_value(make_int(ty, num::zero()))),
         hir::ExprKind::UnsizedConst('1') => Ok(cx.intern_value(make_int(ty, num::one()))),
         hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
+        hir::ExprKind::StringConst(_) => Ok(cx.intern_value(make_array(
+            // TODO(fschuiki): Actually assemble a real string here!
+            cx.mkty_packed_array(1, &ty::BYTE_TYPE),
+            vec![cx.intern_value(make_int(&ty::BYTE_TYPE, num::zero()))],
+        ))),
         hir::ExprKind::Ident(_) | hir::ExprKind::Scope(..) => {
             let binding = cx.resolve_node(expr.id, env)?;
             match cx.constant_value_of(binding, env) {
