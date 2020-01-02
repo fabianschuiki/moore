@@ -1,0 +1,17 @@
+assert_property_statement {
+    `assert` `property` `(` property_spec `)` action_block;
+}
+
+action_block {
+    statement_or_null;
+    (statement)? `else` statement_or_null;
+}
+
+statement_or_null {
+    statement;
+    (attribute_instance)* `;`;
+}
+
+statement {
+    (block_identifier `:`)? (attribute_instance)* statement_item;
+}

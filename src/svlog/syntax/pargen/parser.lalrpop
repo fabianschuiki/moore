@@ -1,0 +1,29 @@
+#![allow(deprecated)]
+use crate::ast;
+
+grammar;
+
+pub Grammar: ast::Grammar = {
+    <Nonterminal> => { let mut g = ast::Grammar::default(); g.nts.push(<>); g },
+    <g:Grammar> <r:Nonterminal> => { let mut g = g; g.nts.push(r); g },
+};
+
+Nonterminal: ast::Nonterminal = <name:Ident> "{" <prods:Production*> "}" => {
+    ast::Nonterminal { name: name.to_string(), prods }
+};
+
+Production: ast::Production = <Symbol*> ";" => {
+    ast::Production { syms: <> }
+};
+
+Symbol: ast::Symbol = {
+    <Ident> => ast::Symbol::Token(<>.to_string()),
+    "(" <Symbol*> ")" "?" => ast::Symbol::Maybe(<>),
+    "(" <Symbol*> ")" "*" => ast::Symbol::Any(<>),
+    "(" <Symbol*> ")" "+" => ast::Symbol::Some(<>),
+}
+
+Ident = {
+    r"[a-zA-Z0-9_]+",
+    r"`[^`]+`",
+};
