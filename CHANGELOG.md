@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix parsing of delays on net declarations.
 - Fix parsing of unparenthesized identifiers as delay value (following `#`).
 - Fix parsing of DPI imports.
+- Fix parsing of elaboration system tasks.
 
 ## 0.5.0 - 2019-10-24
 ### Added

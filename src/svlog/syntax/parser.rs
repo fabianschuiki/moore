@@ -1082,6 +1082,9 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
             p.bump();
             return Ok(HierarchyItem::Dummy);
         }
+
+        // Elaboration system tasks.
+        SysIdent(..) => return parse_elab_system_task(p).map(|_| HierarchyItem::Dummy),
         _ => (),
     }
 
@@ -1097,6 +1100,18 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
         parse_var_decl(p).map(|d| HierarchyItem::VarDecl(d))
     });
     pp.finish(p, "hierarchy item")
+}
+
+fn parse_elab_system_task(p: &mut AbstractParser) -> ReportedResult<()> {
+    let mut span = p.peek(0).1;
+    let name = match p.peek(0).0 {
+        SysIdent(name) => name,
+        _ => unreachable!(),
+    };
+    p.recover_balanced(&[Semicolon], true);
+    span.expand(p.last_span());
+    p.add_diag(DiagBuilder2::warning("unsupported elaboration system task").span(span));
+    Ok(())
 }
 
 fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
