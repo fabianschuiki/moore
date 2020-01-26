@@ -1,6 +1,6 @@
 [package]
 name = "moore-svlog-syntax"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
@@ -12,7 +12,7 @@ license = "Apache-2.0 OR MIT"
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../../common", version = "0.5.0" }
+moore-common = { path = "../../common", version = "0.6.0" }
 rustc-serialize = "0.3.22"
 bincode = "0.6.1"
 slog = "2.0.12"
