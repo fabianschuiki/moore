@@ -5065,10 +5065,40 @@ fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
 /// ```text
 /// "import" package_ident "::" "*" ";"
 /// "import" package_ident "::" ident ";"
+/// "import" string ["context"|"pure"] [ident "="] subroutine_prototype ";"
 /// ```
 fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Import))?;
+
+    // Handle the DPI import case.
+    if let Literal(Lit::Str(spec)) = p.peek(0).0 {
+        let spec = Spanned::new(spec, p.peek(0).1);
+        p.bump();
+        let property = if p.try_eat(Keyword(Kw::Context)) {
+            ()
+        } else if p.try_eat(Keyword(Kw::Pure)) {
+            ()
+        } else {
+            ()
+        };
+        let cident = if p.peek(1).0 == Operator(Op::Assign) {
+            let (n, sp) = p.eat_ident("C identifier")?;
+            p.require_reported(Operator(Op::Assign))?;
+            Some(Spanned::new(n, sp))
+        } else {
+            None
+        };
+        let proto = parse_subroutine_prototype(p)?;
+        // TODO: Don't just discard the imported DPI magic!
+        span.expand(p.last_span());
+        p.add_diag(DiagBuilder2::warning("unsupported DPI import").span(span));
+        return Ok(ImportDecl {
+            span: span,
+            items: vec![],
+        });
+    }
+
     let items = comma_list_nonempty(p, Semicolon, "import item", |p| {
         // package_ident "::" ident
         // package_ident "::" "*"
