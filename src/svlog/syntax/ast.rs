@@ -1193,7 +1193,7 @@ pub struct NetDecl {
     pub strength: Option<NetStrength>,
     pub kind: NetKind,
     pub ty: Type,
-    pub delay: Option<Expr>,
+    pub delay: Option<DelayControl>,
     pub names: Vec<VarDeclName>,
 }
 

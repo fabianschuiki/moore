@@ -4976,17 +4976,9 @@ fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
     let (ty, (delay, names)) = pp.finish(p, "explicit or implicit type")?;
 
     // This function handles parsing of everything after the type.
-    fn tail(p: &mut AbstractParser) -> ReportedResult<(Option<Expr>, Vec<VarDeclName>)> {
+    fn tail(p: &mut AbstractParser) -> ReportedResult<(Option<DelayControl>, Vec<VarDeclName>)> {
         // Parse the optional delay.
-        let delay = if p.try_eat(Hashtag) {
-            let q = p.last_span();
-            p.add_diag(
-                DiagBuilder2::error("Don't know how to parse delays on net declarations").span(q),
-            );
-            return Err(());
-        } else {
-            None
-        };
+        let delay = try_delay_control(p)?;
 
         // Parse the names and assignments.
         let names = comma_list_nonempty(
