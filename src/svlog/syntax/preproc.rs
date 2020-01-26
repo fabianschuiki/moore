@@ -350,12 +350,16 @@ impl<'a> Preprocessor<'a> {
                 // Depending on the directive, modify the define conditional
                 // stack.
                 match dir {
-                    Directive::Ifdef => self.defcond_stack.push(if exists {
+                    Directive::Ifdef => self.defcond_stack.push(if self.is_inactive() {
+                        Defcond::Done
+                    } else if exists {
                         Defcond::Enabled
                     } else {
                         Defcond::Disabled
                     }),
-                    Directive::Ifndef => self.defcond_stack.push(if exists {
+                    Directive::Ifndef => self.defcond_stack.push(if self.is_inactive() {
+                        Defcond::Done
+                    } else if exists {
                         Defcond::Disabled
                     } else {
                         Defcond::Enabled
@@ -364,13 +368,15 @@ impl<'a> Preprocessor<'a> {
                         match self.defcond_stack.pop() {
                             Some(Defcond::Done) |
                             Some(Defcond::Enabled) => self.defcond_stack.push(Defcond::Done),
-                            Some(Defcond::Disabled) => {
-                                if exists {
-                                    self.defcond_stack.push(Defcond::Enabled);
+                            Some(Defcond::Disabled) => self.defcond_stack.push(
+                                if self.is_inactive() {
+                                    Defcond::Done
+                                } else if exists {
+                                    Defcond::Enabled
                                 } else {
-                                    self.defcond_stack.push(Defcond::Disabled);
+                                    Defcond::Disabled
                                 }
-                            },
+                            ),
                             None => return Err(DiagBuilder2::fatal("found `elsif without any preceeding `ifdef, `ifndef, or `elsif directive").span(span))
                         };
                     }
