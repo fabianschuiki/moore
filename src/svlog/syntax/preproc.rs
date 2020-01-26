@@ -20,7 +20,7 @@ pub struct Preprocessor<'a> {
     /// Keeping these around ensures that all emitted tokens remain valid (and
     /// point to valid memory locations) at least until the preprocessor is
     /// dropped.
-    contents: Vec<Rc<SourceContent>>,
+    contents: Vec<Rc<dyn SourceContent>>,
     /// The current token, or None if either the end of the stream has been
     /// encountered, or at the beginning when no token has been read yet.
     token: Option<TokenAndSpan>,
@@ -45,7 +45,7 @@ impl<'a> Preprocessor<'a> {
         macro_defs: &'a [(&'a str, Option<&'a str>)],
     ) -> Preprocessor<'a> {
         let content = source.get_content();
-        let content_unbound = unsafe { &*(content.as_ref() as *const SourceContent) };
+        let content_unbound = unsafe { &*(content.as_ref() as *const dyn SourceContent) };
         let iter = content_unbound.iter();
         let macro_defs = macro_defs
             .into_iter()
@@ -177,7 +177,7 @@ impl<'a> Preprocessor<'a> {
                 };
 
                 let content = included_source.get_content();
-                let content_unbound = unsafe { &*(content.as_ref() as *const SourceContent) };
+                let content_unbound = unsafe { &*(content.as_ref() as *const dyn SourceContent) };
                 let iter = content_unbound.iter();
                 self.contents.push(content);
                 self.stack.push(Stream {

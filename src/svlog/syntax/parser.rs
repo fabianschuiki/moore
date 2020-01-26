@@ -307,9 +307,9 @@ impl<'a> Parser<'a> {
 /// Parses the opening delimiter, calls the `inner` function, and parses the
 /// closing delimiter. Properly recovers to and including the closing
 /// delimiter if the `inner` function throws an error.
-fn flanked<R, F>(p: &mut AbstractParser, delim: DelimToken, mut inner: F) -> ReportedResult<R>
+fn flanked<R, F>(p: &mut dyn AbstractParser, delim: DelimToken, mut inner: F) -> ReportedResult<R>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
 {
     p.require_reported(OpenDelim(delim))?;
     match inner(p) {
@@ -332,12 +332,12 @@ where
 /// including the closing delimiter if the `inner` function throws an error.
 /// If the opening delimiter is not present, returns `None`.
 fn try_flanked<R, F>(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     delim: DelimToken,
     inner: F,
 ) -> ReportedResult<Option<R>>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
 {
     if p.peek(0).0 == OpenDelim(delim) {
         flanked(p, delim, inner).map(|r| Some(r))
@@ -349,13 +349,13 @@ where
 /// Parse a comma-separated list of items, until a terminator token has been
 /// reached. The terminator is not consumed.
 fn comma_list<R, F, T>(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     mut term: T,
     msg: &str,
     mut item: F,
 ) -> ReportedResult<Vec<R>>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
     T: Predicate,
 {
     let mut v = Vec::new();
@@ -395,13 +395,13 @@ where
 
 /// Same as `comma_list`, but at least one item is required.
 fn comma_list_nonempty<R, F, T>(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     term: T,
     msg: &str,
     item: F,
 ) -> ReportedResult<Vec<R>>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
     T: Predicate,
 {
     let q = p.peek(0).1;
@@ -414,9 +414,13 @@ where
     }
 }
 
-fn repeat_until<R, F>(p: &mut AbstractParser, term: Token, mut item: F) -> ReportedResult<Vec<R>>
+fn repeat_until<R, F>(
+    p: &mut dyn AbstractParser,
+    term: Token,
+    mut item: F,
+) -> ReportedResult<Vec<R>>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
 {
     let mut v = Vec::new();
     while p.peek(0).0 != term && p.peek(0).0 != Eof {
@@ -431,9 +435,9 @@ where
     Ok(v)
 }
 
-fn recovered<R, F>(p: &mut AbstractParser, term: Token, mut item: F) -> ReportedResult<R>
+fn recovered<R, F>(p: &mut dyn AbstractParser, term: Token, mut item: F) -> ReportedResult<R>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
 {
     match item(p) {
         Ok(x) => Ok(x),
@@ -448,9 +452,9 @@ where
 /// untouched. If it succeeds, `p` is in the same state as if `parse` was called
 /// on it directly. Use a ParallelParser for better error reporting.
 #[allow(dead_code)]
-fn r#try<R, F>(p: &mut AbstractParser, mut parse: F) -> Option<R>
+fn r#try<R, F>(p: &mut dyn AbstractParser, mut parse: F) -> Option<R>
 where
-    F: FnMut(&mut AbstractParser) -> ReportedResult<R>,
+    F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R>,
 {
     let mut bp = BranchParser::new(p);
     match parse(&mut bp) {
@@ -465,7 +469,7 @@ where
 /// Consumes a Ident or EscIdent token, wrapping it in a ast::Identifier with a
 /// dumy ID assigned.
 fn parse_identifier<M: std::fmt::Display>(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     msg: M,
 ) -> ReportedResult<ast::Identifier> {
     let (tkn, span) = p.peek(0);
@@ -488,7 +492,7 @@ fn parse_identifier<M: std::fmt::Display>(
     }
 }
 
-fn try_identifier(p: &mut AbstractParser) -> ReportedResult<Option<ast::Identifier>> {
+fn try_identifier(p: &mut dyn AbstractParser) -> ReportedResult<Option<ast::Identifier>> {
     let (tkn, span) = p.peek(0);
     match tkn {
         Ident(n) | EscIdent(n) => {
@@ -504,17 +508,17 @@ fn try_identifier(p: &mut AbstractParser) -> ReportedResult<Option<ast::Identifi
 }
 
 trait Predicate {
-    fn matches(&mut self, _: &mut AbstractParser) -> bool;
-    fn recover(&mut self, _: &mut AbstractParser, consume: bool);
+    fn matches(&mut self, _: &mut dyn AbstractParser) -> bool;
+    fn recover(&mut self, _: &mut dyn AbstractParser, consume: bool);
     fn describe(&self) -> String;
 }
 
 impl Predicate for Token {
-    fn matches(&mut self, p: &mut AbstractParser) -> bool {
+    fn matches(&mut self, p: &mut dyn AbstractParser) -> bool {
         p.peek(0).0 == *self
     }
 
-    fn recover(&mut self, p: &mut AbstractParser, consume: bool) {
+    fn recover(&mut self, p: &mut dyn AbstractParser, consume: bool) {
         p.recover_balanced(&[*self], consume)
     }
 
@@ -523,20 +527,23 @@ impl Predicate for Token {
     }
 }
 
-struct FuncPredicate<M: FnMut(&mut AbstractParser) -> bool, R: FnMut(&mut AbstractParser, bool)> {
+struct FuncPredicate<
+    M: FnMut(&mut dyn AbstractParser) -> bool,
+    R: FnMut(&mut dyn AbstractParser, bool),
+> {
     match_func: M,
     recover_func: R,
     desc: &'static str,
 }
 
-impl<M: FnMut(&mut AbstractParser) -> bool, R: FnMut(&mut AbstractParser, bool)> Predicate
+impl<M: FnMut(&mut dyn AbstractParser) -> bool, R: FnMut(&mut dyn AbstractParser, bool)> Predicate
     for FuncPredicate<M, R>
 {
-    fn matches(&mut self, p: &mut AbstractParser) -> bool {
+    fn matches(&mut self, p: &mut dyn AbstractParser) -> bool {
         (self.match_func)(p)
     }
 
-    fn recover(&mut self, p: &mut AbstractParser, consume: bool) {
+    fn recover(&mut self, p: &mut dyn AbstractParser, consume: bool) {
         (self.recover_func)(p, consume)
     }
 
@@ -581,7 +588,7 @@ fn parse_source_text(p: &mut Parser) -> Root {
     root
 }
 
-fn parse_time_units(p: &mut AbstractParser) -> ReportedResult<Timeunit> {
+fn parse_time_units(p: &mut dyn AbstractParser) -> ReportedResult<Timeunit> {
     let mut unit = None;
     let mut prec = None;
     while p.peek(0).0 == Keyword(Kw::Timeunit) || p.peek(0).0 == Keyword(Kw::Timeprecision) {
@@ -604,7 +611,7 @@ fn parse_time_units(p: &mut AbstractParser) -> ReportedResult<Timeunit> {
     Ok(Timeunit { unit, prec })
 }
 
-fn parse_time_literal(p: &mut AbstractParser) -> ReportedResult<Spanned<Lit>> {
+fn parse_time_literal(p: &mut dyn AbstractParser) -> ReportedResult<Spanned<Lit>> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         Literal(lit @ Time(..)) => {
@@ -737,7 +744,7 @@ fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
     result
 }
 
-fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<ParamDecl>> {
+fn parse_parameter_port_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<ParamDecl>> {
     let mut local = false;
 
     flanked(p, Paren, |p| {
@@ -787,7 +794,10 @@ fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Param
                     tail(p, ty)
                 });
 
-                fn tail(p: &mut AbstractParser, ty: Type) -> ReportedResult<ast::ParamValueDecl> {
+                fn tail(
+                    p: &mut dyn AbstractParser,
+                    ty: Type,
+                ) -> ReportedResult<ast::ParamValueDecl> {
                     let mut span = p.peek(0).1;
                     let name = parse_identifier(p, "parameter name")?;
                     let (dims, _) = parse_optional_dimensions(p)?;
@@ -820,7 +830,7 @@ fn parse_parameter_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Param
     })
 }
 
-fn parse_constant_expr(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_constant_expr(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     parse_expr(p)?;
     Ok(())
     // let (tkn, span) = p.peek(0);
@@ -930,7 +940,7 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
     result
 }
 
-fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
+fn parse_package_decl(p: &mut dyn AbstractParser) -> ReportedResult<PackageDecl> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Package))?;
     let result = recovered(p, Keyword(Kw::Endpackage), |p| {
@@ -980,7 +990,7 @@ fn parse_package_decl(p: &mut AbstractParser) -> ReportedResult<PackageDecl> {
     result
 }
 
-fn parse_program_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_program_decl(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     p.require_reported(Keyword(Kw::Program))?;
     let result = recovered(p, Keyword(Kw::Endprogram), |p| {
         let q = p.peek(0).1;
@@ -991,7 +1001,7 @@ fn parse_program_decl(p: &mut AbstractParser) -> ReportedResult<()> {
     result
 }
 
-fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> {
+fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyItem> {
     // Consume optional leading label.
     if p.is_ident() && p.peek(1).0 == Colon {
         p.bump();
@@ -1102,7 +1112,7 @@ fn parse_hierarchy_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem>
     pp.finish(p, "hierarchy item")
 }
 
-fn parse_elab_system_task(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_elab_system_task(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     let mut span = p.peek(0).1;
     let name = match p.peek(0).0 {
         SysIdent(name) => name,
@@ -1114,7 +1124,7 @@ fn parse_elab_system_task(p: &mut AbstractParser) -> ReportedResult<()> {
     Ok(())
 }
 
-fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_localparam_decl(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     p.require_reported(Keyword(Kw::Localparam))?;
     // TODO: Parse data type or implicit type.
 
@@ -1167,7 +1177,7 @@ fn parse_localparam_decl(p: &mut AbstractParser) -> ReportedResult<()> {
     Ok(())
 }
 
-fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
+fn parse_parameter_decl(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     p.require_reported(Keyword(Kw::Parameter))?;
 
     // Branch to try the explicit and implicit type version.
@@ -1182,7 +1192,7 @@ fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
     });
     let (ty, ()) = pp.finish(p, "explicit or implicit type")?;
 
-    fn tail(p: &mut AbstractParser) -> ReportedResult<()> {
+    fn tail(p: &mut dyn AbstractParser) -> ReportedResult<()> {
         let names = parse_parameter_names(p)?;
         p.require_reported(Semicolon)?;
         Ok(())
@@ -1191,7 +1201,7 @@ fn parse_parameter_decl(p: &mut AbstractParser) -> ReportedResult<()> {
     return Ok(());
 }
 
-fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
+fn parse_parameter_names(p: &mut dyn AbstractParser) -> ReportedResult<Vec<()>> {
     let v = comma_list_nonempty(p, Semicolon, "parameter name", |p| {
         // Consume the parameter name and optional dimensions.
         let (name, name_sp) = p.eat_ident("parameter name")?;
@@ -1220,7 +1230,7 @@ fn parse_parameter_names(p: &mut AbstractParser) -> ReportedResult<Vec<()>> {
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportDecl> {
+fn parse_modport_decl(p: &mut dyn AbstractParser) -> ReportedResult<ast::ModportDecl> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Modport))?;
     let items = comma_list_nonempty(p, Semicolon, "modport item", parse_modport_item)?;
@@ -1265,7 +1275,7 @@ fn parse_modport_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportDecl
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<ast::ModportItem> {
+fn parse_modport_item(p: &mut dyn AbstractParser) -> ReportedResult<ast::ModportItem> {
     let mut span = p.peek(0).1;
 
     // Eat the modport item name.
@@ -1339,7 +1349,7 @@ fn parse_modport_item(p: &mut AbstractParser) -> ReportedResult<ast::ModportItem
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_port_decl(p: &mut AbstractParser) -> ReportedResult<ast::ModportPort> {
+fn parse_modport_port_decl(p: &mut dyn AbstractParser) -> ReportedResult<ast::ModportPort> {
     let (tkn, span) = p.peek(0);
 
     // Attempt to parse a simple port introduced by one of the port direction
@@ -1410,7 +1420,7 @@ fn as_port_direction(tkn: Token) -> Option<PortDir> {
 /// it becomes apparent that the explicit type was rather the name of the
 /// variable. In this case, having to parallel parsers, one with explicit and
 /// one with implicit type, can resolve the issue.
-fn parse_data_type(p: &mut AbstractParser) -> ReportedResult<Type> {
+fn parse_data_type(p: &mut dyn AbstractParser) -> ReportedResult<Type> {
     // Try to parse this as an explicit type.
     {
         let mut bp = BranchParser::new(p);
@@ -1428,7 +1438,7 @@ fn parse_data_type(p: &mut AbstractParser) -> ReportedResult<Type> {
     parse_implicit_type(p)
 }
 
-fn parse_explicit_type(p: &mut AbstractParser) -> ReportedResult<Type> {
+fn parse_explicit_type(p: &mut dyn AbstractParser) -> ReportedResult<Type> {
     let mut span = p.peek(0).1;
     let data = parse_type_data(p)?;
     span.expand(p.last_span());
@@ -1436,7 +1446,7 @@ fn parse_explicit_type(p: &mut AbstractParser) -> ReportedResult<Type> {
     parse_type_suffix(p, ty)
 }
 
-fn parse_type_suffix(p: &mut AbstractParser, ty: Type) -> ReportedResult<Type> {
+fn parse_type_suffix(p: &mut dyn AbstractParser, ty: Type) -> ReportedResult<Type> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         // Interfaces allow their internal modports and typedefs to be accessed
@@ -1493,7 +1503,7 @@ fn parse_type_suffix(p: &mut AbstractParser, ty: Type) -> ReportedResult<Type> {
 }
 
 /// Parse an implicit type (`[signing] {dimensions}`).
-fn parse_implicit_type(p: &mut AbstractParser) -> ReportedResult<Type> {
+fn parse_implicit_type(p: &mut dyn AbstractParser) -> ReportedResult<Type> {
     let span = p.peek(0).1.begin().into();
     parse_type_signing_and_dimensions(p, span, ImplicitType)
 }
@@ -1501,7 +1511,7 @@ fn parse_implicit_type(p: &mut AbstractParser) -> ReportedResult<Type> {
 /// Parse the optional signing keyword and packed dimensions that may follow a
 /// data type. Wraps a previously parsed TypeData in a Type struct.
 fn parse_type_signing_and_dimensions(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     mut span: Span,
     data: TypeData,
 ) -> ReportedResult<Type> {
@@ -1531,7 +1541,7 @@ fn parse_type_signing_and_dimensions(
 }
 
 /// Parse the core type data of a type.
-fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
+fn parse_type_data(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         Keyword(Kw::Void) => {
@@ -1649,7 +1659,7 @@ fn parse_type_data(p: &mut AbstractParser) -> ReportedResult<TypeData> {
     }
 }
 
-fn parse_enum_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
+fn parse_enum_type(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
     // Consume the enum keyword.
     p.bump();
 
@@ -1668,7 +1678,7 @@ fn parse_enum_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
     Ok(EnumType(base, names))
 }
 
-fn parse_enum_name(p: &mut AbstractParser) -> ReportedResult<EnumName> {
+fn parse_enum_name(p: &mut dyn AbstractParser) -> ReportedResult<EnumName> {
     // Eat the name.
     let name = parse_identifier(p, "enum name")?;
     let mut span = name.span;
@@ -1692,7 +1702,7 @@ fn parse_enum_name(p: &mut AbstractParser) -> ReportedResult<EnumName> {
     })
 }
 
-fn parse_struct_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
+fn parse_struct_type(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
     let q = p.peek(0).1;
 
     // Consume the "struct", "union", or "union tagged" keywords.
@@ -1739,7 +1749,7 @@ fn parse_struct_type(p: &mut AbstractParser) -> ReportedResult<TypeData> {
     })
 }
 
-fn parse_struct_member(p: &mut AbstractParser) -> ReportedResult<StructMember> {
+fn parse_struct_member(p: &mut dyn AbstractParser) -> ReportedResult<StructMember> {
     let mut span = p.peek(0).1;
 
     // Parse the optional random qualifier.
@@ -1772,7 +1782,7 @@ fn parse_struct_member(p: &mut AbstractParser) -> ReportedResult<StructMember> {
     })
 }
 
-fn parse_signing(p: &mut AbstractParser) -> TypeSign {
+fn parse_signing(p: &mut dyn AbstractParser) -> TypeSign {
     match p.peek(0).0 {
         Keyword(Kw::Signed) => {
             p.bump();
@@ -1786,7 +1796,7 @@ fn parse_signing(p: &mut AbstractParser) -> TypeSign {
     }
 }
 
-fn parse_optional_dimensions(p: &mut AbstractParser) -> ReportedResult<(Vec<TypeDim>, Span)> {
+fn parse_optional_dimensions(p: &mut dyn AbstractParser) -> ReportedResult<(Vec<TypeDim>, Span)> {
     let mut v = Vec::new();
     let mut span;
     if let Some((d, sp)) = try_dimension(p)? {
@@ -1802,7 +1812,7 @@ fn parse_optional_dimensions(p: &mut AbstractParser) -> ReportedResult<(Vec<Type
     Ok((v, span))
 }
 
-fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span)>> {
+fn try_dimension(p: &mut dyn AbstractParser) -> ReportedResult<Option<(TypeDim, Span)>> {
     // Eat the leading opening brackets.
     if !p.try_eat(OpenDelim(Brack)) {
         return Ok(None);
@@ -1876,7 +1886,7 @@ fn try_dimension(p: &mut AbstractParser) -> ReportedResult<Option<(TypeDim, Span
     }
 }
 
-fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<PortConn>> {
+fn parse_list_of_port_connections(p: &mut dyn AbstractParser) -> ReportedResult<Vec<PortConn>> {
     comma_list(p, CloseDelim(Paren), "list of port connections", |p| {
         let mut span = p.peek(0).1;
 
@@ -1913,7 +1923,7 @@ fn parse_list_of_port_connections(p: &mut AbstractParser) -> ReportedResult<Vec<
 
 /// Parse either an expression or a type. Prefers expressions over types.
 fn parse_type_or_expr(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     terminators: &[Token],
 ) -> ReportedResult<ast::TypeOrExpr> {
     let terminators = Vec::from(terminators);
@@ -1931,11 +1941,11 @@ fn parse_type_or_expr(
     pp.finish(p, "type or expression")
 }
 
-fn parse_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
+fn parse_expr(p: &mut dyn AbstractParser) -> ReportedResult<Expr> {
     parse_expr_prec(p, Precedence::Min)
 }
 
-fn parse_expr_prec(p: &mut AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
+fn parse_expr_prec(p: &mut dyn AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
     // TODO: Keep track of the location here and pass that to the
     // parse_expr_first and parse_expr_suffix calls further down. This will
     // allow the spans of those expressions to properly reflect the full span of
@@ -2005,7 +2015,7 @@ fn parse_expr_prec(p: &mut AbstractParser, precedence: Precedence) -> ReportedRe
 }
 
 fn parse_expr_suffix(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     prefix: Expr,
     precedence: Precedence,
 ) -> ReportedResult<Expr> {
@@ -2196,7 +2206,7 @@ fn parse_expr_suffix(
     Ok(prefix)
 }
 
-fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
+fn parse_expr_first(p: &mut dyn AbstractParser, precedence: Precedence) -> ReportedResult<Expr> {
     let first = p.peek(0).1;
 
     // Certain expressions are introduced by an operator or keyword. Handle
@@ -2254,7 +2264,7 @@ fn parse_expr_first(p: &mut AbstractParser, precedence: Precedence) -> ReportedR
     parse_primary_expr(p)
 }
 
-fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
+fn parse_primary_expr(p: &mut dyn AbstractParser) -> ReportedResult<Expr> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         // Primary Literals
@@ -2348,7 +2358,7 @@ fn parse_primary_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
     }
 }
 
-fn parse_pattern_field(p: &mut AbstractParser) -> ReportedResult<PatternField> {
+fn parse_pattern_field(p: &mut dyn AbstractParser) -> ReportedResult<PatternField> {
     let mut span = p.peek(0).1;
 
     // Handle the trivial case of the "default" pattern.
@@ -2422,7 +2432,7 @@ pub enum StreamDir {
     Out,
 }
 
-fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<ExprData> {
+fn parse_concat_expr(p: &mut dyn AbstractParser) -> ReportedResult<ExprData> {
     // Streaming concatenations have a "<<" or ">>" following the opening "{".
     let stream = match p.peek(0).0 {
         Operator(Op::LogicShL) => Some(StreamDir::Out),
@@ -2519,7 +2529,7 @@ fn parse_concat_expr(p: &mut AbstractParser) -> ReportedResult<ExprData> {
     })
 }
 
-fn parse_expr_list(p: &mut AbstractParser) -> ReportedResult<Vec<Expr>> {
+fn parse_expr_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<Expr>> {
     let mut v = Vec::new();
     loop {
         v.push(parse_expr_prec(p, Precedence::Min)?);
@@ -2549,7 +2559,7 @@ fn parse_expr_list(p: &mut AbstractParser) -> ReportedResult<Vec<Expr>> {
 /// "(" expression ")"
 /// "(" expression ":" expression ":" expression ")"
 /// ```
-fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<Expr> {
+fn parse_primary_parenthesis(p: &mut dyn AbstractParser) -> ReportedResult<Expr> {
     let first = parse_expr_prec(p, Precedence::Min)?;
     if p.try_eat(Colon) {
         let typ = parse_expr_prec(p, Precedence::Min)?;
@@ -2577,7 +2587,7 @@ fn parse_primary_parenthesis(p: &mut AbstractParser) -> ReportedResult<Expr> {
 /// expression "+:" expression
 /// expression "-:" expression
 /// ```
-fn parse_range_expr(p: &mut AbstractParser) -> ReportedResult<Expr> {
+fn parse_range_expr(p: &mut dyn AbstractParser) -> ReportedResult<Expr> {
     let mut span = p.peek(0).1;
     let first_expr = parse_expr(p)?;
     let mode = match p.peek(0).0 {
@@ -2690,7 +2700,7 @@ fn as_assign_operator(tkn: Token) -> Option<AssignOp> {
 
 /// Parse a comma-separated list of ports, up to a closing parenthesis. Assumes
 /// that the opening parenthesis has already been consumed.
-fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
+fn parse_port_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<Port>> {
     let mut v = Vec::new();
 
     // In case the port list is empty.
@@ -2731,7 +2741,7 @@ fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
 /// be a reference to the previously parsed port, or `None` if this is the first
 /// port in the list. This is required since ports inherit certain information
 /// from their predecessor if omitted.
-// fn parse_port(p: &mut AbstractParser, prev: Option<&Port>) -> ReportedResult<Port> {
+// fn parse_port(p: &mut dyn AbstractParser, prev: Option<&Port>) -> ReportedResult<Port> {
 //  let mut span = p.peek(0).1;
 
 //  // TODO: Rewrite this function to leverage the branch parser for the
@@ -2864,7 +2874,7 @@ fn parse_port_list(p: &mut AbstractParser) -> ReportedResult<Vec<Port>> {
 // }
 
 /// Parse a single port declaration. These can take a few different forms.
-fn parse_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+fn parse_port(p: &mut dyn AbstractParser) -> ReportedResult<ast::Port> {
     let mut pp = ParallelParser::new();
     pp.add_greedy("interface port", parse_interface_port);
     pp.add_greedy("explicit port", parse_explicit_port);
@@ -2877,7 +2887,7 @@ fn parse_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
 /// ```text
 /// "interface" ["." ident] ident {dimension} ["=" expr]
 /// ```
-fn parse_interface_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+fn parse_interface_port(p: &mut dyn AbstractParser) -> ReportedResult<ast::Port> {
     let mut span = p.peek(0).1;
 
     // Consume the interface keyword.
@@ -2918,7 +2928,7 @@ fn parse_interface_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
 /// ```text
 /// [direction] "." ident "(" [expr] ")"
 /// ```
-fn parse_explicit_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+fn parse_explicit_port(p: &mut dyn AbstractParser) -> ReportedResult<ast::Port> {
     let mut span = p.peek(0).1;
 
     // Consume the optional port direction.
@@ -2954,7 +2964,7 @@ fn parse_explicit_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
 /// ```text
 /// [direction] [net_type|"var"] type_or_implicit ident {dimension} ["=" expr]
 /// ```
-fn parse_named_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+fn parse_named_port(p: &mut dyn AbstractParser) -> ReportedResult<ast::Port> {
     let mut span = p.peek(0).1;
 
     // Consume the optional port direction.
@@ -2991,7 +3001,7 @@ fn parse_named_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
     let (ty, (name, dims, expr)) = pp.finish(p, "explicit or implicit type")?;
 
     fn tail(
-        p: &mut AbstractParser,
+        p: &mut dyn AbstractParser,
     ) -> ReportedResult<(ast::Identifier, Vec<ast::TypeDim>, Option<ast::Expr>)> {
         // Consume the port name.
         let name = parse_identifier(p, "port name")?;
@@ -3026,12 +3036,12 @@ fn parse_named_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
 /// ```text
 /// expr
 /// ```
-fn parse_implicit_port(p: &mut AbstractParser) -> ReportedResult<ast::Port> {
+fn parse_implicit_port(p: &mut dyn AbstractParser) -> ReportedResult<ast::Port> {
     parse_expr(p).map(|e| ast::Port::Implicit(e))
 }
 
 fn parse_parameter_assignments(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
 ) -> ReportedResult<Vec<ast::ParamAssignment>> {
     flanked(p, Paren, |p| {
         comma_list(
@@ -3043,7 +3053,7 @@ fn parse_parameter_assignments(
     })
 }
 
-fn parse_parameter_assignment(p: &mut AbstractParser) -> ReportedResult<ast::ParamAssignment> {
+fn parse_parameter_assignment(p: &mut dyn AbstractParser) -> ReportedResult<ast::ParamAssignment> {
     let mut span = p.peek(0).1;
     let terms = [Comma, CloseDelim(Paren)];
     // If the parameter assignment starts with a ".", this is a named
@@ -3063,7 +3073,7 @@ fn parse_parameter_assignment(p: &mut AbstractParser) -> ReportedResult<ast::Par
     })
 }
 
-fn parse_procedure(p: &mut AbstractParser, kind: ProcedureKind) -> ReportedResult<Procedure> {
+fn parse_procedure(p: &mut dyn AbstractParser, kind: ProcedureKind) -> ReportedResult<Procedure> {
     p.bump();
     let mut span = p.last_span();
     let stmt = parse_stmt(p)?;
@@ -3075,7 +3085,7 @@ fn parse_procedure(p: &mut AbstractParser, kind: ProcedureKind) -> ReportedResul
     })
 }
 
-fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDecl> {
+fn parse_subroutine_decl(p: &mut dyn AbstractParser) -> ReportedResult<SubroutineDecl> {
     let mut span = p.peek(0).1;
 
     // Consume the subroutine prototype, which covers everything up to the ";"
@@ -3102,7 +3112,7 @@ fn parse_subroutine_decl(p: &mut AbstractParser) -> ReportedResult<SubroutineDec
     })
 }
 
-fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<SubroutinePrototype> {
+fn parse_subroutine_prototype(p: &mut dyn AbstractParser) -> ReportedResult<SubroutinePrototype> {
     let mut span = p.peek(0).1;
 
     // Consume the "function" or "task" keyword, which then also decides what
@@ -3160,7 +3170,7 @@ fn parse_subroutine_prototype(p: &mut AbstractParser) -> ReportedResult<Subrouti
 }
 
 fn parse_subroutine_prototype_tail(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
 ) -> ReportedResult<(ast::Identifier, Vec<SubroutinePort>)> {
     // Consume the subroutine name, or "new".
     // TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
@@ -3201,7 +3211,7 @@ fn parse_subroutine_prototype_tail(
             // ensure that the ports are parsed correctly, the function must fail if
             // the port is not immediately followed by a "," or ")". Otherwise
             // implicit and explicit types cannot be distinguished.
-            fn tail(p: &mut AbstractParser) -> ReportedResult<Option<SubroutinePortName>> {
+            fn tail(p: &mut dyn AbstractParser) -> ReportedResult<Option<SubroutinePortName>> {
                 // Parse the optional port identifier.
                 let data = if let Some(name) = try_identifier(p)? {
                     // Parse the optional dimensions.
@@ -3252,7 +3262,7 @@ fn parse_subroutine_prototype_tail(
     Ok((name, args))
 }
 
-fn try_subroutine_port_dir(p: &mut AbstractParser) -> Option<SubroutinePortDir> {
+fn try_subroutine_port_dir(p: &mut dyn AbstractParser) -> Option<SubroutinePortDir> {
     match (p.peek(0).0, p.peek(1).0) {
         (Keyword(Kw::Input), _) => {
             p.bump();
@@ -3279,7 +3289,7 @@ fn try_subroutine_port_dir(p: &mut AbstractParser) -> Option<SubroutinePortDir> 
     }
 }
 
-fn parse_subroutine_item(p: &mut AbstractParser) -> ReportedResult<SubroutineItem> {
+fn parse_subroutine_item(p: &mut dyn AbstractParser) -> ReportedResult<SubroutineItem> {
     let mut span = p.peek(0).1;
 
     // Try to parse a port declaration of the form:
@@ -3329,7 +3339,7 @@ fn parse_subroutine_item(p: &mut AbstractParser) -> ReportedResult<SubroutineIte
     Ok(SubroutineItem::Stmt(parse_stmt(p)?))
 }
 
-fn parse_stmt(p: &mut AbstractParser) -> ReportedResult<Stmt> {
+fn parse_stmt(p: &mut dyn AbstractParser) -> ReportedResult<Stmt> {
     let mut span = p.peek(0).1;
 
     // Null statements simply consist of a semicolon.
@@ -3357,7 +3367,10 @@ fn parse_stmt(p: &mut AbstractParser) -> ReportedResult<Stmt> {
     })
 }
 
-fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> ReportedResult<StmtData> {
+fn parse_stmt_data(
+    p: &mut dyn AbstractParser,
+    label: &mut Option<Name>,
+) -> ReportedResult<StmtData> {
     let (tkn, sp) = p.peek(0);
 
     // See if this is a timing-controlled statement as per IEEE 1800-2009
@@ -3607,7 +3620,7 @@ fn parse_stmt_data(p: &mut AbstractParser, label: &mut Option<Name>) -> Reported
 }
 
 fn parse_block(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     label: &mut Option<Name>,
     terminators: &[Token],
 ) -> ReportedResult<(Vec<Stmt>, Token)> {
@@ -3689,7 +3702,7 @@ fn parse_block(
 /// "assign" [drive_strength] [delay3] list_of_assignments ";"
 /// "assign" [delay_control] list_of_assignments ";"
 /// ```
-fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign> {
+fn parse_continuous_assign(p: &mut dyn AbstractParser) -> ReportedResult<ContAssign> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Assign))?;
 
@@ -3723,7 +3736,7 @@ fn parse_continuous_assign(p: &mut AbstractParser) -> ReportedResult<ContAssign>
 }
 
 fn parse_if_or_case(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     up: Option<UniquePriority>,
 ) -> ReportedResult<StmtData> {
     let (tkn, span) = p.peek(0);
@@ -3760,7 +3773,7 @@ fn parse_if_or_case(
 
 /// Parse a case statement as per IEEE 1800-2009 section 12.5.
 fn parse_case(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     up: Option<UniquePriority>,
     kind: CaseKind,
 ) -> ReportedResult<StmtData> {
@@ -3863,7 +3876,7 @@ fn parse_case(
     })
 }
 
-fn parse_if(p: &mut AbstractParser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
+fn parse_if(p: &mut dyn AbstractParser, up: Option<UniquePriority>) -> ReportedResult<StmtData> {
     // Parse the condition expression surrounded by parenthesis.
     p.require_reported(OpenDelim(Paren))?;
     let cond = match parse_expr(p) {
@@ -3894,7 +3907,7 @@ fn parse_if(p: &mut AbstractParser, up: Option<UniquePriority>) -> ReportedResul
     })
 }
 
-fn try_delay_control(p: &mut AbstractParser) -> ReportedResult<Option<DelayControl>> {
+fn try_delay_control(p: &mut dyn AbstractParser) -> ReportedResult<Option<DelayControl>> {
     // Try to consume the hashtag which introduces the delay control.
     if !p.try_eat(Hashtag) {
         return Ok(None);
@@ -3933,7 +3946,7 @@ fn try_delay_control(p: &mut AbstractParser) -> ReportedResult<Option<DelayContr
 }
 
 /// Try to parse an event control as described in IEEE 1800-2009 section 9.4.2.
-fn try_event_control(p: &mut AbstractParser) -> ReportedResult<Option<EventControl>> {
+fn try_event_control(p: &mut dyn AbstractParser) -> ReportedResult<Option<EventControl>> {
     if !p.try_eat(At) {
         return Ok(None);
     }
@@ -3973,7 +3986,7 @@ fn try_event_control(p: &mut AbstractParser) -> ReportedResult<Option<EventContr
     }))
 }
 
-fn try_cycle_delay(p: &mut AbstractParser) -> ReportedResult<Option<CycleDelay>> {
+fn try_cycle_delay(p: &mut dyn AbstractParser) -> ReportedResult<Option<CycleDelay>> {
     if !p.try_eat(DoubleHashtag) {
         return Ok(None);
     }
@@ -3983,14 +3996,14 @@ fn try_cycle_delay(p: &mut AbstractParser) -> ReportedResult<Option<CycleDelay>>
     Err(())
 }
 
-fn parse_assignment(p: &mut AbstractParser) -> ReportedResult<(Expr, Expr)> {
+fn parse_assignment(p: &mut dyn AbstractParser) -> ReportedResult<(Expr, Expr)> {
     let lhs = parse_expr_prec(p, Precedence::Postfix)?;
     p.require_reported(Operator(Op::Assign))?;
     let rhs = parse_expr_prec(p, Precedence::Assignment)?;
     Ok((lhs, rhs))
 }
 
-fn parse_assign_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
+fn parse_assign_stmt(p: &mut dyn AbstractParser) -> ReportedResult<StmtData> {
     // Parse the leading expression.
     let expr = parse_expr_prec(p, Precedence::Postfix)?;
     let (tkn, sp) = p.peek(0);
@@ -4032,14 +4045,14 @@ fn parse_assign_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
     Err(())
 }
 
-fn parse_expr_stmt(p: &mut AbstractParser) -> ReportedResult<StmtData> {
+fn parse_expr_stmt(p: &mut dyn AbstractParser) -> ReportedResult<StmtData> {
     let expr = parse_expr_prec(p, Precedence::Unary)?;
     p.require_reported(Semicolon)?;
     Ok(ExprStmt(expr))
 }
 
 fn parse_event_expr(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: EventPrecedence,
 ) -> ReportedResult<EventExpr> {
     let mut span = p.peek(0).1;
@@ -4080,7 +4093,7 @@ fn parse_event_expr(
 }
 
 fn parse_event_expr_suffix(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     expr: EventExpr,
     precedence: EventPrecedence,
 ) -> ReportedResult<EventExpr> {
@@ -4127,7 +4140,7 @@ fn as_edge_ident(tkn: Token) -> EdgeIdent {
     }
 }
 
-fn parse_call_args(p: &mut AbstractParser) -> ReportedResult<Vec<CallArg>> {
+fn parse_call_args(p: &mut dyn AbstractParser) -> ReportedResult<Vec<CallArg>> {
     let mut v = Vec::new();
     if p.peek(0).0 == CloseDelim(Paren) {
         return Ok(v);
@@ -4190,7 +4203,7 @@ fn parse_call_args(p: &mut AbstractParser) -> ReportedResult<Vec<CallArg>> {
     Ok(v)
 }
 
-fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarDeclName> {
+fn parse_variable_decl_assignment(p: &mut dyn AbstractParser) -> ReportedResult<VarDeclName> {
     let mut span = p.peek(0).1;
 
     // Parse the variable name.
@@ -4217,7 +4230,7 @@ fn parse_variable_decl_assignment(p: &mut AbstractParser) -> ReportedResult<VarD
     })
 }
 
-fn parse_genvar_decl(p: &mut AbstractParser) -> ReportedResult<GenvarDecl> {
+fn parse_genvar_decl(p: &mut dyn AbstractParser) -> ReportedResult<GenvarDecl> {
     let mut span = p.peek(0).1;
 
     // Parse the genvar name.
@@ -4240,7 +4253,7 @@ fn parse_genvar_decl(p: &mut AbstractParser) -> ReportedResult<GenvarDecl> {
     })
 }
 
-fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> {
+fn parse_generate_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyItem> {
     match p.peek(0).0 {
         Keyword(Kw::For) => parse_generate_for(p).map(|x| HierarchyItem::GenerateFor(x)),
         Keyword(Kw::If) => parse_generate_if(p).map(|x| HierarchyItem::GenerateIf(x)),
@@ -4253,7 +4266,7 @@ fn parse_generate_item(p: &mut AbstractParser) -> ReportedResult<HierarchyItem> 
 /// ```text
 /// "for" "(" stmt expr ";" expr ")" generate_block
 /// ```
-fn parse_generate_for(p: &mut AbstractParser) -> ReportedResult<GenerateFor> {
+fn parse_generate_for(p: &mut dyn AbstractParser) -> ReportedResult<GenerateFor> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::For))?;
     let (init, cond, step) = flanked(p, Paren, |p| {
@@ -4274,7 +4287,7 @@ fn parse_generate_for(p: &mut AbstractParser) -> ReportedResult<GenerateFor> {
     })
 }
 
-fn parse_generate_if(p: &mut AbstractParser) -> ReportedResult<GenerateIf> {
+fn parse_generate_if(p: &mut dyn AbstractParser) -> ReportedResult<GenerateIf> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::If))?;
     let cond = flanked(p, Paren, parse_expr)?;
@@ -4293,7 +4306,7 @@ fn parse_generate_if(p: &mut AbstractParser) -> ReportedResult<GenerateIf> {
     })
 }
 
-fn parse_generate_case(p: &mut AbstractParser) -> ReportedResult<GenerateCase> {
+fn parse_generate_case(p: &mut dyn AbstractParser) -> ReportedResult<GenerateCase> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Case))?;
     let q = p.last_span();
@@ -4301,7 +4314,7 @@ fn parse_generate_case(p: &mut AbstractParser) -> ReportedResult<GenerateCase> {
     Err(())
 }
 
-fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<GenerateBlock> {
+fn parse_generate_block(p: &mut dyn AbstractParser) -> ReportedResult<GenerateBlock> {
     let mut span = p.peek(0).1;
 
     // Parse the optional block label.
@@ -4389,7 +4402,7 @@ fn parse_generate_block(p: &mut AbstractParser) -> ReportedResult<GenerateBlock>
     })
 }
 
-fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
+fn parse_class_decl(p: &mut dyn AbstractParser) -> ReportedResult<ClassDecl> {
     let mut span = p.peek(0).1;
     let result = recovered(p, Keyword(Kw::Endclass), |p| {
         // Eat the optional "virtual" keyword.
@@ -4462,7 +4475,7 @@ fn parse_class_decl(p: &mut AbstractParser) -> ReportedResult<ClassDecl> {
     })
 }
 
-fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
+fn parse_class_item(p: &mut dyn AbstractParser) -> ReportedResult<ClassItem> {
     let mut span = p.peek(0).1;
 
     // Easy path for null class items.
@@ -4539,7 +4552,7 @@ fn parse_class_item(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
 }
 
 fn parse_class_item_qualifiers(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
 ) -> ReportedResult<Vec<(ClassItemQualifier, Span)>> {
     let mut v = Vec::new();
     loop {
@@ -4560,18 +4573,18 @@ fn parse_class_item_qualifiers(
     Ok(v)
 }
 
-fn parse_class_method(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
+fn parse_class_method(p: &mut dyn AbstractParser) -> ReportedResult<ClassItem> {
     println!("Parsing class method");
     Err(())
 }
 
-fn parse_class_property(p: &mut AbstractParser) -> ReportedResult<ClassItem> {
+fn parse_class_property(p: &mut dyn AbstractParser) -> ReportedResult<ClassItem> {
     println!("Parsing class property");
     p.try_eat(Keyword(Kw::Rand));
     Err(())
 }
 
-fn parse_constraint(p: &mut AbstractParser) -> ReportedResult<Constraint> {
+fn parse_constraint(p: &mut dyn AbstractParser) -> ReportedResult<Constraint> {
     let mut span = p.peek(0).1;
 
     // Parse the prototype qualifier.
@@ -4629,7 +4642,7 @@ fn parse_constraint(p: &mut AbstractParser) -> ReportedResult<Constraint> {
     })
 }
 
-fn parse_constraint_item(p: &mut AbstractParser) -> ReportedResult<ConstraintItem> {
+fn parse_constraint_item(p: &mut dyn AbstractParser) -> ReportedResult<ConstraintItem> {
     let mut span = p.peek(0).1;
     let data = parse_constraint_item_data(p)?;
     span.expand(p.last_span());
@@ -4639,7 +4652,7 @@ fn parse_constraint_item(p: &mut AbstractParser) -> ReportedResult<ConstraintIte
     })
 }
 
-fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<ConstraintItemData> {
+fn parse_constraint_item_data(p: &mut dyn AbstractParser) -> ReportedResult<ConstraintItemData> {
     // Handle the trivial cases that start with a keyword first.
     if p.try_eat(Keyword(Kw::If)) {
         let q = p.last_span();
@@ -4664,7 +4677,7 @@ fn parse_constraint_item_data(p: &mut AbstractParser) -> ReportedResult<Constrai
 struct ParallelParser<'a, R: Clone> {
     branches: Vec<(
         String,
-        Box<FnMut(&mut AbstractParser) -> ReportedResult<R> + 'a>,
+        Box<dyn FnMut(&mut dyn AbstractParser) -> ReportedResult<R> + 'a>,
         bool,
     )>,
 }
@@ -4678,19 +4691,19 @@ impl<'a, R: Clone> ParallelParser<'a, R> {
 
     pub fn add<F>(&mut self, name: &str, func: F)
     where
-        F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'a,
+        F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R> + 'a,
     {
         self.branches.push((name.to_owned(), Box::new(func), false));
     }
 
     pub fn add_greedy<F>(&mut self, name: &str, func: F)
     where
-        F: FnMut(&mut AbstractParser) -> ReportedResult<R> + 'a,
+        F: FnMut(&mut dyn AbstractParser) -> ReportedResult<R> + 'a,
     {
         self.branches.push((name.to_owned(), Box::new(func), true));
     }
 
-    pub fn finish(self, p: &mut AbstractParser, msg: &str) -> ReportedResult<R> {
+    pub fn finish(self, p: &mut dyn AbstractParser, msg: &str) -> ReportedResult<R> {
         let (tkn, q) = p.peek(0);
         // p.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
 
@@ -4782,7 +4795,7 @@ impl<'a, R: Clone> ParallelParser<'a, R> {
 }
 
 struct BranchParser<'tp> {
-    parser: &'tp mut AbstractParser,
+    parser: &'tp mut dyn AbstractParser,
     consumed: usize,
     skipped: usize,
     diagnostics: Vec<DiagBuilder2>,
@@ -4791,7 +4804,7 @@ struct BranchParser<'tp> {
 }
 
 impl<'tp> BranchParser<'tp> {
-    pub fn new(parser: &'tp mut AbstractParser) -> Self {
+    pub fn new(parser: &'tp mut dyn AbstractParser) -> Self {
         let last = parser.last_span();
         BranchParser {
             parser: parser,
@@ -4852,7 +4865,7 @@ impl<'tp> AbstractParser for BranchParser<'tp> {
     }
 }
 
-fn parse_typedef(p: &mut AbstractParser) -> ReportedResult<Typedef> {
+fn parse_typedef(p: &mut dyn AbstractParser) -> ReportedResult<Typedef> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Typedef))?;
     let ty = parse_explicit_type(p)?;
@@ -4868,7 +4881,7 @@ fn parse_typedef(p: &mut AbstractParser) -> ReportedResult<Typedef> {
     })
 }
 
-fn parse_port_decl(p: &mut AbstractParser) -> ReportedResult<PortDecl> {
+fn parse_port_decl(p: &mut dyn AbstractParser) -> ReportedResult<PortDecl> {
     let mut span = p.peek(0).1;
 
     // Consume the port direction.
@@ -4907,7 +4920,7 @@ fn parse_port_decl(p: &mut AbstractParser) -> ReportedResult<PortDecl> {
     });
     let (ty, names) = pp.finish(p, "explicit or implicit type")?;
 
-    fn tail(p: &mut AbstractParser) -> ReportedResult<Vec<VarDeclName>> {
+    fn tail(p: &mut dyn AbstractParser) -> ReportedResult<Vec<VarDeclName>> {
         let names = comma_list_nonempty(
             p,
             Semicolon,
@@ -4948,7 +4961,7 @@ fn as_net_type(tkn: Token) -> Option<NetType> {
     }
 }
 
-fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
+fn parse_net_decl(p: &mut dyn AbstractParser) -> ReportedResult<NetDecl> {
     let mut span = p.peek(0).1;
 
     // Consume the net type.
@@ -4993,7 +5006,9 @@ fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
     let (ty, (delay, names)) = pp.finish(p, "explicit or implicit type")?;
 
     // This function handles parsing of everything after the type.
-    fn tail(p: &mut AbstractParser) -> ReportedResult<(Option<DelayControl>, Vec<VarDeclName>)> {
+    fn tail(
+        p: &mut dyn AbstractParser,
+    ) -> ReportedResult<(Option<DelayControl>, Vec<VarDeclName>)> {
         // Parse the optional delay.
         let delay = try_delay_control(p)?;
 
@@ -5021,7 +5036,7 @@ fn parse_net_decl(p: &mut AbstractParser) -> ReportedResult<NetDecl> {
 }
 
 fn try_drive_strength(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
 ) -> ReportedResult<Option<(DriveStrength, DriveStrength)>> {
     if let Some(a) = as_drive_strength(p.peek(0).0) {
         p.bump();
@@ -5038,7 +5053,7 @@ fn try_drive_strength(
     }
 }
 
-fn parse_net_strength(p: &mut AbstractParser) -> ReportedResult<NetStrength> {
+fn parse_net_strength(p: &mut dyn AbstractParser) -> ReportedResult<NetStrength> {
     if let Some((a, b)) = try_drive_strength(p)? {
         Ok(NetStrength::Drive(a, b))
     } else if let Some(s) = as_charge_strength(p.peek(0).0) {
@@ -5082,7 +5097,7 @@ fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
 /// "import" package_ident "::" ident ";"
 /// "import" string ["context"|"pure"] [ident "="] subroutine_prototype ";"
 /// ```
-fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
+fn parse_import_decl(p: &mut dyn AbstractParser) -> ReportedResult<ImportDecl> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Import))?;
 
@@ -5160,7 +5175,7 @@ fn parse_import_decl(p: &mut AbstractParser) -> ReportedResult<ImportDecl> {
     })
 }
 
-fn parse_assertion(p: &mut AbstractParser) -> ReportedResult<Assertion> {
+fn parse_assertion(p: &mut dyn AbstractParser) -> ReportedResult<Assertion> {
     let mut span = p.peek(0).1;
 
     // Peek ahead after the current token to see if a "property", "sequence", or
@@ -5299,7 +5314,9 @@ fn parse_assertion(p: &mut AbstractParser) -> ReportedResult<Assertion> {
     })
 }
 
-fn parse_assertion_action_block(p: &mut AbstractParser) -> ReportedResult<AssertionActionBlock> {
+fn parse_assertion_action_block(
+    p: &mut dyn AbstractParser,
+) -> ReportedResult<AssertionActionBlock> {
     if p.try_eat(Keyword(Kw::Else)) {
         Ok(AssertionActionBlock::Negative(parse_stmt(p)?))
     } else {
@@ -5313,7 +5330,7 @@ fn parse_assertion_action_block(p: &mut AbstractParser) -> ReportedResult<Assert
     }
 }
 
-fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropSpec> {
+fn parse_property_spec(p: &mut dyn AbstractParser) -> ReportedResult<PropSpec> {
     let mut span = p.peek(0).1;
 
     // TODO: Actually parse this stuff, rather than just chicken out.
@@ -5359,12 +5376,12 @@ enum PropSeqPrecedence {
     Max,
 }
 
-fn parse_propexpr(p: &mut AbstractParser) -> ReportedResult<PropExpr> {
+fn parse_propexpr(p: &mut dyn AbstractParser) -> ReportedResult<PropExpr> {
     parse_propexpr_prec(p, PropSeqPrecedence::Min)
 }
 
 fn parse_propexpr_prec(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<PropExpr> {
     let mut span = p.peek(0).1;
@@ -5400,7 +5417,7 @@ fn parse_propexpr_prec(
 }
 
 fn parse_propexpr_nonseq(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<PropExprData> {
     // Handle the trivial case of expressions introduced by a symbol or keyword.
@@ -5432,7 +5449,7 @@ fn parse_propexpr_nonseq(
 }
 
 fn parse_propexpr_seq(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<PropExprData> {
     // Consume a strong, weak, or regular sequence operator.
@@ -5469,7 +5486,7 @@ fn parse_propexpr_seq(
 }
 
 fn parse_propexpr_suffix(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     prefix: PropExpr,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<PropExpr> {
@@ -5499,12 +5516,12 @@ fn parse_propexpr_suffix(
     Ok(prefix)
 }
 
-fn parse_seqexpr(p: &mut AbstractParser) -> ReportedResult<SeqExpr> {
+fn parse_seqexpr(p: &mut dyn AbstractParser) -> ReportedResult<SeqExpr> {
     parse_seqexpr_prec(p, PropSeqPrecedence::Min)
 }
 
 fn parse_seqexpr_prec(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<SeqExpr> {
     let mut span = p.peek(0).1;
@@ -5525,7 +5542,7 @@ fn parse_seqexpr_prec(
 }
 
 fn parse_seqexpr_expr(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<SeqExprData> {
     // TODO: Handle all the non-trivial cases.
@@ -5540,7 +5557,7 @@ fn parse_seqexpr_expr(
 }
 
 fn parse_seqexpr_nonexpr(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<SeqExprData> {
     // If we arrive here, the only possibility left is that this sequence starts
@@ -5561,7 +5578,7 @@ fn parse_seqexpr_nonexpr(
 }
 
 fn parse_seqexpr_suffix(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     prefix: SeqExpr,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<SeqExpr> {
@@ -5569,7 +5586,7 @@ fn parse_seqexpr_suffix(
     Ok(prefix)
 }
 
-fn parse_seqrep(p: &mut AbstractParser) -> ReportedResult<SeqRep> {
+fn parse_seqrep(p: &mut dyn AbstractParser) -> ReportedResult<SeqRep> {
     match p.peek(0).0 {
         // [*]
         // [* expr]
@@ -5613,7 +5630,7 @@ fn parse_seqrep(p: &mut AbstractParser) -> ReportedResult<SeqRep> {
     }
 }
 
-fn parse_inst(p: &mut AbstractParser) -> ReportedResult<ast::Inst> {
+fn parse_inst(p: &mut dyn AbstractParser) -> ReportedResult<ast::Inst> {
     let mut span = p.peek(0).1;
 
     // Consume the module identifier.
@@ -5652,7 +5669,7 @@ fn parse_inst(p: &mut AbstractParser) -> ReportedResult<ast::Inst> {
     })
 }
 
-fn parse_var_decl(p: &mut AbstractParser) -> ReportedResult<ast::VarDecl> {
+fn parse_var_decl(p: &mut dyn AbstractParser) -> ReportedResult<ast::VarDecl> {
     let mut span = p.peek(0).1;
 
     // Parse the optional `const` keyword.
@@ -5683,7 +5700,7 @@ fn parse_var_decl(p: &mut AbstractParser) -> ReportedResult<ast::VarDecl> {
     }
     let (ty, names) = pp.finish(p, "explicit or implicit type")?;
 
-    fn tail(p: &mut AbstractParser) -> ReportedResult<Vec<VarDeclName>> {
+    fn tail(p: &mut dyn AbstractParser) -> ReportedResult<Vec<VarDeclName>> {
         let names = comma_list_nonempty(
             p,
             Semicolon,
@@ -5706,7 +5723,7 @@ fn parse_var_decl(p: &mut AbstractParser) -> ReportedResult<ast::VarDecl> {
 }
 
 fn parse_param_decl(
-    p: &mut AbstractParser,
+    p: &mut dyn AbstractParser,
     keyword_optional: bool,
 ) -> ReportedResult<ast::ParamDecl> {
     let mut span = p.peek(0).1;
@@ -5793,7 +5810,7 @@ fn parse_param_decl(
                 tail(p, ty)
             });
 
-            fn tail(p: &mut AbstractParser, ty: Type) -> ReportedResult<ast::ParamValueDecl> {
+            fn tail(p: &mut dyn AbstractParser, ty: Type) -> ReportedResult<ast::ParamValueDecl> {
                 let mut span = p.peek(0).1;
                 let name = parse_identifier(p, "parameter name")?;
                 let (dims, _) = parse_optional_dimensions(p)?;
@@ -5827,7 +5844,7 @@ fn parse_param_decl(
     })
 }
 
-fn parse_hname(p: &mut AbstractParser, msg: &str) -> ReportedResult<ast::Identifier> {
+fn parse_hname(p: &mut dyn AbstractParser, msg: &str) -> ReportedResult<ast::Identifier> {
     parse_identifier(p, msg)
 }
 
