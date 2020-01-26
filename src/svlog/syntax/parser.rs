@@ -5316,24 +5316,28 @@ fn parse_assertion_action_block(p: &mut AbstractParser) -> ReportedResult<Assert
 fn parse_property_spec(p: &mut AbstractParser) -> ReportedResult<PropSpec> {
     let mut span = p.peek(0).1;
 
-    // Parse the optional event expression.
-    let event = if p.try_eat(At) {
-        Some(parse_event_expr(p, EventPrecedence::Min)?)
-    } else {
-        None
-    };
+    // TODO: Actually parse this stuff, rather than just chicken out.
+    p.recover_balanced(&[CloseDelim(Paren)], false);
+    return Ok(PropSpec);
 
-    // Parse the optional "disable iff" clause.
-    let disable = if p.try_eat(Keyword(Kw::Disable)) {
-        p.require_reported(Keyword(Kw::Iff))?;
-        Some(flanked(p, Paren, parse_expr)?)
-    } else {
-        None
-    };
+    // // Parse the optional event expression.
+    // let event = if p.try_eat(At) {
+    //     Some(parse_event_expr(p, EventPrecedence::Min)?)
+    // } else {
+    //     None
+    // };
 
-    // Parse the property expression.
-    let prop = parse_propexpr(p)?;
-    Ok(PropSpec)
+    // // Parse the optional "disable iff" clause.
+    // let disable = if p.try_eat(Keyword(Kw::Disable)) {
+    //     p.require_reported(Keyword(Kw::Iff))?;
+    //     Some(flanked(p, Paren, parse_expr)?)
+    // } else {
+    //     None
+    // };
+
+    // // Parse the property expression.
+    // let prop = parse_propexpr(p)?;
+    // Ok(PropSpec)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
