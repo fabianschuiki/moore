@@ -3899,7 +3899,9 @@ fn try_delay_control(p: &mut AbstractParser) -> ReportedResult<Option<DelayContr
         }
 
         // Literals
-        Literal(Number(..)) | Literal(Time(..)) => parse_expr_first(p, Precedence::Max)?,
+        Literal(Number(..)) | Literal(Time(..)) | Ident(..) => {
+            parse_expr_first(p, Precedence::Max)?
+        }
 
         // TODO: Parse "1step" keyword
         _ => {
