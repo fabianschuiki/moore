@@ -966,10 +966,14 @@ pub(crate) fn type_context<'gcx>(
             }
         }
         // TODO(fschuiki): Ports
-        HirNode::VarDecl(v) if v.init == Some(onto) => {
+        HirNode::VarDecl(v)
+            if v.init == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
+        {
             Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
         }
-        HirNode::ValueParam(v) if v.default == Some(onto) => {
+        HirNode::ValueParam(v)
+            if v.default == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
+        {
             Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
         }
         // TODO(fschuiki): Statements
