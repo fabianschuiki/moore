@@ -1,10 +1,17 @@
 //! A SystemVerilog parser generator.
 
+#[macro_use]
+extern crate log;
+
 use anyhow::{anyhow, Result};
 use clap::{App, Arg};
 
 mod ast;
+mod context;
 mod parser;
+mod populate;
+
+use crate::context::{Context, ContextArena};
 
 fn main() -> Result<()> {
     let matches = App::new("svlog-pargen")
@@ -19,12 +26,31 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
-    let _context = Context {};
+    env_logger::Builder::from_default_env()
+        .format_timestamp(None)
+        .init();
+
     let grammar = parse_grammar(&std::fs::read_to_string(
         matches.value_of("grammar").unwrap(),
     )?)?;
 
-    println!("{:#?}", grammar);
+    let arena = ContextArena::default();
+    let mut context = Context::new(&arena);
+    populate::add_ast(&mut context, grammar);
+
+    info!(
+        "Grammar has {} productions, {} nonterminals, {} terminals",
+        context.prods.values().flatten().count(),
+        context.next_nonterm,
+        context.next_term
+    );
+    debug!("Grammar:");
+    for ps in context.prods.values() {
+        for p in ps {
+            debug!("  {}", p);
+        }
+    }
+
     Ok(())
 }
 
@@ -34,5 +60,3 @@ pub fn parse_grammar(input: impl AsRef<str>) -> Result<ast::Grammar> {
         .parse(input.as_ref())
         .map_err(|e| anyhow!("Grammar syntax error: {}", e))
 }
-
-struct Context {}

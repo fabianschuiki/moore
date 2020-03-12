@@ -8,22 +8,38 @@ pub Grammar: ast::Grammar = {
     <g:Grammar> <r:Nonterminal> => { let mut g = g; g.nts.push(r); g },
 };
 
-Nonterminal: ast::Nonterminal = <name:Ident> "{" <prods:Production*> "}" => {
-    ast::Nonterminal { name: name.to_string(), prods }
+Nonterminal: ast::Nonterminal = <public:("pub"?)> <name:Ident> "=" <choices:NonterminalChoices> ";" => {
+    let public = public.is_some();
+    let name = name.to_string();
+    ast::Nonterminal { public, name, choices }
 };
 
-Production: ast::Production = <Symbol*> ";" => {
-    ast::Production { syms: <> }
+NonterminalChoices: Vec<Vec<ast::Symbol>> = {
+    <Symbol+> => vec![<>],
+    "{" <Comma<Symbol+>> "}" => <>,
 };
 
 Symbol: ast::Symbol = {
+    "null" => ast::Symbol::Epsilon,
     <Ident> => ast::Symbol::Token(<>.to_string()),
-    "(" <Symbol*> ")" "?" => ast::Symbol::Maybe(<>),
-    "(" <Symbol*> ")" "*" => ast::Symbol::Any(<>),
-    "(" <Symbol*> ")" "+" => ast::Symbol::Some(<>),
+    "(" <Symbol+> ")" => ast::Symbol::Group(<>),
+    <Symbol> "?" => ast::Symbol::Maybe(Box::new(<>)),
+    <Symbol> "*" => ast::Symbol::Any(Box::new(<>)),
+    <Symbol> "+" => ast::Symbol::Some(Box::new(<>)),
 }
 
 Ident = {
     r"[a-zA-Z0-9_]+",
-    r"`[^`]+`",
+    r"'[^']+'",
+};
+
+Comma<T>: Vec<T> = {
+    <v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
 };

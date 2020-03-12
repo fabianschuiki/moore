@@ -1,17 +1,66 @@
-assert_property_statement {
-    `assert` `property` `(` property_spec `)` action_block;
-}
+pub data_declaration =
+    'const'? 'var'? lifetime? data_type_or_implicit list_of_variable_decl_assignments ';';
+lifetime = { 'static', 'automatic' };
+data_type_or_implicit = { data_type, implicit_data_type };
+implicit_data_type = signing? packed_dimension*;
+data_type_or_void = { data_type, 'void' };
+data_type = {
+    integer_vector_type signing? packed_dimension*,
+    integer_atom_type signing?,
+    non_integer_type,
+    struct_union ('packed' signing?)? '{' struct_union_member+ '}' packed_dimension*,
+    'enum' enum_base_type? '{' enum_name_declaration (',' enum_name_declaration)* '}' packed_dimension*,
+    'string',
+    'chandle',
+    'virtual' 'interface' identifier,
+};
+list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
+signing = { 'signed', 'unsigned' };
+unpacked_dimension = { '[' constant_range ']', '[' constant_expression ']' };
+packed_dimension = { '[' constant_range ']', unsized_dimension };
+associative_dimension = {
+    '[' data_type ']',
+    '[' '*' ']',
+};
+queue_dimension = '[' '$' (':' constant_expression)? ']';
+unsized_dimension = '[' ']';
+variable_dimension = {
+    unsized_dimension,
+    unpacked_dimension,
+    associative_dimension,
+    queue_dimension,
+};
+integer_vector_type = { 'bit', 'logic', 'reg' };
+integer_atom_type = { 'byte', 'shortint', 'int', 'longint', 'integer', 'time' };
+non_integer_type = { 'shortreal', 'real', 'realtime' };
+struct_union = { 'struct', 'union' 'tagged'? };
+struct_union_member = attribute_instance* random_qualifier? data_type_or_void list_of_variable_decl_assignments ';';
+enum_base_type = {
+    integer_atom_type signing?,
+    integer_vector_type signing? packed_dimension?,
+    identifier packed_dimension?,
+};
+enum_name_declaration = identifier ('[' integral_number (':' integral_number)? ']')? ('=' constant_expression)?;
+variable_decl_assignment = {
+    identifier variable_dimension* ('=' expression)?,
+    identifier unsized_dimension variable_dimension* ('=' dynamic_array_new)?,
+    identifier ('=' class_new)?,
+};
+class_new = {
+    'new',
+    'new' '(' list_of_arguments ')',
+    'new' expression,
+};
 
-action_block {
-    statement_or_null;
-    (statement)? `else` statement_or_null;
-}
-
-statement_or_null {
-    statement;
-    (attribute_instance)* `;`;
-}
-
-statement {
-    (block_identifier `:`)? (attribute_instance)* statement_item;
-}
+dynamic_array_new = 'new' '[' expression ']' ('(' expression ')')?;
+constant_range = constant_expression ':' constant_expression;
+constant_expression = identifier;
+expression = identifier;
+attribute_instance = 'ATTR';
+random_qualifier = { 'rand', 'randc' };
+integral_number = '123';
+identifier = 'IDENT';
+list_of_arguments = {
+    expression? (',' expression?)? (',' '.' identifier '(' expression? ')')*,
+    '.' identifier '(' expression? ')' (',' '.' identifier '(' expression? ')')*,
+};

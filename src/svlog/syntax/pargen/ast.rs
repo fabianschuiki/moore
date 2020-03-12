@@ -5,19 +5,17 @@ pub struct Grammar {
 
 #[derive(Default, Debug)]
 pub struct Nonterminal {
+    pub public: bool,
     pub name: String,
-    pub prods: Vec<Production>,
-}
-
-#[derive(Default, Debug)]
-pub struct Production {
-    pub syms: Vec<Symbol>,
+    pub choices: Vec<Vec<Symbol>>,
 }
 
 #[derive(Debug)]
 pub enum Symbol {
+    Epsilon,
     Token(String),
-    Maybe(Vec<Symbol>),
-    Any(Vec<Symbol>),
-    Some(Vec<Symbol>),
+    Group(Vec<Symbol>),
+    Maybe(Box<Symbol>),
+    Any(Box<Symbol>),
+    Some(Box<Symbol>),
 }
