@@ -9,8 +9,12 @@ pub fn add_ast(ctx: &mut Context, ast: ast::Grammar) {
 
     // Register the nonterminal names.
     for nt in &ast.nts {
-        let nt = ctx.intern_nonterm(&nt.name);
-        trace!("Declared nonterm {}", nt);
+        let nonterm = ctx.intern_nonterm(&nt.name);
+        if nt.public {
+            ctx.root_nonterms.insert(nonterm);
+            info!("Root nonterminal {}", nonterm);
+        }
+        trace!("Declared nonterm {}", nonterm);
     }
 
     // Populate the productions.
@@ -18,17 +22,13 @@ pub fn add_ast(ctx: &mut Context, ast: ast::Grammar) {
         let nonterm = ctx.intern_nonterm(&nt.name);
         for choice in &nt.choices {
             trace!("Adding {} with {} symbols", nonterm, choice.len());
-            let syms = map_symbols(ctx, choice, Some(&nt.name));
+            let syms = map_symbols(ctx, choice);
             ctx.add_production(nonterm, syms);
         }
     }
 }
 
-fn map_symbols<'a>(
-    ctx: &mut Context<'a>,
-    syms: &[ast::Symbol],
-    name: Option<&str>,
-) -> Vec<Symbol<'a>> {
+fn map_symbols<'a>(ctx: &mut Context<'a>, syms: &[ast::Symbol]) -> Vec<Symbol<'a>> {
     let mut output = vec![];
     for sym in syms {
         output.push(map_symbol(ctx, sym));
@@ -45,7 +45,7 @@ fn map_symbol<'a>(ctx: &mut Context<'a>, sym: &ast::Symbol) -> Symbol<'a> {
         ast::Symbol::Group(syms) => {
             let nonterm = ctx.anonymous_nonterm();
             trace!("Adding group {} with {} symbols", nonterm, syms.len());
-            let syms = map_symbols(ctx, syms, None);
+            let syms = map_symbols(ctx, syms);
             ctx.add_production(nonterm, syms);
             nonterm.into()
         }

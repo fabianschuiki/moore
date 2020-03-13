@@ -3,15 +3,15 @@
 #[macro_use]
 extern crate log;
 
-use anyhow::{anyhow, Result};
-use clap::{App, Arg};
-
 mod ast;
 mod context;
+mod ll;
 mod parser;
 mod populate;
 
 use crate::context::{Context, ContextArena};
+use anyhow::{anyhow, Result};
+use clap::{App, Arg};
 
 fn main() -> Result<()> {
     let matches = App::new("svlog-pargen")
@@ -41,8 +41,8 @@ fn main() -> Result<()> {
     info!(
         "Grammar has {} productions, {} nonterminals, {} terminals",
         context.prods.values().flatten().count(),
-        context.next_nonterm,
-        context.next_term
+        context.nonterms().count(),
+        context.terms().count(),
     );
     debug!("Grammar:");
     for ps in context.prods.values() {
@@ -50,6 +50,8 @@ fn main() -> Result<()> {
             debug!("  {}", p);
         }
     }
+
+    ll::build_ll(&mut context);
 
     Ok(())
 }

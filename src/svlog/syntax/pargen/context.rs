@@ -1,27 +1,40 @@
 use itertools::Itertools;
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet, HashMap},
+};
 use typed_arena::Arena;
 
 pub struct Context<'a> {
     arena: &'a ContextArena<'a>,
-    pub next_term: usize,
-    pub next_nonterm: usize,
+    terms: Vec<Term<'a>>,
+    nonterms: Vec<Nonterm<'a>>,
     term_lookup: HashMap<&'a str, Term<'a>>,
     nonterm_lookup: HashMap<&'a str, Nonterm<'a>>,
     sym_lookup: HashMap<&'a str, Symbol<'a>>,
     pub prods: BTreeMap<Nonterm<'a>, Vec<&'a Production<'a>>>,
+    pub root_nonterms: BTreeSet<Nonterm<'a>>,
+    pub ll_table: LlTable<'a>,
+
+    // Caches
+    production_epsilon_cache: RefCell<HashMap<Nonterm<'a>, bool>>,
+    symbols_epsilon_cache: RefCell<HashMap<Vec<Symbol<'a>>, bool>>,
 }
 
 impl<'a> Context<'a> {
     pub fn new(arena: &'a ContextArena<'a>) -> Self {
         Context {
             arena,
-            next_term: 0,
-            next_nonterm: 0,
+            terms: Default::default(),
+            nonterms: Default::default(),
             term_lookup: Default::default(),
             nonterm_lookup: Default::default(),
             sym_lookup: Default::default(),
             prods: Default::default(),
+            root_nonterms: Default::default(),
+            ll_table: Default::default(),
+            production_epsilon_cache: Default::default(),
+            symbols_epsilon_cache: Default::default(),
         }
     }
 
@@ -31,8 +44,8 @@ impl<'a> Context<'a> {
             t
         } else {
             let interned_name = self.arena.term_arena.alloc_str(name);
-            let v = Term(interned_name, self.next_term);
-            self.next_term += 1;
+            let v = Term(interned_name, self.terms.len());
+            self.terms.push(v);
             self.term_lookup.insert(interned_name, v);
             self.sym_lookup.insert(interned_name, v.into());
             v
@@ -45,8 +58,8 @@ impl<'a> Context<'a> {
             t
         } else {
             let interned_name = self.arena.nonterm_arena.alloc_str(name);
-            let v = Nonterm(NontermName::Name(interned_name), self.next_nonterm);
-            self.next_nonterm += 1;
+            let v = Nonterm(NontermName::Name(interned_name), self.nonterms.len());
+            self.nonterms.push(v);
             self.nonterm_lookup.insert(interned_name, v);
             self.sym_lookup.insert(interned_name, v.into());
             v
@@ -55,9 +68,19 @@ impl<'a> Context<'a> {
 
     /// Create a new anonymous nonterminal.
     pub fn anonymous_nonterm(&mut self) -> Nonterm<'a> {
-        let v = Nonterm(NontermName::Anonymous, self.next_nonterm);
-        self.next_nonterm += 1;
+        let v = Nonterm(NontermName::Anonymous, self.nonterms.len());
+        self.nonterms.push(v);
         v
+    }
+
+    /// Obtain an iterator over all terminals.
+    pub fn terms(&self) -> impl Iterator<Item = Term<'a>> + '_ {
+        self.terms.iter().cloned()
+    }
+
+    /// Obtain an iterator over all nonterminals.
+    pub fn nonterms(&self) -> impl Iterator<Item = Nonterm<'a>> + '_ {
+        self.nonterms.iter().cloned()
     }
 
     /// Try to find an already-interned symbol.
@@ -67,10 +90,69 @@ impl<'a> Context<'a> {
 
     /// Add a production.
     pub fn add_production(&mut self, nt: Nonterm<'a>, syms: Vec<Symbol<'a>>) -> &'a Production<'a> {
-        let prod = self.arena.prod_arena.alloc(Production { nt, syms });
+        let is_epsilon = syms.is_empty() || syms.iter().all(|&s| s == Symbol::Epsilon);
+        let prod = self.arena.prod_arena.alloc(Production {
+            nt,
+            syms,
+            is_epsilon,
+        });
         trace!("Added production {}", prod);
         self.prods.entry(nt).or_default().push(prod);
         prod
+    }
+
+    /// Check if a nontermnial can expand to epsilon.
+    pub fn production_expands_to_epsilon(&self, nt: Nonterm<'a>) -> bool {
+        if let Some(&e) = self.production_epsilon_cache.borrow().get(&nt) {
+            return e;
+        }
+        let mut epsilon = self.prods[&nt].iter().any(|p| p.is_epsilon);
+        self.production_epsilon_cache
+            .borrow_mut()
+            .insert(nt, epsilon);
+        if !epsilon {
+            epsilon = self.prods[&nt]
+                .iter()
+                .any(|p| self.symbols_expand_to_epsilon(&p.syms));
+        }
+        self.production_epsilon_cache
+            .borrow_mut()
+            .insert(nt, epsilon);
+        if epsilon {
+            trace!("May expand to epsilon: {}", nt);
+        }
+        epsilon
+    }
+
+    /// Check if a sequence of symbols can expand to epsilon.
+    pub fn symbols_expand_to_epsilon(&self, syms: &[Symbol<'a>]) -> bool {
+        if let Some(&b) = self.symbols_epsilon_cache.borrow().get(syms) {
+            return b;
+        }
+        let mut epsilon = true;
+        let mut iter = syms.iter();
+        while let Some(&sym) = iter.next() {
+            match sym {
+                Symbol::Error => break,
+                Symbol::Epsilon => {
+                    break;
+                }
+                Symbol::Term(_) => {
+                    epsilon = false;
+                    break;
+                }
+                Symbol::Nonterm(nt) => {
+                    if !self.production_expands_to_epsilon(nt) {
+                        epsilon = false;
+                        break;
+                    }
+                }
+            }
+        }
+        self.symbols_epsilon_cache
+            .borrow_mut()
+            .insert(syms.to_vec(), epsilon);
+        epsilon
     }
 }
 
@@ -89,6 +171,12 @@ pub struct Term<'a>(&'a str, usize);
 impl std::fmt::Display for Term<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Debug for Term<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -126,6 +214,12 @@ impl std::fmt::Display for Nonterm<'_> {
             NontermName::Name(name) => write!(f, "{}", name),
             NontermName::Anonymous => write!(f, "n{}", self.1),
         }
+    }
+}
+
+impl std::fmt::Debug for Nonterm<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -179,10 +273,18 @@ impl std::fmt::Display for Symbol<'_> {
     }
 }
 
+impl std::fmt::Debug for Symbol<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 /// A production in the grammar.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Production<'a> {
     pub nt: Nonterm<'a>,
     pub syms: Vec<Symbol<'a>>,
+    pub is_epsilon: bool,
 }
 
 impl std::fmt::Display for Production<'_> {
@@ -190,3 +292,6 @@ impl std::fmt::Display for Production<'_> {
         write!(f, "{} -> {}", self.nt, self.syms.iter().format(" "))
     }
 }
+
+/// A LL(1) parse table.
+pub type LlTable<'a> = BTreeMap<Nonterm<'a>, BTreeMap<Term<'a>, BTreeSet<&'a Production<'a>>>>;
