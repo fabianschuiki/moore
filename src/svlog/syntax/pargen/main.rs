@@ -6,6 +6,7 @@ extern crate log;
 mod ast;
 mod codegen;
 mod context;
+mod factor;
 mod ll;
 mod parser;
 mod populate;
@@ -52,7 +53,23 @@ fn main() -> Result<()> {
         }
     }
 
+    factor::remove_left_recursion(&mut context);
+
     ll::build_ll(&mut context);
+    for _ in 0..0 {
+        if !ll::left_factor(&mut context) {
+            break;
+        }
+        info!("Rebuilding LL(1) table after left-factoring");
+        ll::build_ll(&mut context);
+    }
+
+    debug!("Grammar:");
+    for ps in context.prods.values() {
+        for p in ps {
+            debug!("  {}", p);
+        }
+    }
 
     debug!("LL(1) Table:");
     for (nt, ts) in &context.ll_table {

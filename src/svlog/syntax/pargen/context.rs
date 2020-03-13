@@ -12,7 +12,7 @@ pub struct Context<'a> {
     term_lookup: HashMap<&'a str, Term<'a>>,
     nonterm_lookup: HashMap<&'a str, Nonterm<'a>>,
     sym_lookup: HashMap<&'a str, Symbol<'a>>,
-    pub prods: BTreeMap<Nonterm<'a>, Vec<&'a Production<'a>>>,
+    pub prods: BTreeMap<Nonterm<'a>, BTreeSet<&'a Production<'a>>>,
     pub root_nonterms: BTreeSet<Nonterm<'a>>,
     pub ll_table: LlTable<'a>,
 
@@ -89,16 +89,33 @@ impl<'a> Context<'a> {
     }
 
     /// Add a production.
-    pub fn add_production(&mut self, nt: Nonterm<'a>, syms: Vec<Symbol<'a>>) -> &'a Production<'a> {
-        let is_epsilon = syms.is_empty() || syms.iter().all(|&s| s == Symbol::Epsilon);
+    pub fn add_production(
+        &mut self,
+        nt: Nonterm<'a>,
+        mut syms: Vec<Symbol<'a>>,
+    ) -> &'a Production<'a> {
+        let is_epsilon = syms.iter().all(|&s| s == Symbol::Epsilon);
+        if is_epsilon {
+            syms = vec![];
+        }
         let prod = self.arena.prod_arena.alloc(Production {
             nt,
             syms,
             is_epsilon,
         });
         trace!("Added production {}", prod);
-        self.prods.entry(nt).or_default().push(prod);
+        self.prods.entry(nt).or_default().insert(prod);
+        self.production_epsilon_cache.borrow_mut().clear();
+        self.symbols_epsilon_cache.borrow_mut().clear();
         prod
+    }
+
+    /// Remove a production.
+    pub fn remove_production(&mut self, prod: &Production<'a>) {
+        trace!("Removed production {}", prod);
+        self.prods.entry(prod.nt).or_default().remove(prod);
+        self.production_epsilon_cache.borrow_mut().clear();
+        self.symbols_epsilon_cache.borrow_mut().clear();
     }
 
     /// Check if a nontermnial can expand to epsilon.
@@ -118,9 +135,9 @@ impl<'a> Context<'a> {
         self.production_epsilon_cache
             .borrow_mut()
             .insert(nt, epsilon);
-        if epsilon {
-            trace!("May expand to epsilon: {}", nt);
-        }
+        // if epsilon {
+        //     trace!("May expand to epsilon: {}", nt);
+        // }
         epsilon
     }
 
@@ -289,7 +306,11 @@ pub struct Production<'a> {
 
 impl std::fmt::Display for Production<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{} -> {}", self.nt, self.syms.iter().format(" "))
+        if self.is_epsilon {
+            write!(f, "{} -> ε", self.nt)
+        } else {
+            write!(f, "{} -> {}", self.nt, self.syms.iter().format(" "))
+        }
     }
 }
 

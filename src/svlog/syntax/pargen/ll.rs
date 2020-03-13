@@ -12,7 +12,7 @@ pub fn build_ll(ctx: &mut Context) {
                 add_action(&mut table, nt, t, p);
             }
             if ctx.symbols_expand_to_epsilon(&p.syms) {
-                trace!("Adding follow set {}", nt);
+                // trace!("Adding follow set {}", nt);
                 for &t in &follow[&nt] {
                     add_action(&mut table, nt, t, p);
                 }
@@ -30,7 +30,7 @@ fn add_action<'a>(table: &mut LlTable<'a>, nt: Nonterm<'a>, term: Term<'a>, p: &
         .or_default()
         .insert(p)
     {
-        trace!("[{}, {}] = {}", nt, term, p);
+        // trace!("[{}, {}] = {}", nt, term, p);
     }
 }
 
@@ -112,7 +112,6 @@ fn collect_follow<'a>(ctx: &Context<'a>) -> BTreeMap<Nonterm<'a>, BTreeSet<Term<
     // Keep iterating until the algorithm has converged.
     loop {
         trace!("Follow set iteration");
-        let mut any_missing = false;
         let mut into = result.clone();
 
         // Iterate over all productions, since we want to scan over each
@@ -164,15 +163,13 @@ fn collect_follow<'a>(ctx: &Context<'a>) -> BTreeMap<Nonterm<'a>, BTreeSet<Term<
                 for &lead in &leads {
                     if let Some(follow) = result.get(nt) {
                         into.entry(lead).or_default().extend(follow.iter().cloned());
-                    } else {
-                        any_missing = true;
                     }
                 }
             }
         }
 
         // Keep iterating until the set converges.
-        if result == into && !any_missing {
+        if result == into {
             break;
         }
         result = into;
@@ -184,4 +181,90 @@ fn collect_follow<'a>(ctx: &Context<'a>) -> BTreeMap<Nonterm<'a>, BTreeSet<Term<
     }
 
     result
+}
+
+/// Left-factor the LL(1) table in a context.
+///
+/// Returns whether any changes have been performed, and thus the table should
+/// be reconstructed.
+pub fn left_factor(ctx: &mut Context) -> bool {
+    info!("Left-factoring LL(1) table");
+    let mut changes = false;
+    let mut ambigs = vec![];
+    for (&nt, ts) in &ctx.ll_table {
+        let mut prods = BTreeSet::new();
+        for (t, ps) in ts {
+            if ps.len() > 1 {
+                prods.insert(ps.clone());
+            }
+        }
+        for ps in prods {
+            ambigs.push((nt, ps));
+        }
+    }
+    for (nt, prods) in ambigs {
+        changes |= handle_ambiguity(ctx, nt, &prods);
+    }
+    changes
+}
+
+fn handle_ambiguity<'a>(
+    ctx: &mut Context<'a>,
+    nt: Nonterm<'a>,
+    prods: &BTreeSet<&'a Production<'a>>,
+) -> bool {
+    // trace!("Handling ambiguous {}:", nt);
+    // for p in prods {
+    //     trace!("  {}", p);
+    // }
+
+    // Left-factor the productions if they have a unique symbol in first
+    // position.
+    let mut any_epsilon = false;
+    let mut firsts = BTreeSet::new();
+    for p in prods {
+        if let Some(&first) = p.syms.iter().next() {
+            firsts.insert(first);
+        }
+        any_epsilon |= p.is_epsilon;
+    }
+    if any_epsilon {
+        warn!("Skipping left-factoring {} due to epsilon", nt);
+        return false;
+    } else if firsts.len() == 1 {
+        let sym = firsts.into_iter().next().unwrap();
+        debug!("Left-factoring {} out of {}", sym, nt);
+        let aux = ctx.anonymous_nonterm();
+        ctx.add_production(nt, vec![sym, Symbol::Nonterm(aux)]);
+        for p in prods {
+            let mut new_syms: Vec<_> = p.syms.iter().skip(1).cloned().collect();
+            ctx.add_production(aux, new_syms);
+            ctx.remove_production(p);
+        }
+        return true;
+    }
+
+    // Inline any nonterminals in first position.
+    let mut any_inlined = false;
+    for p in prods {
+        if let Some(&Symbol::Nonterm(lnt)) = p.syms.iter().next() {
+            // TODO: We somehow need to keep track of the fact that this was
+            // inlined, and probably needs some wrapping up to be done.
+            debug!("Inlining {} in {}", lnt, p);
+            for lp in ctx.prods[&lnt].clone() {
+                // trace!("  {}", lp);
+                let new_syms = lp
+                    .syms
+                    .iter()
+                    .chain(p.syms.iter().skip(1))
+                    .cloned()
+                    .collect();
+                ctx.add_production(nt, new_syms);
+            }
+            ctx.remove_production(p);
+            any_inlined = true;
+        }
+    }
+
+    any_inlined
 }
