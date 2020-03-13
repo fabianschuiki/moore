@@ -45,7 +45,7 @@ impl<'a> Context<'a> {
             t
         } else {
             let interned_name = self.arena.nonterm_arena.alloc_str(name);
-            let v = Nonterm(interned_name, self.next_nonterm);
+            let v = Nonterm(NontermName::Name(interned_name), self.next_nonterm);
             self.next_nonterm += 1;
             self.nonterm_lookup.insert(interned_name, v);
             self.sym_lookup.insert(interned_name, v.into());
@@ -55,11 +55,7 @@ impl<'a> Context<'a> {
 
     /// Create a new anonymous nonterminal.
     pub fn anonymous_nonterm(&mut self) -> Nonterm<'a> {
-        let interned_name = self
-            .arena
-            .nonterm_arena
-            .alloc_str(&format!("n{}", self.next_nonterm));
-        let v = Nonterm(interned_name, self.next_nonterm);
+        let v = Nonterm(NontermName::Anonymous, self.next_nonterm);
         self.next_nonterm += 1;
         v
     }
@@ -85,12 +81,6 @@ pub struct ContextArena<'a> {
     prod_arena: Arena<Production<'a>>,
     _dummy: std::marker::PhantomData<&'a ()>,
 }
-
-// impl ContextArena {
-// 	pub fn new() -> Self {
-// 		ContextArena {}
-// 	}
-// }
 
 /// A terminal.
 #[derive(Copy, Clone, Eq, Ord)]
@@ -122,11 +112,20 @@ impl std::hash::Hash for Term<'_> {
 
 /// A nonterminal.
 #[derive(Copy, Clone, Eq, Ord)]
-pub struct Nonterm<'a>(&'a str, usize);
+pub struct Nonterm<'a>(NontermName<'a>, usize);
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum NontermName<'a> {
+    Name(&'a str),
+    Anonymous,
+}
 
 impl std::fmt::Display for Nonterm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self.0 {
+            NontermName::Name(name) => write!(f, "{}", name),
+            NontermName::Anonymous => write!(f, "n{}", self.1),
+        }
     }
 }
 
