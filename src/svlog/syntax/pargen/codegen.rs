@@ -17,6 +17,7 @@ struct Codegen<'a, 'b> {
     ctx: &'b mut Context<'a>,
     nonterm_seen: HashSet<Nonterm<'a>>,
     nonterm_todo: VecDeque<Nonterm<'a>>,
+    nonterm_code: BTreeMap<Nonterm<'a>, Code<'a>>,
 }
 
 impl<'a, 'b> Codegen<'a, 'b> {
@@ -25,6 +26,7 @@ impl<'a, 'b> Codegen<'a, 'b> {
             ctx,
             nonterm_seen: Default::default(),
             nonterm_todo: Default::default(),
+            nonterm_code: Default::default(),
         }
     }
 
@@ -36,16 +38,17 @@ impl<'a, 'b> Codegen<'a, 'b> {
 
     pub fn generate(&mut self) {
         while let Some(nt) = self.nonterm_todo.pop_front() {
-            self.emit_callable(nt);
+            let code = self.emit_callable(nt);
+            self.nonterm_code.insert(nt, code);
         }
     }
 
-    fn emit_callable(&mut self, nt: Nonterm<'a>) {
-        trace!("Generating {}", nt);
+    fn emit_callable(&mut self, nt: Nonterm<'a>) -> Code<'a> {
+        // trace!("Generating {}", nt);
 
         // Analyze the discriminant.
         let mut prods = BTreeMap::<&'a Production<'a>, BTreeSet<Term<'a>>>::new();
-        let mut ambig = BTreeMap::<Term<'a>, &'a BTreeSet<&'a Production<'a>>>::new();
+        let mut ambig = BTreeMap::<&'a BTreeSet<&'a Production<'a>>, BTreeSet<Term<'a>>>::new();
         let mut epsilon_terms = BTreeSet::<Term<'a>>::new();
         let mut has_epsilon = false;
         for (&t, ps) in &self.ctx.ll_table[&nt] {
@@ -56,46 +59,46 @@ impl<'a, 'b> Codegen<'a, 'b> {
                 }
             }
             if ps.len() > 1 {
-                ambig.insert(t, ps);
+                ambig.entry(ps).or_default().insert(t);
             }
         }
 
         // Generate trivial code if possible.
         if prods.len() == 1 {
-            self.emit_callable_trivial(nt, prods.keys().nth(0).unwrap());
-            return;
+            return self.emit_production(prods.keys().nth(0).unwrap());
         }
 
         // Handle ambiguous code.
         if !ambig.is_empty() {
-            trace!("  Ambiguous: {:?}", ambig);
-            return;
+            trace!("Ambiguity in {}:", nt);
+            for (&ts, ps) in &ambig {
+                for t in ts {
+                    trace!("  {}", t);
+                }
+                trace!("  = {:?}", ps);
+            }
+            return Code::Error;
         }
 
         // Generate a simple match code.
         let mut cases = vec![];
         for (p, ts) in prods {
-            let actions = self.emit_production(p);
-            cases.push((ts, Box::new(Code::Actions(actions))));
+            let code = self.emit_production(p);
+            cases.push((ts, Box::new(code)));
         }
         let code = Code::Match {
             cases,
             expect: vec![nt].into_iter().collect(),
         };
+        code
     }
 
-    fn emit_callable_trivial(&mut self, nt: Nonterm<'a>, p: &'a Production<'a>) {
-        trace!("Generating trivial {}", nt);
-        let actions = self.emit_production(p);
-        trace!("{:?}", actions);
-    }
-
-    fn emit_production(&mut self, p: &'a Production<'a>) -> Vec<Code<'a>> {
+    fn emit_production(&mut self, p: &'a Production<'a>) -> Code<'a> {
         let mut actions = vec![];
         for &sym in &p.syms {
             actions.push(self.emit_symbol(sym));
         }
-        actions
+        Code::Actions(actions)
     }
 
     fn emit_symbol(&mut self, sym: Symbol<'a>) -> Code<'a> {
