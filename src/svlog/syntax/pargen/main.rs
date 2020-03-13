@@ -4,6 +4,7 @@
 extern crate log;
 
 mod ast;
+mod codegen;
 mod context;
 mod ll;
 mod parser;
@@ -52,6 +53,17 @@ fn main() -> Result<()> {
     }
 
     ll::build_ll(&mut context);
+
+    debug!("LL(1) Table:");
+    for (nt, ts) in &context.ll_table {
+        for (t, ps) in ts {
+            for p in ps {
+                debug!("  [{}, {}] = {}", nt, t, p);
+            }
+        }
+    }
+
+    codegen::codegen(&mut context);
 
     Ok(())
 }

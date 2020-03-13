@@ -293,5 +293,11 @@ impl std::fmt::Display for Production<'_> {
     }
 }
 
+impl std::fmt::Debug for Production<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 /// A LL(1) parse table.
 pub type LlTable<'a> = BTreeMap<Nonterm<'a>, BTreeMap<Term<'a>, BTreeSet<&'a Production<'a>>>>;
