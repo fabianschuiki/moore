@@ -3,14 +3,14 @@ pub struct Grammar {
     pub nts: Vec<Nonterminal>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq, Hash)]
 pub struct Nonterminal {
     pub public: bool,
     pub name: String,
     pub choices: Vec<Vec<Symbol>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Symbol {
     Epsilon,
     Token(String),

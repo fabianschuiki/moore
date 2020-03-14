@@ -2,6 +2,7 @@ use crate::{
     ast,
     context::{Context, Symbol},
 };
+use std::collections::HashMap;
 
 /// Populate a context with a parsed grammar AST.
 pub fn add_ast(ctx: &mut Context, ast: ast::Grammar) {
@@ -18,26 +19,40 @@ pub fn add_ast(ctx: &mut Context, ast: ast::Grammar) {
     }
 
     // Populate the productions.
+    let mut cache = Cache::new();
     for nt in &ast.nts {
         let nonterm = ctx.intern_nonterm(&nt.name);
         for choice in &nt.choices {
             trace!("Adding {} with {} symbols", nonterm, choice.len());
-            let syms = map_symbols(ctx, choice);
+            let syms = map_symbols(ctx, choice, &mut cache);
             ctx.add_production(nonterm, syms);
         }
     }
 }
 
-fn map_symbols<'a>(ctx: &mut Context<'a>, syms: &[ast::Symbol]) -> Vec<Symbol<'a>> {
+type Cache<'ast, 'ctx> = HashMap<&'ast ast::Symbol, Symbol<'ctx>>;
+
+fn map_symbols<'ast, 'ctx>(
+    ctx: &mut Context<'ctx>,
+    syms: &'ast [ast::Symbol],
+    cache: &mut Cache<'ast, 'ctx>,
+) -> Vec<Symbol<'ctx>> {
     let mut output = vec![];
     for sym in syms {
-        output.push(map_symbol(ctx, sym));
+        output.push(map_symbol(ctx, sym, cache));
     }
     output
 }
 
-fn map_symbol<'a>(ctx: &mut Context<'a>, sym: &ast::Symbol) -> Symbol<'a> {
-    match sym {
+fn map_symbol<'ast, 'ctx>(
+    ctx: &mut Context<'ctx>,
+    sym: &'ast ast::Symbol,
+    cache: &mut Cache<'ast, 'ctx>,
+) -> Symbol<'ctx> {
+    if let Some(&sym) = cache.get(&sym) {
+        return sym;
+    }
+    let out = match sym {
         ast::Symbol::Epsilon => Symbol::Epsilon,
         ast::Symbol::Token(name) => ctx
             .lookup_symbol(name)
@@ -45,12 +60,12 @@ fn map_symbol<'a>(ctx: &mut Context<'a>, sym: &ast::Symbol) -> Symbol<'a> {
         ast::Symbol::Group(syms) => {
             let nonterm = ctx.anonymous_nonterm();
             trace!("Adding group {} with {} symbols", nonterm, syms.len());
-            let syms = map_symbols(ctx, syms);
+            let syms = map_symbols(ctx, syms, cache);
             ctx.add_production(nonterm, syms);
             nonterm.into()
         }
         ast::Symbol::Maybe(sym) => {
-            let inner = map_symbol(ctx, sym);
+            let inner = map_symbol(ctx, sym, cache);
             let outer = ctx.anonymous_nonterm();
             trace!("Adding maybe {} around {}", outer, inner);
             ctx.add_production(outer, vec![Symbol::Epsilon]);
@@ -58,7 +73,7 @@ fn map_symbol<'a>(ctx: &mut Context<'a>, sym: &ast::Symbol) -> Symbol<'a> {
             outer.into()
         }
         ast::Symbol::Any(sym) => {
-            let inner = map_symbol(ctx, sym);
+            let inner = map_symbol(ctx, sym, cache);
             let outer_some = ctx.anonymous_nonterm();
             let outer_any = ctx.anonymous_nonterm();
             trace!("Adding any {}/{} around {}", outer_some, outer_any, inner);
@@ -69,12 +84,14 @@ fn map_symbol<'a>(ctx: &mut Context<'a>, sym: &ast::Symbol) -> Symbol<'a> {
             outer_any.into()
         }
         ast::Symbol::Some(sym) => {
-            let inner = map_symbol(ctx, sym);
+            let inner = map_symbol(ctx, sym, cache);
             let outer = ctx.anonymous_nonterm();
             trace!("Adding some {} around {}", outer, inner);
             ctx.add_production(outer, vec![inner]);
             ctx.add_production(outer, vec![outer.into(), inner]);
             outer.into()
         }
-    }
+    };
+    cache.insert(sym, out);
+    out
 }
