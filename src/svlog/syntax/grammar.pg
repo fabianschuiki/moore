@@ -112,6 +112,7 @@ primary_literal = { number, time_literal, unbased_unsized_literal, string_litera
 
 // A.9.3 Identifiers
 class_identifier = identifier;
+covergroup_identifier = identifier;
 genvar_identifier = identifier;
 package_identifier = identifier;
 package_scope = { package_identifier '::', '$unit' '::' };
@@ -119,3 +120,4 @@ parameter_identifier = identifier;
 type_identifier = identifier;
 ps_class_identifier = package_scope? class_identifier;
 ps_parameter_identifier = package_scope? parameter_identifier;
+ps_covergroup_identifier = package_scope? covergroup_identifier;
