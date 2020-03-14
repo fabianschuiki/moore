@@ -8,7 +8,7 @@ pub fn build_ll(ctx: &mut Context) {
     let mut table = Default::default();
     for (&nt, prods) in &ctx.prods {
         for p in prods {
-            for t in first_set_of_smybols(ctx, &p.syms) {
+            for t in ctx.first_set_of_symbols(&p.syms) {
                 add_action(&mut table, nt, t, p);
             }
             if ctx.symbols_expand_to_epsilon(&p.syms) {
@@ -32,77 +32,6 @@ fn add_action<'a>(table: &mut LlTable<'a>, nt: Nonterm<'a>, term: Term<'a>, p: &
     {
         // trace!("[{}, {}] = {}", nt, term, p);
     }
-}
-
-/// Collect the set of starting symbols that can be derived from a slice of
-/// symbols.
-fn first_set_of_smybols<'a>(ctx: &Context<'a>, syms: &[Symbol<'a>]) -> BTreeSet<Term<'a>> {
-    let mut into = BTreeSet::new();
-    let mut seen = BTreeSet::new();
-    let mut todo = VecDeque::new();
-    seen.insert(syms);
-    todo.push_back(syms);
-
-    while let Some(syms) = todo.pop_front() {
-        let mut iter = syms.iter();
-        while let Some(&sym) = iter.next() {
-            match sym {
-                Symbol::Error => break,
-                Symbol::Epsilon => continue,
-                Symbol::Term(t) => {
-                    into.insert(t);
-                    break;
-                }
-                Symbol::Nonterm(nt) => {
-                    for p in &ctx.prods[&nt] {
-                        if seen.insert(&p.syms) {
-                            todo.push_back(&p.syms);
-                        }
-                    }
-                    if !ctx.production_expands_to_epsilon(nt) {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    into
-}
-
-/// Collect the set of starting symbols that can be derived from a NT.
-fn first_set_of_nonterm<'a>(ctx: &Context<'a>, nt: Nonterm<'a>) -> BTreeSet<Term<'a>> {
-    let mut into = BTreeSet::new();
-    let mut seen = BTreeSet::new();
-    let mut todo = VecDeque::new();
-    seen.insert(nt);
-    todo.push_back(nt);
-
-    while let Some(nt) = todo.pop_front() {
-        for p in &ctx.prods[&nt] {
-            let mut iter = p.syms.iter();
-            while let Some(&sym) = iter.next() {
-                match sym {
-                    Symbol::Error => break,
-                    Symbol::Epsilon => continue,
-                    Symbol::Term(t) => {
-                        into.insert(t);
-                        break;
-                    }
-                    Symbol::Nonterm(nt) => {
-                        if seen.insert(nt) {
-                            todo.push_back(nt);
-                        }
-                        if !ctx.production_expands_to_epsilon(nt) {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    into
 }
 
 /// Compute the follow sets across the grammar.
@@ -144,7 +73,7 @@ fn collect_follow<'a>(ctx: &Context<'a>) -> BTreeMap<Nonterm<'a>, BTreeSet<Term<
                         // NT whose follow set could include anything beyond
                         // this NT. Then immediately add this NT as a lead.
                         Symbol::Nonterm(nt) => {
-                            let first = first_set_of_nonterm(ctx, nt);
+                            let first = ctx.first_set_of_nonterm(nt);
                             for &lead in &leads {
                                 into.entry(lead).or_default().extend(first.iter().cloned());
                             }

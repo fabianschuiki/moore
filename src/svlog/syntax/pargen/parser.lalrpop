@@ -5,8 +5,8 @@ use crate::ast;
 grammar;
 
 pub Grammar: ast::Grammar = {
-    <Nonterminal> => { let mut g = ast::Grammar::default(); g.nts.push(<>); g },
-    <g:Grammar> <r:Nonterminal> => { let mut g = g; g.nts.push(r); g },
+    Comment <Nonterminal> => { let mut g = ast::Grammar::default(); g.nts.push(<>); g },
+    <g:Grammar> Comment <r:Nonterminal> => { let mut g = g; g.nts.push(r); g },
 };
 
 Nonterminal: ast::Nonterminal = <public:("pub"?)> <name:Ident> "=" <choices:NonterminalChoices> ";" => {
@@ -44,3 +44,5 @@ Comma<T>: Vec<T> = {
         }
     }
 };
+
+Comment: () = r"//.*"* => ();

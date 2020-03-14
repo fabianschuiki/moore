@@ -41,3 +41,30 @@ pub fn remove_left_recursion(ctx: &mut Context) {
         }
     }
 }
+
+/// Left-factor the grammar.
+pub fn left_factor(ctx: &mut Context) {
+    info!("Left-factoring grammar");
+
+    // Identift ambiguous rules that require factoring.
+    for (&nt, ps) in &ctx.prods {
+        if has_conflict(ctx, ps) {
+            trace!("Conflict in {}", nt);
+            for p in ps {
+                trace!("  {}", p);
+            }
+        }
+    }
+}
+
+fn has_conflict<'a>(ctx: &Context<'a>, ps: &BTreeSet<&Production<'a>>) -> bool {
+    let mut seen = HashSet::new();
+    for p in ps {
+        for s in ctx.first_set_of_symbols(&p.syms) {
+            if !seen.insert(s) {
+                return true;
+            }
+        }
+    }
+    false
+}

@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
 };
 use typed_arena::Arena;
 
@@ -170,6 +170,77 @@ impl<'a> Context<'a> {
             .borrow_mut()
             .insert(syms.to_vec(), epsilon);
         epsilon
+    }
+
+    /// Collect the set of starting symbols that can be derived from a slice of
+    /// symbols.
+    pub fn first_set_of_symbols(&self, syms: &[Symbol<'a>]) -> BTreeSet<Term<'a>> {
+        let mut into = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut todo = VecDeque::new();
+        seen.insert(syms);
+        todo.push_back(syms);
+
+        while let Some(syms) = todo.pop_front() {
+            let mut iter = syms.iter();
+            while let Some(&sym) = iter.next() {
+                match sym {
+                    Symbol::Error => break,
+                    Symbol::Epsilon => continue,
+                    Symbol::Term(t) => {
+                        into.insert(t);
+                        break;
+                    }
+                    Symbol::Nonterm(nt) => {
+                        for p in &self.prods[&nt] {
+                            if seen.insert(&p.syms) {
+                                todo.push_back(&p.syms);
+                            }
+                        }
+                        if !self.production_expands_to_epsilon(nt) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        into
+    }
+
+    /// Collect the set of starting symbols that can be derived from a NT.
+    pub fn first_set_of_nonterm(&self, nt: Nonterm<'a>) -> BTreeSet<Term<'a>> {
+        let mut into = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut todo = VecDeque::new();
+        seen.insert(nt);
+        todo.push_back(nt);
+
+        while let Some(nt) = todo.pop_front() {
+            for p in &self.prods[&nt] {
+                let mut iter = p.syms.iter();
+                while let Some(&sym) = iter.next() {
+                    match sym {
+                        Symbol::Error => break,
+                        Symbol::Epsilon => continue,
+                        Symbol::Term(t) => {
+                            into.insert(t);
+                            break;
+                        }
+                        Symbol::Nonterm(nt) => {
+                            if seen.insert(nt) {
+                                todo.push_back(nt);
+                            }
+                            if !self.production_expands_to_epsilon(nt) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        into
     }
 }
 

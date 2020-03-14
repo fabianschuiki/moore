@@ -1,8 +1,6 @@
 pub data_declaration =
     'const'? 'var'? lifetime? data_type_or_implicit list_of_variable_decl_assignments ';';
 lifetime = { 'static', 'automatic' };
-data_type_or_implicit = { data_type, implicit_data_type };
-implicit_data_type = signing? packed_dimension*;
 data_type_or_void = { data_type, 'void' };
 data_type = {
     integer_vector_type signing? packed_dimension*,
@@ -12,8 +10,18 @@ data_type = {
     'enum' enum_base_type? '{' enum_name_declaration (',' enum_name_declaration)* '}' packed_dimension*,
     'string',
     'chandle',
-    'virtual' 'interface' identifier,
+    'virtual' 'interface'? identifier,
+    class_or_package_scope? type_identifier packed_dimension*,
+    class_type,
+    'event',
+    ps_covergroup_identifier,
+    type_reference,
 };
+data_type_or_implicit = { data_type, implicit_data_type };
+implicit_data_type = signing? packed_dimension*;
+class_or_package_scope = { class_scope, package_scope };
+class_scope = class_type '::';
+class_type = ps_class_identifier parameter_value_assignment? ('::' class_identifier parameter_value_assignment?)*;
 list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
 signing = { 'signed', 'unsigned' };
 unpacked_dimension = { '[' constant_range ']', '[' constant_expression ']' };
@@ -29,6 +37,10 @@ variable_dimension = {
     unpacked_dimension,
     associative_dimension,
     queue_dimension,
+};
+type_reference = {
+    'type' '(' expression ')',
+    'type' '(' data_type ')',
 };
 integer_vector_type = { 'bit', 'logic', 'reg' };
 integer_atom_type = { 'byte', 'shortint', 'int', 'longint', 'integer', 'time' };
@@ -51,10 +63,7 @@ class_new = {
     'new' '(' list_of_arguments ')',
     'new' expression,
 };
-
 dynamic_array_new = 'new' '[' expression ']' ('(' expression ')')?;
-constant_range = constant_expression ':' constant_expression;
-constant_expression = identifier;
 expression = identifier;
 attribute_instance = 'ATTR';
 random_qualifier = { 'rand', 'randc' };
@@ -64,3 +73,49 @@ list_of_arguments = {
     expression? (',' expression?)? (',' '.' identifier '(' expression? ')')*,
     '.' identifier '(' expression? ')' (',' '.' identifier '(' expression? ')')*,
 };
+
+t10 = {
+    '$' n49,
+    '*',
+    constant_expression,
+    constant_range,
+    data_type,
+};
+
+/////////////////////////
+//   A.8 Expressions   //
+/////////////////////////
+
+// A.8.3 Expressions
+constant_expression = {
+    constant_primary,
+    unary_operator attribute_instance* constant_primary,
+    constant_expression binary_operator attribute_instance* constant_expression,
+    constant_expression '?' attribute_instance* constant_expression ':' constant_expression,
+};
+constant_range = constant_expression ':' constant_expression;
+
+// A.8.4 Primaries
+constant_primary = {
+    primary_literal,
+    ps_parameter_identifier constant_select,
+    genvar_identifier,
+    type_reference,
+};
+primary = {
+    primary_literal,
+    'this',
+    '$',
+    'null',
+};
+primary_literal = { number, time_literal, unbased_unsized_literal, string_literal };
+
+// A.9.3 Identifiers
+class_identifier = identifier;
+genvar_identifier = identifier;
+package_identifier = identifier;
+package_scope = { package_identifier '::', '$unit' '::' };
+parameter_identifier = identifier;
+type_identifier = identifier;
+ps_class_identifier = package_scope? class_identifier;
+ps_parameter_identifier = package_scope? parameter_identifier;
