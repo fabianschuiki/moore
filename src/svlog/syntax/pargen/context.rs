@@ -103,7 +103,7 @@ impl<'a> Context<'a> {
             syms,
             is_epsilon,
         });
-        trace!("Added production {}", prod);
+        // trace!("Added production {}", prod);
         self.prods.entry(nt).or_default().insert(prod);
         self.production_epsilon_cache.borrow_mut().clear();
         self.symbols_epsilon_cache.borrow_mut().clear();
@@ -112,7 +112,7 @@ impl<'a> Context<'a> {
 
     /// Remove a production.
     pub fn remove_production(&mut self, prod: &Production<'a>) {
-        trace!("Removed production {}", prod);
+        // trace!("Removed production {}", prod);
         self.prods.entry(prod.nt).or_default().remove(prod);
         self.production_epsilon_cache.borrow_mut().clear();
         self.symbols_epsilon_cache.borrow_mut().clear();

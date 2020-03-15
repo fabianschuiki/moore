@@ -128,9 +128,9 @@ fn disambiguate<'a>(
     if seqs.len() == 1 {
         return;
     }
-    trace!("Disambiguate:");
+    trace!("  Disambiguate:");
     for syms in &seqs {
-        trace!("  {}", syms.iter().format(" "));
+        trace!("    {}", syms.iter().format(" "));
     }
 
     // Fully expand nonterminals in first place.
@@ -194,9 +194,9 @@ fn disambiguate<'a>(
     done.sort();
     done.dedup();
 
-    trace!("Expanded:");
+    trace!("  Expanded:");
     for d in &done {
-        trace!("  {}", format_symbols(&d));
+        trace!("    {}", format_symbols(&d));
     }
 
     // No need to further disambiguate if we have only one lead.
@@ -235,7 +235,7 @@ fn disambiguate<'a>(
             _ => None,
         };
         if let Some(balanced_end) = balanced_end {
-            trace!("  Factoring-out balanced {} {}", symbol, balanced_end);
+            trace!("    Factoring-out balanced {} {}", symbol, balanced_end);
             let mut subseqs = vec![];
             for (syms, offset) in done.iter().zip(offsets.iter_mut()) {
                 *offset += 1;
@@ -261,6 +261,33 @@ fn disambiguate<'a>(
         }
     }
     trace!("  Prefix {}", format_symbols(&prefix));
+
+    // Compute the tails that are left over after prefix extraction.
+    let tails: BTreeSet<_> = done
+        .iter()
+        .zip(offsets.iter())
+        .map(|(syms, &offset)| &syms[offset..])
+        .collect();
+
+    // If there is one common tail, add that to the prefix immediately.
+    // Otherwise just go ahead and create an auxiliary nonterminal that will
+    // contain all of the tails.
+    if tails.len() == 1 {
+        let tail = tails.into_iter().next().unwrap();
+        if !tail.is_empty() {
+            trace!("  Adding unique tail {}", format_symbols(tail));
+            prefix.extend(tail);
+        }
+    } else {
+        let aux = ctx.anonymous_nonterm();
+        trace!("  Adding auxiliary tail {}", aux);
+        prefix.push(Symbol::Nonterm(aux));
+        for tail in tails {
+            ctx.add_production(aux, tail.to_vec());
+        }
+    }
+
+    trace!("  Replacement: ? -> {}", format_symbols(&prefix));
 
     // // Find common prefices and suffices.
     // let mut prefix = vec![];
