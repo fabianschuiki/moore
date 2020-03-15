@@ -1,4 +1,4 @@
-use crate::context::{Context, LlTable, Nonterm, Production, Symbol, Term};
+use crate::context::{format_symbols, Context, LlTable, Nonterm, Production, Symbol, Term};
 use itertools::Itertools;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
@@ -51,18 +51,21 @@ pub fn left_factor(ctx: &mut Context) {
     info!("Left-factoring grammar");
 
     // Identift ambiguous rules that require factoring.
+    let mut conflicts = vec![];
     for (&nt, ps) in &ctx.prods {
         if has_conflict(ctx, ps) {
             debug!("Conflict in {}", nt);
             for p in ps {
                 trace!("  {}", p);
             }
-            handle_conflict(
-                ctx,
+            conflicts.push((
+                nt,
                 ctx.prods[&nt].iter().map(|p| p.syms.as_slice()).collect(),
-                &mut Default::default(),
-            );
+            ));
         }
+    }
+    for (nt, seqs) in conflicts {
+        handle_conflict(ctx, seqs, &mut Default::default());
     }
 }
 
@@ -79,7 +82,7 @@ fn has_conflict<'a>(ctx: &Context<'a>, ps: &BTreeSet<&Production<'a>>) -> bool {
 }
 
 fn handle_conflict<'a>(
-    ctx: &Context<'a>,
+    ctx: &mut Context<'a>,
     seqs: BTreeSet<&[Symbol<'a>]>,
     stack: &mut HashSet<Vec<Symbol<'a>>>,
 ) {
@@ -117,7 +120,7 @@ fn handle_conflict<'a>(
 }
 
 fn disambiguate<'a>(
-    ctx: &Context<'a>,
+    ctx: &mut Context<'a>,
     seqs: Vec<&[Symbol<'a>]>,
     stack: &mut HashSet<Vec<Symbol<'a>>>,
 ) {
@@ -193,7 +196,7 @@ fn disambiguate<'a>(
 
     trace!("Expanded:");
     for d in &done {
-        trace!("  {}", d.iter().format(" "));
+        trace!("  {}", format_symbols(&d));
     }
 
     // No need to further disambiguate if we have only one lead.
@@ -244,18 +247,20 @@ fn disambiguate<'a>(
                 *offset += 1;
                 subseqs.push(subsyms);
             }
-            trace!("  Gobbled up subsequences:");
-            for s in &subseqs {
-                trace!("    {}", s.iter().format(" "));
+            // trace!("  Gobbled up subsequences:");
+            let aux = ctx.anonymous_nonterm();
+            for s in subseqs {
+                // trace!("    {}", s.iter().format(" "));
+                ctx.add_production(aux, s);
             }
-            prefix.push(Symbol::Error);
+            prefix.push(Symbol::Nonterm(aux));
             prefix.push(balanced_end);
             break;
         } else {
             offsets.iter_mut().for_each(|o| *o += 1);
         }
     }
-    trace!("  Prefix {}", prefix.iter().format(" "));
+    trace!("  Prefix {}", format_symbols(&prefix));
 
     // // Find common prefices and suffices.
     // let mut prefix = vec![];

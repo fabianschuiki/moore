@@ -367,6 +367,29 @@ impl std::fmt::Debug for Symbol<'_> {
     }
 }
 
+/// A formatter for symbol sequences.
+pub struct SymbolsFormatter<'a>(&'a [Symbol<'a>]);
+
+impl std::fmt::Display for SymbolsFormatter<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.0.is_empty() {
+            write!(f, "ε")
+        } else {
+            write!(f, "{}", self.0.iter().format(" "))
+        }
+    }
+}
+
+impl std::fmt::Debug for SymbolsFormatter<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+pub fn format_symbols<'a>(syms: &'a [Symbol<'a>]) -> SymbolsFormatter<'a> {
+    SymbolsFormatter(syms.as_ref())
+}
+
 /// A production in the grammar.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Production<'a> {
@@ -377,11 +400,7 @@ pub struct Production<'a> {
 
 impl std::fmt::Display for Production<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.is_epsilon {
-            write!(f, "{} -> ε", self.nt)
-        } else {
-            write!(f, "{} -> {}", self.nt, self.syms.iter().format(" "))
-        }
+        write!(f, "{} -> {}", self.nt, format_symbols(&self.syms))
     }
 }
 
