@@ -1,6 +1,9 @@
 use crate::context::{Context, LlTable, Nonterm, Production, Symbol, Term};
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    rc::Rc,
+};
 
 /// Remove left-recursion from the grammar.
 pub fn remove_left_recursion(ctx: &mut Context) {
@@ -128,38 +131,71 @@ fn disambiguate<'a>(
     }
 
     // Fully expand nonterminals in first place.
-    let mut done = BTreeSet::new();
-    let mut leads: BTreeSet<_> = seqs.iter().map(|s| s.to_vec()).collect();
+    #[derive(Clone)]
+    struct Lead<'a> {
+        parent: Option<Rc<Lead<'a>>>,
+        syms: Vec<Symbol<'a>>,
+    }
+    let mut done = vec![];
+    let mut leads: Vec<Lead<'a>> = seqs
+        .iter()
+        .map(|s| Lead {
+            parent: None,
+            syms: s.to_vec(),
+        })
+        .collect();
 
     while !leads.is_empty() {
         for lead in std::mem::take(&mut leads) {
-            if lead.is_empty() {
-                continue;
-            }
-            match lead[0] {
+            assert!(
+                !lead.syms.is_empty(),
+                "there should be no expansion to epsilon"
+            );
+            match lead.syms[0] {
                 Symbol::Nonterm(nt) => {
+                    let parent = Rc::new(lead);
                     for p in &ctx.prods[&nt] {
-                        leads.insert(
-                            p.syms
+                        leads.push(Lead {
+                            parent: Some(parent.clone()),
+                            syms: p
+                                .syms
                                 .iter()
                                 .cloned()
-                                .chain(lead.iter().skip(1).cloned())
+                                .chain(parent.syms.iter().skip(1).cloned())
                                 .collect(),
-                        );
+                        });
                     }
                 }
                 _ => {
-                    done.insert(lead);
+                    done.push(lead);
                 }
             }
         }
     }
+
+    // Step-by-step revert the expansion as long as all leads match.
+    loop {
+        let firsts: BTreeSet<_> = done
+            .iter()
+            .map(|lead| lead.parent.as_ref().map(|p| p.syms[0]))
+            .collect();
+        if firsts.len() == 1 && firsts.iter().next().unwrap().is_some() {
+            for lead in std::mem::take(&mut done) {
+                done.push((*lead.parent.unwrap()).clone());
+            }
+        } else {
+            break;
+        }
+    }
+    let done: BTreeSet<_> = done.into_iter().map(|lead| lead.syms).collect();
+
     trace!("Expanded:");
     for d in &done {
         trace!("  {}", d.iter().format(" "));
     }
+
+    // No need to further disambiguate if we have only one lead.
     if done.len() <= 1 {
-        // No need to further disambiguate.
         return;
     }
 
@@ -202,25 +238,25 @@ fn disambiguate<'a>(
         suffix.iter().format(" ")
     );
 
-    // Disambiguate whatever is left.
-    let set: BTreeSet<_> = done
-        .iter()
-        .map(|d| &d[prefix.len()..d.len() - suffix.len()])
-        .collect();
-    if set.iter().any(|&s| stack.contains(s)) {
-        warn!("Recursion in disambiguation:");
-        for s in &set {
-            warn!("  {}", s.iter().format(" "));
-        }
-        return;
-    }
-    for s in &set {
-        stack.insert(s.to_vec());
-    }
-    handle_conflict(ctx, set.clone(), stack);
-    for &s in &set {
-        stack.remove(s);
-    }
+    // // Disambiguate whatever is left.
+    // let set: BTreeSet<_> = done
+    //     .iter()
+    //     .map(|d| &d[prefix.len()..d.len() - suffix.len()])
+    //     .collect();
+    // if set.iter().any(|&s| stack.contains(s)) {
+    //     warn!("Recursion in disambiguation:");
+    //     for s in &set {
+    //         warn!("  {}", s.iter().format(" "));
+    //     }
+    //     return;
+    // }
+    // for s in &set {
+    //     stack.insert(s.to_vec());
+    // }
+    // handle_conflict(ctx, set.clone(), stack);
+    // for &s in &set {
+    //     stack.remove(s);
+    // }
 
     // // Find the most shallow expansion possible that produces a common prefix
     // // for all sequences.

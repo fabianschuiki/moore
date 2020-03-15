@@ -74,13 +74,13 @@ list_of_arguments = {
     '.' identifier '(' expression? ')' (',' '.' identifier '(' expression? ')')*,
 };
 
-t10 = {
-    '$' n49,
-    '*',
-    constant_expression,
-    constant_range,
-    data_type,
-};
+// t10 = {
+//     '$' n49,
+//     '*',
+//     constant_expression,
+//     constant_range,
+//     data_type,
+// };
 
 /////////////////////////
 //   A.8 Expressions   //
