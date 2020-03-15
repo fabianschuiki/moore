@@ -187,7 +187,9 @@ fn disambiguate<'a>(
             break;
         }
     }
-    let done: BTreeSet<_> = done.into_iter().map(|lead| lead.syms).collect();
+    let mut done: Vec<_> = done.into_iter().map(|lead| lead.syms).collect();
+    done.sort();
+    done.dedup();
 
     trace!("Expanded:");
     for d in &done {
@@ -199,44 +201,100 @@ fn disambiguate<'a>(
         return;
     }
 
-    // Find common prefices and suffices.
+    // Find a common prefix, considering balanced tokens to factor out parts of
+    // the rules.
     let mut prefix = vec![];
+    let mut offsets: Vec<usize> = done.iter().map(|_| 0).collect();
     loop {
-        let set: HashSet<_> = done
+        // Find the set of next symbols in the rules.
+        let symbols: HashSet<_> = done
             .iter()
-            .map(|syms| syms.iter().skip(prefix.len()).next())
+            .zip(offsets.iter())
+            .map(|(syms, &offset)| syms.get(offset))
             .collect();
-        if set.len() == 1 {
-            if let Some(p) = set.into_iter().next().unwrap() {
-                prefix.push(p);
-            } else {
-                break;
-            }
-        } else {
+
+        // Check if we have one unique prefix symbol.
+        if symbols.len() != 1 {
             break;
         }
-    }
-    let mut suffix = vec![];
-    loop {
-        let set: HashSet<_> = done
-            .iter()
-            .map(|syms| syms.iter().rev().skip(suffix.len()).next())
-            .collect();
-        if set.len() == 1 {
-            if let Some(s) = set.into_iter().next().unwrap() {
-                suffix.push(s);
-            } else {
-                break;
+        let symbol = match symbols.into_iter().next().unwrap() {
+            Some(&p) => p,
+            None => break,
+        };
+
+        // If the symbol is the left of a balanced pair, advance ahead to its
+        // counterpart and gobble up the symbols in between.
+        prefix.push(symbol);
+        let balanced_end = match symbol.to_string().as_str() {
+            "'('" => ctx.lookup_symbol("')'"),
+            "'['" => ctx.lookup_symbol("']'"),
+            "'{'" => ctx.lookup_symbol("'}'"),
+            _ => None,
+        };
+        if let Some(balanced_end) = balanced_end {
+            trace!("  Factoring-out balanced {} {}", symbol, balanced_end);
+            let mut subseqs = vec![];
+            for (syms, offset) in done.iter().zip(offsets.iter_mut()) {
+                *offset += 1;
+                let mut subsyms = vec![];
+                while syms[*offset] != balanced_end {
+                    subsyms.push(syms[*offset]);
+                    *offset += 1;
+                }
+                *offset += 1;
+                subseqs.push(subsyms);
             }
-        } else {
+            trace!("  Gobbled up subsequences:");
+            for s in &subseqs {
+                trace!("    {}", s.iter().format(" "));
+            }
+            prefix.push(Symbol::Error);
+            prefix.push(balanced_end);
             break;
+        } else {
+            offsets.iter_mut().for_each(|o| *o += 1);
         }
     }
-    trace!(
-        "  [{} ... {}]",
-        prefix.iter().format(" "),
-        suffix.iter().format(" ")
-    );
+    trace!("  Prefix {}", prefix.iter().format(" "));
+
+    // // Find common prefices and suffices.
+    // let mut prefix = vec![];
+    // loop {
+    //     let set: HashSet<_> = done
+    //         .iter()
+    //         .map(|syms| syms.iter().skip(prefix.len()).next())
+    //         .collect();
+    //     if set.len() == 1 {
+    //         if let Some(p) = set.into_iter().next().unwrap() {
+    //             prefix.push(p);
+    //         } else {
+    //             break;
+    //         }
+    //     } else {
+    //         break;
+    //     }
+    // }
+    // let mut suffix = vec![];
+    // loop {
+    //     let set: HashSet<_> = done
+    //         .iter()
+    //         .map(|syms| syms.iter().rev().skip(suffix.len()).next())
+    //         .collect();
+    //     if set.len() == 1 {
+    //         if let Some(s) = set.into_iter().next().unwrap() {
+    //             suffix.push(s);
+    //         } else {
+    //             break;
+    //         }
+    //     } else {
+    //         break;
+    //     }
+    // }
+    // trace!(
+    //     "  [{} ... {}]",
+    //     prefix.iter().format(" "),
+    //     suffix.iter().format(" ")
+    // );
 
     // // Disambiguate whatever is left.
     // let set: BTreeSet<_> = done
