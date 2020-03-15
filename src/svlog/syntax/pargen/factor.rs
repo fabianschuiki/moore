@@ -54,18 +54,11 @@ pub fn left_factor(ctx: &mut Context) {
     let mut conflicts = vec![];
     for (&nt, ps) in &ctx.prods {
         if has_conflict(ctx, ps) {
-            debug!("Conflict in {}", nt);
-            for p in ps {
-                trace!("  {}", p);
-            }
-            conflicts.push((
-                nt,
-                ctx.prods[&nt].iter().map(|p| p.syms.as_slice()).collect(),
-            ));
+            conflicts.push((nt, ctx.prods[&nt].iter().cloned().collect()));
         }
     }
-    for (nt, seqs) in conflicts {
-        handle_conflict(ctx, seqs, &mut Default::default());
+    for (nt, ps) in conflicts {
+        handle_conflict(ctx, nt, ps, &mut Default::default());
     }
 }
 
@@ -83,13 +76,19 @@ fn has_conflict<'a>(ctx: &Context<'a>, ps: &BTreeSet<&Production<'a>>) -> bool {
 
 fn handle_conflict<'a>(
     ctx: &mut Context<'a>,
-    seqs: BTreeSet<&[Symbol<'a>]>,
+    nt: Nonterm<'a>,
+    prods: BTreeSet<&'a Production<'a>>,
     stack: &mut HashSet<Vec<Symbol<'a>>>,
 ) {
-    let mut todo: BTreeSet<_> = seqs.into_iter().filter(|s| !s.is_empty()).collect();
-    let mut firsts: HashMap<&[Symbol], BTreeSet<Term>> = todo
+    debug!("Conflict in {}", nt);
+    for p in &prods {
+        trace!("  {}", p);
+    }
+
+    let mut todo: BTreeSet<_> = prods.into_iter().filter(|p| !p.syms.is_empty()).collect();
+    let mut firsts: HashMap<&Production, BTreeSet<Term>> = todo
         .iter()
-        .map(|&s| (s, ctx.first_set_of_symbols(s)))
+        .map(|&p| (p, ctx.first_set_of_symbols(&p.syms)))
         .collect();
     while let Some(&init) = todo.iter().next() {
         todo.remove(&init);
@@ -115,22 +114,23 @@ fn handle_conflict<'a>(
             }
         }
         // trace!("Colliders {:?}", colliders);
-        disambiguate(ctx, colliders.into_iter().collect(), stack);
+        disambiguate(ctx, nt, colliders, stack);
     }
 }
 
 fn disambiguate<'a>(
     ctx: &mut Context<'a>,
-    seqs: Vec<&[Symbol<'a>]>,
+    nt: Nonterm<'a>,
+    prods: BTreeSet<&'a Production<'a>>,
     stack: &mut HashSet<Vec<Symbol<'a>>>,
 ) {
     // Handle the trivial case.
-    if seqs.len() == 1 {
+    if prods.len() == 1 {
         return;
     }
     trace!("  Disambiguate:");
-    for syms in &seqs {
-        trace!("    {}", syms.iter().format(" "));
+    for p in &prods {
+        trace!("    {}", p.syms.iter().format(" "));
     }
 
     // Fully expand nonterminals in first place.
@@ -140,11 +140,11 @@ fn disambiguate<'a>(
         syms: Vec<Symbol<'a>>,
     }
     let mut done = vec![];
-    let mut leads: Vec<Lead<'a>> = seqs
+    let mut leads: Vec<Lead<'a>> = prods
         .iter()
-        .map(|s| Lead {
+        .map(|p| Lead {
             parent: None,
-            syms: s.to_vec(),
+            syms: p.syms.to_vec(),
         })
         .collect();
 
@@ -287,7 +287,15 @@ fn disambiguate<'a>(
         }
     }
 
-    trace!("  Replacement: ? -> {}", format_symbols(&prefix));
+    // Actually replace the production.
+    trace!("  Replacing:");
+    for p in &prods {
+        trace!("    {}", p);
+        ctx.remove_production(p);
+    }
+    trace!("  With:");
+    let p = ctx.add_production(nt, prefix);
+    trace!("    {}", p);
 
     // // Find common prefices and suffices.
     // let mut prefix = vec![];
