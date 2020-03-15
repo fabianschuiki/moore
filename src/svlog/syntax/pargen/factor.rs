@@ -50,15 +50,22 @@ pub fn remove_left_recursion(ctx: &mut Context) {
 pub fn left_factor(ctx: &mut Context) {
     info!("Left-factoring grammar");
 
-    // Identift ambiguous rules that require factoring.
-    let mut conflicts = vec![];
-    for (&nt, ps) in &ctx.prods {
-        if has_conflict(ctx, ps) {
-            conflicts.push((nt, ctx.prods[&nt].iter().cloned().collect()));
+    for i in 0..10 {
+        debug!("Iteration {}", i);
+
+        // Identify ambiguous rules that require factoring.
+        let mut conflicts = vec![];
+        for (&nt, ps) in &ctx.prods {
+            if has_conflict(ctx, ps) {
+                conflicts.push((nt, ctx.prods[&nt].iter().cloned().collect()));
+            }
         }
-    }
-    for (nt, ps) in conflicts {
-        handle_conflict(ctx, nt, ps, &mut Default::default());
+
+        // Refactor those rules.
+        for (nt, ps) in conflicts {
+            handle_conflict(ctx, nt, ps, &mut Default::default());
+            // std::io::stdin().read_line(&mut String::new());
+        }
     }
 }
 
@@ -150,10 +157,9 @@ fn disambiguate<'a>(
 
     while !leads.is_empty() {
         for lead in std::mem::take(&mut leads) {
-            assert!(
-                !lead.syms.is_empty(),
-                "there should be no expansion to epsilon"
-            );
+            if lead.syms.is_empty() {
+                continue;
+            }
             match lead.syms[0] {
                 Symbol::Nonterm(nt) => {
                     let parent = Rc::new(lead);
@@ -255,7 +261,6 @@ fn disambiguate<'a>(
             }
             prefix.push(Symbol::Nonterm(aux));
             prefix.push(balanced_end);
-            break;
         } else {
             offsets.iter_mut().for_each(|o| *o += 1);
         }
