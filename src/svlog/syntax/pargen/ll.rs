@@ -197,3 +197,16 @@ fn handle_ambiguity<'a>(
 
     any_inlined
 }
+
+pub fn dump_ambiguities(ctx: &Context) {
+    for (&nt, prods) in &ctx.ll_table {
+        for (&t, ps) in prods {
+            if ps.len() > 1 {
+                trace!("Ambiguity on {}:", t);
+                for p in ps {
+                    trace!("  {}", p);
+                }
+            }
+        }
+    }
+}

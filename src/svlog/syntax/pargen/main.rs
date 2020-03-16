@@ -54,9 +54,10 @@ fn main() -> Result<()> {
         }
     }
 
-    factor::left_factor(&mut context);
+    // factor::left_factor(&mut context);
 
     ll::build_ll(&mut context);
+    ll::dump_ambiguities(&context);
     // for _ in 0..0 {
     //     if !ll::left_factor(&mut context) {
     //         break;
@@ -65,23 +66,23 @@ fn main() -> Result<()> {
     //     ll::build_ll(&mut context);
     // }
 
-    debug!("Grammar:");
-    for ps in context.prods.values() {
-        for p in ps {
-            debug!("  {}", p);
-        }
-    }
+    // debug!("Grammar:");
+    // for ps in context.prods.values() {
+    //     for p in ps {
+    //         debug!("  {}", p);
+    //     }
+    // }
 
-    debug!("LL(1) Table:");
-    for (nt, ts) in &context.ll_table {
-        for (t, ps) in ts {
-            for p in ps {
-                debug!("  [{}, {}] = {}", nt, t, p);
-            }
-        }
-    }
+    // debug!("LL(1) Table:");
+    // for (nt, ts) in &context.ll_table {
+    //     for (t, ps) in ts {
+    //         for p in ps {
+    //             debug!("  [{}, {}] = {}", nt, t, p);
+    //         }
+    //     }
+    // }
 
-    codegen::codegen(&mut context);
+    // codegen::codegen(&mut context);
 
     Ok(())
 }
