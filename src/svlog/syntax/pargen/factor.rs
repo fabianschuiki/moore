@@ -50,7 +50,7 @@ pub fn remove_left_recursion(ctx: &mut Context) {
 pub fn left_factor(ctx: &mut Context) {
     info!("Left-factoring grammar");
 
-    for i in 0..10 {
+    for i in 0..20 {
         debug!("Iteration {}", i);
 
         // Identify ambiguous rules that require factoring.
@@ -140,65 +140,73 @@ fn disambiguate<'a>(
         trace!("    {}", p.syms.iter().format(" "));
     }
 
-    // Fully expand nonterminals in first place.
-    #[derive(Clone)]
-    struct Lead<'a> {
-        parent: Option<Rc<Lead<'a>>>,
-        syms: Vec<Symbol<'a>>,
-    }
-    let mut done = vec![];
-    let mut leads: Vec<Lead<'a>> = prods
-        .iter()
-        .map(|p| Lead {
-            parent: None,
-            syms: p.syms.to_vec(),
-        })
-        .collect();
+    // Check for the special case of unexpanded nonterminals already matching.
+    let firsts: BTreeSet<_> = prods.iter().map(|p| p.syms[0]).collect();
+    let done: Vec<_> = if firsts.len() == 1 {
+        prods.iter().map(|p| p.syms.to_vec()).collect()
+    } else {
+        // Fully expand nonterminals in first place.
+        #[derive(Debug, Clone)]
+        struct Lead<'a> {
+            parent: Option<Rc<Lead<'a>>>,
+            syms: Vec<Symbol<'a>>,
+        }
+        let mut done = vec![];
+        let mut leads: Vec<Lead<'a>> = prods
+            .iter()
+            .map(|p| Lead {
+                parent: None,
+                syms: p.syms.to_vec(),
+            })
+            .collect();
 
-    while !leads.is_empty() {
-        for lead in std::mem::take(&mut leads) {
-            if lead.syms.is_empty() {
-                continue;
-            }
-            match lead.syms[0] {
-                Symbol::Nonterm(nt) => {
-                    let parent = Rc::new(lead);
-                    for p in &ctx.prods[&nt] {
-                        leads.push(Lead {
-                            parent: Some(parent.clone()),
-                            syms: p
-                                .syms
-                                .iter()
-                                .cloned()
-                                .chain(parent.syms.iter().skip(1).cloned())
-                                .collect(),
-                        });
+        while !leads.is_empty() {
+            for lead in std::mem::take(&mut leads) {
+                if lead.syms.is_empty() {
+                    continue;
+                }
+                match lead.syms[0] {
+                    Symbol::Nonterm(nt) => {
+                        let parent = Rc::new(lead);
+                        for p in &ctx.prods[&nt] {
+                            leads.push(Lead {
+                                parent: Some(parent.clone()),
+                                syms: p
+                                    .syms
+                                    .iter()
+                                    .cloned()
+                                    .chain(parent.syms.iter().skip(1).cloned())
+                                    .collect(),
+                            });
+                        }
+                    }
+                    _ => {
+                        done.push(lead);
                     }
                 }
-                _ => {
-                    done.push(lead);
-                }
             }
         }
-    }
+        // trace!("  Fully unrolled: {:?}", done);
 
-    // Step-by-step revert the expansion as long as all leads match.
-    loop {
-        let firsts: BTreeSet<_> = done
-            .iter()
-            .map(|lead| lead.parent.as_ref().map(|p| p.syms[0]))
-            .collect();
-        if firsts.len() == 1 && firsts.iter().next().unwrap().is_some() {
-            for lead in std::mem::take(&mut done) {
-                done.push((*lead.parent.unwrap()).clone());
+        // Step-by-step revert the expansion as long as all leads match.
+        loop {
+            let firsts: BTreeSet<_> = done
+                .iter()
+                .map(|lead| lead.parent.as_ref().map(|p| p.syms[0]))
+                .collect();
+            if firsts.len() == 1 && firsts.iter().next().unwrap().is_some() {
+                for lead in std::mem::take(&mut done) {
+                    done.push((*lead.parent.unwrap()).clone());
+                }
+            } else {
+                break;
             }
-        } else {
-            break;
         }
-    }
-    let mut done: Vec<_> = done.into_iter().map(|lead| lead.syms).collect();
-    done.sort();
-    done.dedup();
+        let mut done: Vec<_> = done.into_iter().map(|lead| lead.syms).collect();
+        done.sort();
+        done.dedup();
+        done
+    };
 
     trace!("  Expanded:");
     for d in &done {
@@ -285,10 +293,11 @@ fn disambiguate<'a>(
         }
     } else {
         let aux = ctx.anonymous_nonterm();
-        trace!("  Adding auxiliary tail {}", aux);
+        trace!("  Adding auxiliary tail {}:", aux);
         prefix.push(Symbol::Nonterm(aux));
         for tail in tails {
-            ctx.add_production(aux, tail.to_vec());
+            let p = ctx.add_production(aux, tail.to_vec());
+            trace!("    {}", p);
         }
     }
 
