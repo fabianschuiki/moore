@@ -272,6 +272,22 @@ anonymous_program_item = {
 //   A.2 Declarations   //
 //////////////////////////
 
+// A.2.1 Declaration types
+
+// A.2.1.1 Module parameter declarations
+
+local_parameter_declaration = {
+    'localparam' data_type_or_implicit list_of_param_assignments,
+    'localparam' type list_of_type_assignments,
+};
+parameter_declaration = {
+    'parameter' data_type_or_implicit list_of_param_assignments,
+    'parameter' type list_of_type_assignments,
+};
+specparam_declaration = 'specparam' packed_dimension? list_of_specparam_assignments ';';
+
+// A.2.1.3 Type declarations
+
 pub data_declaration =
     'const'? 'var'? lifetime? data_type_or_implicit list_of_variable_decl_assignments ';';
 lifetime = { 'static', 'automatic' };
