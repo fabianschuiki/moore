@@ -265,6 +265,35 @@ method_qualifier = { 'pure'? 'virtual', class_item_qualifier };
 method_prototype = { task_prototype, function_prototype };
 class_constructor_declaration = 'function' class_scope? 'new' ('(' tf_port_list? ')')? ';' block_item_declaration* ('super' '.' 'new' ('(' list_of_arguments ')')? ';')? function_statement_or_null* 'endfunction' (':' 'new')?;
 
+// A.1.10 Constraints
+
+constraint_declaration = 'static'? 'constraint' constraint_identifier constraint_block;
+constraint_block = '{' constraint_block_item* '}';
+constraint_block_item = {
+    'solve' solve_before_list 'before' solve_before_list ';',
+    constraint_expression,
+};
+solve_before_list = solve_before_primary (',' solve_before_primary)*;
+solve_before_primary = {
+    hierarchical_identifier select,
+    implicit_class_handle '.' hierarchical_identifier select,
+    class_scope hierarchical_identifier select,
+};
+constraint_expression = {
+    expression_or_dist ';',
+    expression '–>' constraint_set,
+    'if' '(' expression ')' constraint_set ('else' constraint_set)?,
+    'foreach' '(' ps_or_hierarchical_array_identifier '[' loop_variables ']' ')' constraint_set,
+};
+constraint_set = { constraint_expression, '{' constraint_expression* '}' };
+dist_list = dist_item (',' dist_item);
+dist_item = value_range dist_weight?;
+dist_weight = { ':=' expression, ':/' expression };
+constraint_prototype = constraint_prototype_qualifier? 'static'? 'constraint' constraint_identifier ';';
+constraint_prototype_qualifier = { 'extern', 'pure' };
+extern_constraint_declaration = 'static'? 'constraint' class_scope constraint_identifier constraint_block;
+identifier_list = identifier (',' identifier)*;
+
 // A.1.11 Package items
 
 package_item = {
