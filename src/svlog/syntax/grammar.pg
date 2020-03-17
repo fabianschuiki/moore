@@ -347,12 +347,53 @@ parameter_declaration = {
 };
 specparam_declaration = 'specparam' packed_dimension? list_of_specparam_assignments ';';
 
+// A.2.1.2 Port declarations
+
+inout_declaration = 'inout' net_port_type list_of_port_identifiers;
+input_declaration = {
+    'input' net_port_type list_of_port_identifiers,
+    'input' variable_port_type list_of_variable_identifiers,
+};
+output_declaration = {
+    'output' net_port_type list_of_port_identifiers,
+    'output' variable_port_type list_of_variable_port_identifiers,
+};
+interface_port_declaration = {
+    interface_identifier list_of_interface_identifiers,
+    interface_identifier '.' modport_identifier list_of_interface_identifiers,
+};
+ref_declaration = 'ref' variable_port_type list_of_port_identifiers;
+
 // A.2.1.3 Type declarations
 
-pub data_declaration =
-    'const'? 'var'? lifetime? data_type_or_implicit list_of_variable_decl_assignments ';';
+data_declaration = {
+    'const'? 'var'? lifetime? data_type_or_implicit list_of_variable_decl_assignments ';',
+    type_declaration,
+    package_import_declaration,
+    virtual_interface_declaration,
+};
+package_import_declaration = 'import' package_import_item (',' package_import_item)* ';';
+package_import_item = { package_identifier '::' identifier, package_identifier '::' '*' };
+package_export_declaration = {
+    'export' '*' '::' '*' ';',
+    'export' package_import_item (',' package_import_item)* ';',
+};
+genvar_declaration = 'genvar' list_of_genvar_identifiers ';';
+net_declaration = net_type drive_or_charge_strength? vectored_or_scalared? data_type_or_implicit delay3? list_of_net_decl_assignments ';';
+drive_or_charge_strength = { drive_strength, charge_strength };
+vectored_or_scalared = { 'vectored', 'scalared' };
+type_declaration = {
+    'typedef' data_type type_identifier variable_dimension* ';',
+    'typedef' interface_instance_identifier constant_bit_select '.' type_identifier type_identifier ';',
+    'typedef' enum_or_struct_or_union_or_class? type_identifier ';',
+};
+enum_or_struct_or_union_or_class = { 'enum', 'struct', 'union', 'class' };
 lifetime = { 'static', 'automatic' };
-data_type_or_void = { data_type, 'void' };
+
+// A.2.2 Declaration data types
+
+// A.2.2.1 Net and variable types
+casting_type = { simple_type, constant_primary, signing, 'string', 'const' };
 data_type = {
     integer_vector_type signing? packed_dimension*,
     integer_atom_type signing?,
@@ -361,20 +402,62 @@ data_type = {
     'enum' enum_base_type? '{' enum_name_declaration (',' enum_name_declaration)* '}' packed_dimension*,
     'string',
     'chandle',
-    'virtual' 'interface'? identifier,
+    'virtual' 'interface'? interface_identifier,
     class_or_package_scope? type_identifier packed_dimension*,
     class_type,
     'event',
     ps_covergroup_identifier,
     type_reference,
 };
+class_or_package_scope = { class_scope, package_scope };
 data_type_or_implicit = { data_type, implicit_data_type };
 implicit_data_type = signing? packed_dimension*;
-class_or_package_scope = { class_scope, package_scope };
+enum_base_type = {
+    integer_atom_type signing?,
+    integer_vector_type signing? packed_dimension?,
+    type_identifier packed_dimension?,
+};
+enum_name_declaration = enum_identifier ('[' integral_number (':' integral_number)? ']')? ('=' constant_expression)?;
 class_scope = class_type '::';
 class_type = ps_class_identifier parameter_value_assignment? ('::' class_identifier parameter_value_assignment?)*;
-list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
+integer_vector_type = { 'bit', 'logic', 'reg' };
+integer_atom_type = { 'byte', 'shortint', 'int', 'longint', 'integer', 'time' };
+non_integer_type = { 'shortreal', 'real', 'realtime' };
+net_type = { 'supply0', 'supply1', 'tri', 'triand', 'trior', 'trireg', 'tri0', 'tri1', 'uwire', 'wire', 'wand', 'wor' };
+net_port_type = net_type? data_type_or_implicit;
+variable_port_type = var_data_type;
+var_data_type = { data_type, 'var' data_type_or_implicit };
 signing = { 'signed', 'unsigned' };
+simple_type = { integer_type, non_integer_type, ps_type_identifier, ps_parameter_identifier };
+struct_union_member = attribute_instance* random_qualifier? data_type_or_void list_of_variable_decl_assignments ';';
+data_type_or_void = { data_type, 'void' };
+struct_union = { 'struct', 'union' 'tagged'? };
+type_reference = {
+    'type' '(' expression ')',
+    'type' '(' data_type ')',
+};
+
+// A.2.2.2 Strengths
+
+drive_strength = {
+    '(' strength0 ',' strength1 ')',
+    '(' strength1 ',' strength0 ')',
+    '(' strength0 ',' 'highz1' ')',
+    '(' strength1 ',' 'highz0' ')',
+    '(' 'highz0' ',' strength1 ')',
+    '(' 'highz1' ',' strength0 ')',
+};
+strength0 = { 'supply0', 'strong0', 'pull0', 'weak0' };
+strength1 = { 'supply1', 'strong1', 'pull1', 'weak1' };
+charge_strength = {
+    '(' 'small' ')',
+    '(' 'medium' ')',
+    '(' 'large' ')',
+};
+
+// -----------------------------------------------------------------------------
+
+list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
 unpacked_dimension = { '[' constant_range ']', '[' constant_expression ']' };
 packed_dimension = { '[' constant_range ']', unsized_dimension };
 associative_dimension = {
@@ -389,21 +472,6 @@ variable_dimension = {
     associative_dimension,
     queue_dimension,
 };
-type_reference = {
-    'type' '(' expression ')',
-    'type' '(' data_type ')',
-};
-integer_vector_type = { 'bit', 'logic', 'reg' };
-integer_atom_type = { 'byte', 'shortint', 'int', 'longint', 'integer', 'time' };
-non_integer_type = { 'shortreal', 'real', 'realtime' };
-struct_union = { 'struct', 'union' 'tagged'? };
-struct_union_member = attribute_instance* random_qualifier? data_type_or_void list_of_variable_decl_assignments ';';
-enum_base_type = {
-    integer_atom_type signing?,
-    integer_vector_type signing? packed_dimension?,
-    identifier packed_dimension?,
-};
-enum_name_declaration = identifier ('[' integral_number (':' integral_number)? ']')? ('=' constant_expression)?;
 variable_decl_assignment = {
     identifier variable_dimension* ('=' expression)?,
     identifier unsized_dimension variable_dimension* ('=' dynamic_array_new)?,
