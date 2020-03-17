@@ -24,6 +24,11 @@ Symbol: ast::Symbol = {
     "null" => ast::Symbol::Epsilon,
     <Ident> => ast::Symbol::Token(<>.to_string()),
     "(" <Symbol+> ")" => ast::Symbol::Group(<>),
+    "(" <Symbol+> <("|" <Symbol+>)+> ")" => {
+        let (head, mut tail) = (<>);
+        tail.insert(0, head);
+        ast::Symbol::Choice(tail)
+    },
     <Symbol> "?" => ast::Symbol::Maybe(Box::new(<>)),
     <Symbol> "*" => ast::Symbol::Any(Box::new(<>)),
     <Symbol> "+" => ast::Symbol::Some(Box::new(<>)),

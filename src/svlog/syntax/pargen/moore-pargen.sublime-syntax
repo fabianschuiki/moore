@@ -16,7 +16,7 @@ contexts:
       scope: keyword.other.pargen
     - match: '\b(-)?[0-9.]+\b'
       scope: constant.numeric.pargen
-    - match: '[()\[\]{}\.,;:=]'
+    - match: '[()\[\]{}\.,;:=|]'
       scope: punctuation.pargen
     - match: '[?*+]'
       scope: keyword.control.pargen

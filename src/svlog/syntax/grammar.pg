@@ -379,20 +379,18 @@ package_export_declaration = {
     'export' package_import_item (',' package_import_item)* ';',
 };
 genvar_declaration = 'genvar' list_of_genvar_identifiers ';';
-net_declaration = net_type drive_or_charge_strength? vectored_or_scalared? data_type_or_implicit delay3? list_of_net_decl_assignments ';';
-drive_or_charge_strength = { drive_strength, charge_strength };
-vectored_or_scalared = { 'vectored', 'scalared' };
+net_declaration = net_type (drive_strength | charge_strength)? ('vectored' | 'scalared')? data_type_or_implicit delay3? list_of_net_decl_assignments ';';
 type_declaration = {
     'typedef' data_type type_identifier variable_dimension* ';',
     'typedef' interface_instance_identifier constant_bit_select '.' type_identifier type_identifier ';',
-    'typedef' enum_or_struct_or_union_or_class? type_identifier ';',
+    'typedef' ('enum' | 'struct' | 'union' | 'class')? type_identifier ';',
 };
-enum_or_struct_or_union_or_class = { 'enum', 'struct', 'union', 'class' };
 lifetime = { 'static', 'automatic' };
 
 // A.2.2 Declaration data types
 
 // A.2.2.1 Net and variable types
+
 casting_type = { simple_type, constant_primary, signing, 'string', 'const' };
 data_type = {
     integer_vector_type signing? packed_dimension*,
@@ -403,13 +401,12 @@ data_type = {
     'string',
     'chandle',
     'virtual' 'interface'? interface_identifier,
-    class_or_package_scope? type_identifier packed_dimension*,
+    (class_scope | package_scope)? type_identifier packed_dimension*,
     class_type,
     'event',
     ps_covergroup_identifier,
     type_reference,
 };
-class_or_package_scope = { class_scope, package_scope };
 data_type_or_implicit = { data_type, implicit_data_type };
 implicit_data_type = signing? packed_dimension*;
 enum_base_type = {
@@ -529,6 +526,27 @@ variable_dimension = {
 };
 queue_dimension = '[' '$' (':' constant_expression)? ']';
 unsized_dimension = '[' ']';
+
+// A.2.6 Function declarations
+
+function_data_type_or_implicit = { data_type_or_void, implicit_data_type };
+function_declaration = 'function' lifetime? function_body_declaration;
+function_body_declaration = {
+    function_data_type_or_implicit (interface_identifier '.' | class_scope)? function_identifier ';' tf_item_declaration* function_statement_or_null* 'endfunction' (':' function_identifier)?,
+    function_data_type_or_implicit (interface_identifier '.' | class_scope)? function_identifier '(' tf_port_list? ')' ';' block_item_declaration* function_statement_or_null* 'endfunction' (':' function_identifier)?,
+};
+function_prototype = 'function' data_type_or_void function_identifier '(' tf_port_list? ')';
+dpi_import_export = {
+    'import' dpi_spec_string dpi_function_import_property? (c_identifier '=')? dpi_function_proto ';',
+    'import' dpi_spec_string dpi_task_import_property? (c_identifier '=')? dpi_task_proto ';',
+    'export' dpi_spec_string (c_identifier '=')? function function_identifier ';',
+    'export' dpi_spec_string (c_identifier '=')? task task_identifier ';',
+};
+dpi_spec_string = { '"DPI-C"', '"DPI"' };
+dpi_function_import_property = { 'context', 'pure' };
+dpi_task_import_property = 'context';
+dpi_function_proto = function_prototype;
+dpi_task_proto = task_prototype;
 
 // -----------------------------------------------------------------------------
 

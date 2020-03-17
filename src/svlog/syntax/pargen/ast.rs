@@ -15,6 +15,7 @@ pub enum Symbol {
     Epsilon,
     Token(String),
     Group(Vec<Symbol>),
+    Choice(Vec<Vec<Symbol>>),
     Maybe(Box<Symbol>),
     Any(Box<Symbol>),
     Some(Box<Symbol>),

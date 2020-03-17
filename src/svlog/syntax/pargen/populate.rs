@@ -64,6 +64,15 @@ fn map_symbol<'ast, 'ctx>(
             ctx.add_production(nonterm, syms);
             nonterm.into()
         }
+        ast::Symbol::Choice(choices) => {
+            let nonterm = ctx.anonymous_nonterm();
+            trace!("Adding choice {} with {} choices", nonterm, choices.len());
+            for syms in choices {
+                let syms = map_symbols(ctx, syms, cache);
+                ctx.add_production(nonterm, syms);
+            }
+            nonterm.into()
+        }
         ast::Symbol::Maybe(sym) => {
             let inner = map_symbol(ctx, sym, cache);
             let outer = ctx.anonymous_nonterm();
