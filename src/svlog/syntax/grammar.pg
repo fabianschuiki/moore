@@ -473,9 +473,51 @@ delay_value = {
     '1step',
 };
 
+// A.2.3 Declaration lists
+
+list_of_defparam_assignments = defparam_assignment (',' defparam_assignment)*;
+list_of_genvar_identifiers = genvar_identifier (',' genvar_identifier)*;
+list_of_interface_identifiers = interface_identifier unpacked_dimension* (',' interface_identifier unpacked_dimension*)*;
+list_of_net_decl_assignments = net_decl_assignment (',' net_decl_assignment)*;
+list_of_param_assignments = param_assignment (',' param_assignment)*;
+list_of_port_identifiers = port_identifier unpacked_dimension* (',' port_identifier unpacked_dimension*)*;
+list_of_udp_port_identifiers = port_identifier (',' port_identifier)*;
+list_of_specparam_assignments = specparam_assignment (',' specparam_assignment)*;
+list_of_tf_variable_identifiers = port_identifier variable_dimension* ('=' expression)? (',' port_identifier variable_dimension* ('=' expression)?)*;
+list_of_type_assignments = type_assignment (',' type_assignment)*;
+list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
+list_of_variable_identifiers = variable_identifier variable_dimension* (',' variable_identifier variable_dimension*)*;
+list_of_variable_port_identifiers = port_identifier variable_dimension* ('=' constant_expression)? (',' port_identifier variable_dimension* ('=' constant_expression)?)*;
+list_of_virtual_interface_decl = variable_identifier ('=' interface_instance_identifier)? (',' variable_identifier ('=' interface_instance_identifier)?)*;
+
+// A.2.4 Declaration assignments
+
+defparam_assignment = hierarchical_parameter_identifier '=' constant_mintypmax_expression;
+net_decl_assignment = net_identifier unpacked_dimension* ('=' expression)?;
+param_assignment = parameter_identifier unpacked_dimension* ('=' constant_param_expression)?;
+specparam_assignment = { specparam_identifier '=' constant_mintypmax_expression, pulse_control_specparam };
+type_assignment = type_identifier ('=' data_type);
+pulse_control_specparam = {
+    'PATHPULSE$' '=' '(' reject_limit_value (',' error_limit_value) ')',
+    'PATHPULSE$' specify_input_terminal_descriptor '$' specify_output_terminal_descriptor '=' '(' reject_limit_value (',' error_limit_value)? ')',
+};
+error_limit_value = limit_value;
+reject_limit_value = limit_value;
+limit_value = constant_mintypmax_expression;
+variable_decl_assignment = {
+    variable_identifier variable_dimension* ('=' expression)?,
+    dynamic_array_variable_identifier unsized_dimension variable_dimension* ('=' dynamic_array_new)?,
+    class_variable_identifier ('=' class_new)?,
+};
+class_new = {
+    'new',
+    'new' '(' list_of_arguments ')',
+    'new' expression,
+};
+dynamic_array_new = 'new' '[' expression ']' ('(' expression ')')?;
+
 // -----------------------------------------------------------------------------
 
-list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
 unpacked_dimension = { '[' constant_range ']', '[' constant_expression ']' };
 packed_dimension = { '[' constant_range ']', unsized_dimension };
 associative_dimension = {
@@ -495,12 +537,6 @@ variable_decl_assignment = {
     identifier unsized_dimension variable_dimension* ('=' dynamic_array_new)?,
     identifier ('=' class_new)?,
 };
-class_new = {
-    'new',
-    'new' '(' list_of_arguments ')',
-    'new' expression,
-};
-dynamic_array_new = 'new' '[' expression ']' ('(' expression ')')?;
 expression = identifier;
 attribute_instance = 'ATTR';
 integral_number = '123';
