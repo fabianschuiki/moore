@@ -516,27 +516,22 @@ class_new = {
 };
 dynamic_array_new = 'new' '[' expression ']' ('(' expression ')')?;
 
-// -----------------------------------------------------------------------------
+// A.2.5 Declaration ranges
 
 unpacked_dimension = { '[' constant_range ']', '[' constant_expression ']' };
 packed_dimension = { '[' constant_range ']', unsized_dimension };
-associative_dimension = {
-    '[' data_type ']',
-    '[' '*' ']',
-};
-queue_dimension = '[' '$' (':' constant_expression)? ']';
-unsized_dimension = '[' ']';
+associative_dimension = { '[' data_type ']', '[' '*' ']' };
 variable_dimension = {
     unsized_dimension,
     unpacked_dimension,
     associative_dimension,
     queue_dimension,
 };
-variable_decl_assignment = {
-    identifier variable_dimension* ('=' expression)?,
-    identifier unsized_dimension variable_dimension* ('=' dynamic_array_new)?,
-    identifier ('=' class_new)?,
-};
+queue_dimension = '[' '$' (':' constant_expression)? ']';
+unsized_dimension = '[' ']';
+
+// -----------------------------------------------------------------------------
+
 expression = identifier;
 attribute_instance = 'ATTR';
 integral_number = '123';
