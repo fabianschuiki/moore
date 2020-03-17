@@ -1,0 +1,37 @@
+%YAML 1.2
+---
+# See http://www.sublimetext.com/docs/3/syntax.html
+file_extensions:
+  - pg
+scope: source.pargen
+contexts:
+  main:
+    - match: \'
+      scope: punctuation.definition.string.begin.pargen
+      push: single_quoted_string
+    - match: '//'
+      scope: punctuation.definition.comment.pargen
+      push: line_comment
+    - match: '\b(pub)\b'
+      scope: keyword.other.pargen
+    - match: '\b(-)?[0-9.]+\b'
+      scope: constant.numeric.pargen
+    - match: '[()\[\]{}\.,;:=]'
+      scope: punctuation.pargen
+    - match: '[?*+]'
+      scope: keyword.control.pargen
+    - match: '\b\w+(?=\s*=)'
+      scope: entity.name.function.pargen
+
+  single_quoted_string:
+    - meta_scope: string.quoted.single.pargen
+    - match: '\\.'
+      scope: constant.character.escape.pargen
+    - match: \'
+      scope: punctuation.definition.string.end.pargen
+      pop: true
+
+  line_comment:
+    - meta_scope: comment.line.pargen
+    - match: $
+      pop: true
