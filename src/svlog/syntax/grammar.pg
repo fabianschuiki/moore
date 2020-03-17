@@ -548,6 +548,49 @@ dpi_task_import_property = 'context';
 dpi_function_proto = function_prototype;
 dpi_task_proto = task_prototype;
 
+// A.2.7 Task declarations
+
+task_declaration = 'task' lifetime? task_body_declaration;
+task_body_declaration = {
+    (interface_identifier '.' | class_scope)? task_identifier ';' tf_item_declaration* statement_or_null* 'endtask' (':' task_identifier)?,
+    (interface_identifier '.' | class_scope)? task_identifier '(' tf_port_list? ')' ';' block_item_declaration* statement_or_null* 'endtask' (':' task_identifier)?,
+};
+tf_item_declaration = { block_item_declaration, tf_port_declaration };
+tf_port_list = tf_port_item (',' tf_port_item)*;
+tf_port_item = attribute_instance* tf_port_direction? 'var'? data_type_or_implicit (port_identifier variable_dimension* ('=' expression)?)?;
+tf_port_direction = { port_direction, 'const' 'ref' };
+tf_port_declaration = attribute_instance* tf_port_direction 'var' data_type_or_implicit list_of_tf_variable_identifiers ';';
+task_prototype = 'task' task_identifier '(' tf_port_list? ')';
+
+// A.2.8 Block item declarations
+block_item_declaration = {
+    attribute_instance* data_declaration,
+    attribute_instance* local_parameter_declaration ';',
+    attribute_instance* parameter_declaration ';',
+    attribute_instance* overload_declaration,
+    attribute_instance* let_declaration,
+};
+overload_declaration = 'bind' overload_operator 'function' data_type function_identifier '(' overload_proto_formals ')' ';';
+overload_operator = { '+', '++', '–', '– –', '*', '**', '/', '%', '==', '!=', '<', '<=', '>', '>=', '=' };
+overload_proto_formals = data_type (',' data_type)*;
+
+// A.2.9 Interface declarations
+
+virtual_interface_declaration = 'virtual' 'interface'? interface_identifier parameter_value_assignment? ('.' modport_identifier)? list_of_virtual_interface_decl ';';
+modport_declaration = 'modport' modport_item (',' modport_item)* ';';
+modport_item = modport_identifier '(' modport_ports_declaration (',' modport_ports_declaration)* ')';
+modport_ports_declaration = {
+    attribute_instance* modport_simple_ports_declaration,
+    attribute_instance* modport_tf_ports_declaration,
+    attribute_instance* modport_clocking_declaration,
+};
+modport_clocking_declaration = 'clocking' clocking_identifier;
+modport_simple_ports_declaration = port_direction modport_simple_port (',' modport_simple_port)*;
+modport_simple_port = { port_identifier, '.' port_identifier '(' expression? ')' };
+modport_tf_ports_declaration = import_export modport_tf_port (',' modport_tf_port)*;
+modport_tf_port = { method_prototype, tf_identifier };
+import_export = { 'import', 'export' };
+
 // -----------------------------------------------------------------------------
 
 expression = identifier;
