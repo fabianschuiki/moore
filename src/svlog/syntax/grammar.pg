@@ -455,6 +455,24 @@ charge_strength = {
     '(' 'large' ')',
 };
 
+// A.2.2.3 Delays
+
+delay3 = {
+    '#' delay_value,
+    '#' '(' mintypmax_expression (',' mintypmax_expression (',' mintypmax_expression)?)? ')',
+};
+delay2 = {
+    '#' delay_value,
+    '#' '(' mintypmax_expression (',' mintypmax_expression)? ')',
+};
+delay_value = {
+    unsigned_number,
+    real_number,
+    ps_identifier,
+    time_literal,
+    '1step',
+};
+
 // -----------------------------------------------------------------------------
 
 list_of_variable_decl_assignments = variable_decl_assignment (',' variable_decl_assignment)*;
