@@ -76,6 +76,47 @@ fn expand_epsilon<'a>(
     }
 }
 
+/// Remove indirect left-recursion from the grammar.
+pub fn remove_indirect_left_recursion(ctx: &mut Context) {
+    info!("Removing indirect left-recursion");
+    for (&nt, ps) in &ctx.prods {
+        find_indirect_left_recursion(
+            ctx,
+            nt,
+            nt,
+            &mut Default::default(),
+            &mut Default::default(),
+        );
+    }
+}
+
+fn find_indirect_left_recursion<'a>(
+    ctx: &Context<'a>,
+    root: Nonterm<'a>,
+    nt: Nonterm<'a>,
+    seen: &mut HashSet<Nonterm<'a>>,
+    stack: &mut Vec<&'a Production<'a>>,
+) {
+    for &p in &ctx.prods[&nt] {
+        if let Some(Symbol::Nonterm(first)) = p.syms.iter().cloned().next() {
+            if first == root {
+                if seen.contains(&first) {
+                    error!("Unhandled indirect left-recursion in {}", root);
+                    for s in stack.iter() {
+                        error!("  {}", s);
+                    }
+                }
+            } else if !seen.contains(&first) {
+                seen.insert(first);
+                stack.push(p);
+                find_indirect_left_recursion(ctx, root, first, seen, stack);
+                seen.remove(&first);
+                stack.pop();
+            }
+        }
+    }
+}
+
 /// Remove left-recursion from the grammar.
 pub fn remove_left_recursion(ctx: &mut Context) {
     info!("Removing left-recursion");

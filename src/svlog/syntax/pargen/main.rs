@@ -50,6 +50,7 @@ fn main() -> Result<()> {
 
     // Perform basic LL(1) transformations.
     factor::remove_epsilon_derivation(&mut context);
+    factor::remove_indirect_left_recursion(&mut context);
     // factor::remove_left_recursion(&mut context);
 
     info!(
