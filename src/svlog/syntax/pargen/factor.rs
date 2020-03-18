@@ -6,9 +6,13 @@ use std::{
 };
 
 /// Eliminate epsilon derivations from the grammar.
-pub fn remove_epsilon_derivation(ctx: &mut Context) {
+pub fn remove_epsilon_derivation(ctx: &mut Context) -> bool {
     info!("Removing ε-derivation");
-    while remove_epsilon_derivation_inner(ctx) {}
+    let mut modified = false;
+    while remove_epsilon_derivation_inner(ctx) {
+        modified = true;
+    }
+    modified
 }
 
 fn remove_epsilon_derivation_inner(ctx: &mut Context) -> bool {
@@ -77,7 +81,7 @@ fn expand_epsilon<'a>(
 }
 
 /// Remove indirect left-recursion from the grammar.
-pub fn remove_indirect_left_recursion(ctx: &mut Context) {
+pub fn remove_indirect_left_recursion(ctx: &mut Context) -> bool {
     info!("Removing indirect left-recursion");
     for (&nt, ps) in &ctx.prods {
         find_indirect_left_recursion(
@@ -88,6 +92,7 @@ pub fn remove_indirect_left_recursion(ctx: &mut Context) {
             &mut Default::default(),
         );
     }
+    false
 }
 
 fn find_indirect_left_recursion<'a>(
@@ -118,8 +123,8 @@ fn find_indirect_left_recursion<'a>(
 }
 
 /// Remove left-recursion from the grammar.
-pub fn remove_left_recursion(ctx: &mut Context) {
-    info!("Removing left-recursion");
+pub fn remove_direct_left_recursion(ctx: &mut Context) -> bool {
+    info!("Removing direct left-recursion");
 
     // Find the left-recursive NTs.
     let mut rec = vec![];
@@ -135,6 +140,7 @@ pub fn remove_left_recursion(ctx: &mut Context) {
     }
 
     // Remove left-recursions.
+    let modified = !rec.is_empty();
     for (nt, left_rec) in rec {
         debug!("Removing left-recursion in {}", nt);
         let aux = ctx.anonymous_nonterm();
@@ -156,6 +162,221 @@ pub fn remove_left_recursion(ctx: &mut Context) {
             ctx.remove_production(p);
         }
     }
+    modified
+}
+
+/// Perform a simple left-factorization of the grammar.
+pub fn left_factorize_simple(ctx: &mut Context) -> bool {
+    info!("Left-factoring grammar (simple)");
+
+    // Identify ambiguous rules that require factoring.
+    let mut conflicts = vec![];
+    for (&nt, ps) in &ctx.prods {
+        if has_conflict(ctx, ps) {
+            conflicts.push((
+                nt,
+                ctx.prods[&nt]
+                    .iter()
+                    .cloned()
+                    .filter(|p| !p.is_epsilon())
+                    .collect(),
+            ));
+        }
+    }
+
+    // Refactor those rules.
+    let mut modified = false;
+    for (nt, ps) in conflicts {
+        modified |= left_factorize_conflict(ctx, nt, ps);
+    }
+
+    // // Find all prefixes across the grammar.
+    // let mut todo = vec![];
+    // for (&nt, ps) in &ctx.prods {
+    //     if ps.len() < 2 {
+    //         continue;
+    //     }
+    //     let mut prefix = vec![];
+    //     for i in 0.. {
+    //         let firsts: BTreeSet<Option<Symbol>> =
+    //             ps.iter().map(|p| p.syms.get(i).cloned()).collect();
+    //         if firsts.len() != 1 || firsts.iter().next().unwrap().is_none() {
+    //             break;
+    //         }
+    //         prefix.push(firsts.iter().next().unwrap().unwrap());
+    //     }
+    //     if !prefix.is_empty() {
+    //         todo.push((nt, prefix));
+    //     }
+    // }
+
+    // // Rewrite the productions.
+    // let modified = !todo.is_empty();
+    // for (nt, prefix) in todo {
+    //     debug!("Factoring {} out of {}", format_symbols(&prefix), nt);
+    // }
+
+    false
+}
+
+fn has_conflict<'a>(ctx: &Context<'a>, ps: &BTreeSet<&Production<'a>>) -> bool {
+    let mut seen = HashSet::new();
+    for p in ps {
+        for s in ctx.first_set_of_symbols(&p.syms) {
+            if !seen.insert(s) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn left_factorize_conflict<'a>(
+    ctx: &mut Context<'a>,
+    nt: Nonterm<'a>,
+    mut todo: BTreeSet<&'a Production<'a>>,
+) -> bool {
+    let mut firsts: HashMap<&Production, BTreeSet<Term>> = todo
+        .iter()
+        .map(|&p| (p, ctx.first_set_of_symbols(&p.syms)))
+        .collect();
+    let mut modified = false;
+    while let Some(&init) = todo.iter().next() {
+        todo.remove(&init);
+        let mut colliders = BTreeSet::new();
+        colliders.insert(init);
+        let mut seen = HashSet::new();
+        seen.extend(firsts[init].iter().cloned());
+        for s in std::mem::take(&mut todo) {
+            let mut any_hit = false;
+            for &f in &firsts[&s] {
+                if seen.contains(&f) {
+                    any_hit = true;
+                    break;
+                }
+            }
+            if any_hit {
+                seen.extend(firsts[&s].iter().cloned());
+                colliders.insert(s);
+            } else {
+                todo.insert(s);
+            }
+        }
+        if colliders.len() > 1 {
+            modified |= left_factorize_disambiguate(ctx, nt, colliders.into_iter().collect());
+        }
+    }
+    modified
+}
+
+fn left_factorize_disambiguate<'a>(
+    ctx: &mut Context<'a>,
+    nt: Nonterm<'a>,
+    prods: Vec<&'a Production<'a>>,
+) -> bool {
+    // trace!("  Disambiguate:");
+    // for p in &prods {
+    //     trace!("    {}", p.syms.iter().format(" "));
+    // }
+
+    // Find a common prefix, considering balanced tokens to factor out parts of
+    // the rules.
+    let mut prefix = vec![];
+    let mut offsets: Vec<usize> = prods.iter().map(|_| 0).collect();
+    loop {
+        // Find the set of next symbols in the rules.
+        let symbols: HashSet<_> = prods
+            .iter()
+            .zip(offsets.iter())
+            .map(|(p, &offset)| p.syms.get(offset))
+            .collect();
+
+        // Check if we have one unique prefix symbol.
+        if symbols.len() != 1 {
+            break;
+        }
+        let symbol = match symbols.into_iter().next().unwrap() {
+            Some(&p) => p,
+            None => break,
+        };
+
+        // If the symbol is the left of a balanced pair, advance ahead to its
+        // counterpart and gobble up the symbols in between.
+        prefix.push(symbol);
+        let balanced_end = match symbol.to_string().as_str() {
+            "'('" => ctx.lookup_symbol("')'"),
+            "'['" => ctx.lookup_symbol("']'"),
+            "'{'" => ctx.lookup_symbol("'}'"),
+            _ => None,
+        };
+        if let Some(balanced_end) = balanced_end {
+            // trace!("    Factoring-out balanced {} {}", symbol, balanced_end);
+            let mut subseqs = vec![];
+            for (p, offset) in prods.iter().zip(offsets.iter_mut()) {
+                *offset += 1;
+                let mut subsyms = vec![];
+                while p.syms[*offset] != balanced_end {
+                    subsyms.push(p.syms[*offset]);
+                    *offset += 1;
+                }
+                *offset += 1;
+                subseqs.push(subsyms);
+            }
+            // trace!("  Gobbled up subsequences:");
+            let aux = ctx.anonymous_nonterm();
+            for s in subseqs {
+                // trace!("    {}", s.iter().format(" "));
+                ctx.add_production(aux, s);
+            }
+            prefix.push(Symbol::Nonterm(aux));
+            prefix.push(balanced_end);
+        } else {
+            offsets.iter_mut().for_each(|o| *o += 1);
+        }
+    }
+    // trace!("  Prefix {}", format_symbols(&prefix));
+    if prefix.is_empty() {
+        return false;
+    }
+    debug!("Factoring {} out from {}", format_symbols(&prefix), nt);
+
+    // Compute the tails that are left over after prefix extraction.
+    let tails: BTreeSet<_> = prods
+        .iter()
+        .zip(offsets.iter())
+        .map(|(p, &offset)| &p.syms[offset..])
+        .collect();
+
+    // If there is one common tail, add that to the prefix immediately.
+    // Otherwise just go ahead and create an auxiliary nonterminal that will
+    // contain all of the tails.
+    if tails.len() == 1 {
+        let tail = tails.into_iter().next().unwrap();
+        if !tail.is_empty() {
+            // trace!("  Adding unique tail {}", format_symbols(tail));
+            prefix.extend(tail);
+        }
+    } else {
+        let aux = ctx.anonymous_nonterm();
+        // trace!("  Adding auxiliary tail {}:", aux);
+        prefix.push(Symbol::Nonterm(aux));
+        for tail in tails {
+            let p = ctx.add_production(aux, tail.to_vec());
+            // trace!("    {}", p);
+        }
+    }
+
+    // Actually replace the production.
+    // trace!("  Replacing:");
+    for &p in &prods {
+        // trace!("    {}", p);
+        ctx.remove_production(p);
+    }
+    // trace!("  With:");
+    let p = ctx.add_production(nt, prefix);
+    // trace!("    {}", p);
+
+    true
 }
 
 /// Left-factor the grammar.
@@ -179,18 +400,6 @@ pub fn left_factor(ctx: &mut Context) {
             // std::io::stdin().read_line(&mut String::new());
         }
     }
-}
-
-fn has_conflict<'a>(ctx: &Context<'a>, ps: &BTreeSet<&Production<'a>>) -> bool {
-    let mut seen = HashSet::new();
-    for p in ps {
-        for s in ctx.first_set_of_symbols(&p.syms) {
-            if !seen.insert(s) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 fn handle_conflict<'a>(

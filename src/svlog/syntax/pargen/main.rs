@@ -49,9 +49,17 @@ fn main() -> Result<()> {
     );
 
     // Perform basic LL(1) transformations.
-    factor::remove_epsilon_derivation(&mut context);
-    factor::remove_indirect_left_recursion(&mut context);
-    // factor::remove_left_recursion(&mut context);
+    loop {
+        let mut modified = false;
+        modified |= factor::remove_epsilon_derivation(&mut context);
+        modified |= factor::remove_indirect_left_recursion(&mut context);
+        modified |= factor::remove_direct_left_recursion(&mut context);
+        // modified |= factor::left_factorize_simple(&mut context);
+        if !modified {
+            break;
+        }
+    }
+    factor::left_factorize_simple(&mut context);
 
     info!(
         "Grammar has {} productions, {} nonterminals, {} terminals",
@@ -60,17 +68,17 @@ fn main() -> Result<()> {
         context.terms().count(),
     );
 
-    // debug!("Grammar:");
-    // for ps in context.prods.values() {
-    //     for p in ps {
-    //         debug!("  {}", p);
-    //     }
-    // }
+    debug!("Grammar:");
+    for ps in context.prods.values() {
+        for p in ps {
+            debug!("  {}", p);
+        }
+    }
 
     // factor::left_factor(&mut context);
 
-    // ll::build_ll(&mut context);
-    // ll::dump_ambiguities(&context);
+    ll::build_ll(&mut context);
+    ll::dump_ambiguities(&context);
 
     // for _ in 0..0 {
     //     if !ll::left_factor(&mut context) {
