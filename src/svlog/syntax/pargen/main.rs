@@ -36,10 +36,10 @@ fn main() -> Result<()> {
         matches.value_of("grammar").unwrap(),
     )?)?;
 
+    // Parse the grammar and populate the context.
     let arena = ContextArena::default();
     let mut context = Context::new(&arena);
     populate::add_ast(&mut context, grammar);
-    factor::remove_left_recursion(&mut context);
 
     info!(
         "Grammar has {} productions, {} nonterminals, {} terminals",
@@ -47,17 +47,30 @@ fn main() -> Result<()> {
         context.nonterms().count(),
         context.terms().count(),
     );
-    debug!("Grammar:");
-    for ps in context.prods.values() {
-        for p in ps {
-            debug!("  {}", p);
-        }
-    }
+
+    // Perform basic LL(1) transformations.
+    factor::remove_epsilon_derivation(&mut context);
+    // factor::remove_left_recursion(&mut context);
+
+    info!(
+        "Grammar has {} productions, {} nonterminals, {} terminals",
+        context.prods.values().flatten().count(),
+        context.nonterms().count(),
+        context.terms().count(),
+    );
+
+    // debug!("Grammar:");
+    // for ps in context.prods.values() {
+    //     for p in ps {
+    //         debug!("  {}", p);
+    //     }
+    // }
 
     // factor::left_factor(&mut context);
 
-    ll::build_ll(&mut context);
-    ll::dump_ambiguities(&context);
+    // ll::build_ll(&mut context);
+    // ll::dump_ambiguities(&context);
+
     // for _ in 0..0 {
     //     if !ll::left_factor(&mut context) {
     //         break;

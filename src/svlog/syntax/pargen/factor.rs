@@ -5,6 +5,77 @@ use std::{
     rc::Rc,
 };
 
+/// Eliminate epsilon derivations from the grammar.
+pub fn remove_epsilon_derivation(ctx: &mut Context) {
+    info!("Removing ε-derivation");
+    while remove_epsilon_derivation_inner(ctx) {}
+}
+
+fn remove_epsilon_derivation_inner(ctx: &mut Context) -> bool {
+    // Find all nonterminals which can derive epsilon and cause ambiguity.
+    let mut todo = vec![];
+    for (&nt, ps) in &ctx.prods {
+        for &p in ps {
+            if p.is_epsilon() {
+                let first = ctx.first_set_of_nonterm(nt);
+                let follow = ctx.follow_set(nt);
+                if !first.is_disjoint(&follow) {
+                    todo.push(p);
+                }
+            }
+        }
+    }
+
+    // Process the problematic rules.
+    let mut repls = HashMap::new();
+    for outer in todo {
+        debug!("Eliminating {}", outer);
+        ctx.remove_production(outer);
+        for (_, ps) in &ctx.prods {
+            for &p in ps {
+                if let Some(repl) = expand_epsilon(ctx, outer.nt, p) {
+                    trace!("Expanding {} to {} productions", p, repl.len());
+                    repls.insert(p, repl);
+                }
+            }
+        }
+    }
+
+    // Apply the replacements.
+    let modified = !repls.is_empty();
+    for (p, repl) in repls {
+        ctx.remove_production(p);
+        for syms in repl {
+            ctx.add_production(p.nt, syms);
+        }
+    }
+    modified
+}
+
+fn expand_epsilon<'a>(
+    ctx: &Context<'a>,
+    nt: Nonterm<'a>,
+    prod: &'a Production<'a>,
+) -> Option<Vec<Vec<Symbol<'a>>>> {
+    let mut leads = vec![vec![]];
+    for &sym in &prod.syms {
+        if sym == Symbol::Nonterm(nt) {
+            for mut l in std::mem::replace(&mut leads, vec![]) {
+                leads.push(l.clone());
+                l.push(sym);
+                leads.push(l);
+            }
+        } else {
+            leads.iter_mut().for_each(|l| l.push(sym));
+        }
+    }
+    if leads.len() > 1 {
+        Some(leads)
+    } else {
+        None
+    }
+}
+
 /// Remove left-recursion from the grammar.
 pub fn remove_left_recursion(ctx: &mut Context) {
     info!("Removing left-recursion");

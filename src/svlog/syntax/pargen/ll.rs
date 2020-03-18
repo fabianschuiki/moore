@@ -1,10 +1,9 @@
 use crate::context::{Context, LlTable, Nonterm, Production, Symbol, Term};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::BTreeSet;
 
 /// Populate a context with an LL(1) table.
 pub fn build_ll(ctx: &mut Context) {
     info!("Constructing LL(1) table");
-    let follow = collect_follow(ctx);
     let mut table = Default::default();
     for (&nt, prods) in &ctx.prods {
         for p in prods {
@@ -13,7 +12,7 @@ pub fn build_ll(ctx: &mut Context) {
             }
             if ctx.symbols_expand_to_epsilon(&p.syms) {
                 // trace!("Adding follow set {}", nt);
-                for &t in &follow[&nt] {
+                for t in ctx.follow_set(nt) {
                     add_action(&mut table, nt, t, p);
                 }
             }
@@ -23,93 +22,12 @@ pub fn build_ll(ctx: &mut Context) {
 }
 
 fn add_action<'a>(table: &mut LlTable<'a>, nt: Nonterm<'a>, term: Term<'a>, p: &'a Production<'a>) {
-    if table
+    table
         .entry(nt)
         .or_default()
         .entry(term)
         .or_default()
-        .insert(p)
-    {
-        // trace!("[{}, {}] = {}", nt, term, p);
-    }
-}
-
-/// Compute the follow sets across the grammar.
-fn collect_follow<'a>(ctx: &Context<'a>) -> BTreeMap<Nonterm<'a>, BTreeSet<Term<'a>>> {
-    let mut result = BTreeMap::<Nonterm<'a>, BTreeSet<Term<'a>>>::new();
-
-    // Keep iterating until the algorithm has converged.
-    loop {
-        trace!("Follow set iteration");
-        let mut into = result.clone();
-
-        // Iterate over all productions, since we want to scan over each
-        // production's symbols to determine the follow sets.
-        for (nt, prods) in &ctx.prods {
-            for p in prods {
-                let mut leads: HashSet<Nonterm<'a>> = Default::default();
-                for &sym in &p.syms {
-                    match sym {
-                        // In case of an error, just abort.
-                        Symbol::Error => {
-                            leads.clear();
-                            break;
-                        }
-                        // Epsilons are treated as transparent.
-                        Symbol::Epsilon => continue,
-                        // If we encounter a terminal, add it to the follow set
-                        // of all leads, then clear the leads since there is no
-                        // longer any NT whose follow set could include anything
-                        // beyond the T.
-                        Symbol::Term(t) => {
-                            for &lead in &leads {
-                                into.entry(lead).or_default().insert(t);
-                            }
-                            leads.clear();
-                        }
-                        // If we encounter a NT, add all first Ts it may expand
-                        // to to all leads. Then if the NT cannot expand to
-                        // epsilon, clear the leads since there is no longer any
-                        // NT whose follow set could include anything beyond
-                        // this NT. Then immediately add this NT as a lead.
-                        Symbol::Nonterm(nt) => {
-                            let first = ctx.first_set_of_nonterm(nt);
-                            for &lead in &leads {
-                                into.entry(lead).or_default().extend(first.iter().cloned());
-                            }
-                            if !ctx.production_expands_to_epsilon(nt) {
-                                leads.clear();
-                            }
-                            leads.insert(nt);
-                        }
-                    }
-                }
-
-                // Having any leads left at this point indicates that there were
-                // NTs in the production where all subsequent symbols could
-                // expand to epsilon. These leads inherit the follow set of the
-                // current production's NT.
-                for &lead in &leads {
-                    if let Some(follow) = result.get(nt) {
-                        into.entry(lead).or_default().extend(follow.iter().cloned());
-                    }
-                }
-            }
-        }
-
-        // Keep iterating until the set converges.
-        if result == into {
-            break;
-        }
-        result = into;
-    }
-
-    // Ensure there's an entry for every nonterminal in the grammar.
-    for nt in ctx.nonterms() {
-        result.entry(nt).or_default();
-    }
-
-    result
+        .insert(p);
 }
 
 /// Left-factor the LL(1) table in a context.
@@ -122,7 +40,7 @@ pub fn left_factor(ctx: &mut Context) -> bool {
     let mut ambigs = vec![];
     for (&nt, ts) in &ctx.ll_table {
         let mut prods = BTreeSet::new();
-        for (t, ps) in ts {
+        for (_, ps) in ts {
             if ps.len() > 1 {
                 prods.insert(ps.clone());
             }
@@ -199,7 +117,7 @@ fn handle_ambiguity<'a>(
 }
 
 pub fn dump_ambiguities(ctx: &Context) {
-    for (&nt, prods) in &ctx.ll_table {
+    for (_, prods) in &ctx.ll_table {
         for (&t, ps) in prods {
             if ps.len() > 1 {
                 trace!("Ambiguity on {}:", t);
