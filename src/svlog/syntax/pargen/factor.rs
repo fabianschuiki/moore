@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use crate::context::{format_symbols, Context, LlTable, Nonterm, Production, Symbol, Term};
 use itertools::Itertools;
 use std::{
@@ -57,7 +58,7 @@ fn remove_epsilon_derivation_inner(ctx: &mut Context) -> bool {
 }
 
 fn expand_epsilon<'a>(
-    ctx: &Context<'a>,
+    _ctx: &Context<'a>,
     nt: Nonterm<'a>,
     prod: &'a Production<'a>,
 ) -> Option<Vec<Vec<Symbol<'a>>>> {
@@ -83,7 +84,7 @@ fn expand_epsilon<'a>(
 /// Remove indirect left-recursion from the grammar.
 pub fn remove_indirect_left_recursion(ctx: &mut Context) -> bool {
     info!("Removing indirect left-recursion");
-    for (&nt, ps) in &ctx.prods {
+    for (&nt, _) in &ctx.prods {
         find_indirect_left_recursion(
             ctx,
             nt,
@@ -216,7 +217,7 @@ pub fn left_factorize_simple(ctx: &mut Context) -> bool {
     //     debug!("Factoring {} out of {}", format_symbols(&prefix), nt);
     // }
 
-    false
+    modified
 }
 
 fn has_conflict<'a>(ctx: &Context<'a>, ps: &BTreeSet<&Production<'a>>) -> bool {
@@ -236,7 +237,7 @@ fn left_factorize_conflict<'a>(
     nt: Nonterm<'a>,
     mut todo: BTreeSet<&'a Production<'a>>,
 ) -> bool {
-    let mut firsts: HashMap<&Production, BTreeSet<Term>> = todo
+    let firsts: HashMap<&Production, BTreeSet<Term>> = todo
         .iter()
         .map(|&p| (p, ctx.first_set_of_symbols(&p.syms)))
         .collect();
@@ -361,7 +362,7 @@ fn left_factorize_disambiguate<'a>(
         // trace!("  Adding auxiliary tail {}:", aux);
         prefix.push(Symbol::Nonterm(aux));
         for tail in tails {
-            let p = ctx.add_production(aux, tail.to_vec());
+            let _p = ctx.add_production(aux, tail.to_vec());
             // trace!("    {}", p);
         }
     }
@@ -373,7 +374,7 @@ fn left_factorize_disambiguate<'a>(
         ctx.remove_production(p);
     }
     // trace!("  With:");
-    let p = ctx.add_production(nt, prefix);
+    let _p = ctx.add_production(nt, prefix);
     // trace!("    {}", p);
 
     true
@@ -414,7 +415,7 @@ fn handle_conflict<'a>(
     }
 
     let mut todo: BTreeSet<_> = prods.into_iter().filter(|p| !p.syms.is_empty()).collect();
-    let mut firsts: HashMap<&Production, BTreeSet<Term>> = todo
+    let firsts: HashMap<&Production, BTreeSet<Term>> = todo
         .iter()
         .map(|&p| (p, ctx.first_set_of_symbols(&p.syms)))
         .collect();
@@ -450,7 +451,7 @@ fn disambiguate<'a>(
     ctx: &mut Context<'a>,
     nt: Nonterm<'a>,
     prods: BTreeSet<&'a Production<'a>>,
-    stack: &mut HashSet<Vec<Symbol<'a>>>,
+    _stack: &mut HashSet<Vec<Symbol<'a>>>,
 ) {
     // Handle the trivial case.
     if prods.len() == 1 {

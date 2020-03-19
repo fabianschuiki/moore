@@ -22,11 +22,12 @@ pub fn add_ast(ctx: &mut Context, ast: ast::Grammar) {
     let mut cache = Cache::new();
     for nt in &ast.nts {
         let nonterm = ctx.intern_nonterm(&nt.name);
-        for choice in &nt.choices {
-            trace!("Adding {} with {} symbols", nonterm, choice.len());
-            let syms = map_symbols(ctx, choice, &mut cache);
-            ctx.add_production(nonterm, syms);
-        }
+        let prods = nt
+            .choices
+            .iter()
+            .map(|syms| map_symbols(ctx, syms, &mut cache))
+            .collect();
+        ctx.set_productions(nonterm, prods);
     }
 }
 
@@ -58,46 +59,34 @@ fn map_symbol<'ast, 'ctx>(
             .lookup_symbol(name)
             .unwrap_or_else(|| ctx.intern_term(name).into()),
         ast::Symbol::Group(syms) => {
-            let nonterm = ctx.anonymous_nonterm();
-            trace!("Adding group {} with {} symbols", nonterm, syms.len());
             let syms = map_symbols(ctx, syms, cache);
-            ctx.add_production(nonterm, syms);
+            let nonterm = ctx.anonymous_productions(vec![syms]);
             nonterm.into()
         }
         ast::Symbol::Choice(choices) => {
-            let nonterm = ctx.anonymous_nonterm();
-            trace!("Adding choice {} with {} choices", nonterm, choices.len());
-            for syms in choices {
-                let syms = map_symbols(ctx, syms, cache);
-                ctx.add_production(nonterm, syms);
-            }
+            let prods = choices
+                .into_iter()
+                .map(|syms| map_symbols(ctx, syms, cache))
+                .collect();
+            let nonterm = ctx.anonymous_productions(prods);
             nonterm.into()
         }
         ast::Symbol::Maybe(sym) => {
             let inner = map_symbol(ctx, sym, cache);
-            let outer = ctx.anonymous_nonterm();
-            trace!("Adding maybe {} around {}", outer, inner);
-            ctx.add_production(outer, vec![Symbol::Epsilon]);
-            ctx.add_production(outer, vec![inner]);
+            let outer = ctx.anonymous_productions(vec![vec![Symbol::Epsilon], vec![inner]]);
             outer.into()
         }
         ast::Symbol::Any(sym) => {
             let inner = map_symbol(ctx, sym, cache);
-            let outer_some = ctx.anonymous_nonterm();
-            let outer_any = ctx.anonymous_nonterm();
-            trace!("Adding any {}/{} around {}", outer_some, outer_any, inner);
-            ctx.add_production(outer_some, vec![inner]);
-            ctx.add_production(outer_some, vec![outer_some.into(), inner]);
-            ctx.add_production(outer_any, vec![outer_some.into()]);
-            ctx.add_production(outer_any, vec![Symbol::Epsilon]);
+            let outer_some =
+                ctx.anonymous_productions(vec![vec![inner], vec![Symbol::This, inner]]);
+            let outer_any =
+                ctx.anonymous_productions(vec![vec![outer_some.into()], vec![Symbol::Epsilon]]);
             outer_any.into()
         }
         ast::Symbol::Some(sym) => {
             let inner = map_symbol(ctx, sym, cache);
-            let outer = ctx.anonymous_nonterm();
-            trace!("Adding some {} around {}", outer, inner);
-            ctx.add_production(outer, vec![inner]);
-            ctx.add_production(outer, vec![outer.into(), inner]);
+            let outer = ctx.anonymous_productions(vec![vec![inner], vec![Symbol::This, inner]]);
             outer.into()
         }
     };

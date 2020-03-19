@@ -92,6 +92,7 @@ impl<'a> Context<'a> {
     }
 
     /// Add a production.
+    // #[deprecated]
     pub fn add_production(
         &mut self,
         nt: Nonterm<'a>,
@@ -100,6 +101,11 @@ impl<'a> Context<'a> {
         let is_epsilon = syms.iter().all(|&s| s == Symbol::Epsilon);
         if is_epsilon {
             syms = vec![];
+        }
+        for sym in &mut syms {
+            if *sym == Symbol::This {
+                *sym = Symbol::Nonterm(nt)
+            }
         }
         let prod = self.arena.prod_arena.alloc(Production {
             nt,
@@ -112,6 +118,47 @@ impl<'a> Context<'a> {
         self.symbols_epsilon_cache.borrow_mut().clear();
         self.follow_set_cache.replace(None);
         prod
+    }
+
+    /// Add an anonymous set of productions.
+    pub fn anonymous_productions(&mut self, prods: Vec<Vec<Symbol<'a>>>) -> Nonterm<'a> {
+        let nt = self.anonymous_nonterm();
+        self.set_productions(nt, prods);
+        nt
+    }
+
+    /// Set the productions for a nonterminal.
+    ///
+    /// Returns the actual nonterminal that was used. In case the productions
+    /// align with an existing nonterminal, that nonterminal will be returned.
+    pub fn set_productions(
+        &mut self,
+        nt: Nonterm<'a>,
+        prods: Vec<Vec<Symbol<'a>>>,
+    ) -> (Nonterm<'a>, &BTreeSet<&'a Production<'a>>) {
+        let mut out = BTreeSet::<&Production>::new();
+        for mut syms in prods {
+            let is_epsilon = syms.iter().all(|&s| s == Symbol::Epsilon);
+            if is_epsilon {
+                syms = vec![];
+            }
+            for sym in &mut syms {
+                if *sym == Symbol::This {
+                    *sym = Symbol::Nonterm(nt)
+                }
+            }
+            let prod = self.arena.prod_arena.alloc(Production {
+                nt,
+                syms,
+                is_epsilon,
+            });
+            out.insert(prod);
+        }
+        self.prods.insert(nt, out);
+        self.production_epsilon_cache.borrow_mut().clear();
+        self.symbols_epsilon_cache.borrow_mut().clear();
+        self.follow_set_cache.replace(None);
+        (nt, &self.prods[&nt])
     }
 
     /// Remove a production.
@@ -159,6 +206,7 @@ impl<'a> Context<'a> {
                 Symbol::Epsilon => {
                     break;
                 }
+                Symbol::This => break,
                 Symbol::Term(_) => {
                     epsilon = false;
                     break;
@@ -191,6 +239,7 @@ impl<'a> Context<'a> {
             while let Some(&sym) = iter.next() {
                 match sym {
                     Symbol::Error => break,
+                    Symbol::This => unreachable!(),
                     Symbol::Epsilon => continue,
                     Symbol::Term(t) => {
                         into.insert(t);
@@ -228,6 +277,7 @@ impl<'a> Context<'a> {
                     match sym {
                         Symbol::Error => break,
                         Symbol::Epsilon => continue,
+                        Symbol::This => unreachable!(),
                         Symbol::Term(t) => {
                             into.insert(t);
                             break;
@@ -317,6 +367,17 @@ enum NontermName<'a> {
     Anonymous,
 }
 
+// impl<'a> Nonterm<'a> {
+//     pub fn this() -> Nonterm<'static> {
+//         static THIS: Nonterm = Nonterm(NontermName::Name("$this"), usize::max_value());
+//         THIS
+//     }
+
+//     pub fn is_this(self) -> bool {
+//         self == Self::this()
+//     }
+// }
+
 impl std::fmt::Display for Nonterm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.0 {
@@ -355,6 +416,7 @@ impl std::hash::Hash for Nonterm<'_> {
 pub enum Symbol<'a> {
     Error,
     Epsilon,
+    This,
     Term(Term<'a>),
     Nonterm(Nonterm<'a>),
 }
@@ -376,6 +438,7 @@ impl std::fmt::Display for Symbol<'_> {
         match *self {
             Symbol::Error => write!(f, "?"),
             Symbol::Epsilon => write!(f, "ε"),
+            Symbol::This => write!(f, "$this"),
             Symbol::Term(x) => write!(f, "{}", x),
             Symbol::Nonterm(x) => write!(f, "{}", x),
         }
@@ -467,6 +530,8 @@ fn compute_follow_sets<'a>(ctx: &Context<'a>) -> FollowSets<'a> {
                         }
                         // Epsilons are treated as transparent.
                         Symbol::Epsilon => continue,
+                        // Self-references cannot appear here.
+                        Symbol::This => unreachable!(),
                         // If we encounter a terminal, add it to the follow set
                         // of all leads, then clear the leads since there is no
                         // longer any NT whose follow set could include anything

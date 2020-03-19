@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use crate::context::{Context, LlTable, Nonterm, Production, Symbol, Term};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
@@ -50,7 +51,7 @@ impl<'a, 'b> Codegen<'a, 'b> {
         let mut prods = BTreeMap::<&'a Production<'a>, BTreeSet<Term<'a>>>::new();
         let mut ambig = BTreeMap::<&'a BTreeSet<&'a Production<'a>>, BTreeSet<Term<'a>>>::new();
         let mut epsilon_terms = BTreeSet::<Term<'a>>::new();
-        let mut has_epsilon = false;
+        // let mut has_epsilon = false;
         for (&t, ps) in &self.ctx.ll_table[&nt] {
             for p in ps {
                 prods.entry(p).or_default().insert(t);
@@ -105,6 +106,7 @@ impl<'a, 'b> Codegen<'a, 'b> {
         match sym {
             Symbol::Error => Code::Error,
             Symbol::Epsilon => Code::Nil,
+            Symbol::This => unreachable!(),
             Symbol::Term(t) => Code::Require(t),
             Symbol::Nonterm(nt) => {
                 self.schedule(nt);

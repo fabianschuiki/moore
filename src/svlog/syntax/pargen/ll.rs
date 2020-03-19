@@ -84,7 +84,7 @@ fn handle_ambiguity<'a>(
         let aux = ctx.anonymous_nonterm();
         ctx.add_production(nt, vec![sym, Symbol::Nonterm(aux)]);
         for p in prods {
-            let mut new_syms: Vec<_> = p.syms.iter().skip(1).cloned().collect();
+            let new_syms: Vec<_> = p.syms.iter().skip(1).cloned().collect();
             ctx.add_production(aux, new_syms);
             ctx.remove_production(p);
         }
