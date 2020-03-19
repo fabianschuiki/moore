@@ -48,18 +48,22 @@ fn main() -> Result<()> {
         context.terms().count(),
     );
 
+    context.minimize();
+
     // Perform basic LL(1) transformations.
     loop {
         let mut modified = false;
         modified |= factor::remove_epsilon_derivation(&mut context);
         modified |= factor::remove_indirect_left_recursion(&mut context);
         modified |= factor::remove_direct_left_recursion(&mut context);
+        context.minimize();
         // modified |= factor::left_factorize_simple(&mut context);
         if !modified {
             break;
         }
     }
     factor::left_factorize_simple(&mut context);
+    context.minimize();
 
     info!(
         "Grammar has {} productions, {} nonterminals, {} terminals",

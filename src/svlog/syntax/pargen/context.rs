@@ -313,6 +313,87 @@ impl<'a> Context<'a> {
         self.follow_set_cache.replace(Some(fs.clone()));
         fs
     }
+
+    // Minimize the grammar by removing redundant rules where possible.
+    pub fn minimize(&mut self) {
+        info!("Minimizing grammar");
+        let mut removed = HashSet::new();
+        let mut lookup = HashMap::<Vec<Vec<Symbol>>, Nonterm>::new();
+        let mut deps = HashMap::<Nonterm, HashSet<Nonterm>>::new();
+        let mut repls = HashMap::<Symbol, Symbol>::new();
+        let mut todo_vec: VecDeque<_> = self.prods.keys().cloned().collect();
+        let mut todo_set: HashSet<_> = self.prods.keys().cloned().collect();
+        while let Some(nt) = todo_vec.pop_front() {
+            todo_set.remove(&nt);
+
+            // Build the lookup key for this nonterm.
+            let mut outdated_prods = HashSet::new();
+            let mut nt_deps = HashSet::new();
+            let key: Vec<Vec<_>> = self.prods[&nt]
+                .iter()
+                .map(|&p| {
+                    p.syms
+                        .iter()
+                        .cloned()
+                        .map(|sym| if sym == nt.into() { Symbol::This } else { sym })
+                        .map(|sym| match repls.get(&sym).cloned() {
+                            Some(sym) => {
+                                outdated_prods.insert(p);
+                                sym
+                            }
+                            None => sym,
+                        })
+                        .inspect(|&sym| match sym {
+                            Symbol::Nonterm(sym_nt) => {
+                                nt_deps.insert(sym_nt);
+                            }
+                            _ => (),
+                        })
+                        .collect()
+                })
+                .collect();
+
+            // Update dependencies.
+            deps.insert(nt, nt_deps);
+
+            // Update productions with outdated nonterminals.
+            for p in outdated_prods {
+                trace!("Update {}", p);
+                let new_syms = p
+                    .syms
+                    .iter()
+                    .cloned()
+                    .map(|sym| repls.get(&sym).cloned().unwrap_or(sym))
+                    .collect();
+                self.remove_production(p);
+                let p = self.add_production(nt, new_syms);
+                trace!("    to {}", p);
+            }
+            // trace!("Key for {} is {:?}", nt, key);
+
+            // See if there is already a matching nonterminal.
+            if let Some(&other_nt) = lookup.get(&key) {
+                if nt.is_anonymous() {
+                    if nt != other_nt {
+                        debug!("Replacing {} with {}", nt, other_nt);
+                        repls.insert(nt.into(), other_nt.into());
+                        for &dep_nt in deps.get(&nt).into_iter().flatten() {
+                            if todo_set.insert(dep_nt) {
+                                trace!("Retriggering {}", dep_nt);
+                                todo_vec.push_back(dep_nt);
+                            }
+                        }
+                        self.prods.insert(nt, Default::default());
+                        removed.insert(nt);
+                    }
+                    continue;
+                }
+            }
+            lookup.insert(key, nt);
+        }
+
+        info!("Removed {} nonterminals", removed.len());
+    }
 }
 
 #[derive(Default)]
@@ -367,16 +448,30 @@ enum NontermName<'a> {
     Anonymous,
 }
 
-// impl<'a> Nonterm<'a> {
-//     pub fn this() -> Nonterm<'static> {
-//         static THIS: Nonterm = Nonterm(NontermName::Name("$this"), usize::max_value());
-//         THIS
-//     }
+impl<'a> Nonterm<'a> {
+    pub fn is_anonymous(&self) -> bool {
+        match self.0 {
+            NontermName::Anonymous => true,
+            _ => false,
+        }
+    }
 
-//     pub fn is_this(self) -> bool {
-//         self == Self::this()
-//     }
-// }
+    pub fn is_named(&self) -> bool {
+        match self.0 {
+            NontermName::Name(..) => true,
+            _ => false,
+        }
+    }
+
+    //     pub fn this() -> Nonterm<'static> {
+    //         static THIS: Nonterm = Nonterm(NontermName::Name("$this"), usize::max_value());
+    //         THIS
+    //     }
+
+    //     pub fn is_this(self) -> bool {
+    //         self == Self::this()
+    //     }
+}
 
 impl std::fmt::Display for Nonterm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
