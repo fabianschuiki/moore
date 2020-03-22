@@ -302,7 +302,7 @@ impl<'a> Context<'a> {
 
     // Minimize the grammar by removing redundant rules where possible.
     pub fn minimize(&mut self) {
-        info!("Minimizing grammar");
+        debug!("Minimizing grammar");
         let mut removed = HashSet::new();
         let mut lookup = HashMap::<Vec<Vec<Symbol>>, Nonterm>::new();
         let mut deps = HashMap::<Nonterm, HashSet<Nonterm>>::new();
@@ -378,7 +378,7 @@ impl<'a> Context<'a> {
             lookup.insert(key, nt);
         }
 
-        info!("Removed {} nonterminals", removed.len());
+        debug!("Removed {} nonterminals", removed.len());
     }
 }
 

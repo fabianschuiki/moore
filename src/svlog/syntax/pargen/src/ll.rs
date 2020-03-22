@@ -1,5 +1,5 @@
 use crate::context::{Context, LlTable, Nonterm, Production, Symbol, Term};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Populate a context with an LL(1) table.
 pub fn build_ll(ctx: &mut Context) {
@@ -117,13 +117,17 @@ fn handle_ambiguity<'a>(
 }
 
 pub fn dump_ambiguities(ctx: &Context) {
-    for (_, prods) in &ctx.ll_table {
-        for (&t, ps) in prods {
+    for (&nt, ts) in &ctx.ll_table {
+        let mut conflicts = BTreeMap::new();
+        for (t, ps) in ts {
             if ps.len() > 1 {
-                trace!("Ambiguity on {}:", t);
-                for p in ps {
-                    trace!("  {}", p);
-                }
+                conflicts.entry(ps).or_insert_with(BTreeSet::new).insert(t);
+            }
+        }
+        for (ps, ts) in conflicts {
+            error!("Ambiguity in {} on {:?}:", nt, ts);
+            for p in ps {
+                error!("  {}", p);
             }
         }
     }
