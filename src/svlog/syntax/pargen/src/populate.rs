@@ -54,7 +54,6 @@ fn map_symbol<'ast, 'ctx>(
         return sym;
     }
     let out = match sym {
-        ast::Symbol::Epsilon => Symbol::Epsilon,
         ast::Symbol::Token(name) => ctx
             .lookup_symbol(name)
             .unwrap_or_else(|| ctx.intern_term(name).into()),
@@ -73,15 +72,14 @@ fn map_symbol<'ast, 'ctx>(
         }
         ast::Symbol::Maybe(sym) => {
             let inner = map_symbol(ctx, sym, cache);
-            let outer = ctx.anonymous_productions(vec![vec![Symbol::Epsilon], vec![inner]]);
+            let outer = ctx.anonymous_productions(vec![vec![], vec![inner]]);
             outer.into()
         }
         ast::Symbol::Any(sym) => {
             let inner = map_symbol(ctx, sym, cache);
             let outer_some =
                 ctx.anonymous_productions(vec![vec![inner], vec![Symbol::This, inner]]);
-            let outer_any =
-                ctx.anonymous_productions(vec![vec![outer_some.into()], vec![Symbol::Epsilon]]);
+            let outer_any = ctx.anonymous_productions(vec![vec![outer_some.into()], vec![]]);
             outer_any.into()
         }
         ast::Symbol::Some(sym) => {

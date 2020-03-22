@@ -12,7 +12,6 @@ pub struct Nonterminal {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Symbol {
-    Epsilon,
     Token(String),
     Group(Vec<Symbol>),
     Choice(Vec<Vec<Symbol>>),

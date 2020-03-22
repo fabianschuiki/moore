@@ -98,10 +98,7 @@ impl<'a> Context<'a> {
         nt: Nonterm<'a>,
         mut syms: Vec<Symbol<'a>>,
     ) -> &'a Production<'a> {
-        let is_epsilon = syms.iter().all(|&s| s == Symbol::Epsilon);
-        if is_epsilon {
-            syms = vec![];
-        }
+        let is_epsilon = syms.is_empty();
         for sym in &mut syms {
             if *sym == Symbol::This {
                 *sym = Symbol::Nonterm(nt)
@@ -138,10 +135,7 @@ impl<'a> Context<'a> {
     ) -> (Nonterm<'a>, &BTreeSet<&'a Production<'a>>) {
         let mut out = BTreeSet::<&Production>::new();
         for mut syms in prods {
-            let is_epsilon = syms.iter().all(|&s| s == Symbol::Epsilon);
-            if is_epsilon {
-                syms = vec![];
-            }
+            let is_epsilon = syms.is_empty();
             for sym in &mut syms {
                 if *sym == Symbol::This {
                     *sym = Symbol::Nonterm(nt)
@@ -202,10 +196,6 @@ impl<'a> Context<'a> {
         let mut iter = syms.iter();
         while let Some(&sym) = iter.next() {
             match sym {
-                Symbol::Error => break,
-                Symbol::Epsilon => {
-                    break;
-                }
                 Symbol::This => break,
                 Symbol::Term(_) => {
                     epsilon = false;
@@ -238,9 +228,7 @@ impl<'a> Context<'a> {
             let mut iter = syms.iter();
             while let Some(&sym) = iter.next() {
                 match sym {
-                    Symbol::Error => break,
                     Symbol::This => unreachable!(),
-                    Symbol::Epsilon => continue,
                     Symbol::Term(t) => {
                         into.insert(t);
                         break;
@@ -275,8 +263,6 @@ impl<'a> Context<'a> {
                 let mut iter = p.syms.iter();
                 while let Some(&sym) = iter.next() {
                     match sym {
-                        Symbol::Error => break,
-                        Symbol::Epsilon => continue,
                         Symbol::This => unreachable!(),
                         Symbol::Term(t) => {
                             into.insert(t);
@@ -509,8 +495,6 @@ impl std::hash::Hash for Nonterm<'_> {
 /// A symbol in a production.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Symbol<'a> {
-    Error,
-    Epsilon,
     This,
     Term(Term<'a>),
     Nonterm(Nonterm<'a>),
@@ -531,8 +515,6 @@ impl<'a> From<Nonterm<'a>> for Symbol<'a> {
 impl std::fmt::Display for Symbol<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            Symbol::Error => write!(f, "?"),
-            Symbol::Epsilon => write!(f, "ε"),
             Symbol::This => write!(f, "$this"),
             Symbol::Term(x) => write!(f, "{}", x),
             Symbol::Nonterm(x) => write!(f, "{}", x),
@@ -618,13 +600,6 @@ fn compute_follow_sets<'a>(ctx: &Context<'a>) -> FollowSets<'a> {
                 let mut leads: HashSet<Nonterm<'a>> = Default::default();
                 for &sym in &p.syms {
                     match sym {
-                        // In case of an error, just abort.
-                        Symbol::Error => {
-                            leads.clear();
-                            break;
-                        }
-                        // Epsilons are treated as transparent.
-                        Symbol::Epsilon => continue,
                         // Self-references cannot appear here.
                         Symbol::This => unreachable!(),
                         // If we encounter a terminal, add it to the follow set

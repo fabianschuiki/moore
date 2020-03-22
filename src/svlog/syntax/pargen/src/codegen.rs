@@ -104,8 +104,6 @@ impl<'a, 'b> Codegen<'a, 'b> {
 
     fn emit_symbol(&mut self, sym: Symbol<'a>) -> Code<'a> {
         match sym {
-            Symbol::Error => Code::Error,
-            Symbol::Epsilon => Code::Nil,
             Symbol::This => unreachable!(),
             Symbol::Term(t) => Code::Require(t),
             Symbol::Nonterm(nt) => {
@@ -119,7 +117,6 @@ impl<'a, 'b> Codegen<'a, 'b> {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Code<'a> {
     Error,
-    Nil,
     Require(Term<'a>),
     CallNonterm(Nonterm<'a>),
     Actions(Vec<Code<'a>>),
