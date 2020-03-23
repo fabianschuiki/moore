@@ -15,4 +15,4 @@ path = "lib.rs"
 moore-common = { path = "../../common", version = "0.7.0-dev" }
 rustc-serialize = "0.3.22"
 bincode = "0.6.1"
-slog = "2.0.12"
+log = "0.4"

@@ -3,6 +3,9 @@
 //! This crate implements parsing SystemVerilog source files into an abstract
 //! syntax tree and resolving the encountered names.
 
+#[macro_use]
+extern crate log;
+
 pub mod ast;
 pub mod cat;
 pub mod lexer;

@@ -605,6 +605,45 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
+
+            Directive::DefaultNettype => {
+                if !self.is_inactive() {
+                    // Skip leading whitespace.
+                    match self.token {
+                        Some((Whitespace, _)) => self.bump(),
+                        _ => (),
+                    }
+
+                    // Parse the nettype.
+                    let tkn = match self.token {
+                        Some(tkn @ (Text, _)) => {
+                            self.bump();
+                            tkn
+                        }
+                        _ => {
+                            return Err(DiagBuilder2::fatal(
+                                "expected nettype after `default_nettype",
+                            )
+                            .span(span));
+                        }
+                    };
+
+                    // Store the nettype in the directive set.
+                    self.dirs.default_nettype = if tkn.1.extract() == "none" {
+                        None
+                    } else {
+                        Some(tkn)
+                    };
+                    debug!(
+                        "Set default_nettype to `{}`",
+                        self.dirs
+                            .default_nettype
+                            .map(|(_, sp)| sp.extract())
+                            .unwrap_or_else(|| "none".to_string())
+                    );
+                }
+                return Ok(());
+            }
         }
 
         return Err(
@@ -757,6 +796,7 @@ enum Directive {
     Resetall,
     Celldefine,
     Endcelldefine,
+    DefaultNettype,
     Unknown,
 }
 
@@ -778,29 +818,30 @@ impl fmt::Display for Directive {
             Directive::Resetall => write!(f, "`resetall"),
             Directive::Celldefine => write!(f, "`celldefine"),
             Directive::Endcelldefine => write!(f, "`endcelldefine"),
+            Directive::DefaultNettype => write!(f, "`default_nettype"),
             Directive::Unknown => write!(f, "unknown"),
         }
     }
 }
 
 thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
-    use self::Directive::*;
     let mut table = HashMap::new();
-    table.insert("include", Include);
-    table.insert("define", Define);
-    table.insert("undef", Undef);
-    table.insert("undefineall", Undefineall);
-    table.insert("ifdef", Ifdef);
-    table.insert("ifndef", Ifndef);
-    table.insert("else", Else);
-    table.insert("elsif", Elsif);
-    table.insert("endif", Endif);
-    table.insert("__FILE__", CurrentFile);
-    table.insert("__LINE__", CurrentLine);
-    table.insert("resetall", Resetall);
-    table.insert("celldefine", Celldefine);
-    table.insert("endcelldefine", Endcelldefine);
-    table.insert("timescale", Timescale);
+    table.insert("include", Directive::Include);
+    table.insert("define", Directive::Define);
+    table.insert("undef", Directive::Undef);
+    table.insert("undefineall", Directive::Undefineall);
+    table.insert("ifdef", Directive::Ifdef);
+    table.insert("ifndef", Directive::Ifndef);
+    table.insert("else", Directive::Else);
+    table.insert("elsif", Directive::Elsif);
+    table.insert("endif", Directive::Endif);
+    table.insert("__FILE__", Directive::CurrentFile);
+    table.insert("__LINE__", Directive::CurrentLine);
+    table.insert("resetall", Directive::Resetall);
+    table.insert("celldefine", Directive::Celldefine);
+    table.insert("endcelldefine", Directive::Endcelldefine);
+    table.insert("default_nettype", Directive::DefaultNettype);
+    table.insert("timescale", Directive::Timescale);
     table
 });
 
@@ -847,6 +888,7 @@ enum Defcond {
 #[derive(Default)]
 struct Directives {
     celldefine: bool,
+    default_nettype: Option<TokenAndSpan>,
 }
 
 #[cfg(test)]
