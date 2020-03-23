@@ -567,6 +567,20 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
+
+            Directive::CurrentFile => {
+                if !self.is_inactive() {
+                    self.macro_stack.push((CatTokenKind::Text, span));
+                }
+                return Ok(());
+            }
+
+            Directive::CurrentLine => {
+                if !self.is_inactive() {
+                    self.macro_stack.push((CatTokenKind::Digits, span));
+                }
+                return Ok(());
+            }
         }
 
         return Err(
@@ -714,6 +728,8 @@ enum Directive {
     Elsif,
     Endif,
     Timescale,
+    CurrentFile,
+    CurrentLine,
     Unknown,
 }
 
@@ -730,6 +746,8 @@ impl fmt::Display for Directive {
             Directive::Elsif => write!(f, "`elsif"),
             Directive::Endif => write!(f, "`endif"),
             Directive::Timescale => write!(f, "`timescale"),
+            Directive::CurrentFile => write!(f, "`__FILE__"),
+            Directive::CurrentLine => write!(f, "`__LINE__"),
             Directive::Unknown => write!(f, "unknown"),
         }
     }
@@ -747,6 +765,8 @@ thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
     table.insert("else", Else);
     table.insert("elsif", Elsif);
     table.insert("endif", Endif);
+    table.insert("__FILE__", CurrentFile);
+    table.insert("__LINE__", CurrentLine);
     table.insert("timescale", Timescale);
     table
 });
