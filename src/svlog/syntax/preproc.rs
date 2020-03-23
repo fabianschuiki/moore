@@ -35,6 +35,8 @@ pub struct Preprocessor<'a> {
     /// or `endif directive is encountered, the stack is expanded, modified, or
     /// reduced to reflect the kind of conditional block we're in.
     defcond_stack: Vec<Defcond>,
+    /// Currently enabled directives.
+    dirs: Directives,
 }
 
 impl<'a> Preprocessor<'a> {
@@ -83,6 +85,7 @@ impl<'a> Preprocessor<'a> {
             macro_stack: Vec::new(),
             include_paths: include_paths,
             defcond_stack: Vec::new(),
+            dirs: Default::default(),
         }
     }
 
@@ -581,6 +584,27 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
+
+            Directive::Resetall => {
+                if !self.is_inactive() {
+                    self.dirs = Default::default();
+                }
+                return Ok(());
+            }
+
+            Directive::Celldefine => {
+                if !self.is_inactive() {
+                    self.dirs.celldefine = true;
+                }
+                return Ok(());
+            }
+
+            Directive::Endcelldefine => {
+                if !self.is_inactive() {
+                    self.dirs.celldefine = false;
+                }
+                return Ok(());
+            }
         }
 
         return Err(
@@ -730,6 +754,9 @@ enum Directive {
     Timescale,
     CurrentFile,
     CurrentLine,
+    Resetall,
+    Celldefine,
+    Endcelldefine,
     Unknown,
 }
 
@@ -748,6 +775,9 @@ impl fmt::Display for Directive {
             Directive::Timescale => write!(f, "`timescale"),
             Directive::CurrentFile => write!(f, "`__FILE__"),
             Directive::CurrentLine => write!(f, "`__LINE__"),
+            Directive::Resetall => write!(f, "`resetall"),
+            Directive::Celldefine => write!(f, "`celldefine"),
+            Directive::Endcelldefine => write!(f, "`endcelldefine"),
             Directive::Unknown => write!(f, "unknown"),
         }
     }
@@ -767,6 +797,9 @@ thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
     table.insert("endif", Endif);
     table.insert("__FILE__", CurrentFile);
     table.insert("__LINE__", CurrentLine);
+    table.insert("resetall", Resetall);
+    table.insert("celldefine", Celldefine);
+    table.insert("endcelldefine", Endcelldefine);
     table.insert("timescale", Timescale);
     table
 });
@@ -809,6 +842,11 @@ enum Defcond {
     Done,
     Enabled,
     Disabled,
+}
+
+#[derive(Default)]
+struct Directives {
+    celldefine: bool,
 }
 
 #[cfg(test)]
