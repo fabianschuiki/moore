@@ -795,6 +795,46 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
+
+            Directive::UnconnectedDrive => {
+                if !self.is_inactive() {
+                    // Skip leading whitespace.
+                    match self.token {
+                        Some((Whitespace, _)) => self.bump(),
+                        _ => (),
+                    }
+
+                    // Parse the pull type.
+                    let tkn = match self.token {
+                        Some((Text, _)) => self.token,
+                        _ => None,
+                    };
+                    let pull = match tkn.map(|(_, sp)| sp.extract()).as_ref().map(|s| s.as_str()) {
+                        Some("pull0") => UnconnectedDrive::Pull0,
+                        Some("pull1") => UnconnectedDrive::Pull1,
+                        _ => {
+                            return Err(DiagBuilder2::fatal(
+                                "expected `pull0` or `pull1` after `unconnected_drive",
+                            )
+                            .span(span));
+                        }
+                    };
+                    self.bump(); // consume the pull
+
+                    // Store the directive.
+                    self.dirs.unconnected_drive = Some(pull);
+                    debug!("Set unconnected_drive to {:?}", self.dirs.unconnected_drive);
+                }
+                return Ok(());
+            }
+
+            Directive::NoUnconnectedDrive => {
+                if !self.is_inactive() {
+                    self.dirs.unconnected_drive = None;
+                    debug!("Set unconnected_drive to {:?}", self.dirs.unconnected_drive);
+                }
+                return Ok(());
+            }
         }
 
         return Err(
@@ -951,6 +991,8 @@ enum Directive {
     BeginKeywords,
     EndKeywords,
     Line,
+    UnconnectedDrive,
+    NoUnconnectedDrive,
     Unknown,
 }
 
@@ -976,6 +1018,8 @@ impl fmt::Display for Directive {
             Directive::BeginKeywords => write!(f, "`begin_keywords"),
             Directive::EndKeywords => write!(f, "`end_keywords"),
             Directive::Line => write!(f, "`line"),
+            Directive::UnconnectedDrive => write!(f, "`unconnected_drive"),
+            Directive::NoUnconnectedDrive => write!(f, "`nounconnected_drive"),
             Directive::Unknown => write!(f, "unknown"),
         }
     }
@@ -1001,6 +1045,8 @@ thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
     table.insert("begin_keywords", Directive::BeginKeywords);
     table.insert("end_keywords", Directive::EndKeywords);
     table.insert("line", Directive::Line);
+    table.insert("unconnected_drive", Directive::UnconnectedDrive);
+    table.insert("nounconnected_drive", Directive::NoUnconnectedDrive);
     table.insert("timescale", Directive::Timescale);
     table
 });
@@ -1050,6 +1096,7 @@ struct Directives {
     celldefine: bool,
     default_nettype: Option<TokenAndSpan>,
     keywords: Vec<KeywordsDirective>,
+    unconnected_drive: Option<UnconnectedDrive>,
 }
 
 #[allow(non_camel_case_types)]
@@ -1061,6 +1108,12 @@ enum KeywordsDirective {
     Ieee1364_2001,
     Ieee1364_2001_Noconfig,
     Ieee1364_1995,
+}
+
+#[derive(Debug)]
+enum UnconnectedDrive {
+    Pull0,
+    Pull1,
 }
 
 impl KeywordsDirective {
