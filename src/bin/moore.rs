@@ -90,6 +90,11 @@ fn main() {
                 .help("Dump the parsed abstract syntax tree"),
         )
         .arg(
+            Arg::with_name("check-syntax")
+                .long("syntax")
+                .help("Preprocess and check the input for syntax errors"),
+        )
+        .arg(
             Arg::with_name("emit_pkgs")
                 .long("emit-pkgs")
                 .help("Dump VHDL packages for debugging"),
@@ -282,6 +287,11 @@ fn score(sess: &Session, matches: &ArgMatches) {
                 })
                 .collect(),
         );
+    }
+
+    // Stop processing if requested.
+    if matches.is_present("check-syntax") {
+        std::process::exit(0);
     }
 
     // Create the scoreboard and add the initial map of libraries.
