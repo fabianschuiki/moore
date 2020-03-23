@@ -46,7 +46,7 @@ if [ $# -ge 1 ]; then
         $SV_TESTS_BIN $log -B
     done
 else
-    # $SV_TESTS_BIN clean
+    $SV_TESTS_BIN clean
     $SV_TESTS_BIN generate-tests -j$(nproc)
     $SV_TESTS_BIN tests -j$(nproc)
 fi
