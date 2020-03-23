@@ -1,6 +1,6 @@
 [package]
 name = "moore-vhdl-syntax"
-version = "0.6.0"
+version = "0.7.0-dev"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
@@ -12,7 +12,7 @@ license = "Apache-2.0 OR MIT"
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../../common", version = "0.6.0" }
+moore-common = { path = "../../common", version = "0.7.0-dev" }
 bincode = "0.6.1"
 rustc-serialize = "0.3"
 slog = "2.0.12"
