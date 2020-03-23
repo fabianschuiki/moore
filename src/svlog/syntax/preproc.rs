@@ -712,6 +712,89 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
+
+            Directive::Line => {
+                if !self.is_inactive() {
+                    // Skip whitespace.
+                    match self.token {
+                        Some((Whitespace, _)) => self.bump(),
+                        _ => (),
+                    }
+
+                    // Consume line number.
+                    let line = match self.token {
+                        Some((Digits, sp)) => {
+                            self.bump();
+                            sp
+                        }
+                        _ => {
+                            return Err(
+                                DiagBuilder2::fatal("expected line number after `line").span(span)
+                            );
+                        }
+                    };
+
+                    // Skip whitespace.
+                    match self.token {
+                        Some((Whitespace, _)) => self.bump(),
+                        _ => (),
+                    }
+
+                    // Consume the opening symbol.
+                    match self.token {
+                        Some((Symbol('"'), _)) => self.bump(),
+                        _ => {
+                            return Err(DiagBuilder2::fatal(
+                                "expected `\"` after line number in `line",
+                            )
+                            .span(span));
+                        }
+                    };
+
+                    // Consume the file name.
+                    let mut filename = String::new();
+                    while let Some(tkn) = self.token {
+                        if tkn.0 == Symbol('"') {
+                            break;
+                        }
+                        filename.push_str(&tkn.1.extract());
+                        self.bump();
+                    }
+
+                    // Consume the closing symbol.
+                    match self.token {
+                        Some((Symbol('"'), _)) => self.bump(),
+                        _ => {
+                            return Err(DiagBuilder2::fatal(
+                                "expected `\"` after filename in `line",
+                            )
+                            .span(span));
+                        }
+                    };
+
+                    // Skip whitespace.
+                    match self.token {
+                        Some((Whitespace, _)) => self.bump(),
+                        _ => (),
+                    }
+
+                    // Consume level.
+                    let level = match self.token {
+                        Some((Digits, sp)) => {
+                            self.bump();
+                            sp
+                        }
+                        _ => {
+                            return Err(
+                                DiagBuilder2::fatal("expected level after `line").span(span)
+                            );
+                        }
+                    };
+
+                    debug!("Ignoring `line directive");
+                }
+                return Ok(());
+            }
         }
 
         return Err(
@@ -867,6 +950,7 @@ enum Directive {
     DefaultNettype,
     BeginKeywords,
     EndKeywords,
+    Line,
     Unknown,
 }
 
@@ -891,6 +975,7 @@ impl fmt::Display for Directive {
             Directive::DefaultNettype => write!(f, "`default_nettype"),
             Directive::BeginKeywords => write!(f, "`begin_keywords"),
             Directive::EndKeywords => write!(f, "`end_keywords"),
+            Directive::Line => write!(f, "`line"),
             Directive::Unknown => write!(f, "unknown"),
         }
     }
@@ -915,6 +1000,7 @@ thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
     table.insert("default_nettype", Directive::DefaultNettype);
     table.insert("begin_keywords", Directive::BeginKeywords);
     table.insert("end_keywords", Directive::EndKeywords);
+    table.insert("line", Directive::Line);
     table.insert("timescale", Directive::Timescale);
     table
 });
