@@ -644,6 +644,74 @@ impl<'a> Preprocessor<'a> {
                 }
                 return Ok(());
             }
+
+            Directive::BeginKeywords => {
+                if !self.is_inactive() {
+                    // Skip leading whitespace.
+                    match self.token {
+                        Some((Whitespace, _)) => self.bump(),
+                        _ => (),
+                    }
+
+                    // Consume the opening symbol.
+                    match self.token {
+                        Some((Symbol('"'), _)) => self.bump(),
+                        _ => {
+                            return Err(DiagBuilder2::fatal("expected `\"` after `begin_keywords")
+                                .span(span));
+                        }
+                    };
+
+                    // Consume the version specifier.
+                    let mut spec = String::new();
+                    while let Some(tkn) = self.token {
+                        if tkn.0 == Symbol('"') {
+                            break;
+                        }
+                        spec.push_str(&tkn.1.extract());
+                        self.bump();
+                    }
+
+                    // Consume the closing symbol.
+                    match self.token {
+                        Some((Symbol('"'), _)) => self.bump(),
+                        _ => {
+                            return Err(DiagBuilder2::fatal(
+                                "expected `\"` after version specifier",
+                            )
+                            .span(span));
+                        }
+                    };
+
+                    // Parse the version.
+                    let spec = match KeywordsDirective::from_str(&spec) {
+                        Some(spec) => spec,
+                        _ => {
+                            return Err(DiagBuilder2::fatal(format!(
+                                "unknown `begin_keywords version specifier `{}`",
+                                spec
+                            ))
+                            .span(span));
+                        }
+                    };
+                    self.dirs.keywords.push(spec);
+                    debug!("Push keywords; now `{:?}`", self.dirs.keywords.last());
+                }
+                return Ok(());
+            }
+
+            Directive::EndKeywords => {
+                if !self.is_inactive() {
+                    if self.dirs.keywords.pop().is_none() {
+                        return Err(DiagBuilder2::fatal(
+                            "`end_keywords without earlier `begin_keywords",
+                        )
+                        .span(span));
+                    }
+                    debug!("Pop keywords; now `{:?}`", self.dirs.keywords.last());
+                }
+                return Ok(());
+            }
         }
 
         return Err(
@@ -797,6 +865,8 @@ enum Directive {
     Celldefine,
     Endcelldefine,
     DefaultNettype,
+    BeginKeywords,
+    EndKeywords,
     Unknown,
 }
 
@@ -819,6 +889,8 @@ impl fmt::Display for Directive {
             Directive::Celldefine => write!(f, "`celldefine"),
             Directive::Endcelldefine => write!(f, "`endcelldefine"),
             Directive::DefaultNettype => write!(f, "`default_nettype"),
+            Directive::BeginKeywords => write!(f, "`begin_keywords"),
+            Directive::EndKeywords => write!(f, "`end_keywords"),
             Directive::Unknown => write!(f, "unknown"),
         }
     }
@@ -841,6 +913,8 @@ thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
     table.insert("celldefine", Directive::Celldefine);
     table.insert("endcelldefine", Directive::Endcelldefine);
     table.insert("default_nettype", Directive::DefaultNettype);
+    table.insert("begin_keywords", Directive::BeginKeywords);
+    table.insert("end_keywords", Directive::EndKeywords);
     table.insert("timescale", Directive::Timescale);
     table
 });
@@ -889,6 +963,32 @@ enum Defcond {
 struct Directives {
     celldefine: bool,
     default_nettype: Option<TokenAndSpan>,
+    keywords: Vec<KeywordsDirective>,
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+enum KeywordsDirective {
+    Ieee1800_2009,
+    Ieee1800_2005,
+    Ieee1364_2005,
+    Ieee1364_2001,
+    Ieee1364_2001_Noconfig,
+    Ieee1364_1995,
+}
+
+impl KeywordsDirective {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "1800-2009" => Some(Self::Ieee1800_2009),
+            "1800-2005" => Some(Self::Ieee1800_2005),
+            "1364-2005" => Some(Self::Ieee1364_2005),
+            "1364-2001" => Some(Self::Ieee1364_2001),
+            "1364-2001-noconfig" => Some(Self::Ieee1364_2001_Noconfig),
+            "1364-1995" => Some(Self::Ieee1364_1995),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
