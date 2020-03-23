@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Added
 - Add the `--syntax` option to only syntax-check input files.
+- Add support for `__FILE__` and `__LINE__` directives.
+- Add support for `resetall` directive.
+- Add support for `celldefine` and `endcelldefine` directives.
+- Add support for `default_nettype` directive.
+- Add support for `begin_keywords` and `end_keywords` directives.
+- Add support for `line` directive.
+- Add support for `unconnected_drive` and `nounconnected_drive` directives.
+
+### Fixed
+- Fix parsing of keywords `implements`, `interconnect`, `nettype`, `soft`.
 
 ## 0.6.0 - 2020-01-26
 ### Added
