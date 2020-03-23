@@ -57,7 +57,7 @@ pub struct Root {
     pub items: Vec<Item>,
 }
 
-#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum Item {
     Module(ModDecl),
     Interface(IntfDecl),
@@ -115,7 +115,7 @@ impl Item {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ModDecl {
     pub id: NodeId,
     pub span: Span,
@@ -147,7 +147,7 @@ impl HasDesc for ModDecl {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct IntfDecl {
     pub id: NodeId,
     pub span: Span,
@@ -159,7 +159,7 @@ pub struct IntfDecl {
     pub items: Vec<HierarchyItem>,
 }
 
-#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct PackageDecl {
     pub id: NodeId,
     pub span: Span,

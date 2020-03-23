@@ -647,21 +647,22 @@ fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
         // would behave if they are declared at such a high level,. Maybe we
         // should just accept these items here, and complain about what we do
         // not support during lowering to HIR.
-        tkn => {
-            p.add_diag(DiagBuilder2::error(format!("Expected module, interface, package, program, class, import, or typedef, instead got `{}`", tkn)).span(sp));
-            p.recover_balanced(
-                &[
-                    Keyword(Kw::Module),
-                    Keyword(Kw::Interface),
-                    Keyword(Kw::Package),
-                    Keyword(Kw::Program),
-                    Keyword(Kw::Class),
-                    Keyword(Kw::Typedef),
-                ],
-                false,
-            );
-            Err(())
-        }
+        _ => parse_hierarchy_item(p).map(ast::Item::Item),
+        // tkn => {
+        //     p.add_diag(DiagBuilder2::error(format!("Expected module, interface, package, program, class, import, or typedef, instead got `{}`", tkn)).span(sp));
+        //     p.recover_balanced(
+        //         &[
+        //             Keyword(Kw::Module),
+        //             Keyword(Kw::Interface),
+        //             Keyword(Kw::Package),
+        //             Keyword(Kw::Program),
+        //             Keyword(Kw::Class),
+        //             Keyword(Kw::Typedef),
+        //         ],
+        //         false,
+        //     );
+        //     Err(())
+        // }
     }
 }
 
