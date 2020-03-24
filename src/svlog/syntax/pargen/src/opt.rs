@@ -87,13 +87,16 @@ fn optimize_minimal<'a>(
     // productions.
     let safe = find_safe_symbols(ctx, &colliders);
     if !safe.is_empty() {
-        trace!("  Safe: {:#?}", safe);
+        // trace!("  Safe: {:#?}", safe);
         let mut safe: Vec<_> = safe.into_iter().map(|(sym, exps)| (exps, sym)).collect();
         safe.sort();
-        trace!(
-            "  Safe symbols: {}",
-            safe.iter().map(|(_, sym)| sym).format(" ")
-        );
+        safe.dedup_by(|(exps1, _), (exps2, _)| {
+            exps1
+                .iter()
+                .zip(exps2.iter())
+                .all(|(e1, e2)| e1.subsumes(e2))
+        });
+        trace!("  Safe: {}", safe.iter().map(|(_, sym)| sym).format(" "));
 
         // Fold the expansions into a recursive expansion recipe.
         let folded = fold_expansions(&safe);
@@ -489,6 +492,21 @@ pub struct Expansion<'a> {
     pub pos: usize,
     pub exp: Vec<Expansion<'a>>,
     pub prod: &'a Production<'a>,
+}
+
+impl<'a> Expansion<'a> {
+    pub fn subsumes(&self, other: &Self) -> bool {
+        if self.pos != other.pos || self.prod != other.prod {
+            false
+        } else if !self.exp.is_empty() {
+            self.exp
+                .iter()
+                .zip(other.exp.iter())
+                .all(|(e1, e2)| e1.subsumes(e2))
+        } else {
+            true
+        }
+    }
 }
 
 fn fold_expansions<'a>(exps: &[(Vec<Expansion<'a>>, Symbol<'a>)]) -> FoldedExpansions<'a> {
