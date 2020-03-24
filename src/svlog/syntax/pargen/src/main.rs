@@ -36,6 +36,14 @@ fn main() -> Result<()> {
                 .takes_value(true)
                 .number_of_values(1),
         )
+        .arg(
+            Arg::with_name("dump-final")
+                .short("f")
+                .long("dump-final")
+                .help("Dump the grammar after full processing.")
+                .takes_value(true)
+                .number_of_values(1),
+        )
         .get_matches();
 
     env_logger::Builder::from_default_env()
@@ -93,10 +101,15 @@ fn main() -> Result<()> {
     }
 
     // Optimize the grammar.
-    for i in 1..2 {
+    for i in 1..50 {
         info!("Optimizing grammar (step {})", i);
-        opt::optimize(&mut context);
+        let mut modified = false;
+        modified |= opt::optimize(&mut context);
         context.minimize();
+        if !modified {
+            break;
+        }
+        // std::io::stdin().read_line(&mut Default::default()).unwrap();
     }
 
     // ll::build_ll(&mut context);
@@ -110,6 +123,17 @@ fn main() -> Result<()> {
     //         }
     //     }
     // }
+
+    // Dump this final grammar if requested.
+    if let Some(path) = matches.value_of("dump-final") {
+        info!("Dumping grammar to `{}`", path);
+        let mut f = File::create(path)?;
+        for ps in context.prods.values() {
+            for p in ps {
+                write!(f, "{}\n", p)?;
+            }
+        }
+    }
 
     // codegen::codegen(&mut context);
 

@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Optimize the grammar.
 pub fn optimize(ctx: &mut Context) -> bool {
+    let mut modified = false;
+
     // Identify ambiguous rules that require factoring.
     let mut conflicts = vec![];
     for (&nt, ps) in &ctx.prods {
@@ -17,10 +19,10 @@ pub fn optimize(ctx: &mut Context) -> bool {
 
     // Refactor those rules.
     for (nt, ps) in conflicts {
-        optimize_conflicting(ctx, nt, ps);
+        modified |= optimize_conflicting(ctx, nt, ps);
     }
 
-    false
+    modified
 }
 
 /// Optimize a set of conflicting productions.
@@ -28,7 +30,9 @@ fn optimize_conflicting<'a>(
     ctx: &mut Context<'a>,
     nt: Nonterm<'a>,
     mut todo: BTreeSet<&'a Production<'a>>,
-) {
+) -> bool {
+    let mut modified = false;
+
     // Build a map from productions to first symbols.
     let firsts: HashMap<&Production, BTreeSet<Term>> = todo
         .iter()
@@ -66,9 +70,11 @@ fn optimize_conflicting<'a>(
 
         // Handle the collision.
         if colliders.len() > 1 {
-            optimize_minimal(ctx, nt, seen, colliders);
+            modified |= optimize_minimal(ctx, nt, seen, colliders);
         }
     }
+
+    modified
 }
 
 /// Optimize a minimal-sized set of conflicting productions.
@@ -77,7 +83,7 @@ fn optimize_minimal<'a>(
     nt: Nonterm<'a>,
     ts: HashSet<Term<'a>>,
     colliders: BTreeSet<&'a Production<'a>>,
-) {
+) -> bool {
     trace!("Optimize {} on {:?}:", nt, ts);
     for p in &colliders {
         trace!("  {}", p);
@@ -90,17 +96,70 @@ fn optimize_minimal<'a>(
         // trace!("  Safe: {:#?}", safe);
         let mut safe: Vec<_> = safe.into_iter().map(|(sym, exps)| (exps, sym)).collect();
         safe.sort();
-        safe.dedup_by(|(exps1, _), (exps2, _)| {
-            exps1
-                .iter()
-                .zip(exps2.iter())
-                .all(|(e1, e2)| e1.subsumes(e2))
-        });
-        trace!("  Safe: {}", safe.iter().map(|(_, sym)| sym).format(" "));
+        // trace!("  Safe: {:#?}", safe);
+        for (exps2, sym2) in std::mem::take(&mut safe) {
+            if let Some((exps1, sym1)) = safe.pop() {
+                if Expansion::many_subsume(&exps1, &exps2) {
+                    safe.push((exps1, sym1));
+                } else if Expansion::many_subsume(&exps2, &exps1) {
+                    safe.push((exps2, sym2));
+                } else {
+                    safe.push((exps1, sym1));
+                    safe.push((exps2, sym2));
+                }
+            } else {
+                safe.push((exps2, sym2));
+            }
+        }
+        // safe.dedup_by(|(exps1, _), (exps2, _)| Expansion::many_subsume(exps2, exps1));
+        // trace!("  Safe: {:#?}", safe);
+        let mut safe_syms: Vec<_> = safe.iter().map(|(_, sym)| *sym).collect();
+        trace!("  Safe: {}", safe_syms.iter().format(" "));
 
         // Fold the expansions into a recursive expansion recipe.
-        let folded = fold_expansions(&safe);
-        trace!("  Folded: {:#?}", folded);
+        let mut folded = fold_expansions(&safe);
+        // trace!("  Folded: {:#?}", folded);
+
+        // Reduce the safe symbols to the prefix that can be produced in all
+        // expansions in this order.
+        let all_orders = collect_expansion_orders(&folded);
+        // trace!("  All orders:");
+        // for order in &all_orders {
+        //     trace!("    {}", order.iter().format(" "));
+        // }
+
+        // TODO: Actually do a Levenshtein-like process here to find the minimal
+        // removal of symbols to make the orders equivalent. For now we simply
+        // prefix-strip the orders.
+        let mut leads: Vec<_> = all_orders.iter().map(|syms| syms.as_slice()).collect();
+        for required_sym in std::mem::take(&mut safe_syms) {
+            let all = leads.iter_mut().all(|syms| {
+                while let Some(&sym) = syms.first() {
+                    if sym == required_sym {
+                        return true;
+                    }
+                    *syms = &syms[1..];
+                }
+                false
+            });
+            if !all {
+                break;
+            }
+            safe_syms.push(required_sym);
+        }
+        assert!(
+            safe_syms.len() > 0,
+            "at least one symbol must be present in all expansions; all expansions {:?}",
+            all_orders
+        );
+        trace!("  Safe (filtered): {}", safe_syms.iter().format(" "));
+
+        // Enforce the symbol order of `safe_syms` on the folded expansions.
+        // This is necessary since these may contain multiple expansions for the
+        // same symbol, and we only ever want to expand symbols in a very
+        // specific order.
+        enforce_expansion_order(&mut folded, &safe_syms);
+        // trace!("  Enforced Order: {:#?}", folded);
 
         // Apply the expansions.
         let expanded = apply_expansions(&folded);
@@ -112,7 +171,7 @@ fn optimize_minimal<'a>(
         // Isolate the sections in between safe symbols into separate rules.
         let mut main_syms = vec![];
         let mut tails: Vec<_> = expanded.iter().map(|_| 0).collect();
-        for (i, &safe_sym) in safe.iter().map(|(_, sym)| sym).enumerate() {
+        for (i, &safe_sym) in safe_syms.iter().enumerate() {
             // Gather the symbol vectors up to this point.
             // trace!("  Isolating to {}", safe_sym);
             let mut syms = BTreeSet::new();
@@ -154,274 +213,31 @@ fn optimize_minimal<'a>(
             ctx.remove_production(p);
         }
         ctx.add_production(nt, main_syms);
-
-        std::io::stdin().read_line(&mut String::new()).unwrap();
+        return true;
     }
 
-    // // Find the minimal inlining for the colliders.
-    // let inlined = find_minimal_inlining(ctx, &colliders);
-    // trace!("  Inlined:");
-    // for p in &inlined {
-    //     trace!("    {}", format_symbols(p));
-    // }
+    // Find the minimal inlining for the colliders.
+    if let Some(inlined) = find_minimal_inlining(ctx, &colliders) {
+        // for p in &inlined {
+        //     trace!("    {}", format_symbols(p));
+        // }
+        trace!("  Inlined:");
+        for syms in inlined {
+            let p = ctx.add_production(nt, syms);
+            trace!("    {}", p);
+        }
+        for &p in &colliders {
+            ctx.remove_production(p);
+        }
+        return true;
+    }
 
-    // std::process::exit(0);
-
-    // // Check for the special case of unexpanded nonterminals already matching.
-    // let firsts: BTreeSet<_> = prods.iter().map(|p| p.syms[0]).collect();
-    // let done: Vec<_> = if firsts.len() == 1 {
-    //     prods.iter().map(|p| p.syms.to_vec()).collect()
-    // } else {
-    //     // Fully expand nonterminals in first place.
-    //     #[derive(Debug, Clone)]
-    //     struct Lead<'a> {
-    //         parent: Option<Rc<Lead<'a>>>,
-    //         syms: Vec<Symbol<'a>>,
-    //     }
-    //     let mut done = vec![];
-    //     let mut leads: Vec<Lead<'a>> = prods
-    //         .iter()
-    //         .map(|p| Lead {
-    //             parent: None,
-    //             syms: p.syms.to_vec(),
-    //         })
-    //         .collect();
-
-    //     while !leads.is_empty() {
-    //         for lead in std::mem::take(&mut leads) {
-    //             if lead.syms.is_empty() {
-    //                 continue;
-    //             }
-    //             match lead.syms[0] {
-    //                 Symbol::Nonterm(nt) => {
-    //                     let parent = Rc::new(lead);
-    //                     for p in &ctx.prods[&nt] {
-    //                         leads.push(Lead {
-    //                             parent: Some(parent.clone()),
-    //                             syms: p
-    //                                 .syms
-    //                                 .iter()
-    //                                 .cloned()
-    //                                 .chain(parent.syms.iter().skip(1).cloned())
-    //                                 .collect(),
-    //                         });
-    //                     }
-    //                 }
-    //                 _ => {
-    //                     done.push(lead);
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     // trace!("  Fully unrolled: {:?}", done);
-
-    //     // Step-by-step revert the expansion as long as all leads match.
-    //     loop {
-    //         let firsts: BTreeSet<_> = done
-    //             .iter()
-    //             .map(|lead| lead.parent.as_ref().map(|p| p.syms[0]))
-    //             .collect();
-    //         if firsts.len() == 1 && firsts.iter().next().unwrap().is_some() {
-    //             for lead in std::mem::take(&mut done) {
-    //                 done.push((*lead.parent.unwrap()).clone());
-    //             }
-    //         } else {
-    //             break;
-    //         }
-    //     }
-    //     let mut done: Vec<_> = done.into_iter().map(|lead| lead.syms).collect();
-    //     done.sort();
-    //     done.dedup();
-    //     done
-    // };
-
-    // trace!("  Expanded:");
-    // for d in &done {
-    //     trace!("    {}", format_symbols(&d));
-    // }
-
-    // // No need to further disambiguate if we have only one lead.
-    // if done.len() <= 1 {
-    //     return;
-    // }
-
-    // // Find a common prefix, considering balanced tokens to factor out parts of
-    // // the rules.
-    // let mut prefix = vec![];
-    // let mut offsets: Vec<usize> = done.iter().map(|_| 0).collect();
-    // loop {
-    //     // Find the set of next symbols in the rules.
-    //     let symbols: HashSet<_> = done
-    //         .iter()
-    //         .zip(offsets.iter())
-    //         .map(|(syms, &offset)| syms.get(offset))
-    //         .collect();
-
-    //     // Check if we have one unique prefix symbol.
-    //     if symbols.len() != 1 {
-    //         break;
-    //     }
-    //     let symbol = match symbols.into_iter().next().unwrap() {
-    //         Some(&p) => p,
-    //         None => break,
-    //     };
-
-    //     // If the symbol is the left of a balanced pair, advance ahead to its
-    //     // counterpart and gobble up the symbols in between.
-    //     prefix.push(symbol);
-    //     let balanced_end = match symbol.to_string().as_str() {
-    //         "'('" => ctx.lookup_symbol("')'"),
-    //         "'['" => ctx.lookup_symbol("']'"),
-    //         "'{'" => ctx.lookup_symbol("'}'"),
-    //         _ => None,
-    //     };
-    //     if let Some(balanced_end) = balanced_end {
-    //         trace!("    Factoring-out balanced {} {}", symbol, balanced_end);
-    //         let mut subseqs = vec![];
-    //         for (syms, offset) in done.iter().zip(offsets.iter_mut()) {
-    //             *offset += 1;
-    //             let mut subsyms = vec![];
-    //             while syms[*offset] != balanced_end {
-    //                 subsyms.push(syms[*offset]);
-    //                 *offset += 1;
-    //             }
-    //             *offset += 1;
-    //             subseqs.push(subsyms);
-    //         }
-    //         // trace!("  Gobbled up subsequences:");
-    //         let aux = ctx.anonymous_nonterm();
-    //         for s in subseqs {
-    //             // trace!("    {}", s.iter().format(" "));
-    //             ctx.add_production(aux, s);
-    //         }
-    //         prefix.push(Symbol::Nonterm(aux));
-    //         prefix.push(balanced_end);
-    //     } else {
-    //         offsets.iter_mut().for_each(|o| *o += 1);
-    //     }
-    // }
-    // trace!("  Prefix {}", format_symbols(&prefix));
-
-    // // Compute the tails that are left over after prefix extraction.
-    // let tails: BTreeSet<_> = done
-    //     .iter()
-    //     .zip(offsets.iter())
-    //     .map(|(syms, &offset)| &syms[offset..])
-    //     .collect();
-
-    // // If there is one common tail, add that to the prefix immediately.
-    // // Otherwise just go ahead and create an auxiliary nonterminal that will
-    // // contain all of the tails.
-    // if tails.len() == 1 {
-    //     let tail = tails.into_iter().next().unwrap();
-    //     if !tail.is_empty() {
-    //         trace!("  Adding unique tail {}", format_symbols(tail));
-    //         prefix.extend(tail);
-    //     }
-    // } else {
-    //     let aux = ctx.anonymous_nonterm();
-    //     trace!("  Adding auxiliary tail {}:", aux);
-    //     prefix.push(Symbol::Nonterm(aux));
-    //     for tail in tails {
-    //         let p = ctx.add_production(aux, tail.to_vec());
-    //         trace!("    {}", p);
-    //     }
-    // }
-
-    // // Actually replace the production.
-    // trace!("  Replacing:");
-    // for p in &prods {
-    //     trace!("    {}", p);
-    //     ctx.remove_production(p);
-    // }
-    // trace!("  With:");
-    // let p = ctx.add_production(nt, prefix);
-    // trace!("    {}", p);
-
-    // // Find common prefices and suffices.
-    // let mut prefix = vec![];
-    // loop {
-    //     let set: HashSet<_> = done
-    //         .iter()
-    //         .map(|syms| syms.iter().skip(prefix.len()).next())
-    //         .collect();
-    //     if set.len() == 1 {
-    //         if let Some(p) = set.into_iter().next().unwrap() {
-    //             prefix.push(p);
-    //         } else {
-    //             break;
-    //         }
-    //     } else {
-    //         break;
-    //     }
-    // }
-    // let mut suffix = vec![];
-    // loop {
-    //     let set: HashSet<_> = done
-    //         .iter()
-    //         .map(|syms| syms.iter().rev().skip(suffix.len()).next())
-    //         .collect();
-    //     if set.len() == 1 {
-    //         if let Some(s) = set.into_iter().next().unwrap() {
-    //             suffix.push(s);
-    //         } else {
-    //             break;
-    //         }
-    //     } else {
-    //         break;
-    //     }
-    // }
-    // trace!(
-    //     "  [{} ... {}]",
-    //     prefix.iter().format(" "),
-    //     suffix.iter().format(" ")
-    // );
-
-    // // Disambiguate whatever is left.
-    // let set: BTreeSet<_> = done
-    //     .iter()
-    //     .map(|d| &d[prefix.len()..d.len() - suffix.len()])
-    //     .collect();
-    // if set.iter().any(|&s| stack.contains(s)) {
-    //     warn!("Recursion in disambiguation:");
-    //     for s in &set {
-    //         warn!("  {}", s.iter().format(" "));
-    //     }
-    //     return;
-    // }
-    // for s in &set {
-    //     stack.insert(s.to_vec());
-    // }
-    // optimize_conflicting(ctx, set.clone(), stack);
-    // for &s in &set {
-    //     stack.remove(s);
-    // }
-
-    // // Find the most shallow expansion possible that produces a common prefix
-    // // for all sequences.
-    // let mut expansions = HashMap::<Symbol, HashMap<usize, usize>>::new();
-    // for (seq_idx, seq) in seqs.iter().enumerate() {
-    //     let mut leads = vec![seq[0]];
-    //     for level in 0.. {
-    //         for sym in std::mem::take(&mut leads) {
-    //             expansions
-    //                 .entry(sym)
-    //                 .or_default()
-    //                 .entry(seq_idx)
-    //                 .or_insert(level);
-    //             match sym {
-    //                 Symbol::Nonterm(nt) => {
-    //                     leads.extend(ctx.prods[&nt].iter().flat_map(|p| p.syms.iter().next()))
-    //                 }
-    //                 _ => (),
-    //             }
-    //         }
-    //         if leads.is_empty() {
-    //             break;
-    //         }
-    //     }
-    // }
-    // trace!("Expansions: {:?}", expansions);
+    // Otherwise just give up.
+    warn!("Cannot resolve {} conflict on {:?}", nt, ts);
+    for p in &colliders {
+        warn!("  {}", p);
+    }
+    false
 }
 
 type SafeSymbols<'a> = BTreeMap<Symbol<'a>, Vec<Expansion<'a>>>;
@@ -430,17 +246,18 @@ fn find_safe_symbols<'a>(
     ctx: &Context<'a>,
     prods: &BTreeSet<&'a Production<'a>>,
 ) -> SafeSymbols<'a> {
-    find_safe_symbols_inner(ctx, prods, &mut Default::default())
+    find_safe_symbols_inner(ctx, prods, &mut Default::default(), &mut Default::default())
 }
 
 fn find_safe_symbols_inner<'a>(
     ctx: &Context<'a>,
     prods: &BTreeSet<&'a Production<'a>>,
     visited: &mut HashSet<Nonterm<'a>>,
+    cache: &mut HashMap<&'a Production<'a>, SafeSymbols<'a>>,
 ) -> SafeSymbols<'a> {
     let mut safe: Option<SafeSymbols> = None;
     for &prod in prods {
-        let mut prod_safe = find_safe_symbols_single(ctx, prod, visited);
+        let mut prod_safe = find_safe_symbols_single(ctx, prod, visited, cache);
         safe = Some(match safe {
             Some(safe) => safe
                 .into_iter()
@@ -461,7 +278,11 @@ fn find_safe_symbols_single<'a>(
     ctx: &Context<'a>,
     prod: &'a Production<'a>,
     visited: &mut HashSet<Nonterm<'a>>,
+    cache: &mut HashMap<&'a Production<'a>, SafeSymbols<'a>>,
 ) -> SafeSymbols<'a> {
+    if let Some(safe) = cache.get(&prod) {
+        return safe.clone();
+    }
     visited.insert(prod.nt);
     let mut safe = BTreeMap::<_, Vec<_>>::new();
     for (pos, &sym) in prod.syms.iter().enumerate() {
@@ -472,7 +293,7 @@ fn find_safe_symbols_single<'a>(
         });
         if let Symbol::Nonterm(nt) = sym {
             if !visited.contains(&nt) {
-                for (sym, exp) in find_safe_symbols_inner(ctx, &ctx.prods[&nt], visited) {
+                for (sym, exp) in find_safe_symbols_inner(ctx, &ctx.prods[&nt], visited, cache) {
                     safe.entry(sym)
                         .or_default()
                         .push(Expansion { prod, pos, exp });
@@ -481,6 +302,7 @@ fn find_safe_symbols_single<'a>(
         }
     }
     visited.remove(&prod.nt);
+    cache.insert(prod, safe.clone());
     safe
 }
 
@@ -495,14 +317,29 @@ pub struct Expansion<'a> {
 }
 
 impl<'a> Expansion<'a> {
+    pub fn many_subsume(exps1: &[Self], exps2: &[Self]) -> bool {
+        // trace!("Many subsume: {:#?} and {:#?}", exps1, exps2);
+        for exp in exps1 {
+            let mut found = false;
+            for exp2 in exps2 {
+                if exp.pos == exp2.pos && exp.prod == exp2.prod {
+                    found = exp.subsumes(exp2);
+                    break;
+                }
+            }
+            if !found {
+                // trace!("Does not subsume: {:#?} and {:#?}", exp, exps2);
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn subsumes(&self, other: &Self) -> bool {
         if self.pos != other.pos || self.prod != other.prod {
             false
         } else if !self.exp.is_empty() {
-            self.exp
-                .iter()
-                .zip(other.exp.iter())
-                .all(|(e1, e2)| e1.subsumes(e2))
+            Self::many_subsume(&self.exp, &other.exp)
         } else {
             true
         }
@@ -546,6 +383,96 @@ pub struct FoldedExpansion<'a> {
 }
 
 pub type FoldedExpansions<'a> = BTreeMap<&'a Production<'a>, Vec<FoldedExpansion<'a>>>;
+
+fn collect_expansion_orders<'a>(input: &FoldedExpansions<'a>) -> Vec<Vec<Symbol<'a>>> {
+    let mut leads = vec![];
+    for (prod, exp) in input {
+        leads.extend(collect_expansion_orders_vec(prod, exp));
+    }
+    leads
+}
+
+fn collect_expansion_orders_vec<'a>(
+    prod: &'a Production<'a>,
+    input: &[FoldedExpansion<'a>],
+) -> Vec<Vec<Symbol<'a>>> {
+    let mut leads = vec![vec![]];
+    for exp in input {
+        if exp.exp.is_empty() {
+            leads
+                .iter_mut()
+                .for_each(|lead| lead.push(prod.syms[exp.pos]));
+        } else {
+            let map = collect_expansion_orders(&exp.exp);
+            for lead in std::mem::take(&mut leads) {
+                for syms in &map {
+                    let mut lead = lead.clone();
+                    lead.extend(syms);
+                    leads.push(lead);
+                }
+            }
+        }
+    }
+    leads
+}
+
+fn enforce_expansion_order<'a>(input: &mut FoldedExpansions<'a>, order: &[Symbol<'a>]) {
+    // trace!("Enforcing order {:?}", order);
+    let consumed = enforce_expansion_order_map(input, order);
+    assert_eq!(
+        consumed,
+        order.len(),
+        "order enforcing did not consume all symbols"
+    );
+}
+
+fn enforce_expansion_order_map<'a>(
+    input: &mut FoldedExpansions<'a>,
+    order: &[Symbol<'a>],
+) -> usize {
+    let mut consumed = BTreeSet::new();
+    for (prod, exps) in input {
+        consumed.insert(enforce_expansion_order_vec(prod, exps, order));
+    }
+    if consumed.len() != 1 {
+        panic!(
+            "order enforcing consumed uneven number of symbols: {:?}",
+            consumed
+        );
+    }
+    consumed.into_iter().next().unwrap()
+}
+
+fn enforce_expansion_order_vec<'a>(
+    prod: &'a Production<'a>,
+    input: &mut Vec<FoldedExpansion<'a>>,
+    order: &[Symbol<'a>],
+) -> usize {
+    let mut pos = 0;
+    for mut exp in std::mem::take(input) {
+        // Drop expansions which are out of order.
+        if exp.exp.is_empty() {
+            if Some(&prod.syms[exp.pos]) == order.get(pos) {
+                pos += 1;
+                input.push(exp);
+                // } else {
+                //     trace!("Dropping {:#?}", exp);
+            }
+            continue;
+        }
+
+        // Recursively filter out the inner expansions.
+        pos += enforce_expansion_order_map(&mut exp.exp, &order[pos..]);
+
+        // If that made this expansion empty, drop it entirely.
+        if !exp.exp.values().all(|v| v.is_empty()) {
+            input.push(exp);
+            // } else {
+            //     trace!("Dropping {:#?}", exp);
+        }
+    }
+    pos
+}
 
 fn apply_expansions<'a>(exps: &FoldedExpansions<'a>) -> Vec<ExpandedSymbols<'a>> {
     let mut v = vec![];
@@ -601,14 +528,27 @@ pub struct ExpandedSymbols<'a> {
 fn find_minimal_inlining<'a>(
     ctx: &Context<'a>,
     prods: &BTreeSet<&'a Production<'a>>,
-) -> BTreeSet<Vec<Symbol<'a>>> {
+) -> Option<BTreeSet<Vec<Symbol<'a>>>> {
+    find_minimal_inlining_inner(ctx, prods, &mut Default::default())
+}
+
+fn find_minimal_inlining_inner<'a>(
+    ctx: &Context<'a>,
+    prods: &BTreeSet<&'a Production<'a>>,
+    seen: &mut HashSet<Nonterm<'a>>,
+) -> Option<BTreeSet<Vec<Symbol<'a>>>> {
     let mut out = BTreeSet::new();
     for &p in prods {
-        match p.syms[0] {
-            Symbol::Nonterm(nt) => {
-                for mut syms in find_minimal_inlining(ctx, &ctx.prods[&nt]) {
-                    syms.extend(p.syms[1..].iter().cloned());
-                    out.insert(syms);
+        match p.syms.first() {
+            Some(&Symbol::Nonterm(nt)) => {
+                if seen.insert(nt) {
+                    for mut syms in find_minimal_inlining_inner(ctx, &ctx.prods[&nt], seen)? {
+                        syms.extend(p.syms[1..].iter().cloned());
+                        out.insert(syms);
+                    }
+                    seen.remove(&nt);
+                } else {
+                    return None;
                 }
             }
             _ => {
@@ -616,5 +556,5 @@ fn find_minimal_inlining<'a>(
             }
         }
     }
-    out
+    Some(out)
 }

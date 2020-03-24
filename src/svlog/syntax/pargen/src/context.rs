@@ -311,6 +311,9 @@ impl<'a> Context<'a> {
         let mut todo_set: HashSet<_> = self.prods.keys().cloned().collect();
         while let Some(nt) = todo_vec.pop_front() {
             todo_set.remove(&nt);
+            if self.prods[&nt].is_empty() {
+                continue;
+            }
 
             // Build the lookup key for this nonterm.
             let mut outdated_prods = HashSet::new();
@@ -361,7 +364,7 @@ impl<'a> Context<'a> {
             if let Some(&other_nt) = lookup.get(&key) {
                 if nt.is_anonymous() {
                     if nt != other_nt {
-                        debug!("Replacing {} with {}", nt, other_nt);
+                        trace!("Replacing {} with {}", nt, other_nt);
                         repls.insert(nt.into(), other_nt.into());
                         for &dep_nt in deps.get(&nt).into_iter().flatten() {
                             if todo_set.insert(dep_nt) {
