@@ -8,6 +8,7 @@ pub mod codegen;
 pub mod context;
 pub mod factor;
 pub mod ll;
+pub mod lr;
 pub mod opt;
 pub mod parser;
 pub mod populate;
@@ -68,27 +69,6 @@ fn main() -> Result<()> {
     // Perform initial minimization of the grammar to remove redundancies.
     context.minimize();
 
-    // Perform basic LL(1) transformations.
-    for i in 1.. {
-        info!("Simplifying grammar (step {})", i);
-        let mut modified = false;
-        modified |= factor::remove_epsilon_derivation(&mut context);
-        modified |= factor::remove_indirect_left_recursion(&mut context);
-        modified |= factor::remove_direct_left_recursion(&mut context);
-        context.minimize();
-        if !modified {
-            break;
-        }
-    }
-    factor::left_factorize_simple(&mut context);
-    context.minimize();
-    info!(
-        "Grammar has {} productions, {} nonterminals, {} terminals",
-        context.prods.values().flatten().count(),
-        context.nonterms().count(),
-        context.terms().count(),
-    );
-
     // Dump this initial grammar if requested.
     if let Some(path) = matches.value_of("dump-init") {
         info!("Dumping grammar to `{}`", path);
@@ -100,29 +80,55 @@ fn main() -> Result<()> {
         }
     }
 
-    // Optimize the grammar.
-    for i in 1..50 {
-        info!("Optimizing grammar (step {})", i);
-        let mut modified = false;
-        modified |= opt::optimize(&mut context);
-        context.minimize();
-        if !modified {
-            break;
+    // Create the LR(1) table.
+    lr::build_lr(&mut context);
+
+    if false {
+        // Perform basic LL(1) transformations.
+        for i in 1.. {
+            info!("Simplifying grammar (step {})", i);
+            let mut modified = false;
+            modified |= factor::remove_epsilon_derivation(&mut context);
+            modified |= factor::remove_indirect_left_recursion(&mut context);
+            modified |= factor::remove_direct_left_recursion(&mut context);
+            context.minimize();
+            if !modified {
+                break;
+            }
         }
-        // std::io::stdin().read_line(&mut Default::default()).unwrap();
+        factor::left_factorize_simple(&mut context);
+        context.minimize();
+        info!(
+            "Grammar has {} productions, {} nonterminals, {} terminals",
+            context.prods.values().flatten().count(),
+            context.nonterms().count(),
+            context.terms().count(),
+        );
+
+        // Optimize the grammar.
+        for i in 1..50 {
+            info!("Optimizing grammar (step {})", i);
+            let mut modified = false;
+            modified |= opt::optimize(&mut context);
+            context.minimize();
+            if !modified {
+                break;
+            }
+            // std::io::stdin().read_line(&mut Default::default()).unwrap();
+        }
+
+        // ll::build_ll(&mut context);
+        // ll::dump_ambiguities(&context);
+
+        // debug!("LL(1) Table:");
+        // for (nt, ts) in &context.ll_table {
+        //     for (t, ps) in ts {
+        //         for p in ps {
+        //             debug!("  [{}, {}] = {}", nt, t, p);
+        //         }
+        //     }
+        // }
     }
-
-    // ll::build_ll(&mut context);
-    // ll::dump_ambiguities(&context);
-
-    // debug!("LL(1) Table:");
-    // for (nt, ts) in &context.ll_table {
-    //     for (t, ps) in ts {
-    //         for p in ps {
-    //             debug!("  [{}, {}] = {}", nt, t, p);
-    //         }
-    //     }
-    // }
 
     // Dump this final grammar if requested.
     if let Some(path) = matches.value_of("dump-final") {

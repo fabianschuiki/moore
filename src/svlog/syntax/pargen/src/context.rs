@@ -7,7 +7,7 @@ use std::{
 use typed_arena::Arena;
 
 pub struct Context<'a> {
-    arena: &'a ContextArena<'a>,
+    pub(crate) arena: &'a ContextArena<'a>,
     terms: Vec<Term<'a>>,
     nonterms: Vec<Nonterm<'a>>,
     term_lookup: HashMap<&'a str, Term<'a>>,
@@ -387,10 +387,10 @@ impl<'a> Context<'a> {
 
 #[derive(Default)]
 pub struct ContextArena<'a> {
-    term_arena: Arena<u8>,
-    nonterm_arena: Arena<u8>,
-    prod_arena: Arena<Production<'a>>,
-    _dummy: std::marker::PhantomData<&'a ()>,
+    pub(crate) term_arena: Arena<u8>,
+    pub(crate) nonterm_arena: Arena<u8>,
+    pub(crate) prod_arena: Arena<Production<'a>>,
+    pub(crate) lr_arena: crate::lr::LrArena<'a>,
 }
 
 /// A terminal.
