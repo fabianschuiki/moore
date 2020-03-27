@@ -53,6 +53,14 @@ fn main() -> Result<()> {
                 .takes_value(true)
                 .number_of_values(1),
         )
+        .arg(
+            Arg::with_name("output")
+                .short("o")
+                .long("output")
+                .help("Emit code into this file.")
+                .takes_value(true)
+                .number_of_values(1),
+        )
         .get_matches();
 
     env_logger::Builder::from_default_env()
@@ -174,7 +182,12 @@ fn main() -> Result<()> {
         }
     }
 
-    // codegen::codegen(&mut context);
+    // Generate code.
+    if let Some(path) = matches.value_of("output") {
+        info!("Generating code in `{}`", path);
+        let mut f = File::create(path)?;
+        codegen::codegen(&mut context, &mut f)?;
+    }
 
     Ok(())
 }
