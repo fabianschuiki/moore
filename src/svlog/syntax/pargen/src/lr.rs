@@ -10,7 +10,7 @@ pub fn build_lr(ctx: &mut Context) {
     info!("Constructing LR(1) table");
 
     let eof = ctx.intern_term("$");
-    let mut table = Table::new(&ctx.arena.lr_arena, eof);
+    let mut tb = TableBuilder::new(&ctx.arena.lr_arena);
     let mut states_seen = HashSet::new();
     let mut states_todo = VecDeque::new();
 
@@ -20,9 +20,9 @@ pub fn build_lr(ctx: &mut Context) {
         for &p in &ctx.prods[&nt] {
             kb.add(p, 0, Some(eof));
         }
-        let kernel = table.intern_kernel(kb.build(&table));
-        let state = table.intern_state(kernel, ctx);
-        table.root_states.insert(nt, state);
+        let kernel = tb.intern_kernel(kb.build(&tb));
+        let state = tb.intern_state(kernel, ctx);
+        tb.table.root_states.insert(nt, state);
         debug!("Scheduling root {} as {:?}", nt, state);
         if states_seen.insert(state) {
             states_todo.push_back(state);
@@ -54,35 +54,22 @@ pub fn build_lr(ctx: &mut Context) {
         // trace!("Next: {:#?}", next_items);
 
         for (sym, kb) in next_items {
-            let kernel = table.intern_kernel(kb.build(&table));
-            let state = table.intern_state(kernel, ctx);
+            let kernel = tb.intern_kernel(kb.build(&tb));
+            let state = tb.intern_state(kernel, ctx);
             actions.entry(sym).or_default().insert(Action::Shift(state));
             if states_seen.insert(state) {
                 states_todo.push_back(state);
             }
         }
         // println!("{:#?}", actions);
-        table.actions.insert(state, actions);
+        tb.table.actions.insert(state, actions);
 
         // trace!("{} kernels left", states_todo.len());
         // std::io::stdin().read_line(&mut Default::default()).unwrap();
     }
 
-    // Dump the action conflicts.
-    for (&state, actions) in &table.actions {
-        let mut reported = false;
-        for (&sym, actions) in actions {
-            if actions.len() > 1 {
-                if !reported {
-                    warn!("Conflict in {:?}", state);
-                    reported = true;
-                }
-                warn!("  {} -> {:?}", sym, actions);
-            }
-        }
-    }
-
     info!("Created {} states", states_seen.len());
+    ctx.lr_table = tb.build();
 }
 
 /// An arena for LR(1) structure interning.
@@ -94,31 +81,36 @@ pub struct Arena<'a> {
 }
 
 /// An LR(1) parsing table.
+#[derive(Default)]
 pub struct Table<'a> {
-    arena: &'a Arena<'a>,
     /// The end-of-file marker terminal.
-    pub eof: Term<'a>,
-    kernels: RefCell<BTreeSet<&'a Kernel<'a>>>,
-    lookaheads: RefCell<BTreeSet<&'a Lookahead<'a>>>,
-    states: Vec<State<'a>>,
-    state_lookup: HashMap<&'a Kernel<'a>, State<'a>>,
-    root_states: BTreeMap<Nonterm<'a>, State<'a>>,
+    pub states: Vec<State<'a>>,
+    pub state_lookup: HashMap<&'a Kernel<'a>, State<'a>>,
+    pub root_states: BTreeMap<Nonterm<'a>, State<'a>>,
     /// The action table.
-    actions: BTreeMap<State<'a>, StateActions<'a>>,
+    pub actions: BTreeMap<State<'a>, StateActions<'a>>,
 }
 
-impl<'a> Table<'a> {
-    pub fn new(arena: &'a Arena<'a>, eof: Term<'a>) -> Self {
+/// A parsing table builder.
+pub struct TableBuilder<'a> {
+    arena: &'a Arena<'a>,
+    table: Table<'a>,
+    kernels: RefCell<BTreeSet<&'a Kernel<'a>>>,
+    lookaheads: RefCell<BTreeSet<&'a Lookahead<'a>>>,
+}
+
+impl<'a> TableBuilder<'a> {
+    pub fn new(arena: &'a Arena<'a>) -> Self {
         Self {
             arena,
-            eof,
+            table: Default::default(),
             kernels: Default::default(),
             lookaheads: Default::default(),
-            states: Default::default(),
-            state_lookup: Default::default(),
-            root_states: Default::default(),
-            actions: Default::default(),
         }
+    }
+
+    pub fn build(self) -> Table<'a> {
+        self.table
     }
 
     pub fn intern_kernel(&self, kernel: Kernel<'a>) -> &'a Kernel<'a> {
@@ -140,7 +132,7 @@ impl<'a> Table<'a> {
     }
 
     pub fn intern_state(&mut self, kernel: &'a Kernel<'a>, ctx: &Context<'a>) -> State<'a> {
-        if let Some(&state) = self.state_lookup.get(&kernel) {
+        if let Some(&state) = self.table.state_lookup.get(&kernel) {
             return state;
         }
 
@@ -170,9 +162,9 @@ impl<'a> Table<'a> {
 
         // Create the state data and internalize.
         let data = self.arena.state_arena.alloc(StateData { kernel, items });
-        let v = State(data, self.states.len());
-        self.states.push(v);
-        self.state_lookup.insert(kernel, v);
+        let v = State(data, self.table.states.len());
+        self.table.states.push(v);
+        self.table.state_lookup.insert(kernel, v);
         v
     }
 }
@@ -280,10 +272,10 @@ impl<'a> KernelBuilder<'a> {
         self
     }
 
-    pub fn build(self, table: &Table<'a>) -> Kernel<'a> {
+    pub fn build(self, tb: &TableBuilder<'a>) -> Kernel<'a> {
         self.items
             .into_iter()
-            .map(|((prod, pos), lookahead)| Item::new(prod, pos, table.intern_lookahead(lookahead)))
+            .map(|((prod, pos), lookahead)| Item::new(prod, pos, tb.intern_lookahead(lookahead)))
             .collect()
     }
 }

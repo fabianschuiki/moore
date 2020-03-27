@@ -17,6 +17,7 @@ pub struct Context<'a> {
     pub prods: BTreeMap<Nonterm<'a>, BTreeSet<&'a Production<'a>>>,
     pub root_nonterms: BTreeSet<Nonterm<'a>>,
     pub ll_table: LlTable<'a>,
+    pub lr_table: lr::Table<'a>,
 
     // Caches
     production_epsilon_cache: RefCell<HashMap<Nonterm<'a>, bool>>,
@@ -36,6 +37,7 @@ impl<'a> Context<'a> {
             prods: Default::default(),
             root_nonterms: Default::default(),
             ll_table: Default::default(),
+            lr_table: Default::default(),
             production_epsilon_cache: Default::default(),
             symbols_epsilon_cache: Default::default(),
             follow_set_cache: Default::default(),

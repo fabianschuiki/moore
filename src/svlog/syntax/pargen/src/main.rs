@@ -45,6 +45,14 @@ fn main() -> Result<()> {
                 .takes_value(true)
                 .number_of_values(1),
         )
+        .arg(
+            Arg::with_name("dump-conflicts")
+                .short("c")
+                .long("dump-conflicts")
+                .help("Dump the conflicts.")
+                .takes_value(true)
+                .number_of_values(1),
+        )
         .get_matches();
 
     env_logger::Builder::from_default_env()
@@ -82,6 +90,31 @@ fn main() -> Result<()> {
 
     // Create the LR(1) table.
     lr::build_lr(&mut context);
+
+    // Dump the conflicts if requested.
+    if let Some(path) = matches.value_of("dump-conflicts") {
+        info!("Dumping conflicts to `{}`", path);
+        let mut f = File::create(path)?;
+        let mut num_conflicts = 0;
+        for (&state, actions) in &context.lr_table.actions {
+            let mut reported = false;
+            for (&sym, actions) in actions {
+                if actions.len() > 1 {
+                    if !reported {
+                        write!(f, "Conflict in {} {:#?}\n", state, state.items)?;
+                        reported = true;
+                    }
+                    write!(f, "{} -> {:?}\n", sym, actions)?;
+                    num_conflicts += 1;
+                }
+            }
+            if reported {
+                write!(f, "\n")?;
+            }
+        }
+        write!(f, "Found {} conflicts\n", num_conflicts)?;
+        info!("Found {} conflicts", num_conflicts);
+    }
 
     if false {
         // Perform basic LL(1) transformations.
