@@ -6116,3 +6116,19 @@ fn try_builtin_system_task<'n>(
         _ => None,
     })
 }
+
+struct Context;
+
+// Include the auto-generated parser.
+include!("grammar.rs");
+
+pub fn pargen_parse(input: Lexer) -> Result<(), ()> {
+    let mut p = Parser::new(input);
+    let mut ctx = Context;
+    action_s0(&mut ctx, &mut p)?;
+    if p.is_error() {
+        Err(())
+    } else {
+        Ok(())
+    }
+}

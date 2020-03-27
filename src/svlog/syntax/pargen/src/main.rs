@@ -185,8 +185,11 @@ fn main() -> Result<()> {
     // Generate code.
     if let Some(path) = matches.value_of("output") {
         info!("Generating code in `{}`", path);
-        let mut f = File::create(path)?;
-        codegen::codegen(&mut context, &mut f)?;
+        {
+            let mut f = File::create(path)?;
+            codegen::codegen(&mut context, &mut f)?;
+        }
+        std::process::Command::new("rustfmt").arg(path).output()?;
     }
 
     Ok(())

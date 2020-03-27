@@ -400,6 +400,16 @@ pub struct ContextArena<'a> {
 #[derive(Copy, Clone)]
 pub struct Term<'a>(&'a str, usize);
 
+impl<'a> Term<'a> {
+    pub fn as_str(&self) -> &'a str {
+        self.0
+    }
+
+    pub fn index(&self) -> usize {
+        self.1
+    }
+}
+
 impl std::fmt::Display for Term<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -460,6 +470,13 @@ impl<'a> Nonterm<'a> {
         match self.0 {
             NontermName::Name(..) => true,
             _ => false,
+        }
+    }
+
+    pub fn get_str(&self) -> Option<&'a str> {
+        match self.0 {
+            NontermName::Name(n) => Some(n),
+            _ => None,
         }
     }
 }
