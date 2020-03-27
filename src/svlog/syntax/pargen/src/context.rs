@@ -1,3 +1,4 @@
+use crate::lr;
 use itertools::Itertools;
 use std::{
     cell::RefCell,
@@ -390,11 +391,11 @@ pub struct ContextArena<'a> {
     pub(crate) term_arena: Arena<u8>,
     pub(crate) nonterm_arena: Arena<u8>,
     pub(crate) prod_arena: Arena<Production<'a>>,
-    pub(crate) lr_arena: crate::lr::LrArena<'a>,
+    pub(crate) lr_arena: lr::Arena<'a>,
 }
 
 /// A terminal.
-#[derive(Copy, Clone, Eq, Ord)]
+#[derive(Copy, Clone)]
 pub struct Term<'a>(&'a str, usize);
 
 impl std::fmt::Display for Term<'_> {
@@ -409,9 +410,17 @@ impl std::fmt::Debug for Term<'_> {
     }
 }
 
+impl Eq for Term<'_> {}
+
 impl PartialEq for Term<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.1 == other.1
+    }
+}
+
+impl Ord for Term<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        Ord::cmp(&self.1, &other.1)
     }
 }
 
@@ -428,7 +437,7 @@ impl std::hash::Hash for Term<'_> {
 }
 
 /// A nonterminal.
-#[derive(Copy, Clone, Eq, Ord)]
+#[derive(Copy, Clone)]
 pub struct Nonterm<'a>(NontermName<'a>, usize);
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -451,15 +460,6 @@ impl<'a> Nonterm<'a> {
             _ => false,
         }
     }
-
-    //     pub fn this() -> Nonterm<'static> {
-    //         static THIS: Nonterm = Nonterm(NontermName::Name("$this"), usize::max_value());
-    //         THIS
-    //     }
-
-    //     pub fn is_this(self) -> bool {
-    //         self == Self::this()
-    //     }
 }
 
 impl std::fmt::Display for Nonterm<'_> {
@@ -477,9 +477,17 @@ impl std::fmt::Debug for Nonterm<'_> {
     }
 }
 
+impl Eq for Nonterm<'_> {}
+
 impl PartialEq for Nonterm<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.1 == other.1
+    }
+}
+
+impl Ord for Nonterm<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        Ord::cmp(&self.1, &other.1)
     }
 }
 
