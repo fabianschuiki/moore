@@ -87,6 +87,7 @@ fn map_symbol<'ast, 'ctx>(
             let outer = ctx.anonymous_productions(vec![vec![inner], vec![Symbol::This, inner]]);
             outer.into()
         }
+        ast::Symbol::Not(sym) => map_symbol(ctx, sym, cache),
     };
     cache.insert(sym, out);
     out

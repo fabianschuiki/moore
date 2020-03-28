@@ -1,12 +1,12 @@
 use crate::{
-    context::{Context, Symbol, Term},
-    lr::Action,
+    context::{Context, Nonterm, Symbol, Term},
+    lr::{Action, State},
 };
 use anyhow::Result;
 use heck::{CamelCase, TitleCase};
 use itertools::Itertools;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     io::Write,
 };
 
@@ -44,13 +44,31 @@ pub fn codegen(ctx: &mut Context, into: &mut impl Write) -> Result<()> {
     debug!("{} invariant states", invariant_states.len());
     debug!("{} inline states", inline_states.len());
 
+    let mut states_todo = VecDeque::new();
+    let mut states_seen = HashSet::new();
+
     // Generate some code.
     for (&nt, &state) in &ctx.lr_table.root_states {
-        debug!("Root {} {} {:#?}", nt, state, state.items);
+        debug!("Scheduling root {} {}", nt, state);
+        if states_seen.insert(state) {
+            states_todo.push_back(state);
+        }
+    }
+    let roots: HashMap<_, _> = ctx
+        .lr_table
+        .root_states
+        .iter()
+        .map(|(&nt, &s)| (s, nt))
+        .collect();
+
+    // Generate some code.
+    while let Some(state) = states_todo.pop_front() {
+        debug!("Generating state {} {:#?}", state, state.items);
 
         // Group the actions.
         let mut ambiguous = BTreeSet::new();
         let mut actions = BTreeMap::<Action, BTreeSet<Term>>::new();
+        let mut gotos = BTreeMap::<State, BTreeSet<Nonterm>>::new();
         for (&sym, acs) in &ctx.lr_table.actions[&state] {
             match sym {
                 Symbol::Term(term) => {
@@ -59,6 +77,16 @@ pub fn codegen(ctx: &mut Context, into: &mut impl Write) -> Result<()> {
                     } else {
                         for &action in acs {
                             actions.entry(action).or_default().insert(term);
+                        }
+                    }
+                }
+                Symbol::Nonterm(nonterm) => {
+                    for &action in acs {
+                        match action {
+                            Action::Shift(s) => {
+                                gotos.entry(s).or_default().insert(nonterm);
+                            }
+                            _ => unreachable!(),
                         }
                     }
                 }
@@ -76,7 +104,7 @@ pub fn codegen(ctx: &mut Context, into: &mut impl Write) -> Result<()> {
         write!(into, "\n")?;
         write!(
             into,
-            "fn action_{}(ctx: &mut Context, p: &mut impl AbstractParser) -> ReportedResult<()> {{\n",
+            "fn action_{}<'a, 'n>(ctx: &mut Context, p: &mut Parser<'a, 'n>) -> ReportedResult<()> {{\n",
             state
         )?;
         write!(into, "let t = p.peek(0);\n")?;
@@ -84,45 +112,63 @@ pub fn codegen(ctx: &mut Context, into: &mut impl Write) -> Result<()> {
 
         // Add handling of recognized tokens.
         for (&action, terms) in &actions {
-            write!(
-                into,
-                "{} => {{\n",
-                terms
-                    .iter()
-                    .cloned()
-                    .flat_map(match_pattern_for_terminal)
-                    .format("|\n")
-            )?;
-            match action {
-                Action::Shift(s) => write!(into, "// shift {}\n", s)?,
-                Action::Reduce(p) => write!(into, "// reduce {}\n", p)?,
+            let mapped: Vec<_> = terms
+                .iter()
+                .cloned()
+                .flat_map(match_pattern_for_terminal)
+                .collect();
+            if mapped.is_empty() {
+                continue;
             }
-            write!(into, "p.add_diag(DiagBuilder2::bug(")?;
-            write!(into, "format!(\"not yet supported: `{{}}`\", t.0)")?;
-            write!(into, ").span(t.1));\n")?;
-            write!(into, "return Err(());\n")?;
+            write!(into, "{} => {{\n", mapped.into_iter().format("|\n"))?;
+            match action {
+                Action::Shift(s) => {
+                    write!(into, "// shift {}\n", s)?;
+                    write!(into, "trace!(\"{}: shift {{}} -> {}\", t.0);\n", state, s)?;
+                    write!(into, "ctx.push_token(t.0.to_string());\n")?;
+                    write!(into, "ctx.push_state((action_{0}, unsafe {{ std::mem::transmute(goto_{0} as *const GotoFn) }}));\n", s)?;
+                    write!(into, "p.bump();\n")?;
+                    write!(into, "return Ok(());\n")?;
+                    if states_seen.insert(s) {
+                        states_todo.push_back(s);
+                    }
+                }
+                Action::Reduce(p) => {
+                    write!(into, "// reduce {}\n", p)?;
+                    write!(into, "trace!(\"{}: reduce {}\");\n", state, p.nt)?;
+                    write!(into, "ctx.pop_states({});\n", p.syms.len())?;
+                    write!(into, "ctx.pop_tokens({});\n", p.syms.len())?;
+                    write!(into, "ctx.push_token(\"{}\".to_string());\n", p.nt)?;
+                    write!(
+                        into,
+                        "ctx.push_state(ctx.lookup_goto(Nonterm::{}));\n",
+                        p.nt.to_string().to_camel_case()
+                    )?;
+                    write!(into, "return Ok(());\n")?;
+                }
+            }
             write!(into, "}}\n")?;
         }
 
         // Add handling of ambiguous code.
         if !ambiguous.is_empty() {
-            write!(
-                into,
-                "{} => {{\n",
-                ambiguous
-                    .iter()
-                    .cloned()
-                    .flat_map(match_pattern_for_terminal)
-                    .format("|\n")
-            )?;
-            write!(into, "p.add_diag(DiagBuilder2::bug(")?;
-            write!(
-                into,
-                "format!(\"ambiguous: `{{}}` cannot be handled by the parser here\", t.0)"
-            )?;
-            write!(into, ").span(t.1));\n")?;
-            write!(into, "return Err(());\n")?;
-            write!(into, "}}\n")?;
+            let mapped: Vec<_> = ambiguous
+                .iter()
+                .cloned()
+                .flat_map(match_pattern_for_terminal)
+                .collect();
+            if !mapped.is_empty() {
+                write!(into, "{} => {{\n", mapped.into_iter().format("|\n"))?;
+                write!(into, "p.add_diag(DiagBuilder2::bug(")?;
+                write!(
+                    into,
+                    "format!(\"ambiguous: `{{}}` cannot be handled by the parser here\", t.0)"
+                )?;
+                write!(into, ").span(t.1));\n")?;
+                write!(into, "debug!(\"state {}\");\n", state)?;
+                write!(into, "return Err(());\n")?;
+                write!(into, "}}\n")?;
+            }
         }
 
         // Add syntax error handling.
@@ -148,15 +194,49 @@ pub fn codegen(ctx: &mut Context, into: &mut impl Write) -> Result<()> {
 
         write!(into, "}}\n")?;
         write!(into, "}}\n")?;
+
+        // Add a goto lookup function for this state.
+        write!(into, "\n")?;
+        write!(
+            into,
+            "fn goto_{}(nt: Nonterm) -> (ActionFn, GotoFn) {{\n",
+            state
+        )?;
+        write!(into, "match nt {{\n")?;
+        for (&s, nonterms) in &gotos {
+            write!(
+                into,
+                "{} => (action_{1}, unsafe {{ std::mem::transmute(goto_{1} as *const GotoFn) }}),\n",
+                nonterms
+                    .iter()
+                    .map(|nt| format!("Nonterm::{}", nt.to_string().to_camel_case()))
+                    .format(" | "),
+                s
+            )?;
+            if states_seen.insert(s) {
+                states_todo.push_back(s);
+            }
+        }
+        if let Some(nt) = roots.get(&state) {
+            write!(
+                into,
+                "{} => (action_accept, unsafe {{ std::mem::transmute(goto_accept as *const GotoFn) }}),\n",
+                format!("Nonterm::{}", nt.to_string().to_camel_case())
+            )?;
+        }
+        write!(into, "_ => unreachable!(),\n",)?;
+        write!(into, "}}\n")?;
+        write!(into, "}}\n")?;
     }
 
-    // let root = ctx.root_nonterms.clone();
-    // let mut cg = Codegen::new(ctx);
-    // for nt in root {
-    //     debug!("Triggering root {}", nt);
-    //     cg.schedule(nt);
-    // }
-    // cg.generate();
+    // Add the nonterminal enumerator.
+    write!(into, "\n\n")?;
+    write!(into, "enum Nonterm {{\n")?;
+    for nt in ctx.nonterms() {
+        write!(into, "{},\n", nt.to_string().to_camel_case())?;
+    }
+    write!(into, "}}\n")?;
+
     Ok(())
 }
 
@@ -164,17 +244,39 @@ fn match_pattern_for_terminal(term: Term) -> Option<String> {
     // TODO: This is super-hacky. Derive this from the grammar later on.
     Some(match term.as_str() {
         "$" => "Token::Eof".to_string(),
-        "';'" => "Token::Semicolon".to_string(),
         "'('" => "Token::OpenDelim(DelimToken::Paren)".to_string(),
         "'['" => "Token::OpenDelim(DelimToken::Brack)".to_string(),
         "'{'" => "Token::OpenDelim(DelimToken::Brace)".to_string(),
         "')'" => "Token::CloseDelim(DelimToken::Paren)".to_string(),
         "']'" => "Token::CloseDelim(DelimToken::Brack)".to_string(),
         "'}'" => "Token::CloseDelim(DelimToken::Brace)".to_string(),
+        "','" => "Token::Comma".to_string(),
+        "'.'" => "Token::Period".to_string(),
+        "':'" => "Token::Colon".to_string(),
+        "';'" => "Token::Semicolon".to_string(),
+        "'@'" => "Token::At".to_string(),
+        "'#'" => "Token::Hashtag".to_string(),
+        "'##'" => "Token::DoubleHashtag".to_string(),
+        "'::'" => "Token::Namespace".to_string(),
+        "'?'" => "Token::Ternary".to_string(),
+        "'+:'" => "Token::AddColon".to_string(),
+        "'-:'" => "Token::SubColon".to_string(),
+        "'\\''" => "Token::Apostrophe".to_string(),
+        "'$'" => "Token::Dollar".to_string(),
         "'IDENT'" => "Token::Ident(_)".to_string(),
+        "'1step'" => return None,
         "'ATTR'" => return None,
+        "'PATHPULSE$'" => return None,
+        "'\"DPI\"'" => return None,
+        "'\"DPI-C\"'" => return None,
         s if s.starts_with("'$") => return None,
-        s if s.starts_with("'") => format!("Token::Keyword(Kw::{})", term.as_str().to_camel_case()),
+        s if s.starts_with("'") => {
+            let s = term.as_str().to_camel_case();
+            if s.is_empty() {
+                return None;
+            }
+            format!("Token::Keyword(Kw::{})", s)
+        }
         _ => return None,
     })
 }

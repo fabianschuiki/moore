@@ -18,4 +18,5 @@ pub enum Symbol {
     Maybe(Box<Symbol>),
     Any(Box<Symbol>),
     Some(Box<Symbol>),
+    Not(Box<Symbol>),
 }

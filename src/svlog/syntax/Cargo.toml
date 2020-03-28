@@ -17,6 +17,7 @@ moore-derive = { path = "../../derive", version = "0.12.0-dev" }
 log = "0.4"
 backtrace = "0.3"
 once_cell = "1.3"
+itertools = "0.9"
 
 [dev-dependencies]
 clap = "2.33"

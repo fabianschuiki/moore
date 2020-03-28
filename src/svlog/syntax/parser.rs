@@ -10,6 +10,7 @@ use crate::ast;
 use crate::ast::*;
 use crate::lexer::{Lexer, TokenAndSpan};
 use crate::token::*;
+use itertools::Itertools;
 use moore_common::{arenas::Alloc, errors::*, name::*, source::*, util::HasSpan};
 use std;
 use std::collections::VecDeque;
@@ -6117,18 +6118,104 @@ fn try_builtin_system_task<'n>(
     })
 }
 
-struct Context;
+// -----------------------------------------------------------------------------
+// This is an experimental new parser.
+
+#[derive(Default)]
+struct Context {
+    states: Vec<(ActionFn, GotoFn)>,
+    tokens: Vec<String>,
+}
+
+impl Context {
+    fn push_token(&mut self, token: String) {
+        self.tokens.push(token);
+    }
+
+    fn push_state(&mut self, state: (ActionFn, GotoFn)) {
+        self.states.push(state);
+    }
+
+    fn pop_tokens(&mut self, num: usize) {
+        self.tokens.truncate(self.tokens.len() - num);
+    }
+
+    fn pop_states(&mut self, num: usize) {
+        self.states.truncate(self.states.len() - num);
+    }
+
+    fn lookup_goto(&self, nt: Nonterm) -> (ActionFn, GotoFn) {
+        let goto_fn = self.states.last().unwrap().1;
+        let (a, g) = goto_fn(nt);
+        (a, unsafe { std::mem::transmute(g as *const GotoFn) })
+    }
+}
+
+type ActionFn = fn(&mut Context, &mut Parser) -> ReportedResult<()>;
+type GotoFn = fn(Nonterm) -> (ActionFn, GotoFnRec);
+type GotoFnRec = fn();
 
 // Include the auto-generated parser.
 include!("grammar.rs");
 
 pub fn pargen_parse(input: Lexer) -> Result<(), ()> {
     let mut p = Parser::new(input);
-    let mut ctx = Context;
-    action_s0(&mut ctx, &mut p)?;
+    let mut ctx = Context::default();
+    ctx.push_state((action_s0, unsafe {
+        std::mem::transmute(goto_s0 as *const GotoFn)
+    }));
+    while !ctx.states.is_empty() {
+        trace!("{} · {}", ctx.tokens.iter().format(" "), p.peek(0).0);
+        ctx.states.last().unwrap().0(&mut ctx, &mut p)?;
+        // std::io::stdin().read_line(&mut Default::default()).unwrap();
+    }
     if p.is_error() {
         Err(())
     } else {
         Ok(())
     }
+}
+
+fn action_accept(ctx: &mut Context, p: &mut Parser) -> ReportedResult<()> {
+    assert_eq!(ctx.states.len(), 2); // <state> <accept>
+    assert_eq!(ctx.tokens.len(), 1); // <root>
+    ctx.pop_states(2);
+    trace!("accept {}", ctx.tokens[0]);
+    Ok(())
+}
+
+fn goto_accept(_nt: Nonterm) -> (ActionFn, GotoFn) {
+    unreachable!();
+}
+
+// fn action_s3(ctx: &mut Context, p: &mut Parser) -> ReportedResult<()> {
+//     dead_end(ctx, p)
+// }
+
+// fn action_s4(ctx: &mut Context, p: &mut Parser) -> ReportedResult<()> {
+//     dead_end(ctx, p)
+// }
+
+fn dead_end(ctx: &mut Context, p: &mut Parser) -> ReportedResult<()> {
+    let t = p.peek(0);
+    p.add_diag(
+        DiagBuilder2::bug(format!(
+            "dead end: `{}` cannot be handled by the parser here",
+            t.0
+        ))
+        .span(t.1),
+    );
+    Err(())
+}
+
+// fn goto_s3(nt: Nonterm) -> (ActionFn, GotoFn) {
+//     dead_end_goto(nt)
+// }
+
+// fn goto_s4(nt: Nonterm) -> (ActionFn, GotoFn) {
+//     dead_end_goto(nt)
+// }
+
+fn dead_end_goto(_nt: Nonterm) -> (ActionFn, GotoFn) {
+    unreachable!()
 }

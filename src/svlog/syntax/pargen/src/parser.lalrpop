@@ -36,6 +36,7 @@ Symbol: ast::Symbol = {
     <Symbol> "?" => ast::Symbol::Maybe(Box::new(<>)),
     <Symbol> "*" => ast::Symbol::Any(Box::new(<>)),
     <Symbol> "+" => ast::Symbol::Some(Box::new(<>)),
+    <Symbol> "!" => ast::Symbol::Not(Box::new(<>)),
 }
 
 Ident = {

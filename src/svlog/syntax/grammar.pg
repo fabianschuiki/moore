@@ -18,7 +18,7 @@ description = {
 module_declaration = {
     module_nonansi_header timeunits_declaration? module_item* 'endmodule' (':' module_identifier)?,
     module_ansi_header timeunits_declaration? non_port_module_item* 'endmodule' (':' module_identifier)?,
-    attribute_instance* module_keyword lifetime? module_identifier '(' '.' '*' ')' ';' timeunits_declaration? module_item* 'endmodule' (':' module_identifier)?,
+    attribute_instance* module_keyword lifetime? module_identifier package_import_declaration*! parameter_port_list?! '(' attribute_instance*! '.' '*' ')' ';' timeunits_declaration? module_item* 'endmodule' (':' module_identifier)?,
     'extern' module_nonansi_header,
     'extern' module_ansi_header,
 };
@@ -66,7 +66,7 @@ parameter_port_declaration = {
     data_type list_of_param_assignments,
     'type' list_of_type_assignments,
 };
-list_of_ports = '(' port (',' port)* ')';
+list_of_ports = '(' attribute_instance*! port (',' attribute_instance*! port)* ')';
 list_of_port_declarations = '(' (attribute_instance* ansi_port_declaration (',' attribute_instance* ansi_port_declaration)*)? ')';
 port_declaration = {
     attribute_instance* inout_declaration,
