@@ -1,8 +1,10 @@
 use crate::context::{Context, Nonterm, Production, Symbol, Term};
+use anyhow::Result;
 use itertools::Itertools;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    io::Write,
 };
 
 /// Populate a context with an LR(1) table.
@@ -89,6 +91,57 @@ pub struct Table<'a> {
     pub root_states: BTreeMap<Nonterm<'a>, State<'a>>,
     /// The action table.
     pub actions: BTreeMap<State<'a>, StateActions<'a>>,
+}
+
+/// Emit the states in an LR(1) parsing table.
+pub fn dump_states(table: &Table, out: &mut impl Write) -> Result<()> {
+    write!(out, "Parser has {} states\n", table.states.len())?;
+    for &state in &table.states {
+        write!(
+            out,
+            "\nState {} {:#?} {:#?} {{\n",
+            state,
+            state.kernel,
+            state
+                .items
+                .difference(state.kernel)
+                .collect::<BTreeSet<_>>(),
+        )?;
+        let mut actions = BTreeMap::<Action, BTreeSet<Symbol>>::new();
+        for (&sym, acs) in &table.actions[&state] {
+            for &action in acs {
+                actions.entry(action).or_default().insert(sym);
+            }
+        }
+        for (action, syms) in actions {
+            write!(out, "    {} upon {:?},\n", action, syms)?;
+        }
+        write!(out, "}}\n")?;
+    }
+    Ok(())
+}
+
+/// Emit the conflicts in an LR(1) parsing table.
+pub fn dump_conflicts(table: &Table, out: &mut impl Write) -> Result<usize> {
+    let mut num_conflicts = 0;
+    for (&state, actions) in &table.actions {
+        let mut reported = false;
+        for (&sym, actions) in actions {
+            if actions.len() > 1 {
+                if !reported {
+                    write!(out, "Conflict in {} {:#?} {{\n", state, state.items)?;
+                    reported = true;
+                }
+                write!(out, "    {} -> {:?}\n", sym, actions)?;
+                num_conflicts += 1;
+            }
+        }
+        if reported {
+            write!(out, "}}\n\n")?;
+        }
+    }
+    write!(out, "Found {} conflicts\n", num_conflicts)?;
+    Ok(num_conflicts)
 }
 
 /// A parsing table builder.

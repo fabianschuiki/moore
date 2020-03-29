@@ -46,6 +46,14 @@ fn main() -> Result<()> {
                 .number_of_values(1),
         )
         .arg(
+            Arg::with_name("dump-states")
+                .short("s")
+                .long("dump-states")
+                .help("Dump the LR(1) parser states.")
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
             Arg::with_name("dump-conflicts")
                 .short("c")
                 .long("dump-conflicts")
@@ -99,28 +107,18 @@ fn main() -> Result<()> {
     // Create the LR(1) table.
     lr::build_lr(&mut context);
 
+    // Dump the LR(1) states if requested.
+    if let Some(path) = matches.value_of("dump-states") {
+        info!("Dumping states to `{}`", path);
+        let mut f = File::create(path)?;
+        lr::dump_states(&context.lr_table, &mut f)?;
+    }
+
     // Dump the conflicts if requested.
     if let Some(path) = matches.value_of("dump-conflicts") {
         info!("Dumping conflicts to `{}`", path);
         let mut f = File::create(path)?;
-        let mut num_conflicts = 0;
-        for (&state, actions) in &context.lr_table.actions {
-            let mut reported = false;
-            for (&sym, actions) in actions {
-                if actions.len() > 1 {
-                    if !reported {
-                        write!(f, "Conflict in {} {:#?}\n", state, state.items)?;
-                        reported = true;
-                    }
-                    write!(f, "{} -> {:?}\n", sym, actions)?;
-                    num_conflicts += 1;
-                }
-            }
-            if reported {
-                write!(f, "\n")?;
-            }
-        }
-        write!(f, "Found {} conflicts\n", num_conflicts)?;
+        let num_conflicts = lr::dump_conflicts(&context.lr_table, &mut f)?;
         info!("Found {} conflicts", num_conflicts);
     }
 
