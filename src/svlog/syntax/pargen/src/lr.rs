@@ -213,6 +213,13 @@ impl<'a> TableBuilder<'a> {
             }
         }
 
+        // Combine items which only differ in their lookaheads.
+        let mut kb = KernelBuilder::new();
+        for item in items {
+            kb.add_item(item);
+        }
+        let items = kb.build(self);
+
         // Create the state data and internalize.
         let data = self.arena.state_arena.alloc(StateData { kernel, items });
         let v = State(data, self.table.states.len());
