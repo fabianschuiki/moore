@@ -516,12 +516,32 @@ pub enum PortKind {
     Var,
 }
 
+impl std::fmt::Display for PortKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            PortKind::Net(nt) => write!(f, "{}", nt),
+            PortKind::Var => write!(f, "var"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
 pub enum PortDir {
     Input,
     Output,
     Inout,
     Ref,
+}
+
+impl std::fmt::Display for PortDir {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            PortDir::Input => write!(f, "input"),
+            PortDir::Output => write!(f, "output"),
+            PortDir::Inout => write!(f, "inout"),
+            PortDir::Ref => write!(f, "ref"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
@@ -538,6 +558,25 @@ pub enum NetType {
     Wire,
     WireAnd,
     WireOr,
+}
+
+impl std::fmt::Display for NetType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            NetType::Supply0 => write!(f, "supply0"),
+            NetType::Supply1 => write!(f, "supply1"),
+            NetType::Tri => write!(f, "tri"),
+            NetType::TriAnd => write!(f, "triand"),
+            NetType::TriOr => write!(f, "trior"),
+            NetType::TriReg => write!(f, "trireg"),
+            NetType::Tri0 => write!(f, "tri0"),
+            NetType::Tri1 => write!(f, "tri1"),
+            NetType::Uwire => write!(f, "uwire"),
+            NetType::Wire => write!(f, "wire"),
+            NetType::WireAnd => write!(f, "wand"),
+            NetType::WireOr => write!(f, "wor"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
