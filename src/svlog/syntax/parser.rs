@@ -1569,14 +1569,14 @@ fn parse_type_data(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
             p.bump();
             Ok(ast::EventType)
         }
-        Keyword(Kw::Signed) => {
-            p.bump();
-            Ok(ast::ImplicitSignedType)
-        }
-        Keyword(Kw::Unsigned) => {
-            p.bump();
-            Ok(ast::ImplicitUnsignedType)
-        }
+        // Keyword(Kw::Signed) => {
+        //     p.bump();
+        //     Ok(ast::ImplicitSignedType)
+        // }
+        // Keyword(Kw::Unsigned) => {
+        //     p.bump();
+        //     Ok(ast::ImplicitUnsignedType)
+        // }
 
         // Integer Vector Types
         Keyword(Kw::Bit) => {
@@ -4777,8 +4777,15 @@ impl<'a, R: Clone> ParallelParser<'a, R> {
             // Print the errors.
             if num_errors != 1 {
                 p.add_diag(
-                    DiagBuilder2::error(format!("expected {}, found {} instead", msg, tkn)).span(q),
+                    DiagBuilder2::error(format!("expected {}, found `{}` instead", msg, tkn))
+                        .span(q),
                 );
+                for (name, _, ds) in errors {
+                    p.add_diag(DiagBuilder2::note(format!("parsing as {}:", name)));
+                    for d in ds {
+                        p.add_diag(d);
+                    }
+                }
             } else {
                 for d in errors.into_iter().next().unwrap().2 {
                     p.add_diag(d);
