@@ -129,7 +129,16 @@ pub fn dump_conflicts(table: &Table, out: &mut impl Write) -> Result<usize> {
         for (&sym, actions) in actions {
             if actions.len() > 1 {
                 if !reported {
-                    write!(out, "Conflict in {} {:#?} {{\n", state, state.items)?;
+                    write!(
+                        out,
+                        "Conflict in {} {:#?} {:#?} {{\n",
+                        state,
+                        state.kernel,
+                        state
+                            .items
+                            .difference(state.kernel)
+                            .collect::<BTreeSet<_>>(),
+                    )?;
                     reported = true;
                 }
                 write!(out, "    {} -> {:?}\n", sym, actions)?;
