@@ -5,6 +5,7 @@
 use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
 use bit_vec::BitVec;
 use num::BigInt;
+use std::collections::HashMap;
 
 /// A hint about how a node should be lowered to HIR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -489,6 +490,9 @@ fn lower_module<'gcx>(
         next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
     }
 
+    // Lower the module's ports.
+    lower_module_ports(cx, &ast.ports, &ast.items)?;
+
     // Allocate ports.
     let mut ports = Vec::new();
     for port in &ast.ports {
@@ -515,6 +519,321 @@ fn lower_module<'gcx>(
         block,
     };
     Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
+}
+
+/// Lower the ports of a module to HIR.
+///
+/// This is a fairly complex process due to the many degrees of freedom in SV.
+/// Mainly we identify if the module uses an ANSI or non-ANSI style and then go
+/// ahead and create the external and internal views of the ports.
+fn lower_module_ports<'gcx>(
+    cx: &impl Context<'gcx>,
+    ast_ports: &'gcx [ast::Port],
+    ast_items: &'gcx [ast::HierarchyItem],
+) -> Result<()> {
+    // First determined if the module uses ANSI or non-ANSI style. We do this by
+    // Determining whether the first port has type, sign, and direction omitted.
+    // If it has, the ports are declared in non-ANSI style.
+    let (nonansi, first_span) = {
+        let first = match ast_ports.first() {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+        let nonansi = match *first {
+            ast::Port::Explicit { ref dir, .. } if dir.is_none() => true,
+            ast::Port::Named {
+                ref dir,
+                ref kind,
+                ref ty,
+                ref dims,
+                ref expr,
+                ..
+            } if dir.is_none()
+                && kind.is_none()
+                && dims.is_empty()
+                && expr.is_none()
+                && ty.data == ast::ImplicitType
+                && ty.sign == ast::TypeSign::None
+                && ty.dims.is_empty() =>
+            {
+                true
+            }
+            ast::Port::Implicit(_) => true,
+            _ => false,
+        };
+        (nonansi, first.span())
+    };
+    debug!(
+        "Module uses {} style",
+        if nonansi { "non-ANSI" } else { "ANSI" }
+    );
+
+    // Create the external and internal port views.
+    let partial_ports = match nonansi {
+        true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span),
+        false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span),
+    }?;
+
+    Ok(())
+}
+
+/// Lower the non-ANSI ports of a module.
+fn lower_module_ports_nonansi<'gcx>(
+    cx: &impl Context<'gcx>,
+    ast_ports: &'gcx [ast::Port],
+    ast_items: &'gcx [ast::HierarchyItem],
+    first_span: Span,
+) -> Result<()> {
+    let mut failed = false;
+
+    // As a first step, collect the ports declared inside the module body. These
+    // will form the internal view of the ports.
+    trace!("Gathering ports inside module body");
+    let mut decl_order = vec![];
+    let mut decls = HashMap::new();
+    for item in ast_items {
+        let ast = match item {
+            ast::HierarchyItem::PortDecl(pd) => pd,
+            _ => continue,
+        };
+        trace!("Found {:#?}", ast);
+        for name in &ast.names {
+            let data = PartialNonAnsiPort {
+                span: name.name_span,
+                name: name.name,
+                kind: ast.kind,
+                dir: ast.dir,
+                ty: &ast.ty.data,
+                sign: ast.ty.sign,
+                packed_dims: &ast.ty.dims,
+                unpacked_dims: &name.dims,
+                default: name.init.as_ref(),
+                var_decl: None,
+                net_decl: None,
+            };
+            trace!("Producing {:#?}", data);
+            if let Some(prev) = decls.insert(data.name, data) {
+                cx.emit(
+                    DiagBuilder2::error(format!("port `{}` declared multiple times", name.name))
+                        .span(name.name_span)
+                        .add_note("previous declaration was here:")
+                        .span(prev.span),
+                );
+                failed = true;
+            } else {
+                decl_order.push(name.name);
+            }
+        }
+    }
+
+    // As a second step, collect the variable and net declarations inside the
+    // module body which further specify a port.
+    for item in ast_items {
+        match item {
+            ast::HierarchyItem::VarDecl(vd) => {
+                for name in &vd.names {
+                    let entry = match decls.get_mut(&name.name) {
+                        Some(e) => e,
+                        None => continue,
+                    };
+                    if let Some(prev) = std::mem::replace(&mut entry.var_decl, Some((vd, name))) {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "port variable `{}` declared multiple times",
+                                name.name
+                            ))
+                            .span(name.name_span)
+                            .add_note("previous declaration was here:")
+                            .span(prev.1.name_span),
+                        );
+                        failed = true;
+                    }
+                }
+            }
+            ast::HierarchyItem::NetDecl(nd) => {
+                for name in &nd.names {
+                    let entry = match decls.get_mut(&name.name) {
+                        Some(e) => e,
+                        None => continue,
+                    };
+                    if let Some(prev) = std::mem::replace(&mut entry.net_decl, Some((nd, name))) {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "port net `{}` declared multiple times",
+                                name.name
+                            ))
+                            .span(name.name_span)
+                            .add_note("previous declaration was here:")
+                            .span(prev.1.name_span),
+                        );
+                        failed = true;
+                    }
+                }
+            }
+            _ => continue,
+        }
+    }
+
+    // As a third step, merge the port declarations with the optional variable
+    // and net declarations.
+    for name in &decl_order {
+        let port = decls.get_mut(name).unwrap();
+
+        // Check if the port is already complete, that is, already has a net or
+        // variable type. In that case it's an error to provide an additional
+        // variable or net declaration that goes with it.
+        if port.kind.is_some() || *port.ty != ast::ImplicitType {
+            for span in port
+                .var_decl
+                .iter()
+                .map(|x| x.1.span)
+                .chain(port.net_decl.iter().map(|x| x.1.span))
+            {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "port `{}` is complete; additional declaration forbidden",
+                        port.name
+                    ))
+                    .span(span)
+                    .add_note(
+                        "Port already has a net/variable type. \
+                        Cannot declare an additional net/variable with the same \
+                        name.",
+                    )
+                    .add_note("Port declaration was here:")
+                    .span(port.span),
+                );
+                failed = true;
+            }
+            port.var_decl = None;
+            port.net_decl = None;
+        }
+
+        // Extract additional details of the port from optional variable and net
+        // declarations.
+        let (add_span, add_ty, add_sign, add_packed, add_unpacked) =
+            match (port.var_decl, port.net_decl) {
+                // Inherit details from a variable declaration.
+                (Some(vd), None) => {
+                    // TODO: Pretty sure that this can never happen, since a port
+                    // which already provides this information is considered
+                    // complete.
+                    if port.kind.is_some() && port.kind != Some(ast::PortKind::Var) {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "net port `{}` redeclared as variable",
+                                port.name
+                            ))
+                            .span(vd.1.span)
+                            .add_note("Port declaration was here:")
+                            .span(port.span),
+                        );
+                        failed = true;
+                    }
+                    port.kind = Some(ast::PortKind::Var);
+                    (
+                        vd.1.name_span,
+                        &vd.0.ty.data,
+                        vd.0.ty.sign,
+                        &vd.0.ty.dims,
+                        &vd.1.dims,
+                    )
+                }
+                // Inherit details from a net declaration.
+                (None, Some(nd)) => {
+                    // TODO: Pretty sure that this can never happen, since a port
+                    // which already provides this information is considered
+                    // complete.
+                    if port.kind.is_some() && port.kind == Some(ast::PortKind::Var) {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "variable port `{}` redeclared as net",
+                                port.name
+                            ))
+                            .span(nd.1.span)
+                            .add_note("Port declaration was here:")
+                            .span(port.span),
+                        );
+                        failed = true;
+                    }
+                    port.kind = Some(ast::PortKind::Net(nd.0.net_type));
+                    (
+                        nd.1.name_span,
+                        &nd.0.ty.data,
+                        nd.0.ty.sign,
+                        &nd.0.ty.dims,
+                        &nd.1.dims,
+                    )
+                }
+                // Handle the case where both are present.
+                (Some(vd), Some(nd)) => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "port `{}` doubly declared as variable and net",
+                            port.name
+                        ))
+                        .span(vd.1.span)
+                        .span(nd.1.span)
+                        .add_note("Port declaration was here:")
+                        .span(port.span),
+                    );
+                    failed = true;
+                    continue;
+                }
+                // Otherwise we keep things as they are.
+                (None, None) => continue,
+            };
+
+        // Merge the sign.
+        match (port.sign, add_sign) {
+            (a, b) if a == b => port.sign = a,
+            (a, ast::TypeSign::None) => port.sign = a,
+            (ast::TypeSign::None, b) => port.sign = b,
+            (a, b) => {
+                cx.emit(
+                    DiagBuilder2::error(format!("port `{}` has contradicting signs", port.name))
+                        .span(port.span)
+                        .span(add_span),
+                );
+            }
+        };
+
+        trace!("Merging type {:#?}", add_ty);
+        trace!("Merging packed dims {:#?}", add_packed);
+        trace!("Merging unpacked dims {:#?}", add_unpacked);
+    }
+
+    // As a fourth step, go through the ports themselves and pair them up with
+    // declarations inside the module body. This forms the external view of the
+    // ports.
+    // TODO
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct PartialNonAnsiPort<'a> {
+    span: Span,
+    name: Name,
+    dir: ast::PortDir,
+    kind: Option<ast::PortKind>,
+    ty: &'a ast::TypeData,
+    sign: ast::TypeSign,
+    packed_dims: &'a [ast::TypeDim],
+    unpacked_dims: &'a [ast::TypeDim],
+    default: Option<&'a ast::Expr>,
+    var_decl: Option<(&'a ast::VarDecl, &'a ast::VarDeclName)>,
+    net_decl: Option<(&'a ast::NetDecl, &'a ast::VarDeclName)>,
+}
+
+/// Lower the ANSI ports of a module.
+fn lower_module_ports_ansi<'gcx>(
+    cx: &impl Context<'gcx>,
+    ast_ports: &'gcx [ast::Port],
+    ast_items: &'gcx [ast::HierarchyItem],
+    first_span: Span,
+) -> Result<()> {
+    Ok(())
 }
 
 fn lower_module_block<'gcx>(
