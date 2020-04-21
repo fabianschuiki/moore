@@ -63,7 +63,7 @@ trait AbstractParser {
                 Ok((name, span))
             }
             (tkn, span) => {
-                Err(DiagBuilder2::error(format!("Expected {} before `{}`", msg, tkn)).span(span))
+                Err(DiagBuilder2::error(format!("expected {} before `{}`", msg, tkn)).span(span))
             }
         }
     }
@@ -80,7 +80,7 @@ trait AbstractParser {
             }
             (tkn, span) => {
                 self.add_diag(
-                    DiagBuilder2::error(format!("Expected {} before `{}`", msg, tkn)).span(span),
+                    DiagBuilder2::error(format!("expected {} before `{}`", msg, tkn)).span(span),
                 );
                 Err(())
             }
@@ -101,7 +101,7 @@ trait AbstractParser {
                 Ok(())
             }
             (wrong, span) => Err(DiagBuilder2::error(format!(
-                "Expected `{}`, but found `{}` instead",
+                "expected `{}`, but found `{}` instead",
                 expect, wrong
             ))
             .span(span)),
@@ -169,13 +169,13 @@ trait AbstractParser {
                 CloseDelim(x) => {
                     if let Some(open) = stack.pop() {
                         if open != x {
-                            self.add_diag(DiagBuilder2::fatal(format!("Found closing `{}` which is not the complement to the previous opening `{}`", CloseDelim(x), OpenDelim(open))).span(sp));
+                            self.add_diag(DiagBuilder2::fatal(format!("found closing `{}` which is not the complement to the previous opening `{}`", CloseDelim(x), OpenDelim(open))).span(sp));
                             break;
                         }
                     } else {
                         self.add_diag(
                             DiagBuilder2::fatal(format!(
-                                "Found closing `{}` without an earlier opening `{}`",
+                                "found closing `{}` without an earlier opening `{}`",
                                 CloseDelim(x),
                                 OpenDelim(x)
                             ))
@@ -208,7 +208,7 @@ trait AbstractParser {
         }
         self.add_diag(
             DiagBuilder2::error(format!(
-                "Expected {:?}, but found {:?} instead",
+                "expected {:?}, but found {:?} instead",
                 tokens, tkn
             ))
             .span(sp),
@@ -383,7 +383,7 @@ where
         } else {
             let sp = p.peek(0).1;
             p.add_diag(
-                DiagBuilder2::error(format!("Expected , or {} after {}", term.describe(), msg))
+                DiagBuilder2::error(format!("expected , or {} after {}", term.describe(), msg))
                     .span(sp),
             );
             term.recover(p, false);
@@ -407,7 +407,7 @@ where
     let q = p.peek(0).1;
     let v = comma_list(p, term, msg, item)?;
     if v.is_empty() {
-        p.add_diag(DiagBuilder2::error(format!("Expected at least one {}", msg)).span(q));
+        p.add_diag(DiagBuilder2::error(format!("expected at least one {}", msg)).span(q));
         Err(())
     } else {
         Ok(v)
@@ -649,7 +649,7 @@ fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
         // not support during lowering to HIR.
         _ => parse_hierarchy_item(p).map(ast::Item::Item),
         // tkn => {
-        //     p.add_diag(DiagBuilder2::error(format!("Expected module, interface, package, program, class, import, or typedef, instead got `{}`", tkn)).span(sp));
+        //     p.add_diag(DiagBuilder2::error(format!("expected module, interface, package, program, class, import, or typedef, instead got `{}`", tkn)).span(sp));
         //     p.recover_balanced(
         //         &[
         //             Keyword(Kw::Module),
@@ -851,7 +851,7 @@ fn parse_constant_expr(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     //  Literal(UnbasedUnsized(x)) => { p.bump(); () },
     //  Ident(x) => { p.bump(); () },
     //  _ => {
-    //      p.add_diag(DiagBuilder2::error("Expected constant primary expression").span(span));
+    //      p.add_diag(DiagBuilder2::error("expected constant primary expression").span(span));
     //      return Err(());
     //  }
     // };
@@ -1167,7 +1167,7 @@ fn parse_localparam_decl(p: &mut dyn AbstractParser) -> ReportedResult<()> {
             (Semicolon, _) => break,
             (x, sp) => {
                 p.add_diag(
-                    DiagBuilder2::error(format!("Expected , or ; after localparam, found {}", x))
+                    DiagBuilder2::error(format!("expected , or ; after localparam, found {}", x))
                         .span(sp),
                 );
                 return Err(());
@@ -1257,7 +1257,7 @@ fn parse_modport_decl(p: &mut dyn AbstractParser) -> ReportedResult<ast::Modport
     //      },
     //      (Semicolon, _) => break,
     //      (x, sp) => {
-    //          p.add_diag(DiagBuilder2::error(format!("Expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
+    //          p.add_diag(DiagBuilder2::error(format!("expected , or ; after modport declaration, got `{:?}`", x)).span(sp));
     //          return Err(());
     //      }
     //  }
@@ -1295,7 +1295,7 @@ fn parse_modport_item(p: &mut dyn AbstractParser) -> ReportedResult<ast::Modport
     // // Eat the opening parenthesis.
     // if !p.try_eat(OpenDelim(Paren)) {
     //  let (tkn, q) = p.peek(0);
-    //  p.add_diag(DiagBuilder2::error(format!("Expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
+    //  p.add_diag(DiagBuilder2::error(format!("expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
     //  return Err(());
     // }
 
@@ -1327,7 +1327,7 @@ fn parse_modport_item(p: &mut dyn AbstractParser) -> ReportedResult<ast::Modport
     //      }
     //      (CloseDelim(Paren), _) => break,
     //      (x, sp) => {
-    //          p.add_diag(DiagBuilder2::error(format!("Expected , or ) after port declaration, got `{:?}`", x)).span(sp));
+    //          p.add_diag(DiagBuilder2::error(format!("expected , or ) after port declaration, got `{:?}`", x)).span(sp));
     //          return Err(());
     //      }
     //  }
@@ -1336,7 +1336,7 @@ fn parse_modport_item(p: &mut dyn AbstractParser) -> ReportedResult<ast::Modport
     // // Eat the closing parenthesis.
     // if !p.try_eat(CloseDelim(Paren)) {
     //  let (tkn, q) = p.peek(0);
-    //  p.add_diag(DiagBuilder2::error(format!("Expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
+    //  p.add_diag(DiagBuilder2::error(format!("expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
     //  return Err(());
     // }
 
@@ -1395,7 +1395,7 @@ fn parse_modport_port_decl(p: &mut dyn AbstractParser) -> ReportedResult<ast::Mo
     }
 
     // If we've come thus far, none of the above matched.
-    p.add_diag(DiagBuilder2::error("Expected port declaration").span(span));
+    p.add_diag(DiagBuilder2::error("expected port declaration").span(span));
     Err(())
 }
 
@@ -1654,7 +1654,7 @@ fn parse_type_data(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
 
         _ => {
             let q = p.peek(0).1;
-            p.add_diag(DiagBuilder2::error("Expected type").span(q));
+            p.add_diag(DiagBuilder2::error("expected type").span(q));
             return Err(());
         }
     }
@@ -1723,7 +1723,7 @@ fn parse_struct_type(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
         }
         _ => {
             p.add_diag(
-                DiagBuilder2::error("Expected `struct`, `union`, or `union tagged`").span(q),
+                DiagBuilder2::error("expected `struct`, `union`, or `union tagged`").span(q),
             );
             return Err(());
         }
@@ -1876,7 +1876,7 @@ fn try_dimension(p: &mut dyn AbstractParser) -> ReportedResult<Option<(TypeDim, 
         (tkn, sp) => {
             p.add_diag(
                 DiagBuilder2::error(format!(
-                    "Expected closing brackets `]` after dimension, got {}",
+                    "expected closing brackets `]` after dimension, got {}",
                     tkn
                 ))
                 .span(sp),
@@ -2352,7 +2352,7 @@ fn parse_primary_expr(p: &mut dyn AbstractParser) -> ReportedResult<Expr> {
 
         tkn => {
             p.add_diag(
-                DiagBuilder2::error(format!("Expected expression, found {} instead", tkn)).span(sp),
+                DiagBuilder2::error(format!("expected expression, found {} instead", tkn)).span(sp),
             );
             return Err(());
         }
@@ -2545,7 +2545,7 @@ fn parse_expr_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<Expr>> {
             }
             (CloseDelim(Brace), _) => break,
             (_, sp) => {
-                p.add_diag(DiagBuilder2::error("Expected , or } after expression").span(sp));
+                p.add_diag(DiagBuilder2::error("expected , or } after expression").span(sp));
                 return Err(());
             }
         }
@@ -2727,7 +2727,7 @@ fn parse_port_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<Port>> {
             }
             (CloseDelim(Paren), _) => break,
             (_, sp) => {
-                p.add_diag(DiagBuilder2::error("Expected , or ) after port").span(sp));
+                p.add_diag(DiagBuilder2::error("expected , or ) after port").span(sp));
                 p.recover_balanced(&[CloseDelim(Paren)], false);
                 break;
             }
@@ -2807,7 +2807,7 @@ fn parse_port_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<Port>> {
 //          };
 //          r
 //      } else {
-//          p.add_diag(DiagBuilder2::error("Expected port type or name").span(ty.span));
+//          p.add_diag(DiagBuilder2::error("expected port type or name").span(ty.span));
 //          return Err(());
 //      }
 //  };
@@ -3128,7 +3128,7 @@ fn parse_subroutine_prototype(p: &mut dyn AbstractParser) -> ReportedResult<Subr
             SubroutineKind::Task
         }
         _ => {
-            p.add_diag(DiagBuilder2::error("Expected function or task prototype").span(span));
+            p.add_diag(DiagBuilder2::error("expected function or task prototype").span(span));
             return Err(());
         }
     };
@@ -3239,7 +3239,7 @@ fn parse_subroutine_prototype_tail(
                     (Comma, _) | (CloseDelim(Paren), _) => Ok(data),
                     (_, sp) => {
                         p.add_diag(
-                            DiagBuilder2::error("Expected , or ) after subroutine port").span(sp),
+                            DiagBuilder2::error("expected , or ) after subroutine port").span(sp),
                         );
                         Err(())
                     }
@@ -3568,7 +3568,7 @@ fn parse_stmt_data(
                 (tkn, sp) => {
                     p.add_diag(
                         DiagBuilder2::error(format!(
-                            "Expected (<expr>) or fork after wait, found {} instead",
+                            "expected (<expr>) or fork after wait, found {} instead",
                             tkn
                         ))
                         .span(sp),
@@ -3713,7 +3713,7 @@ fn parse_continuous_assign(p: &mut dyn AbstractParser) -> ReportedResult<ContAss
         match try_drive_strength(p)? {
             Some(x) => Ok(x),
             None => {
-                p.add_diag(DiagBuilder2::error("Expected drive strength").span(span));
+                p.add_diag(DiagBuilder2::error("expected drive strength").span(span));
                 Err(())
             }
         }
@@ -3764,7 +3764,7 @@ fn parse_if_or_case(
 
         x => {
             p.add_diag(
-                DiagBuilder2::error(format!("Expected case or if statement, got {:?}", x))
+                DiagBuilder2::error(format!("expected case or if statement, got {:?}", x))
                     .span(span),
             );
             Err(())
@@ -3852,7 +3852,7 @@ fn parse_case(
                     (Colon, _) => break,
                     (_, sp) => {
                         p.add_diag(
-                            DiagBuilder2::error("Expected , or : after case expression").span(sp),
+                            DiagBuilder2::error("expected , or : after case expression").span(sp),
                         );
                         break;
                     }
@@ -3934,7 +3934,7 @@ fn try_delay_control(p: &mut dyn AbstractParser) -> ReportedResult<Option<DelayC
 
         // TODO: Parse "1step" keyword
         _ => {
-            p.add_diag(DiagBuilder2::error("Expected delay value or expression after #").span(sp));
+            p.add_diag(DiagBuilder2::error("expected delay value or expression after #").span(sp));
             return Err(());
         }
     };
@@ -4042,7 +4042,7 @@ fn parse_assign_stmt(p: &mut dyn AbstractParser) -> ReportedResult<StmtData> {
         });
     }
 
-    p.add_diag(DiagBuilder2::error("Expected blocking or non-blocking assign statement").span(sp));
+    p.add_diag(DiagBuilder2::error("expected blocking or non-blocking assign statement").span(sp));
     Err(())
 }
 
@@ -4089,7 +4089,7 @@ fn parse_event_expr(
     };
     parse_event_expr_suffix(p, expr, precedence)
 
-    // p.add_diag(DiagBuilder2::error("Expected event expression").span(span));
+    // p.add_diag(DiagBuilder2::error("expected event expression").span(span));
     // Err(())
 }
 
@@ -4196,7 +4196,7 @@ fn parse_call_args(p: &mut dyn AbstractParser) -> ReportedResult<Vec<CallArg>> {
             }
             (CloseDelim(Paren), _) => break,
             (_, sp) => {
-                p.add_diag(DiagBuilder2::error("Expected , or ) after call argument").span(sp));
+                p.add_diag(DiagBuilder2::error("expected , or ) after call argument").span(sp));
                 return Err(());
             }
         }
@@ -4334,7 +4334,7 @@ fn parse_generate_block(p: &mut dyn AbstractParser) -> ReportedResult<GenerateBl
             let (t, q) = p.peek(0);
             p.add_diag(
                 DiagBuilder2::error(format!(
-                    "Expected `begin` keyword after generate block label, found {} instead",
+                    "expected `begin` keyword after generate block label, found {} instead",
                     t
                 ))
                 .span(q),
@@ -4742,7 +4742,7 @@ impl<'a, R: Clone> ParallelParser<'a, R> {
                 names.push_str(", or ");
                 names.push_str(&results[results.len() - 1].0);
             }
-            p.add_diag(DiagBuilder2::fatal(format!("Ambiguous code, could be {}", names)).span(q));
+            p.add_diag(DiagBuilder2::fatal(format!("ambiguous code, could be {}", names)).span(q));
             for &(ref name, _, _, _, span) in &results {
                 p.add_diag(DiagBuilder2::note(format!("{} would be this part", name)).span(span));
             }
@@ -4769,7 +4769,7 @@ impl<'a, R: Clone> ParallelParser<'a, R> {
             // Print the errors.
             if num_errors != 1 {
                 p.add_diag(
-                    DiagBuilder2::error(format!("Expected {}, found {} instead", msg, tkn)).span(q),
+                    DiagBuilder2::error(format!("expected {}, found {} instead", msg, tkn)).span(q),
                 );
             } else {
                 for d in errors.into_iter().next().unwrap().2 {
@@ -4893,7 +4893,7 @@ fn parse_port_decl(p: &mut dyn AbstractParser) -> ReportedResult<PortDecl> {
         }
         None => {
             p.add_diag(
-                DiagBuilder2::error("Expected port direction (inout, input, output, or ref)")
+                DiagBuilder2::error("expected port direction (inout, input, output, or ref)")
                     .span(span),
             );
             return Err(());
@@ -4973,7 +4973,7 @@ fn parse_net_decl(p: &mut dyn AbstractParser) -> ReportedResult<NetDecl> {
         }
         None => {
             let q = p.peek(0).1;
-            p.add_diag(DiagBuilder2::error("Expected net type").span(q));
+            p.add_diag(DiagBuilder2::error("expected net type").span(q));
             return Err(());
         }
     };
@@ -5046,7 +5046,7 @@ fn try_drive_strength(
             Ok(Some((a, b)))
         } else {
             let q = p.peek(0).1;
-            p.add_diag(DiagBuilder2::error("Expected second drive strength").span(q));
+            p.add_diag(DiagBuilder2::error("expected second drive strength").span(q));
             Err(())
         }
     } else {
@@ -5062,7 +5062,7 @@ fn parse_net_strength(p: &mut dyn AbstractParser) -> ReportedResult<NetStrength>
         Ok(NetStrength::Charge(s))
     } else {
         let q = p.peek(0).1;
-        p.add_diag(DiagBuilder2::error("Expected drive or charge strength").span(q));
+        p.add_diag(DiagBuilder2::error("expected drive or charge strength").span(q));
         Err(())
     }
 }
@@ -5161,7 +5161,7 @@ fn parse_import_decl(p: &mut dyn AbstractParser) -> ReportedResult<ImportDecl> {
 
             _ => {
                 p.add_diag(
-                    DiagBuilder2::error("Expected identifier or * after :: in import declaration")
+                    DiagBuilder2::error("expected identifier or * after :: in import declaration")
                         .span(sp),
                 );
                 Err(())
@@ -5300,7 +5300,7 @@ fn parse_assertion(p: &mut dyn AbstractParser) -> ReportedResult<Assertion> {
 
         _ => {
             p.add_diag(
-                DiagBuilder2::error("Expected assert, assume, cover, expect, or restrict")
+                DiagBuilder2::error("expected assert, assume, cover, expect, or restrict")
                     .span(span),
             );
             return Err(());
@@ -5443,7 +5443,7 @@ fn parse_propexpr_nonseq(
 
         _ => {
             let q = p.peek(0).1;
-            p.add_diag(DiagBuilder2::error("Expected primary property expression").span(q));
+            p.add_diag(DiagBuilder2::error("expected primary property expression").span(q));
             return Err(());
         }
     }
@@ -5622,7 +5622,7 @@ fn parse_seqrep(p: &mut dyn AbstractParser) -> ReportedResult<SeqRep> {
             let q = p.peek(0).1;
             p.add_diag(
                 DiagBuilder2::error(
-                    "Expected sequence repetition [+], [*], [* <expr>], [= <expr>], or [-> <expr>]",
+                    "expected sequence repetition [+], [*], [* <expr>], [= <expr>], or [-> <expr>]",
                 )
                 .span(q),
             );
