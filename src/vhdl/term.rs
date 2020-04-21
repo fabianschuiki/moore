@@ -9,23 +9,23 @@ use std::marker::PhantomData;
 
 use num::{BigInt, BigRational};
 
-use crate::common::SessionContext;
-use crate::common::name::Name;
 use crate::common::errors::*;
+use crate::common::name::Name;
+use crate::common::score::Result;
 use crate::common::source::*;
 use crate::common::util::*;
-use crate::common::score::Result;
+use crate::common::SessionContext;
 
+use crate::add_ctx::AddContext;
 use crate::arenas::Alloc;
-use crate::syntax::lexer::token::{Exponent, ExponentSign, Literal};
-use crate::syntax::ast::{self, Dir};
-use crate::score::*;
 use crate::hir;
 use crate::konst::ConstInt;
-use crate::add_ctx::AddContext;
-use crate::ty::*;
 use crate::op::*;
-use crate::scope2::{Def2, TypeVariantDef, ScopeData};
+use crate::scope2::{Def2, ScopeData, TypeVariantDef};
+use crate::score::*;
+use crate::syntax::ast::{self, Dir};
+use crate::syntax::lexer::token::{Exponent, ExponentSign, Literal};
+use crate::ty::*;
 
 /// A term.
 ///
@@ -110,14 +110,14 @@ impl<'t> EitherUnit<'t> {
     pub fn unwrap_old(self) -> UnitRef {
         match self {
             EitherUnit::Old(u) => u,
-            _ => panic!("unit is not an old unit")
+            _ => panic!("unit is not an old unit"),
         }
     }
 
     pub fn unwrap_new(self) -> TypeVariantDef<'t> {
         match self {
             EitherUnit::New(u) => u,
-            _ => panic!("unit is not a new unit")
+            _ => panic!("unit is not a new unit"),
         }
     }
 }
@@ -184,7 +184,8 @@ where
                                     DiagBuilder2::error(format!(
                                         "`{}` is not a valid base for a number literal",
                                         base
-                                    )).span(ast.span),
+                                    ))
+                                    .span(ast.span),
                                 );
                                 return Err(());
                             }
@@ -194,23 +195,32 @@ where
                     let int = match BigInt::parse_bytes(int.as_str().as_bytes(), base) {
                         Some(v) => v,
                         None => {
-                            self.emit(DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", int, base)).span(ast.span));
+                            self.emit(
+                                DiagBuilder2::error(format!(
+                                    "`{}` is not a valid base-{} integer",
+                                    int, base
+                                ))
+                                .span(ast.span),
+                            );
                             return Err(());
                         }
                     };
                     let exp: isize = match exp {
                         Some(Exponent(sign, exp)) => match exp.as_str().parse() {
-                            Ok(v) => if sign == ExponentSign::Positive {
-                                v
-                            } else {
-                                -v
-                            },
+                            Ok(v) => {
+                                if sign == ExponentSign::Positive {
+                                    v
+                                } else {
+                                    -v
+                                }
+                            }
                             Err(_) => {
                                 self.emit(
                                     DiagBuilder2::error(format!(
                                         "`{}` is not a valid exponent for a number literal",
                                         exp
-                                    )).span(ast.span),
+                                    ))
+                                    .span(ast.span),
                                 );
                                 return Err(());
                             }
@@ -225,7 +235,13 @@ where
                         let frac = match BigInt::parse_bytes(frac.as_str().as_bytes(), base) {
                             Some(v) => v,
                             None => {
-                                self.emit(DiagBuilder2::error(format!("`{}` is not a valid base-{} integer", frac, base)).span(ast.span));
+                                self.emit(
+                                    DiagBuilder2::error(format!(
+                                        "`{}` is not a valid base-{} integer",
+                                        frac, base
+                                    ))
+                                    .span(ast.span),
+                                );
                                 return Err(());
                             }
                         };
@@ -245,7 +261,8 @@ where
                                 DiagBuilder2::error(format!(
                                     "integer literal `{}` has negative exponent",
                                     ast.span.extract()
-                                )).span(ast.span),
+                                ))
+                                .span(ast.span),
                             );
                             return Err(());
                         }
@@ -262,8 +279,9 @@ where
                         DiagBuilder2::bug(format!(
                             "termification of literal `{}` not implemented",
                             ast.span.extract()
-                        )).span(ast.span)
-                            .add_note(format!("{:?}", wrong)),
+                        ))
+                        .span(ast.span)
+                        .add_note(format!("{:?}", wrong)),
                     );
                     return Err(());
                 }
@@ -318,7 +336,8 @@ where
                         DiagBuilder2::bug(format!(
                             "termification of signature suffix `{}` not implemented",
                             sig.span.extract()
-                        )).span(sig.span),
+                        ))
+                        .span(sig.span),
                     );
                     return Err(());
                 }
@@ -333,10 +352,13 @@ where
                         // }
                         Term::Ident(other) => {
                             self.emit(
-                                DiagBuilder2::error(format!("`{}` is not an attribute name", ident.name))
-                                    .span(ident.span)
-                                    .add_note("Declared here:")
-                                    .span(other.span),
+                                DiagBuilder2::error(format!(
+                                    "`{}` is not an attribute name",
+                                    ident.name
+                                ))
+                                .span(ident.span)
+                                .add_note("Declared here:")
+                                .span(other.span),
                             );
                             return Err(());
                         }
@@ -378,26 +400,30 @@ where
     pub fn termify_paren_elems(&self, elems: &ast::ParenElems) -> Result<Spanned<Term<'a>>> {
         let is_aggregate = elems.value.iter().any(|e| !e.choices.value.is_empty());
         let term = if is_aggregate {
-            Term::Aggregate(elems
-                .value
-                .iter()
-                .map(|e| {
-                    Ok((
-                        e.choices
-                            .value
-                            .iter()
-                            .map(|c| self.termify_expr(c))
-                            .collect::<Result<Vec<_>>>()?,
-                        self.termify_expr(&e.expr)?,
-                    ))
-                })
-                .collect::<Result<Vec<_>>>()?)
+            Term::Aggregate(
+                elems
+                    .value
+                    .iter()
+                    .map(|e| {
+                        Ok((
+                            e.choices
+                                .value
+                                .iter()
+                                .map(|c| self.termify_expr(c))
+                                .collect::<Result<Vec<_>>>()?,
+                            self.termify_expr(&e.expr)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            )
         } else {
-            Term::Paren(elems
-                .value
-                .iter()
-                .map(|e| self.termify_expr(&e.expr))
-                .collect::<Result<Vec<_>>>()?)
+            Term::Paren(
+                elems
+                    .value
+                    .iter()
+                    .map(|e| self.termify_expr(&e.expr))
+                    .collect::<Result<Vec<_>>>()?,
+            )
         };
         Ok(self.fold(Spanned::new(term, elems.span)))
     }
@@ -406,7 +432,9 @@ where
     pub fn termify_subtype_ind(&self, subty: &ast::SubtypeInd) -> Result<Spanned<Term<'a>>> {
         let name = self.termify_compound_name(&subty.name)?;
         let res = match subty.res {
-            Some(ast::ResolInd::Exprs(ref paren_elems)) => Some(self.termify_paren_elems(paren_elems)?),
+            Some(ast::ResolInd::Exprs(ref paren_elems)) => {
+                Some(self.termify_paren_elems(paren_elems)?)
+            }
             Some(ast::ResolInd::Name(ref name)) => Some(self.termify_compound_name(name)?),
             None => None,
         };
@@ -447,7 +475,8 @@ where
                                 DiagBuilder2::error(format!(
                                     "`{}` is not a valid physical unit",
                                     unit.span.extract()
-                                )).span(unit.span),
+                                ))
+                                .span(unit.span),
                             );
                             debugln!("It is a {:#?}", unit.value);
                             return Err(());
@@ -460,7 +489,8 @@ where
                                 DiagBuilder2::error(format!(
                                     "`{}` is not a valid value for a physical literal",
                                     lit.span.extract()
-                                )).span(lit.span),
+                                ))
+                                .span(lit.span),
                             );
                             debugln!("It is a {:#?}", lit.value);
                             return Err(());
@@ -475,7 +505,9 @@ where
             // ast::ResolExpr(ref paren_elems, ref name) => {
             //  let name = self.termify_compound_name(name)?;
             // }
-            ast::UnaryExpr(op, ref arg) => Term::Unary(UnaryOp::from(op, self.ctx)?, self.termify_expr(arg)?.into()),
+            ast::UnaryExpr(op, ref arg) => {
+                Term::Unary(UnaryOp::from(op, self.ctx)?, self.termify_expr(arg)?.into())
+            }
             ast::BinaryExpr(op, ref lhs, ref rhs) => {
                 if let ast::BinaryOp::Dir(d) = op.value {
                     Term::Range(
@@ -506,8 +538,9 @@ where
                     DiagBuilder2::bug(format!(
                         "termification of expression `{}` not implemented",
                         ast.span.extract()
-                    )).span(ast.span)
-                        .add_note(format!("{:?}", wrong)),
+                    ))
+                    .span(ast.span)
+                    .add_note(format!("{:?}", wrong)),
                 );
                 return Err(());
             }
@@ -522,11 +555,19 @@ pub trait DefSpecificTermContext<'t, D> {
     ///
     /// This ensures that there is only one definition, or in case of something
     /// overloadable, that all definitions are of the same kind.
-    fn termify_defs(&self, name: Spanned<ResolvableName>, defs: Vec<Spanned<D>>) -> Result<Spanned<Term<'t>>>;
+    fn termify_defs(
+        &self,
+        name: Spanned<ResolvableName>,
+        defs: Vec<Spanned<D>>,
+    ) -> Result<Spanned<Term<'t>>>;
 }
 
 impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def> for TermContext<C, S, Def> {
-    fn termify_defs(&self, name: Spanned<ResolvableName>, mut defs: Vec<Spanned<Def>>) -> Result<Spanned<Term<'t>>> {
+    fn termify_defs(
+        &self,
+        name: Spanned<ResolvableName>,
+        mut defs: Vec<Spanned<Def>>,
+    ) -> Result<Spanned<Term<'t>>> {
         if defs.is_empty() {
             return Ok(name.map(Term::Unresolved));
         }
@@ -556,7 +597,8 @@ impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def> for TermContext<C, S
             }
             // TODO: Handle the function case.
             _ if !defs.is_empty() => {
-                let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", name.value)).span(name.span);
+                let mut d =
+                    DiagBuilder2::error(format!("`{}` is ambiguous", name.value)).span(name.span);
                 d = d.add_note("Found the following definitions:");
                 if first_def.span() != INVALID_SPAN {
                     d = d.span(first_def.span());
@@ -577,7 +619,11 @@ impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def> for TermContext<C, S
 }
 
 impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def2<'t>> for TermContext<C, S, Def2<'t>> {
-    fn termify_defs(&self, name: Spanned<ResolvableName>, mut defs: Vec<Spanned<Def2<'t>>>) -> Result<Spanned<Term<'t>>> {
+    fn termify_defs(
+        &self,
+        name: Spanned<ResolvableName>,
+        mut defs: Vec<Spanned<Def2<'t>>>,
+    ) -> Result<Spanned<Term<'t>>> {
         if defs.is_empty() {
             return Ok(name.map(Term::Unresolved));
         }
@@ -607,7 +653,8 @@ impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def2<'t>> for TermContext
             }
             // TODO: Handle the function case.
             _ if !defs.is_empty() => {
-                let mut d = DiagBuilder2::error(format!("`{}` is ambiguous", name.value)).span(name.span);
+                let mut d =
+                    DiagBuilder2::error(format!("`{}` is ambiguous", name.value)).span(name.span);
                 d = d.add_note("Found the following definitions:");
                 if first_def.span() != INVALID_SPAN {
                     d = d.span(first_def.span());
@@ -629,12 +676,17 @@ impl<'t, C: DiagEmitter, S> DefSpecificTermContext<'t, Def2<'t>> for TermContext
 
 #[allow(missing_docs)]
 pub trait ScopeSpecificTermContext<'t, S, D> {
-    fn termify_name_in_scope(&self, name: Spanned<ResolvableName>, scope: S) -> Result<Spanned<Term<'t>>>;
+    fn termify_name_in_scope(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope: S,
+    ) -> Result<Spanned<Term<'t>>>;
 
     fn maybe_selectable_scope(&self, term: &Term<'t>) -> Option<S>;
 }
 
-impl<'t, 'sbc, 'lazy, 'sb, 'ast, 'ctx> ScopeSpecificTermContext<'t, ScopeRef, Def> for TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef, Def>
+impl<'t, 'sbc, 'lazy, 'sb, 'ast, 'ctx> ScopeSpecificTermContext<'t, ScopeRef, Def>
+    for TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef, Def>
 where
     'lazy: 'sbc,
     'sb: 'lazy,
@@ -642,7 +694,11 @@ where
     'ctx: 'sb,
 {
     /// Map a resolvable name to a term, resolving it within a scope.
-    fn termify_name_in_scope(&self, name: Spanned<ResolvableName>, scope: ScopeRef) -> Result<Spanned<Term<'t>>> {
+    fn termify_name_in_scope(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope: ScopeRef,
+    ) -> Result<Spanned<Term<'t>>> {
         let defs = self.ctx.resolve_name(name, scope, false, true)?;
         self.termify_defs(name, defs)
     }
@@ -661,9 +717,15 @@ where
     }
 }
 
-impl<'t> ScopeSpecificTermContext<'t, &'t ScopeData<'t>, Def2<'t>> for TermContext<hir::AllocContext<'t>, &'t ScopeData<'t>, Def2<'t>> {
+impl<'t> ScopeSpecificTermContext<'t, &'t ScopeData<'t>, Def2<'t>>
+    for TermContext<hir::AllocContext<'t>, &'t ScopeData<'t>, Def2<'t>>
+{
     /// Map a resolvable name to a term, resolving it within a scope.
-    fn termify_name_in_scope(&self, name: Spanned<ResolvableName>, scope: &'t ScopeData<'t>) -> Result<Spanned<Term<'t>>> {
+    fn termify_name_in_scope(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope: &'t ScopeData<'t>,
+    ) -> Result<Spanned<Term<'t>>> {
         let defs = scope.resolve(name.value, false);
         self.termify_defs(name, defs)
     }
@@ -681,7 +743,8 @@ impl<'t> ScopeSpecificTermContext<'t, &'t ScopeData<'t>, Def2<'t>> for TermConte
     }
 }
 
-impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef, Def>
+impl<'sbc, 'lazy, 'sb, 'ast, 'ctx>
+    TermContext<&'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, ScopeRef, Def>
 where
     'lazy: 'sbc,
     'sb: 'lazy,
@@ -701,7 +764,9 @@ where
     pub fn termify_latent_name(&self, name: LatentName<'ast>) -> Result<Spanned<Term>> {
         match name {
             LatentName::Simple(n) => self.termify_name(n.map_into()),
-            LatentName::Primary(n) => self.termify_name(ResolvableName::from_primary_name(n, self.ctx)?),
+            LatentName::Primary(n) => {
+                self.termify_name(ResolvableName::from_primary_name(n, self.ctx)?)
+            }
             LatentName::Compound(n) => self.termify_compound_name(n),
         }
     }
@@ -734,7 +799,8 @@ where
                 // enums for this literal.
                 let set: HashSet<_> = value.as_str().chars().collect();
                 debugln!("string literal `{}` contains characters {:?}", value, set);
-                let char_defs = set.into_iter()
+                let char_defs = set
+                    .into_iter()
                     .map(|chr| {
                         let rn = Spanned::new(ResolvableName::Bit(chr), term_span);
                         let defs = self.ctx.resolve_name(rn, self.scope, false, true)?;
@@ -742,7 +808,10 @@ where
                         let term = self.termify_defs(rn, defs)?;
                         match term.value {
                             Term::Unresolved(name) => {
-                                self.emit(DiagBuilder2::error(format!("`{}` is unknown", name)).span(term.span));
+                                self.emit(
+                                    DiagBuilder2::error(format!("`{}` is unknown", name))
+                                        .span(term.span),
+                                );
                                 Err(())
                             }
                             Term::Enum(ids) => Ok((chr, ids.into_iter().collect())),
@@ -831,9 +900,10 @@ where
                         DiagBuilder2::error(format!(
                             "`{}` cannot be used in an expression",
                             term_span.extract()
-                        )).span(term_span)
-                            .add_note(format!("`{}` was declared here:", term_span.extract()))
-                            .span(def.span),
+                        ))
+                        .span(term_span)
+                        .add_note(format!("`{}` was declared here:", term_span.extract()))
+                        .span(def.span),
                     );
                     return Err(());
                 }
@@ -879,7 +949,10 @@ where
                         );
                         hir::ExprData::Allocator(tm, Some(expr))
                     }
-                    other => hir::ExprData::Allocator(self.term_to_type_mark(Spanned::new(other, arg.span))?, None),
+                    other => hir::ExprData::Allocator(
+                        self.term_to_type_mark(Spanned::new(other, arg.span))?,
+                        None,
+                    ),
                 }
             }
 
@@ -895,7 +968,8 @@ where
                                 DiagBuilder2::error(format!(
                                     "cast `{}` must have exactly one argument",
                                     term_span.extract()
-                                )).span(args.span),
+                                ))
+                                .span(args.span),
                             );
                             return Err(());
                         }
@@ -905,7 +979,8 @@ where
                                 DiagBuilder2::error(format!(
                                     "cast argument `{}` cannot have a formal part",
                                     arg.span.extract()
-                                )).span(formal.span),
+                                ))
+                                .span(formal.span),
                             );
                         }
                         let arg = match arg.actual.value {
@@ -915,16 +990,22 @@ where
                                     DiagBuilder2::error(format!(
                                         "`{}` is not a valid cast argument",
                                         arg.actual.span.extract()
-                                    )).span(arg.actual.span),
+                                    ))
+                                    .span(arg.actual.span),
                                 );
                                 return Err(());
                             }
                         };
-                        self.ctx
-                            .set_type_context(arg, self.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value)));
+                        self.ctx.set_type_context(
+                            arg,
+                            self.ctx.intern_ty(Ty::Named(tm.span.into(), tm.value)),
+                        );
                         hir::ExprData::Cast(tm, arg)
                     }
-                    other => hir::ExprData::Call(self.term_to_expr(Spanned::new(other, callee.span))?, args),
+                    other => hir::ExprData::Call(
+                        self.term_to_expr(Spanned::new(other, callee.span))?,
+                        args,
+                    ),
                 }
             }
 
@@ -933,7 +1014,8 @@ where
                     DiagBuilder2::error(format!(
                         "`{}` is not a valid expression",
                         term.span.extract()
-                    )).span(term.span),
+                    ))
+                    .span(term.span),
                 );
                 debugln!("It is a {:#?}", term);
                 return Err(());
@@ -955,7 +1037,8 @@ where
                     DiagBuilder2::error(format!(
                         "`{}` is not a type or subtype",
                         term.span.extract()
-                    )).span(term.span),
+                    ))
+                    .span(term.span),
                 );
                 debugln!("It is a {:#?}", term);
                 return Err(());
@@ -995,7 +1078,9 @@ where
                 let suffix = self.fold_term_as_type(*suffix)?;
                 match subterm.value {
                     // Fold `TypeMark (T)` to `SubtypeInd`.
-                    Term::TypeMark(tm) => (true, Term::SubtypeInd(tm, None, Some(Box::new(suffix)))),
+                    Term::TypeMark(tm) => {
+                        (true, Term::SubtypeInd(tm, None, Some(Box::new(suffix))))
+                    }
                     // Fold `SubtypeInd (T)` to `SubtypeInd`.
                     Term::SubtypeInd(tm, resol, Some(con)) => {
                         let sp = Span::union(con.span, suffix.span);
@@ -1003,7 +1088,9 @@ where
                         (true, Term::SubtypeInd(tm, resol, Some(Box::new(new_con))))
                     }
                     // Fold `SubtypeInd (T)` to `SubtypeInd`.
-                    Term::SubtypeInd(tm, resol, None) => (true, Term::SubtypeInd(tm, resol, Some(Box::new(suffix)))),
+                    Term::SubtypeInd(tm, resol, None) => {
+                        (true, Term::SubtypeInd(tm, resol, Some(Box::new(suffix))))
+                    }
                     _ => (
                         false,
                         Term::SuffixParen(Box::new(subterm), Box::new(suffix)),
@@ -1031,7 +1118,8 @@ where
                     DiagBuilder2::error(format!(
                         "`{}` is not a subtype indication",
                         term.span.extract()
-                    )).span(term.span),
+                    ))
+                    .span(term.span),
                 );
                 debugln!("It is a {:#?}", term);
                 return Err(());
@@ -1065,7 +1153,8 @@ where
             DiagBuilder2::bug(format!(
                 "interpretation of `{}` as a resolution indication not implemented",
                 term.span.extract()
-            )).span(term.span),
+            ))
+            .span(term.span),
         );
         Err(())
     }
@@ -1074,13 +1163,17 @@ where
     pub fn term_to_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::Constraint>> {
         // Handle range constraints.
         match term.value {
-            Term::Range(..) => return Ok(self.term_to_range(term)?.map(|r| hir::Constraint::Range(r))),
+            Term::Range(..) => {
+                return Ok(self.term_to_range(term)?.map(|r| hir::Constraint::Range(r)))
+            }
             _ => (),
         };
 
         // Unpack the optional element constraint on array constraints.
         let (term, elem) = match term.value {
-            Term::RangeSuffix(subterm, con) | Term::SuffixParen(subterm, con) => (*subterm, Some(*con)),
+            Term::RangeSuffix(subterm, con) | Term::SuffixParen(subterm, con) => {
+                (*subterm, Some(*con))
+            }
             _ => (term, None),
         };
 
@@ -1114,7 +1207,12 @@ where
     }
 
     /// Map a term to an array constraint.
-    pub fn term_to_array_constraint(&self, span: Span, terms: Vec<Spanned<Term>>, elem: Option<Spanned<Term>>) -> Result<Spanned<hir::ArrayConstraint>> {
+    pub fn term_to_array_constraint(
+        &self,
+        span: Span,
+        terms: Vec<Spanned<Term>>,
+        elem: Option<Spanned<Term>>,
+    ) -> Result<Spanned<hir::ArrayConstraint>> {
         if terms.is_empty() {
             self.emit(DiagBuilder2::error(format!("array constraint cannot be empty")).span(span));
             return Err(());
@@ -1142,7 +1240,11 @@ where
     }
 
     /// Map a term to a record constraint.
-    pub fn term_to_record_constraint(&self, span: Span, terms: Vec<Spanned<Term>>) -> Result<Spanned<hir::RecordConstraint>> {
+    pub fn term_to_record_constraint(
+        &self,
+        span: Span,
+        terms: Vec<Spanned<Term>>,
+    ) -> Result<Spanned<hir::RecordConstraint>> {
         if terms.is_empty() {
             self.emit(DiagBuilder2::error(format!("record constraint cannot be empty")).span(span));
             return Err(());
@@ -1174,7 +1276,8 @@ where
                         DiagBuilder2::error(format!(
                             "`{}` is not a valid record element name",
                             name.span.extract()
-                        )).span(name.span),
+                        ))
+                        .span(name.span),
                     );
                     debugln!("It is a {:#?}", name.value);
                     has_fails = true;
@@ -1188,9 +1291,10 @@ where
                     DiagBuilder2::error(format!(
                         "element `{}` has already been constrained",
                         name.value
-                    )).span(name.span)
-                        .add_note("Previous constraint was here:")
-                        .span(span),
+                    ))
+                    .span(name.span)
+                    .add_note("Previous constraint was here:")
+                    .span(span),
                 );
                 has_fails = true;
                 continue;
@@ -1214,7 +1318,10 @@ where
     }
 
     /// Map a term to an element constraint.
-    pub fn term_to_element_constraint(&self, term: Spanned<Term>) -> Result<Spanned<hir::ElementConstraint>> {
+    pub fn term_to_element_constraint(
+        &self,
+        term: Spanned<Term>,
+    ) -> Result<Spanned<hir::ElementConstraint>> {
         let con = self.term_to_constraint(term)?;
         Ok(Spanned::new(
             match con.value {
@@ -1237,7 +1344,10 @@ where
     }
 
     /// Map a term to a discrete range.
-    pub fn term_to_discrete_range(&self, term: Spanned<Term>) -> Result<Spanned<hir::DiscreteRange>> {
+    pub fn term_to_discrete_range(
+        &self,
+        term: Spanned<Term>,
+    ) -> Result<Spanned<hir::DiscreteRange>> {
         let term = self.fold_term_as_type(term)?;
         Ok(match term.value {
             Term::SubtypeInd(..) | Term::TypeMark(..) => {
@@ -1251,12 +1361,15 @@ where
                     DiagBuilder2::error(format!(
                         "`{}` is not a valid discrete range",
                         term.span.extract()
-                    )).span(term.span)
-                        .add_note("A discrete range can be one of the following:")
-                        .add_note("- a subtype indication of the form `[resolution] type_mark [constraint]`")
-                        .add_note("- a range of the form `a to b` or `a downto b`")
-                        .add_note("- a range attribute of the form `T'range`")
-                        .add_note("See IEEE 1076-2008 section 5.3.2.1."),
+                    ))
+                    .span(term.span)
+                    .add_note("A discrete range can be one of the following:")
+                    .add_note(
+                        "- a subtype indication of the form `[resolution] type_mark [constraint]`",
+                    )
+                    .add_note("- a range of the form `a to b` or `a downto b`")
+                    .add_note("- a range attribute of the form `T'range`")
+                    .add_note("See IEEE 1076-2008 section 5.3.2.1."),
                 );
                 debugln!("It is a {:#?}", term);
                 return Err(());
@@ -1269,16 +1382,23 @@ where
         Ok(Spanned::new(
             match term.value {
                 // Term::Attr(..) => ...
-                Term::Range(dir, lb, rb) => hir::Range::Immediate(dir.value, self.term_to_expr(*lb)?, self.term_to_expr(*rb)?),
+                Term::Range(dir, lb, rb) => hir::Range::Immediate(
+                    dir.value,
+                    self.term_to_expr(*lb)?,
+                    self.term_to_expr(*rb)?,
+                ),
                 _ => {
                     self.emit(
-                        DiagBuilder2::error(format!("`{}` is not a valid range", term.span.extract()))
-                            .span(term.span)
-                            .add_note("A range can be one of the following:")
-                            .add_note("- an ascending range of the form `a to b`")
-                            .add_note("- a descending range of the form `a downto b`")
-                            .add_note("- a range attribute of the form `T'range`")
-                            .add_note("See IEEE 1076-2008 section 5.2.1."),
+                        DiagBuilder2::error(format!(
+                            "`{}` is not a valid range",
+                            term.span.extract()
+                        ))
+                        .span(term.span)
+                        .add_note("A range can be one of the following:")
+                        .add_note("- an ascending range of the form `a to b`")
+                        .add_note("- a descending range of the form `a downto b`")
+                        .add_note("- a range attribute of the form `T'range`")
+                        .add_note("See IEEE 1076-2008 section 5.2.1."),
                     );
                     debugln!("It is a {:#?}", term);
                     return Err(());
@@ -1304,13 +1424,19 @@ where
                     let e = defs.into_iter().next().unwrap();
                     e.map(|e| e.0.into())
                 } else {
-                    self.emit(DiagBuilder2::error(format!("`{}` is ambiguous", term.span.extract())).span(term.span));
+                    self.emit(
+                        DiagBuilder2::error(format!("`{}` is ambiguous", term.span.extract()))
+                            .span(term.span),
+                    );
                     debugln!("Its definitions are {:#?}", defs);
                     return Err(());
                 }
             }
             _ => {
-                self.emit(DiagBuilder2::error(format!("`{}` is not an identifier", term.span.extract())).span(term.span));
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not an identifier", term.span.extract()))
+                        .span(term.span),
+                );
                 debugln!("It is a {:#?}", term);
                 return Err(());
             }
@@ -1328,10 +1454,13 @@ where
                 Def::Stmt(id) => id,
                 _ => {
                     self.emit(
-                        DiagBuilder2::error(format!("`{}` is not a statement label", span.extract()))
-                            .span(span)
-                            .add_note(format!("`{}` was defined here:", span.extract()))
-                            .span(def.span),
+                        DiagBuilder2::error(format!(
+                            "`{}` is not a statement label",
+                            span.extract()
+                        ))
+                        .span(span)
+                        .add_note(format!("`{}` was defined here:", span.extract()))
+                        .span(def.span),
                     );
                     debugln!("The definition is a {:?}", def.value);
                     return Err(());
@@ -1373,18 +1502,25 @@ where
             match term.value {
                 Term::Unresolved(ResolvableName::Ident(name)) => hir::Choice::Element(name),
                 Term::Others => hir::Choice::Others,
-                Term::SubtypeInd(..) | Term::TypeMark(..) | Term::Range(..) => hir::Choice::DiscreteRange(self.term_to_discrete_range(term)?.value),
-                Term::IntLit(..) | Term::Unary(..) | Term::Binary(..) => hir::Choice::Expr(self.term_to_expr(term)?),
+                Term::SubtypeInd(..) | Term::TypeMark(..) | Term::Range(..) => {
+                    hir::Choice::DiscreteRange(self.term_to_discrete_range(term)?.value)
+                }
+                Term::IntLit(..) | Term::Unary(..) | Term::Binary(..) => {
+                    hir::Choice::Expr(self.term_to_expr(term)?)
+                }
                 _ => {
                     self.emit(
-                        DiagBuilder2::error(format!("`{}` is not a valid choice", term.span.extract()))
-                            .span(term.span)
-                            .add_note("A choice can be one of the following:")
-                            .add_note("- an expression")
-                            .add_note("- a discrete range")
-                            .add_note("- an element name")
-                            .add_note("- the `others` keyword")
-                            .add_note("See IEEE 1076-2008 section 9.3.3.1."),
+                        DiagBuilder2::error(format!(
+                            "`{}` is not a valid choice",
+                            term.span.extract()
+                        ))
+                        .span(term.span)
+                        .add_note("A choice can be one of the following:")
+                        .add_note("- an expression")
+                        .add_note("- a discrete range")
+                        .add_note("- an element name")
+                        .add_note("- the `others` keyword")
+                        .add_note("See IEEE 1076-2008 section 9.3.3.1."),
                     );
                     debugln!("It is a {:#?}", term);
                     return Err(());
@@ -1435,8 +1571,9 @@ where
                     DiagBuilder2::error(format!(
                         "`{}` is not a valid aggregate",
                         term.span.extract()
-                    )).span(term.span)
-                        .add_note("See IEEE 1076-2008 section 9.3.3.1."),
+                    ))
+                    .span(term.span)
+                    .add_note("See IEEE 1076-2008 section 9.3.3.1."),
                 );
                 debugln!("It is a {:#?}", term);
                 return Err(());
@@ -1727,7 +1864,8 @@ where
                 DiagBuilder2::error(format!(
                     "`{}` is not a valid expression",
                     term.span.extract()
-                )).span(term.span),
+                ))
+                .span(term.span),
             );
             debugln!("It is a {:#?}", term);
             Err(())

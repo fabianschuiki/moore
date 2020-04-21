@@ -2,482 +2,596 @@
 
 //! This module implements the type calculation of the scoreboard.
 
-use std::fmt::Debug;
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-use crate::common::{NodeId, Verbosity};
 use crate::common::errors::*;
-use crate::common::source::{Span, Spanned, INVALID_SPAN};
 use crate::common::score::{NodeMaker, NodeStorage, Result};
+use crate::common::source::{Span, Spanned, INVALID_SPAN};
+use crate::common::{NodeId, Verbosity};
+use crate::hir;
+use crate::konst::*;
+use crate::lazy::LazyNode;
 use crate::score::*;
 use crate::ty::*;
-use crate::konst::*;
-use crate::hir;
-use crate::lazy::LazyNode;
 
 /// A context to typecheck things in.
 ///
 /// This context helps checking the types of things and keeping track of errors.
 pub struct TypeckContext<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb> {
-	/// The parent context.
-	pub ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
-	/// Whether any of the type checking failed.
-	failed: Cell<bool>,
+    /// The parent context.
+    pub ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
+    /// Whether any of the type checking failed.
+    failed: Cell<bool>,
 }
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
-	/// Create a new type checking context.
-	pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>) -> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
-		TypeckContext {
-			ctx: ctx,
-			failed: Cell::new(false),
-		}
-	}
+    /// Create a new type checking context.
+    pub fn new(
+        ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
+    ) -> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
+        TypeckContext {
+            ctx: ctx,
+            failed: Cell::new(false),
+        }
+    }
 
-	/// Consume the context and return the result of the typeck.
-	pub fn finish(self) -> bool {
-		!self.failed.get()
-	}
+    /// Consume the context and return the result of the typeck.
+    pub fn finish(self) -> bool {
+        !self.failed.get()
+    }
 
-	/// Emit a diagnostic message.
-	pub fn emit(&self, diag: DiagBuilder2) {
-		if diag.severity >= Severity::Error {
-			self.failed.set(true);
-		}
-		self.ctx.sess.emit(diag)
-	}
+    /// Emit a diagnostic message.
+    pub fn emit(&self, diag: DiagBuilder2) {
+        if diag.severity >= Severity::Error {
+            self.failed.set(true);
+        }
+        self.ctx.sess.emit(diag)
+    }
 
-	/// Check the type of a node.
-	///
-	/// If the node already had its type checked, immediately returns the result
-	/// of that operation. Otherwise runs the task scheduled in the lazy table.
-	pub fn lazy_typeck<I>(&self, id: I) where I: Into<NodeId> {
-		let id = id.into();
+    /// Check the type of a node.
+    ///
+    /// If the node already had its type checked, immediately returns the result
+    /// of that operation. Otherwise runs the task scheduled in the lazy table.
+    pub fn lazy_typeck<I>(&self, id: I)
+    where
+        I: Into<NodeId>,
+    {
+        let id = id.into();
 
-		// If the typeck has already been performed, return its result.
-		if let Some(&node) = self.ctx.sb.typeck_table.borrow().get(&id) {
-			if node.is_err() {
-				self.failed.set(true);
-			}
-			return;
-		}
+        // If the typeck has already been performed, return its result.
+        if let Some(&node) = self.ctx.sb.typeck_table.borrow().get(&id) {
+            if node.is_err() {
+                self.failed.set(true);
+            }
+            return;
+        }
 
-		// Otherwise run the task scheduled in the lazy typeck table, then store
-		// the result.
-		let task = self.ctx.lazy.typeck.borrow_mut().set(id, LazyNode::Running);
-		let result = match task {
-			Some(LazyNode::Pending(f)) => f(self),
-			Some(LazyNode::Running) => { self.ctx.bug(id, format!("recursion on typeck of {:?}", id)); Err(()) }
-			None => { self.ctx.bug(id, format!("no typeck scheduled for {:?}", id)); Err(()) }
-		};
-		if result.is_err() {
-			self.failed.set(true);
-		}
-		self.ctx.sb.typeck_table.borrow_mut().insert(id, result);
-	}
+        // Otherwise run the task scheduled in the lazy typeck table, then store
+        // the result.
+        let task = self.ctx.lazy.typeck.borrow_mut().set(id, LazyNode::Running);
+        let result = match task {
+            Some(LazyNode::Pending(f)) => f(self),
+            Some(LazyNode::Running) => {
+                self.ctx.bug(id, format!("recursion on typeck of {:?}", id));
+                Err(())
+            }
+            None => {
+                self.ctx
+                    .bug(id, format!("no typeck scheduled for {:?}", id));
+                Err(())
+            }
+        };
+        if result.is_err() {
+            self.failed.set(true);
+        }
+        self.ctx.sb.typeck_table.borrow_mut().insert(id, result);
+    }
 
-	/// Determine the type of a node.
-	///
-	/// If the node already had its type determined, immediately returns the
-	/// result of that operation. Otherwise runs the task scheduled in the lazy
-	/// table.
-	pub fn lazy_typeval<I>(&self, id: I) -> Result<&'ctx Ty> where I: Into<NodeId> {
-		let id = id.into();
+    /// Determine the type of a node.
+    ///
+    /// If the node already had its type determined, immediately returns the
+    /// result of that operation. Otherwise runs the task scheduled in the lazy
+    /// table.
+    pub fn lazy_typeval<I>(&self, id: I) -> Result<&'ctx Ty>
+    where
+        I: Into<NodeId>,
+    {
+        let id = id.into();
 
-		// If the typeval has already been performed, return its result.
-		if let Some(&node) = self.ctx.sb.typeval_table.borrow().get(&id) {
-			return node;
-		}
+        // If the typeval has already been performed, return its result.
+        if let Some(&node) = self.ctx.sb.typeval_table.borrow().get(&id) {
+            return node;
+        }
 
-		// Otherwise run the task scheduled in the lazy typeval table, then store
-		// the result.
-		let task = self.ctx.lazy.typeval.borrow_mut().set(id, LazyNode::Running);
-		let result = match task {
-			Some(LazyNode::Pending(f)) => f(self),
-			Some(LazyNode::Running) => { self.ctx.bug(id, format!("recursion on typeval of {:?}", id)); Err(()) }
-			None => { self.ctx.bug(id, format!("no typeval scheduled for {:?}", id)); Err(()) }
-		};
-		if result.is_err() {
-			self.failed.set(true);
-		}
+        // Otherwise run the task scheduled in the lazy typeval table, then store
+        // the result.
+        let task = self
+            .ctx
+            .lazy
+            .typeval
+            .borrow_mut()
+            .set(id, LazyNode::Running);
+        let result = match task {
+            Some(LazyNode::Pending(f)) => f(self),
+            Some(LazyNode::Running) => {
+                self.ctx
+                    .bug(id, format!("recursion on typeval of {:?}", id));
+                Err(())
+            }
+            None => {
+                self.ctx
+                    .bug(id, format!("no typeval scheduled for {:?}", id));
+                Err(())
+            }
+        };
+        if result.is_err() {
+            self.failed.set(true);
+        }
 
-		// Emit a diagnostic for the determined type if the corresponding flag
-		// is active.
-		if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPES) {
-			match (result, self.ctx.span(id)) {
-				(Ok(ty), Some(span)) => {
-					self.emit(
-						DiagBuilder2::note(format!("type of `{}` is {}", span.extract(), ty))
-						.span(span)
-					);
-				}
-				_ => ()
-			}
-		}
+        // Emit a diagnostic for the determined type if the corresponding flag
+        // is active.
+        if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPES) {
+            match (result, self.ctx.span(id)) {
+                (Ok(ty), Some(span)) => {
+                    self.emit(
+                        DiagBuilder2::note(format!("type of `{}` is {}", span.extract(), ty))
+                            .span(span),
+                    );
+                }
+                _ => (),
+            }
+        }
 
-		self.ctx.sb.typeval_table.borrow_mut().insert(id, result);
-		result
-	}
+        self.ctx.sb.typeval_table.borrow_mut().insert(id, result);
+        result
+    }
 
-	/// Ensure that two types are compatible.
-	pub fn must_match(&self, exp: &'ctx Ty, act: &'ctx Ty, span: Span) -> bool {
-		assert!(span != INVALID_SPAN);
-		if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPECK) {
-			self.emit(
-				DiagBuilder2::note(format!("typeck expected {} and actual {}", exp, act))
-				.span(span)
-			);
-		}
-		if exp == act {
-			return true;
-		}
-		let (exp_flat, act_flat) = match (self.ctx.deref_named_type(exp), self.ctx.deref_named_type(act)) {
-			(Ok(e), Ok(a)) => (e, a),
-			_ => return false,
-		};
-		match (exp_flat, act_flat) {
-			(e,a) if e == a => return true,
-			// (e,a) if a.is_subtype_of(e) => return true,
-			(&Ty::Int(..), &Ty::UniversalInt) => return true,
-			_ => ()
-		}
-		self.emit(
-			DiagBuilder2::error(format!("expected type {}, but `{}` has type {}", exp, span.extract(), act))
-			.span(span)
-			.add_note(format!("expected type: {}", exp_flat))
-			.add_note(format!("  actual type: {}", act_flat))
-		);
-		false
-	}
+    /// Ensure that two types are compatible.
+    pub fn must_match(&self, exp: &'ctx Ty, act: &'ctx Ty, span: Span) -> bool {
+        assert!(span != INVALID_SPAN);
+        if self.ctx.sess.opts.verbosity.contains(Verbosity::TYPECK) {
+            self.emit(
+                DiagBuilder2::note(format!("typeck expected {} and actual {}", exp, act))
+                    .span(span),
+            );
+        }
+        if exp == act {
+            return true;
+        }
+        let (exp_flat, act_flat) = match (
+            self.ctx.deref_named_type(exp),
+            self.ctx.deref_named_type(act),
+        ) {
+            (Ok(e), Ok(a)) => (e, a),
+            _ => return false,
+        };
+        match (exp_flat, act_flat) {
+            (e, a) if e == a => return true,
+            // (e,a) if a.is_subtype_of(e) => return true,
+            (&Ty::Int(..), &Ty::UniversalInt) => return true,
+            _ => (),
+        }
+        self.emit(
+            DiagBuilder2::error(format!(
+                "expected type {}, but `{}` has type {}",
+                exp,
+                span.extract(),
+                act
+            ))
+            .span(span)
+            .add_note(format!("expected type: {}", exp_flat))
+            .add_note(format!("  actual type: {}", act_flat)),
+        );
+        false
+    }
 
-	/// Ensure that one type can be cast into the other.
-	pub fn must_cast(&self, into: &'ctx Ty, from: &'ctx Ty, span: Span) -> bool {
-		self.must_match(into, from, span)
-	}
+    /// Ensure that one type can be cast into the other.
+    pub fn must_cast(&self, into: &'ctx Ty, from: &'ctx Ty, span: Span) -> bool {
+        self.must_match(into, from, span)
+    }
 
-	/// Type check the time expression in a delay mechanism.
-	pub fn typeck_delay_mechanism(&self, _node: &'ctx hir::DelayMechanism) {
-		// TODO: implement this
-	}
+    /// Type check the time expression in a delay mechanism.
+    pub fn typeck_delay_mechanism(&self, _node: &'ctx hir::DelayMechanism) {
+        // TODO: implement this
+    }
 
-	/// Type check a waveform.
-	pub fn typeck_waveform(&self, node: &'ctx hir::Waveform, exp: &'ctx Ty) {
-		for elem in node {
-			self.typeck_wave_elem(elem, exp);
-		}
-	}
+    /// Type check a waveform.
+    pub fn typeck_waveform(&self, node: &'ctx hir::Waveform, exp: &'ctx Ty) {
+        for elem in node {
+            self.typeck_wave_elem(elem, exp);
+        }
+    }
 
-	/// Type check a waveform element.
-	pub fn typeck_wave_elem(&self, node: &'ctx hir::WaveElem, _exp: &'ctx Ty) {
-		if let Some(_value) = node.value {
-			// TODO: type check value expression
+    /// Type check a waveform element.
+    pub fn typeck_wave_elem(&self, node: &'ctx hir::WaveElem, _exp: &'ctx Ty) {
+        if let Some(_value) = node.value {
+            // TODO: type check value expression
             // self.typeck_node(value, exp);
             // let ty = self.lazy_typeval(value);
             // self.must_match(exp, ty, node.span);
         }
         if let Some(_after) = node.after {
             // TODO: type check time expression
-			// self.typeck_node(after, /* time type */);
-		}
-	}
+            // self.typeck_node(after, /* time type */);
+        }
+    }
 
-	/// Type check a subprogram specification.
-	pub fn typeck_subprog_spec(&self, node: &'ctx hir::SubprogSpec) {
-		self.typeck_slice(&node.generics);
-		// self.typeck_slice(&node.generic_map);
-		self.typeck_slice(&node.params);
-		if let Some(ref ty) = node.return_type {
-			self.typeck(ty.value);
-		}
-	}
+    /// Type check a subprogram specification.
+    pub fn typeck_subprog_spec(&self, node: &'ctx hir::SubprogSpec) {
+        self.typeck_slice(&node.generics);
+        // self.typeck_slice(&node.generic_map);
+        self.typeck_slice(&node.params);
+        if let Some(ref ty) = node.return_type {
+            self.typeck(ty.value);
+        }
+    }
 
-	/// Type check any node that can have its type calculated.
-	pub fn typeck_node<I>(&self, id: I, exp: &'ctx Ty)
-		where
-			I: 'ctx + Copy + Debug + Into<NodeId>,
-			ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>
-	{
-		if let Ok(act) = self.ctx.ty(id) {
-			if act != exp {
-				// TODO: We need some span information here!
-				self.emit(
-					DiagBuilder2::error(format!("typecheck failed, expected {:?}, got {:?}", exp, act))
-				);
-			}
-		} else {
-			self.failed.set(true);
-		}
-	}
+    /// Type check any node that can have its type calculated.
+    pub fn typeck_node<I>(&self, id: I, exp: &'ctx Ty)
+    where
+        I: 'ctx + Copy + Debug + Into<NodeId>,
+        ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>,
+    {
+        if let Ok(act) = self.ctx.ty(id) {
+            if act != exp {
+                // TODO: We need some span information here!
+                self.emit(DiagBuilder2::error(format!(
+                    "typecheck failed, expected {:?}, got {:?}",
+                    exp, act
+                )));
+            }
+        } else {
+            self.failed.set(true);
+        }
+    }
 
-	/// Type check a slice of nodes.
-	pub fn typeck_slice<T,I>(&self, ids: T)
-		where
-			T: AsRef<[I]>,
-			I: Copy,
-			TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>: Typeck<I>,
-	{
-		for &id in ids.as_ref() {
-			self.typeck(id);
-		}
-	}
+    /// Type check a slice of nodes.
+    pub fn typeck_slice<T, I>(&self, ids: T)
+    where
+        T: AsRef<[I]>,
+        I: Copy,
+        TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>: Typeck<I>,
+    {
+        for &id in ids.as_ref() {
+            self.typeck(id);
+        }
+    }
 
-	/// Apply a range constraint to a type.
-	pub fn apply_range_constraint(&self, ty: &Ty, con: Spanned<&hir::Range>) -> Result<&'ctx Ty> {
-		// Determine the applied range.
-		let (dir, lb, rb) = match *con.value {
-			hir::Range::Immediate(dir, lb, rb) => (dir, lb, rb),
-		};
-		let lb = self.ctx.const_value(lb)?;
-		let rb = self.ctx.const_value(rb)?;
+    /// Apply a range constraint to a type.
+    pub fn apply_range_constraint(&self, ty: &Ty, con: Spanned<&hir::Range>) -> Result<&'ctx Ty> {
+        // Determine the applied range.
+        let (dir, lb, rb) = match *con.value {
+            hir::Range::Immediate(dir, lb, rb) => (dir, lb, rb),
+        };
+        let lb = self.ctx.const_value(lb)?;
+        let rb = self.ctx.const_value(rb)?;
 
-		// Determine the inner type to which the constraint shall be applied.
-		let ty = self.ctx.deref_named_type(ty)?;
-		match *ty {
-			Ty::Int(ref ty) => {
-				// Make sure we have an integer range.
-				let (lb, rb) = match (lb, rb) {
-					(&Const::Int(ref lb), &Const::Int(ref rb)) => (lb, rb),
-					_ => {
-						self.emit(
-							DiagBuilder2::error(format!("non-integer range `{} {} {}` cannot constrain an integer type", lb, dir, rb))
-							.span(con.span)
-						);
-						return Err(());
-					}
-				};
+        // Determine the inner type to which the constraint shall be applied.
+        let ty = self.ctx.deref_named_type(ty)?;
+        match *ty {
+            Ty::Int(ref ty) => {
+                // Make sure we have an integer range.
+                let (lb, rb) = match (lb, rb) {
+                    (&Const::Int(ref lb), &Const::Int(ref rb)) => (lb, rb),
+                    _ => {
+                        self.emit(
+                            DiagBuilder2::error(format!(
+                                "non-integer range `{} {} {}` cannot constrain an integer type",
+                                lb, dir, rb
+                            ))
+                            .span(con.span),
+                        );
+                        return Err(());
+                    }
+                };
 
-				// Make sure that this is actually a subtype.
-				if ty.dir != dir || ty.left_bound > lb.value || ty.right_bound < rb.value {
-					self.emit(
-						DiagBuilder2::error(format!("`{} {} {}` is not a subrange of `{}`", lb, dir, rb, ty))
-						.span(con.span)
-					);
-					return Err(());
-				}
+                // Make sure that this is actually a subtype.
+                if ty.dir != dir || ty.left_bound > lb.value || ty.right_bound < rb.value {
+                    self.emit(
+                        DiagBuilder2::error(format!(
+                            "`{} {} {}` is not a subrange of `{}`",
+                            lb, dir, rb, ty
+                        ))
+                        .span(con.span),
+                    );
+                    return Err(());
+                }
 
-				// Create the new type.
-				Ok(self.ctx.intern_ty(IntTy::new(ty.dir, lb.value.clone(), rb.value.clone()).maybe_null()))
-			}
+                // Create the new type.
+                Ok(self
+                    .ctx
+                    .intern_ty(IntTy::new(ty.dir, lb.value.clone(), rb.value.clone()).maybe_null()))
+            }
 
-			// All other types we simply cannot constrain by range.
-			_ => {
-				self.emit(
-					DiagBuilder2::error(format!("{} cannot be constrained by range", ty.kind_desc()))
-					.span(con.span)
-				);
-				return Err(());
-			}
-		}
-	}
+            // All other types we simply cannot constrain by range.
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "{} cannot be constrained by range",
+                        ty.kind_desc()
+                    ))
+                    .span(con.span),
+                );
+                return Err(());
+            }
+        }
+    }
 
-	/// Apply an array constraint to a type.
-	pub fn apply_array_constraint(&self, ty: &'ctx Ty, con: Spanned<&hir::ArrayConstraint>) -> Result<&'ctx Ty> {
-		// Determine the inner type to which the constraint shall be applied.
-		let ty = self.ctx.deref_named_type(ty)?;
-		match *ty {
-			Ty::Array(ref ty) => {
-				let indices = if !con.value.index.is_empty() {
-					if con.value.index.len() != ty.indices.len() {
-						self.emit(
-							DiagBuilder2::error(format!("constrained {} indices, but array has {}", con.value.index.len(), ty.indices.len()))
-							.span(con.span)
-							.add_note(format!("`{}` constrained with `{}`", ty, con.span.extract()))
-						);
-						return Err(());
-					}
-					ty.indices.iter()
-						.zip(con.value.index.iter())
-						.map(|(ty, con)| self.apply_index_constraint(ty, con.as_ref()))
-						.collect::<Result<Vec<_>>>()?
-				} else {
-					ty.indices.clone()
-				};
-				let element = if let Some(ref elem_con) = con.value.elem {
-					match elem_con.value {
-						hir::ElementConstraint::Array(ref ac) => {
-							self.apply_array_constraint(&*ty.element, Spanned::new(ac, elem_con.span))?
-						}
-						hir::ElementConstraint::Record(ref rc) => {
-							self.apply_record_constraint(&*ty.element, Spanned::new(rc, elem_con.span))?
-						}
-					}
-				} else {
-					&*ty.element
-				};
-				Ok(self.ctx.intern_ty(ArrayTy::new(indices, Box::new(element.clone()))))
-			}
-			_ => {
-				self.emit(
-					DiagBuilder2::error(format!("array constraint `{}` does not apply to {}", con.span.extract(), ty.kind_desc()))
-					.span(con.span)
-				);
-				return Err(());
-			}
-		}
-	}
+    /// Apply an array constraint to a type.
+    pub fn apply_array_constraint(
+        &self,
+        ty: &'ctx Ty,
+        con: Spanned<&hir::ArrayConstraint>,
+    ) -> Result<&'ctx Ty> {
+        // Determine the inner type to which the constraint shall be applied.
+        let ty = self.ctx.deref_named_type(ty)?;
+        match *ty {
+            Ty::Array(ref ty) => {
+                let indices = if !con.value.index.is_empty() {
+                    if con.value.index.len() != ty.indices.len() {
+                        self.emit(
+                            DiagBuilder2::error(format!(
+                                "constrained {} indices, but array has {}",
+                                con.value.index.len(),
+                                ty.indices.len()
+                            ))
+                            .span(con.span)
+                            .add_note(format!(
+                                "`{}` constrained with `{}`",
+                                ty,
+                                con.span.extract()
+                            )),
+                        );
+                        return Err(());
+                    }
+                    ty.indices
+                        .iter()
+                        .zip(con.value.index.iter())
+                        .map(|(ty, con)| self.apply_index_constraint(ty, con.as_ref()))
+                        .collect::<Result<Vec<_>>>()?
+                } else {
+                    ty.indices.clone()
+                };
+                let element = if let Some(ref elem_con) = con.value.elem {
+                    match elem_con.value {
+                        hir::ElementConstraint::Array(ref ac) => self.apply_array_constraint(
+                            &*ty.element,
+                            Spanned::new(ac, elem_con.span),
+                        )?,
+                        hir::ElementConstraint::Record(ref rc) => self.apply_record_constraint(
+                            &*ty.element,
+                            Spanned::new(rc, elem_con.span),
+                        )?,
+                    }
+                } else {
+                    &*ty.element
+                };
+                Ok(self
+                    .ctx
+                    .intern_ty(ArrayTy::new(indices, Box::new(element.clone()))))
+            }
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "array constraint `{}` does not apply to {}",
+                        con.span.extract(),
+                        ty.kind_desc()
+                    ))
+                    .span(con.span),
+                );
+                return Err(());
+            }
+        }
+    }
 
-	/// Apply a record constraint to a type.
-	pub fn apply_record_constraint(&self, ty: &'ctx Ty, con: Spanned<&hir::RecordConstraint>) -> Result<&'ctx Ty> {
-		use moore_common::name::Name;
-		// Determine the inner type to which the constraint shall be applied.
-		let ty = self.ctx.deref_named_type(ty)?;
-		match *ty {
-			Ty::Record(ref ty) => {
-				let mut fields: Vec<(Name, &Ty)> = ty.fields
-					.iter()
-					.map(|&(name, ref ty)| (name, ty.as_ref()))
-					.collect();
-				let mut had_fails = false;
-				for &(name, ref con) in &con.value.elems {
-					// Find the field that we're supposed to constrain.
-					let idx = match ty.lookup.get(&name.value) {
-						Some(&idx) => idx,
-						None => {
-							self.emit(
-								DiagBuilder2::error(format!("record has no element `{}`", name.value))
-								.span(name.span)
-								.add_note(format!("{}", ty))
-							);
-							had_fails = true;
-							continue;
-						}
-					};
+    /// Apply a record constraint to a type.
+    pub fn apply_record_constraint(
+        &self,
+        ty: &'ctx Ty,
+        con: Spanned<&hir::RecordConstraint>,
+    ) -> Result<&'ctx Ty> {
+        use moore_common::name::Name;
+        // Determine the inner type to which the constraint shall be applied.
+        let ty = self.ctx.deref_named_type(ty)?;
+        match *ty {
+            Ty::Record(ref ty) => {
+                let mut fields: Vec<(Name, &Ty)> = ty
+                    .fields
+                    .iter()
+                    .map(|&(name, ref ty)| (name, ty.as_ref()))
+                    .collect();
+                let mut had_fails = false;
+                for &(name, ref con) in &con.value.elems {
+                    // Find the field that we're supposed to constrain.
+                    let idx = match ty.lookup.get(&name.value) {
+                        Some(&idx) => idx,
+                        None => {
+                            self.emit(
+                                DiagBuilder2::error(format!(
+                                    "record has no element `{}`",
+                                    name.value
+                                ))
+                                .span(name.span)
+                                .add_note(format!("{}", ty)),
+                            );
+                            had_fails = true;
+                            continue;
+                        }
+                    };
 
-					// Constrain the field.
-					fields[idx].1 = match con.value {
-						hir::ElementConstraint::Array(ref ac) => {
-							self.apply_array_constraint(&fields[idx].1, Spanned::new(ac, con.span))?
-						}
-						hir::ElementConstraint::Record(ref rc) => {
-							self.apply_record_constraint(&fields[idx].1, Spanned::new(rc, con.span))?
-						}
-					};
-				}
-				if had_fails {
-					return Err(());
-				}
-				let fields = fields.into_iter().map(|(name, ty)| (name, Box::new(ty.clone()))).collect();
-				Ok(self.ctx.intern_ty(RecordTy::new(fields)))
-			}
-			_ => {
-				self.emit(
-					DiagBuilder2::error(format!("array constraint `{}` does not apply to {}", con.span.extract(), ty.kind_desc()))
-					.span(con.span)
-				);
-				return Err(());
-			}
-		}
-	}
+                    // Constrain the field.
+                    fields[idx].1 = match con.value {
+                        hir::ElementConstraint::Array(ref ac) => {
+                            self.apply_array_constraint(&fields[idx].1, Spanned::new(ac, con.span))?
+                        }
+                        hir::ElementConstraint::Record(ref rc) => self
+                            .apply_record_constraint(&fields[idx].1, Spanned::new(rc, con.span))?,
+                    };
+                }
+                if had_fails {
+                    return Err(());
+                }
+                let fields = fields
+                    .into_iter()
+                    .map(|(name, ty)| (name, Box::new(ty.clone())))
+                    .collect();
+                Ok(self.ctx.intern_ty(RecordTy::new(fields)))
+            }
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "array constraint `{}` does not apply to {}",
+                        con.span.extract(),
+                        ty.kind_desc()
+                    ))
+                    .span(con.span),
+                );
+                return Err(());
+            }
+        }
+    }
 
-	/// Apply an index constraint to an array index.
-	pub fn apply_index_constraint(&self, index: &'ctx ArrayIndex, con: Spanned<&hir::DiscreteRange>) -> Result<ArrayIndex> {
-		// Convert the discrete range applied as constraint into a type.
-		let con_ty = Spanned::new(self.ctx.deref_named_type(self.type_from_discrete_range(con)?)?, con.span);
+    /// Apply an index constraint to an array index.
+    pub fn apply_index_constraint(
+        &self,
+        index: &'ctx ArrayIndex,
+        con: Spanned<&hir::DiscreteRange>,
+    ) -> Result<ArrayIndex> {
+        // Convert the discrete range applied as constraint into a type.
+        let con_ty = Spanned::new(
+            self.ctx
+                .deref_named_type(self.type_from_discrete_range(con)?)?,
+            con.span,
+        );
 
-		// Impose the type as a subtype on the index.
-		let index_ty = match *index {
-			ArrayIndex::Unbounded(ref ty) | ArrayIndex::Constrained(ref ty) => {
-				self.apply_subtype(&*ty, con_ty)?
-			}
-		};
+        // Impose the type as a subtype on the index.
+        let index_ty = match *index {
+            ArrayIndex::Unbounded(ref ty) | ArrayIndex::Constrained(ref ty) => {
+                self.apply_subtype(&*ty, con_ty)?
+            }
+        };
 
-		Ok(ArrayIndex::Constrained(Box::new(index_ty.clone())))
-	}
+        Ok(ArrayIndex::Constrained(Box::new(index_ty.clone())))
+    }
 
-	/// Impose a subtype on a type.
-	pub fn apply_subtype(&self, orig_ty: &'ctx Ty, subty: Spanned<&Ty>) -> Result<&'ctx Ty> {
-		let deref = self.ctx.deref_named_type(orig_ty)?;
-		let span = subty.span;
-		match (deref, self.ctx.deref_named_type(subty.value)?) {
-			(&Ty::Int(ref ty), &Ty::Int(ref subty)) => {
-				use std::cmp::{max, min};
-				if ty.dir != subty.dir {
-					self.emit(
-						DiagBuilder2::error(format!("directions disagree; `{}` and `{}`", subty, ty))
-						.span(span)
-					);
-					return Err(());
-				}
-				let (ty_lo, ty_hi, subty_lo, subty_hi) = match ty.dir {
-					Dir::To => (&ty.left_bound, &ty.right_bound, &subty.left_bound, &subty.right_bound),
-					Dir::Downto => (&ty.right_bound, &ty.left_bound, &subty.right_bound, &subty.left_bound),
-				};
-				if ty_lo > subty_lo || ty_hi < subty_hi {
-					self.emit(
+    /// Impose a subtype on a type.
+    pub fn apply_subtype(&self, orig_ty: &'ctx Ty, subty: Spanned<&Ty>) -> Result<&'ctx Ty> {
+        let deref = self.ctx.deref_named_type(orig_ty)?;
+        let span = subty.span;
+        match (deref, self.ctx.deref_named_type(subty.value)?) {
+            (&Ty::Int(ref ty), &Ty::Int(ref subty)) => {
+                use std::cmp::{max, min};
+                if ty.dir != subty.dir {
+                    self.emit(
+                        DiagBuilder2::error(format!(
+                            "directions disagree; `{}` and `{}`",
+                            subty, ty
+                        ))
+                        .span(span),
+                    );
+                    return Err(());
+                }
+                let (ty_lo, ty_hi, subty_lo, subty_hi) = match ty.dir {
+                    Dir::To => (
+                        &ty.left_bound,
+                        &ty.right_bound,
+                        &subty.left_bound,
+                        &subty.right_bound,
+                    ),
+                    Dir::Downto => (
+                        &ty.right_bound,
+                        &ty.left_bound,
+                        &subty.right_bound,
+                        &subty.left_bound,
+                    ),
+                };
+                if ty_lo > subty_lo || ty_hi < subty_hi {
+                    self.emit(
 						DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", subty, ty))
 						.span(span)
 						.add_note("The range of a subtype must be entirely contained within the range of the target type.")
 						// TODO: Add reference to standard.
 					);
-				}
-				let lo = max(ty_lo, subty_lo);
-				let hi = min(ty_hi, subty_hi);
-				let (lb, rb) = match ty.dir {
-					Dir::To => (lo, hi),
-					Dir::Downto => (hi, lo),
-				};
-				let new_ty: Ty = IntTy::new(ty.dir, lb.clone(), rb.clone()).into();
-				if &new_ty == deref {
-					Ok(orig_ty)
-				} else {
-					Ok(self.ctx.intern_ty(new_ty))
-				}
-			}
-			_ => {
-				self.emit(
-					DiagBuilder2::error(format!("`{}` is not a subtype of `{}`", subty.span.extract(), orig_ty))
-					.span(span)
-				);
-				return Err(());
-			}
-		}
-	}
+                }
+                let lo = max(ty_lo, subty_lo);
+                let hi = min(ty_hi, subty_hi);
+                let (lb, rb) = match ty.dir {
+                    Dir::To => (lo, hi),
+                    Dir::Downto => (hi, lo),
+                };
+                let new_ty: Ty = IntTy::new(ty.dir, lb.clone(), rb.clone()).into();
+                if &new_ty == deref {
+                    Ok(orig_ty)
+                } else {
+                    Ok(self.ctx.intern_ty(new_ty))
+                }
+            }
+            _ => {
+                self.emit(
+                    DiagBuilder2::error(format!(
+                        "`{}` is not a subtype of `{}`",
+                        subty.span.extract(),
+                        orig_ty
+                    ))
+                    .span(span),
+                );
+                return Err(());
+            }
+        }
+    }
 
-	/// Evaluate a discrete range as a type.
-	pub fn type_from_discrete_range(&self, range: Spanned<&hir::DiscreteRange>) -> Result<&'ctx Ty> {
-		match *range.value {
-			hir::DiscreteRange::Subtype(id) => self.ctx.ty(id),
-			hir::DiscreteRange::Range(ref r) => self.type_from_range(Spanned::new(r, range.span)),
-		}
-	}
+    /// Evaluate a discrete range as a type.
+    pub fn type_from_discrete_range(
+        &self,
+        range: Spanned<&hir::DiscreteRange>,
+    ) -> Result<&'ctx Ty> {
+        match *range.value {
+            hir::DiscreteRange::Subtype(id) => self.ctx.ty(id),
+            hir::DiscreteRange::Range(ref r) => self.type_from_range(Spanned::new(r, range.span)),
+        }
+    }
 
-	/// Evaluate a range as a type.
-	pub fn type_from_range(&self, range: Spanned<&hir::Range>) -> Result<&'ctx Ty> {
-		match *range.value {
-			hir::Range::Immediate(dir, lb, rb) => {
-				let lb = self.ctx.const_value(lb)?;
-				let rb = self.ctx.const_value(rb)?;
-				match (lb, rb) {
-					(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-						Ok(self.ctx.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone())))
-					}
-					_ => {
-						self.emit(
-							DiagBuilder2::error(format!("`{} {} {}` is not a valid range", lb, dir, rb))
-							.span(range.span)
-						);
-						return Err(());
-					}
-				}
-			}
-		}
-	}
+    /// Evaluate a range as a type.
+    pub fn type_from_range(&self, range: Spanned<&hir::Range>) -> Result<&'ctx Ty> {
+        match *range.value {
+            hir::Range::Immediate(dir, lb, rb) => {
+                let lb = self.ctx.const_value(lb)?;
+                let rb = self.ctx.const_value(rb)?;
+                match (lb, rb) {
+                    (&Const::Int(ref lb), &Const::Int(ref rb)) => Ok(self
+                        .ctx
+                        .intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()))),
+                    _ => {
+                        self.emit(
+                            DiagBuilder2::error(format!(
+                                "`{} {} {}` is not a valid range",
+                                lb, dir, rb
+                            ))
+                            .span(range.span),
+                        );
+                        return Err(());
+                    }
+                }
+            }
+        }
+    }
 }
 
 use crate::ty2::RangeDir;
 impl From<Dir> for RangeDir {
-	fn from(d: Dir) -> RangeDir {
-		match d {
-			Dir::To => RangeDir::To,
-			Dir::Downto => RangeDir::Downto,
-		}
-	}
+    fn from(d: Dir) -> RangeDir {
+        match d {
+            Dir::To => RangeDir::To,
+            Dir::Downto => RangeDir::Downto,
+        }
+    }
 }
 
 /// Performs a type check.
 pub trait Typeck<I> {
-	fn typeck(&self, id: I);
+    fn typeck(&self, id: I);
 }
 
 /// A macro to implement the `Typeck` trait.
@@ -503,55 +617,69 @@ macro_rules! impl_typeck_err {
 }
 
 // Implement the `Typeck` trait for everything that supports type calculation.
-impl<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb, I> Typeck<I> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> where ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
-	fn typeck(&self, id: I) {
-		match ScoreContext::make(self.ctx, id) {
-			Ok(_) => (),
-			Err(()) => self.failed.set(true),
-		}
-	}
+impl<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 'sb, I> Typeck<I>
+    for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx>
+where
+    ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>,
+{
+    fn typeck(&self, id: I) {
+        match ScoreContext::make(self.ctx, id) {
+            Ok(_) => (),
+            Err(()) => self.failed.set(true),
+        }
+    }
 }
 
 /// Checks whether a node is of a given type.
 pub trait TypeckNode<'ctx, I> {
-	fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()>;
+    fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()>;
 }
 
 // Implement the `TypeckNode` trait for everything that supports type
 // calculation.
-impl<'lazy, 'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> where ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty> {
-	fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()> {
-		let actual = self.make(id)?;
-		if actual != expected {
-			self.emit(
-				DiagBuilder2::error(format!("typecheck failed, expected {:?}, got {:?}", expected, actual))
-			);
-			Err(())
-		} else {
-			Ok(())
-		}
-	}
+impl<'lazy, 'sb, 'ast, 'ctx, I> TypeckNode<'ctx, I> for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
+where
+    ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, &'ctx Ty>,
+{
+    fn typeck_node(&self, id: I, expected: &'ctx Ty) -> Result<()> {
+        let actual = self.make(id)?;
+        if actual != expected {
+            self.emit(DiagBuilder2::error(format!(
+                "typecheck failed, expected {:?}, got {:?}",
+                expected, actual
+            )));
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
 }
 
 macro_rules! unimp {
-	($slf:tt, $id:expr) => {{
-		$slf.emit(DiagBuilder2::bug(format!("typeck of {:?} not implemented", $id)));
-		return;
-	}}
+    ($slf:tt, $id:expr) => {{
+        $slf.emit(DiagBuilder2::bug(format!(
+            "typeck of {:?} not implemented",
+            $id
+        )));
+        return;
+    }};
 }
 
 macro_rules! unimp_err {
-	($slf:tt, $id:expr) => {{
-		$slf.emit(DiagBuilder2::bug(format!("typeck of {:?} not implemented", $id)));
-		return Err(());
-	}}
+    ($slf:tt, $id:expr) => {{
+        $slf.emit(DiagBuilder2::bug(format!(
+            "typeck of {:?} not implemented",
+            $id
+        )));
+        return Err(());
+    }};
 }
 
 macro_rules! unimpmsg {
-	($slf:tt, $span:expr, $msg:expr) => {{
-		$slf.emit(DiagBuilder2::bug(format!("{} not implemented", $msg)).span($span));
-		return Err(());
-	}}
+    ($slf:tt, $span:expr, $msg:expr) => {{
+        $slf.emit(DiagBuilder2::bug(format!("{} not implemented", $msg)).span($span));
+        return Err(());
+    }};
 }
 
 impl_typeck_err!(self, id: LibRef => {
@@ -960,18 +1088,20 @@ impl_typeck_err!(self, id: SigAssignStmtRef => {
 });
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-	/// Replace `Ty::Named` by the actual type definition recursively.
-	pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty> where 'ctx: 'a {
-		match ty {
-			&Ty::Named(_, tmr) => {
-				let inner = self.ty(tmr)?;
-				self.deref_named_type(inner)
-			}
-			other => Ok(other)
-		}
-	}
+    /// Replace `Ty::Named` by the actual type definition recursively.
+    pub fn deref_named_type<'a>(&self, ty: &'a Ty) -> Result<&'a Ty>
+    where
+        'ctx: 'a,
+    {
+        match ty {
+            &Ty::Named(_, tmr) => {
+                let inner = self.ty(tmr)?;
+                self.deref_named_type(inner)
+            }
+            other => Ok(other),
+        }
+    }
 }
-
 
 /// Determine the type of a type mark.
 impl_make!(self, id: TypeMarkRef => &Ty {
@@ -980,7 +1110,6 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 		TypeMarkRef::Subtype(id) => self.make(id),
 	}
 });
-
 
 /// Determine the type of a subtype indication.
 #[deprecated]
@@ -1002,7 +1131,6 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
 	// 	}
 	// }
 });
-
 
 /// Determine the type of a type declaration.
 impl_make!(self, id: TypeDeclRef => &Ty {
@@ -1112,38 +1240,42 @@ impl_make!(self, id: TypeDeclRef => &Ty {
 	}
 });
 
-
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-	pub fn make_range_ty(&self, dir: hir::Dir, lb_id: ExprRef, rb_id: ExprRef, span: Span) -> Result<&'ctx Ty> {
-		let lb = self.const_value(lb_id)?;
-		let rb = self.const_value(rb_id)?;
-		Ok(match (lb, rb) {
-			(&Const::Int(ref lb), &Const::Int(ref rb)) => {
-				use crate::ty2::{IntegerBasetype, Range};
-				let ty = IntegerBasetype::new(Range::with_left_right(dir, lb.value.clone(), rb.value.clone()));
-				debugln!("type from range `{}` = {}", span.extract(), ty);
-				self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
-			}
+    pub fn make_range_ty(
+        &self,
+        dir: hir::Dir,
+        lb_id: ExprRef,
+        rb_id: ExprRef,
+        span: Span,
+    ) -> Result<&'ctx Ty> {
+        let lb = self.const_value(lb_id)?;
+        let rb = self.const_value(rb_id)?;
+        Ok(match (lb, rb) {
+            (&Const::Int(ref lb), &Const::Int(ref rb)) => {
+                use crate::ty2::{IntegerBasetype, Range};
+                let ty = IntegerBasetype::new(Range::with_left_right(
+                    dir,
+                    lb.value.clone(),
+                    rb.value.clone(),
+                ));
+                debugln!("type from range `{}` = {}", span.extract(), ty);
+                self.intern_ty(IntTy::new(dir, lb.value.clone(), rb.value.clone()).maybe_null())
+            }
 
-			(&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
-				self.emit(
-					DiagBuilder2::error("Float range bounds not yet supported")
-					.span(span)
-				);
-				return Err(());
-			}
+            (&Const::Float(ref _lb), &Const::Float(ref _rb)) => {
+                self.emit(DiagBuilder2::error("Float range bounds not yet supported").span(span));
+                return Err(());
+            }
 
-			_ => {
-				self.emit(
-					DiagBuilder2::error("Bounds of range are not of the same type")
-					.span(span)
-				);
-				return Err(());
-			}
-		})
-	}
+            _ => {
+                self.emit(
+                    DiagBuilder2::error("Bounds of range are not of the same type").span(span),
+                );
+                return Err(());
+            }
+        })
+    }
 }
-
 
 /// Determine the type of a subtype declaration.
 impl_make!(self, id: SubtypeDeclRef => &Ty {
@@ -1151,13 +1283,11 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 	self.ty(hir.subty)
 });
 
-
 /// Determine the type of a signal declaration.
 // impl_make!(self, id: SignalDeclRef => &Ty {
 // 	let hir = self.lazy_hir(id)?;
 // 	self.lazy_typeval(hir.decl.ty)
 // });
-
 
 // /// Determine the type of an expression.
 // impl_make!(self, id: ExprRef => &Ty {
@@ -1203,7 +1333,6 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 // 		_ => unimp_err!(self, id),
 // 	}
 // });
-
 
 /// Determine the type of a typed node.
 impl_make!(self, id: TypedNodeRef => &Ty {

@@ -1,7 +1,7 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use std::fmt;
 use std::borrow::Cow;
+use std::fmt;
 
 use crate::konst2::traits::*;
 use crate::ty2::{FloatingType, Type};

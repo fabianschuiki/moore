@@ -4,12 +4,12 @@
 
 #![deny(missing_docs)]
 
-mod traits;
-mod integer;
-mod floating;
 mod arena;
+mod floating;
+mod integer;
+mod traits;
 
-pub use self::traits::*;
-pub use self::integer::*;
-pub use self::floating::*;
 pub use self::arena::*;
+pub use self::floating::*;
+pub use self::integer::*;
+pub use self::traits::*;

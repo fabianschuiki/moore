@@ -6,12 +6,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::common::name::Name;
 use crate::common::errors::*;
-use crate::common::source::{Spanned, Span};
+use crate::common::name::Name;
 use crate::common::score::Result;
+use crate::common::source::{Span, Spanned};
 
-use crate::score::{ScoreContext, Def};
+use crate::score::{Def, ScoreContext};
 use crate::ty::Ty;
 
 /// A type requirement on an overloaded entity.
@@ -31,7 +31,7 @@ impl<'ctx> OverloadReq<'ctx> {
     /// Check if a type matches this requirement.
     pub fn matches(&self, ty: &Ty) -> bool {
         match *self {
-            OverloadReq::Enum(ref req)    => req.matches(ty),
+            OverloadReq::Enum(ref req) => req.matches(ty),
             OverloadReq::Subprog(ref req) => req.matches(ty),
         }
     }
@@ -52,7 +52,13 @@ impl<'ctx> SignatureReq<'ctx> {
     /// Check if a type matches this requirement.
     pub fn matches(&self, ty: &Ty) -> bool {
         if let Ty::Subprog(ref ty) = *ty {
-            if !self.return_type.is_any() && !ty.ret.as_ref().map(|t| self.return_type.matches(t)).unwrap_or(false) {
+            if !self.return_type.is_any()
+                && !ty
+                    .ret
+                    .as_ref()
+                    .map(|t| self.return_type.matches(t))
+                    .unwrap_or(false)
+            {
                 debugln!("return type mismatch: {} vs {:?}", ty, self);
                 return false;
             }
@@ -64,7 +70,13 @@ impl<'ctx> SignatureReq<'ctx> {
             for req in &self.positional {
                 let arg = arg_iter.next().unwrap(); // never fails due to above check
                 if !req.matches(&arg.ty) {
-                    debugln!("positional mismatch: {} vs {:?} in {} vs {:?}", arg.ty, req, ty, self);
+                    debugln!(
+                        "positional mismatch: {} vs {:?} in {} vs {:?}",
+                        arg.ty,
+                        req,
+                        ty,
+                        self
+                    );
                     return false;
                 }
             }
@@ -73,19 +85,31 @@ impl<'ctx> SignatureReq<'ctx> {
                 let name = match arg.name {
                     Some(name) => name,
                     None => {
-                        debugln!("unhandled positional arg: {} in {} vs {:?}", arg.ty, ty, self);
-                        return false
-                    },
+                        debugln!(
+                            "unhandled positional arg: {} in {} vs {:?}",
+                            arg.ty,
+                            ty,
+                            self
+                        );
+                        return false;
+                    }
                 };
                 let req = match self.named.get(&name) {
                     Some(req) => req,
                     None => {
                         debugln!("unknown named arg: {} in {} vs {:?}", name, ty, self);
-                        return false
-                    },
+                        return false;
+                    }
                 };
                 if !req.matches(&arg.ty) {
-                    debugln!("named mismatch `{}`: {} vs {:?} in {} vs {:?}", name, arg.ty, req, ty, self);
+                    debugln!(
+                        "named mismatch `{}`: {} vs {:?} in {} vs {:?}",
+                        name,
+                        arg.ty,
+                        req,
+                        ty,
+                        self
+                    );
                     return false;
                 }
                 unhandled_names.remove(&name);
@@ -142,17 +166,26 @@ fn are_types_matching(a: &Ty, b: &Ty) -> bool {
 }
 
 /// Reduce overloaded definitions.
-pub fn reduce_overloads(ctx: &ScoreContext, defs: &[Spanned<Def>], req: &OverloadReq, _span: Span) -> Result<Vec<Spanned<Def>>> {
+pub fn reduce_overloads(
+    ctx: &ScoreContext,
+    defs: &[Spanned<Def>],
+    req: &OverloadReq,
+    _span: Span,
+) -> Result<Vec<Spanned<Def>>> {
     debugln!("resolving overloaded {:?} with requirement {:?}", defs, req);
 
     // Filter the definitions by kind such that only those remain which have any
     // chance of applying to the requirement.
-    let filtered: Vec<_> = defs.iter().enumerate().filter(|&(_, def)| match (def.value, req) {
-        (Def::Enum(..), &OverloadReq::Enum(..)) => true,
-        (Def::BuiltinOp(..), &OverloadReq::Subprog(..)) => true,
-        (Def::Subprog(..), &OverloadReq::Subprog(..)) => true,
-        _ => false,
-    }).collect();
+    let filtered: Vec<_> = defs
+        .iter()
+        .enumerate()
+        .filter(|&(_, def)| match (def.value, req) {
+            (Def::Enum(..), &OverloadReq::Enum(..)) => true,
+            (Def::BuiltinOp(..), &OverloadReq::Subprog(..)) => true,
+            (Def::Subprog(..), &OverloadReq::Subprog(..)) => true,
+            _ => false,
+        })
+        .collect();
     if filtered.is_empty() {
         return Ok(vec![]);
     }
@@ -160,12 +193,17 @@ pub fn reduce_overloads(ctx: &ScoreContext, defs: &[Spanned<Def>], req: &Overloa
     // Determine the type of the applicable definitions.
     let types = filtered
         .iter()
-        .map(|&(i, def)| Ok((i, match def.value {
-            Def::Enum(id)      => ctx.lazy_typeval(id)?,
-            Def::BuiltinOp(id) => ctx.lazy_typeval(id)?,
-            Def::Subprog(id)   => ctx.lazy_typeval(id)?,
-            _ => unreachable!(),
-        })))
+        .map(|&(i, def)| {
+            Ok((
+                i,
+                match def.value {
+                    Def::Enum(id) => ctx.lazy_typeval(id)?,
+                    Def::BuiltinOp(id) => ctx.lazy_typeval(id)?,
+                    Def::Subprog(id) => ctx.lazy_typeval(id)?,
+                    _ => unreachable!(),
+                },
+            ))
+        })
         .collect::<Vec<Result<_>>>()
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
@@ -180,21 +218,22 @@ pub fn reduce_overloads(ctx: &ScoreContext, defs: &[Spanned<Def>], req: &Overloa
 }
 
 /// Resolve overloaded definitions to exactly one unambiguous definition.
-pub fn resolve_overloads(ctx: &ScoreContext, defs: &[Spanned<Def>], req: &OverloadReq, span: Span) -> Result<Spanned<Def>> {
+pub fn resolve_overloads(
+    ctx: &ScoreContext,
+    defs: &[Spanned<Def>],
+    req: &OverloadReq,
+    span: Span,
+) -> Result<Spanned<Def>> {
     let reduced = reduce_overloads(ctx, defs, req, span)?;
     if reduced.is_empty() {
         ctx.emit(
-            DiagBuilder2::error("no overload applies")
-            .span(span)
-            // TODO: Show available implementations.
+            DiagBuilder2::error("no overload applies").span(span), // TODO: Show available implementations.
         );
         debugln!("available definitions: {:#?}", defs);
         Err(())
     } else if reduced.len() > 1 {
         ctx.emit(
-            DiagBuilder2::error(format!("`{}` is ambiguous", span.extract()))
-            .span(span)
-            // TODO: Show implementations that matched.
+            DiagBuilder2::error(format!("`{}` is ambiguous", span.extract())).span(span), // TODO: Show implementations that matched.
         );
         debugln!("matching definitions: {:#?}", reduced);
         Err(())

@@ -2,16 +2,16 @@
 
 //! Dealing with types in an abstract manner.
 
-use std::fmt::{self, Debug, Display};
 use std::borrow::Borrow;
+use std::fmt::{self, Debug, Display};
 
 pub use num::BigInt;
 
-use crate::ty2::ints::*;
-use crate::ty2::floats::*;
-use crate::ty2::enums::*;
-use crate::ty2::physical::*;
 use crate::ty2::access::*;
+use crate::ty2::enums::*;
+use crate::ty2::floats::*;
+use crate::ty2::ints::*;
+use crate::ty2::physical::*;
 
 /// An interface for dealing with types.
 ///

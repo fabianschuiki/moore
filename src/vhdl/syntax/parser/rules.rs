@@ -45,21 +45,17 @@
 //! | time_expression                      | expr                 |
 //! | type_mark                            | name                 |
 
-use std::fmt::Display;
+use crate::ast;
+use crate::lexer::token::*;
+use crate::parser::core::*;
+use crate::parser::TokenStream;
 use moore_common::errors::*;
 use moore_common::name::*;
 use moore_common::source::*;
-use crate::lexer::token::*;
-use crate::parser::TokenStream;
-use crate::parser::core::*;
-use crate::ast;
+use std::fmt::Display;
 
 pub trait Parser: TokenStream<Token> {}
-impl<T> Parser for T
-where
-    T: TokenStream<Token>,
-{
-}
+impl<T> Parser for T where T: TokenStream<Token> {}
 
 #[derive(Debug)]
 pub struct Recovered;
@@ -77,13 +73,10 @@ impl From<Recovered> for Reported {
 
 macro_rules! unimp {
     ($parser:expr, $name:expr) => {{
-    	let q = $parser.peek(0).span;
-    	$parser.emit(
-    		DiagBuilder2::error(format!("{} not yet implemented", $name))
-    		.span(q)
-    	);
-    	return Err(Reported);
-    }}
+        let q = $parser.peek(0).span;
+        $parser.emit(DiagBuilder2::error(format!("{} not yet implemented", $name)).span(q));
+        return Err(Reported);
+    }};
 }
 
 /// Parse an entire design file. IEEE 1076-2008 section 13.1.
@@ -138,11 +131,10 @@ pub fn parse_design_unit<P: Parser>(p: &mut P) -> RecoveredResult<ast::DesignUni
                 DiagBuilder2::error(format!(
                     "Expected a primary or secondary unit, instead found {}",
                     tkn
-                )).span(sp)
-                    .add_note(
-                        "`entity`, `configuration`, `package`, and `context` are primary units",
-                    )
-                    .add_note("`architecture` and `package body` are secondary units"),
+                ))
+                .span(sp)
+                .add_note("`entity`, `configuration`, `package`, and `context` are primary units")
+                .add_note("`architecture` and `package body` are secondary units"),
             );
             Err(Reported)
         }
@@ -393,8 +385,9 @@ where
                     DiagBuilder2::warning(format!(
                         "`{}` does not match {} name `{}`",
                         n.value, msg, name.value
-                    )).span(n.span)
-                        .add_note(format!("see IEEE 1076-2008 {}", sec)),
+                    ))
+                    .span(n.span)
+                    .add_note(format!("see IEEE 1076-2008 {}", sec)),
                 );
             }
         } else {
@@ -402,8 +395,9 @@ where
                 DiagBuilder2::warning(format!(
                     "Label `{}` is given at the end of {}, but not at the beginning",
                     n.value, msg
-                )).span(n.span)
-                    .add_note(format!("see IEEE 1076-2008 {}", sec)),
+                ))
+                .span(n.span)
+                .add_note(format!("see IEEE 1076-2008 {}", sec)),
             );
         }
     }
@@ -645,8 +639,9 @@ pub fn parse_intf_decl<P: Parser>(
                         DiagBuilder2::error(format!(
                             "Expected default subprogram name or `<>` after `is`, found {} instead",
                             tkn
-                        )).span(span)
-                            .add_note("see IEEE 1076-2008 section 6.5.4"),
+                        ))
+                        .span(span)
+                        .add_note("see IEEE 1076-2008 section 6.5.4"),
                     );
                     return Err(Reported);
                 }
@@ -911,8 +906,9 @@ pub fn parse_subprog_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::Subp
         DiagBuilder2::error(format!(
             "Expected `;` or keyword `is` after subprogram specification, found {} instead",
             pk.value
-        )).span(pk.span)
-            .add_note("see IEEE 1076-2008 section 4.2"),
+        ))
+        .span(pk.span)
+        .add_note("see IEEE 1076-2008 section 4.2"),
     );
     Err(Reported)
 }
@@ -1032,7 +1028,8 @@ pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Par
                 expr: first,
             })
         }
-    }).map_err(|e| e.into())
+    })
+    .map_err(|e| e.into())
 }
 
 pub fn parse_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
@@ -1633,7 +1630,8 @@ pub fn parse_type_decl<P: Parser>(
                     DiagBuilder2::error(format!(
                         "Expected type definition after keyword `is`, found {} instead",
                         tkn
-                    )).span(sp),
+                    ))
+                    .span(sp),
                 );
                 return Err(Reported);
             }
@@ -1786,8 +1784,9 @@ pub fn parse_object_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::ObjDecl> {
                 DiagBuilder2::error(format!(
                     "Expected a constant, signal, variable, or file declaration, found {} instead",
                     wrong
-                )).span(span)
-                    .add_note("see IEEE 1076-2008 section 6.4.2"),
+                ))
+                .span(span)
+                .add_note("see IEEE 1076-2008 section 6.4.2"),
             );
             return Err(Reported);
         }
@@ -1890,8 +1889,9 @@ pub fn parse_subprog_spec<P: Parser>(p: &mut P) -> ReportedResult<ast::SubprogSp
                 DiagBuilder2::error(format!(
                     "Expected `procedure` or `function`, found {} instead",
                     wrong
-                )).span(span)
-                    .add_note("see IEEE 1076-2008 section 4.2"),
+                ))
+                .span(span)
+                .add_note("see IEEE 1076-2008 section 4.2"),
             );
             return Err(Reported);
         }
@@ -1906,9 +1906,10 @@ pub fn parse_subprog_spec<P: Parser>(p: &mut P) -> ReportedResult<ast::SubprogSp
                 DiagBuilder2::error(format!(
                     "Expected subprogram name, found {} instead",
                     pk.value
-                )).span(pk.span)
-                    .add_note("A subprogram name is either an identifier or an operator symbol")
-                    .add_note("see IEEE 1076-2008 section 4.2"),
+                ))
+                .span(pk.span)
+                .add_note("A subprogram name is either an identifier or an operator symbol")
+                .add_note("see IEEE 1076-2008 section 4.2"),
             );
             return Err(Reported);
         }
@@ -2076,7 +2077,8 @@ pub fn parse_block_comp_decl_item<P: Parser>(p: &mut P) -> ReportedResult<ast::D
                 DiagBuilder2::error(format!(
                     "Expected configuration item, found {} instead",
                     wrong
-                )).span(sp),
+                ))
+                .span(sp),
             );
             Err(Reported)
         }
@@ -2142,12 +2144,13 @@ pub fn parse_binding_ind<P: Parser>(p: &mut P) -> ReportedResult<ast::BindingInd
                     DiagBuilder2::error(format!(
                         "Expected entity aspect after `use`, found {} instead",
                         pk.value
-                    )).span(pk.span)
-                        .add_note("An entity aspect is one of the following:")
-                        .add_note("`entity <name>(<architecture>)`")
-                        .add_note("`configuration <name>`")
-                        .add_note("`open`")
-                        .add_note("see IEEE 1076-2008 section 7.3.2.2"),
+                    ))
+                    .span(pk.span)
+                    .add_note("An entity aspect is one of the following:")
+                    .add_note("`entity <name>(<architecture>)`")
+                    .add_note("`configuration <name>`")
+                    .add_note("`open`")
+                    .add_note("see IEEE 1076-2008 section 7.3.2.2"),
                 );
                 return Err(Reported);
             }
@@ -2330,8 +2333,9 @@ pub fn parse_attr_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::AttrDecl> {
             DiagBuilder2::error(format!(
                 "Expected `:` or `of` after attribute name, found {} instead",
                 pk.value
-            )).span(pk.span)
-                .add_note("see IEEE 1076-2008 sections 6.7 and 7.2"),
+            ))
+            .span(pk.span)
+            .add_note("see IEEE 1076-2008 sections 6.7 and 7.2"),
         );
         Err(Reported)
     }
@@ -2421,7 +2425,8 @@ pub fn parse_group_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::GroupDecl> 
                 let cls = parse_entity_class(p)?;
                 let open = accept(p, LtGt);
                 Ok((cls, open))
-            }).map_err(|e| e.into())
+            })
+            .map_err(|e| e.into())
         })?;
         ast::GroupData::Temp(elems)
     } else {
@@ -2430,10 +2435,11 @@ pub fn parse_group_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::GroupDecl> 
             DiagBuilder2::error(format!(
                 "Expected `:` or `is` after group name, found {} instead",
                 pk.value
-            )).span(pk.span)
-                .add_note("`group <name> is ...` declares a group template")
-                .add_note("`group <name> : ...` declares group")
-                .add_note("see IEEE 1076-2008 sections 6.9 and 6.10"),
+            ))
+            .span(pk.span)
+            .add_note("`group <name> is ...` declares a group template")
+            .add_note("`group <name> : ...` declares group")
+            .add_note("see IEEE 1076-2008 sections 6.9 and 6.10"),
         );
         return Err(Reported);
     };
@@ -2469,7 +2475,8 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
         Keyword(Kw::If) => match earliest(
             p,
             &[Keyword(Kw::Generate), Keyword(Kw::Then), Keyword(Kw::End)],
-        ).value
+        )
+        .value
         {
             Keyword(Kw::Generate) => parse_if_generate_stmt(p, label)?,
             _ => parse_if_stmt(p, label)?,
@@ -2481,7 +2488,8 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
         Keyword(Kw::Case) => match earliest(
             p,
             &[Keyword(Kw::Generate), Keyword(Kw::Is), Keyword(Kw::End)],
-        ).value
+        )
+        .value
         {
             Keyword(Kw::Generate) => parse_case_generate_stmt(p, label)?,
             _ => parse_case_stmt(p, label)?,
@@ -2493,7 +2501,8 @@ pub fn parse_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::Stmt> {
         Keyword(Kw::For) => match earliest(
             p,
             &[Keyword(Kw::Generate), Keyword(Kw::Loop), Keyword(Kw::End)],
-        ).value
+        )
+        .value
         {
             Keyword(Kw::Generate) => parse_for_generate_stmt(p, label)?,
             _ => parse_loop_stmt(p, label)?,
@@ -2850,8 +2859,9 @@ pub fn parse_nexit_stmt<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData> {
                 DiagBuilder2::error(format!(
                     "Expected `next` or `exit`, found {} instead",
                     pk.value
-                )).span(pk.span)
-                    .add_note("see IEEE 1076-2008 sections 10.11 and 10.12"),
+                ))
+                .span(pk.span)
+                .add_note("see IEEE 1076-2008 sections 10.11 and 10.12"),
             );
             return Err(Reported);
         }
@@ -3257,8 +3267,9 @@ pub fn parse_select_assign<P: Parser>(p: &mut P) -> ReportedResult<ast::StmtData
             DiagBuilder2::error(format!(
                 "Expected signal name, variable name or aggregate, found {} instead",
                 pk.value
-            )).span(pk.span)
-                .add_note("see IEEE 1076-2008 section 10.5"),
+            ))
+            .span(pk.span)
+            .add_note("see IEEE 1076-2008 section 10.5"),
         );
         return Err(Reported);
     };
@@ -3303,8 +3314,9 @@ pub fn parse_assign_dst_tail<P: Parser>(p: &mut P) -> ReportedResult<(ast::Assig
                 DiagBuilder2::error(format!(
                     "Expected `<=` or `:=` after assignment target, found {} instead",
                     pk.value
-                )).span(pk.span)
-                    .add_note("see IEEE 1076-2008 section 10.5"),
+                ))
+                .span(pk.span)
+                .add_note("see IEEE 1076-2008 section 10.5"),
             );
             return Err(Reported);
         }
@@ -3367,7 +3379,8 @@ pub fn parse_cond_waves<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::CondWav
             None
         };
         Ok(ast::CondWave(wave, cond))
-    }).map_err(|e| e.into())
+    })
+    .map_err(|e| e.into())
 }
 
 /// Parse a list of selected waveforms. See IEEE 1076-2008 section 10.5.
@@ -3389,7 +3402,8 @@ pub fn parse_selected_waves<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Sel
         )?;
         choices_span.expand(p.last_span());
         Ok(ast::SelectWave(wave, Spanned::new(choices, choices_span)))
-    }).map_err(|e| e.into())
+    })
+    .map_err(|e| e.into())
 }
 
 /// Parse a waveform. See IEEE 1076-2008 section 10.5.

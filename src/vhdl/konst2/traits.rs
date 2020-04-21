@@ -1,12 +1,12 @@
 // Copyright (c) 2017 Fabian Schuiki
 
-use std::fmt::{self, Debug, Display};
 use std::borrow::{Borrow, Cow};
+use std::fmt::{self, Debug, Display};
 
 use crate::common::errors::*;
 
-use crate::ty2::Type;
 use crate::konst2::{FloatingConst, IntegerConst};
+use crate::ty2::Type;
 
 /// An interface for dealing with constants.
 ///

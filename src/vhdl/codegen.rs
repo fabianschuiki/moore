@@ -86,40 +86,41 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                             return Err(());
                         }
                         ArrayIndex::Constrained(ref ty) => {
-                            let num =
-                                match **ty {
-                                    Ty::Int(ref ty) => {
-                                        let l = ty.len();
-                                        if l.is_negative() || l.is_zero() {
-                                            return Ok(llhd::void_ty());
-                                        }
-                                        match l.to_usize() {
-                                            Some(l) => l,
-                                            None => {
-                                                self.emit(
-                                                DiagBuilder2::error(format!("array index `{}` is too large; {} elements", ty, l))
-                                                // TODO: What span should we use here?
+                            let num = match **ty {
+                                Ty::Int(ref ty) => {
+                                    let l = ty.len();
+                                    if l.is_negative() || l.is_zero() {
+                                        return Ok(llhd::void_ty());
+                                    }
+                                    match l.to_usize() {
+                                        Some(l) => l,
+                                        None => {
+                                            self.emit(
+                                                DiagBuilder2::error(format!(
+                                                    "array index `{}` is too large; {} elements",
+                                                    ty, l
+                                                )), // TODO: What span should we use here?
                                             );
-                                                return Err(());
-                                            }
+                                            return Err(());
                                         }
                                     }
-                                    Ty::Enum(ref ty) => {
-                                        match self.lazy_hir(ty.decl)?.data.as_ref().unwrap().value {
-                                            hir::TypeData::Enum(ref lits) => lits.len(),
-                                            _ => unreachable!(),
-                                        }
+                                }
+                                Ty::Enum(ref ty) => {
+                                    match self.lazy_hir(ty.decl)?.data.as_ref().unwrap().value {
+                                        hir::TypeData::Enum(ref lits) => lits.len(),
+                                        _ => unreachable!(),
                                     }
-                                    _ => {
-                                        self.emit(
-                                            DiagBuilder2::error(format!(
-                                                "`{}` is an invalid array index type",
-                                                ty
-                                            )), // TODO: What span should we use here?
-                                        );
-                                        return Err(());
-                                    }
-                                };
+                                }
+                                _ => {
+                                    self.emit(
+                                        DiagBuilder2::error(format!(
+                                            "`{}` is an invalid array index type",
+                                            ty
+                                        )), // TODO: What span should we use here?
+                                    );
+                                    return Err(());
+                                }
+                            };
                             llty = llhd::array_ty(num, llty);
                         }
                     }

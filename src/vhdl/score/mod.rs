@@ -6,33 +6,33 @@
 #![allow(unused_imports)]
 
 use std;
-use std::fmt::Debug;
-use std::collections::HashMap;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
-use moore_common::{Session, Verbosity};
-use moore_common::name::*;
-use moore_common::source::*;
 use moore_common::errors::*;
-use moore_common::NodeId;
+use moore_common::name::*;
 use moore_common::score::{GenericContext, NodeMaker, NodeStorage, Result};
+use moore_common::source::*;
 use moore_common::util::{HasDesc, HasSpan};
+use moore_common::NodeId;
+use moore_common::{Session, Verbosity};
 
-use typed_arena::Arena;
-use num::{BigInt, Signed};
 use llhd;
+use num::{BigInt, Signed};
+use typed_arena::Arena;
 
-use crate::syntax::ast;
-use crate::hir;
-use crate::ty::*;
-use crate::konst::*;
-use crate::codegen::Codegen;
-use crate::typeck::{Typeck, TypeckContext};
-use crate::lazy::*;
 use crate::arenas::Alloc;
 use crate::builtin;
-use crate::op::*;
 pub use crate::builtin::*;
+use crate::codegen::Codegen;
+use crate::hir;
+use crate::konst::*;
+use crate::lazy::*;
+use crate::op::*;
+use crate::syntax::ast;
+use crate::ty::*;
+use crate::typeck::{Typeck, TypeckContext};
 
 /// This macro implements the `NodeMaker` trait for a specific combination of
 /// identifier and output type.
@@ -49,9 +49,9 @@ macro_rules! impl_make {
 	}
 }
 
+mod cval;
 mod lower_hir;
 mod scope;
-mod cval;
 
 /// The VHDL context which holds information about the language scoreboard and
 /// the global scoreboard in its language-agnostic generic form. All useful
@@ -236,7 +236,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     where
         I: 'ctx + Copy + Debug,
         HirTable<'ctx>: NodeStorage<I>,
-        ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
+        ScoreContext<'lazy, 'sb, 'ast, 'ctx>:
+            NodeMaker<I, <HirTable<'ctx> as NodeStorage<I>>::Node>,
         <HirTable<'ctx> as NodeStorage<I>>::Node: Copy + Debug,
     {
         if let Some(&node) = self.sb.hir_table.borrow().get(&id) {
@@ -287,7 +288,12 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     where
         I: Copy + Debug,
         R: Debug + 'ctx,
-        LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<I, Node = LazyNode<Box<for<'a, 'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb>>>,
+        LazyHirTable<'sb, 'ast, 'ctx>: NodeStorage<
+            I,
+            Node = LazyNode<
+                Box<for<'a, 'b> Fn(&'a ScoreContext<'b, 'sb, 'ast, 'ctx>) -> Result<R> + 'sb>,
+            >,
+        >,
         HirTable<'ctx>: NodeStorage<I, Node = &'ctx R>,
         hir::Arenas: Alloc<'ctx, 'ctx, R>,
     {
@@ -357,7 +363,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         if self.sess.opts.trace_scoreboard {
             debugln!("[SB][VHDL] lldecl for {:?} is {:?}", id, node);
         }
-        if self.sb
+        if self
+            .sb
             .lldecl_table
             .borrow_mut()
             .insert(id.into(), node.clone())
@@ -383,7 +390,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         if self.sess.opts.trace_scoreboard {
             debugln!("[SB][VHDL] lldef for {:?} is {:?}", id, node);
         }
-        if self.sb
+        if self
+            .sb
             .lldef_table
             .borrow_mut()
             .insert(id.into(), node.clone())
@@ -416,7 +424,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         if self.sess.opts.trace_scoreboard {
             debugln!("[SB][VHDL] ty for {:?} is {:?}", id, node);
         }
-        if self.sb
+        if self
+            .sb
             .ty_table
             .borrow_mut()
             .insert(id.into(), node)
@@ -498,7 +507,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         if self.sess.opts.trace_scoreboard {
             debugln!("[SB][VHDL] const for {:?} is {:?}", id, node);
         }
-        if self.sb
+        if self
+            .sb
             .const_table
             .borrow_mut()
             .insert(id.into(), node)
@@ -574,7 +584,9 @@ pub struct DeclValueRef(pub llhd::ValueRef);
 pub struct DefValueRef(pub llhd::ValueRef);
 
 // Library lowering to HIR.
-impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib>
+    for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
+{
     fn make(&self, id: LibRef) -> Result<&'ctx hir::Lib> {
         let mut lib = hir::Lib::new();
         for du in &self.sb.libs.borrow()[&id] {
@@ -626,13 +638,22 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     /// Convert a primary name as it is present in the AST to a resolvable name
     /// that can be defined and resolved in a scope.
     // #[deprecated]
-    pub fn resolvable_from_primary_name(&self, primary: &ast::PrimaryName) -> Result<Spanned<ResolvableName>> {
+    pub fn resolvable_from_primary_name(
+        &self,
+        primary: &ast::PrimaryName,
+    ) -> Result<Spanned<ResolvableName>> {
         ResolvableName::from_primary_name(primary, self.sess)
     }
 
     /// Resolve a name within a scope. Traverses to the parent scopes if nothing
     /// matching the name is found.
-    pub fn resolve_name(&self, name: Spanned<ResolvableName>, scope_id: ScopeRef, only_defs: bool, allow_fail: bool) -> Result<Vec<Spanned<Def>>> {
+    pub fn resolve_name(
+        &self,
+        name: Spanned<ResolvableName>,
+        scope_id: ScopeRef,
+        only_defs: bool,
+        allow_fail: bool,
+    ) -> Result<Vec<Spanned<Def>>> {
         if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
             debugln!("resolving `{}` in scope {:?}", name.value, scope_id);
         }
@@ -698,7 +719,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
             } else if allow_fail {
                 Ok(vec![])
             } else {
-                self.emit(DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span));
+                self.emit(
+                    DiagBuilder2::error(format!("`{}` is not known", name.value)).span(name.span),
+                );
                 Err(())
             }
         } else {
@@ -706,14 +729,22 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                 debugln!("[SB][VHDL] resolved {:?} to {:?}", name.value, found_defs);
             }
             if self.sess.opts.verbosity.contains(Verbosity::NAMES) {
-                self.emit(DiagBuilder2::note(format!("resolved `{}` to {:?}", name.value, found_defs)).span(name.span));
+                self.emit(
+                    DiagBuilder2::note(format!("resolved `{}` to {:?}", name.value, found_defs))
+                        .span(name.span),
+                );
             }
             Ok(found_defs)
         }
     }
 
     /// Resolve a compound name within a scope.
-    pub fn resolve_compound_name<'a>(&self, name: &'a ast::CompoundName, scope_id: ScopeRef, only_defs: bool) -> Result<(ResolvableName, Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
+    pub fn resolve_compound_name<'a>(
+        &self,
+        name: &'a ast::CompoundName,
+        scope_id: ScopeRef,
+        only_defs: bool,
+    ) -> Result<(ResolvableName, Vec<Spanned<Def>>, Span, &'a [ast::NamePart])> {
         if self.sess.opts.trace_scoreboard {
             debugln!(
                 "[SB][VHDL] resolve compound {:?} in scope {:?}",
@@ -760,7 +791,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                         // Def::PkgInst(id) => id.into(),
                         Def::BuiltinPkg(id) => id.into(),
                         d => {
-                            self.emit(DiagBuilder2::error(format!("cannot select into {:?}", d)).span(pn.span));
+                            self.emit(
+                                DiagBuilder2::error(format!("cannot select into {:?}", d))
+                                    .span(pn.span),
+                            );
                             return Err(());
                         }
                     };
@@ -806,12 +840,15 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 }
 
 // Group the architectures declared in a library by entity.
-impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable>
+    for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
+{
     fn make(&self, id: LibRef) -> Result<&'ctx ArchTable> {
         let lib = self.hir(id)?;
         let defs = self.defs(ScopeRef::Lib(id.into()))?;
         let mut res = ArchTable::new();
-        res.by_entity = lib.entities
+        res.by_entity = lib
+            .entities
             .iter()
             .map(|&id| (id, EntityArchTable::new()))
             .collect();
@@ -835,7 +872,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext
                         DiagBuilder2::error(format!(
                             "`{}` is not a valid entity name",
                             arch.target.span.extract()
-                        )).span(arch.target.span),
+                        ))
+                        .span(arch.target.span),
                     );
                     had_fails = true;
                     continue;
@@ -861,7 +899,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext
                     }
                 }
                 None => {
-                    self.emit(DiagBuilder2::error(format!("Unknown entity `{}`", entity_name)).span(arch.target.span));
+                    self.emit(
+                        DiagBuilder2::error(format!("Unknown entity `{}`", entity_name))
+                            .span(arch.target.span),
+                    );
                     had_fails = true;
                     continue;
                 }
@@ -883,14 +924,18 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx ArchTable> for ScoreContext
 }
 
 // Generate the prototype for an architecture.
-impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef>
+    for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
+{
     fn make(&self, _: ArchRef) -> Result<DeclValueRef> {
         unimplemented!();
     }
 }
 
 // Generate the definition for an architecture.
-impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef>
+    for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
+{
     fn make(&self, id: ArchRef) -> Result<DefValueRef> {
         // Type check the entire library where the architecture is defined in.
         let typeck_ctx = TypeckContext::new(self);
@@ -915,14 +960,18 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef> for ScoreContext<'l
             let ty = self.map_type(self.ty(hir.ty)?)?;
             // let ty = llhd::void_ty();
             match hir.mode {
-                hir::IntfSignalMode::In | hir::IntfSignalMode::Inout | hir::IntfSignalMode::Linkage => {
+                hir::IntfSignalMode::In
+                | hir::IntfSignalMode::Inout
+                | hir::IntfSignalMode::Linkage => {
                     in_tys.push(ty.clone());
                     in_names.push(hir.name.value);
                 }
                 _ => (),
             }
             match hir.mode {
-                hir::IntfSignalMode::Out | hir::IntfSignalMode::Inout | hir::IntfSignalMode::Buffer => {
+                hir::IntfSignalMode::Out
+                | hir::IntfSignalMode::Inout
+                | hir::IntfSignalMode::Buffer => {
                     out_tys.push(ty.clone());
                     out_names.push(hir.name.value);
                 }
@@ -975,7 +1024,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                 Some(ty.base.clone()),
                 ty.base.left_bound.clone(),
             ))),
-            Ty::Int(ref ty) => Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone()))),
+            Ty::Int(ref ty) => {
+                Ok(self.intern_const(ConstInt::new(Some(ty.clone()), ty.left_bound.clone())))
+            }
             Ty::UniversalInt => panic!("universal integer has no default value"),
             Ty::UnboundedInt => panic!("unbounded integer has no default value"),
             Ty::Subprog(..) => panic!("subprogram type has no default value"),
@@ -1116,12 +1167,17 @@ impl ResolvableName {
     /// names, e.g. in use clauses, or as standalone names, e.g. in functions.
     /// The conversion fails if the primary name is a string literal (`"..."`)
     /// which does not name a known operator.
-    pub fn from_primary_name<C>(primary: &ast::PrimaryName, context: C) -> Result<Spanned<ResolvableName>>
+    pub fn from_primary_name<C>(
+        primary: &ast::PrimaryName,
+        context: C,
+    ) -> Result<Spanned<ResolvableName>>
     where
         C: DiagEmitter,
     {
         match primary.kind {
-            ast::PrimaryNameKind::Ident(n) => Ok(Spanned::new(ResolvableName::Ident(n), primary.span)),
+            ast::PrimaryNameKind::Ident(n) => {
+                Ok(Spanned::new(ResolvableName::Ident(n), primary.span))
+            }
             ast::PrimaryNameKind::Char(c) => Ok(Spanned::new(ResolvableName::Bit(c), primary.span)),
             ast::PrimaryNameKind::String(s) => match Operator::from_name(s) {
                 Some(op) => Ok(Spanned::new(ResolvableName::Operator(op), primary.span)),
@@ -1288,7 +1344,9 @@ node_ref!(BuiltinOpRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
 /// which defines the enumeration and the index of the literal.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug,
+)]
 pub struct EnumRef(pub TypeDeclRef, pub usize);
 
 impl Into<NodeId> for EnumRef {
@@ -1299,7 +1357,9 @@ impl Into<NodeId> for EnumRef {
 
 /// A reference to a physical unit, expressed as the type declaration which
 /// defines the unit and the index of it.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug,
+)]
 pub struct UnitRef(pub TypeDeclRef, pub usize);
 
 impl Into<NodeId> for UnitRef {

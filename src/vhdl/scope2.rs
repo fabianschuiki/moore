@@ -6,15 +6,15 @@
 
 #![deny(missing_docs)]
 
-use std::fmt;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use crate::common::{SessionContext, Verbosity};
 use crate::common::errors::*;
 use crate::common::score::Result;
 use crate::common::source::Spanned;
+use crate::common::{SessionContext, Verbosity};
 
 use crate::hir::{self, Node};
 use crate::score::ResolvableName;
@@ -141,7 +141,8 @@ impl<'t> ScopeData<'t> {
 
             // Handle unique cases.
             _ => {
-                let ins = self.defs
+                let ins = self
+                    .defs
                     .borrow_mut()
                     .insert(name.value, vec![Spanned::new(def, name.span)]);
                 if let Some(existing) = ins {

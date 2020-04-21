@@ -7,16 +7,15 @@
 //! are supposed to work.
 
 #[deny(missing_docs)]
-
 use std::fmt::Debug;
 
-use moore_common::NodeId;
+use crate::arenas::Alloc;
+use crate::hir;
+use crate::lazy::*;
+use crate::score::{HirTable, ScoreContext};
 use moore_common::score::NodeStorage;
 use moore_common::source::Span;
-use crate::score::{HirTable, ScoreContext};
-use crate::lazy::*;
-use crate::hir;
-use crate::arenas::Alloc;
+use moore_common::NodeId;
 
 /// A context within which compiler passes can be described.
 ///
@@ -35,7 +34,11 @@ where
     I: Copy + Into<NodeId> + Debug,
 {
     /// Create a new context.
-    pub fn new(ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>, span: Span, id: I) -> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> {
+    pub fn new(
+        ctx: &'sbc ScoreContext<'lazy, 'sb, 'ast, 'ctx>,
+        span: Span,
+        id: I,
+    ) -> MakeContext<'sbc, 'lazy, 'sb, 'ast, 'ctx, I> {
         debugln!("make {:?} `{}`", id, {
             let mut sp = span;
             let mut shortened = false;

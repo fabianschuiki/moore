@@ -2,8 +2,8 @@
 
 //! Packages
 
-use crate::hir::prelude::*;
 use crate::hir::apply_use_clauses;
+use crate::hir::prelude::*;
 use crate::hir::TypeDecl2;
 
 #[derive(Debug)]
@@ -48,12 +48,17 @@ impl<'t> FromAst<'t> for Package2<'t> {
         debugln!("create package decl {}", ast.name.value);
         let context = context.create_subscope();
         let mut uses = Vec::new();
-        let decls = ast.decls
+        let decls = ast
+            .decls
             .iter()
             .flat_map(|decl| -> Option<&'t LatentNode<'t, Decl2>> {
                 match *decl {
-                    ast::DeclItem::PkgDecl(ref decl) => Some(Package2::alloc_slot(decl, context).ok()?),
-                    ast::DeclItem::TypeDecl(ref decl) => Some(TypeDecl2::alloc_slot(decl, context).ok()?),
+                    ast::DeclItem::PkgDecl(ref decl) => {
+                        Some(Package2::alloc_slot(decl, context).ok()?)
+                    }
+                    ast::DeclItem::TypeDecl(ref decl) => {
+                        Some(TypeDecl2::alloc_slot(decl, context).ok()?)
+                    }
                     ast::DeclItem::UseClause(_, ref clause) => {
                         uses.extend(clause.value.iter());
                         None

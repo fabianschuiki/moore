@@ -4,13 +4,13 @@
 
 use num::{BigInt, BigRational, ToPrimitive};
 
-use crate::common::SessionContext;
 use crate::common::errors::*;
+use crate::common::SessionContext;
 
 use crate::hir::prelude::*;
-use crate::ty2::{UniversalIntegerType, UniversalRealType};
 use crate::konst2::{Const2, FloatingConst, IntegerConst};
 pub use crate::syntax::ast::Dir;
+use crate::ty2::{UniversalIntegerType, UniversalRealType};
 
 /// An expression.
 ///
@@ -26,19 +26,19 @@ pub trait Expr2<'t>: Node<'t> {
 }
 
 /// A context that provides the facilities to operate on expressions.
-pub trait ExprContext<'t>
-    : SessionContext
+pub trait ExprContext<'t>:
+    SessionContext
     + AllocInto<'t, IntegerConst<'t>>
     + AllocOwnedInto<'t, Const2<'t>>
-    + AllocOwnedInto<'t, Type> {
+    + AllocOwnedInto<'t, Type>
+{
 }
 
-impl<'t, T> ExprContext<'t> for T
-where
+impl<'t, T> ExprContext<'t> for T where
     T: SessionContext
         + AllocInto<'t, IntegerConst<'t>>
         + AllocOwnedInto<'t, Const2<'t>>
-        + AllocOwnedInto<'t, Type>,
+        + AllocOwnedInto<'t, Type>
 {
 }
 
@@ -197,9 +197,10 @@ impl<'t> Range2<'t> {
                             "range bounds `{}` and `{}` have incompatible types",
                             l.span().extract(),
                             r.span().extract()
-                        )).span(span)
-                            .add_note(format!(" left bound type: {}", lt))
-                            .add_note(format!("right bound type: {}", rt)),
+                        ))
+                        .span(span)
+                        .add_note(format!(" left bound type: {}", lt))
+                        .add_note(format!("right bound type: {}", rt)),
                     );
                     Err(())
                 }

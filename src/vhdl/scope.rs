@@ -6,12 +6,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::common::Verbosity;
 use crate::common::errors::*;
 use crate::common::score::Result;
 use crate::common::source::Spanned;
+use crate::common::Verbosity;
 
-use crate::score::{ScoreContext, ScopeRef, Def, ResolvableName};
+use crate::score::{Def, ResolvableName, ScopeRef, ScoreContext};
 
 /// A scope.
 #[derive(Clone, Debug)]
@@ -43,16 +43,18 @@ impl Scope {
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     /// Lookup a scope and perform an operation on it.
-    pub fn with_scope<F,R>(&self, scope: ScopeRef, f: F) -> Result<R>
-        where F: FnOnce(&mut Scope) -> Result<R>
+    pub fn with_scope<F, R>(&self, scope: ScopeRef, f: F) -> Result<R>
+    where
+        F: FnOnce(&mut Scope) -> Result<R>,
     {
         let mut tbl = self.sb.scope2_table.borrow_mut();
         let scp = match tbl.get_mut(&scope) {
             Some(s) => s,
             None => {
-                self.emit(
-                    DiagBuilder2::bug(format!("scope {:?} does not exist`", scope))
-                );
+                self.emit(DiagBuilder2::bug(format!(
+                    "scope {:?} does not exist`",
+                    scope
+                )));
                 return Err(());
             }
         };
@@ -61,7 +63,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
     /// Create a subscope of another scope.
     pub fn subscope(&self, scope: ScopeRef, parent: ScopeRef) {
-        self.sb.scope2_table.borrow_mut().insert(scope, Scope::new(Some(parent)));
+        self.sb
+            .scope2_table
+            .borrow_mut()
+            .insert(scope, Scope::new(Some(parent)));
     }
 
     /// Define a new name in a scope.
@@ -72,22 +77,25 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         self.with_scope(scope, |scope| match def {
             // Handle overloadable cases.
             Def::Enum(_) => {
-                scope.defs
+                scope
+                    .defs
                     .entry(name.value)
                     .or_insert_with(|| Vec::new())
                     .push(Spanned::new(def, name.span));
                 Ok(())
-            },
+            }
 
             // Handle unique cases.
             _ => {
-                let ins = scope.defs.insert(name.value, vec![Spanned::new(def, name.span)]);
+                let ins = scope
+                    .defs
+                    .insert(name.value, vec![Spanned::new(def, name.span)]);
                 if let Some(existing) = ins {
                     self.emit(
                         DiagBuilder2::error(format!("`{}` has already been declared", name.value))
-                        .span(name.span)
-                        .add_note("Previous declaration was here:")
-                        .span(existing.last().unwrap().span)
+                            .span(name.span)
+                            .add_note("Previous declaration was here:")
+                            .span(existing.last().unwrap().span),
                     );
                     Err(())
                 } else {
@@ -98,9 +106,15 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Import a definition into a scope.
-    pub fn import_def(&self, scope: ScopeRef, name: Spanned<ResolvableName>, def: Def) -> Result<()> {
-        self.with_scope(scope, |scope|{
-            scope.imported_defs
+    pub fn import_def(
+        &self,
+        scope: ScopeRef,
+        name: Spanned<ResolvableName>,
+        def: Def,
+    ) -> Result<()> {
+        self.with_scope(scope, |scope| {
+            scope
+                .imported_defs
                 .entry(name.value)
                 .or_insert_with(|| Vec::new())
                 .push(Spanned::new(def, name.span));
@@ -110,7 +124,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
     /// Import an entire scope into another scope.
     pub fn import_scope(&self, scope: ScopeRef, into: ScopeRef) -> Result<()> {
-        self.with_scope(into, |into|{
+        self.with_scope(into, |into| {
             into.imported_scopes.insert(scope);
             Ok(())
         })

@@ -3,14 +3,14 @@
 use crate::hir::prelude::*;
 
 use crate::common::name::{get_name_table, Name};
-use crate::common::source::{Span, Spanned, INVALID_SPAN};
 use crate::common::score::Result;
+use crate::common::source::{Span, Spanned, INVALID_SPAN};
 
 use crate::arenas::Alloc;
-use crate::syntax::ast;
 use crate::hir::visit::Visitor;
 use crate::hir::{FromAst, LatentNode, Node, Package2};
 use crate::scope2::{Def2, ScopeContext, ScopeData};
+use crate::syntax::ast;
 
 /// A library.
 #[derive(Debug)]
@@ -22,13 +22,19 @@ pub struct Library<'t> {
 
 impl<'t> Library<'t> {
     /// Create a new library of design units.
-    pub fn new(name: Name, units: &[&'t ast::DesignUnit], ctx: AllocContext<'t>) -> Result<&'t Library<'t>> {
+    pub fn new(
+        name: Name,
+        units: &[&'t ast::DesignUnit],
+        ctx: AllocContext<'t>,
+    ) -> Result<&'t Library<'t>> {
         let ctx = ctx.create_subscope();
         let units = units
             .into_iter()
             .flat_map(|unit| -> Option<&'t LatentNode<'t, Node<'t>>> {
                 match unit.data {
-                    ast::DesignUnitData::PkgDecl(ref decl) => Some(Package2::alloc_slot(decl, ctx).ok()?),
+                    ast::DesignUnitData::PkgDecl(ref decl) => {
+                        Some(Package2::alloc_slot(decl, ctx).ok()?)
+                    }
                     _ => None,
                 }
             })

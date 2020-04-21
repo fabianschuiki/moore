@@ -6,19 +6,21 @@
 use std;
 use std::fmt;
 
-use moore_common::source::{Span, Spanned};
-use moore_common::name::Name;
-use moore_common::util::{HasDesc, HasSpan};
 use crate::lexer::token::Literal;
+use moore_common::name::Name;
+use moore_common::source::{Span, Spanned};
+use moore_common::util::{HasDesc, HasSpan};
 
 pub use self::ExprData::*;
-pub use self::TypeData::*;
 pub use self::StmtData::*;
+pub use self::TypeData::*;
 
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight
 /// way to refer to individual nodes, e.g. during symbol table construction and
 /// name resolution.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(
+    Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, RustcEncodable, RustcDecodable,
+)]
 pub struct NodeId(u32);
 
 impl NodeId {
@@ -419,7 +421,7 @@ impl HasDesc for DeclItem {
                     value: PortgenKind::Port,
                     ..
                 },
-                ..
+                ..,
             ) => "port map",
             DeclItem::PortgenMap(
                 _,
@@ -427,7 +429,7 @@ impl HasDesc for DeclItem {
                     value: PortgenKind::Generic,
                     ..
                 },
-                ..
+                ..,
             ) => "generic map",
             DeclItem::PortgenClause(
                 _,
@@ -435,7 +437,7 @@ impl HasDesc for DeclItem {
                     value: PortgenKind::Port,
                     ..
                 },
-                ..
+                ..,
             ) => "port clause",
             DeclItem::PortgenClause(
                 _,
@@ -443,7 +445,7 @@ impl HasDesc for DeclItem {
                     value: PortgenKind::Generic,
                     ..
                 },
-                ..
+                ..,
             ) => "generic clause",
             DeclItem::GroupDecl(..) => "group declaration",
             DeclItem::VunitBindInd(..) => "vunit binding indication",

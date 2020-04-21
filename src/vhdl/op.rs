@@ -4,16 +4,16 @@
 
 #![deny(missing_docs)]
 
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
 use crate::common::errors::*;
 use crate::common::name::*;
-use crate::common::source::Spanned;
 use crate::common::score::Result;
+use crate::common::source::Spanned;
 
-use crate::syntax::ast;
 use crate::score::ResolvableName;
+use crate::syntax::ast;
 pub use crate::syntax::ast::LogicalOp;
 pub use crate::syntax::ast::RelationalOp;
 pub use crate::syntax::ast::ShiftOp;
@@ -87,47 +87,47 @@ impl Operator {
 }
 
 // A static table that maps operator symbols to the actual operator.
-lazy_static!(
-	static ref TBL: HashMap<Name, Operator> = {
-		let mut tbl = HashMap::new();
-		let nt = get_name_table();
-		tbl.insert(nt.intern("and",  false), Operator::Logical(LogicalOp::And));
-		tbl.insert(nt.intern("or",   false), Operator::Logical(LogicalOp::Or));
-		tbl.insert(nt.intern("nand", false), Operator::Logical(LogicalOp::Nand));
-		tbl.insert(nt.intern("nor",  false), Operator::Logical(LogicalOp::Nor));
-		tbl.insert(nt.intern("xor",  false), Operator::Logical(LogicalOp::Xor));
-		tbl.insert(nt.intern("xnor", false), Operator::Logical(LogicalOp::Xnor));
-		tbl.insert(nt.intern("=",    false), Operator::Rel(RelationalOp::Eq));
-		tbl.insert(nt.intern("/=",   false), Operator::Rel(RelationalOp::Neq));
-		tbl.insert(nt.intern("<",    false), Operator::Rel(RelationalOp::Lt));
-		tbl.insert(nt.intern("<=",   false), Operator::Rel(RelationalOp::Leq));
-		tbl.insert(nt.intern(">",    false), Operator::Rel(RelationalOp::Gt));
-		tbl.insert(nt.intern(">=",   false), Operator::Rel(RelationalOp::Geq));
-		tbl.insert(nt.intern("?=",   false), Operator::Match(RelationalOp::Eq));
-		tbl.insert(nt.intern("?/=",  false), Operator::Match(RelationalOp::Neq));
-		tbl.insert(nt.intern("?<",   false), Operator::Match(RelationalOp::Lt));
-		tbl.insert(nt.intern("?<=",  false), Operator::Match(RelationalOp::Leq));
-		tbl.insert(nt.intern("?>",   false), Operator::Match(RelationalOp::Gt));
-		tbl.insert(nt.intern("?>=",  false), Operator::Match(RelationalOp::Geq));
-		tbl.insert(nt.intern("sll",  false), Operator::Shift(ShiftOp::Sll));
-		tbl.insert(nt.intern("srl",  false), Operator::Shift(ShiftOp::Srl));
-		tbl.insert(nt.intern("sla",  false), Operator::Shift(ShiftOp::Sla));
-		tbl.insert(nt.intern("sra",  false), Operator::Shift(ShiftOp::Sra));
-		tbl.insert(nt.intern("rol",  false), Operator::Shift(ShiftOp::Rol));
-		tbl.insert(nt.intern("ror",  false), Operator::Shift(ShiftOp::Ror));
-		tbl.insert(nt.intern("+",    false), Operator::Add);
-		tbl.insert(nt.intern("-",    false), Operator::Sub);
-		tbl.insert(nt.intern("&",    false), Operator::Concat);
-		tbl.insert(nt.intern("*",    false), Operator::Mul);
-		tbl.insert(nt.intern("/",    false), Operator::Div);
-		tbl.insert(nt.intern("mod",  false), Operator::Mod);
-		tbl.insert(nt.intern("rem",  false), Operator::Rem);
-		tbl.insert(nt.intern("**",   false), Operator::Pow);
-		tbl.insert(nt.intern("abs",  false), Operator::Abs);
-		tbl.insert(nt.intern("not",  false), Operator::Not);
-		tbl
-	};
-);
+lazy_static! {
+    static ref TBL: HashMap<Name, Operator> = {
+        let mut tbl = HashMap::new();
+        let nt = get_name_table();
+        tbl.insert(nt.intern("and", false), Operator::Logical(LogicalOp::And));
+        tbl.insert(nt.intern("or", false), Operator::Logical(LogicalOp::Or));
+        tbl.insert(nt.intern("nand", false), Operator::Logical(LogicalOp::Nand));
+        tbl.insert(nt.intern("nor", false), Operator::Logical(LogicalOp::Nor));
+        tbl.insert(nt.intern("xor", false), Operator::Logical(LogicalOp::Xor));
+        tbl.insert(nt.intern("xnor", false), Operator::Logical(LogicalOp::Xnor));
+        tbl.insert(nt.intern("=", false), Operator::Rel(RelationalOp::Eq));
+        tbl.insert(nt.intern("/=", false), Operator::Rel(RelationalOp::Neq));
+        tbl.insert(nt.intern("<", false), Operator::Rel(RelationalOp::Lt));
+        tbl.insert(nt.intern("<=", false), Operator::Rel(RelationalOp::Leq));
+        tbl.insert(nt.intern(">", false), Operator::Rel(RelationalOp::Gt));
+        tbl.insert(nt.intern(">=", false), Operator::Rel(RelationalOp::Geq));
+        tbl.insert(nt.intern("?=", false), Operator::Match(RelationalOp::Eq));
+        tbl.insert(nt.intern("?/=", false), Operator::Match(RelationalOp::Neq));
+        tbl.insert(nt.intern("?<", false), Operator::Match(RelationalOp::Lt));
+        tbl.insert(nt.intern("?<=", false), Operator::Match(RelationalOp::Leq));
+        tbl.insert(nt.intern("?>", false), Operator::Match(RelationalOp::Gt));
+        tbl.insert(nt.intern("?>=", false), Operator::Match(RelationalOp::Geq));
+        tbl.insert(nt.intern("sll", false), Operator::Shift(ShiftOp::Sll));
+        tbl.insert(nt.intern("srl", false), Operator::Shift(ShiftOp::Srl));
+        tbl.insert(nt.intern("sla", false), Operator::Shift(ShiftOp::Sla));
+        tbl.insert(nt.intern("sra", false), Operator::Shift(ShiftOp::Sra));
+        tbl.insert(nt.intern("rol", false), Operator::Shift(ShiftOp::Rol));
+        tbl.insert(nt.intern("ror", false), Operator::Shift(ShiftOp::Ror));
+        tbl.insert(nt.intern("+", false), Operator::Add);
+        tbl.insert(nt.intern("-", false), Operator::Sub);
+        tbl.insert(nt.intern("&", false), Operator::Concat);
+        tbl.insert(nt.intern("*", false), Operator::Mul);
+        tbl.insert(nt.intern("/", false), Operator::Div);
+        tbl.insert(nt.intern("mod", false), Operator::Mod);
+        tbl.insert(nt.intern("rem", false), Operator::Rem);
+        tbl.insert(nt.intern("**", false), Operator::Pow);
+        tbl.insert(nt.intern("abs", false), Operator::Abs);
+        tbl.insert(nt.intern("not", false), Operator::Not);
+        tbl
+    };
+}
 
 /// A unary operator.
 ///

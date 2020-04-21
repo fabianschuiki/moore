@@ -94,8 +94,9 @@ impl<'t> TypeDecl2<'t> {
                             DiagBuilder2::error(format!(
                                 "bounds of type `{}` must be of integer or floating-point type",
                                 self.name.value
-                            )).span(range.span)
-                                .add_note(format!("bounds are of type {}", ty)),
+                            ))
+                            .span(range.span)
+                            .add_note(format!("bounds are of type {}", ty)),
                         );
                         Err(())
                     }
@@ -121,8 +122,9 @@ impl<'t> TypeDecl2<'t> {
                             DiagBuilder2::error(format!(
                                 "bounds of physical type `{}` must be integers",
                                 self.name.value
-                            )).span(range.span)
-                                .add_note(format!("bounds are of type {}", ty)),
+                            ))
+                            .span(range.span)
+                            .add_note(format!("bounds are of type {}", ty)),
                         );
                         Err(())
                     }
@@ -203,21 +205,25 @@ fn define_auxiliary_names<'t>(
     context: AllocContext<'t>,
 ) -> Result<()> {
     match *data {
-        ast::EnumType(ref paren_elems) => for (i, lit) in paren_elems.value.iter().enumerate() {
-            match lit.expr.data {
-                ast::NameExpr(ref name) => context.define(
-                    ResolvableName::from_primary_name(&name.primary, context)?,
-                    Def2::Enum(TypeVariantDef(type_decl, i)),
-                )?,
-                _ => (),
+        ast::EnumType(ref paren_elems) => {
+            for (i, lit) in paren_elems.value.iter().enumerate() {
+                match lit.expr.data {
+                    ast::NameExpr(ref name) => context.define(
+                        ResolvableName::from_primary_name(&name.primary, context)?,
+                        Def2::Enum(TypeVariantDef(type_decl, i)),
+                    )?,
+                    _ => (),
+                }
             }
-        },
-        ast::RangeType(_, Some(ref units)) => for (i, unit) in units.iter().enumerate() {
-            context.define(
-                Spanned::new(unit.0.name.into(), unit.0.span),
-                Def2::Unit(TypeVariantDef(type_decl, i)),
-            )?;
-        },
+        }
+        ast::RangeType(_, Some(ref units)) => {
+            for (i, unit) in units.iter().enumerate() {
+                context.define(
+                    Spanned::new(unit.0.name.into(), unit.0.span),
+                    Def2::Unit(TypeVariantDef(type_decl, i)),
+                )?;
+            }
+        }
         _ => (),
     }
     Ok(())
@@ -241,8 +247,9 @@ fn unpack_type_data<'t>(
                             DiagBuilder2::error(format!(
                                 "`{}` is not an enumeration literal",
                                 elem.span.extract()
-                            )).span(elem.span)
-                                .add_note("expected an identifier or character literal"),
+                            ))
+                            .span(elem.span)
+                            .add_note("expected an identifier or character literal"),
                         );
                         Err(())
                     }
@@ -295,11 +302,12 @@ fn unpack_units<'t>(
                 DiagBuilder2::error(format!(
                     "physical type `{}` has no primary unit",
                     type_name.value
-                )).span(type_name.span)
-                    .add_note(
-                        "A physical type must have a primary unit of the form `<name>;`. \
+                ))
+                .span(type_name.span)
+                .add_note(
+                    "A physical type must have a primary unit of the form `<name>;`. \
                          See IEEE 1076-2008 section 5.2.4.",
-                    ),
+                ),
             );
             return Err(());
         }
@@ -310,11 +318,12 @@ fn unpack_units<'t>(
             DiagBuilder2::error(format!(
                 "physical type `{}` has multiple primary units",
                 type_name.value
-            )).span(n.span)
-                .add_note(
-                    "A physical type cannot have multiple primary units. \
+            ))
+            .span(n.span)
+            .add_note(
+                "A physical type cannot have multiple primary units. \
                      See IEEE 1076-2008 section 5.2.4.",
-                ),
+            ),
         );
         had_fails = true;
     }
@@ -337,7 +346,8 @@ fn unpack_units<'t>(
                             DiagBuilder2::error(format!(
                                 "`{}` is not a valid secondary unit",
                                 term.span.extract()
-                            )).span(term.span),
+                            ))
+                            .span(term.span),
                         );
                         debugln!("It is a {:#?}", term.value);
                         return Err(());
@@ -394,14 +404,11 @@ fn paren_elem_to_enum_literal(elem: &ast::ParenElem) -> Option<EnumLit> {
                 primary: ast::PrimaryName { kind, span, .. },
                 ref parts,
                 ..
-            }) if parts.is_empty() =>
-            {
-                match kind {
-                    ast::PrimaryNameKind::Ident(n) => Some(EnumLit::Ident(Spanned::new(n, span))),
-                    ast::PrimaryNameKind::Char(c) => Some(EnumLit::Char(Spanned::new(c, span))),
-                    _ => None,
-                }
-            }
+            }) if parts.is_empty() => match kind {
+                ast::PrimaryNameKind::Ident(n) => Some(EnumLit::Ident(Spanned::new(n, span))),
+                ast::PrimaryNameKind::Char(c) => Some(EnumLit::Char(Spanned::new(c, span))),
+                _ => None,
+            },
             _ => None,
         }
     }

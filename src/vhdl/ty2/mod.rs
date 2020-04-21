@@ -10,25 +10,25 @@
 
 #![deny(missing_docs)]
 
-mod types;
-mod subtypes;
-mod marks;
-mod arena;
-mod range;
-mod ints;
-mod floats;
-mod enums;
-mod physical;
 mod access;
+mod arena;
+mod enums;
+mod floats;
+mod ints;
+mod marks;
+mod physical;
 mod prelude;
+mod range;
+mod subtypes;
+mod types;
 
-pub use self::types::*;
-pub use self::subtypes::*;
-pub use self::marks::*;
-pub use self::arena::*;
-pub use self::range::*;
-pub use self::ints::*;
-pub use self::floats::*;
-pub use self::enums::*;
-pub use self::physical::*;
 pub use self::access::*;
+pub use self::arena::*;
+pub use self::enums::*;
+pub use self::floats::*;
+pub use self::ints::*;
+pub use self::marks::*;
+pub use self::physical::*;
+pub use self::range::*;
+pub use self::subtypes::*;
+pub use self::types::*;

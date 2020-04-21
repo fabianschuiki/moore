@@ -3,23 +3,24 @@
 //! Type declarations
 
 use crate::common::errors::*;
+use crate::common::name::Name;
 use crate::common::score::{NodeRef, Result};
 use crate::common::source::Spanned;
-use crate::common::name::Name;
 
 use num::BigInt;
 
 use crate::add_ctx::AddContext;
-use crate::syntax::ast;
 use crate::hir;
 use crate::score::*;
+use crate::syntax::ast;
 use crate::term::{Term, TermContext};
 
 impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
     /// Add a type declaration.
     pub fn add_type_decl(&self, decl: &'ast ast::TypeDecl) -> Result<TypeDeclRef> {
         let (mk, id, scope) = self.make(decl.span);
-        self.ctx.define(scope, decl.name.map_into(), Def::Type(id))?;
+        self.ctx
+            .define(scope, decl.name.map_into(), Def::Type(id))?;
         mk.lower_to_hir(Box::new(move |sbc| {
             let ctx = AddContext::new(sbc, scope);
             Ok(hir::TypeDecl {
@@ -117,7 +118,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                             DiagBuilder2::error(format!(
                                                 "`{}` is not a valid secondary unit",
                                                 term.span.extract()
-                                            )).span(term.span),
+                                            ))
+                                            .span(term.span),
                                         );
                                         debugln!("It is a {:#?}", term.value);
                                         return Err(());
@@ -129,12 +131,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                             "`{}` is not a unit in the physical type `{}`",
                                             term.span.extract(),
                                             name.value
-                                        )).span(term.span)
-                                            .add_note(format!(
-                                                "`{}` has been declared here:",
-                                                term.span.extract()
-                                            ))
-                                            .span(unit.span),
+                                        ))
+                                        .span(term.span)
+                                        .add_note(format!(
+                                            "`{}` has been declared here:",
+                                            term.span.extract()
+                                        ))
+                                        .span(unit.span),
                                     );
                                 }
                                 Some((value, unit.value.unwrap_old().1))
@@ -183,18 +186,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                                 primary: ast::PrimaryName { kind, span, .. },
                                 ref parts,
                                 ..
-                            }) if parts.is_empty() =>
-                            {
-                                match kind {
-                                    ast::PrimaryNameKind::Ident(n) => {
-                                        Some(hir::EnumLit::Ident(Spanned::new(n, span)))
-                                    }
-                                    ast::PrimaryNameKind::Char(c) => {
-                                        Some(hir::EnumLit::Char(Spanned::new(c, span)))
-                                    }
-                                    _ => None,
+                            }) if parts.is_empty() => match kind {
+                                ast::PrimaryNameKind::Ident(n) => {
+                                    Some(hir::EnumLit::Ident(Spanned::new(n, span)))
                                 }
-                            }
+                                ast::PrimaryNameKind::Char(c) => {
+                                    Some(hir::EnumLit::Char(Spanned::new(c, span)))
+                                }
+                                _ => None,
+                            },
                             _ => None,
                         }
                     };
@@ -223,7 +223,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 // each index into its own node, unpack the element subtype, and
                 // we're done.
                 assert!(indices.value.len() > 0);
-                let indices = self.ctx
+                let indices = self
+                    .ctx
                     .sanitize_paren_elems_as_exprs(&indices.value, "an array type index")
                     .into_iter()
                     .map(|index| {

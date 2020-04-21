@@ -6,9 +6,9 @@ use std::fmt::{Debug, Display};
 
 pub use num::BigInt;
 
-use crate::ty2::types::*;
 use crate::ty2::marks::*;
 use crate::ty2::range::*;
+use crate::ty2::types::*;
 
 /// An interface for dealing with subtypes.
 pub trait Subtype: Debug + Display {}

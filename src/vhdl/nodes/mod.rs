@@ -4,8 +4,8 @@
 
 #![deny(missing_docs)]
 
-mod misc;
 mod expr;
-mod seq_stmt;
+mod misc;
 mod obj_decl;
+mod seq_stmt;
 mod type_decl;

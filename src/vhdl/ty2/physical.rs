@@ -3,8 +3,8 @@
 //! Physical types.
 
 use std::fmt::{self, Display};
-use std::ops::Deref;
 use std::iter::{once, repeat};
+use std::ops::Deref;
 
 pub use num::BigInt;
 

@@ -1,14 +1,14 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use crate::common::{SessionContext, Verbosity};
-use crate::common::source::Spanned;
 use crate::common::errors::*;
 use crate::common::score::Result;
+use crate::common::source::Spanned;
+use crate::common::{SessionContext, Verbosity};
 
 use crate::arenas::Alloc;
-use crate::score::ResolvableName;
-use crate::scope2::{Def2, ScopeContext, ScopeData};
 use crate::hir::Arenas2;
+use crate::scope2::{Def2, ScopeContext, ScopeData};
+use crate::score::ResolvableName;
 
 /// A context for HIR node construction.
 #[derive(Copy, Clone)]

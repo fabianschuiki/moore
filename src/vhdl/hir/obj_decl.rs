@@ -37,7 +37,10 @@ impl<'t> FromAst<'t> for ConstDecl<'t> {
             .collect()
     }
 
-    fn from_ast((span, name, ty, init): Self::LatentInput, _context: Self::Context) -> Result<Self> {
+    fn from_ast(
+        (span, name, ty, init): Self::LatentInput,
+        _context: Self::Context,
+    ) -> Result<Self> {
         Ok(ConstDecl {
             span: span,
             name: name,

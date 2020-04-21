@@ -4,7 +4,6 @@
 
 use crate::score::*;
 
-
 // Calculate the constant value of an expression.
 impl_make!(self, id: ExprRef => &Const {
 	let hir = self.lazy_hir(id)?;

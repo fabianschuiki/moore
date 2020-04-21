@@ -1,7 +1,7 @@
 // Copyright (c) 2018 Fabian Schuiki
 
-use std::fmt;
 use std::cell::RefCell;
+use std::fmt;
 
 use crate::common::score::Result;
 

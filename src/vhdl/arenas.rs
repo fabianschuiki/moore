@@ -26,11 +26,7 @@ impl<'z, 'a, 'p: 'a, 't, T: 't> Alloc<'z, 't, T> for &'p Alloc<'a, 't, T> {
 pub trait AllocSelf<T>: for<'a> Alloc<'a, 'a, T> {}
 
 // Implement `AllocSelf` for anything that supports the proper `Alloc`.
-impl<T, A> AllocSelf<T> for A
-where
-    A: for<'a> Alloc<'a, 'a, T>,
-{
-}
+impl<T, A> AllocSelf<T> for A where A: for<'a> Alloc<'a, 'a, T> {}
 
 /// Allocates values into some arena.
 ///

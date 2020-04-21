@@ -7,8 +7,8 @@
 pub mod token_stream;
 #[macro_use]
 mod core;
-pub mod rules;
 pub mod basic;
+pub mod rules;
 
 #[cfg(test)]
 mod test;

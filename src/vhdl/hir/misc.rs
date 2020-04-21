@@ -45,7 +45,10 @@ fn apply_use_clause(clause: &ast::CompoundName, context: AllocContext) -> Result
             Def2::Lib(x) => x.scope(),
             Def2::Pkg(x) => x.poll()?.scope(),
             _ => {
-                context.emit(DiagBuilder2::error(format!("cannot select into {}", def.value.desc_kind())).span(def.span));
+                context.emit(
+                    DiagBuilder2::error(format!("cannot select into {}", def.value.desc_kind()))
+                        .span(def.span),
+                );
                 return Err(());
             }
         };
@@ -57,7 +60,10 @@ fn apply_use_clause(clause: &ast::CompoundName, context: AllocContext) -> Result
                 lookup = scope.resolve(lookup_name.value, false);
                 // debugln!("`{}` resolved to {:?}", lookup_name.value, lookup);
                 if lookup.is_empty() {
-                    context.emit(DiagBuilder2::error(format!("`{}` is unknown", lookup_name.value)).span(lookup_name.span));
+                    context.emit(
+                        DiagBuilder2::error(format!("`{}` is unknown", lookup_name.value))
+                            .span(lookup_name.span),
+                    );
                     return Err(());
                 }
             }
@@ -66,7 +72,10 @@ fn apply_use_clause(clause: &ast::CompoundName, context: AllocContext) -> Result
                 return Ok(());
             }
             _ => {
-                context.emit(DiagBuilder2::error(format!("`{}` cannot be used", clause.span.extract())).span(clause.span));
+                context.emit(
+                    DiagBuilder2::error(format!("`{}` cannot be used", clause.span.extract()))
+                        .span(clause.span),
+                );
                 return Err(());
             }
         }

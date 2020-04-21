@@ -2,9 +2,8 @@
 
 //! This module implements the tracking of definitions and scopes for VHDL.
 
-use crate::score::*;
 use crate::defs::*;
-
+use crate::score::*;
 
 macro_rules! impl_make_defs {
 	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
@@ -17,7 +16,6 @@ macro_rules! impl_make_scope {
 		impl_make!($slf, $id: $id_ty => &Scope $blk);
 	}
 }
-
 
 impl_make_defs!(self, id: ScopeRef => {
 	match id {
@@ -48,7 +46,6 @@ impl_make_scope!(self, id: ScopeRef => {
 		ScopeRef::SubprogBody(id) => self.make(id),
 	}
 });
-
 
 // Definitions in a library.
 impl_make_defs!(self, id: LibRef => {
@@ -97,7 +94,6 @@ impl_make_defs!(self, id: LibRef => {
 	// Return the definitions.
 	Ok(self.sb.arenas.defs.alloc(defs))
 });
-
 
 // Definitions made by the context items that appear before design units.
 impl_make_defs!(self, id: CtxItemsRef => {
@@ -150,13 +146,11 @@ impl_make_scope!(self, _id: CtxItemsRef => {
 	}))
 });
 
-
 // Definitions in an entity.
 impl_make_defs!(self, _id: EntityRef => {
 	// TODO: Implement this.
 	Ok(self.sb.arenas.defs.alloc(HashMap::new()))
 });
-
 
 // Definitions in an architecture.
 impl_make_defs!(self, id: ArchRef => {
@@ -207,7 +201,6 @@ impl_make_defs!(self, id: SubprogBodyRef => {
 	Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
 
-
 // Populate the scope of a library.
 impl_make_scope!(self, id: LibRef => {
 	let mut defs = Vec::new();
@@ -219,65 +212,80 @@ impl_make_scope!(self, id: LibRef => {
 	}))
 });
 
-
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-	// Populate the scope of the context items that appear before a design unit. The
-	// scope of the design unit itself is a subscope of the context items.
-	pub fn make_ctx_items_scope(&self, id: CtxItemsRef, parent: Option<ScopeRef>) -> Result<CtxItemsRef> {
-		let (_, items) = self.ast(id);
-		let mut defs = Vec::new();
-		let mut explicit_defs = HashMap::new();
-		defs.push(id.into());
-		for item in items {
-			if let &ast::CtxItem::UseClause(Spanned{value: ref names, ..}) = item {
-				for name in names {
-					// TODO: This creates an infinite loop, since the name lookup requires the context items to be ready.
-					let (res_name, mut out_defs, valid_span, mut tail) = self.resolve_compound_name(name, id.into(), true)?;
+    // Populate the scope of the context items that appear before a design unit. The
+    // scope of the design unit itself is a subscope of the context items.
+    pub fn make_ctx_items_scope(
+        &self,
+        id: CtxItemsRef,
+        parent: Option<ScopeRef>,
+    ) -> Result<CtxItemsRef> {
+        let (_, items) = self.ast(id);
+        let mut defs = Vec::new();
+        let mut explicit_defs = HashMap::new();
+        defs.push(id.into());
+        for item in items {
+            if let &ast::CtxItem::UseClause(Spanned {
+                value: ref names, ..
+            }) = item
+            {
+                for name in names {
+                    // TODO: This creates an infinite loop, since the name lookup requires the context items to be ready.
+                    let (res_name, mut out_defs, valid_span, mut tail) =
+                        self.resolve_compound_name(name, id.into(), true)?;
 
-					// Resolve the optional `all`.
-					match tail.first() {
-						Some(&ast::NamePart::SelectAll(all_span)) => {
-							tail = &tail[1..];
-							match out_defs.pop() {
-								Some(Spanned{value: Def::Pkg(id), ..}) => {
-									defs.push(id.into());
-								}
-								Some(_) => {
-									self.emit(
-										DiagBuilder2::error(format!("`all` not possible on `{}`", valid_span.extract()))
-										.span(all_span)
-									);
-									continue;
-								}
-								None => unreachable!()
-							}
-						}
-						_ => {
-							explicit_defs.entry(res_name).or_insert_with(|| Vec::new()).extend(out_defs);
-						}
-					}
+                    // Resolve the optional `all`.
+                    match tail.first() {
+                        Some(&ast::NamePart::SelectAll(all_span)) => {
+                            tail = &tail[1..];
+                            match out_defs.pop() {
+                                Some(Spanned {
+                                    value: Def::Pkg(id),
+                                    ..
+                                }) => {
+                                    defs.push(id.into());
+                                }
+                                Some(_) => {
+                                    self.emit(
+                                        DiagBuilder2::error(format!(
+                                            "`all` not possible on `{}`",
+                                            valid_span.extract()
+                                        ))
+                                        .span(all_span),
+                                    );
+                                    continue;
+                                }
+                                None => unreachable!(),
+                            }
+                        }
+                        _ => {
+                            explicit_defs
+                                .entry(res_name)
+                                .or_insert_with(|| Vec::new())
+                                .extend(out_defs);
+                        }
+                    }
 
-					// Ensure that there is no garbage.
-					if tail.len() > 0 {
-						let span = Span::union(valid_span.end().into(), name.span.end());
-						self.emit(
-							DiagBuilder2::error("invalid name suffix")
-							.span(span)
-						);
-						continue;
-					}
-				}
-			}
-		}
-		self.sb.scope_table.borrow_mut().insert(id.into(), self.sb.arenas.scope.alloc(Scope{
-			parent: Some(parent.unwrap_or(*ROOT_SCOPE_REF)),
-			defs: defs,
-			explicit_defs: explicit_defs,
-		}));
-		Ok(id)
-	}
+                    // Ensure that there is no garbage.
+                    if tail.len() > 0 {
+                        let span = Span::union(valid_span.end().into(), name.span.end());
+                        self.emit(DiagBuilder2::error("invalid name suffix").span(span));
+                        continue;
+                    }
+                }
+            }
+        }
+        self.sb.scope_table.borrow_mut().insert(
+            id.into(),
+            self.sb.arenas.scope.alloc(Scope {
+                parent: Some(parent.unwrap_or(*ROOT_SCOPE_REF)),
+                defs: defs,
+                explicit_defs: explicit_defs,
+            }),
+        );
+        Ok(id)
+    }
 }
-
 
 // Populate the scope of an entity.
 impl_make_scope!(self, id: EntityRef => {
@@ -291,7 +299,6 @@ impl_make_scope!(self, id: EntityRef => {
 		explicit_defs: HashMap::new(),
 	}))
 });
-
 
 // Populate the scope of an architecture.
 impl_make_scope!(self, id: ArchRef => {
