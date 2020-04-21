@@ -17,5 +17,5 @@ script:
   - cargo fmt -- --check
   - cargo build
   - cargo test --all
-  - tests/run.sh
+  - test/run.sh
   - python3 scripts/test.py --debug --verbose
