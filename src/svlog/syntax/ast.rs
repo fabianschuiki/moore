@@ -505,8 +505,7 @@ impl HasDesc for Port {
 pub struct PortDecl {
     pub span: Span,
     pub dir: PortDir,
-    pub net_type: Option<NetType>,
-    pub var: bool,
+    pub kind: Option<PortKind>,
     pub ty: Type,
     pub names: Vec<VarDeclName>,
 }

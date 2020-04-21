@@ -4916,12 +4916,13 @@ fn parse_port_decl(p: &mut dyn AbstractParser) -> ReportedResult<PortDecl> {
     };
 
     // Consume the optional net type or "var" keyword.
-    let net_type = as_net_type(p.peek(0).0);
-    let var = if net_type.is_some() {
+    let kind = if let Some(nt) = as_net_type(p.peek(0).0) {
         p.bump();
-        false
+        Some(PortKind::Net(nt))
+    } else if p.try_eat(Keyword(Kw::Var)) {
+        Some(PortKind::Var)
     } else {
-        p.try_eat(Keyword(Kw::Var))
+        None
     };
 
     // Branch to handle explicit and implicit types.
@@ -4950,12 +4951,11 @@ fn parse_port_decl(p: &mut dyn AbstractParser) -> ReportedResult<PortDecl> {
     // Wrap things up.
     span.expand(p.last_span());
     Ok(PortDecl {
-        span: span,
-        dir: dir,
-        net_type: net_type,
-        var: var,
-        ty: ty,
-        names: names,
+        span,
+        dir,
+        kind,
+        ty,
+        names,
     })
 }
 
