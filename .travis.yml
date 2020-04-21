@@ -1,3 +1,4 @@
+sudo: false
 language: rust
 rust:
   - stable
@@ -14,16 +15,6 @@ script:
   - cargo test --all
   - tests/run.sh
   - python3 scripts/test.py --debug --verbose
-
-after_success:
-  - |
-    [ ! $TRAVIS_BRANCH = master ] ||
-    [ ! $TRAVIS_RUST_VERSION = stable ] ||
-    scripts/doc_upload.sh
-
-env:
-  global:
-    - secure: "SjFTsn1KuFWw0huk6fFyYfwqhaICBLfx8P8RnnKwhR3AFJ8CKYux8O+fbHCPMo/4Q5YG9/0PUNAiFbKuEtgZsEoitG4LpBG7abSzgDHJWuuE6s8c22hWiQzz0qU86swRD+DdvBiaJGcBUg3TRnSZ5HEalwctOxeldTMH9gP04XYXZMlOxaRb/STIHeWyMuo76lb4SGehgftidDO4B9SSBYSmH6ipLdSW8o/01MP25Q0nRWvzaC8pJcNLplxt1ILm1n6bjxftlwZhagrHlGsJY4ngpJgsfj3L+0Jq9iL/yBsmPddnR+kimzUDRmx1xhs7bDkgE955Go2NM+gswthZ77XyfAzN6yi90hTCyruyl/AHm0MRkkD2ubkT+gVdD0iV3X8RiJZhGi9F2QHLbLIqvVLVyQfXcB0uEvL77dfnRaqxwWl5mGSfIwVKKFDm0F7YhZ8KE8JAB/9bTWS8ysXzrzXhqdO0sxTZCjDLDEKnxpAH4oCGAdu0W6Nb4iQulFJkepdc9vTDdt4Tb6rfA8B7mBtZqqQoFSJPifJ0ETdYS7SpziH90Ch4yrE9tvia+WKGL5UbLbXZ3z5fTQh1VFgC5Ib33X7JBmkcXE8qGH/4mu6Cshw/toL/42buu8DmtT3H877k6scW/AYeMq83C7BJJ2J36D4M75CxMEWfSU6pIfE="
 
 notifications:
   slack:
