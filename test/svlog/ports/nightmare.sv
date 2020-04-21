@@ -15,4 +15,7 @@ module foo (
     input P4;
     input x3, x5;
     output x4, x6;
+
+    logic [7:0] x1;
+    int x2;
 endmodule
