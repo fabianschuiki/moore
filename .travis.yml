@@ -13,6 +13,7 @@ script:
   - cargo build
   - cargo test --all
   - tests/run.sh
+  - python3 scripts/test.py --debug --verbose
 
 after_success:
   - |
