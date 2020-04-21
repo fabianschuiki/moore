@@ -38,6 +38,7 @@ args = parser.parse_args()
 # A class to encapsulate the check directives in a file.
 class CheckFile:
     regex_dir = re.compile(r'^\s*//\s*(CHECK[^:]*):\s+(.+)$')
+    ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
 
     def __init__(self, checks, input):
         # Collect the directives in the file.
@@ -78,6 +79,7 @@ class CheckFile:
         if dirname == "CHECK":
             for line in state:
                 line = line.split("//")[0].strip()
+                line = self.ansi_escape.sub("", line)
                 if line == directive[1]:
                     return state
             raise Exception("No matching line found")
