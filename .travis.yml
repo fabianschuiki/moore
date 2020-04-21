@@ -19,7 +19,3 @@ script:
   - cargo test --all
   - tests/run.sh
   - python3 scripts/test.py --debug --verbose
-
-notifications:
-  slack:
-    secure: "ON5mSYxG4Tlmpmn+g+/qL43z1IrYDvVTmaId/I8Hlcw4UN7VSgNybefEBf1wnmPz73C8/8/jfJWXfAFMDDvKx05OZy3dZv4wMhxH3vufrjdyOVcjMbWPTzNpzrTMnDfGoegVI1TYM5AoXpRbrKHvxne0T7qVWn/hNE0ZufLniGT5JgjHR3e825Jw1/zZB3XFBqI5tP8EmilDVLqtDJXI4wNsA5tk4M1aQLKqKrlhvbNgG60rsnwe/RTkc/DKAsfOFyTEg9518zPZnUAKV7zbTWll8F5Fr9PLyV4c1EWyanEi1g1ZarS+4t7zYkHr+PMvcOehadEEAYqafmoMTowIN+MB3/uCMLWUXP4dIgSTim/vjygr/RfBTRkYPLtqeCphdqoz0GnTOHqDVxkXvQYlspojF/7/L6MToE0YdiWd2X7XM8JqW/2Qsmn8EjOo8/HO2zJyUVcigE+oi9+dkbBm7MEZ7R6zIxa1MNTIGttd6lSRLUh9xia1uejV2PRWxINhfb0/Nrr4gw1SKwCq38VjbAth88smd5EZf4ukajO+qdXvBC5OmzL0lrEpj+A53DNzmRVRK+6MLAFLfJ/h4SSQ0itzqy11CSVNOfqgTlpojz2c1FNgZ/bKVXsHkpFyA/K9vrz9/yUip0n9fW2yFcEBnER4J2/jWIGW5hTEuPvDhQM="
