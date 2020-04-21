@@ -265,6 +265,14 @@ impl<'a> AbstractParser for Parser<'a> {
         eprintln!("");
         eprintln!("{}", diag);
 
+        // Emit a backtrace for this diagnostic.
+        if diag.get_severity() >= Severity::Warning {
+            trace!(
+                "Diagnostic triggered here:\n{:?}",
+                backtrace::Backtrace::new()
+            );
+        }
+
         // Keep track of the worst diagnostic severity we've encountered, such
         // that parsing can be aborted accordingly.
         if diag.get_severity() > self.severity {
