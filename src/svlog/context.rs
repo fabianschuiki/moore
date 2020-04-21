@@ -218,23 +218,19 @@ pub struct GlobalTables<'t> {
 /// the global context via the `gcx()` method.
 pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     /// Get the global context.
-    #[inline(always)]
     fn gcx(&self) -> &GlobalContext<'gcx>;
 
     /// Get the compiler session.
-    #[inline(always)]
     fn sess(&self) -> &'gcx Session {
         self.gcx().sess
     }
 
     /// Access the arena into which values are to be allocated.
-    #[inline(always)]
     fn arena(&self) -> &'gcx GlobalArenas<'gcx> {
         self.gcx().arena
     }
 
     /// Access the tables.
-    #[inline(always)]
     fn tables(&self) -> &GlobalTables<'gcx> {
         &self.gcx().tables
     }
