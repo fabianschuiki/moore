@@ -15,7 +15,8 @@ TMPDIFFACT=`mktemp`
 TESTS_DIR="$(dirname "${BASH_SOURCE[0]}")"
 # MOORE="cargo run --"
 (cd "$TESTS_DIR/.." && cargo build)
-MOORE="$TESTS_DIR/../target/debug/moore"
+TARGET_DIR=$(cargo metadata --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+MOORE=$(readlink -f "$TARGET_DIR/debug/moore")
 
 ALL=false
 if [ "$1" = "--all" ] || [ "$1" = "-a" ]; then
