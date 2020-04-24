@@ -603,10 +603,13 @@ fn lower_module_ports_nonansi<'gcx>(
                 name: name.name,
                 kind: ast.kind,
                 dir: ast.dir,
-                ty: &ast.ty.data,
                 sign: ast.ty.sign,
+                ty: &ast.ty.data,
                 packed_dims: &ast.ty.dims,
                 unpacked_dims: &name.dims,
+                match_ty: None,
+                match_packed_dims: None,
+                match_unpacked_dims: None,
                 default: name.init.as_ref(),
                 var_decl: None,
                 net_decl: None,
@@ -789,18 +792,27 @@ fn lower_module_ports_nonansi<'gcx>(
             (a, b) if a == b => port.sign = a,
             (a, ast::TypeSign::None) => port.sign = a,
             (ast::TypeSign::None, b) => port.sign = b,
-            (a, b) => {
+            (_, _) => {
                 cx.emit(
                     DiagBuilder2::error(format!("port `{}` has contradicting signs", port.name))
                         .span(port.span)
                         .span(add_span),
                 );
             }
-        };
+        }
 
-        trace!("Merging type {:#?}", add_ty);
-        trace!("Merging packed dims {:#?}", add_packed);
-        trace!("Merging unpacked dims {:#?}", add_unpacked);
+        // Merge the type.
+        match (port.ty, add_ty) {
+            (a, b) if a == b => {
+                port.ty = a;
+                port.match_ty = Some(b);
+            }
+            (a, ast::ImplicitType) => port.ty = a,
+            (ast::ImplicitType, b) => port.ty = b,
+            _ => unreachable!("redecl of complete port should be handled above"),
+        }
+        port.match_packed_dims = Some(add_packed);
+        port.match_unpacked_dims = Some(add_unpacked);
     }
 
     // As a fourth step, go through the ports themselves and pair them up with
@@ -817,13 +829,17 @@ struct PartialNonAnsiPort<'a> {
     name: Name,
     dir: ast::PortDir,
     kind: Option<ast::PortKind>,
-    ty: &'a ast::TypeData,
     sign: ast::TypeSign,
+    ty: &'a ast::TypeData,
     packed_dims: &'a [ast::TypeDim],
     unpacked_dims: &'a [ast::TypeDim],
     default: Option<&'a ast::Expr>,
     var_decl: Option<(&'a ast::VarDecl, &'a ast::VarDeclName)>,
     net_decl: Option<(&'a ast::NetDecl, &'a ast::VarDeclName)>,
+    // Redundant type specification which should check for a match later.
+    match_ty: Option<&'a ast::TypeData>,
+    match_packed_dims: Option<&'a [ast::TypeDim]>,
+    match_unpacked_dims: Option<&'a [ast::TypeDim]>,
 }
 
 /// Lower the ANSI ports of a module.
