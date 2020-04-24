@@ -1002,404 +1002,404 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
 // Lower an entity to HIR.
 impl_make!(self, id: EntityRef => &hir::Entity {
-	let (lib, ctx_id, ast) = self.ast(id);
-	let mut entity = hir::Entity{
-		ctx_items: ctx_id,
-		lib: lib,
-		name: ast.name,
-		generics: Vec::new(),
-		ports: Vec::new(),
-	};
-	let mut port_spans = Vec::new();
-	let mut generic_spans = Vec::new();
-	let ctx = AddContext::new(self, id.into());
-	for decl in &ast.decls {
-		match *decl {
-			// Port clauses
-			ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Port, span }, ref decls) => {
-				// For ports only signal interface declarations are allowed.
-				port_spans.push(span);
-				for decl in &decls.value {
-					match *decl {
-						ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
-							let ty = ctx.add_subtype_ind(&decl.ty)?;
-							// let ty = SubtypeIndRef(NodeId::alloc());
-							// self.set_ast(ty, (id.into(), &decl.ty));
-							for name in &decl.names {
-								let subid = IntfSignalRef(NodeId::alloc());
-								self.set_ast(subid, (id.into(), decl, ty, name));
-								entity.ports.push(subid);
-							}
-						}
-						ref wrong => {
-							self.emit(
-								DiagBuilder2::error(format!("a {} cannot appear in a port clause", wrong.desc()))
-								.span(wrong.human_span())
-							);
-							continue;
-						}
-					}
-				}
-			}
+    let (lib, ctx_id, ast) = self.ast(id);
+    let mut entity = hir::Entity{
+        ctx_items: ctx_id,
+        lib: lib,
+        name: ast.name,
+        generics: Vec::new(),
+        ports: Vec::new(),
+    };
+    let mut port_spans = Vec::new();
+    let mut generic_spans = Vec::new();
+    let ctx = AddContext::new(self, id.into());
+    for decl in &ast.decls {
+        match *decl {
+            // Port clauses
+            ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Port, span }, ref decls) => {
+                // For ports only signal interface declarations are allowed.
+                port_spans.push(span);
+                for decl in &decls.value {
+                    match *decl {
+                        ast::IntfDecl::ObjDecl(ref decl @ ast::IntfObjDecl{ kind: ast::IntfObjKind::Signal, .. }) => {
+                            let ty = ctx.add_subtype_ind(&decl.ty)?;
+                            // let ty = SubtypeIndRef(NodeId::alloc());
+                            // self.set_ast(ty, (id.into(), &decl.ty));
+                            for name in &decl.names {
+                                let subid = IntfSignalRef(NodeId::alloc());
+                                self.set_ast(subid, (id.into(), decl, ty, name));
+                                entity.ports.push(subid);
+                            }
+                        }
+                        ref wrong => {
+                            self.emit(
+                                DiagBuilder2::error(format!("a {} cannot appear in a port clause", wrong.desc()))
+                                .span(wrong.human_span())
+                            );
+                            continue;
+                        }
+                    }
+                }
+            }
 
-			// Generic clauses
-			ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Generic, span }, ref decls) => {
-				generic_spans.push(span);
-				self.unpack_generics(id.into(), &decls.value, &mut entity.generics)?;
-			}
+            // Generic clauses
+            ast::DeclItem::PortgenClause(_, Spanned{ value: ast::PortgenKind::Generic, span }, ref decls) => {
+                generic_spans.push(span);
+                self.unpack_generics(id.into(), &decls.value, &mut entity.generics)?;
+            }
 
-			ref wrong => {
-				self.emit(
-					DiagBuilder2::error(format!("a {} cannot appear in an entity declaration", wrong.desc()))
-					.span(decl.human_span())
-				);
-				continue;
-			}
-		}
-	}
-	// TODO(strict): Complain about multiple port and generic clauses.
-	// TODO(strict): Complain when port and generic clauses are not the
-	// first in the entity.
-	Ok(self.sb.arenas.hir.entity.alloc(entity))
+            ref wrong => {
+                self.emit(
+                    DiagBuilder2::error(format!("a {} cannot appear in an entity declaration", wrong.desc()))
+                    .span(decl.human_span())
+                );
+                continue;
+            }
+        }
+    }
+    // TODO(strict): Complain about multiple port and generic clauses.
+    // TODO(strict): Complain when port and generic clauses are not the
+    // first in the entity.
+    Ok(self.sb.arenas.hir.entity.alloc(entity))
 });
 
 // Lower an interface signal to HIR.
 impl_make!(self, id: IntfSignalRef => &hir::IntfSignal {
-	let (scope_id, decl, subty_id, ident) = self.ast(id);
-	let init = match decl.default {
-		Some(ref e) => {
-			let subid = ExprRef(NodeId::alloc());
-			self.set_ast(subid, (scope_id, e));
-			Some(subid)
-		}
-		None => None
-	};
-	let sig = hir::IntfSignal {
-		name: Spanned::new(ident.name, ident.span),
-		mode: match decl.mode {
-			None | Some(ast::IntfMode::In) => hir::IntfSignalMode::In,
-			Some(ast::IntfMode::Out) => hir::IntfSignalMode::Out,
-			Some(ast::IntfMode::Inout) => hir::IntfSignalMode::Inout,
-			Some(ast::IntfMode::Buffer) => hir::IntfSignalMode::Buffer,
-			Some(ast::IntfMode::Linkage) => hir::IntfSignalMode::Linkage,
-		},
-		ty: subty_id,
-		bus: decl.bus,
-		init: init,
-	};
-	Ok(self.sb.arenas.hir.intf_sig.alloc(sig))
+    let (scope_id, decl, subty_id, ident) = self.ast(id);
+    let init = match decl.default {
+        Some(ref e) => {
+            let subid = ExprRef(NodeId::alloc());
+            self.set_ast(subid, (scope_id, e));
+            Some(subid)
+        }
+        None => None
+    };
+    let sig = hir::IntfSignal {
+        name: Spanned::new(ident.name, ident.span),
+        mode: match decl.mode {
+            None | Some(ast::IntfMode::In) => hir::IntfSignalMode::In,
+            Some(ast::IntfMode::Out) => hir::IntfSignalMode::Out,
+            Some(ast::IntfMode::Inout) => hir::IntfSignalMode::Inout,
+            Some(ast::IntfMode::Buffer) => hir::IntfSignalMode::Buffer,
+            Some(ast::IntfMode::Linkage) => hir::IntfSignalMode::Linkage,
+        },
+        ty: subty_id,
+        bus: decl.bus,
+        init: init,
+    };
+    Ok(self.sb.arenas.hir.intf_sig.alloc(sig))
 });
 
 // Lower a package declaration to HIR.
 impl_make!(self, id: PkgDeclRef => &hir::Package {
-	let (outer_scope, ast) = self.ast(id);
+    let (outer_scope, ast) = self.ast(id);
     let scope = id.into();
     self.subscope(scope, outer_scope);
-	let generics = Vec::new();
-	// let generic_maps = Vec::new();
-	let mut decls = Vec::new();
-	let mut had_fails = false;
+    let generics = Vec::new();
+    // let generic_maps = Vec::new();
+    let mut decls = Vec::new();
+    let mut had_fails = false;
 
-	// Filter the declarations in the package to only those that we actually
-	// support, and separate the generic clauses and maps.
-	let ctx = AddContext::new(self, scope);
-	for decl in &ast.decls {
-		match *decl {
-			ast::DeclItem::SubprogDecl(ref decl) => {
-				match decl.data {
-					ast::SubprogData::Decl => {
-						let subid = SubprogDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope, decl));
-						decls.push(subid.into());
-					}
-					ast::SubprogData::Body{..} => {
-						self.emit(
-							DiagBuilder2::error(format!("a {} cannot appear in a package declaration", decl.desc()))
-							.span(decl.human_span())
-							.add_note("Only subprogram declarations or instantiations can appear in a package declaration. See IEEE 1076-2008 section 4.7.")
-						);
-						had_fails = true;
-						continue;
-					}
-					ast::SubprogData::Inst{..} => {
-						let subid = SubprogInstRef(NodeId::alloc());
-						self.set_ast(subid, (scope, decl));
-						decls.push(subid.into());
-					}
-				}
-			}
-			ast::DeclItem::PkgDecl(ref decl) => {
-				let subid = PkgDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::PkgInst(ref decl) => {
-				let subid = PkgInstRef(NodeId::alloc());
-				self.set_ast(subid, (scope, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::TypeDecl(ref decl) => {
-				decls.push(ctx.add_type_decl(decl)?.into());
-				// let subid = TypeDeclRef(NodeId::alloc());
-				// self.set_ast(subid, (scope, decl));
-				// decls.push(subid.into());
-			}
-			ast::DeclItem::SubtypeDecl(ref decl) => {
-				let subid = SubtypeDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::ObjDecl(ref decl) => {
-				match decl.kind {
-					ast::ObjKind::Const => {
-						decls.extend(ctx.add_const_decl::<DeclInPkgRef>(decl)?);
-					}
-					ast::ObjKind::Signal => {
-						decls.extend(ctx.add_signal_decl::<DeclInPkgRef>(decl)?);
-					}
-					ast::ObjKind::SharedVar => {
-						self.emit(
-							DiagBuilder2::error("not a variable; shared variables may not appear in a package declaration")
-							.span(decl.human_span())
-						);
-						had_fails = true;
-					}
-					ast::ObjKind::Var => {
-						decls.extend(ctx.add_var_decl::<DeclInPkgRef>(decl)?);
-					}
-					ast::ObjKind::File => {
-						decls.extend(ctx.add_file_decl::<DeclInPkgRef>(decl)?);
-					}
-				}
-			}
-			ast::DeclItem::AliasDecl(ref decl) => {
-				let subid = AliasDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::CompDecl(ref decl) => {
-				let subid = CompDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::AttrDecl(ref decl) => {
-				match decl.data {
-					ast::AttrData::Decl(..) => {
-						let subid = AttrDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope, decl));
-						decls.push(subid.into());
-					}
-					ast::AttrData::Spec{..} => {
-						let subid = AttrSpecRef(NodeId::alloc());
-						self.set_ast(subid, (scope, decl));
-						decls.push(subid.into());
-					}
-				}
-			}
-			ast::DeclItem::DisconDecl(ref decl) => {
-				let subid = DisconSpecRef(NodeId::alloc());
-				self.set_ast(subid, (scope, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::GroupDecl(ref decl) => {
-				match decl.data {
-					ast::GroupData::Decl(..) => {
-						let subid = GroupDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope, decl));
-						decls.push(subid.into());
-					}
-					ast::GroupData::Temp{..} => {
-						let subid = GroupTempRef(NodeId::alloc());
-						self.set_ast(subid, (scope, decl));
-						decls.push(subid.into());
-					}
-				}
-			}
-			ast::DeclItem::UseClause(..) => (),
-			ref wrong => {
-				self.emit(
-					DiagBuilder2::error(format!("a {} cannot appear in a package declaration", wrong.desc()))
-					.span(decl.human_span())
-				);
-				had_fails = true;
-				continue;
-			}
-		}
-	}
+    // Filter the declarations in the package to only those that we actually
+    // support, and separate the generic clauses and maps.
+    let ctx = AddContext::new(self, scope);
+    for decl in &ast.decls {
+        match *decl {
+            ast::DeclItem::SubprogDecl(ref decl) => {
+                match decl.data {
+                    ast::SubprogData::Decl => {
+                        let subid = SubprogDeclRef(NodeId::alloc());
+                        self.set_ast(subid, (scope, decl));
+                        decls.push(subid.into());
+                    }
+                    ast::SubprogData::Body{..} => {
+                        self.emit(
+                            DiagBuilder2::error(format!("a {} cannot appear in a package declaration", decl.desc()))
+                            .span(decl.human_span())
+                            .add_note("Only subprogram declarations or instantiations can appear in a package declaration. See IEEE 1076-2008 section 4.7.")
+                        );
+                        had_fails = true;
+                        continue;
+                    }
+                    ast::SubprogData::Inst{..} => {
+                        let subid = SubprogInstRef(NodeId::alloc());
+                        self.set_ast(subid, (scope, decl));
+                        decls.push(subid.into());
+                    }
+                }
+            }
+            ast::DeclItem::PkgDecl(ref decl) => {
+                let subid = PkgDeclRef(NodeId::alloc());
+                self.set_ast(subid, (scope, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::PkgInst(ref decl) => {
+                let subid = PkgInstRef(NodeId::alloc());
+                self.set_ast(subid, (scope, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::TypeDecl(ref decl) => {
+                decls.push(ctx.add_type_decl(decl)?.into());
+                // let subid = TypeDeclRef(NodeId::alloc());
+                // self.set_ast(subid, (scope, decl));
+                // decls.push(subid.into());
+            }
+            ast::DeclItem::SubtypeDecl(ref decl) => {
+                let subid = SubtypeDeclRef(NodeId::alloc());
+                self.set_ast(subid, (scope, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::ObjDecl(ref decl) => {
+                match decl.kind {
+                    ast::ObjKind::Const => {
+                        decls.extend(ctx.add_const_decl::<DeclInPkgRef>(decl)?);
+                    }
+                    ast::ObjKind::Signal => {
+                        decls.extend(ctx.add_signal_decl::<DeclInPkgRef>(decl)?);
+                    }
+                    ast::ObjKind::SharedVar => {
+                        self.emit(
+                            DiagBuilder2::error("not a variable; shared variables may not appear in a package declaration")
+                            .span(decl.human_span())
+                        );
+                        had_fails = true;
+                    }
+                    ast::ObjKind::Var => {
+                        decls.extend(ctx.add_var_decl::<DeclInPkgRef>(decl)?);
+                    }
+                    ast::ObjKind::File => {
+                        decls.extend(ctx.add_file_decl::<DeclInPkgRef>(decl)?);
+                    }
+                }
+            }
+            ast::DeclItem::AliasDecl(ref decl) => {
+                let subid = AliasDeclRef(NodeId::alloc());
+                self.set_ast(subid, (scope, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::CompDecl(ref decl) => {
+                let subid = CompDeclRef(NodeId::alloc());
+                self.set_ast(subid, (scope, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::AttrDecl(ref decl) => {
+                match decl.data {
+                    ast::AttrData::Decl(..) => {
+                        let subid = AttrDeclRef(NodeId::alloc());
+                        self.set_ast(subid, (scope, decl));
+                        decls.push(subid.into());
+                    }
+                    ast::AttrData::Spec{..} => {
+                        let subid = AttrSpecRef(NodeId::alloc());
+                        self.set_ast(subid, (scope, decl));
+                        decls.push(subid.into());
+                    }
+                }
+            }
+            ast::DeclItem::DisconDecl(ref decl) => {
+                let subid = DisconSpecRef(NodeId::alloc());
+                self.set_ast(subid, (scope, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::GroupDecl(ref decl) => {
+                match decl.data {
+                    ast::GroupData::Decl(..) => {
+                        let subid = GroupDeclRef(NodeId::alloc());
+                        self.set_ast(subid, (scope, decl));
+                        decls.push(subid.into());
+                    }
+                    ast::GroupData::Temp{..} => {
+                        let subid = GroupTempRef(NodeId::alloc());
+                        self.set_ast(subid, (scope, decl));
+                        decls.push(subid.into());
+                    }
+                }
+            }
+            ast::DeclItem::UseClause(..) => (),
+            ref wrong => {
+                self.emit(
+                    DiagBuilder2::error(format!("a {} cannot appear in a package declaration", wrong.desc()))
+                    .span(decl.human_span())
+                );
+                had_fails = true;
+                continue;
+            }
+        }
+    }
 
-	if had_fails {
-		Err(())
-	} else {
-		Ok(self.sb.arenas.hir.package.alloc(hir::Package{
-			parent: outer_scope,
-			name: ast.name,
-			generics: generics,
-			decls: decls,
-		}))
-	}
+    if had_fails {
+        Err(())
+    } else {
+        Ok(self.sb.arenas.hir.package.alloc(hir::Package{
+            parent: outer_scope,
+            name: ast.name,
+            generics: generics,
+            decls: decls,
+        }))
+    }
 });
 
 // Lower a package body to HIR.
 impl_make!(self, id: PkgBodyRef => &hir::PackageBody {
-	let (scope_id, ast) = self.ast(id);
-	let pkg = self.unpack_package_name((&ast.name).into(), scope_id)?;
-	let mut decls = Vec::new();
-	let mut had_fails = false;
-	let ctx = AddContext::new(self, scope_id);
-	for decl in &ast.decls {
-		match *decl {
-			ast::DeclItem::SubprogDecl(ref decl) => {
-				match decl.data {
-					ast::SubprogData::Decl => {
-						let subid = SubprogDeclRef(NodeId::alloc());
-						self.set_ast(subid, (id.into(), decl));
-						decls.push(subid.into());
-					}
-					ast::SubprogData::Body{..} => {
-						let subid = SubprogBodyRef(NodeId::alloc());
-						self.set_ast(subid, (id.into(), decl));
-						decls.push(subid.into());
-					}
-					ast::SubprogData::Inst{..} => {
-						let subid = SubprogInstRef(NodeId::alloc());
-						self.set_ast(subid, (id.into(), decl));
-						decls.push(subid.into());
-					}
-				}
-			}
-			ast::DeclItem::PkgDecl(ref decl) => {
-				let subid = PkgDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::PkgBody(ref decl) => {
-				let subid = PkgBodyRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::PkgInst(ref decl) => {
-				let subid = PkgInstRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::TypeDecl(ref decl) => {
-				let subid = TypeDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::SubtypeDecl(ref decl) => {
-				let subid = SubtypeDeclRef(NodeId::alloc());
-				self.set_ast(subid, (id.into(), decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::ObjDecl(ref decl) => {
-				match decl.kind {
-					ast::ObjKind::Const => {
-						decls.extend(ctx.add_const_decl::<DeclInPkgBodyRef>(decl)?);
-					}
-					ast::ObjKind::Signal => {
-						self.emit(
-							DiagBuilder2::error("a signal declaration cannot appear in a package body")
-							.span(decl.human_span())
-						);
-						had_fails = true;
-					}
-					ast::ObjKind::SharedVar => {
-						self.emit(
-							DiagBuilder2::error("not a variable; shared variables may not appear in a package body")
-							.span(decl.human_span())
-						);
-						had_fails = true;
-					}
-					ast::ObjKind::Var => {
-						decls.extend(ctx.add_var_decl::<DeclInPkgBodyRef>(decl)?);
-					}
-					ast::ObjKind::File => {
-						decls.extend(ctx.add_file_decl::<DeclInPkgBodyRef>(decl)?);
-					}
-				}
-			}
-			ast::DeclItem::AliasDecl(ref decl) => {
-				let subid = AliasDeclRef(NodeId::alloc());
-				self.set_ast(subid, (scope_id, decl));
-				decls.push(subid.into());
-			}
-			ast::DeclItem::AttrDecl(ref decl) => {
-				match decl.data {
-					ast::AttrData::Decl(..) => {
-						let subid = AttrDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
-					}
-					ast::AttrData::Spec{..} => {
-						let subid = AttrSpecRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
-					}
-				}
-			}
-			ast::DeclItem::GroupDecl(ref decl) => {
-				match decl.data {
-					ast::GroupData::Decl(..) => {
-						let subid = GroupDeclRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
-					}
-					ast::GroupData::Temp{..} => {
-						let subid = GroupTempRef(NodeId::alloc());
-						self.set_ast(subid, (scope_id, decl));
-						decls.push(subid.into());
-					}
-				}
-			}
-			ast::DeclItem::UseClause(..) => (),
-			ref wrong => {
-				self.emit(
-					DiagBuilder2::error(format!("a {} cannot appear in a package body", wrong.desc()))
-					.span(decl.human_span())
-				);
-				had_fails = true;
-				continue;
-			}
-		}
-	}
+    let (scope_id, ast) = self.ast(id);
+    let pkg = self.unpack_package_name((&ast.name).into(), scope_id)?;
+    let mut decls = Vec::new();
+    let mut had_fails = false;
+    let ctx = AddContext::new(self, scope_id);
+    for decl in &ast.decls {
+        match *decl {
+            ast::DeclItem::SubprogDecl(ref decl) => {
+                match decl.data {
+                    ast::SubprogData::Decl => {
+                        let subid = SubprogDeclRef(NodeId::alloc());
+                        self.set_ast(subid, (id.into(), decl));
+                        decls.push(subid.into());
+                    }
+                    ast::SubprogData::Body{..} => {
+                        let subid = SubprogBodyRef(NodeId::alloc());
+                        self.set_ast(subid, (id.into(), decl));
+                        decls.push(subid.into());
+                    }
+                    ast::SubprogData::Inst{..} => {
+                        let subid = SubprogInstRef(NodeId::alloc());
+                        self.set_ast(subid, (id.into(), decl));
+                        decls.push(subid.into());
+                    }
+                }
+            }
+            ast::DeclItem::PkgDecl(ref decl) => {
+                let subid = PkgDeclRef(NodeId::alloc());
+                self.set_ast(subid, (id.into(), decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::PkgBody(ref decl) => {
+                let subid = PkgBodyRef(NodeId::alloc());
+                self.set_ast(subid, (id.into(), decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::PkgInst(ref decl) => {
+                let subid = PkgInstRef(NodeId::alloc());
+                self.set_ast(subid, (id.into(), decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::TypeDecl(ref decl) => {
+                let subid = TypeDeclRef(NodeId::alloc());
+                self.set_ast(subid, (id.into(), decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::SubtypeDecl(ref decl) => {
+                let subid = SubtypeDeclRef(NodeId::alloc());
+                self.set_ast(subid, (id.into(), decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::ObjDecl(ref decl) => {
+                match decl.kind {
+                    ast::ObjKind::Const => {
+                        decls.extend(ctx.add_const_decl::<DeclInPkgBodyRef>(decl)?);
+                    }
+                    ast::ObjKind::Signal => {
+                        self.emit(
+                            DiagBuilder2::error("a signal declaration cannot appear in a package body")
+                            .span(decl.human_span())
+                        );
+                        had_fails = true;
+                    }
+                    ast::ObjKind::SharedVar => {
+                        self.emit(
+                            DiagBuilder2::error("not a variable; shared variables may not appear in a package body")
+                            .span(decl.human_span())
+                        );
+                        had_fails = true;
+                    }
+                    ast::ObjKind::Var => {
+                        decls.extend(ctx.add_var_decl::<DeclInPkgBodyRef>(decl)?);
+                    }
+                    ast::ObjKind::File => {
+                        decls.extend(ctx.add_file_decl::<DeclInPkgBodyRef>(decl)?);
+                    }
+                }
+            }
+            ast::DeclItem::AliasDecl(ref decl) => {
+                let subid = AliasDeclRef(NodeId::alloc());
+                self.set_ast(subid, (scope_id, decl));
+                decls.push(subid.into());
+            }
+            ast::DeclItem::AttrDecl(ref decl) => {
+                match decl.data {
+                    ast::AttrData::Decl(..) => {
+                        let subid = AttrDeclRef(NodeId::alloc());
+                        self.set_ast(subid, (scope_id, decl));
+                        decls.push(subid.into());
+                    }
+                    ast::AttrData::Spec{..} => {
+                        let subid = AttrSpecRef(NodeId::alloc());
+                        self.set_ast(subid, (scope_id, decl));
+                        decls.push(subid.into());
+                    }
+                }
+            }
+            ast::DeclItem::GroupDecl(ref decl) => {
+                match decl.data {
+                    ast::GroupData::Decl(..) => {
+                        let subid = GroupDeclRef(NodeId::alloc());
+                        self.set_ast(subid, (scope_id, decl));
+                        decls.push(subid.into());
+                    }
+                    ast::GroupData::Temp{..} => {
+                        let subid = GroupTempRef(NodeId::alloc());
+                        self.set_ast(subid, (scope_id, decl));
+                        decls.push(subid.into());
+                    }
+                }
+            }
+            ast::DeclItem::UseClause(..) => (),
+            ref wrong => {
+                self.emit(
+                    DiagBuilder2::error(format!("a {} cannot appear in a package body", wrong.desc()))
+                    .span(decl.human_span())
+                );
+                had_fails = true;
+                continue;
+            }
+        }
+    }
 
-	if had_fails {
-		Err(())
-	} else {
-		Ok(self.sb.arenas.hir.package_body.alloc(hir::PackageBody {
-			parent: scope_id,
-			name: ast.name,
-			pkg: pkg,
-			decls: decls,
-		}))
-	}
+    if had_fails {
+        Err(())
+    } else {
+        Ok(self.sb.arenas.hir.package_body.alloc(hir::PackageBody {
+            parent: scope_id,
+            name: ast.name,
+            pkg: pkg,
+            decls: decls,
+        }))
+    }
 });
 
 // Lower a package instantiation to HIR.
 impl_make!(self, id: PkgInstRef => &hir::PackageInst {
-	let (scope_id, ast) = self.ast(id);
-	let pkg = self.unpack_package_name((&ast.target).into(), scope_id)?;
-	let gm = match ast.generics {
-		Some(ref g) => self.unpack_generic_map(scope_id, g)?,
-		None => vec![],
-	};
-	Ok(self.sb.arenas.hir.package_inst.alloc(hir::PackageInst {
-		parent: scope_id,
-		name: ast.name,
-		pkg: pkg,
-		generic_map: gm,
-	}))
+    let (scope_id, ast) = self.ast(id);
+    let pkg = self.unpack_package_name((&ast.target).into(), scope_id)?;
+    let gm = match ast.generics {
+        Some(ref g) => self.unpack_generic_map(scope_id, g)?,
+        None => vec![],
+    };
+    Ok(self.sb.arenas.hir.package_inst.alloc(hir::PackageInst {
+        parent: scope_id,
+        name: ast.name,
+        pkg: pkg,
+        generic_map: gm,
+    }))
 });
 
 impl_make!(self, id: SubtypeDeclRef => &hir::SubtypeDecl {
-	let (scope_id, ast) = self.ast(id);
-	let subty = self.unpack_subtype_ind(&ast.subtype, scope_id)?;
-	Ok(self.sb.arenas.hir.subtype_decl.alloc(hir::SubtypeDecl{
-		parent: scope_id,
-		name: ast.name,
-		subty: subty,
-	}))
+    let (scope_id, ast) = self.ast(id);
+    let subty = self.unpack_subtype_ind(&ast.subtype, scope_id)?;
+    Ok(self.sb.arenas.hir.subtype_decl.alloc(hir::SubtypeDecl{
+        parent: scope_id,
+        name: ast.name,
+        subty: subty,
+    }))
 });
 
 // // Lower an expression to HIR.
@@ -1807,112 +1807,112 @@ impl_make!(self, id: SubtypeDeclRef => &hir::SubtypeDecl {
 
 // Lower an architecture to HIR.
 impl_make!(self, id: ArchRef => &hir::Arch {
-	let (lib_id, ctx_id, ast) = self.ast(id);
-	let decls = self.unpack_block_decls(id.into(), &ast.decls, "an architecture")?;
-	let stmts = self.unpack_concurrent_stmts(id.into(), &ast.stmts, "an architecture")?;
-	let entity_id = *self.archs(lib_id)?.by_arch.get(&id).unwrap();
-	Ok(self.sb.arenas.hir.arch.alloc(hir::Arch{
-		ctx_items: ctx_id,
-		entity: entity_id,
-		name: ast.name,
-		decls: decls,
-		stmts: stmts,
-	}))
+    let (lib_id, ctx_id, ast) = self.ast(id);
+    let decls = self.unpack_block_decls(id.into(), &ast.decls, "an architecture")?;
+    let stmts = self.unpack_concurrent_stmts(id.into(), &ast.stmts, "an architecture")?;
+    let entity_id = *self.archs(lib_id)?.by_arch.get(&id).unwrap();
+    Ok(self.sb.arenas.hir.arch.alloc(hir::Arch{
+        ctx_items: ctx_id,
+        entity: entity_id,
+        name: ast.name,
+        decls: decls,
+        stmts: stmts,
+    }))
 });
 
 impl_make!(self, id: ProcessStmtRef => &hir::ProcessStmt {
-	let (scope_id, ast) = self.ast(id);
-	match ast.data {
-		ast::ProcStmt {
-			// ref sensitivity,
-			ref decls,
-			ref stmts,
-			postponed,
-			..
-		} => {
-			// TODO: map sensititivty
-			let decls = self.unpack_process_decls(id.into(), decls, "a process")?;
-			let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a process")?;
-			Ok(self.sb.arenas.hir.process_stmt.alloc(hir::ProcessStmt {
-				parent: scope_id,
-				label: ast.label,
-				postponed: postponed,
-				sensitivity: hir::ProcessSensitivity::None,
-				decls: decls,
-				stmts: stmts,
-			}))
-		}
-		_ => unreachable!()
-	}
+    let (scope_id, ast) = self.ast(id);
+    match ast.data {
+        ast::ProcStmt {
+            // ref sensitivity,
+            ref decls,
+            ref stmts,
+            postponed,
+            ..
+        } => {
+            // TODO: map sensititivty
+            let decls = self.unpack_process_decls(id.into(), decls, "a process")?;
+            let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a process")?;
+            Ok(self.sb.arenas.hir.process_stmt.alloc(hir::ProcessStmt {
+                parent: scope_id,
+                label: ast.label,
+                postponed: postponed,
+                sensitivity: hir::ProcessSensitivity::None,
+                decls: decls,
+                stmts: stmts,
+            }))
+        }
+        _ => unreachable!()
+    }
 });
 
 impl_make!(self, id: SigAssignStmtRef => &hir::SigAssignStmt {
-	let (scope_id, ast) = self.ast(id);
-	match ast.data {
-		ast::AssignStmt {
-			target: Spanned{ value: ref target, span: target_span },
-			ref mode,
-			guarded,
-			..
-		} => {
-			let target = self.unpack_signal_assign_target(scope_id, target)?;
-			let tyctx = match target {
-				hir::SigAssignTarget::Name(id) => TypeCtx::TypeOf(id.into()),
-				hir::SigAssignTarget::Aggregate => unimplemented!(),
-			};
-			let kind = self.unpack_signal_assign_mode(scope_id, mode, &tyctx)?;
-			if guarded {
-				self.emit(
-					DiagBuilder2::warning("sequential signal assignment cannot be guarded")
-					.span(ast.human_span())
-					.add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
-				);
-			}
-			Ok(self.sb.arenas.hir.sig_assign_stmt.alloc(hir::SigAssignStmt {
-				parent: scope_id,
-				span: ast.span,
-				label: ast.label,
-				target: target,
-				target_span: target_span,
-				kind: kind.value,
-				kind_span: kind.span,
-			}))
-		}
-		_ => unreachable!()
-	}
+    let (scope_id, ast) = self.ast(id);
+    match ast.data {
+        ast::AssignStmt {
+            target: Spanned{ value: ref target, span: target_span },
+            ref mode,
+            guarded,
+            ..
+        } => {
+            let target = self.unpack_signal_assign_target(scope_id, target)?;
+            let tyctx = match target {
+                hir::SigAssignTarget::Name(id) => TypeCtx::TypeOf(id.into()),
+                hir::SigAssignTarget::Aggregate => unimplemented!(),
+            };
+            let kind = self.unpack_signal_assign_mode(scope_id, mode, &tyctx)?;
+            if guarded {
+                self.emit(
+                    DiagBuilder2::warning("sequential signal assignment cannot be guarded")
+                    .span(ast.human_span())
+                    .add_note("Only concurrent signal assignments can be guarded. See IEEE 1076-2008 section 11.6.")
+                );
+            }
+            Ok(self.sb.arenas.hir.sig_assign_stmt.alloc(hir::SigAssignStmt {
+                parent: scope_id,
+                span: ast.span,
+                label: ast.label,
+                target: target,
+                target_span: target_span,
+                kind: kind.value,
+                kind_span: kind.span,
+            }))
+        }
+        _ => unreachable!()
+    }
 });
 
 impl_make!(self, id: ArrayTypeIndexRef => &Spanned<hir::ArrayTypeIndex> {
-	let (scope_id, ast) = self.ast(id);
-	let ctx = TermContext::new(self, scope_id);
-	let term = ctx.termify_expr(ast)?;
-	let term = ctx.fold_term_as_type(term)?;
-	let index = match term.value {
-		Term::Range(dir, lb, rb) => {
-			let lb = ctx.term_to_expr(*lb)?;
-			let rb = ctx.term_to_expr(*rb)?;
-			hir::ArrayTypeIndex::Range(dir.value, lb, rb)
-		}
-		Term::UnboundedRange(subterm) => {
-			let tm = ctx.term_to_type_mark(*subterm)?;
-			hir::ArrayTypeIndex::Unbounded(tm)
-		}
-		Term::TypeMark(..) | Term::SubtypeInd(..) => {
-			let subty = ctx.term_to_subtype_ind(term)?.value;
-			let add_ctx = AddContext::new(self, scope_id);
-			let subty = add_ctx.add_subtype_ind_hir(subty)?;
-			hir::ArrayTypeIndex::Subtype(subty)
-		}
-		_ => {
-			self.emit(
-				DiagBuilder2::error(format!("`{}` is not a valid array index", term.span.extract()))
-				.span(term.span)
-			);
-			debugln!("It is a {:#?}", term);
-			return Err(());
-		}
-	};
-	Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
+    let (scope_id, ast) = self.ast(id);
+    let ctx = TermContext::new(self, scope_id);
+    let term = ctx.termify_expr(ast)?;
+    let term = ctx.fold_term_as_type(term)?;
+    let index = match term.value {
+        Term::Range(dir, lb, rb) => {
+            let lb = ctx.term_to_expr(*lb)?;
+            let rb = ctx.term_to_expr(*rb)?;
+            hir::ArrayTypeIndex::Range(dir.value, lb, rb)
+        }
+        Term::UnboundedRange(subterm) => {
+            let tm = ctx.term_to_type_mark(*subterm)?;
+            hir::ArrayTypeIndex::Unbounded(tm)
+        }
+        Term::TypeMark(..) | Term::SubtypeInd(..) => {
+            let subty = ctx.term_to_subtype_ind(term)?.value;
+            let add_ctx = AddContext::new(self, scope_id);
+            let subty = add_ctx.add_subtype_ind_hir(subty)?;
+            hir::ArrayTypeIndex::Subtype(subty)
+        }
+        _ => {
+            self.emit(
+                DiagBuilder2::error(format!("`{}` is not a valid array index", term.span.extract()))
+                .span(term.span)
+            );
+            debugln!("It is a {:#?}", term);
+            return Err(());
+        }
+    };
+    Ok(self.sb.arenas.hir.array_type_index.alloc(Spanned::new(index, ast.span)))
 });
 
 // impl_make!(self, id: SubtypeIndRef => &hir::SubtypeInd {
@@ -1926,68 +1926,68 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {}
 
 // Lower a subprogram declaration to HIR.
 impl_make!(self, id: SubprogDeclRef => &hir::Subprog {
-	let (scope_id, ast) = self.ast(id);
-	let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
-	Ok(self.sb.arenas.hir.subprog.alloc(hir::Subprog {
-		parent: scope_id,
-		spec: spec,
-	}))
+    let (scope_id, ast) = self.ast(id);
+    let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
+    Ok(self.sb.arenas.hir.subprog.alloc(hir::Subprog {
+        parent: scope_id,
+        spec: spec,
+    }))
 });
 
 // Lower a subprogram body to HIR.
 impl_make!(self, id: SubprogBodyRef => &hir::SubprogBody {
-	let (scope_id, ast) = self.ast(id);
-	let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
-	let subprog = self.unpack_subprog_name((&ast.spec.name).into(), scope_id)?;
-	let (decls, stmts) = match ast.data {
-		ast::SubprogData::Body { ref decls, ref stmts } => (decls, stmts),
-		_ => unreachable!(),
-	};
-	let decls = self.unpack_subprog_decls(id.into(), decls)?;
-	let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a subprogram")?;
-	Ok(self.sb.arenas.hir.subprog_body.alloc(hir::SubprogBody {
-		parent: scope_id,
-		spec: spec,
-		subprog: subprog,
-		decls: decls,
-		stmts: stmts,
-	}))
+    let (scope_id, ast) = self.ast(id);
+    let spec = self.lower_subprog_spec(id.into(), &ast.spec)?;
+    let subprog = self.unpack_subprog_name((&ast.spec.name).into(), scope_id)?;
+    let (decls, stmts) = match ast.data {
+        ast::SubprogData::Body { ref decls, ref stmts } => (decls, stmts),
+        _ => unreachable!(),
+    };
+    let decls = self.unpack_subprog_decls(id.into(), decls)?;
+    let stmts = self.unpack_sequential_stmts(id.into(), stmts, "a subprogram")?;
+    Ok(self.sb.arenas.hir.subprog_body.alloc(hir::SubprogBody {
+        parent: scope_id,
+        spec: spec,
+        subprog: subprog,
+        decls: decls,
+        stmts: stmts,
+    }))
 });
 
 // Lower a subprogram instantiation to HIR.
 impl_make!(self, id: SubprogInstRef => &hir::SubprogInst {
-	let (scope_id, ast) = self.ast(id);
-	let kind = match ast.spec.kind {
-		ast::SubprogKind::Proc => hir::SubprogKind::Proc,
-		ast::SubprogKind::Func => hir::SubprogKind::PureFunc,
-	};
-	let name = self.lower_subprog_name(kind, &ast.spec.name)?;
-	assert!(ast.spec.purity.is_none());
-	assert!(ast.spec.generic_clause.is_none());
-	assert!(ast.spec.generic_map.is_none());
-	assert!(ast.spec.params.is_none());
-	assert!(ast.spec.retty.is_none());
-	let (target_name, generics) = match ast.data {
-		ast::SubprogData::Inst { ref name, ref generics } => (name, generics),
-		_ => unreachable!(),
-	};
-	let subprog = self.unpack_subprog_name(target_name.into(), scope_id)?;
-	let generics = match *generics {
-		Some(ref g) => self.unpack_generic_map(scope_id, g)?,
-		None => vec![],
-	};
-	Ok(self.sb.arenas.hir.subprog_inst.alloc(hir::SubprogInst {
-		parent: scope_id,
-		kind: kind,
-		name: name,
-		subprog: subprog,
-		generic_map: generics,
-	}))
+    let (scope_id, ast) = self.ast(id);
+    let kind = match ast.spec.kind {
+        ast::SubprogKind::Proc => hir::SubprogKind::Proc,
+        ast::SubprogKind::Func => hir::SubprogKind::PureFunc,
+    };
+    let name = self.lower_subprog_name(kind, &ast.spec.name)?;
+    assert!(ast.spec.purity.is_none());
+    assert!(ast.spec.generic_clause.is_none());
+    assert!(ast.spec.generic_map.is_none());
+    assert!(ast.spec.params.is_none());
+    assert!(ast.spec.retty.is_none());
+    let (target_name, generics) = match ast.data {
+        ast::SubprogData::Inst { ref name, ref generics } => (name, generics),
+        _ => unreachable!(),
+    };
+    let subprog = self.unpack_subprog_name(target_name.into(), scope_id)?;
+    let generics = match *generics {
+        Some(ref g) => self.unpack_generic_map(scope_id, g)?,
+        None => vec![],
+    };
+    Ok(self.sb.arenas.hir.subprog_inst.alloc(hir::SubprogInst {
+        parent: scope_id,
+        kind: kind,
+        name: name,
+        subprog: subprog,
+        generic_map: generics,
+    }))
 });
 
 impl_make!(self, id: LatentTypeMarkRef => Spanned<TypeMarkRef> {
-	let (scope_id, ast) = self.ast(id);
-	let ctx = TermContext::new(self, scope_id);
-	let term = ctx.termify_latent_name(ast)?;
-	ctx.term_to_type_mark(term)
+    let (scope_id, ast) = self.ast(id);
+    let ctx = TermContext::new(self, scope_id);
+    let term = ctx.termify_latent_name(ast)?;
+    ctx.term_to_type_mark(term)
 });

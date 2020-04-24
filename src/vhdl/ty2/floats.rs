@@ -87,7 +87,7 @@ macro_rules! common_type_impl {
         fn as_any(&self) -> AnyType {
             AnyType::Floating(self)
         }
-    }
+    };
 }
 
 /// A real base type.

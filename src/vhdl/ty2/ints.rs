@@ -89,7 +89,7 @@ macro_rules! common_type_impl {
         fn as_any(&self) -> AnyType {
             AnyType::Integer(self)
         }
-    }
+    };
 }
 
 /// An integer base type.

@@ -120,33 +120,33 @@ pub type LazyTypeval<'sb, 'ast, 'ctx> =
 
 /// A table of pending or running HIR lowerings.
 node_storage!(LazyHirTable<'sb, 'ast, 'ctx> where ('ast: 'sb, 'ctx: 'sb):
-	// Miscellaneous
-	subtype_inds:     SubtypeIndRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::SubtypeInd>>,
+    // Miscellaneous
+    subtype_inds:     SubtypeIndRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::SubtypeInd>>,
 
-	// Expressions
-	exprs:            ExprRef          => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Expr>>,
-	aggregates:       AggregateRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Aggregate>>,
+    // Expressions
+    exprs:            ExprRef          => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Expr>>,
+    aggregates:       AggregateRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Aggregate>>,
 
-	// Declarations
-	const_decls:      ConstDeclRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::ConstDecl>>>,
-	signal_decls:     SignalDeclRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::SignalDecl>>>,
-	var_decls:        VarDeclRef       => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::VarDecl>>>,
-	file_decls:       FileDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::FileDecl>>>,
-	type_decls:       TypeDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::TypeDecl>>,
+    // Declarations
+    const_decls:      ConstDeclRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::ConstDecl>>>,
+    signal_decls:     SignalDeclRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::SignalDecl>>>,
+    var_decls:        VarDeclRef       => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::VarDecl>>>,
+    file_decls:       FileDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Decl<hir::FileDecl>>>,
+    type_decls:       TypeDeclRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::TypeDecl>>,
 
-	// Sequential statements
-	wait_stmts:       WaitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
-	assert_stmts:     AssertStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::AssertStmt>>>,
-	report_stmts:     ReportStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReportStmt>>>,
-	sig_assign_stmts: SigAssignStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::SigAssignStmt>>>,
-	var_assign_stmts: VarAssignStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::VarAssignStmt>>>,
-	call_stmt:        CallStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CallStmt>>>,
-	if_stmt:          IfStmtRef        => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::IfStmt>>>,
-	case_stmt:        CaseStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CaseStmt>>>,
-	loop_stmt:        LoopStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::LoopStmt>>>,
-	nexit_stmt:       NexitStmtRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NexitStmt>>>,
-	return_stmt:      ReturnStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReturnStmt>>>,
-	null_stmt:        NullStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NullStmt>>>,
+    // Sequential statements
+    wait_stmts:       WaitStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::WaitStmt>>>,
+    assert_stmts:     AssertStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::AssertStmt>>>,
+    report_stmts:     ReportStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReportStmt>>>,
+    sig_assign_stmts: SigAssignStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::SigAssignStmt>>>,
+    var_assign_stmts: VarAssignStmtRef => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::VarAssignStmt>>>,
+    call_stmt:        CallStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CallStmt>>>,
+    if_stmt:          IfStmtRef        => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::IfStmt>>>,
+    case_stmt:        CaseStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::CaseStmt>>>,
+    loop_stmt:        LoopStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::LoopStmt>>>,
+    nexit_stmt:       NexitStmtRef     => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NexitStmt>>>,
+    return_stmt:      ReturnStmtRef    => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::ReturnStmt>>>,
+    null_stmt:        NullStmtRef      => LazyNode<LazyHir<'sb, 'ast, 'ctx, hir::Stmt<hir::NullStmt>>>,
 );
 
 impl<'sb, 'ast, 'ctx> Default for LazyHirTable<'sb, 'ast, 'ctx> {

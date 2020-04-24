@@ -90,7 +90,7 @@ macro_rules! common_type_impl {
         fn as_any(&self) -> AnyType {
             AnyType::Enum(self)
         }
-    }
+    };
 }
 
 /// An enumeration base type.

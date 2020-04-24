@@ -683,74 +683,74 @@ macro_rules! unimpmsg {
 }
 
 impl_typeck_err!(self, id: LibRef => {
-	let hir = self.ctx.hir(id)?;
-	self.typeck_slice(&hir.pkg_decls);
-	self.typeck_slice(&hir.pkg_insts);
-	self.typeck_slice(&hir.pkg_bodies);
-	self.typeck_slice(&hir.ctxs);
-	self.typeck_slice(&hir.entities);
-	self.typeck_slice(&hir.archs);
-	self.typeck_slice(&hir.cfgs);
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    self.typeck_slice(&hir.pkg_decls);
+    self.typeck_slice(&hir.pkg_insts);
+    self.typeck_slice(&hir.pkg_bodies);
+    self.typeck_slice(&hir.ctxs);
+    self.typeck_slice(&hir.entities);
+    self.typeck_slice(&hir.archs);
+    self.typeck_slice(&hir.cfgs);
+    Ok(())
 });
 
 impl_typeck_err!(self, id: PkgDeclRef => {
-	let hir = self.ctx.hir(id)?;
-	self.typeck_slice(&hir.generics);
-	self.typeck_slice(&hir.decls);
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    self.typeck_slice(&hir.generics);
+    self.typeck_slice(&hir.decls);
+    Ok(())
 });
 
 impl_typeck_err!(self, id: PkgBodyRef => {
-	let hir = self.ctx.hir(id)?;
-	self.typeck_slice(&hir.decls);
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    self.typeck_slice(&hir.decls);
+    Ok(())
 });
 
 impl_typeck_err!(self, id: PkgInstRef => {
-	let _hir = self.ctx.hir(id)?;
-	// self.typeck_slice(&hir.generic_map);
-	Ok(())
+    let _hir = self.ctx.hir(id)?;
+    // self.typeck_slice(&hir.generic_map);
+    Ok(())
 });
 
 impl_typeck!(self, id: CtxRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: CfgRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck_err!(self, id: EntityRef => {
-	let hir = self.ctx.hir(id)?;
-	for &generic in &hir.generics {
-		self.typeck(generic);
-	}
-	for &port in &hir.ports {
-		self.typeck(port);
-	}
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    for &generic in &hir.generics {
+        self.typeck(generic);
+    }
+    for &port in &hir.ports {
+        self.typeck(port);
+    }
+    Ok(())
 });
 
 impl_typeck_err!(self, id: ArchRef => {
-	let hir = self.ctx.hir(id)?;
-	self.typeck(hir.entity);
-	for &decl in &hir.decls {
-		self.typeck(decl);
-	}
-	for &stmt in &hir.stmts {
-		self.typeck(stmt);
-	}
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    self.typeck(hir.entity);
+    for &decl in &hir.decls {
+        self.typeck(decl);
+    }
+    for &stmt in &hir.stmts {
+        self.typeck(stmt);
+    }
+    Ok(())
 });
 
 impl_typeck!(self, id: GenericRef => {
-	match id {
-		GenericRef::Type(id)    => self.typeck(id),
-		GenericRef::Subprog(id) => self.typeck(id),
-		GenericRef::Pkg(id)     => self.typeck(id),
-		GenericRef::Const(id)   => self.typeck(id),
-	}
+    match id {
+        GenericRef::Type(id)    => self.typeck(id),
+        GenericRef::Subprog(id) => self.typeck(id),
+        GenericRef::Pkg(id)     => self.typeck(id),
+        GenericRef::Const(id)   => self.typeck(id),
+    }
 });
 
 // impl_typeck!(self, id: IntfSignalRef => {
@@ -758,333 +758,333 @@ impl_typeck!(self, id: GenericRef => {
 // });
 
 impl_typeck!(self, id: IntfTypeRef => {
-	unimp!(self, id)
-	// self.typeck(self.hir(id)?.ty)
+    unimp!(self, id)
+    // self.typeck(self.hir(id)?.ty)
 });
 
 impl_typeck!(self, id: IntfSubprogRef => {
-	unimp!(self, id)
-	// self.typeck(self.hir(id)?.ty)
+    unimp!(self, id)
+    // self.typeck(self.hir(id)?.ty)
 });
 
 impl_typeck!(self, id: IntfPkgRef => {
-	unimp!(self, id)
-	// self.typeck(self.hir(id)?.ty)
+    unimp!(self, id)
+    // self.typeck(self.hir(id)?.ty)
 });
 
 impl_make!(self, id: IntfConstRef => &Ty {
-	// TODO: Implement this.
-	unimp_err!(self, id)
+    // TODO: Implement this.
+    unimp_err!(self, id)
 });
 
 impl_make!(self, id: IntfVarRef => &Ty {
-	// TODO: Implement this.
-	unimp_err!(self, id)
+    // TODO: Implement this.
+    unimp_err!(self, id)
 });
 
 impl_make!(self, id: IntfSignalRef => &Ty {
-	let hir = self.hir(id)?;
-	self.ty(hir.ty)
+    let hir = self.hir(id)?;
+    self.ty(hir.ty)
 });
 
 impl_make!(self, id: IntfFileRef => &Ty {
-	// TODO: Implement this.
-	unimp_err!(self, id)
+    // TODO: Implement this.
+    unimp_err!(self, id)
 });
 
 impl_typeck!(self, id: DeclInPkgRef => {
-	match id {
-		DeclInPkgRef::Subprog(id)     => self.typeck(id),
-		DeclInPkgRef::SubprogInst(id) => self.typeck(id),
-		DeclInPkgRef::Pkg(id)         => self.typeck(id),
-		DeclInPkgRef::PkgInst(id)     => self.typeck(id),
-		DeclInPkgRef::Type(id)        => self.typeck(id),
-		DeclInPkgRef::Subtype(id)     => self.typeck(id),
-		DeclInPkgRef::Const(id)       => self.typeck(id),
-		DeclInPkgRef::Signal(id)      => self.typeck(id),
-		DeclInPkgRef::Var(id)         => self.typeck(id),
-		DeclInPkgRef::File(id)        => self.typeck(id),
-		DeclInPkgRef::Alias(id)       => self.typeck(id),
-		DeclInPkgRef::Comp(id)        => self.typeck(id),
-		DeclInPkgRef::Attr(id)        => self.typeck(id),
-		DeclInPkgRef::AttrSpec(id)    => self.typeck(id),
-		DeclInPkgRef::Discon(id)      => self.typeck(id),
-		DeclInPkgRef::GroupTemp(id)   => self.typeck(id),
-		DeclInPkgRef::Group(id)       => self.typeck(id),
-	}
+    match id {
+        DeclInPkgRef::Subprog(id)     => self.typeck(id),
+        DeclInPkgRef::SubprogInst(id) => self.typeck(id),
+        DeclInPkgRef::Pkg(id)         => self.typeck(id),
+        DeclInPkgRef::PkgInst(id)     => self.typeck(id),
+        DeclInPkgRef::Type(id)        => self.typeck(id),
+        DeclInPkgRef::Subtype(id)     => self.typeck(id),
+        DeclInPkgRef::Const(id)       => self.typeck(id),
+        DeclInPkgRef::Signal(id)      => self.typeck(id),
+        DeclInPkgRef::Var(id)         => self.typeck(id),
+        DeclInPkgRef::File(id)        => self.typeck(id),
+        DeclInPkgRef::Alias(id)       => self.typeck(id),
+        DeclInPkgRef::Comp(id)        => self.typeck(id),
+        DeclInPkgRef::Attr(id)        => self.typeck(id),
+        DeclInPkgRef::AttrSpec(id)    => self.typeck(id),
+        DeclInPkgRef::Discon(id)      => self.typeck(id),
+        DeclInPkgRef::GroupTemp(id)   => self.typeck(id),
+        DeclInPkgRef::Group(id)       => self.typeck(id),
+    }
 });
 
 impl_typeck!(self, id: DeclInPkgBodyRef => {
-	match id {
-		DeclInPkgBodyRef::Subprog(id)     => self.typeck(id),
-		DeclInPkgBodyRef::SubprogBody(id) => self.typeck(id),
-		DeclInPkgBodyRef::SubprogInst(id) => self.typeck(id),
-		DeclInPkgBodyRef::Pkg(id)         => self.typeck(id),
-		DeclInPkgBodyRef::PkgBody(id)     => self.typeck(id),
-		DeclInPkgBodyRef::PkgInst(id)     => self.typeck(id),
-		DeclInPkgBodyRef::Type(id)        => self.typeck(id),
-		DeclInPkgBodyRef::Subtype(id)     => self.typeck(id),
-		DeclInPkgBodyRef::Const(id)       => self.typeck(id),
-		DeclInPkgBodyRef::Var(id)         => self.typeck(id),
-		DeclInPkgBodyRef::File(id)        => self.typeck(id),
-		DeclInPkgBodyRef::Alias(id)       => self.typeck(id),
-		DeclInPkgBodyRef::Attr(id)        => self.typeck(id),
-		DeclInPkgBodyRef::AttrSpec(id)    => self.typeck(id),
-		DeclInPkgBodyRef::GroupTemp(id)   => self.typeck(id),
-		DeclInPkgBodyRef::Group(id)       => self.typeck(id),
-	}
+    match id {
+        DeclInPkgBodyRef::Subprog(id)     => self.typeck(id),
+        DeclInPkgBodyRef::SubprogBody(id) => self.typeck(id),
+        DeclInPkgBodyRef::SubprogInst(id) => self.typeck(id),
+        DeclInPkgBodyRef::Pkg(id)         => self.typeck(id),
+        DeclInPkgBodyRef::PkgBody(id)     => self.typeck(id),
+        DeclInPkgBodyRef::PkgInst(id)     => self.typeck(id),
+        DeclInPkgBodyRef::Type(id)        => self.typeck(id),
+        DeclInPkgBodyRef::Subtype(id)     => self.typeck(id),
+        DeclInPkgBodyRef::Const(id)       => self.typeck(id),
+        DeclInPkgBodyRef::Var(id)         => self.typeck(id),
+        DeclInPkgBodyRef::File(id)        => self.typeck(id),
+        DeclInPkgBodyRef::Alias(id)       => self.typeck(id),
+        DeclInPkgBodyRef::Attr(id)        => self.typeck(id),
+        DeclInPkgBodyRef::AttrSpec(id)    => self.typeck(id),
+        DeclInPkgBodyRef::GroupTemp(id)   => self.typeck(id),
+        DeclInPkgBodyRef::Group(id)       => self.typeck(id),
+    }
 });
 
 impl_typeck!(self, id: DeclInSubprogRef => {
-	match id {
-		DeclInSubprogRef::Subprog(id)     => self.typeck(id),
-		DeclInSubprogRef::SubprogBody(id) => self.typeck(id),
-		DeclInSubprogRef::SubprogInst(id) => self.typeck(id),
-		DeclInSubprogRef::Pkg(id)         => self.typeck(id),
-		DeclInSubprogRef::PkgBody(id)     => self.typeck(id),
-		DeclInSubprogRef::PkgInst(id)     => self.typeck(id),
-		DeclInSubprogRef::Type(id)        => self.typeck(id),
-		DeclInSubprogRef::Subtype(id)     => self.typeck(id),
-		DeclInSubprogRef::Const(id)       => self.typeck(id),
-		DeclInSubprogRef::Var(id)         => self.typeck(id),
-		DeclInSubprogRef::File(id)        => self.typeck(id),
-		DeclInSubprogRef::Alias(id)       => self.typeck(id),
-		DeclInSubprogRef::Attr(id)        => self.typeck(id),
-		DeclInSubprogRef::AttrSpec(id)    => self.typeck(id),
-		DeclInSubprogRef::GroupTemp(id)   => self.typeck(id),
-		DeclInSubprogRef::Group(id)       => self.typeck(id),
-	}
+    match id {
+        DeclInSubprogRef::Subprog(id)     => self.typeck(id),
+        DeclInSubprogRef::SubprogBody(id) => self.typeck(id),
+        DeclInSubprogRef::SubprogInst(id) => self.typeck(id),
+        DeclInSubprogRef::Pkg(id)         => self.typeck(id),
+        DeclInSubprogRef::PkgBody(id)     => self.typeck(id),
+        DeclInSubprogRef::PkgInst(id)     => self.typeck(id),
+        DeclInSubprogRef::Type(id)        => self.typeck(id),
+        DeclInSubprogRef::Subtype(id)     => self.typeck(id),
+        DeclInSubprogRef::Const(id)       => self.typeck(id),
+        DeclInSubprogRef::Var(id)         => self.typeck(id),
+        DeclInSubprogRef::File(id)        => self.typeck(id),
+        DeclInSubprogRef::Alias(id)       => self.typeck(id),
+        DeclInSubprogRef::Attr(id)        => self.typeck(id),
+        DeclInSubprogRef::AttrSpec(id)    => self.typeck(id),
+        DeclInSubprogRef::GroupTemp(id)   => self.typeck(id),
+        DeclInSubprogRef::Group(id)       => self.typeck(id),
+    }
 });
 
 impl_typeck!(self, id: DeclInBlockRef => {
-	match id {
-		DeclInBlockRef::Subprog(id)     => self.typeck(id),
-		DeclInBlockRef::SubprogBody(id) => self.typeck(id),
-		DeclInBlockRef::SubprogInst(id) => self.typeck(id),
-		DeclInBlockRef::Pkg(id)         => self.typeck(id),
-		DeclInBlockRef::PkgBody(id)     => self.typeck(id),
-		DeclInBlockRef::PkgInst(id)     => self.typeck(id),
-		DeclInBlockRef::Type(id)        => self.typeck(id),
-		DeclInBlockRef::Subtype(id)     => self.typeck(id),
-		DeclInBlockRef::Const(id)       => self.typeck(id),
-		DeclInBlockRef::Signal(id)      => self.typeck(id),
-		DeclInBlockRef::Var(id)         => self.typeck(id),
-		DeclInBlockRef::File(id)        => self.typeck(id),
-		DeclInBlockRef::Alias(id)       => self.typeck(id),
-		DeclInBlockRef::Comp(id)        => self.typeck(id),
-		DeclInBlockRef::Attr(id)        => self.typeck(id),
-		DeclInBlockRef::AttrSpec(id)    => self.typeck(id),
-		DeclInBlockRef::CfgSpec(id)     => self.typeck(id),
-		DeclInBlockRef::Discon(id)      => self.typeck(id),
-		DeclInBlockRef::GroupTemp(id)   => self.typeck(id),
-		DeclInBlockRef::Group(id)       => self.typeck(id),
-	}
+    match id {
+        DeclInBlockRef::Subprog(id)     => self.typeck(id),
+        DeclInBlockRef::SubprogBody(id) => self.typeck(id),
+        DeclInBlockRef::SubprogInst(id) => self.typeck(id),
+        DeclInBlockRef::Pkg(id)         => self.typeck(id),
+        DeclInBlockRef::PkgBody(id)     => self.typeck(id),
+        DeclInBlockRef::PkgInst(id)     => self.typeck(id),
+        DeclInBlockRef::Type(id)        => self.typeck(id),
+        DeclInBlockRef::Subtype(id)     => self.typeck(id),
+        DeclInBlockRef::Const(id)       => self.typeck(id),
+        DeclInBlockRef::Signal(id)      => self.typeck(id),
+        DeclInBlockRef::Var(id)         => self.typeck(id),
+        DeclInBlockRef::File(id)        => self.typeck(id),
+        DeclInBlockRef::Alias(id)       => self.typeck(id),
+        DeclInBlockRef::Comp(id)        => self.typeck(id),
+        DeclInBlockRef::Attr(id)        => self.typeck(id),
+        DeclInBlockRef::AttrSpec(id)    => self.typeck(id),
+        DeclInBlockRef::CfgSpec(id)     => self.typeck(id),
+        DeclInBlockRef::Discon(id)      => self.typeck(id),
+        DeclInBlockRef::GroupTemp(id)   => self.typeck(id),
+        DeclInBlockRef::Group(id)       => self.typeck(id),
+    }
 });
 
 impl_typeck!(self, id: DeclInProcRef => {
-	match id {
-		DeclInProcRef::Subprog(id)     => self.typeck(id),
-		DeclInProcRef::SubprogBody(id) => self.typeck(id),
-		DeclInProcRef::SubprogInst(id) => self.typeck(id),
-		DeclInProcRef::Pkg(id)         => self.typeck(id),
-		DeclInProcRef::PkgBody(id)     => self.typeck(id),
-		DeclInProcRef::PkgInst(id)     => self.typeck(id),
-		DeclInProcRef::Type(id)        => self.typeck(id),
-		DeclInProcRef::Subtype(id)     => self.typeck(id),
-		DeclInProcRef::Const(id)       => self.typeck(id),
-		DeclInProcRef::Var(id)         => self.typeck(id),
-		DeclInProcRef::File(id)        => self.typeck(id),
-		DeclInProcRef::Alias(id)       => self.typeck(id),
-		DeclInProcRef::Attr(id)        => self.typeck(id),
-		DeclInProcRef::AttrSpec(id)    => self.typeck(id),
-		DeclInProcRef::GroupTemp(id)   => self.typeck(id),
-		DeclInProcRef::Group(id)       => self.typeck(id),
-	}
+    match id {
+        DeclInProcRef::Subprog(id)     => self.typeck(id),
+        DeclInProcRef::SubprogBody(id) => self.typeck(id),
+        DeclInProcRef::SubprogInst(id) => self.typeck(id),
+        DeclInProcRef::Pkg(id)         => self.typeck(id),
+        DeclInProcRef::PkgBody(id)     => self.typeck(id),
+        DeclInProcRef::PkgInst(id)     => self.typeck(id),
+        DeclInProcRef::Type(id)        => self.typeck(id),
+        DeclInProcRef::Subtype(id)     => self.typeck(id),
+        DeclInProcRef::Const(id)       => self.typeck(id),
+        DeclInProcRef::Var(id)         => self.typeck(id),
+        DeclInProcRef::File(id)        => self.typeck(id),
+        DeclInProcRef::Alias(id)       => self.typeck(id),
+        DeclInProcRef::Attr(id)        => self.typeck(id),
+        DeclInProcRef::AttrSpec(id)    => self.typeck(id),
+        DeclInProcRef::GroupTemp(id)   => self.typeck(id),
+        DeclInProcRef::Group(id)       => self.typeck(id),
+    }
 });
 
 impl_typeck!(self, id: ConcStmtRef => {
-	match id {
-		ConcStmtRef::Block(id)         => self.typeck(id),
-		ConcStmtRef::Process(id)       => self.typeck(id),
-		ConcStmtRef::ConcProcCall(id)  => self.typeck(id),
-		ConcStmtRef::ConcAssert(id)    => self.typeck(id),
-		ConcStmtRef::ConcSigAssign(id) => self.typeck(id),
-		ConcStmtRef::CompInst(id)      => self.typeck(id),
-		ConcStmtRef::ForGen(id)        => self.typeck(id),
-		ConcStmtRef::IfGen(id)         => self.typeck(id),
-		ConcStmtRef::CaseGen(id)       => self.typeck(id),
-	}
+    match id {
+        ConcStmtRef::Block(id)         => self.typeck(id),
+        ConcStmtRef::Process(id)       => self.typeck(id),
+        ConcStmtRef::ConcProcCall(id)  => self.typeck(id),
+        ConcStmtRef::ConcAssert(id)    => self.typeck(id),
+        ConcStmtRef::ConcSigAssign(id) => self.typeck(id),
+        ConcStmtRef::CompInst(id)      => self.typeck(id),
+        ConcStmtRef::ForGen(id)        => self.typeck(id),
+        ConcStmtRef::IfGen(id)         => self.typeck(id),
+        ConcStmtRef::CaseGen(id)       => self.typeck(id),
+    }
 });
 
 impl_typeck!(self, id: SeqStmtRef => {
-	match id {
-		SeqStmtRef::Wait(id)      => self.lazy_typeck(id),
-		SeqStmtRef::Assert(id)    => self.lazy_typeck(id),
-		SeqStmtRef::Report(id)    => self.lazy_typeck(id),
-		SeqStmtRef::SigAssign(id) => self.lazy_typeck(id),
-		SeqStmtRef::VarAssign(id) => self.lazy_typeck(id),
-		SeqStmtRef::ProcCall(id)  => self.lazy_typeck(id),
-		SeqStmtRef::If(id)        => self.lazy_typeck(id),
-		SeqStmtRef::Case(id)      => self.lazy_typeck(id),
-		SeqStmtRef::Loop(id)      => self.lazy_typeck(id),
-		SeqStmtRef::Nexit(id)     => self.lazy_typeck(id),
-		SeqStmtRef::Return(id)    => self.lazy_typeck(id),
-		SeqStmtRef::Null(id)      => self.lazy_typeck(id),
-	}
+    match id {
+        SeqStmtRef::Wait(id)      => self.lazy_typeck(id),
+        SeqStmtRef::Assert(id)    => self.lazy_typeck(id),
+        SeqStmtRef::Report(id)    => self.lazy_typeck(id),
+        SeqStmtRef::SigAssign(id) => self.lazy_typeck(id),
+        SeqStmtRef::VarAssign(id) => self.lazy_typeck(id),
+        SeqStmtRef::ProcCall(id)  => self.lazy_typeck(id),
+        SeqStmtRef::If(id)        => self.lazy_typeck(id),
+        SeqStmtRef::Case(id)      => self.lazy_typeck(id),
+        SeqStmtRef::Loop(id)      => self.lazy_typeck(id),
+        SeqStmtRef::Nexit(id)     => self.lazy_typeck(id),
+        SeqStmtRef::Return(id)    => self.lazy_typeck(id),
+        SeqStmtRef::Null(id)      => self.lazy_typeck(id),
+    }
 });
 
 impl_typeck_err!(self, id: SubprogDeclRef => {
-	let hir = self.ctx.hir(id)?;
-	self.typeck_subprog_spec(&hir.spec);
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    self.typeck_subprog_spec(&hir.spec);
+    Ok(())
 });
 
 impl_typeck_err!(self, id: SubprogBodyRef => {
-	let hir = self.ctx.hir(id)?;
-	self.typeck_subprog_spec(&hir.spec);
-	self.typeck_slice(&hir.decls);
-	self.typeck_slice(&hir.stmts);
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    self.typeck_subprog_spec(&hir.spec);
+    self.typeck_slice(&hir.decls);
+    self.typeck_slice(&hir.stmts);
+    Ok(())
 });
 
 impl_typeck_err!(self, id: SubprogInstRef => {
-	let _hir = self.ctx.hir(id)?;
-	// self.typeck_slice(&hir.generic_map);
-	Ok(())
+    let _hir = self.ctx.hir(id)?;
+    // self.typeck_slice(&hir.generic_map);
+    Ok(())
 });
 
 impl_typeck_err!(self, id: ConstDeclRef => {
-	self.ctx.lazy_typeval(id)?;
-	Ok(())
+    self.ctx.lazy_typeval(id)?;
+    Ok(())
 });
 
 impl_typeck_err!(self, id: SignalDeclRef => {
-	self.ctx.lazy_typeval(id)?;
-	Ok(())
+    self.ctx.lazy_typeval(id)?;
+    Ok(())
 });
 
 impl_typeck_err!(self, id: VarDeclRef => {
-	self.ctx.lazy_typeval(id)?;
-	Ok(())
+    self.ctx.lazy_typeval(id)?;
+    Ok(())
 });
 
 impl_typeck_err!(self, id: FileDeclRef => {
-	self.ctx.lazy_typeval(id)?;
-	Ok(())
+    self.ctx.lazy_typeval(id)?;
+    Ok(())
 });
 
 impl_typeck!(self, id: AliasDeclRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: CompDeclRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: AttrDeclRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: AttrSpecRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: CfgSpecRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: DisconSpecRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: GroupTempRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: GroupDeclRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: BlockStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck_err!(self, id: ProcessStmtRef => {
-	let hir = self.ctx.hir(id)?;
-	for &decl in &hir.decls {
-		self.typeck(decl);
-	}
-	for &stmt in &hir.stmts {
-		self.typeck(stmt);
-	}
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    for &decl in &hir.decls {
+        self.typeck(decl);
+    }
+    for &stmt in &hir.stmts {
+        self.typeck(stmt);
+    }
+    Ok(())
 });
 
 impl_typeck!(self, id: ConcCallStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: ConcAssertStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: ConcSigAssignStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: CompInstStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: ForGenStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: IfGenStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck!(self, id: CaseGenStmtRef => {
-	unimp!(self, id)
+    unimp!(self, id)
 });
 
 impl_typeck_err!(self, id: SigAssignStmtRef => {
-	let hir = self.ctx.hir(id)?;
-	let lhs_ty = match hir.target {
-		hir::SigAssignTarget::Name(sig) => self.ctx.ty(sig)?,
-		hir::SigAssignTarget::Aggregate => unimpmsg!(self, hir.target_span, "assignment to aggregate signal"),
-	};
-	// let mut ctx = TypeckContext::new(self);
-	// let typeck_dm = |dm| match dm {
-	// 	// TODO: typeck time expression
-	// 	// &hir::DelayMechanism::RejectInertial(expr) => self.typeck_node(expr, self.intern_ty(/* time type */))?,
-	// 	_ => Ok(()),
-	// };
-	match hir.kind {
-		hir::SigAssignKind::SimpleWave(ref dm, ref wave) => {
-			self.typeck_delay_mechanism(dm);
-			self.typeck_waveform(wave, lhs_ty);
-		}
-		hir::SigAssignKind::SimpleForce(_, _expr) => {
-			// self.typeck_node(expr, lhs_ty)?;
-		}
-		hir::SigAssignKind::SimpleRelease(_) => (),
-		hir::SigAssignKind::CondWave(ref dm, ref _cond) => {
-			self.typeck_delay_mechanism(dm);
-			// self.typeck_node(cond, lhs_ty)?;
-		}
-		hir::SigAssignKind::CondForce(_, ref _cond) => {
-			// self.typeck_node(cond, lhs_ty)?;
-		}
-		hir::SigAssignKind::SelWave(ref dm, ref _sel) => {
-			self.typeck_delay_mechanism(dm);
-			// self.typeck_node(sel, lhs_ty)?;
-		}
-		hir::SigAssignKind::SelForce(_, ref _sel) => {
-			// self.typeck_node(sel, lhs_ty)?;
-		}
-	}
-	Ok(())
+    let hir = self.ctx.hir(id)?;
+    let lhs_ty = match hir.target {
+        hir::SigAssignTarget::Name(sig) => self.ctx.ty(sig)?,
+        hir::SigAssignTarget::Aggregate => unimpmsg!(self, hir.target_span, "assignment to aggregate signal"),
+    };
+    // let mut ctx = TypeckContext::new(self);
+    // let typeck_dm = |dm| match dm {
+    // 	// TODO: typeck time expression
+    // 	// &hir::DelayMechanism::RejectInertial(expr) => self.typeck_node(expr, self.intern_ty(/* time type */))?,
+    // 	_ => Ok(()),
+    // };
+    match hir.kind {
+        hir::SigAssignKind::SimpleWave(ref dm, ref wave) => {
+            self.typeck_delay_mechanism(dm);
+            self.typeck_waveform(wave, lhs_ty);
+        }
+        hir::SigAssignKind::SimpleForce(_, _expr) => {
+            // self.typeck_node(expr, lhs_ty)?;
+        }
+        hir::SigAssignKind::SimpleRelease(_) => (),
+        hir::SigAssignKind::CondWave(ref dm, ref _cond) => {
+            self.typeck_delay_mechanism(dm);
+            // self.typeck_node(cond, lhs_ty)?;
+        }
+        hir::SigAssignKind::CondForce(_, ref _cond) => {
+            // self.typeck_node(cond, lhs_ty)?;
+        }
+        hir::SigAssignKind::SelWave(ref dm, ref _sel) => {
+            self.typeck_delay_mechanism(dm);
+            // self.typeck_node(sel, lhs_ty)?;
+        }
+        hir::SigAssignKind::SelForce(_, ref _sel) => {
+            // self.typeck_node(sel, lhs_ty)?;
+        }
+    }
+    Ok(())
 });
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
@@ -1105,139 +1105,139 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
 /// Determine the type of a type mark.
 impl_make!(self, id: TypeMarkRef => &Ty {
-	match id {
-		TypeMarkRef::Type(id) => self.make(id),
-		TypeMarkRef::Subtype(id) => self.make(id),
-	}
+    match id {
+        TypeMarkRef::Type(id) => self.make(id),
+        TypeMarkRef::Subtype(id) => self.make(id),
+    }
 });
 
 /// Determine the type of a subtype indication.
 #[deprecated]
 impl_make!(self, id: SubtypeIndRef => &Ty {
-	self.lazy_typeval(id)
-	// let hir = self.hir(id)?;
-	// let ctx = TypeckContext::new(self);
-	// let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
-	// match hir.constraint {
-	// 	None => Ok(inner),
-	// 	Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
-	// 		ctx.apply_range_constraint(inner, Spanned::new(con, span))
-	// 	}
-	// 	Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
-	// 		ctx.apply_array_constraint(inner, Spanned::new(ac, span))
-	// 	}
-	// 	Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
-	// 		ctx.apply_record_constraint(inner, Spanned::new(rc, span))
-	// 	}
-	// }
+    self.lazy_typeval(id)
+    // let hir = self.hir(id)?;
+    // let ctx = TypeckContext::new(self);
+    // let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
+    // match hir.constraint {
+    // 	None => Ok(inner),
+    // 	Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
+    // 		ctx.apply_range_constraint(inner, Spanned::new(con, span))
+    // 	}
+    // 	Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
+    // 		ctx.apply_array_constraint(inner, Spanned::new(ac, span))
+    // 	}
+    // 	Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
+    // 		ctx.apply_record_constraint(inner, Spanned::new(rc, span))
+    // 	}
+    // }
 });
 
 /// Determine the type of a type declaration.
 impl_make!(self, id: TypeDeclRef => &Ty {
-	let hir = self.lazy_hir(id)?;
-	let data = match hir.data {
-		Some(ref d) => d,
-		None => {
-			self.emit(
-				DiagBuilder2::error(format!("declaration of type `{}` is incomplete", hir.name.value))
-				.span(hir.name.span)
-			);
-			return Err(());
-		}
-	};
-	match data.value {
-		hir::TypeData::Range(dir, lb_id, rb_id) => {
-			self.make_range_ty(dir, lb_id, rb_id, data.span)
-		}
+    let hir = self.lazy_hir(id)?;
+    let data = match hir.data {
+        Some(ref d) => d,
+        None => {
+            self.emit(
+                DiagBuilder2::error(format!("declaration of type `{}` is incomplete", hir.name.value))
+                .span(hir.name.span)
+            );
+            return Err(());
+        }
+    };
+    match data.value {
+        hir::TypeData::Range(dir, lb_id, rb_id) => {
+            self.make_range_ty(dir, lb_id, rb_id, data.span)
+        }
 
-		hir::TypeData::Physical(dir, lb_id, rb_id, ref units, primary_index) => {
-			let base = self.make_range_ty(dir, lb_id, rb_id, data.span)?;
-			let base = match *base {
-				Ty::Int(ref it) => it.clone(),
-				_ => unreachable!(),
-			};
-			let units = units.iter().map(|&(name, ref abs, ref rel)|
-				PhysicalUnit::new(name.value, abs.clone(), rel.clone())
-			).collect();
-			Ok(self.intern_ty(PhysicalTy::new(id, base, units, primary_index)))
-		}
+        hir::TypeData::Physical(dir, lb_id, rb_id, ref units, primary_index) => {
+            let base = self.make_range_ty(dir, lb_id, rb_id, data.span)?;
+            let base = match *base {
+                Ty::Int(ref it) => it.clone(),
+                _ => unreachable!(),
+            };
+            let units = units.iter().map(|&(name, ref abs, ref rel)|
+                PhysicalUnit::new(name.value, abs.clone(), rel.clone())
+            ).collect();
+            Ok(self.intern_ty(PhysicalTy::new(id, base, units, primary_index)))
+        }
 
-		hir::TypeData::Enum(ref lits) => {
-			use crate::ty2::{EnumBasetype, EnumVariant};
-			let ty = EnumBasetype::new(lits.iter().map(|l| match *l {
-				hir::EnumLit::Ident(sp) => EnumVariant::from(sp.value),
-				hir::EnumLit::Char(sp)  => EnumVariant::from(sp.value),
-			}));
-			debugln!("type from enum `{}` = {}", hir.name, ty);
-			Ok(self.intern_ty(EnumTy::new(id)))
-		}
+        hir::TypeData::Enum(ref lits) => {
+            use crate::ty2::{EnumBasetype, EnumVariant};
+            let ty = EnumBasetype::new(lits.iter().map(|l| match *l {
+                hir::EnumLit::Ident(sp) => EnumVariant::from(sp.value),
+                hir::EnumLit::Char(sp)  => EnumVariant::from(sp.value),
+            }));
+            debugln!("type from enum `{}` = {}", hir.name, ty);
+            Ok(self.intern_ty(EnumTy::new(id)))
+        }
 
-		hir::TypeData::Access(subty_id) => {
-			let ty = self.ty(subty_id)?.clone();
-			Ok(self.intern_ty(Ty::Access(Box::new(ty))))
-		}
+        hir::TypeData::Access(subty_id) => {
+            let ty = self.ty(subty_id)?.clone();
+            Ok(self.intern_ty(Ty::Access(Box::new(ty))))
+        }
 
-		hir::TypeData::Array(ref index_ids, elem_ty) => {
-			// To determine the type of an array, we first need to obtain the
-			// HIR of each index. Based on that we can decide whether this is an
-			// unbounded or constrained array type, and proceed accordingly.
-			let mut had_fails = false;
-			let mut indices = Vec::new();
-			for &index_id in index_ids {
-				let hir = match self.hir(index_id) {
-					Ok(h) => h,
-					Err(()) => { had_fails = true; continue; }
-				};
-				indices.push(match hir.value {
-					hir::ArrayTypeIndex::Unbounded(tm) => {
-						ArrayIndex::Unbounded(Box::new(self.ty(tm.value)?.clone()))
-					}
-					hir::ArrayTypeIndex::Subtype(subty) => {
-						ArrayIndex::Constrained(Box::new(self.ty(subty)?.clone()))
-					}
-					hir::ArrayTypeIndex::Range(dir, lb_id, rb_id) => {
-						ArrayIndex::Constrained(Box::new(
-							self.make_range_ty(dir, lb_id, rb_id, hir.span)?.clone()
-						))
-					}
-				});
-			}
-			if had_fails {
-				return Err(());
-			}
-			let elem_ty = self.ty(elem_ty)?.clone();
-			Ok(self.intern_ty(ArrayTy::new(indices, Box::new(elem_ty))))
-		}
+        hir::TypeData::Array(ref index_ids, elem_ty) => {
+            // To determine the type of an array, we first need to obtain the
+            // HIR of each index. Based on that we can decide whether this is an
+            // unbounded or constrained array type, and proceed accordingly.
+            let mut had_fails = false;
+            let mut indices = Vec::new();
+            for &index_id in index_ids {
+                let hir = match self.hir(index_id) {
+                    Ok(h) => h,
+                    Err(()) => { had_fails = true; continue; }
+                };
+                indices.push(match hir.value {
+                    hir::ArrayTypeIndex::Unbounded(tm) => {
+                        ArrayIndex::Unbounded(Box::new(self.ty(tm.value)?.clone()))
+                    }
+                    hir::ArrayTypeIndex::Subtype(subty) => {
+                        ArrayIndex::Constrained(Box::new(self.ty(subty)?.clone()))
+                    }
+                    hir::ArrayTypeIndex::Range(dir, lb_id, rb_id) => {
+                        ArrayIndex::Constrained(Box::new(
+                            self.make_range_ty(dir, lb_id, rb_id, hir.span)?.clone()
+                        ))
+                    }
+                });
+            }
+            if had_fails {
+                return Err(());
+            }
+            let elem_ty = self.ty(elem_ty)?.clone();
+            Ok(self.intern_ty(ArrayTy::new(indices, Box::new(elem_ty))))
+        }
 
-		hir::TypeData::File(tm) => {
-			let inner = self.ty(tm.value)?.clone();
-			Ok(self.intern_ty(Ty::File(Box::new(inner))))
-		}
+        hir::TypeData::File(tm) => {
+            let inner = self.ty(tm.value)?.clone();
+            Ok(self.intern_ty(Ty::File(Box::new(inner))))
+        }
 
-		hir::TypeData::Record(ref fields) => {
-			let mut had_fails = false;
-			let mut mapped_fields = Vec::new();
-			let mut used_names = HashMap::new();
-			for &(name, subty) in fields {
-				if let Some(&span) = used_names.get(&name.value) {
-					self.emit(
-						DiagBuilder2::error(format!("field `{}` already declared", name.value))
-						.span(name.span)
-						.add_note("Previous declaration was here:")
-						.span(span)
-					);
-					had_fails = true;
-				} else {
-					used_names.insert(name.value, name.span);
-				}
-				mapped_fields.push((name.value, Box::new(self.ty(subty)?.clone())))
-			}
-			if had_fails {
-				return Err(());
-			}
-			Ok(self.intern_ty(RecordTy::new(mapped_fields)))
-		}
-	}
+        hir::TypeData::Record(ref fields) => {
+            let mut had_fails = false;
+            let mut mapped_fields = Vec::new();
+            let mut used_names = HashMap::new();
+            for &(name, subty) in fields {
+                if let Some(&span) = used_names.get(&name.value) {
+                    self.emit(
+                        DiagBuilder2::error(format!("field `{}` already declared", name.value))
+                        .span(name.span)
+                        .add_note("Previous declaration was here:")
+                        .span(span)
+                    );
+                    had_fails = true;
+                } else {
+                    used_names.insert(name.value, name.span);
+                }
+                mapped_fields.push((name.value, Box::new(self.ty(subty)?.clone())))
+            }
+            if had_fails {
+                return Err(());
+            }
+            Ok(self.intern_ty(RecordTy::new(mapped_fields)))
+        }
+    }
 });
 
 impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
@@ -1279,8 +1279,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 
 /// Determine the type of a subtype declaration.
 impl_make!(self, id: SubtypeDeclRef => &Ty {
-	let hir = self.hir(id)?;
-	self.ty(hir.subty)
+    let hir = self.hir(id)?;
+    self.ty(hir.subty)
 });
 
 /// Determine the type of a signal declaration.
@@ -1336,30 +1336,30 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 
 /// Determine the type of a typed node.
 impl_make!(self, id: TypedNodeRef => &Ty {
-	match id {
-		TypedNodeRef::SubtypeInd(id) => self.make(id),
-		TypedNodeRef::Signal(id)     => self.make(id),
-	}
+    match id {
+        TypedNodeRef::SubtypeInd(id) => self.make(id),
+        TypedNodeRef::Signal(id)     => self.make(id),
+    }
 });
 
 impl_make!(self, id: SignalRef => &Ty {
-	match id {
-		SignalRef::Intf(id) => self.make(id),
-		SignalRef::Decl(id) => self.lazy_typeval(id),
-	}
+    match id {
+        SignalRef::Intf(id) => self.make(id),
+        SignalRef::Decl(id) => self.lazy_typeval(id),
+    }
 });
 
 impl_make!(self, id: IntfObjRef => &Ty {
-	match id {
-		IntfObjRef::Const(id)  => self.make(id),
-		IntfObjRef::Var(id)    => self.make(id),
-		IntfObjRef::Signal(id) => self.make(id),
-		IntfObjRef::File(id)   => self.make(id),
-	}
+    match id {
+        IntfObjRef::Const(id)  => self.make(id),
+        IntfObjRef::Var(id)    => self.make(id),
+        IntfObjRef::Signal(id) => self.make(id),
+        IntfObjRef::File(id)   => self.make(id),
+    }
 });
 
 impl_make!(self, id: LatentTypeMarkRef => &Ty {
-	self.ty(self.hir(id)?.value)
+    self.ty(self.hir(id)?.value)
 });
 
 // impl_make!(self, id: LatentSubprogRef => &Ty {
