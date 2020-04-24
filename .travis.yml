@@ -14,7 +14,7 @@ before_script:
   - rustup component add rustfmt
 
 script:
-  - cargo fmt -- --check
+  - "[ $TRAVIS_RUST_VERSION != stable ] || cargo fmt -- --check"
   - cargo build
   - cargo test --all
   - test/run.sh
