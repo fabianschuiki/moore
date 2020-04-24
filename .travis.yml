@@ -1,14 +1,15 @@
-sudo: false
 language: rust
+cache: cargo
 rust:
   - stable
   - beta
   - nightly
   # minimum supported version
   - "1.38.0"
-matrix:
+jobs:
   allow_failures:
     - rust: nightly
+  fast_finish: true
 
 before_script:
   - rustup component add rustfmt
