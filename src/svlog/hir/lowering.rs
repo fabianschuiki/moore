@@ -590,13 +590,13 @@ fn lower_module_ports_nonansi<'gcx>(
     // will form the internal view of the ports.
     trace!("Gathering ports inside module body");
     let mut decl_order = vec![];
-    let mut decls = HashMap::new();
+    let mut decl_names = HashMap::new();
     for item in ast_items {
         let ast = match item {
             ast::HierarchyItem::PortDecl(pd) => pd,
             _ => continue,
         };
-        trace!("Found {:#?}", ast);
+        // trace!("Found {:#?}", ast);
         for name in &ast.names {
             let data = PartialNonAnsiPort {
                 span: name.name_span,
@@ -614,17 +614,17 @@ fn lower_module_ports_nonansi<'gcx>(
                 var_decl: None,
                 net_decl: None,
             };
-            trace!("Producing {:#?}", data);
-            if let Some(prev) = decls.insert(data.name, data) {
+            // trace!("Producing {:#?}", data);
+            let index = decl_order.len();
+            decl_order.push(data);
+            if let Some(prev) = decl_names.insert(name.name, index) {
                 cx.emit(
                     DiagBuilder2::error(format!("port `{}` declared multiple times", name.name))
                         .span(name.name_span)
                         .add_note("previous declaration was here:")
-                        .span(prev.span),
+                        .span(decl_order[prev].span),
                 );
                 failed = true;
-            } else {
-                decl_order.push(name.name);
             }
         }
     }
@@ -635,10 +635,11 @@ fn lower_module_ports_nonansi<'gcx>(
         match item {
             ast::HierarchyItem::VarDecl(vd) => {
                 for name in &vd.names {
-                    let entry = match decls.get_mut(&name.name) {
-                        Some(e) => e,
+                    let index = match decl_names.get(&name.name) {
+                        Some(&e) => e,
                         None => continue,
                     };
+                    let entry = &mut decl_order[index];
                     if let Some(prev) = std::mem::replace(&mut entry.var_decl, Some((vd, name))) {
                         cx.emit(
                             DiagBuilder2::error(format!(
@@ -655,10 +656,11 @@ fn lower_module_ports_nonansi<'gcx>(
             }
             ast::HierarchyItem::NetDecl(nd) => {
                 for name in &nd.names {
-                    let entry = match decls.get_mut(&name.name) {
-                        Some(e) => e,
+                    let index = match decl_names.get(&name.name) {
+                        Some(&e) => e,
                         None => continue,
                     };
+                    let entry = &mut decl_order[index];
                     if let Some(prev) = std::mem::replace(&mut entry.net_decl, Some((nd, name))) {
                         cx.emit(
                             DiagBuilder2::error(format!(
@@ -679,9 +681,7 @@ fn lower_module_ports_nonansi<'gcx>(
 
     // As a third step, merge the port declarations with the optional variable
     // and net declarations.
-    for name in &decl_order {
-        let port = decls.get_mut(name).unwrap();
-
+    for port in &mut decl_order {
         // Check if the port is already complete, that is, already has a net or
         // variable type. In that case it's an error to provide an additional
         // variable or net declaration that goes with it.
@@ -819,8 +819,11 @@ fn lower_module_ports_nonansi<'gcx>(
     // declarations inside the module body. This forms the external view of the
     // ports.
     trace!("Pairing up with port list");
+    let mut ext_pos: Vec<ExtPort> = vec![];
+    let mut ext_named: HashMap<Name, usize> = HashMap::new();
+    let mut any_unnamed = false;
     for port in ast_ports {
-        match port {
+        let (name, exprs) = match port {
             // [direction] "." ident "(" [expr] ")"
             ast::Port::Explicit {
                 span,
@@ -828,11 +831,12 @@ fn lower_module_ports_nonansi<'gcx>(
                 name,
                 expr,
             } => {
+                let name = Spanned::new(name.name, name.span);
                 if let Some(expr) = expr {
                     let pe = lower_port_expr(cx, expr, parent);
-                    trace!("Explicit port `.{}({:?})`", name.name, pe);
+                    (Some(name), pe)
                 } else {
-                    trace!("Explicit port `.{}()`", name.name);
+                    (Some(name), vec![])
                 }
             }
 
@@ -852,13 +856,51 @@ fn lower_module_ports_nonansi<'gcx>(
                 dims,
                 expr: None,
             } if packed_dims.is_empty() => {
-                trace!("Named port `{}`", name.name);
+                let name = Spanned::new(name.name, name.span);
+                // Now we have to deal with the problem that a port like
+                // `foo[7:0]` is interpreted as a named type by the parser, but
+                // is actually an implicit port. This is indicated by the dims
+                // of the port being non-empty. In this case we recast the dims
+                // as selects in a port expression.
+                let selects = dims
+                    .iter()
+                    .map(|dim| match dim {
+                        ast::TypeDim::Expr(index) => PortSelect::Index(hir::IndexMode::One(
+                            cx.map_ast_with_parent(AstNode::Expr(index), parent),
+                        )),
+                        ast::TypeDim::Range(lhs, rhs) => PortSelect::Index(hir::IndexMode::Many(
+                            ast::RangeMode::Absolute,
+                            cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
+                            cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
+                        )),
+                        _ => {
+                            cx.emit(
+                                DiagBuilder2::error(format!(
+                                    "invalid port range {}; on port `{}`",
+                                    dim.desc_full(),
+                                    name
+                                ))
+                                .span(*span),
+                            );
+                            PortSelect::Error
+                        }
+                    })
+                    .collect();
+                let pe = vec![PortExpr { name, selects }];
+
+                // If dims are empty, then this is a named port. Otherwise it's
+                // actually an implicit port with no name.
+                if dims.is_empty() {
+                    (Some(name), pe)
+                } else {
+                    (None, pe)
+                }
             }
 
             // expr
             ast::Port::Implicit(expr) => {
                 let pe = lower_port_expr(cx, expr, parent);
-                trace!("Implicit port {:?}", pe);
+                (None, pe)
             }
 
             // Everything else is just an error.
@@ -872,6 +914,60 @@ fn lower_module_ports_nonansi<'gcx>(
                 continue;
             }
         };
+        // trace!("Port {:?}: {:?}", name, exprs);
+
+        // Resolve the port expressions to actual ports in the list.
+        let exprs = exprs
+            .into_iter()
+            .flat_map(|expr| match decl_names.get(&expr.name.value) {
+                Some(&index) => Some(ExtPortExpr {
+                    port: index,
+                    selects: expr.selects,
+                }),
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "port `{}` not declared in module body",
+                            expr.name
+                        ))
+                        .span(expr.name.span)
+                        .add_note("Declare the port inside the module, e.g.:")
+                        .add_note(format!("input {};", expr.name)),
+                    );
+                    None
+                }
+            })
+            .collect();
+
+        // Wrap things up in an external port.
+        let port = ExtPort { name, exprs };
+
+        // Build a map of ordered and named port associations.
+        if let Some(name) = port.name {
+            if let Some(prev) = ext_named.insert(name.value, ext_pos.len()) {
+                // If the other port maps to the exact same thing, this is
+                // admissible, but we lose the ability to perform named
+                // connections.
+                any_unnamed = true;
+            }
+        } else {
+            any_unnamed = true;
+        }
+        ext_pos.push(port);
+    }
+
+    // Dump what we end up with.
+    trace!("Positional ports:");
+    for (i, p) in ext_pos.iter().enumerate() {
+        trace!("  {}: {:?}", i, p);
+    }
+    if any_unnamed {
+        trace!("No named connections");
+    } else {
+        trace!("Named ports:");
+        for (n, i) in &ext_named {
+            trace!("  {}: {}", n, i);
+        }
     }
 
     Ok(())
@@ -963,6 +1059,23 @@ struct PortExpr {
 enum PortSelect {
     Error,
     Index(hir::IndexMode),
+}
+
+#[derive(Debug)]
+struct ExtPort {
+    /// Optional name of the port.
+    name: Option<Spanned<Name>>,
+    /// Port expressions that map this external to internal ports. May be empty
+    /// in case of a port that does not connect to anything.
+    exprs: Vec<ExtPortExpr>,
+}
+
+#[derive(Debug)]
+struct ExtPortExpr {
+    /// Index of the internal port this expression targets.
+    port: usize,
+    /// Selects into the internal port.
+    selects: Vec<PortSelect>,
 }
 
 /// Lower the ANSI ports of a module.
