@@ -7,7 +7,8 @@ module foo (
     .P3(x2),
     P4,
     .P5({x3, x4}),
-    {x5, x6}
+    {x5, x6},
+    .P6()
 );
     // This language needs to die.
     output [7:0] x1;

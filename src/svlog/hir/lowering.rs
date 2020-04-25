@@ -550,7 +550,6 @@ fn lower_module_ports<'gcx>(
                 ..
             } if dir.is_none()
                 && kind.is_none()
-                && dims.is_empty()
                 && expr.is_none()
                 && ty.data == ast::ImplicitType
                 && ty.sign == ast::TypeSign::None
@@ -585,6 +584,7 @@ fn lower_module_ports_nonansi<'gcx>(
     first_span: Span,
 ) -> Result<()> {
     let mut failed = false;
+    let parent = NodeId::from_u32(0);
 
     // As a first step, collect the ports declared inside the module body. These
     // will form the internal view of the ports.
@@ -818,9 +818,120 @@ fn lower_module_ports_nonansi<'gcx>(
     // As a fourth step, go through the ports themselves and pair them up with
     // declarations inside the module body. This forms the external view of the
     // ports.
-    // TODO
+    trace!("Pairing up with port list");
+    for port in ast_ports {
+        match port {
+            // [direction] "." ident "(" [expr] ")"
+            ast::Port::Explicit {
+                span,
+                dir: None,
+                name,
+                expr,
+            } => {
+                if let Some(expr) = expr {
+                    let pe = lower_port_expr(cx, expr, parent);
+                    trace!("Explicit port `.{}({:?})`", name.name, pe);
+                } else {
+                    trace!("Explicit port `.{}()`", name.name);
+                }
+            }
+
+            // [direction] [net_type|"var"] type_or_implicit ident {dimension} ["=" expr]
+            ast::Port::Named {
+                span,
+                dir: None,
+                kind: None,
+                ty:
+                    ast::Type {
+                        data: ast::ImplicitType,
+                        sign: ast::TypeSign::None,
+                        dims: packed_dims,
+                        ..
+                    },
+                name,
+                dims,
+                expr: None,
+            } if packed_dims.is_empty() => {
+                trace!("Named port `{}`", name.name);
+            }
+
+            // expr
+            ast::Port::Implicit(expr) => {
+                let pe = lower_port_expr(cx, expr, parent);
+                trace!("Implicit port {:?}", pe);
+            }
+
+            // Everything else is just an error.
+            _ => {
+                cx.emit(
+                    DiagBuilder2::error("ANSI port in non-ANSI port list")
+                        .span(port.span())
+                        .add_note("First port uses non-ANSI style:")
+                        .span(first_span),
+                );
+                continue;
+            }
+        };
+    }
 
     Ok(())
+}
+
+/// Lower an AST expression as a port expression.
+///
+/// ```plain
+/// port_expression ::= port_reference | "{" port_reference {"," port_reference} "}"
+/// ```
+fn lower_port_expr<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx ast::Expr,
+    parent: NodeId,
+) -> Vec<PortExpr> {
+    match &expr.data {
+        ast::ConcatExpr {
+            repeat: None,
+            exprs,
+        } => exprs
+            .iter()
+            .flat_map(|expr| lower_port_ref(cx, expr, parent))
+            .collect(),
+        _ => lower_port_ref(cx, expr, parent).into_iter().collect(),
+    }
+}
+
+/// Lower an AST expression as a port reference.
+///
+/// ```plain
+/// port_reference ::= port_identifier constant_select
+/// ```
+fn lower_port_ref<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx ast::Expr,
+    parent: NodeId,
+) -> Option<PortExpr> {
+    match &expr.data {
+        ast::IdentExpr(ident) => Some(PortExpr {
+            name: Spanned::new(ident.name, ident.span),
+            selects: vec![],
+        }),
+        ast::IndexExpr { indexee, index } => {
+            let mut pe = lower_port_ref(cx, indexee, parent)?;
+            let mode = lower_index_mode(cx, index, parent);
+            pe.selects.push(PortSelect::Index(mode));
+            Some(pe)
+        }
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "invalid port expression: `{}`",
+                    expr.span.extract()
+                ))
+                .span(expr.span),
+            );
+            error!("{:?}", expr);
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -840,6 +951,18 @@ struct PartialNonAnsiPort<'a> {
     match_ty: Option<&'a ast::TypeData>,
     match_packed_dims: Option<&'a [ast::TypeDim]>,
     match_unpacked_dims: Option<&'a [ast::TypeDim]>,
+}
+
+#[derive(Debug)]
+struct PortExpr {
+    name: Spanned<Name>,
+    selects: Vec<PortSelect>,
+}
+
+#[derive(Debug)]
+enum PortSelect {
+    Error,
+    Index(hir::IndexMode),
 }
 
 /// Lower the ANSI ports of a module.
@@ -1287,18 +1410,19 @@ fn lower_expr<'gcx>(
             ref index,
         } => {
             let indexee = cx.map_ast_with_parent(AstNode::Expr(indexee), node_id);
-            let mode = match index.data {
-                ast::RangeExpr {
-                    mode,
-                    ref lhs,
-                    ref rhs,
-                } => hir::IndexMode::Many(
-                    mode,
-                    cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
-                    cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
-                ),
-                _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), node_id)),
-            };
+            let mode = lower_index_mode(cx, index, node_id);
+            // let mode = match index.data {
+            //     ast::RangeExpr {
+            //         mode,
+            //         ref lhs,
+            //         ref rhs,
+            //     } => hir::IndexMode::Many(
+            //         mode,
+            //         cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+            //         cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+            //     ),
+            //     _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), node_id)),
+            // };
             hir::ExprKind::Index(indexee, mode)
         }
         ast::CallExpr(ref callee, ref args) => match callee.data {
@@ -1724,4 +1848,23 @@ fn lower_package<'gcx>(
         last_rib: next_rib,
     };
     Ok(HirNode::Package(cx.arena().alloc_hir(hir)))
+}
+
+fn lower_index_mode<'gcx>(
+    cx: &impl Context<'gcx>,
+    index: &'gcx ast::Expr,
+    parent: NodeId,
+) -> hir::IndexMode {
+    match index.data {
+        ast::RangeExpr {
+            mode,
+            ref lhs,
+            ref rhs,
+        } => hir::IndexMode::Many(
+            mode,
+            cx.map_ast_with_parent(AstNode::Expr(lhs), parent),
+            cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
+        ),
+        _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), parent)),
+    }
 }
