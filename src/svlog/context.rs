@@ -140,6 +140,7 @@ impl<'gcx> BaseContext<'gcx> for GlobalContext<'gcx> {
 ///
 /// Use this struct whenever you want to allocate or internalize
 /// something during the compilation procedure.
+#[derive(Default)]
 pub struct GlobalArenas<'t> {
     ids: TypedArena<NodeId>,
     hir: hir::Arena<'t>,
@@ -149,21 +150,8 @@ pub struct GlobalArenas<'t> {
     values: TypedArena<ValueData<'t>>,
     mir_lvalue: TypedArena<mir::Lvalue<'t>>,
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
-}
-
-impl Default for GlobalArenas<'_> {
-    fn default() -> Self {
-        GlobalArenas {
-            ids: TypedArena::new(),
-            hir: Default::default(),
-            param_envs: TypedArena::new(),
-            ribs: TypedArena::new(),
-            types: TypedArena::new(),
-            values: TypedArena::new(),
-            mir_lvalue: TypedArena::new(),
-            mir_rvalue: TypedArena::new(),
-        }
-    }
+    /// Additional AST types generated during HIR lowering.
+    ast_types: TypedArena<ast::Type>,
 }
 
 impl<'t> GlobalArenas<'t> {
@@ -194,6 +182,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate an MIR rvalue.
     pub fn alloc_mir_rvalue(&'t self, mir: mir::Rvalue<'t>) -> &'t mir::Rvalue<'t> {
         self.mir_rvalue.alloc(mir)
+    }
+
+    /// Allocate an AST type.
+    pub fn alloc_ast_type(&'t self, ast: ast::Type) -> &'t ast::Type {
+        self.ast_types.alloc(ast)
     }
 }
 
