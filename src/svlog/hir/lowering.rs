@@ -545,7 +545,6 @@ fn lower_module_ports<'gcx>(
                 ref dir,
                 ref kind,
                 ref ty,
-                ref dims,
                 ref expr,
                 ..
             } if dir.is_none()
@@ -571,9 +570,208 @@ fn lower_module_ports<'gcx>(
     let partial_ports = match nonansi {
         true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span),
         false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span),
-    }?;
+    };
+    trace!("Lowered ports: {:#?}", partial_ports);
+
+    // TODO: Apply default sign, port kind, and data type.
+    // TODO: Verify that `inout` ports are of net kind, and `ref` ports are of
+    // var kind.
 
     Ok(())
+}
+
+/// Lower the ANSI ports of a module.
+fn lower_module_ports_ansi<'gcx>(
+    cx: &impl Context<'gcx>,
+    ast_ports: &'gcx [ast::Port],
+    ast_items: &'gcx [ast::HierarchyItem],
+    first_span: Span,
+) -> PartialPortList<'gcx> {
+    // Emit errors for any port declarations inside the module.
+    for item in ast_items {
+        let ast = match item {
+            ast::HierarchyItem::PortDecl(pd) => pd,
+            _ => continue,
+        };
+        cx.emit(
+            DiagBuilder2::error("port declaration in body of ANSI-style module")
+                .span(ast.span)
+                .add_note("Modules with an ANSI-style port list cannot have port declarations in the body.")
+                .add_note("Consider using non-ANSI style.")
+                .add_note("First port uses ANSI style:")
+                .span(first_span),
+        );
+    }
+
+    // Ports have a rather sticky way of tracking types, signs, dimensions, etc.
+    // Keep a list of "carry" variables that carry over the previous port's
+    // details over to the next port. Initialize with the default mandated by
+    // the standard.
+    let mut carry_dir = ast::PortDir::Inout;
+    let mut carry_kind: Option<ast::PortKind> = None;
+    let mut carry_ty = &ast::LogicType;
+    let mut carry_sign = ast::TypeSign::None;
+    let mut carry_packed_dims: &[ast::TypeDim] = &[];
+
+    // Map each of the ports in the list.
+    trace!("Gathering ports in the port list");
+    let mut int_ports: Vec<PartialPort> = vec![];
+    let mut ext_pos: Vec<ExtPort> = vec![];
+    let mut ext_named: HashMap<Name, usize> = HashMap::new();
+
+    for port in ast_ports {
+        let data = match port {
+            // [direction] [net_type|"var"] type_or_implicit ident {dimension} ["=" expr]
+            ast::Port::Named {
+                span,
+                dir,
+                kind,
+                ty,
+                name,
+                dims: unpacked_dims,
+                expr,
+            } => {
+                // If no direction has been provided, use the one carried over
+                // from the previous port.
+                let dir = dir.unwrap_or(carry_dir);
+
+                // If no port kind has been provided, use the one carried over
+                // from the previous port.
+                let kind = kind.or(carry_kind);
+
+                // If no port type has been provided, use the one carried over
+                //  from the previous port.
+                let (ty, sign, packed_dims) = if ty.data == ast::ImplicitType
+                    && ty.sign == ast::TypeSign::None
+                    && ty.dims.is_empty()
+                {
+                    (carry_ty, carry_sign, carry_packed_dims)
+                } else {
+                    (&ty.data, ty.sign, ty.dims.as_slice())
+                };
+
+                // Keep the direction, kind, and type around for the next port
+                // in the list, which might want to inherit them.
+                carry_dir = dir;
+                carry_kind = kind;
+                carry_ty = ty;
+                carry_sign = sign;
+                carry_packed_dims = packed_dims;
+
+                PartialPort {
+                    name: Spanned::new(name.name, name.span),
+                    span: *span,
+                    kind,
+                    dir,
+                    sign,
+                    ty,
+                    packed_dims,
+                    unpacked_dims,
+                    default: expr.as_ref(),
+                    expr: None,
+                    var_decl: None,
+                    net_decl: None,
+                    match_ty: None,
+                    match_packed_dims: None,
+                    match_unpacked_dims: None,
+                }
+            }
+
+            // [direction] "." ident "(" [expr] ")"
+            ast::Port::Explicit {
+                span,
+                dir,
+                name,
+                expr,
+            } => {
+                // If no direction has been provided, use the one carried
+                // over from the previous port.
+                let dir = dir.unwrap_or(carry_dir);
+
+                // Clear the carry to some sane default. Not sure if this is the
+                // expected behaviour, but there are no further details in the
+                // standard. What a joke.
+                carry_dir = dir;
+                carry_kind = None;
+                carry_ty = &ast::LogicType;
+                carry_sign = ast::TypeSign::None;
+                carry_packed_dims = &[];
+
+                PartialPort {
+                    name: Spanned::new(name.name, name.span),
+                    span: *span,
+                    kind: None,
+                    dir,
+                    sign: ast::TypeSign::None,
+                    ty: &ast::ImplicitType, // inferred from expression
+                    packed_dims: &[],       // inferred from expression
+                    unpacked_dims: &[],
+                    default: None,
+                    expr: expr.as_ref(),
+                    var_decl: None,
+                    net_decl: None,
+                    match_ty: None,
+                    match_packed_dims: None,
+                    match_unpacked_dims: None,
+                }
+            }
+
+            _ => {
+                cx.emit(
+                    DiagBuilder2::error("non-ANSI port in ANSI port list")
+                        .span(port.span())
+                        .add_note("First port uses ANSI style:")
+                        .span(first_span),
+                );
+                error!("Invalid port: {:?}", port);
+                continue;
+            }
+        };
+
+        trace!("Adding {:?}", data);
+
+        // Wrap things up in an external port.
+        let port = ExtPort {
+            name: Some(data.name),
+            exprs: vec![ExtPortExpr {
+                port: int_ports.len(),
+                selects: vec![],
+            }],
+        };
+
+        // Build a map of ordered and named port associations.
+        if let Some(prev) = ext_named.insert(data.name.value, ext_pos.len()) {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "port `{}` declared multiple times",
+                    data.name.value
+                ))
+                .span(data.name.span)
+                .add_note("Previous declaration was here:")
+                .span(ext_pos[prev].name.unwrap().span),
+            );
+        }
+
+        // Add the port to the internal and external port list.
+        int_ports.push(data);
+        ext_pos.push(port);
+    }
+
+    // Dump what we end up with.
+    trace!("Positional ports:");
+    for (i, p) in ext_pos.iter().enumerate() {
+        trace!("  {}: {:?}", i, p);
+    }
+    trace!("Named ports:");
+    for (n, i) in &ext_named {
+        trace!("  {}: {}", n, i);
+    }
+
+    PartialPortList {
+        int: int_ports,
+        ext_pos,
+        ext_named: Some(ext_named),
+    }
 }
 
 /// Lower the non-ANSI ports of a module.
@@ -582,14 +780,13 @@ fn lower_module_ports_nonansi<'gcx>(
     ast_ports: &'gcx [ast::Port],
     ast_items: &'gcx [ast::HierarchyItem],
     first_span: Span,
-) -> Result<()> {
-    let mut failed = false;
+) -> PartialPortList<'gcx> {
     let parent = NodeId::from_u32(0);
 
     // As a first step, collect the ports declared inside the module body. These
     // will form the internal view of the ports.
     trace!("Gathering ports inside module body");
-    let mut decl_order = vec![];
+    let mut decl_order: Vec<PartialPort> = vec![];
     let mut decl_names = HashMap::new();
     for item in ast_items {
         let ast = match item {
@@ -598,34 +795,37 @@ fn lower_module_ports_nonansi<'gcx>(
         };
         // trace!("Found {:#?}", ast);
         for name in &ast.names {
-            let data = PartialNonAnsiPort {
-                span: name.name_span,
-                name: name.name,
+            let data = PartialPort {
+                span: ast.span,
+                name: Spanned::new(name.name, name.name_span),
                 kind: ast.kind,
                 dir: ast.dir,
                 sign: ast.ty.sign,
                 ty: &ast.ty.data,
                 packed_dims: &ast.ty.dims,
                 unpacked_dims: &name.dims,
+                default: name.init.as_ref(),
+                expr: None,
                 match_ty: None,
                 match_packed_dims: None,
                 match_unpacked_dims: None,
-                default: name.init.as_ref(),
                 var_decl: None,
                 net_decl: None,
             };
             // trace!("Producing {:#?}", data);
             let index = decl_order.len();
-            decl_order.push(data);
-            if let Some(prev) = decl_names.insert(name.name, index) {
+            if let Some(prev) = decl_names.insert(data.name.value, index) {
                 cx.emit(
-                    DiagBuilder2::error(format!("port `{}` declared multiple times", name.name))
-                        .span(name.name_span)
-                        .add_note("previous declaration was here:")
-                        .span(decl_order[prev].span),
+                    DiagBuilder2::error(format!(
+                        "port `{}` declared multiple times",
+                        data.name.value
+                    ))
+                    .span(data.name.span)
+                    .add_note("Previous declaration was here:")
+                    .span(decl_order[prev].name.span),
                 );
-                failed = true;
             }
+            decl_order.push(data);
         }
     }
 
@@ -650,7 +850,6 @@ fn lower_module_ports_nonansi<'gcx>(
                             .add_note("previous declaration was here:")
                             .span(prev.1.name_span),
                         );
-                        failed = true;
                     }
                 }
             }
@@ -671,7 +870,6 @@ fn lower_module_ports_nonansi<'gcx>(
                             .add_note("previous declaration was here:")
                             .span(prev.1.name_span),
                         );
-                        failed = true;
                     }
                 }
             }
@@ -706,7 +904,6 @@ fn lower_module_ports_nonansi<'gcx>(
                     .add_note("Port declaration was here:")
                     .span(port.span),
                 );
-                failed = true;
             }
             port.var_decl = None;
             port.net_decl = None;
@@ -731,7 +928,6 @@ fn lower_module_ports_nonansi<'gcx>(
                             .add_note("Port declaration was here:")
                             .span(port.span),
                         );
-                        failed = true;
                     }
                     port.kind = Some(ast::PortKind::Var);
                     (
@@ -757,7 +953,6 @@ fn lower_module_ports_nonansi<'gcx>(
                             .add_note("Port declaration was here:")
                             .span(port.span),
                         );
-                        failed = true;
                     }
                     port.kind = Some(ast::PortKind::Net(nd.0.net_type));
                     (
@@ -780,7 +975,6 @@ fn lower_module_ports_nonansi<'gcx>(
                         .add_note("Port declaration was here:")
                         .span(port.span),
                     );
-                    failed = true;
                     continue;
                 }
                 // Otherwise we keep things as they are.
@@ -826,7 +1020,7 @@ fn lower_module_ports_nonansi<'gcx>(
         let (name, exprs) = match port {
             // [direction] "." ident "(" [expr] ")"
             ast::Port::Explicit {
-                span,
+                span: _,
                 dir: None,
                 name,
                 expr,
@@ -911,6 +1105,7 @@ fn lower_module_ports_nonansi<'gcx>(
                         .add_note("First port uses non-ANSI style:")
                         .span(first_span),
                 );
+                error!("Invalid port: {:?}", port);
                 continue;
             }
         };
@@ -944,7 +1139,7 @@ fn lower_module_ports_nonansi<'gcx>(
 
         // Build a map of ordered and named port associations.
         if let Some(name) = port.name {
-            if let Some(prev) = ext_named.insert(name.value, ext_pos.len()) {
+            if ext_named.insert(name.value, ext_pos.len()).is_some() {
                 // If the other port maps to the exact same thing, this is
                 // admissible, but we lose the ability to perform named
                 // connections.
@@ -970,7 +1165,11 @@ fn lower_module_ports_nonansi<'gcx>(
         }
     }
 
-    Ok(())
+    PartialPortList {
+        int: decl_order,
+        ext_pos,
+        ext_named: if any_unnamed { None } else { Some(ext_named) },
+    }
 }
 
 /// Lower an AST expression as a port expression.
@@ -1031,22 +1230,43 @@ fn lower_port_ref<'gcx>(
 }
 
 #[derive(Debug)]
-struct PartialNonAnsiPort<'a> {
+struct PartialPort<'a> {
     span: Span,
-    name: Name,
+    name: Spanned<Name>,
     dir: ast::PortDir,
     kind: Option<ast::PortKind>,
     sign: ast::TypeSign,
     ty: &'a ast::TypeData,
     packed_dims: &'a [ast::TypeDim],
     unpacked_dims: &'a [ast::TypeDim],
+    /// The default value assigned to this port if left unconnected.
     default: Option<&'a ast::Expr>,
+    /// The port expression from which the ANSI port is inferred.
+    expr: Option<&'a ast::Expr>,
+    /// The variable declaration associated with a non-ANSI port.
     var_decl: Option<(&'a ast::VarDecl, &'a ast::VarDeclName)>,
+    /// The net declaration associated with a non-ANSI port.
     net_decl: Option<(&'a ast::NetDecl, &'a ast::VarDeclName)>,
-    // Redundant type specification which should check for a match later.
+    /// Redundant type which must be checked against the non-ANSI port later.
     match_ty: Option<&'a ast::TypeData>,
+    /// Redundant packed dimensions which must be checked against the non-ANSI
+    /// port later.
     match_packed_dims: Option<&'a [ast::TypeDim]>,
+    /// Redundant unpacked dimensions which must be checked against the non-ANSI
+    /// port later.
     match_unpacked_dims: Option<&'a [ast::TypeDim]>,
+}
+
+#[derive(Debug)]
+struct PartialPortList<'a> {
+    /// The internal ports.
+    int: Vec<PartialPort<'a>>,
+    /// The external ports, in order for positional connections. Port indices
+    /// are indices into `int`.
+    ext_pos: Vec<ExtPort>,
+    /// The external ports, for named connections. Values are indices into
+    /// `ext_pos`.
+    ext_named: Option<HashMap<Name, usize>>,
 }
 
 #[derive(Debug)]
@@ -1076,16 +1296,6 @@ struct ExtPortExpr {
     port: usize,
     /// Selects into the internal port.
     selects: Vec<PortSelect>,
-}
-
-/// Lower the ANSI ports of a module.
-fn lower_module_ports_ansi<'gcx>(
-    cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::HierarchyItem],
-    first_span: Span,
-) -> Result<()> {
-    Ok(())
 }
 
 fn lower_module_block<'gcx>(
