@@ -614,7 +614,6 @@ fn lower_module_ports_ansi<'gcx>(
     let mut carry_packed_dims: &[ast::TypeDim] = &[];
 
     // Map each of the ports in the list.
-    trace!("Gathering ports in the port list");
     let mut int_ports: Vec<PartialPort> = vec![];
     let mut ext_pos: Vec<ExtPort> = vec![];
     let mut ext_named: HashMap<Name, usize> = HashMap::new();
@@ -728,8 +727,6 @@ fn lower_module_ports_ansi<'gcx>(
             }
         };
 
-        trace!("Adding {:?}", data);
-
         // Wrap things up in an external port.
         let port = ExtPort {
             name: Some(data.name),
@@ -757,16 +754,6 @@ fn lower_module_ports_ansi<'gcx>(
         ext_pos.push(port);
     }
 
-    // Dump what we end up with.
-    trace!("Positional ports:");
-    for (i, p) in ext_pos.iter().enumerate() {
-        trace!("  {}: {:?}", i, p);
-    }
-    trace!("Named ports:");
-    for (n, i) in &ext_named {
-        trace!("  {}: {}", n, i);
-    }
-
     PartialPortList {
         int: int_ports,
         ext_pos,
@@ -785,7 +772,6 @@ fn lower_module_ports_nonansi<'gcx>(
 
     // As a first step, collect the ports declared inside the module body. These
     // will form the internal view of the ports.
-    trace!("Gathering ports inside module body");
     let mut decl_order: Vec<PartialPort> = vec![];
     let mut decl_names = HashMap::new();
     for item in ast_items {
@@ -1012,7 +998,6 @@ fn lower_module_ports_nonansi<'gcx>(
     // As a fourth step, go through the ports themselves and pair them up with
     // declarations inside the module body. This forms the external view of the
     // ports.
-    trace!("Pairing up with port list");
     let mut ext_pos: Vec<ExtPort> = vec![];
     let mut ext_named: HashMap<Name, usize> = HashMap::new();
     let mut any_unnamed = false;
@@ -1149,20 +1134,6 @@ fn lower_module_ports_nonansi<'gcx>(
             any_unnamed = true;
         }
         ext_pos.push(port);
-    }
-
-    // Dump what we end up with.
-    trace!("Positional ports:");
-    for (i, p) in ext_pos.iter().enumerate() {
-        trace!("  {}: {:?}", i, p);
-    }
-    if any_unnamed {
-        trace!("No named connections");
-    } else {
-        trace!("Named ports:");
-        for (n, i) in &ext_named {
-            trace!("  {}: {}", n, i);
-        }
     }
 
     PartialPortList {
