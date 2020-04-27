@@ -403,7 +403,7 @@ dependencies = [
  "sha1 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "stderrlog 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "typed-arena 1.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "typed-arena 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -415,7 +415,7 @@ dependencies = [
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.84 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "typed-arena 1.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "typed-arena 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -460,7 +460,7 @@ dependencies = [
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "typed-arena 1.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "typed-arena 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "typed-arena"
-version = "1.4.1"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1225,7 +1225,7 @@ dependencies = [
 "checksum textwrap 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "307686869c93e71f94da64286f9a9524c0f308a9e1c87a583de8e9c9039ad3f6"
 "checksum thread_local 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "c6b53e329000edc2b34dbe8545fd20e55a333362d0a321909685a19bd28c3f1b"
 "checksum time 0.1.41 (registry+https://github.com/rust-lang/crates.io-index)" = "847da467bf0db05882a9e2375934a8a55cffdc9db0d128af1518200260ba1f6c"
-"checksum typed-arena 1.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c6c06a92aef38bb4dc5b0df00d68496fc31307c5344c867bb61678c6e1671ec5"
+"checksum typed-arena 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a9b2228007eba4120145f785df0f6c92ea538f5a3635a612ecf4e334c8c1446d"
 "checksum typenum 1.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "612d636f949607bdf9b123b4a6f6d966dedf3ff669f7f045890d3a4a73948169"
 "checksum ucd-util 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "fa9b3b49edd3468c0e6565d85783f51af95212b6fa3986a5500954f00b460874"
 "checksum unicode-width 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "882386231c45df4700b275c7ff55b6f3698780a650026380e72dabe76fa46526"
