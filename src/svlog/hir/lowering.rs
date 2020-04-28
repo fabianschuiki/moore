@@ -520,6 +520,7 @@ fn lower_module<'gcx>(
     // Allocate items.
     let block = lower_module_block(cx, next_rib, &ast.items, true)?;
 
+    // Create the HIR module.
     let hir = hir::Module {
         id: node_id,
         name: Spanned::new(ast.name, ast.name_span),
@@ -529,7 +530,14 @@ fn lower_module<'gcx>(
         params: cx.arena().alloc_ids(params),
         block,
     };
-    Ok(HirNode::Module(cx.arena().alloc_hir(hir)))
+    let hir = cx.arena().alloc_hir(hir);
+
+    // Internalize the ports.
+    for port in &hir.ports_new.int {
+        cx.intern_hir(port.id, HirNode::IntPort(port), node_id);
+    }
+
+    Ok(HirNode::Module(hir))
 }
 
 /// Lower the ports of a module to HIR.

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     Port(&'hir Port),
-    IntPort(&'hir Module<'hir>, usize),
+    IntPort(&'hir IntPort),
     ExtPort(&'hir Module<'hir>, usize),
     Type(&'hir Type),
     Expr(&'hir Expr),
@@ -37,7 +37,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.span(),
             HirNode::Port(x) => x.span(),
-            HirNode::IntPort(x, i) => x.ports_new.int[i].span(),
+            HirNode::IntPort(x) => x.span(),
             HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].span(),
             HirNode::Type(x) => x.span(),
             HirNode::Expr(x) => x.span(),
@@ -62,7 +62,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.human_span(),
             HirNode::Port(x) => x.human_span(),
-            HirNode::IntPort(x, i) => x.ports_new.int[i].human_span(),
+            HirNode::IntPort(x) => x.human_span(),
             HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].human_span(),
             HirNode::Type(x) => x.human_span(),
             HirNode::Expr(x) => x.human_span(),
@@ -89,7 +89,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.desc(),
             HirNode::Port(x) => x.desc(),
-            HirNode::IntPort(x, i) => x.ports_new.int[i].desc(),
+            HirNode::IntPort(x) => x.desc(),
             HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].desc(),
             HirNode::Type(x) => x.desc(),
             HirNode::Expr(x) => x.desc(),
@@ -114,7 +114,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.desc_full(),
             HirNode::Port(x) => x.desc_full(),
-            HirNode::IntPort(x, i) => x.ports_new.int[i].desc_full(),
+            HirNode::IntPort(x) => x.desc_full(),
             HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].desc_full(),
             HirNode::Type(x) => x.desc_full(),
             HirNode::Expr(x) => x.desc_full(),
