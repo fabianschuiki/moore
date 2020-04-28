@@ -1,9 +1,15 @@
+// RUN: moore %s -Vports -e mh0 -e mh1
+
 module mh0 (wire x);
-    // inout wire logic x
+    // CHECK: Ports of `mh0`:
+    // CHECK: 0: inout wire logic x
+    // CHECK: 0: .x(x)
 endmodule
 
 module mh1 (integer x);
-    // inout wire integer x
+    // CHECK: Ports of `mh1`:
+    // CHECK: 0: inout wire integer x
+    // CHECK: 0: .x(x)
 endmodule
 
 module mh2 (inout integer x);
