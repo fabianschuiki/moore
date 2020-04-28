@@ -5,6 +5,7 @@
 use crate::crate_prelude::*;
 use bit_vec::BitVec;
 use num::{BigInt, BigRational};
+use std::collections::HashMap;
 
 /// A reference to an HIR node.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -133,6 +134,8 @@ pub struct Module<'hir> {
     pub span: Span,
     /// The ports of the module.
     pub ports: &'hir [NodeId],
+    /// The ports of the module.
+    pub ports_new: PortList,
     /// The parameters of the module.
     pub params: &'hir [NodeId],
     /// The contents of the module.
@@ -388,6 +391,80 @@ impl HasDesc for Port {
     fn desc_full(&self) -> String {
         format!("port `{}`", self.name.value)
     }
+}
+
+/// List of internal and external ports of a module.
+///
+/// A `PortList` consists of an ordered list of internal and external ports. The
+/// external ports map to one or more internal ports via `PortExpr`. An optional
+/// name lookup table allows for external ports to be connected to by name.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct PortList {
+    /// The internal ports.
+    pub int: Vec<IntPort>,
+    /// The external ports, in order for positional connections. Port indices
+    /// are indices into `int`.
+    pub ext_pos: Vec<ExtPort>,
+    /// The external ports, for named connections. Values are indices into
+    /// `ext_pos`. `None` if there are any purely positional external ports.
+    pub ext_named: Option<HashMap<Name, usize>>,
+}
+
+/// An internal port.
+#[derive(Debug, PartialEq, Eq)]
+pub struct IntPort {
+    /// Location of the port declaration in the source file.
+    pub span: Span,
+    /// Name of the port.
+    pub name: Spanned<Name>,
+    /// Direction of the port.
+    pub dir: ast::PortDir,
+    /// Kind of the port.
+    pub kind: ast::PortKind,
+    /// Additional port details. Omitted if this is an explicitly-named ANSI
+    /// port, and the port details must be inferred from declarations inside the
+    /// module.
+    pub data: Option<IntPortData>,
+}
+
+/// Additional internal port details.
+#[derive(Debug, PartialEq, Eq)]
+pub struct IntPortData {
+    /// Type of the port.
+    pub ty: NodeId,
+    /// Unpacked dimensions of the port.
+    pub unpacked_dims: (),
+    /// Optional redundant type (possible in non-ANSI ports), which must be
+    /// checked against `ty`.
+    pub matching: Option<(NodeId, ())>,
+}
+
+/// An external port.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ExtPort {
+    /// Optional name of the port.
+    pub name: Option<Spanned<Name>>,
+    /// Port expressions that map this external to internal ports. May be empty
+    /// in case of a port that does not connect to anything.
+    pub exprs: Vec<ExtPortExpr>,
+}
+
+/// A port expression associating an external port with an internal port.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ExtPortExpr {
+    /// Index of the internal port this expression targets.
+    pub port: usize,
+    /// Selects into the internal port.
+    pub selects: Vec<ExtPortSelect>,
+}
+
+/// A select operation into an internal port.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExtPortSelect {
+    /// Tombstone.
+    Error,
+    /// An indexing operation, like `[7:0]` or `[42]`.
+    Index(hir::IndexMode),
 }
 
 // /// A port slice refers to a port declaration within the module. It consists of

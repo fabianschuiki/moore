@@ -2,7 +2,11 @@
 
 //! Lowering of AST nodes to HIR nodes.
 
-use crate::{ast_map::AstNode, crate_prelude::*, hir::HirNode};
+use crate::{
+    ast_map::AstNode,
+    crate_prelude::*,
+    hir::{ExtPort, ExtPortExpr, ExtPortSelect, HirNode, IntPort, IntPortData, PortList},
+};
 use bit_vec::BitVec;
 use num::BigInt;
 use std::collections::HashMap;
@@ -493,8 +497,8 @@ fn lower_module<'gcx>(
     }
 
     // Lower the module's ports.
-    let ports = lower_module_ports(cx, &ast.ports, &ast.items, node_id);
-    trace!("Lowered port list: {:#?}", ports);
+    let ports_new = lower_module_ports(cx, &ast.ports, &ast.items, node_id);
+    trace!("Lowered port list: {:#?}", ports_new);
 
     // Allocate ports.
     let mut ports = Vec::new();
@@ -518,6 +522,7 @@ fn lower_module<'gcx>(
         name: Spanned::new(ast.name, ast.name_span),
         span: ast.span,
         ports: cx.arena().alloc_ids(ports),
+        ports_new,
         params: cx.arena().alloc_ids(params),
         block,
     };
@@ -1152,14 +1157,16 @@ fn lower_module_ports_nonansi<'gcx>(
                 let selects = dims
                     .iter()
                     .map(|dim| match dim {
-                        ast::TypeDim::Expr(index) => PortSelect::Index(hir::IndexMode::One(
+                        ast::TypeDim::Expr(index) => ExtPortSelect::Index(hir::IndexMode::One(
                             cx.map_ast_with_parent(AstNode::Expr(index), module),
                         )),
-                        ast::TypeDim::Range(lhs, rhs) => PortSelect::Index(hir::IndexMode::Many(
-                            ast::RangeMode::Absolute,
-                            cx.map_ast_with_parent(AstNode::Expr(lhs), module),
-                            cx.map_ast_with_parent(AstNode::Expr(rhs), module),
-                        )),
+                        ast::TypeDim::Range(lhs, rhs) => {
+                            ExtPortSelect::Index(hir::IndexMode::Many(
+                                ast::RangeMode::Absolute,
+                                cx.map_ast_with_parent(AstNode::Expr(lhs), module),
+                                cx.map_ast_with_parent(AstNode::Expr(rhs), module),
+                            ))
+                        }
                         _ => {
                             cx.emit(
                                 DiagBuilder2::error(format!(
@@ -1169,11 +1176,11 @@ fn lower_module_ports_nonansi<'gcx>(
                                 ))
                                 .span(*span),
                             );
-                            PortSelect::Error
+                            ExtPortSelect::Error
                         }
                     })
                     .collect();
-                let pe = vec![PortExpr { name, selects }];
+                let pe = vec![PartialPortExpr { name, selects }];
 
                 // If dims are empty, then this is a named port. Otherwise it's
                 // actually an implicit port with no name.
@@ -1260,7 +1267,7 @@ fn lower_port_expr<'gcx>(
     cx: &impl Context<'gcx>,
     expr: &'gcx ast::Expr,
     parent: NodeId,
-) -> Vec<PortExpr> {
+) -> Vec<PartialPortExpr> {
     match &expr.data {
         ast::ConcatExpr {
             repeat: None,
@@ -1282,16 +1289,16 @@ fn lower_port_ref<'gcx>(
     cx: &impl Context<'gcx>,
     expr: &'gcx ast::Expr,
     parent: NodeId,
-) -> Option<PortExpr> {
+) -> Option<PartialPortExpr> {
     match &expr.data {
-        ast::IdentExpr(ident) => Some(PortExpr {
+        ast::IdentExpr(ident) => Some(PartialPortExpr {
             name: Spanned::new(ident.name, ident.span),
             selects: vec![],
         }),
         ast::IndexExpr { indexee, index } => {
             let mut pe = lower_port_ref(cx, indexee, parent)?;
             let mode = lower_index_mode(cx, index, parent);
-            pe.selects.push(PortSelect::Index(mode));
+            pe.selects.push(ExtPortSelect::Index(mode));
             Some(pe)
         }
         _ => {
@@ -1337,77 +1344,15 @@ struct PartialPort<'a> {
 }
 
 #[derive(Debug)]
+struct PartialPortExpr {
+    name: Spanned<Name>,
+    selects: Vec<ExtPortSelect>,
+}
+
+#[derive(Debug)]
 struct PartialPortList<'a> {
     /// The internal ports.
     int: Vec<PartialPort<'a>>,
-    /// The external ports, in order for positional connections. Port indices
-    /// are indices into `int`.
-    ext_pos: Vec<ExtPort>,
-    /// The external ports, for named connections. Values are indices into
-    /// `ext_pos`.
-    ext_named: Option<HashMap<Name, usize>>,
-}
-
-#[derive(Debug)]
-struct PortExpr {
-    name: Spanned<Name>,
-    selects: Vec<PortSelect>,
-}
-
-#[derive(Debug)]
-enum PortSelect {
-    Error,
-    Index(hir::IndexMode),
-}
-
-#[derive(Debug)]
-struct IntPort {
-    /// Location of the port declaration in the source file.
-    span: Span,
-    /// Name of the port.
-    name: Spanned<Name>,
-    /// Direction of the port.
-    dir: ast::PortDir,
-    /// Kind of the port.
-    kind: ast::PortKind,
-    /// Additional port details. Omitted if this is an explicitly-named ANSI
-    /// port, and the port details must be inferred from declarations inside the
-    /// module.
-    data: Option<IntPortData>,
-}
-
-#[derive(Debug)]
-struct IntPortData {
-    /// Type of the port.
-    ty: NodeId,
-    /// Unpacked dimensions of the port.
-    unpacked_dims: (),
-    /// Optional redundant type (possible in non-ANSI ports), which must be
-    /// checked against `ty`.
-    matching: Option<(NodeId, ())>,
-}
-
-#[derive(Debug)]
-struct ExtPort {
-    /// Optional name of the port.
-    name: Option<Spanned<Name>>,
-    /// Port expressions that map this external to internal ports. May be empty
-    /// in case of a port that does not connect to anything.
-    exprs: Vec<ExtPortExpr>,
-}
-
-#[derive(Debug)]
-struct ExtPortExpr {
-    /// Index of the internal port this expression targets.
-    port: usize,
-    /// Selects into the internal port.
-    selects: Vec<PortSelect>,
-}
-
-#[derive(Debug, Default)]
-struct PortList {
-    /// The internal ports.
-    int: Vec<IntPort>,
     /// The external ports, in order for positional connections. Port indices
     /// are indices into `int`.
     ext_pos: Vec<ExtPort>,
