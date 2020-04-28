@@ -760,6 +760,7 @@ fn lower_module_ports_ansi<'gcx>(
                     match_ty: None,
                 };
                 let ext_port = ExtPort {
+                    span: *span,
                     name: Some(data.name),
                     exprs: vec![ExtPortExpr {
                         port: int_ports.len(),
@@ -829,6 +830,7 @@ fn lower_module_ports_ansi<'gcx>(
                     .collect();
 
                 ExtPort {
+                    span: *span,
                     name: Some(Spanned::new(name.name, name.span)),
                     exprs: pe,
                 }
@@ -1115,10 +1117,10 @@ fn lower_module_ports_nonansi<'gcx>(
     let mut ext_named: HashMap<Name, usize> = HashMap::new();
     let mut any_unnamed = false;
     for port in ast_ports {
-        let (name, exprs) = match port {
+        let (span, name, exprs) = match port {
             // [direction] "." ident "(" [expr] ")"
             ast::Port::Explicit {
-                span: _,
+                span,
                 dir: None,
                 name,
                 expr,
@@ -1126,9 +1128,9 @@ fn lower_module_ports_nonansi<'gcx>(
                 let name = Spanned::new(name.name, name.span);
                 if let Some(expr) = expr {
                     let pe = lower_port_expr(cx, expr, module);
-                    (Some(name), pe)
+                    (*span, Some(name), pe)
                 } else {
-                    (Some(name), vec![])
+                    (*span, Some(name), vec![])
                 }
             }
 
@@ -1185,16 +1187,16 @@ fn lower_module_ports_nonansi<'gcx>(
                 // If dims are empty, then this is a named port. Otherwise it's
                 // actually an implicit port with no name.
                 if dims.is_empty() {
-                    (Some(name), pe)
+                    (*span, Some(name), pe)
                 } else {
-                    (None, pe)
+                    (*span, None, pe)
                 }
             }
 
             // expr
             ast::Port::Implicit(expr) => {
                 let pe = lower_port_expr(cx, expr, module);
-                (None, pe)
+                (expr.span, None, pe)
             }
 
             // Everything else is just an error.
@@ -1235,7 +1237,7 @@ fn lower_module_ports_nonansi<'gcx>(
             .collect();
 
         // Wrap things up in an external port.
-        let port = ExtPort { name, exprs };
+        let port = ExtPort { span, name, exprs };
 
         // Build a map of ordered and named port associations.
         if let Some(name) = port.name {

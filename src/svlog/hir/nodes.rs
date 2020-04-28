@@ -12,6 +12,8 @@ use std::collections::HashMap;
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     Port(&'hir Port),
+    IntPort(&'hir Module<'hir>, usize),
+    ExtPort(&'hir Module<'hir>, usize),
     Type(&'hir Type),
     Expr(&'hir Expr),
     InstTarget(&'hir InstTarget),
@@ -35,6 +37,8 @@ impl<'hir> HasSpan for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.span(),
             HirNode::Port(x) => x.span(),
+            HirNode::IntPort(x, i) => x.ports_new.int[i].span(),
+            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].span(),
             HirNode::Type(x) => x.span(),
             HirNode::Expr(x) => x.span(),
             HirNode::InstTarget(x) => x.span(),
@@ -58,6 +62,8 @@ impl<'hir> HasSpan for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.human_span(),
             HirNode::Port(x) => x.human_span(),
+            HirNode::IntPort(x, i) => x.ports_new.int[i].human_span(),
+            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].human_span(),
             HirNode::Type(x) => x.human_span(),
             HirNode::Expr(x) => x.human_span(),
             HirNode::InstTarget(x) => x.human_span(),
@@ -83,6 +89,8 @@ impl<'hir> HasDesc for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.desc(),
             HirNode::Port(x) => x.desc(),
+            HirNode::IntPort(x, i) => x.ports_new.int[i].desc(),
+            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].desc(),
             HirNode::Type(x) => x.desc(),
             HirNode::Expr(x) => x.desc(),
             HirNode::InstTarget(x) => x.desc(),
@@ -106,6 +114,8 @@ impl<'hir> HasDesc for HirNode<'hir> {
         match *self {
             HirNode::Module(x) => x.desc_full(),
             HirNode::Port(x) => x.desc_full(),
+            HirNode::IntPort(x, i) => x.ports_new.int[i].desc_full(),
+            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].desc_full(),
             HirNode::Type(x) => x.desc_full(),
             HirNode::Expr(x) => x.desc_full(),
             HirNode::InstTarget(x) => x.desc_full(),
@@ -442,6 +452,8 @@ pub struct IntPortData {
 /// An external port.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ExtPort {
+    /// Location of the port declaration in the source file.
+    pub span: Span,
     /// Optional name of the port.
     pub name: Option<Spanned<Name>>,
     /// Port expressions that map this external to internal ports. May be empty
@@ -465,6 +477,48 @@ pub enum ExtPortSelect {
     Error,
     /// An indexing operation, like `[7:0]` or `[42]`.
     Index(hir::IndexMode),
+}
+
+impl HasSpan for IntPort {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for IntPort {
+    fn desc(&self) -> &'static str {
+        "port"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("port `{}`", self.name.value)
+    }
+}
+
+impl HasSpan for ExtPort {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.map(|n| n.span).unwrap_or(self.span)
+    }
+}
+
+impl HasDesc for ExtPort {
+    fn desc(&self) -> &'static str {
+        "port"
+    }
+
+    fn desc_full(&self) -> String {
+        self.name
+            .map(|n| format!("port `{}`", n))
+            .unwrap_or_else(|| "port".to_string())
+    }
 }
 
 // /// A port slice refers to a port declaration within the module. It consists of
