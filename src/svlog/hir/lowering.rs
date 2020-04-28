@@ -370,9 +370,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         }
         AstNode::GenIf(gen) => {
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), node_id);
-            let main_body = lower_module_block(cx, node_id, &gen.main_block.items)?;
+            let main_body = lower_module_block(cx, node_id, &gen.main_block.items, false)?;
             let else_body = match gen.else_block {
-                Some(ref else_block) => Some(lower_module_block(cx, node_id, &else_block.items)?),
+                Some(ref else_block) => {
+                    Some(lower_module_block(cx, node_id, &else_block.items, false)?)
+                }
                 None => None,
             };
             let hir = hir::Gen {
@@ -391,7 +393,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             let rib = *init.last().unwrap();
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), rib);
             let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), rib);
-            let body = lower_module_block(cx, rib, &gen.block.items)?;
+            let body = lower_module_block(cx, rib, &gen.block.items, false)?;
             let hir = hir::Gen {
                 id: node_id,
                 span: gen.span(),
@@ -509,7 +511,7 @@ fn lower_module<'gcx>(
     }
 
     // Allocate items.
-    let block = lower_module_block(cx, next_rib, &ast.items)?;
+    let block = lower_module_block(cx, next_rib, &ast.items, true)?;
 
     let hir = hir::Module {
         id: node_id,
@@ -1418,6 +1420,7 @@ fn lower_module_block<'gcx>(
     cx: &impl Context<'gcx>,
     parent_rib: NodeId,
     items: impl IntoIterator<Item = &'gcx ast::HierarchyItem>,
+    allow_ports: bool,
 ) -> Result<hir::ModuleBlock> {
     let mut next_rib = parent_rib;
     let mut insts = Vec::new();
@@ -1485,7 +1488,17 @@ fn lower_module_block<'gcx>(
                     next_rib = id;
                 }
             }
-            // _ => return cx.unimp_msg("lowering of", item),
+            ast::HierarchyItem::PortDecl(ref decl) => {
+                if !allow_ports {
+                    cx.emit(
+                        DiagBuilder2::error("misplaced port declaration")
+                            .span(decl.span)
+                            .add_note(
+                                "Port declarations can only appear directly in a module body",
+                            ),
+                    );
+                }
+            }
             _ => warn!("skipping unsupported {:?}", item),
         }
     }
