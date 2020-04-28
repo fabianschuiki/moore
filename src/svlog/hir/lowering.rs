@@ -599,6 +599,8 @@ fn lower_module_ports<'gcx>(
     let default_net_type = ast::NetType::Wire; // TODO: Make changeable by directive
 
     for port in partial_ports.int {
+        let port_id = cx.alloc_id(port.span);
+
         // Determine the port kind.
         let kind = port.kind.unwrap_or_else(|| match port.dir {
             ast::PortDir::Input | ast::PortDir::Inout => ast::PortKind::Net(default_net_type),
@@ -651,16 +653,23 @@ fn lower_module_ports<'gcx>(
             });
             let ty = cx.map_ast_with_parent(AstNode::Type(ty_ast), module);
             let _ = lower_type(cx, ty, ty_ast);
+
+            // Allocate the default expression.
+            let default = port
+                .default
+                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), port_id));
+
             Some(IntPortData {
                 ty,
                 unpacked_dims: (),
                 matching: None,
+                default,
             })
         };
 
         // Package everything up in an internal port.
         ports.push(IntPort {
-            id: cx.alloc_id(port.span),
+            id: port_id,
             span: port.span,
             name: port.name,
             dir: port.dir,

@@ -449,6 +449,8 @@ pub struct IntPortData {
     /// Optional redundant type (possible in non-ANSI ports), which must be
     /// checked against `ty`.
     pub matching: Option<(NodeId, ())>,
+    /// Optional default value assigned to the port if left unconnected.
+    pub default: Option<NodeId>,
 }
 
 /// An external port.

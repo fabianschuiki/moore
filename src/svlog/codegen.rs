@@ -88,16 +88,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
         let mut port_id_to_name = HashMap::new();
-        for &port_id in hir.ports {
-            let port = match self.hir_of(port_id)? {
-                HirNode::Port(p) => p,
-                _ => unreachable!(),
-            };
-            let ty = self.type_of(port_id, env)?;
-            debug!(
-                "port {}.{} has type {:?}",
-                hir.name.value, port.name.value, ty
-            );
+        for port in &hir.ports_new.int {
+            let ty = self.type_of(port.id, env)?;
+            debug!("port {}.{} has type {:?}", hir.name, port.name, ty);
             let ty = self.emit_type(ty, env)?;
             let ty = match port.dir {
                 ast::PortDir::Ref => llhd::pointer_ty(ty),
@@ -106,20 +99,20 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             match port.dir {
                 ast::PortDir::Input | ast::PortDir::Ref => {
                     sig.add_input(ty);
-                    inputs.push(port_id);
+                    inputs.push(port.id);
                 }
                 ast::PortDir::Output => {
                     sig.add_output(ty);
-                    outputs.push(port_id);
+                    outputs.push(port.id);
                 }
                 ast::PortDir::Inout => {
                     sig.add_input(ty.clone());
                     sig.add_output(ty);
-                    inputs.push(port_id);
-                    outputs.push(port_id);
+                    inputs.push(port.id);
+                    outputs.push(port.id);
                 }
             }
-            port_id_to_name.insert(port_id, port.name);
+            port_id_to_name.insert(port.id, port.name);
         }
 
         // Pick an entity name.
@@ -181,11 +174,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 continue;
             }
             let hir = match gen.hir_of(port_id)? {
-                HirNode::Port(p) => p,
+                HirNode::IntPort(p) => p,
                 _ => unreachable!(),
             };
+            let port_data = match &hir.data {
+                Some(data) => data,
+                None => continue,
+            };
             let default_value = gen.emit_const(
-                if let Some(default) = hir.default {
+                if let Some(default) = port_data.default {
                     gen.constant_value_of(default, env)?
                 } else {
                     gen.type_default_value(gen.type_of(port_id, env)?)
