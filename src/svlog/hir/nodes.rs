@@ -423,6 +423,8 @@ pub struct PortList {
 /// An internal port.
 #[derive(Debug, PartialEq, Eq)]
 pub struct IntPort {
+    /// Node ID of the port.
+    pub id: NodeId,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Name of the port.

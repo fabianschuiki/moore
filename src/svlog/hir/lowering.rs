@@ -652,6 +652,7 @@ fn lower_module_ports<'gcx>(
 
         // Package everything up in an internal port.
         ports.push(IntPort {
+            id: cx.alloc_id(port.span),
             span: port.span,
             name: port.name,
             dir: port.dir,
