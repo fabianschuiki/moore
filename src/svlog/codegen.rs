@@ -1869,8 +1869,11 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module, env: Para
     // Dump the internal ports.
     println!("  internal:");
     for (i, port) in hir.ports_new.int.iter().enumerate() {
-        // let ty = cx.type_of(port.id, env);
-        println!("    {}: {} {} {}", i, port.dir, port.kind, port.name);
+        let ty = match cx.type_of(port.id, env) {
+            Ok(ty) => format!("{}", ty),
+            Err(_) => format!("<type-error>"),
+        };
+        println!("    {}: {} {} {} {}", i, port.dir, port.kind, ty, port.name);
     }
 
     // Dump the external ports.

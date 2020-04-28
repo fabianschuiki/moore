@@ -19,6 +19,16 @@ pub(crate) fn type_of<'gcx>(
     #[allow(unreachable_patterns)]
     match hir {
         HirNode::Port(p) => cx.map_to_type(p.ty, env),
+        HirNode::IntPort(p) => match &p.data {
+            Some(data) => cx.map_to_type(data.ty, env),
+            None => {
+                cx.emit(
+                    DiagBuilder2::bug(format!("type of {} cannot be inferred", p.desc_full()))
+                        .span(p.span()),
+                );
+                Err(())
+            }
+        },
         HirNode::Expr(e) => Ok(type_of_expr(cx, e, env)),
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
