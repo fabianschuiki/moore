@@ -21,6 +21,9 @@ pub enum Hint {
 }
 
 pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<HirNode<'gcx>> {
+    if let Some(hir) = cx.get_interned_hir(node_id) {
+        return Ok(hir);
+    }
     let ast = cx.ast_of(node_id)?;
 
     #[allow(unreachable_patterns)]

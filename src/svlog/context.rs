@@ -202,6 +202,7 @@ pub struct GlobalTables<'t> {
     interned_types: RefCell<HashSet<Type<'t>>>,
     interned_values: RefCell<HashSet<Value<'t>>>,
     lowering_hints: RefCell<HashMap<NodeId, hir::Hint>>,
+    interned_hir: RefCell<HashMap<NodeId, HirNode<'t>>>,
 }
 
 /// The fundamental compiler context.
@@ -313,6 +314,22 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
                 Err(())
             }
         }
+    }
+
+    /// Internalize an HIR node.
+    fn intern_hir(&self, id: NodeId, hir: HirNode<'gcx>, parent: NodeId) {
+        self.tables().interned_hir.borrow_mut().insert(id, hir);
+        self.set_parent(id, parent);
+    }
+
+    /// Lookup an internalized HIR node.
+    fn interned_hir(&self, id: NodeId) -> HirNode<'gcx> {
+        self.tables().interned_hir.borrow()[&id]
+    }
+
+    /// Lookup an internalized HIR node.
+    fn get_interned_hir(&self, id: NodeId) -> Option<HirNode<'gcx>> {
+        self.tables().interned_hir.borrow().get(&id).cloned()
     }
 
     /// Internalize a type.
