@@ -13,6 +13,7 @@ use llhd::ir::{Unit, UnitBuilder};
 use num::{BigInt, One, Zero};
 use std::{
     collections::{HashMap, HashSet},
+    iter::{once, repeat},
     ops::Deref,
     ops::DerefMut,
 };
@@ -76,6 +77,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             _ => panic!("expected {:?} to be a module", id),
         };
         debug!("emit module `{}` with {:?}", hir.name, env);
+
+        // Emit detailed port information if requested.
+        if self.sess().has_verbosity(Verbosity::PORTS) {
+            emit_port_details(self.cx, hir, env);
+        }
 
         // Determine entity type and port names.
         let mut sig = llhd::ir::Signature::new();
@@ -1851,4 +1857,50 @@ enum Mode {
 enum ShiftDir {
     Left,
     Right,
+}
+
+/// Emit a detailed description of a module's ports.
+///
+/// Called when the PORTS verbosity flag is set.
+fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module, env: ParamEnv) {
+    trace!("Port details of {:#?}", hir.ports_new);
+    println!("Ports of `{}`:", hir.name);
+
+    // Dump the internal ports.
+    println!("  internal:");
+    for (i, port) in hir.ports_new.int.iter().enumerate() {
+        // let ty = cx.type_of(port.id, env);
+        println!("    {}: {} {} {}", i, port.dir, port.kind, port.name);
+    }
+
+    // Dump the external ports.
+    println!("  external:");
+    for (i, port) in hir.ports_new.ext_pos.iter().enumerate() {
+        print!("    {}:", i);
+        if let Some(name) = port.name {
+            print!(" .{}(", name);
+        }
+        if port.exprs.len() > 1 {
+            print!("{{");
+        }
+        for (expr, sep) in port.exprs.iter().zip(once("").chain(repeat(", "))) {
+            print!("{}{}", sep, hir.ports_new.int[expr.port].name);
+            for select in &expr.selects {
+                match select {
+                    hir::ExtPortSelect::Error => (),
+                    hir::ExtPortSelect::Index(_mode) => {
+                        print!("[..]");
+                    }
+                }
+            }
+        }
+        if port.exprs.len() > 1 {
+            print!("}}");
+        }
+        if port.name.is_some() {
+            print!(")");
+        }
+        // TODO: Dump the external port type.
+        println!();
+    }
 }

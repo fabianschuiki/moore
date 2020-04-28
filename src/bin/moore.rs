@@ -58,6 +58,7 @@ fn main() {
                     "typeck",
                     "names",
                     "casts",
+                    "ports",
                 ])
                 .global(true),
         )
@@ -178,6 +179,7 @@ fn main() {
             "typeck" => Verbosity::TYPECK,
             "names" => Verbosity::NAMES,
             "casts" => Verbosity::CASTS,
+            "ports" => Verbosity::PORTS,
             _ => unreachable!(),
         };
     }

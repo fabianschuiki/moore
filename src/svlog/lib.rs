@@ -43,12 +43,14 @@ mod crate_prelude {
     #[allow(unused_imports)]
     pub(crate) use crate::{
         ast,
-        common::errors::*,
-        common::name::Name,
-        common::score::Result,
-        common::source::{Span, Spanned},
-        common::util::{HasDesc, HasSpan},
-        common::NodeId,
+        common::{
+            errors::*,
+            name::Name,
+            score::Result,
+            source::{Span, Spanned},
+            util::{HasDesc, HasSpan},
+            NodeId, SessionContext, Verbosity,
+        },
         context::{BaseContext, Context, GlobalContext},
         hir, mir, param_env, port_mapping,
         resolver::{self, Rib, RibKind},
