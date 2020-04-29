@@ -4,14 +4,13 @@ module A (input int a, input int b, output int c);
 	assign c = a + b;
 endmodule
 
-//| entity @A (i32$ %a, i32$ %b) (i32$ %c) {
-//|     %a0 = prb %a
-//|     %b0 = prb %b
-//|     %0 = add i32 %a0 %b0
-//|     %1 = sig i32
-//|     drv %1 %0
-//|     drv %c %1
-//| }
+// CHECK: entity @A (i32$ %a, i32$ %b) -> (i32$ %c) {
+// CHECK:     %a1 = prb i32$ %a
+// CHECK:     %b1 = prb i32$ %b
+// CHECK:     %0 = add i32 %a1, %b1
+// CHECK:     %1 = const time 0s 1e
+// CHECK:     drv i32$ %c, %0, %1
+// CHECK: }
 
 module B;
 	int a, b, c;
