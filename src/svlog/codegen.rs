@@ -502,7 +502,13 @@ where
     UB: UnitBuilder,
 {
     fn emitted_value(&self, node_id: NodeId) -> llhd::ir::Value {
-        self.values[&node_id]
+        match self.values.get(&node_id) {
+            Some(&v) => v,
+            None => panic!(
+                "{}",
+                DiagBuilder2::bug("no value emitted").span(self.span(node_id))
+            ),
+        }
     }
 
     fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ir::Value) {
