@@ -1,43 +1,42 @@
+// RUN: moore %s -e A
+
 module A;
-	int a, b, c = 19;
+	int a, b, c;
 	initial begin
-		#1ns a = +b;
-		#1ns a = -b;
-		#1ns a = &b;
-		#1ns a = ~&b;
-		#1ns a = |b;
-		#1ns a = ~|b;
-		#1ns a = ^b;
-		#1ns a = ~^b;
-		#1ns a = ^~b;
-		#1ns a = ~b;
-		#1ns a = b++;
-		#1ns a = ++b;
-		#1ns a = b--;
-		#1ns a = --b;
-		#1ns b = 42;
-		#1ns a = 1 + 2;
-		#1ns a = b + 1;
-		#1ns a = b + c;
-		#1ns a = b - c;
-		#1ns a = b * c;
-		#1ns a = b / c;
-		// #1ns a = b ** c; // not yet supported
-		#1ns a = b & c;
-		#1ns a = b | c;
-		#1ns a = b ^ c;
-		#1ns a = b == c;
-		#1ns a = b != c;
-		#1ns a = b < c;
-		#1ns a = b <= c;
-		#1ns a = b > c;
-		#1ns a = b >= c;
-		#1ns a = !b;
-		#1ns a = b && c;
-		#1ns a = b || c;
-		#1ns a = b == c ? 42 : 9001;
-		#1ns;
+		a <= +b;
+		a <= -b;
+		a <= &b;
+		a <= ~&b;
+		a <= |b;
+		a <= ~|b;
+		a <= ^b;
+		a <= ~^b;
+		a <= ^~b;
+		a <= ~b;
+		a <= b++;
+		a <= ++b;
+		a <= b--;
+		a <= --b;
+		a <= 42;
+		a <= 1 + 2;
+		a <= b + 1;
+		a <= b + c;
+		a <= b - c;
+		a <= b * c;
+		a <= b / c;
+		// a <= b ** c; // not yet supported
+		a <= b & c;
+		a <= b | c;
+		a <= b ^ c;
+		a <= b == c;
+		a <= b != c;
+		a <= b < c;
+		a <= b <= c;
+		a <= b > c;
+		a <= b >= c;
+		a <= !b;
+		a <= b && c;
+		a <= b || c;
+		a <= b == c ? 42 : 9001;
 	end
 endmodule
-
-//@ elab A

@@ -101,14 +101,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     sig.add_input(ty);
                     inputs.push(port.id);
                 }
-                ast::PortDir::Output => {
+                ast::PortDir::Inout | ast::PortDir::Output => {
                     sig.add_output(ty);
-                    outputs.push(port.id);
-                }
-                ast::PortDir::Inout => {
-                    sig.add_input(ty.clone());
-                    sig.add_output(ty);
-                    inputs.push(port.id);
                     outputs.push(port.id);
                 }
             }
@@ -208,7 +202,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         id: NodeId,
         env: ParamEnv,
         name_prefix: &str,
-    ) -> Result<llhd::ir::ModUnit> {
+    ) -> Result<EmittedProcedure> {
         let hir = match self.hir_of(id)? {
             HirNode::Proc(x) => x,
             _ => unreachable!(),
@@ -216,24 +210,24 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Find the accessed nodes.
         let acc = self.accessed_nodes(hir.stmt)?;
-        trace!("process accesses {:#?}", acc);
+        trace!("Process accesses {:#?}", acc);
         let mut sig = llhd::ir::Signature::new();
         let mut inputs = vec![];
         let mut outputs = vec![];
-        for &id in &acc.read {
+        for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
             sig.add_input(llhd::signal_ty(
                 self.emit_type(self.type_of(id, env)?, env)?,
             ));
             inputs.push(id);
         }
-        for &id in &acc.written {
+        for &id in acc.written.iter() {
             sig.add_output(llhd::signal_ty(
                 self.emit_type(self.type_of(id, env)?, env)?,
             ));
             outputs.push(id);
         }
-        trace!("process inputs = {:#?}", inputs);
-        trace!("process outputs = {:#?}", outputs);
+        trace!("Process Inputs: {:?}", inputs);
+        trace!("Process Outputs: {:?}", outputs);
 
         // Create process and entry block.
         let proc_name = format!(
@@ -259,13 +253,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             hir::HirNode::Port(x) => Some(x.name),
             _ => None,
         };
-        for (i, &id) in acc.read.iter().enumerate() {
+        for (i, &id) in inputs.iter().enumerate() {
             if let Some(name) = guess_name(id) {
                 let value = builder.prok.input_arg(i);
                 builder.dfg_mut().set_name(value, format!("{}", name));
             }
         }
-        for (i, &id) in acc.written.iter().enumerate() {
+        for (i, &id) in outputs.iter().enumerate() {
             if let Some(name) = guess_name(id) {
                 let value = builder.prok.output_arg(i);
                 builder.dfg_mut().set_name(value, format!("{}", name));
@@ -365,7 +359,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 pg.builder.ins().halt();
             }
         }
-        Ok(self.into.add_process(prok))
+
+        Ok(EmittedProcedure {
+            unit: self.into.add_process(prok),
+            inputs,
+            outputs,
+        })
     }
 
     /// Map a type to an LLHD type (interned).
@@ -615,9 +614,54 @@ where
             };
 
             // Map external to internal ports.
-            let port_mapping_int: HashMap<NodeId, llhd::ir::Value> = HashMap::new();
+            let mut port_mapping_int: HashMap<NodeId, llhd::ir::Value> = HashMap::new();
             for port in &module_hir.ports_new.ext_pos {
-                trace!("Checking connection of {:?}", port);
+                // trace!("Checking connection of {:?}", port);
+                let mapping = match port_mapping.find(port.id) {
+                    Some(m) => m,
+                    None => continue,
+                };
+                if port.exprs.len() > 1 {
+                    self.emit(
+                        DiagBuilder2::bug("port expressions with concatenations not supported")
+                            .span(inst_hir.span())
+                            .add_note("Port declared here:")
+                            .span(port.span),
+                    );
+                    continue;
+                }
+                let expr = match port.exprs.iter().next() {
+                    Some(m) => m,
+                    None => continue,
+                };
+                if !expr.selects.is_empty() {
+                    self.emit(
+                        DiagBuilder2::bug("port expressions with selections not supported")
+                            .span(inst_hir.span())
+                            .add_note("Port declared here:")
+                            .span(port.span),
+                    );
+                    continue;
+                }
+                let int = &module_hir.ports_new.int[expr.port];
+                // trace!("Attaching {:?} to {:?}", mapping, int);
+                let value = match int.dir {
+                    ast::PortDir::Input | ast::PortDir::Ref => {
+                        self.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?
+                    }
+                    ast::PortDir::Output | ast::PortDir::Inout => {
+                        self.emit_lvalue(mapping.0, mapping.1)?
+                    }
+                };
+                if port_mapping_int.insert(int.id, value).is_some() {
+                    self.emit(
+                        DiagBuilder2::error(format!(
+                            "port `{}` connected multiple times",
+                            int.name
+                        ))
+                        .span(self.span(mapping.0)),
+                    );
+                }
             }
             trace!("Internal Port Mapping: {:?}", port_mapping_int);
 
@@ -626,19 +670,8 @@ where
             let mut inputs = Vec::new();
             let mut outputs = Vec::new();
             for port in &module_hir.ports_new.int {
-                let mapping = port_mapping.find(port.id);
-                let (is_input, is_output) = match port.dir {
-                    ast::PortDir::Input | ast::PortDir::Ref => (true, false),
-                    ast::PortDir::Output => (false, true),
-                    ast::PortDir::Inout => (true, true),
-                };
-                if let Some(mapping) = mapping {
-                    if is_input {
-                        inputs.push(self.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?);
-                    }
-                    if is_output {
-                        outputs.push(self.emit_lvalue(mapping.0, mapping.1)?);
-                    }
+                let value = if let Some(&mapping) = port_mapping_int.get(&port.id) {
+                    mapping
                 } else {
                     let ty = self.type_of(port.id, inst_env)?;
                     let value = match port.data.as_ref().and_then(|d| d.default) {
@@ -649,16 +682,18 @@ where
                             self.builder.ins().sig(v)
                         }
                     };
-                    if is_input {
-                        inputs.push(value);
+                    if self.builder.dfg().get_name(value).is_none() {
+                        self.builder
+                            .dfg_mut()
+                            .set_name(value, format!("{}.{}.default", inst_hir.name, port.name));
                     }
-                    if is_output {
-                        outputs.push(value);
-                    }
+                    value
+                };
+                match port.dir {
+                    ast::PortDir::Input | ast::PortDir::Ref => inputs.push(value),
+                    ast::PortDir::Output | ast::PortDir::Inout => outputs.push(value),
                 }
             }
-            trace!("inputs = {:#?}", inputs);
-            trace!("outputs = {:#?}", outputs);
 
             // Emit the instantiated module, and instantiate it.
             let target = self.emit_module_with_env(module, inst_env)?;
@@ -714,7 +749,6 @@ where
         // Emit and instantiate procedures.
         for &proc_id in &hir.procs {
             let prok = self.emit_procedure(proc_id, env, name_prefix)?;
-            let acc = self.accessed_nodes(proc_id)?;
             let lookup_value = |&id| match self.values.get(&id) {
                 Some(v) => v.clone(),
                 None => {
@@ -729,11 +763,11 @@ where
                     panic!("no value emitted for {:?}", id);
                 }
             };
-            let inputs = acc.read.iter().map(lookup_value).collect();
-            let outputs = acc.written.iter().map(lookup_value).collect();
+            let inputs = prok.inputs.iter().map(lookup_value).collect();
+            let outputs = prok.outputs.iter().map(lookup_value).collect();
             let ext_unit = self.builder.add_extern(
-                self.into[prok].name().clone(),
-                self.into[prok].sig().clone(),
+                self.into[prok.unit].name().clone(),
+                self.into[prok.unit].sig().clone(),
             );
             self.builder.ins().inst(ext_unit, inputs, outputs);
         }
@@ -1920,4 +1954,11 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module, env: Para
         // TODO: Dump the external port type.
         println!();
     }
+}
+
+/// Result of emitting a procedure.
+struct EmittedProcedure {
+    unit: llhd::ir::ModUnit,
+    inputs: Vec<NodeId>,
+    outputs: Vec<NodeId>,
 }
