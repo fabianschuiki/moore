@@ -1482,35 +1482,6 @@ fn lower_module_block<'gcx>(
     })
 }
 
-fn lower_port<'gcx>(
-    cx: &impl Context<'gcx>,
-    node_id: NodeId,
-    ast: &'gcx ast::Port,
-) -> Result<HirNode<'gcx>> {
-    let parent = cx.parent_node_id(node_id).unwrap();
-    let hir = match *ast {
-        ast::Port::Named {
-            span,
-            name,
-            dir,
-            ref ty,
-            ref expr,
-            ..
-        } => hir::Port {
-            id: node_id,
-            name: Spanned::new(name.name, name.span),
-            span: span,
-            dir: dir.expect("port missing direction"),
-            ty: cx.map_ast_with_parent(AstNode::Type(ty), parent),
-            default: expr
-                .as_ref()
-                .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent)),
-        },
-        _ => return cx.unimp(ast),
-    };
-    Ok(HirNode::Port(cx.arena().alloc_hir(hir)))
-}
-
 fn lower_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
