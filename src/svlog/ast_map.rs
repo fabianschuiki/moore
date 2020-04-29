@@ -38,8 +38,8 @@ impl<'ast> AstMap<'ast> {
 pub enum AstNode<'ast> {
     /// A module.
     Module(&'ast ast::ModDecl),
-    /// A module or interface port.
-    Port(&'ast ast::Port),
+    /// A module or interface port placeholder (defined in HIR).
+    Port(Span),
     /// A type.
     Type(&'ast ast::Type),
     /// An expression.
@@ -88,7 +88,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
     fn span(&self) -> Span {
         match *self {
             AstNode::Module(x) => x.span(),
-            AstNode::Port(x) => x.span(),
+            AstNode::Port(x) => x,
             AstNode::Type(x) => x.span(),
             AstNode::Expr(x) => x.span(),
             AstNode::InstTarget(x) => x.span(),
@@ -116,7 +116,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
     fn human_span(&self) -> Span {
         match *self {
             AstNode::Module(x) => x.human_span(),
-            AstNode::Port(x) => x.human_span(),
+            AstNode::Port(x) => x,
             AstNode::Type(x) => x.human_span(),
             AstNode::Expr(x) => x.human_span(),
             AstNode::InstTarget(x) => x.human_span(),
@@ -146,7 +146,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
     fn desc(&self) -> &'static str {
         match *self {
             AstNode::Module(x) => x.desc(),
-            AstNode::Port(x) => x.desc(),
+            AstNode::Port(_) => "port",
             AstNode::Type(x) => x.desc(),
             AstNode::Expr(x) => x.desc(),
             AstNode::InstTarget(x) => x.desc(),
@@ -174,7 +174,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
     fn desc_full(&self) -> String {
         match *self {
             AstNode::Module(x) => x.desc_full(),
-            AstNode::Port(x) => x.desc_full(),
+            AstNode::Port(_) => "port".to_string(),
             AstNode::Type(x) => x.desc_full(),
             AstNode::Expr(x) => x.desc_full(),
             AstNode::InstTarget(x) => x.desc_full(),

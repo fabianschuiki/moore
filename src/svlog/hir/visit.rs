@@ -87,10 +87,10 @@ pub trait Visitor<'a>: Sized {
 
 /// Walk the contents of a module.
 pub fn walk_module<'a>(visitor: &mut impl Visitor<'a>, module: &'a Module) {
-    for &id in module.ports {
-        visitor.visit_node_with_id(id, false);
-    }
     for port in &module.ports_new.int {
+        visitor.visit_node_with_id(port.id, false);
+    }
+    for port in &module.ports_new.ext_pos {
         visitor.visit_node_with_id(port.id, false);
     }
     for &id in module.params {

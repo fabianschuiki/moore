@@ -327,8 +327,13 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     }
 
     /// Internalize an HIR node.
-    fn intern_hir(&self, id: NodeId, hir: HirNode<'gcx>, parent: NodeId) {
+    fn intern_hir(&self, id: NodeId, hir: HirNode<'gcx>) {
         self.tables().interned_hir.borrow_mut().insert(id, hir);
+    }
+
+    /// Internalize an HIR node.
+    fn intern_hir_with_parent(&self, id: NodeId, hir: HirNode<'gcx>, parent: NodeId) {
+        self.intern_hir(id, hir);
         self.set_parent(id, parent);
     }
 

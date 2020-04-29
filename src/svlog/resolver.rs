@@ -95,9 +95,6 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             Spanned::new(decl.name, decl.name_span),
             node_id,
         )),
-        AstNode::Port(&ast::Port::Named { name, .. }) => {
-            Some(RibKind::Normal(Spanned::new(name.name, name.span), node_id))
-        }
         AstNode::Stmt(stmt) => match stmt.data {
             ast::VarDeclStmt(_) => {
                 let hir = match cx.hir_of(node_id)? {
@@ -134,6 +131,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
                     node_id,
                 ))
             }
+            HirNode::IntPort(port) => Some(RibKind::Normal(port.name, node_id)),
             _ => None,
         };
     }
