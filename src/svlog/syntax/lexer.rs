@@ -486,7 +486,7 @@ impl<'a> Lexer<'a> {
                 | (CatTokenKind::Symbol('$'), this_sp) => {
                     s.push_str(&this_sp.extract());
                     sp.expand(this_sp);
-                    r#try!(self.bump());
+                    self.bump()?;
                 }
                 _ => break,
             }
@@ -626,7 +626,7 @@ impl<'a> Lexer<'a> {
                 }
                 _ => break,
             }
-            r#try!(self.bump());
+            self.bump()?;
         }
         Ok(())
     }

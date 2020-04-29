@@ -722,7 +722,8 @@ impl<'a> Preprocessor<'a> {
                     }
 
                     // Consume line number.
-                    let line = match self.token {
+                    // TODO: Actually make use of this.
+                    let _line = match self.token {
                         Some((Digits, sp)) => {
                             self.bump();
                             sp
@@ -779,7 +780,8 @@ impl<'a> Preprocessor<'a> {
                     }
 
                     // Consume level.
-                    let level = match self.token {
+                    // TODO: Actually make use of this.
+                    let _level = match self.token {
                         Some((Digits, sp)) => {
                             self.bump();
                             sp
