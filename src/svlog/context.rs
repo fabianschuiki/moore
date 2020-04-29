@@ -120,7 +120,17 @@ impl<'gcx> GlobalContext<'gcx> {
 
 impl DiagEmitter for GlobalContext<'_> {
     fn emit(&self, diag: DiagBuilder2) {
-        self.sess.emit(diag)
+        let sev = diag.get_severity();
+        self.sess.emit(diag);
+
+        // If this is anything more than a warning, emit a backtrace in debug
+        // builds.
+        if sev >= Severity::Warning {
+            trace!(
+                "Diagnostic triggered here:\n{:?}",
+                backtrace::Backtrace::new()
+            );
+        }
     }
 }
 
