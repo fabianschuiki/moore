@@ -536,6 +536,9 @@ fn lower_module<'gcx>(
     for port in &hir.ports_new.int {
         cx.intern_hir(port.id, HirNode::IntPort(port), node_id);
     }
+    for port in &hir.ports_new.ext_pos {
+        cx.intern_hir(port.id, HirNode::ExtPort(port), node_id);
+    }
 
     Ok(HirNode::Module(hir))
 }
@@ -781,6 +784,7 @@ fn lower_module_ports_ansi<'gcx>(
                     match_ty: None,
                 };
                 let ext_port = ExtPort {
+                    id: cx.alloc_id(*span),
                     span: *span,
                     name: Some(data.name),
                     exprs: vec![ExtPortExpr {
@@ -851,6 +855,7 @@ fn lower_module_ports_ansi<'gcx>(
                     .collect();
 
                 ExtPort {
+                    id: cx.alloc_id(*span),
                     span: *span,
                     name: Some(Spanned::new(name.name, name.span)),
                     exprs: pe,
@@ -1258,7 +1263,12 @@ fn lower_module_ports_nonansi<'gcx>(
             .collect();
 
         // Wrap things up in an external port.
-        let port = ExtPort { span, name, exprs };
+        let port = ExtPort {
+            id: cx.alloc_id(span),
+            span,
+            name,
+            exprs,
+        };
 
         // Build a map of ordered and named port associations.
         if let Some(name) = port.name {

@@ -13,7 +13,7 @@ pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     Port(&'hir Port),
     IntPort(&'hir IntPort),
-    ExtPort(&'hir Module<'hir>, usize),
+    ExtPort(&'hir ExtPort),
     Type(&'hir Type),
     Expr(&'hir Expr),
     InstTarget(&'hir InstTarget),
@@ -38,7 +38,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Module(x) => x.span(),
             HirNode::Port(x) => x.span(),
             HirNode::IntPort(x) => x.span(),
-            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].span(),
+            HirNode::ExtPort(x) => x.span(),
             HirNode::Type(x) => x.span(),
             HirNode::Expr(x) => x.span(),
             HirNode::InstTarget(x) => x.span(),
@@ -63,7 +63,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Module(x) => x.human_span(),
             HirNode::Port(x) => x.human_span(),
             HirNode::IntPort(x) => x.human_span(),
-            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].human_span(),
+            HirNode::ExtPort(x) => x.human_span(),
             HirNode::Type(x) => x.human_span(),
             HirNode::Expr(x) => x.human_span(),
             HirNode::InstTarget(x) => x.human_span(),
@@ -90,7 +90,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Module(x) => x.desc(),
             HirNode::Port(x) => x.desc(),
             HirNode::IntPort(x) => x.desc(),
-            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].desc(),
+            HirNode::ExtPort(x) => x.desc(),
             HirNode::Type(x) => x.desc(),
             HirNode::Expr(x) => x.desc(),
             HirNode::InstTarget(x) => x.desc(),
@@ -115,7 +115,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Module(x) => x.desc_full(),
             HirNode::Port(x) => x.desc_full(),
             HirNode::IntPort(x) => x.desc_full(),
-            HirNode::ExtPort(x, i) => x.ports_new.ext_pos[i].desc_full(),
+            HirNode::ExtPort(x) => x.desc_full(),
             HirNode::Type(x) => x.desc_full(),
             HirNode::Expr(x) => x.desc_full(),
             HirNode::InstTarget(x) => x.desc_full(),
@@ -456,6 +456,8 @@ pub struct IntPortData {
 /// An external port.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ExtPort {
+    /// Node ID of the port.
+    pub id: NodeId,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Optional name of the port.
