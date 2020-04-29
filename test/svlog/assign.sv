@@ -1,8 +1,9 @@
+// RUN: moore %s -e A -e C
+
 module A (input int a, input int b, output int c);
 	assign c = a + b;
 endmodule
 
-//@ elab A
 //| entity @A (i32$ %a, i32$ %b) (i32$ %c) {
 //|     %a0 = prb %a
 //|     %b0 = prb %b
@@ -30,7 +31,6 @@ module C;
 	end
 endmodule
 
-//@ elab C
 //| proc @C.initial.237.0 () (i32$ %0) {
 //| %1:
 //|     drv %0 9001 0s 1d
