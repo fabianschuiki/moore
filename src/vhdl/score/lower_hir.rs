@@ -899,7 +899,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         &self,
         kind: hir::SubprogKind,
         name: &'ast ast::PrimaryName,
-    ) -> Result<(Spanned<ResolvableName>)> {
+    ) -> Result<Spanned<ResolvableName>> {
         let name = self.resolvable_from_primary_name(&name)?;
         if name.value.is_bit() {
             self.emit(
