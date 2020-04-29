@@ -250,7 +250,7 @@ impl<'t> fmt::Debug for TypeVariantDef<'t> {
 
 impl<'t> PartialEq for TypeVariantDef<'t> {
     fn eq(&self, other: &Self) -> bool {
-        (self.0 as *const _ == other.0 as *const _ && self.1 == other.1)
+        self.0 as *const _ == other.0 as *const _ && self.1 == other.1
     }
 }
 

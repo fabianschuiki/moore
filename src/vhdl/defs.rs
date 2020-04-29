@@ -110,7 +110,6 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> DefsContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
 
     /// Handle type declarations.
     pub fn declare_type(&mut self, id: TypeDeclRef) {
-        use crate::syntax::ast;
         let ast = self.ctx.ast(id).1;
         self.declare(ast.name.map_into(), Def::Type(id));
         // This is a rather hacky way of declaring the variant names for enum

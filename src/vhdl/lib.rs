@@ -2,6 +2,9 @@
 
 //! This crate implements VHDL for the moore compiler.
 
+#![allow(bare_trait_objects)] // Remove this once fixed
+#![allow(unused_doc_comments)] // Remove this once fixed
+
 #[macro_use]
 extern crate lazy_static;
 extern crate llhd;
