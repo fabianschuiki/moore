@@ -11,7 +11,6 @@ use std::collections::HashMap;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
-    Port(&'hir Port),
     IntPort(&'hir IntPort),
     ExtPort(&'hir ExtPort),
     Type(&'hir Type),
@@ -36,7 +35,6 @@ impl<'hir> HasSpan for HirNode<'hir> {
     fn span(&self) -> Span {
         match *self {
             HirNode::Module(x) => x.span(),
-            HirNode::Port(x) => x.span(),
             HirNode::IntPort(x) => x.span(),
             HirNode::ExtPort(x) => x.span(),
             HirNode::Type(x) => x.span(),
@@ -61,7 +59,6 @@ impl<'hir> HasSpan for HirNode<'hir> {
     fn human_span(&self) -> Span {
         match *self {
             HirNode::Module(x) => x.human_span(),
-            HirNode::Port(x) => x.human_span(),
             HirNode::IntPort(x) => x.human_span(),
             HirNode::ExtPort(x) => x.human_span(),
             HirNode::Type(x) => x.human_span(),
@@ -88,7 +85,6 @@ impl<'hir> HasDesc for HirNode<'hir> {
     fn desc(&self) -> &'static str {
         match *self {
             HirNode::Module(x) => x.desc(),
-            HirNode::Port(x) => x.desc(),
             HirNode::IntPort(x) => x.desc(),
             HirNode::ExtPort(x) => x.desc(),
             HirNode::Type(x) => x.desc(),
@@ -113,7 +109,6 @@ impl<'hir> HasDesc for HirNode<'hir> {
     fn desc_full(&self) -> String {
         match *self {
             HirNode::Module(x) => x.desc_full(),
-            HirNode::Port(x) => x.desc_full(),
             HirNode::IntPort(x) => x.desc_full(),
             HirNode::ExtPort(x) => x.desc_full(),
             HirNode::Type(x) => x.desc_full(),

@@ -18,7 +18,6 @@ pub(crate) fn type_of<'gcx>(
     let hir = cx.hir_of(node_id)?;
     #[allow(unreachable_patterns)]
     match hir {
-        HirNode::Port(p) => cx.map_to_type(p.ty, env),
         HirNode::IntPort(p) => match &p.data {
             Some(data) => cx.map_to_type(data.ty, env),
             None => {

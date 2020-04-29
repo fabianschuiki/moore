@@ -83,7 +83,7 @@ fn try_lower_expr<'gcx>(
     let hir = match builder.cx.hir_of(expr_id)? {
         HirNode::Expr(x) => x,
         HirNode::VarDecl(decl) => return Ok(builder.build(ty, LvalueKind::Var(decl.id))),
-        HirNode::Port(port) => return Ok(builder.build(ty, LvalueKind::Port(port.id))),
+        HirNode::IntPort(port) => return Ok(builder.build(ty, LvalueKind::Port(port.id))),
         x => unreachable!("lvalue for {:#?}", x),
     };
 
@@ -94,7 +94,7 @@ fn try_lower_expr<'gcx>(
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = builder.cx.resolve_node(expr_id, builder.env)?;
             match builder.cx.hir_of(binding)? {
-                HirNode::VarDecl(..) | HirNode::Port(..) => {
+                HirNode::VarDecl(..) | HirNode::IntPort(..) => {
                     return try_lower_expr(builder, binding);
                 }
                 _ => (),

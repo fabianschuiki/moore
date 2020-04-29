@@ -94,7 +94,7 @@ fn try_lower_expr<'gcx>(
         HirNode::VarDecl(decl) => {
             return Ok(builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id)))
         }
-        HirNode::Port(port) => {
+        HirNode::IntPort(port) => {
             return Ok(builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id)))
         }
         HirNode::EnumVariant(..) => {
@@ -124,7 +124,7 @@ fn try_lower_expr<'gcx>(
             let binding = builder.cx.resolve_node(expr_id, env)?;
             match builder.cx.hir_of(binding)? {
                 HirNode::VarDecl(..)
-                | HirNode::Port(..)
+                | HirNode::IntPort(..)
                 | HirNode::EnumVariant(..)
                 | HirNode::ValueParam(..)
                 | HirNode::GenvarDecl(..) => try_lower_expr(builder, binding),

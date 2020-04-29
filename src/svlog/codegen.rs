@@ -250,7 +250,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Assign names to inputs and outputs.
         let guess_name = |id| match self.hir_of(id).ok()? {
             hir::HirNode::VarDecl(x) => Some(x.name),
-            hir::HirNode::Port(x) => Some(x.name),
+            hir::HirNode::IntPort(x) => Some(x.name),
             _ => None,
         };
         for (i, &id) in inputs.iter().enumerate() {
