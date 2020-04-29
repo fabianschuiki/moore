@@ -84,7 +84,7 @@ test_file() {
 NUM_PASS=0
 NUM_FAIL=0
 while read -d $'\0' SRCFILE; do
-	if ! $ALL && grep -E '@exclude' $SRCFILE >/dev/null; then
+	if ! $ALL && grep -E '@exclude|RUN:' $SRCFILE >/dev/null; then
 		continue
 	fi
 	check parse $SRCFILE $MOORE $SRCFILE
