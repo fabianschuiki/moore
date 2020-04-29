@@ -37,7 +37,7 @@ impl Source {
     }
 
     /// Access the contents of this source file.
-    pub fn get_content(self) -> Rc<SourceContent> {
+    pub fn get_content(self) -> Rc<dyn SourceContent> {
         get_source_manager().with(self, |x| x.get_content())
     }
 
@@ -98,7 +98,7 @@ pub trait SourceFile {
 
     /// Obtain the content of this source file. The returned object may be used
     /// to iterate over the characters in the file or extract portions of it.
-    fn get_content(&self) -> Rc<SourceContent>;
+    fn get_content(&self) -> Rc<dyn SourceContent>;
 
     /// Copy a range of the source content into a String instance owned by the
     /// caller, possibly converting the encoding such that the result is in
@@ -136,7 +136,7 @@ pub trait SourceContent {
 /// A manager for source files and their assigned IDs.
 pub struct SourceManager {
     map: RefCell<HashMap<RcStr, Source>>,
-    vect: RefCell<Vec<Box<SourceFile>>>,
+    vect: RefCell<Vec<Box<dyn SourceFile>>>,
 }
 
 impl SourceManager {
@@ -150,7 +150,7 @@ impl SourceManager {
     /// Obtain the source file for a given source ID.
     pub fn with<F, R>(&self, id: Source, f: F) -> R
     where
-        F: FnOnce(&SourceFile) -> R,
+        F: FnOnce(&dyn SourceFile) -> R,
     {
         let ref vect = *self.vect.borrow();
         assert!(id.0 > 0, "invalid source");
@@ -263,7 +263,7 @@ impl SourceFile for VirtualSourceFile {
         self.filename.clone()
     }
 
-    fn get_content(&self) -> Rc<SourceContent> {
+    fn get_content(&self) -> Rc<dyn SourceContent> {
         self.content.clone()
     }
 }
@@ -309,7 +309,7 @@ impl SourceFile for DiskSourceFile {
         self.filename.clone()
     }
 
-    fn get_content(&self) -> Rc<SourceContent> {
+    fn get_content(&self) -> Rc<dyn SourceContent> {
         use memmap::Protection;
         let is_none = self.content.borrow().is_none();
         if is_none {
@@ -366,7 +366,7 @@ impl SourceContent for DiskSourceContent {
 
 /// An iterator that yields the characters from an input file together with the
 /// byte positions within the stream.
-pub type CharIter<'a> = DoubleEndedIterator<Item = (usize, char)> + 'a;
+pub type CharIter<'a> = dyn DoubleEndedIterator<Item = (usize, char)> + 'a;
 
 /// A single location within a source file, expressed as a byte offset.
 #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, RustcEncodable, RustcDecodable)]
@@ -385,7 +385,7 @@ impl Location {
     }
 
     /// Obtain an iterator into the source file at this location.
-    pub fn iter<'a>(self, content: &'a Rc<SourceContent>) -> Box<CharIter<'a>> {
+    pub fn iter<'a>(self, content: &'a Rc<dyn SourceContent>) -> Box<CharIter<'a>> {
         content.iter_from(self.offset)
     }
 
@@ -518,7 +518,7 @@ impl Span {
 
     /// Obtain an iterator over the extract of the source file describe by this
     /// span.
-    pub fn iter<'a>(self, content: &'a Rc<SourceContent>) -> Box<CharIter<'a>> {
+    pub fn iter<'a>(self, content: &'a Rc<dyn SourceContent>) -> Box<CharIter<'a>> {
         content.extract_iter(self.begin, self.end)
     }
 }

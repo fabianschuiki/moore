@@ -13,7 +13,7 @@ pub trait Alloc<'a, 't, T: 't> {
     fn alloc(&'a self, value: T) -> &'t mut T;
 }
 
-impl<'z, 'a, 'p: 'a, 't, T: 't> Alloc<'z, 't, T> for &'p Alloc<'a, 't, T> {
+impl<'z, 'a, 'p: 'a, 't, T: 't> Alloc<'z, 't, T> for &'p dyn Alloc<'a, 't, T> {
     fn alloc(&'z self, value: T) -> &'t mut T {
         Alloc::alloc(*self, value)
     }
@@ -84,7 +84,7 @@ pub trait AllocOwned<'a, 't, T: ToOwned + ?Sized + 't> {
 
 // Implement `AllocOwned` for anything that supports the proper `Alloc` and for
 // any types that implement `ToOwned` with `Owned` equal to the type.
-impl<'a, 't, T: ToOwned<Owned = T> + 't> AllocOwned<'a, 't, T> for Alloc<'a, 't, T> {
+impl<'a, 't, T: ToOwned<Owned = T> + 't> AllocOwned<'a, 't, T> for dyn Alloc<'a, 't, T> {
     fn alloc_owned(&'a self, value: T) -> &'t T {
         self.alloc(value)
     }

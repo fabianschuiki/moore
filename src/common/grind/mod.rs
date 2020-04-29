@@ -125,7 +125,7 @@ pub trait Grinder {
 // 	}
 // }
 
-impl<I, C: Chisel<Value = I>, E> Iterator for Grinder<Item = C, Error = E> {
+impl<I, C: Chisel<Value = I>, E> Iterator for dyn Grinder<Item = C, Error = E> {
     type Item = I;
 
     fn next(&mut self) -> Option<I> {

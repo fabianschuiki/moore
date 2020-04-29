@@ -21,7 +21,7 @@ pub trait Lexer<T> {
 }
 
 pub struct AccumulatingReader {
-    rd: Box<Read>,
+    rd: Box<dyn Read>,
     buf: Vec<u8>,
     base: usize,
     pos: usize,
@@ -29,7 +29,7 @@ pub struct AccumulatingReader {
 }
 
 impl AccumulatingReader {
-    pub fn new(rd: Box<Read>) -> AccumulatingReader {
+    pub fn new(rd: Box<dyn Read>) -> AccumulatingReader {
         AccumulatingReader {
             rd: rd,
             buf: Vec::new(),
@@ -139,7 +139,7 @@ impl Reader for AccumulatingReader {
 
 pub struct StringReader<'tdata> {
     // data: &'tdata str,
-    iter: Box<Iterator<Item = char> + 'tdata>,
+    iter: Box<dyn Iterator<Item = char> + 'tdata>,
     buf: Vec<char>,
     base: usize,
     pos: usize,
@@ -239,7 +239,7 @@ impl<'tdata> Reader for StringReader<'tdata> {
 /// popped off the stack and the next lexer's tokens are produced. An Eof is
 /// returned once all lexers have been drained.
 pub struct StackedLexer<T> {
-    stack: Vec<Box<Lexer<T>>>,
+    stack: Vec<Box<dyn Lexer<T>>>,
     eof: T,
 }
 
@@ -251,7 +251,7 @@ impl<T> StackedLexer<T> {
         }
     }
 
-    pub fn push(&mut self, lexer: Box<Lexer<T>>) {
+    pub fn push(&mut self, lexer: Box<dyn Lexer<T>>) {
         self.stack.push(lexer);
     }
 }
@@ -277,7 +277,7 @@ impl<T: Clone + PartialEq> Lexer<T> for StackedLexer<T> {
 /// A buffered lexer that allows tokens to be peeked at before they are actually
 /// consumed.
 pub struct BufferedLexer<T> {
-    inner: Box<Lexer<T>>,
+    inner: Box<dyn Lexer<T>>,
     eof: T,
     buffer: VecDeque<T>,
     done: bool,
@@ -285,7 +285,7 @@ pub struct BufferedLexer<T> {
 
 impl<T: Clone + PartialEq> BufferedLexer<T> {
     /// Create a new buffered lexer.
-    pub fn new(inner: Box<Lexer<T>>, eof: T) -> BufferedLexer<T> {
+    pub fn new(inner: Box<dyn Lexer<T>>, eof: T) -> BufferedLexer<T> {
         BufferedLexer {
             inner: inner,
             eof: eof,
@@ -336,11 +336,11 @@ impl<T: Clone + PartialEq> BufferedLexer<T> {
         }
     }
 
-    pub fn inner(&self) -> &Lexer<T> {
+    pub fn inner(&self) -> &dyn Lexer<T> {
         &*self.inner
     }
 
-    pub fn inner_mut(&mut self) -> &mut Lexer<T> {
+    pub fn inner_mut(&mut self) -> &mut dyn Lexer<T> {
         &mut *self.inner
     }
 }

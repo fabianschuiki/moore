@@ -192,7 +192,6 @@ impl fmt::Display for DiagBuilder2 {
             match *segment {
                 DiagSegment::Span(sp) => {
                     let c = sp.source.get_content();
-                    let mut iter = c.extract_iter(0, sp.begin);
 
                     // Look for the start of the line.
                     let (line, col, line_offset) = sp.begin().human();
