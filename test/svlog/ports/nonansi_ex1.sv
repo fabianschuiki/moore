@@ -1,4 +1,6 @@
 // IGNORE
+// @exclude
+
 module test(a,b,c,d,e,f,g,h);
     input [7:0] a;         // no explicit net declaration - net is unsigned
     input [7:0] b;

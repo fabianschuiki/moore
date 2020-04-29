@@ -1,4 +1,6 @@
 // IGNORE
+// @exclude
+
 module test (
     input [7:0] a,
     input signed [7:0] b, c, d, // Multiple ports that share all

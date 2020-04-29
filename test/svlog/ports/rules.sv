@@ -1,4 +1,5 @@
 // IGNORE
+// @exclude
 
 module mh0 (wire x);
     // inout wire logic x
