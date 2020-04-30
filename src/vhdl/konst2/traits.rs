@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 use std::borrow::{Borrow, Cow};
 use std::fmt::{self, Debug, Display};

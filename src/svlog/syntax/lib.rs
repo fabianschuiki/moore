@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2019 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! This crate implements parsing SystemVerilog source files into an abstract
 //! syntax tree and resolving the encountered names.

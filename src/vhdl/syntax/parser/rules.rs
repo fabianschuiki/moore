@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! This module implements a first stage recursive descent parser for VHDL. It
 //! can process a stream of input tokens into the coarse, generalized abstract

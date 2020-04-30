@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! This module implements the lowering ports to HIR.
 

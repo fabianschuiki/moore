@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]

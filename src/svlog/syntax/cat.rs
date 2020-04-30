@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! The categorizing lexer. Tokenizes an input stream of characters, yielding a
 //! stream of newline, whitespace, comment, symbol, and text tokens.

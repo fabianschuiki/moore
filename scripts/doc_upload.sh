@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2017 Fabian Schuiki
+# Copyright (c) 2016-2020 Fabian Schuiki
 # This script uploads the documentation in target/doc to the repo's
 # GitHub pages. Requires the GH_TOKEN env var to be set.
 

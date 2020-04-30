@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A positive, small ID assigned to nodes in the AST and derived data

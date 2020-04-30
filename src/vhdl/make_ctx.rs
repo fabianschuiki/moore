@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! A context within which compiler passes can be described.
 //!

@@ -6,6 +6,6 @@
 #     check_copyrights.sh | patch -p0
 
 YEAR=$(date +%Y)
-for FILE in $(find src -name "*.rs"); do
+for FILE in $(find . -name "*.rs" -or -name "*.sh"); do
 	sed -E "s/(Copyright \(c\) )[0-9]+(-[0-9]+)?/\12016-$YEAR/g" $FILE | diff -u $FILE -
 done

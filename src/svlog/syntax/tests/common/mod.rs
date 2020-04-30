@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2019 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 use moore_common::source::get_source_manager;
 use moore_svlog_syntax::{lexer::Lexer, parser, preproc::Preprocessor};

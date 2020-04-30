@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2019 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! The central data structure of the compiler.
 //!

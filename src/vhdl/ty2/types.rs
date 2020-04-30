@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2018 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! Dealing with types in an abstract manner.
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! A VHDL lexer. This module implements lexical analysis of VHDL source files.
 //! It converts a stream of input bytes into a stream of language tokens such as

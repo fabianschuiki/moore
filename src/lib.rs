@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 //! A hardware description language compiler.
 

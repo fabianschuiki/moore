@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Fabian Schuiki
+// Copyright (c) 2016-2020 Fabian Schuiki
 
 use crate::arenas::{Alloc, AllocOwned};
 use crate::ty2::access::*;
