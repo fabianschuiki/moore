@@ -194,6 +194,7 @@ pub(crate) fn hierarchical_rib<'gcx>(
     let mut names = HashMap::new();
     let mut rib_id = match hir {
         HirNode::Package(pkg) => Some(pkg.last_rib),
+        HirNode::Module(module) => Some(module.last_rib),
         _ => panic!("{} has no hierarchical rib", hir.desc_full()),
     };
     while let Some(id) = rib_id {
@@ -291,6 +292,9 @@ pub(crate) fn resolve_node<'gcx>(
             }
             _ => (),
         },
+        HirNode::IntPort(port) if port.data.is_none() => {
+            return cx.resolve_downwards_or_error(port.name, port.module);
+        }
         _ => (),
     }
     error!("{:#?}", hir);

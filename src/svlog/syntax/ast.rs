@@ -525,7 +525,7 @@ impl std::fmt::Display for PortKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable, Hash)]
 pub enum PortDir {
     Input,
     Output,

@@ -512,6 +512,7 @@ fn lower_module<'gcx>(
         span: ast.span,
         ports_new,
         params: cx.arena().alloc_ids(params),
+        last_rib: block.last_rib,
         block,
     };
     let hir = cx.arena().alloc_hir(hir);
@@ -665,6 +666,7 @@ fn lower_module_ports<'gcx>(
         // Package everything up in an internal port.
         ports.push(IntPort {
             id: port_id,
+            module,
             span: port.span,
             name: port.name,
             dir: port.dir,
@@ -719,7 +721,7 @@ fn lower_module_ports_ansi<'gcx>(
     let mut int_ports: Vec<PartialPort> = vec![];
     let mut ext_pos: Vec<ExtPort> = vec![];
     let mut ext_named: HashMap<Name, usize> = HashMap::new();
-    let mut explicit_named: HashMap<Name, usize> = HashMap::new();
+    let mut explicit_named: HashMap<(ast::PortDir, Name), usize> = HashMap::new();
 
     for port in ast_ports {
         let port = match port {
@@ -777,6 +779,7 @@ fn lower_module_ports_ansi<'gcx>(
                 };
                 let ext_port = ExtPort {
                     id: cx.alloc_id(*span),
+                    module,
                     span: *span,
                     name: Some(data.name),
                     exprs: vec![ExtPortExpr {
@@ -819,26 +822,29 @@ fn lower_module_ports_ansi<'gcx>(
                 let pe = pe
                     .into_iter()
                     .map(|pr| {
-                        let index = *explicit_named.entry(pr.name.value).or_insert_with(|| {
-                            let index = int_ports.len();
-                            trace!("Adding inferred port {}", pr.name);
-                            int_ports.push(PartialPort {
-                                name: pr.name,
-                                span: *span,
-                                kind: None,
-                                dir,
-                                sign: ast::TypeSign::None,
-                                ty: &ast::ImplicitType, // inferred from expression
-                                packed_dims: &[],       // inferred from expression
-                                unpacked_dims: &[],
-                                default: None,
-                                inferred: true,
-                                var_decl: None,
-                                net_decl: None,
-                                match_ty: None,
-                            });
-                            index
-                        });
+                        let index =
+                            *explicit_named
+                                .entry((dir, pr.name.value))
+                                .or_insert_with(|| {
+                                    let index = int_ports.len();
+                                    trace!("Adding inferred port {}", pr.name);
+                                    int_ports.push(PartialPort {
+                                        name: pr.name,
+                                        span: *span,
+                                        kind: None,
+                                        dir,
+                                        sign: ast::TypeSign::None,
+                                        ty: &ast::ImplicitType, // inferred from expression
+                                        packed_dims: &[],       // inferred from expression
+                                        unpacked_dims: &[],
+                                        default: None,
+                                        inferred: true,
+                                        var_decl: None,
+                                        net_decl: None,
+                                        match_ty: None,
+                                    });
+                                    index
+                                });
                         ExtPortExpr {
                             port: index,
                             selects: pr.selects,
@@ -848,6 +854,7 @@ fn lower_module_ports_ansi<'gcx>(
 
                 ExtPort {
                     id: cx.alloc_id(*span),
+                    module,
                     span: *span,
                     name: Some(Spanned::new(name.name, name.span)),
                     exprs: pe,
@@ -1257,6 +1264,7 @@ fn lower_module_ports_nonansi<'gcx>(
         // Wrap things up in an external port.
         let port = ExtPort {
             id: cx.alloc_id(span),
+            module,
             span,
             name,
             exprs,
@@ -1479,6 +1487,7 @@ fn lower_module_block<'gcx>(
         gens,
         params,
         assigns,
+        last_rib: next_rib,
     })
 }
 

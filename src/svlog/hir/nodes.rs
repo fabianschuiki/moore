@@ -143,6 +143,8 @@ pub struct Module<'hir> {
     pub params: &'hir [NodeId],
     /// The contents of the module.
     pub block: ModuleBlock,
+    /// The bottom of the name scope tree.
+    pub last_rib: NodeId,
 }
 
 impl HasSpan for Module<'_> {
@@ -180,6 +182,8 @@ pub struct ModuleBlock {
     pub params: Vec<NodeId>,
     /// The continuous assignments in the module.
     pub assigns: Vec<NodeId>,
+    /// The bottom of the name scope tree.
+    pub last_rib: NodeId,
 }
 
 /// An instantiation target.
@@ -418,6 +422,8 @@ pub struct PortList {
 pub struct IntPort {
     /// Node ID of the port.
     pub id: NodeId,
+    /// The module containing the port.
+    pub module: NodeId,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Name of the port.
@@ -451,6 +457,8 @@ pub struct IntPortData {
 pub struct ExtPort {
     /// Node ID of the port.
     pub id: NodeId,
+    /// The module containing the port.
+    pub module: NodeId,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Optional name of the port.

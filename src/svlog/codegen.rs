@@ -91,11 +91,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         for port in &hir.ports_new.int {
             let ty = self.type_of(port.id, env)?;
             debug!("port {}.{} has type {:?}", hir.name, port.name, ty);
-            let ty = self.emit_type(ty, env)?;
-            let ty = match port.dir {
-                ast::PortDir::Ref => llhd::pointer_ty(ty),
-                _ => llhd::signal_ty(ty),
-            };
+            let ty = llhd::signal_ty(self.emit_type(ty, env)?);
             match port.dir {
                 ast::PortDir::Input | ast::PortDir::Ref => {
                     sig.add_input(ty);
@@ -1933,9 +1929,9 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module, env: Para
     // Dump the external ports.
     println!("  external:");
     for (i, port) in hir.ports_new.ext_pos.iter().enumerate() {
-        print!("    {}:", i);
+        print!("    {}: ", i);
         if let Some(name) = port.name {
-            print!(" .{}(", name);
+            print!(".{}(", name);
         }
         if port.exprs.len() > 1 {
             print!("{{");

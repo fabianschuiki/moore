@@ -21,11 +21,10 @@ pub(crate) fn type_of<'gcx>(
         HirNode::IntPort(p) => match &p.data {
             Some(data) => cx.map_to_type(data.ty, env),
             None => {
-                cx.emit(
-                    DiagBuilder2::bug(format!("type of {} cannot be inferred", p.desc_full()))
-                        .span(p.span()),
-                );
-                Err(())
+                // Resolve the port to a net/var decl in the module, then use
+                // that decl's type.
+                let decl_id = cx.resolve_node(node_id, env)?;
+                cx.type_of(decl_id, env)
             }
         },
         HirNode::Expr(e) => Ok(type_of_expr(cx, e, env)),
