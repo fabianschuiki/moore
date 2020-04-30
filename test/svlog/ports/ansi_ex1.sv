@@ -8,9 +8,6 @@ module test (
     output var signed [7:0] f, g,
     output signed [7:0] h
 );
-    // It is illegal to redeclare any ports of
-    // the module in the body of the module.
-
     // CHECK: Ports of `test`:
     // CHECK: 0: input wire logic [7:0] a
     // -CHECK: 1: input wire logic signed [7:0] b
