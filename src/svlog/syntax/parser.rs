@@ -1118,7 +1118,11 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
     pp.add("variable declaration", |p| {
         parse_var_decl(p).map(|d| HierarchyItem::VarDecl(d))
     });
-    pp.finish(p, "hierarchy item")
+    let res = pp.finish(p, "hierarchy item");
+    if res.is_err() {
+        p.recover_balanced(&[Semicolon], true);
+    }
+    res
 }
 
 fn parse_elab_system_task(p: &mut dyn AbstractParser) -> ReportedResult<()> {
