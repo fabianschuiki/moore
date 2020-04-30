@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add support for `begin_keywords` and `end_keywords` directives.
 - Add support for `line` directive.
 - Add support for `unconnected_drive` and `nounconnected_drive` directives.
+- Add full support for ANSI and non-ANSI port lists. ([#128](https://github.com/fabianschuiki/moore/issues/128))
+- Add the `-Vports` verbosity option.
 
 ### Fixed
 - Fix parsing of keywords `implements`, `interconnect`, `nettype`, `soft`.
