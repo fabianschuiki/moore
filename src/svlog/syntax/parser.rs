@@ -1110,6 +1110,31 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
 
         // Elaboration system tasks.
         SysIdent(..) => return parse_elab_system_task(p).map(|_| HierarchyItem::Dummy),
+
+        // Default clocking and disable declarations.
+        Keyword(Kw::Default) => {
+            p.bump();
+            let mut span = p.last_span();
+            if p.try_eat(Keyword(Kw::Clocking)) {
+                let name = p.eat_ident("clocking identifier")?;
+                p.require_reported(Semicolon)?;
+                span.expand(p.last_span());
+                return Ok(HierarchyItem::Dummy);
+            }
+            if p.try_eat(Keyword(Kw::Disable)) {
+                p.require_reported(Keyword(Kw::Iff))?;
+                let expr = parse_expr(p)?;
+                p.require_reported(Semicolon)?;
+                span.expand(p.last_span());
+                return Ok(HierarchyItem::Dummy);
+            }
+            p.add_diag(
+                DiagBuilder2::error("expected `clocking` or `disable` after `default`").span(span),
+            );
+            p.recover_balanced(&[Semicolon], true);
+            return Err(());
+        }
+
         _ => (),
     }
 
