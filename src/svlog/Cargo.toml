@@ -1,6 +1,6 @@
 [package]
 name = "moore-svlog"
-version = "0.7.0"
+version = "0.8.0-dev"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
@@ -14,8 +14,8 @@ include = ["**.rs", "*.toml"]
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../common", version = "0.7.0" }
-moore-svlog-syntax = { path = "syntax", version = "0.7.0" }
+moore-common = { path = "../common", version = "0.8.0-dev" }
+moore-svlog-syntax = { path = "syntax", version = "0.8.0-dev" }
 # llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "master", version = "0.9" }
 llhd = "0.9"
 log = "0.4"
