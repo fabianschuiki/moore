@@ -768,6 +768,8 @@ pub enum ExprKind {
     Concat(Option<NodeId>, Vec<NodeId>),
     /// A cast `(ty, expr)` such as `foo'(bar)`.
     Cast(NodeId, NodeId),
+    /// A sign cast such as `unsigned'(foo)`.
+    CastSign(Spanned<ty::Sign>, NodeId),
     /// An inside expression such as `a inside {b, c}`.
     Inside(NodeId, Vec<Spanned<InsideRange>>),
 }

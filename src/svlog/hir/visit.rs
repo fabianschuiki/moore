@@ -276,6 +276,9 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
             visitor.visit_node_with_id(ty, false);
             visitor.visit_node_with_id(expr, false);
         }
+        ExprKind::CastSign(_, expr) => {
+            visitor.visit_node_with_id(expr, false);
+        }
         ExprKind::Inside(expr, ref ranges) => {
             visitor.visit_node_with_id(expr, false);
             for r in ranges {

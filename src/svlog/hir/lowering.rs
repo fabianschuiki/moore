@@ -1987,6 +1987,17 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Type(ty), node_id),
             cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
         ),
+        ast::CastSignExpr(sign, ref expr) => hir::ExprKind::CastSign(
+            Spanned::new(
+                match sign.value {
+                    ast::TypeSign::Signed => ty::Sign::Signed,
+                    ast::TypeSign::Unsigned => ty::Sign::Unsigned,
+                    ast::TypeSign::None => unreachable!(),
+                },
+                sign.span,
+            ),
+            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
+        ),
         ast::InsideExpr(ref expr, ref ranges) => hir::ExprKind::Inside(
             cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
             ranges

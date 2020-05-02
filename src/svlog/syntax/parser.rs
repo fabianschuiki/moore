@@ -1801,18 +1801,22 @@ fn parse_struct_member(p: &mut dyn AbstractParser) -> ReportedResult<StructMembe
     })
 }
 
-fn parse_signing(p: &mut dyn AbstractParser) -> TypeSign {
+fn try_signing(p: &mut dyn AbstractParser) -> Option<TypeSign> {
     match p.peek(0).0 {
         Keyword(Kw::Signed) => {
             p.bump();
-            TypeSign::Signed
+            Some(TypeSign::Signed)
         }
         Keyword(Kw::Unsigned) => {
             p.bump();
-            TypeSign::Unsigned
+            Some(TypeSign::Unsigned)
         }
-        _ => TypeSign::None,
+        _ => None,
     }
+}
+
+fn parse_signing(p: &mut dyn AbstractParser) -> TypeSign {
+    try_signing(p).unwrap_or(TypeSign::None)
 }
 
 fn parse_optional_dimensions(p: &mut dyn AbstractParser) -> ReportedResult<(Vec<TypeDim>, Span)> {
@@ -2024,6 +2028,21 @@ fn parse_expr_prec(p: &mut dyn AbstractParser, precedence: Precedence) -> Report
             }
             _ => (),
         }
+    }
+
+    // Try to parse a sign cast expression, which starts with a `unsigned` or
+    // `signed` keyword.
+    if let Some(sign) = try_signing(p) {
+        let mut span = p.last_span();
+        let sign = Spanned::new(sign, span);
+        p.require_reported(Apostrophe)?;
+        let expr = flanked(p, Paren, parse_expr)?;
+        span.expand(p.last_span());
+        let cast = Expr {
+            span,
+            data: CastSignExpr(sign, Box::new(expr)),
+        };
+        return parse_expr_suffix(p, cast, precedence);
     }
 
     // Otherwise treat this as a normal expression.

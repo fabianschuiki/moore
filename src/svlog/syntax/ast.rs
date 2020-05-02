@@ -932,6 +932,7 @@ pub enum ExprData {
     InsideExpr(Box<Expr>, Vec<ValueRange>),
     CastExpr(Type, Box<Expr>),
     CastSizeExpr(Box<Expr>, Box<Expr>),
+    CastSignExpr(Spanned<TypeSign>, Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

@@ -120,6 +120,7 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         | hir::ExprKind::Scope(..)
         | hir::ExprKind::Concat(..)
         | hir::ExprKind::Cast(..)
+        | hir::ExprKind::CastSign(..)
         | hir::ExprKind::Inside(..)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
@@ -541,6 +542,11 @@ fn self_determined_expr_type<'gcx>(
 
         // Casts trivially evaluate to the cast type.
         hir::ExprKind::Cast(ty, _) => Some(cx.map_to_type(ty, env).unwrap_or(&ty::ERROR_TYPE)),
+
+        // Sign casts trivially evaluate to the sign-converted inner type.
+        hir::ExprKind::CastSign(sign, arg) => cx
+            .self_determined_type(arg, env)
+            .map(|x| x.change_sign(cx, sign.value)),
 
         // The `inside` expression evaluates to a boolean.
         hir::ExprKind::Inside(..) => Some(&ty::LOGIC_TYPE),
