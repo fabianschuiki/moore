@@ -1,5 +1,4 @@
 // RUN: moore %s -e foo1 -e foo2 -e foo3
-// IGNORE  see issue #137
 
 package magic;
 endpackage

@@ -122,6 +122,7 @@ pub struct ModDecl {
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
+    pub imports: Vec<ImportDecl>,
     pub params: Vec<ParamDecl>,
     pub ports: Vec<Port>,
     pub items: Vec<HierarchyItem>,

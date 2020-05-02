@@ -895,6 +895,11 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
         let (name, name_sp) = p.eat_ident("module name")?;
 
         // TODO: Parse package import declarations.
+        // Eat the optional package import declarations.
+        let mut imports = vec![];
+        while p.peek(0).0 == Keyword(Kw::Import) {
+            imports.push(parse_import_decl(p)?);
+        }
 
         // Eat the optional parameter port list.
         let params = if p.try_eat(Hashtag) {
@@ -932,13 +937,14 @@ fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
         span.expand(p.last_span());
         Ok(ModDecl {
             id: DUMMY_NODE_ID,
-            span: span,
-            lifetime: lifetime,
-            name: name,
+            span,
+            lifetime,
+            name,
             name_span: name_sp,
-            params: params,
-            ports: ports,
-            items: items,
+            imports,
+            params,
+            ports,
+            items,
         })
     });
     let sp = p.peek(0).1;
