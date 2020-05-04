@@ -1336,8 +1336,16 @@ pub struct Assertion {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum AssertionData {
     Immediate(BlockingAssertion),
-    Deferred(BlockingAssertion),
+    Deferred(AssertionDeferred, BlockingAssertion),
     Concurrent(ConcurrentAssertion),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+pub enum AssertionDeferred {
+    /// `assert #0`
+    Observed,
+    /// `assert final`
+    Final,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]

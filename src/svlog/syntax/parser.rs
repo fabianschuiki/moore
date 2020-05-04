@@ -5248,12 +5248,19 @@ fn parse_import_decl(p: &mut dyn AbstractParser) -> ReportedResult<ImportDecl> {
 fn parse_assertion(p: &mut dyn AbstractParser) -> ReportedResult<Assertion> {
     let mut span = p.peek(0).1;
 
-    // Peek ahead after the current token to see if a "property", "sequence", or
-    // "#0" follows. This decides what kind of assertion we're parsing.
+    // Peek ahead after the current token to see if a "property", "sequence",
+    // "#0", or "final" follows. This decides what kind of assertion we're
+    // parsing.
     let null = get_name_table().intern("0", false);
     let is_property = p.peek(1).0 == Keyword(Kw::Property);
     let is_sequence = p.peek(1).0 == Keyword(Kw::Sequence);
-    let is_deferred = p.peek(1).0 == Hashtag && p.peek(2).0 == Literal(Number(null, None));
+    let is_deferred_observed = p.peek(1).0 == Hashtag && p.peek(2).0 == Literal(Number(null, None));
+    let is_deferred_final = p.peek(1).0 == Keyword(Kw::Final);
+    let is_deferred = is_deferred_observed || is_deferred_final;
+    let deferred_mode = match is_deferred_final {
+        true => AssertionDeferred::Final,
+        false => AssertionDeferred::Observed,
+    };
 
     // Handle the different combinations of keywords and lookaheads from above.
 
@@ -5316,52 +5323,58 @@ fn parse_assertion(p: &mut dyn AbstractParser) -> ReportedResult<Assertion> {
         // Immediate and Deferred Assertions
         // ---------------------------------
 
-        // `assert` and `assert #0`
+        // `assert`, `assert #0`, and `assert final`
         Keyword(Kw::Assert) => {
             p.bump();
             if is_deferred {
                 p.bump();
-                p.bump();
+                if is_deferred_observed {
+                    p.bump();
+                }
             }
             let expr = flanked(p, Paren, parse_expr)?;
             let action = parse_assertion_action_block(p)?;
             let a = BlockingAssertion::Assert(expr, action);
             if is_deferred {
-                AssertionData::Deferred(a)
+                AssertionData::Deferred(deferred_mode, a)
             } else {
                 AssertionData::Immediate(a)
             }
         }
 
-        // `assume` and `assume #0`
+        // `assume`, `assume #0`, and `assume final`
         Keyword(Kw::Assume) => {
             p.bump();
             if is_deferred {
                 p.bump();
-                p.bump();
+                if is_deferred_observed {
+                    p.bump();
+                }
             }
             let expr = flanked(p, Paren, parse_expr)?;
             let action = parse_assertion_action_block(p)?;
             let a = BlockingAssertion::Assume(expr, action);
             if is_deferred {
-                AssertionData::Deferred(a)
+                AssertionData::Deferred(deferred_mode, a)
             } else {
                 AssertionData::Immediate(a)
             }
         }
 
-        // `cover` and `cover #0`
+        // `cover`, `cover #0`, and `cover final`
         Keyword(Kw::Cover) => {
             p.bump();
             if is_deferred {
                 p.bump();
-                p.bump();
+                if is_deferred_observed {
+                    p.bump();
+                }
             }
             let expr = flanked(p, Paren, parse_expr)?;
             let stmt = parse_stmt(p)?;
             let a = BlockingAssertion::Cover(expr, stmt);
             if is_deferred {
-                AssertionData::Deferred(a)
+                AssertionData::Deferred(deferred_mode, a)
             } else {
                 AssertionData::Immediate(a)
             }
