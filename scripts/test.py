@@ -160,7 +160,7 @@ class TestCase(object):
 
     def __init__(self, name, path):
         self.name = name
-        self.path = path
+        self.path = Path(path)
 
         # Load the contents of the test file.
         with open(path.__str__()) as f:
@@ -184,6 +184,16 @@ class TestCase(object):
         if self.cmd[0] == "moore":
             self.cmd[0] = "{}{}".format(prefix, self.cmd[0])
         self.cmd = [path if x == "%s" else x for x in self.cmd]
+        cmd = list()
+        for x in self.cmd:
+            try:
+                if "*" in x.__str__() or os.path.exists(self.path.parent/x):
+                    cmd += list([p.relative_to(crate_dir) for p in self.path.parent.glob(x)])
+                else:
+                    cmd.append(x)
+            except:
+                cmd.append(x)
+        self.cmd = list([x.__str__() for x in cmd])
 
         # Execution results.
         self.timeout = False
