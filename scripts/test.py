@@ -260,38 +260,42 @@ else:
     tests = [TestCase(p.relative_to(test_dir), p) for p in sorted(itertools.chain(*globs))]
 sys.stdout.write("running {} tests\n".format(len(tests)))
 
-# Execute the tests.
-for test in tests:
-    test.launch()
+# Assemble the test arrays.
+num_parallel = 16
+heads = tests + [None]*num_parallel
+tails = [None]*num_parallel + tests
 
-# Output test results.
+# Execute the tests and output test results.
 ignored = list()
 failed = list()
-for test in tests:
-    sys.stdout.write("test {} ...".format(test.name))
-    sys.stdout.flush()
-    test.finish()
-    if test.ignore:
-        ignored.append(test)
-        sys.stdout.write(" ignored\n")
-        continue
-    if test.timeout:
-        sys.stdout.write(" timeout,")
-    if test.failed:
-        failed.append(test)
-        sys.stdout.write(" {}FAILED{}\n".format(cbold+cfail, creset))
-        if args.verbose:
-            sys.stdout.write("\n=== INFO ===\n")
-            sys.stdout.write(test.info)
-            sys.stdout.write("\n=== STDERR ===\n")
-            sys.stdout.write(test.stderr)
-            sys.stdout.write("\n=== STDOUT ===\n")
-            sys.stdout.write(test.stdout)
-            sys.stdout.write("\n")
-    else:
-        sys.stdout.write(" {}passed{}\n".format(cpass, creset))
-    if args.commands:
-        sys.stdout.write("# {}\n".format(" ".join([x.__str__() for x in test.cmd])))
+for head, tail in zip(heads, tails):
+    if head:
+        head.launch()
+    if tail:
+        sys.stdout.write("test {} ...".format(tail.name))
+        sys.stdout.flush()
+        tail.finish()
+        if tail.ignore:
+            ignored.append(tail)
+            sys.stdout.write(" ignored\n")
+            continue
+        if tail.timeout:
+            sys.stdout.write(" timeout,")
+        if tail.failed:
+            failed.append(tail)
+            sys.stdout.write(" {}FAILED{}\n".format(cbold+cfail, creset))
+            if args.verbose:
+                sys.stdout.write("\n=== INFO ===\n")
+                sys.stdout.write(tail.info)
+                sys.stdout.write("\n=== STDERR ===\n")
+                sys.stdout.write(tail.stderr)
+                sys.stdout.write("\n=== STDOUT ===\n")
+                sys.stdout.write(tail.stdout)
+                sys.stdout.write("\n")
+        else:
+            sys.stdout.write(" {}passed{}\n".format(cpass, creset))
+        if args.commands:
+            sys.stdout.write("# {}\n".format(" ".join([x.__str__() for x in tail.cmd])))
 
 # Output summary.
 sys.stdout.write("\n")
