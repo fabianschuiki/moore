@@ -265,6 +265,8 @@ fn try_lower_expr<'gcx>(
             let target = if target_ty.is_array() {
                 // No need to cast arrays.
                 cx.mir_rvalue(target, env)
+            } else if target_ty.is_error() {
+                builder.error()
             } else {
                 let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
                     Some(ty) => ty,
@@ -272,8 +274,8 @@ fn try_lower_expr<'gcx>(
                         let span = builder.cx.span(target);
                         builder.cx.emit(
                             DiagBuilder2::error(format!(
-                                "`{}` cannot be index into",
-                                span.extract()
+                                "cannot index into a value of type `{}`",
+                                target_ty
                             ))
                             .span(span)
                             .add_note(format!(

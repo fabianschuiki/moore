@@ -682,13 +682,12 @@ fn self_determined_expr_type<'gcx>(
                 }),
                 TypeKind::Error => (target_ty),
                 _ => {
-                    let desc = cx
-                        .hir_of(target)
-                        .map(|x| x.desc_full())
-                        .unwrap_or_else(|_| cx.span(target).extract());
                     cx.emit(
-                        DiagBuilder2::error(format!("{} cannot be indexed into", desc))
-                            .span(expr.span()),
+                        DiagBuilder2::error(format!(
+                            "cannot index into a value of type `{}`",
+                            target_ty
+                        ))
+                        .span(expr.span()),
                     );
                     &ty::ERROR_TYPE
                 }
