@@ -18,7 +18,7 @@ use crate::{
     ParamEnv, ParamEnvBinding,
 };
 use bit_vec::BitVec;
-use num::{BigInt, BigRational, One, ToPrimitive, Zero};
+use num::{BigInt, BigRational, Integer, One, ToPrimitive, Zero};
 
 /// A verilog value.
 pub type Value<'t> = &'t ValueData<'t>;
@@ -256,10 +256,13 @@ fn const_expr<'gcx>(
         hir::ExprKind::Unary(op, arg) => {
             let arg_val = cx.constant_value_of(arg, env)?;
             match arg_val.kind {
-                ValueKind::Int(ref arg, ..) => Ok(cx.intern_value(make_int(
-                    ty,
-                    const_unary_op_on_int(cx, expr.span, ty, op, arg)?,
-                ))),
+                ValueKind::Int(ref arg, ..) => {
+                    let op_ty = cx.operation_type(expr.id, env).unwrap();
+                    Ok(cx.intern_value(make_int(
+                        ty,
+                        const_unary_op_on_int(cx, expr.span, op_ty, op, arg)?,
+                    )))
+                }
                 _ => {
                     cx.emit(
                         DiagBuilder2::error(format!(
@@ -276,11 +279,13 @@ fn const_expr<'gcx>(
             let lhs_val = cx.constant_value_of(lhs, env)?;
             let rhs_val = cx.constant_value_of(rhs, env)?;
             match (&lhs_val.kind, &rhs_val.kind) {
-                (&ValueKind::Int(ref lhs, ..), &ValueKind::Int(ref rhs, ..)) => Ok(cx
-                    .intern_value(make_int(
+                (&ValueKind::Int(ref lhs, ..), &ValueKind::Int(ref rhs, ..)) => {
+                    let op_ty = cx.operation_type(expr.id, env).unwrap();
+                    Ok(cx.intern_value(make_int(
                         ty,
-                        const_binary_op_on_int(cx, expr.span, ty, op, lhs, rhs)?,
-                    ))),
+                        const_binary_op_on_int(cx, expr.span, op_ty, op, lhs, rhs)?,
+                    )))
+                }
                 _ => {
                     cx.emit(
                         DiagBuilder2::error(format!(
@@ -381,7 +386,30 @@ fn const_unary_op_on_int<'gcx>(
         hir::UnaryOp::Neg => -arg,
         hir::UnaryOp::BitNot => (BigInt::one() << ty.width()) - 1 - arg,
         hir::UnaryOp::LogicNot => (arg.is_zero() as usize).into(),
-        _ => {
+        hir::UnaryOp::RedAnd => ((arg == &((BigInt::one() << ty.width()) - 1)) as usize).into(),
+        hir::UnaryOp::RedNand => ((arg != &((BigInt::one() << ty.width()) - 1)) as usize).into(),
+        hir::UnaryOp::RedOr => ((!arg.is_zero()) as usize).into(),
+        hir::UnaryOp::RedNor => (arg.is_zero() as usize).into(),
+        hir::UnaryOp::RedXor => (arg
+            .to_bytes_le()
+            .1
+            .into_iter()
+            .map(|v| v.count_ones())
+            .sum::<u32>()
+            .is_odd() as usize)
+            .into(),
+        hir::UnaryOp::RedXnor => (arg
+            .to_bytes_le()
+            .1
+            .into_iter()
+            .map(|v| v.count_ones())
+            .sum::<u32>()
+            .is_even() as usize)
+            .into(),
+        hir::UnaryOp::PreInc
+        | hir::UnaryOp::PreDec
+        | hir::UnaryOp::PostInc
+        | hir::UnaryOp::PostDec => {
             cx.emit(
                 DiagBuilder2::error(format!(
                     "{} cannot be applied to integer `{}`",
@@ -446,18 +474,20 @@ fn const_binary_op_on_int<'gcx>(
         hir::BinaryOp::BitXnor => {
             const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs ^ rhs))?
         }
-        _ => {
-            cx.emit(
-                DiagBuilder2::error(format!(
-                    "{} cannot be applied to constant integers `{}` and `{}`",
-                    op.desc_full(),
-                    lhs,
-                    rhs
-                ))
-                .span(span),
-            );
-            return Err(());
-        }
+        hir::BinaryOp::LogicAnd => ((!lhs.is_zero() && !rhs.is_zero()) as usize).into(),
+        hir::BinaryOp::LogicOr => ((!lhs.is_zero() || !rhs.is_zero()) as usize).into(),
+        // _ => {
+        //     cx.emit(
+        //         DiagBuilder2::error(format!(
+        //             "{} cannot be applied to constant integers `{}` and `{}`",
+        //             op.desc_full(),
+        //             lhs,
+        //             rhs
+        //         ))
+        //         .span(span),
+        //     );
+        //     return Err(());
+        // }
     })
 }
 
