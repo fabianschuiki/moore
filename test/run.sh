@@ -87,6 +87,9 @@ while read -d $'\0' SRCFILE; do
 	if ! $ALL && grep -E '@exclude|RUN:' $SRCFILE >/dev/null; then
 		continue
 	fi
+	if echo $SRCFILE | grep -q "^$TESTS_DIR/third-party"; then
+		continue
+	fi
 	check parse $SRCFILE $MOORE $SRCFILE
 	test_file $SRCFILE
 done < <(find $TESTS_DIR -name "*.sv" -print0 -or -name "*.vhd" -print0 | sort -z)
