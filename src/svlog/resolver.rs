@@ -361,15 +361,21 @@ pub(crate) fn resolve_field_access<'gcx>(
         _ => unreachable!(),
     };
     let ty = cx.type_of(target_id, env)?;
-    let struct_def = match ty {
+    let struct_def = match ty.unname() {
         &TypeKind::Struct(id) => id,
-        &TypeKind::Named(_, _, &TypeKind::Struct(id)) => id,
         _ => {
-            let hir = cx.hir_of(target_id)?;
+            let target_hir = cx.hir_of(target_id)?;
             cx.emit(
-                DiagBuilder2::error(format!("{} is not a struct", hir.desc_full()))
-                    .span(hir.human_span()),
+                DiagBuilder2::error(format!(
+                    "{} has no fields; type `{}` is not a struct",
+                    target_hir.desc_full(),
+                    ty
+                ))
+                .span(hir.human_span()),
             );
+            error!("Cannot resolve field access {:?}", hir);
+            error!("Target is {:?}", target_hir);
+            error!("Type is {:?}", ty);
             return Err(());
         }
     };

@@ -242,6 +242,14 @@ impl<'t> TypeKind<'t> {
             _ => self,
         }
     }
+
+    /// Dereference name aliases.
+    pub fn unname(&self) -> &Self {
+        match self {
+            TypeKind::Named(_, _, ty) => ty.unname(),
+            _ => self,
+        }
+    }
 }
 
 impl<'t> Display for TypeKind<'t> {
