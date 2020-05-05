@@ -1755,10 +1755,7 @@ where
         let ty = self.type_of(decl_id, env)?;
         let ty = self.emit_type(ty, env)?;
         let init = match hir.init {
-            Some(expr) => {
-                let k = self.constant_value_of(expr, env)?;
-                self.emit_const(k, env)?
-            }
+            Some(expr) => self.emit_rvalue(expr, env)?,
             None => self.emit_zero_for_type(&ty),
         };
         let value = self.builder.ins().var(init);
