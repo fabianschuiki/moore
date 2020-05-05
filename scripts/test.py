@@ -161,6 +161,7 @@ class TestCase(object):
     def __init__(self, name, path):
         self.name = name
         self.path = Path(path)
+        self.dir = self.path.parent
 
         # Load the contents of the test file.
         with open(path.__str__()) as f:
@@ -187,8 +188,8 @@ class TestCase(object):
         cmd = list()
         for x in self.cmd:
             try:
-                if "*" in x.__str__() or os.path.exists(self.path.parent/x):
-                    cmd += list([p.relative_to(crate_dir) for p in self.path.parent.glob(x)])
+                if "*" in x.__str__() or os.path.exists(self.dir/x):
+                    cmd += self.dir.glob(x)
                 else:
                     cmd.append(x)
             except:
