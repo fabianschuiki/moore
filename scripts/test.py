@@ -180,6 +180,13 @@ class TestCase(object):
         else:
             self.run = "moore --syntax %s"
 
+        # Execution results.
+        self.timeout = False
+        self.failed = False
+        self.info = ""
+        self.stdout = ""
+        self.stderr = ""
+
         # Process the run command.
         self.cmd = shlex.split(self.run)
         if self.cmd[0] == "moore":
@@ -189,21 +196,17 @@ class TestCase(object):
         for x in self.cmd:
             try:
                 if "*" in x.__str__():
+                    self.info += "Arg: `{}` is a glob pattern\n".format(x)
                     cmd += self.dir.glob(x)
                 elif os.path.exists(self.dir/x):
+                    self.info += "Arg: `{}` is a path\n".format(x)
                     cmd.append(self.dir/x)
                 else:
+                    self.info += "Arg: `{}` is a plain argument\n".format(x)
                     cmd.append(x)
             except:
                 cmd.append(x)
         self.cmd = list([x.__str__() for x in cmd])
-
-        # Execution results.
-        self.timeout = False
-        self.failed = False
-        self.info = ""
-        self.stdout = ""
-        self.stderr = ""
 
     def launch(self):
         if self.ignore:
