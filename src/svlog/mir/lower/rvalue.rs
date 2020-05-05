@@ -262,11 +262,11 @@ fn try_lower_expr<'gcx>(
 
             // Cast the target to a simple bit vector type if needed.
             let target_ty = cx.type_of(target, env)?;
-            let target = if target_ty.is_array() {
+            let target = if target_ty.is_error() {
+                builder.error()
+            } else if target_ty.unname().is_array() {
                 // No need to cast arrays.
                 cx.mir_rvalue(target, env)
-            } else if target_ty.is_error() {
-                builder.error()
             } else {
                 let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
                     Some(ty) => ty,
@@ -283,6 +283,7 @@ fn try_lower_expr<'gcx>(
                                 target_ty
                             )),
                         );
+                        error!("Type is {:?}", target_ty);
                         return Ok(builder.error());
                     }
                 };
@@ -1281,15 +1282,15 @@ fn map_to_simple_bit_type<'gcx>(
     ty: Type<'gcx>,
     env: ParamEnv,
 ) -> Option<Type<'gcx>> {
-    let bits = match *ty {
+    let bits = match *ty.unname() {
         TypeKind::Error | TypeKind::Void | TypeKind::Time => return None,
-        TypeKind::Named(_, _, ty) => return map_to_simple_bit_type(cx, ty, env),
         TypeKind::BitVector { .. } => return Some(ty),
         TypeKind::BitScalar { .. } => return Some(ty),
         TypeKind::Bit(..)
         | TypeKind::Int(..)
         | TypeKind::Struct(..)
         | TypeKind::PackedArray(..) => ty::bit_size_of_type(cx, ty, env).ok()?,
+        TypeKind::Named(..) => unreachable!("handled by unname()"),
     };
     Some(cx.intern_type(TypeKind::BitVector {
         domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
