@@ -188,8 +188,10 @@ class TestCase(object):
         cmd = list()
         for x in self.cmd:
             try:
-                if "*" in x.__str__() or os.path.exists(self.dir/x):
+                if "*" in x.__str__():
                     cmd += self.dir.glob(x)
+                elif os.path.exists(self.dir/x):
+                    cmd.append(self.dir/x)
                 else:
                     cmd.append(x)
             except:
