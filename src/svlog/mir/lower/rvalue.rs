@@ -313,6 +313,11 @@ fn try_lower_expr<'gcx>(
             Ok(lower_expr_and_cast_sign(&builder, expr, sign.value))
         }
 
+        hir::ExprKind::CastSize(_, expr) => {
+            let ty = cx.need_self_determined_type(expr_id, env);
+            Ok(lower_expr_and_cast(cx, expr, env, ty))
+        }
+
         hir::ExprKind::Inside(expr, ref ranges) => {
             // By default nothing matches.
             let mut check = builder.build(

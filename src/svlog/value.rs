@@ -373,9 +373,13 @@ fn const_expr<'gcx>(
         // TODO: Casts are just transparent at the moment. That's pretty bad.
         hir::ExprKind::Cast(_, arg)
         | hir::ExprKind::CastSign(_, arg)
+        | hir::ExprKind::CastSize(_, arg)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx.constant_value_of(arg, env),
-        _ => cx.unimp_msg("constant value computation of", expr),
+        _ => {
+            error!("{:?}", expr);
+            cx.unimp_msg("constant value computation of", expr)
+        }
     }
 }
 

@@ -770,6 +770,8 @@ pub enum ExprKind {
     Cast(NodeId, NodeId),
     /// A sign cast such as `unsigned'(foo)`.
     CastSign(Spanned<ty::Sign>, NodeId),
+    /// A size cast `(size_expr, expr)` such as `42'(foo)`.
+    CastSize(NodeId, NodeId),
     /// An inside expression such as `a inside {b, c}`.
     Inside(NodeId, Vec<Spanned<InsideRange>>),
 }

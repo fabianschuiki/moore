@@ -1983,10 +1983,36 @@ fn lower_expr<'gcx>(
                 .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
                 .collect(),
         ),
-        ast::CastExpr(ref ty, ref expr) => hir::ExprKind::Cast(
-            cx.map_ast_with_parent(AstNode::Type(ty), node_id),
-            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
-        ),
+        ast::CastExpr(ref ty, ref expr) => {
+            // Catch the corner case where a size cast looks like a type cast.
+            if let ast::NamedType(n) = ty.data {
+                let binding = cx.resolve_upwards_or_error(
+                    Spanned::new(n.name, n.span),
+                    cx.parent_node_id(node_id).unwrap(),
+                )?;
+                match cx.hir_of(binding)? {
+                    HirNode::TypeParam(..) | HirNode::Typedef(..) => hir::ExprKind::Cast(
+                        cx.map_ast_with_parent(AstNode::Type(ty), node_id),
+                        cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
+                    ),
+                    _ => {
+                        let size_expr = cx.arena().alloc_ast_expr(ast::Expr {
+                            span: ty.span,
+                            data: ast::IdentExpr(n),
+                        });
+                        hir::ExprKind::CastSize(
+                            cx.map_ast_with_parent(AstNode::Expr(size_expr), node_id),
+                            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
+                        )
+                    }
+                }
+            } else {
+                hir::ExprKind::Cast(
+                    cx.map_ast_with_parent(AstNode::Type(ty), node_id),
+                    cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
+                )
+            }
+        }
         ast::CastSignExpr(sign, ref expr) => hir::ExprKind::CastSign(
             Spanned::new(
                 match sign.value {
@@ -1996,6 +2022,10 @@ fn lower_expr<'gcx>(
                 },
                 sign.span,
             ),
+            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
+        ),
+        ast::CastSizeExpr(ref size_expr, ref expr) => hir::ExprKind::CastSize(
+            cx.map_ast_with_parent(AstNode::Expr(size_expr), node_id),
             cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
         ),
         ast::InsideExpr(ref expr, ref ranges) => hir::ExprKind::Inside(

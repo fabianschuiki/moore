@@ -121,6 +121,7 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         | hir::ExprKind::Concat(..)
         | hir::ExprKind::Cast(..)
         | hir::ExprKind::CastSign(..)
+        | hir::ExprKind::CastSize(..)
         | hir::ExprKind::Inside(..)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
@@ -547,6 +548,40 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::CastSign(sign, arg) => cx
             .self_determined_type(arg, env)
             .map(|x| x.change_sign(cx, sign.value)),
+
+        // Sign casts trivially evaluate to the size-converted inner type.
+        hir::ExprKind::CastSize(size, arg) => {
+            let mut failed = false;
+
+            // Determine the actual size.
+            let size = match cx.constant_int_value_of(size, env) {
+                Ok(r) => r.to_usize().unwrap(),
+                Err(_) => {
+                    failed = true;
+                    0
+                }
+            };
+
+            // Map the inner type to a simple bit vector.
+            let inner_ty = cx.need_self_determined_type(arg, env);
+            failed |= inner_ty.is_error();
+
+            // Create a new type with the correct size.
+            Some(if failed {
+                &ty::ERROR_TYPE
+            } else {
+                cx.intern_type(TypeKind::BitVector {
+                    domain: inner_ty.get_value_domain().unwrap_or(Domain::TwoValued),
+                    sign: inner_ty.get_sign().unwrap_or(Sign::Unsigned),
+                    range: ty::Range {
+                        size: size,
+                        dir: ty::RangeDir::Down,
+                        offset: 0isize,
+                    },
+                    dubbed: false,
+                })
+            })
+        }
 
         // The `inside` expression evaluates to a boolean.
         hir::ExprKind::Inside(..) => Some(&ty::LOGIC_TYPE),

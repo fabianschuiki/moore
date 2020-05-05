@@ -162,6 +162,8 @@ pub struct GlobalArenas<'t> {
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
     /// Additional AST types generated during HIR lowering.
     ast_types: TypedArena<ast::Type>,
+    /// Additional AST expressions generated during HIR lowering.
+    ast_exprs: TypedArena<ast::Expr>,
 }
 
 impl<'t> GlobalArenas<'t> {
@@ -197,6 +199,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate an AST type.
     pub fn alloc_ast_type(&'t self, ast: ast::Type) -> &'t ast::Type {
         self.ast_types.alloc(ast)
+    }
+
+    /// Allocate an AST expression.
+    pub fn alloc_ast_expr(&'t self, ast: ast::Expr) -> &'t ast::Expr {
+        self.ast_exprs.alloc(ast)
     }
 }
 
