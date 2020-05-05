@@ -2037,7 +2037,7 @@ fn parse_expr_prec(p: &mut dyn AbstractParser, precedence: Precedence) -> Report
     // Try to parse a cast expression, which starts with an explicit type.
     {
         let mut bp = BranchParser::new(p);
-        let mut span = bp.last_span();
+        let mut span = bp.peek(0).1;
         let ty = parse_explicit_type(&mut bp);
         let tick = bp.require_reported(Apostrophe);
         match (ty, tick) {
