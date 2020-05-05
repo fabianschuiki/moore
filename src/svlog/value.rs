@@ -370,6 +370,11 @@ fn const_expr<'gcx>(
             let mir = cx.mir_rvalue(expr.id, env);
             const_mir(cx, mir)
         }
+        // TODO: Casts are just transparent at the moment. That's pretty bad.
+        hir::ExprKind::Cast(_, arg)
+        | hir::ExprKind::CastSign(_, arg)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx.constant_value_of(arg, env),
         _ => cx.unimp_msg("constant value computation of", expr),
     }
 }
@@ -476,18 +481,6 @@ fn const_binary_op_on_int<'gcx>(
         }
         hir::BinaryOp::LogicAnd => ((!lhs.is_zero() && !rhs.is_zero()) as usize).into(),
         hir::BinaryOp::LogicOr => ((!lhs.is_zero() || !rhs.is_zero()) as usize).into(),
-        // _ => {
-        //     cx.emit(
-        //         DiagBuilder2::error(format!(
-        //             "{} cannot be applied to constant integers `{}` and `{}`",
-        //             op.desc_full(),
-        //             lhs,
-        //             rhs
-        //         ))
-        //         .span(span),
-        //     );
-        //     return Err(());
-        // }
     })
 }
 

@@ -145,6 +145,23 @@ module foo;
     // CHECK: %0 = const i1 1
     // CHECK: %0 = const i1 1
     // CHECK: %0 = const i1 0
+
+    // Ternary Operator
+
+    bar #(a == b ? 42 : 9001) i0();
+    bar #(a != b ? 42 : 9001) i0();
+    // CHECK: %0 = const i32 9001
+    // CHECK: %0 = const i32 42
+
+    // Cast Operators
+    bar #(unsigned'(a)) i0();
+    bar #(signed'(a)) i0();
+    bar #($unsigned(a)) i0();
+    bar #($signed(a)) i0();
+    // CHECK: %0 = const i32 42
+    // CHECK: %0 = const i32 42
+    // CHECK: %0 = const i32 42
+    // CHECK: %0 = const i32 42
 endmodule
 
 module bar #(parameter int X);
