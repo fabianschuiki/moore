@@ -194,17 +194,14 @@ class TestCase(object):
         self.cmd = [path if x == "%s" else x for x in self.cmd]
         cmd = list()
         for x in self.cmd:
-            try:
-                if "*" in x.__str__():
-                    self.info += "Arg: `{}` is a glob pattern\n".format(x)
-                    cmd += self.dir.glob(x)
-                elif os.path.exists(self.dir/x):
-                    self.info += "Arg: `{}` is a path\n".format(x)
-                    cmd.append(self.dir/x)
-                else:
-                    self.info += "Arg: `{}` is a plain argument\n".format(x)
-                    cmd.append(x)
-            except:
+            if "*" in x.__str__():
+                self.info += "Arg: `{}` is a glob pattern\n".format(x)
+                cmd += self.dir.glob(x)
+            elif (self.dir/x).exists():
+                self.info += "Arg: `{}` is a path\n".format(x)
+                cmd.append(self.dir/x)
+            else:
+                self.info += "Arg: `{}` is a plain argument\n".format(x)
                 cmd.append(x)
         self.cmd = list([x.__str__() for x in cmd])
 
