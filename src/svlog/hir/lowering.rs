@@ -348,7 +348,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     }
                 }
                 ast::AssertionStmt { .. } => {
-                    warn!("ignoring unsupported assertion `{}`", stmt.span.extract());
+                    cx.emit(
+                        DiagBuilder2::warning("unsupported: immediate assertion; ignored")
+                            .span(stmt.human_span()),
+                    );
                     hir::StmtKind::Null
                 }
                 _ => {
