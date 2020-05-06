@@ -119,6 +119,10 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
         AstNode::Import(_import) => {
             unimplemented!("import statement local rib");
         }
+        AstNode::SubroutineDecl(decl) => Some(RibKind::Normal(
+            Spanned::new(decl.prototype.name.name, decl.prototype.name.span),
+            node_id,
+        )),
         _ => None,
     };
     if kind.is_none() {
@@ -236,8 +240,14 @@ pub(crate) fn resolve_upwards<'gcx>(
             cx.emit(DiagBuilder2::note(format!("resolving `{}` here", name)).span(cx.span(rib_id)));
         }
         let rib = cx.local_rib(rib_id)?;
-        if let id @ Some(_) = rib.get(name) {
-            return Ok(id);
+        if let Some(id) = rib.get(name) {
+            return Ok(Some(id));
+        }
+        if let RibKind::Module(..) = rib.kind {
+            let rib = cx.hierarchical_rib(rib_id)?;
+            if let Some(id) = rib.get(name) {
+                return Ok(Some(id));
+            }
         }
         next_id = rib.parent;
     }
