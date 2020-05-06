@@ -215,9 +215,19 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         | hir::ExprKind::EmptyPattern => cx.need_type_context(expr.id, env).ty(),
 
         // Function calls resolve to the function's return type.
-        hir::ExprKind::FunctionCall(target, _) => {
-            unimplemented!("Call {:?}", cx.hir_of(target));
-        }
+        hir::ExprKind::FunctionCall(target, _) => cx
+            .hir_of(target)
+            .and_then(|hir| {
+                let hir = match hir {
+                    HirNode::Subroutine(s) => s,
+                    _ => unreachable!(),
+                };
+                match hir.retty {
+                    Some(retty_id) => cx.map_to_type(retty_id, env),
+                    None => Ok(&ty::VOID_TYPE),
+                }
+            })
+            .unwrap_or(&ty::ERROR_TYPE),
     }
 }
 
