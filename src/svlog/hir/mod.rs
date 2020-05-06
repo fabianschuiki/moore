@@ -38,6 +38,7 @@ make_arenas!(
         assigns: Assign,
         packages: Package,
         enum_variants: EnumVariant,
+        subroutines: Subroutine,
     }
 );
 

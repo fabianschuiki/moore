@@ -29,6 +29,7 @@ pub enum HirNode<'hir> {
     Assign(&'hir Assign),
     Package(&'hir Package),
     EnumVariant(&'hir EnumVariant),
+    Subroutine(&'hir Subroutine),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -53,6 +54,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Assign(x) => x.span(),
             HirNode::Package(x) => x.span(),
             HirNode::EnumVariant(x) => x.span(),
+            HirNode::Subroutine(x) => x.span(),
         }
     }
 
@@ -77,6 +79,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Assign(x) => x.human_span(),
             HirNode::Package(x) => x.human_span(),
             HirNode::EnumVariant(x) => x.human_span(),
+            HirNode::Subroutine(x) => x.human_span(),
         }
     }
 }
@@ -103,6 +106,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Assign(x) => x.desc(),
             HirNode::Package(x) => x.desc(),
             HirNode::EnumVariant(x) => x.desc(),
+            HirNode::Subroutine(x) => x.desc(),
         }
     }
 
@@ -127,6 +131,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Assign(x) => x.desc_full(),
             HirNode::Package(x) => x.desc_full(),
             HirNode::EnumVariant(x) => x.desc_full(),
+            HirNode::Subroutine(x) => x.desc_full(),
         }
     }
 }
@@ -1359,4 +1364,42 @@ pub struct CallArg {
     pub name: Option<Spanned<Name>>,
     /// Value assigned to this argument.
     pub expr: Option<NodeId>,
+}
+
+/// A subroutine declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Subroutine {
+    pub id: NodeId,
+    pub name: Spanned<Name>,
+    pub span: Span,
+    /// Whether this is a task or function.
+    pub kind: ast::SubroutineKind,
+    /// Optional return type in case of a function.
+    pub retty: Option<NodeId>,
+}
+
+impl HasSpan for Subroutine {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name.span
+    }
+}
+
+impl HasDesc for Subroutine {
+    fn desc(&self) -> &'static str {
+        match self.kind {
+            ast::SubroutineKind::Func => "function",
+            ast::SubroutineKind::Task => "task",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match self.kind {
+            ast::SubroutineKind::Func => format!("function `{}`", self.name),
+            ast::SubroutineKind::Task => format!("task `{}`", self.name),
+        }
+    }
 }

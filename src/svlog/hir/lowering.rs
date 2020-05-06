@@ -477,6 +477,20 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::EnumVariant(cx.arena().alloc_hir(hir)))
         }
         AstNode::Import(import) => unreachable!("import should never be lowered: {:#?}", import),
+        AstNode::SubroutineDecl(decl) => {
+            let hir = hir::Subroutine {
+                id: node_id,
+                name: Spanned::new(decl.prototype.name.name, decl.prototype.name.span),
+                span: decl.span,
+                kind: decl.prototype.kind,
+                retty: decl
+                    .prototype
+                    .retty
+                    .as_ref()
+                    .map(|ty| cx.map_ast_with_parent(AstNode::Type(ty), node_id)),
+            };
+            Ok(HirNode::Subroutine(cx.arena().alloc_hir(hir)))
+        }
         _ => {
             error!("{:#?}", ast);
             cx.unimp_msg("lowering of", &ast)
