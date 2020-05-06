@@ -213,6 +213,11 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         | hir::ExprKind::NamedPattern(..)
         | hir::ExprKind::RepeatPattern(..)
         | hir::ExprKind::EmptyPattern => cx.need_type_context(expr.id, env).ty(),
+
+        // Function calls resolve to the function's return type.
+        hir::ExprKind::FunctionCall(target, _) => {
+            unimplemented!("Call {:?}", cx.hir_of(target));
+        }
     }
 }
 

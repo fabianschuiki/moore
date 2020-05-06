@@ -1861,9 +1861,28 @@ fn lower_expr<'gcx>(
                     }
                 })
             }
+            ast::IdentExpr(name) => {
+                let target = cx.resolve_upwards_or_error(
+                    Spanned::new(name.name, name.span),
+                    cx.parent_node_id(node_id).unwrap(),
+                )?;
+                hir::ExprKind::FunctionCall(
+                    target,
+                    args.iter()
+                        .map(|arg| lower_call_arg(cx, arg, node_id))
+                        .collect(),
+                )
+            }
             _ => {
                 error!("{:#?}", callee);
-                return cx.unimp_msg("lowering of call to", callee.as_ref());
+                cx.emit(
+                    DiagBuilder2::warning(format!(
+                        "`{}` is not something that can be called",
+                        expr.span().extract()
+                    ))
+                    .span(expr.human_span()),
+                );
+                return Err(());
             }
         },
         ast::TernaryExpr {
@@ -2309,5 +2328,21 @@ fn lower_index_mode<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(rhs), parent),
         ),
         _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), parent)),
+    }
+}
+
+/// Lower a function or method call argument to HIR.
+fn lower_call_arg<'gcx>(
+    cx: &impl Context<'gcx>,
+    ast: &'gcx ast::CallArg,
+    parent: NodeId,
+) -> hir::CallArg {
+    hir::CallArg {
+        span: ast.span,
+        name: ast.name.map(|n| Spanned::new(n, ast.name_span)),
+        expr: ast
+            .expr
+            .as_ref()
+            .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent)),
     }
 }

@@ -774,6 +774,8 @@ pub enum ExprKind {
     CastSize(NodeId, NodeId),
     /// An inside expression such as `a inside {b, c}`.
     Inside(NodeId, Vec<Spanned<InsideRange>>),
+    /// A function call such as `foo(a, b, c)`.
+    FunctionCall(NodeId, Vec<CallArg>),
 }
 
 /// The different unary operators.
@@ -1346,4 +1348,15 @@ pub enum PatternMapping {
 pub enum InsideRange {
     Single(NodeId),
     Range(NodeId, NodeId),
+}
+
+/// An argument to a function or method call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallArg {
+    /// Span of the entire argument.
+    pub span: Span,
+    /// Optional argument name.
+    pub name: Option<Spanned<Name>>,
+    /// Value assigned to this argument.
+    pub expr: Option<NodeId>,
 }
