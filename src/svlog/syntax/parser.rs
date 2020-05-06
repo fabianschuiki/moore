@@ -3224,11 +3224,12 @@ fn parse_subroutine_prototype(p: &mut dyn AbstractParser) -> ReportedResult<Subr
 
     span.expand(p.last_span());
     Ok(SubroutinePrototype {
-        span: span,
-        kind: kind,
-        lifetime: lifetime,
-        name: name,
-        args: args,
+        span,
+        kind,
+        lifetime,
+        name,
+        args,
+        retty,
     })
 }
 

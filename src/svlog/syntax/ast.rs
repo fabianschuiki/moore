@@ -1202,6 +1202,7 @@ pub struct SubroutinePrototype {
     pub lifetime: Option<Lifetime>,
     pub name: Identifier,
     pub args: Vec<SubroutinePort>,
+    pub retty: Option<Type>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
