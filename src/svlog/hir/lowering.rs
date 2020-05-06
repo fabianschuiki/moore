@@ -1409,6 +1409,7 @@ fn lower_module_block<'gcx>(
     let mut assigns = Vec::new();
     for item in items {
         match *item {
+            ast::HierarchyItem::Dummy => (),
             ast::HierarchyItem::Inst(ref inst) => {
                 let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
                 next_rib = target_id;
@@ -1445,6 +1446,11 @@ fn lower_module_block<'gcx>(
                 next_rib = id;
                 gens.push(id);
             }
+            ast::HierarchyItem::GenerateCase(ref gen) => {
+                let id = cx.map_ast_with_parent(AstNode::GenCase(gen), next_rib);
+                next_rib = id;
+                gens.push(id);
+            }
             ast::HierarchyItem::ParamDecl(ref param) => {
                 next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
             }
@@ -1477,7 +1483,30 @@ fn lower_module_block<'gcx>(
                     );
                 }
             }
-            _ => warn!("skipping unsupported {:?}", item),
+            ast::HierarchyItem::ModportDecl(ref decl) => {
+                cx.emit(
+                    DiagBuilder2::error("modport declaration in module")
+                        .span(decl.span)
+                        .add_note("Modport declarations can only appear in an interface"),
+                );
+            }
+            ast::HierarchyItem::ClassDecl(ref decl) => {
+                cx.emit(
+                    DiagBuilder2::warning("unsupported: class declaration; ignored")
+                        .span(decl.span),
+                );
+            }
+            ast::HierarchyItem::SubroutineDecl(ref decl) => {
+                let id = cx.map_ast_with_parent(AstNode::SubroutineDecl(decl), next_rib);
+                next_rib = id;
+            }
+            ast::HierarchyItem::Assertion(ref assert) => {
+                cx.emit(
+                    DiagBuilder2::warning("unsupported: concurrent assertion; ignored")
+                        .span(assert.span),
+                );
+            }
+            ast::HierarchyItem::GenvarDecl(..) | ast::HierarchyItem::GenerateRegion(..) => (),
         }
     }
     Ok(hir::ModuleBlock {

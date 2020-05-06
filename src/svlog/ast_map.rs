@@ -68,6 +68,8 @@ pub enum AstNode<'ast> {
     GenIf(&'ast ast::GenerateIf),
     /// A for-generate statement.
     GenFor(&'ast ast::GenerateFor),
+    /// A case-generate statement.
+    GenCase(&'ast ast::GenerateCase),
     /// A genvar declaration.
     GenvarDecl(&'ast ast::GenvarDecl),
     /// A typedef.
@@ -82,6 +84,8 @@ pub enum AstNode<'ast> {
     EnumVariant(&'ast ast::EnumName, NodeId, usize),
     /// An import.
     Import(&'ast ast::ImportItem),
+    /// A subroutine declaration.
+    SubroutineDecl(&'ast ast::SubroutineDecl),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -103,6 +107,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::EventExpr(x) => x.span(),
             AstNode::GenIf(x) => x.span(),
             AstNode::GenFor(x) => x.span(),
+            AstNode::GenCase(x) => x.span(),
             AstNode::GenvarDecl(x) => x.span(),
             AstNode::Typedef(x) => x.span(),
             AstNode::ContAssign(x, _, _) => x.span(),
@@ -110,6 +115,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Package(x) => x.span(),
             AstNode::EnumVariant(x, _, _) => x.span(),
             AstNode::Import(x) => x.span(),
+            AstNode::SubroutineDecl(x) => x.span(),
         }
     }
 
@@ -131,6 +137,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::EventExpr(x) => x.human_span(),
             AstNode::GenIf(x) => x.human_span(),
             AstNode::GenFor(x) => x.human_span(),
+            AstNode::GenCase(x) => x.human_span(),
             AstNode::GenvarDecl(x) => x.human_span(),
             AstNode::Typedef(x) => x.human_span(),
             AstNode::ContAssign(x, _, _) => x.human_span(),
@@ -138,6 +145,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Package(x) => x.human_span(),
             AstNode::EnumVariant(x, _, _) => x.human_span(),
             AstNode::Import(x) => x.human_span(),
+            AstNode::SubroutineDecl(x) => x.human_span(),
         }
     }
 }
@@ -161,6 +169,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::EventExpr(x) => x.desc(),
             AstNode::GenIf(x) => x.desc(),
             AstNode::GenFor(x) => x.desc(),
+            AstNode::GenCase(x) => x.desc(),
             AstNode::GenvarDecl(x) => x.desc(),
             AstNode::Typedef(x) => x.desc(),
             AstNode::ContAssign(x, _, _) => x.desc(),
@@ -168,6 +177,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Package(x) => x.desc(),
             AstNode::EnumVariant(x, _, _) => x.desc(),
             AstNode::Import(x) => x.desc(),
+            AstNode::SubroutineDecl(x) => x.desc(),
         }
     }
 
@@ -189,6 +199,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::EventExpr(x) => x.desc_full(),
             AstNode::GenIf(x) => x.desc_full(),
             AstNode::GenFor(x) => x.desc_full(),
+            AstNode::GenCase(x) => x.desc_full(),
             AstNode::GenvarDecl(x) => x.desc_full(),
             AstNode::Typedef(x) => x.desc_full(),
             AstNode::ContAssign(x, _, _) => x.desc_full(),
@@ -196,6 +207,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Package(x) => x.desc_full(),
             AstNode::EnumVariant(x, _, _) => x.desc_full(),
             AstNode::Import(x) => x.desc_full(),
+            AstNode::SubroutineDecl(x) => x.desc_full(),
         }
     }
 }

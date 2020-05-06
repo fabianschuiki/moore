@@ -4,7 +4,7 @@
 
 use super::token::{Lit, Op};
 use moore_common::name::Name;
-use moore_common::source::{Span, Spanned};
+use moore_common::source::{Span, Spanned, INVALID_SPAN};
 use moore_common::util::{HasDesc, HasSpan};
 use std::fmt;
 
@@ -214,8 +214,6 @@ pub struct Timeunit {
 pub enum HierarchyItem {
     Dummy,
     ImportDecl(ImportDecl),
-    LocalparamDecl(()),
-    ParameterDecl(()),
     ParamDecl(ParamDecl),
     ModportDecl(ModportDecl),
     ClassDecl(ClassDecl),
@@ -1171,6 +1169,32 @@ pub struct SubroutineDecl {
     pub items: Vec<SubroutineItem>,
 }
 
+impl HasSpan for SubroutineDecl {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.prototype.name.span
+    }
+}
+
+impl HasDesc for SubroutineDecl {
+    fn desc(&self) -> &'static str {
+        match self.prototype.kind {
+            SubroutineKind::Func => "function declaration",
+            SubroutineKind::Task => "task declaration",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match self.prototype.kind {
+            SubroutineKind::Func => format!("function `{}`", self.prototype.name.name),
+            SubroutineKind::Task => format!("task `{}`", self.prototype.name.name),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct SubroutinePrototype {
     pub span: Span,
@@ -1699,6 +1723,19 @@ impl HasDesc for GenerateIf {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenerateCase {
     // TODO
+}
+
+impl HasSpan for GenerateCase {
+    fn span(&self) -> Span {
+        // TODO: Fix this once we have a proper case statement.
+        INVALID_SPAN
+    }
+}
+
+impl HasDesc for GenerateCase {
+    fn desc(&self) -> &'static str {
+        "case-generate statement"
+    }
 }
 
 /// A body of a generate construct. May contains hierarchy items or more
