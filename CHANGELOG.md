@@ -5,10 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 ### Added
-- Add support for `assert final` assertions.
+- Add parsing support for `assert final` assertions (#139)
+- Add parsing support for `default disable` statements (#140)
 
 ### Fixed
-- Fix parsing of import declarations in module headers. ([#136](https://github.com/fabianschuiki/moore/issues/136))
+- Fix sign casts (#138)
+- Fix parsing of import declarations in module headers (#136)
+- Fix non-constant initial expressions in variabel declarations
 
 ## 0.7.0 - 2020-04-30
 ### Added
