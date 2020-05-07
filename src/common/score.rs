@@ -157,13 +157,15 @@ where
 ///
 /// impl<'tn> NodeMaker<FooId, &'tn Foo> for Table {
 ///     fn make(&self, id: FooId) -> score::Result<&'tn Foo> {
-///         Ok(unsafe { &*(1 as *const Foo) }) // usually you would allocate this in an arena
+///         static FOO: Foo = Foo;
+///         Ok(&FOO) // usually you would allocate this in an arena
 ///     }
 /// }
 ///
 /// impl<'tn> NodeMaker<BarId, &'tn Bar> for Table {
 ///     fn make(&self, id: BarId) -> score::Result<&'tn Bar> {
-///         Ok(unsafe { &*(1 as *const Bar) }) // usually you would allocate this in an arena
+///         static BAR: Bar = Bar;
+///         Ok(&BAR) // usually you would allocate this in an arena
 ///     }
 /// }
 ///
