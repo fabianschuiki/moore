@@ -7,8 +7,13 @@ if [ $# -ge 1 ]; then
     shift
 else
     echo "usage: $0 SV_TESTS_LOG_DIR" >&2
-    exit1
+    exit 1
 fi
 
-# Summarize and count the distinct error messages
-find $LOG_DIR -name "*.log" | xargs grep --no-filename -E "^(error|fatal):" | sort | uniq -c | sort -rn | less
+if [ $# -ge 0 ]; then
+    # Search trough the logs
+    rg "$(echo $@)" $LOG_DIR -A 4 -p | less -r
+else
+    # Summarize and count the distinct error messages
+    find $LOG_DIR -name "*.log" | xargs grep --no-filename -E "^(error|fatal):" | sort | uniq -c | sort -rn | less
+fi
