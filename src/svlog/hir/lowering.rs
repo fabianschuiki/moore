@@ -1827,6 +1827,12 @@ fn lower_expr<'gcx>(
                 Op::Pow => hir::BinaryOp::Pow,
                 Op::LogicEq => hir::BinaryOp::Eq,
                 Op::LogicNeq => hir::BinaryOp::Neq,
+                // TODO: Make these separate operators.
+                Op::CaseEq => hir::BinaryOp::Eq,
+                Op::CaseNeq => hir::BinaryOp::Neq,
+                // TODO: Make these separate operators.
+                Op::WildcardEq => hir::BinaryOp::Eq,
+                Op::WildcardNeq => hir::BinaryOp::Neq,
                 Op::Lt => hir::BinaryOp::Lt,
                 Op::Leq => hir::BinaryOp::Leq,
                 Op::Gt => hir::BinaryOp::Gt,
@@ -1849,6 +1855,7 @@ fn lower_expr<'gcx>(
                         DiagBuilder2::error(format!("`{}` is not a valid binary operator", op,))
                             .span(expr.span()),
                     );
+                    error!("Offending operator is {:?}", op);
                     return Err(());
                 }
             },

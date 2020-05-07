@@ -78,8 +78,24 @@ module foo;
     bar #(a == b) i0();
     // CHECK: %0 = const i1 1
     // CHECK: %0 = const i1 0
+    bar #(a === a) i0();
+    bar #(a === b) i0();
+    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i1 0
+    bar #(a ==? a) i0();
+    bar #(a ==? b) i0();
+    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i1 0
     bar #(a != a) i0();
     bar #(a != b) i0();
+    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i1 1
+    bar #(a !== a) i0();
+    bar #(a !== b) i0();
+    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i1 1
+    bar #(a !=? a) i0();
+    bar #(a !=? b) i0();
     // CHECK: %0 = const i1 0
     // CHECK: %0 = const i1 1
     bar #(a < a) i0();
@@ -154,6 +170,7 @@ module foo;
     // CHECK: %0 = const i32 42
 
     // Cast Operators
+
     bar #(unsigned'(a)) i0();
     bar #(signed'(a)) i0();
     bar #($unsigned(a)) i0();
