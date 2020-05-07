@@ -2,7 +2,9 @@
 set -e
 
 # Locate the release binary.
+CRATE_DIR=$(cargo metadata --format-version 1 | sed -n 's/.*"workspace_root":"\([^"]*\)".*/\1/p')
 TARGET_DIR=$(cargo metadata --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+GIT_REV=$(git rev-parse --short HEAD)
 MOORE=$(readlink -f "$TARGET_DIR/release/moore")
 if ! [ -e $MOORE ]; then
     cargo build --release
@@ -36,14 +38,13 @@ echo "sv-tests: " $SV_TESTS_DIR
 # Run the tests.
 cd "$SV_TESTS_DIR"
 export PATH="$(dirname $MOORE):$PATH"
-SV_TESTS_BIN="make RUNNERS=moore_parse"
+SV_TESTS_BIN="make RUNNERS+=moore_parse RUNNERS+=moore"
 
 $SV_TESTS_BIN versions -B
 if [ $# -ge 1 ]; then
     for t in $@; do
         echo $t
-        log=./out//logs/moore_parse/$t.log
-        $SV_TESTS_BIN $log -B
+        $SV_TESTS_BIN ./out//logs/moore_parse/$t.log ./out//logs/moore/$t.log -B
     done
 else
     $SV_TESTS_BIN clean
@@ -51,3 +52,6 @@ else
     $SV_TESTS_BIN tests -j$(nproc)
 fi
 $SV_TESTS_BIN report
+
+LOG_FILE="`date +%Y-%m-%d-%H%M`-$GIT_REV.csv"
+cp out/report/report.csv $CRATE_DIR/test/history/symbiflow/$LOG_FILE
