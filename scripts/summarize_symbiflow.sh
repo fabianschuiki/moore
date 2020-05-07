@@ -10,7 +10,7 @@ else
     exit 1
 fi
 
-if [ $# -ge 0 ]; then
+if [ $# -gt 0 ]; then
     # Search trough the logs
     rg "$(echo $@)" $LOG_DIR -A 4 -p | less -r
 else
