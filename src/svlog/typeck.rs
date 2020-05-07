@@ -60,6 +60,8 @@ pub(crate) fn type_of<'gcx>(
                 cx.map_to_type(d.ty, env)
             } else if let Some(init) = d.init {
                 cx.type_of(init, env)
+            } else if let hir::VarKind::Net { .. } = d.kind {
+                Ok(&ty::LOGIC_TYPE)
             } else {
                 cx.emit(
                     DiagBuilder2::error(format!(
