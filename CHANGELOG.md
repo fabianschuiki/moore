@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add parsing support for `default disable` statements (#140)
 - Add codegen support for case/wildcard equality operators (#147)
 - Add parsing support for `implements` in classs declarations
+- Add `moore-derive` crate
 
 ### Fixed
 - Fix sign casts (#138)

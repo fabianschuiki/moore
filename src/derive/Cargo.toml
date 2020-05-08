@@ -1,0 +1,15 @@
+[package]
+name = "moore-derive"
+version = "0.8.0-dev"
+authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
+edition = "2018"
+
+description = "Procedural macros for moore compiler framework."
+repository = "https://github.com/fabianschuiki/moore"
+license = "Apache-2.0 OR MIT"
+
+[lib]
+proc-macro = true
+path = "lib.rs"
+
+[dependencies]

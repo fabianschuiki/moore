@@ -403,6 +403,7 @@ dependencies = [
  "llhd 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.8.0-dev",
+ "moore-derive 0.8.0-dev",
  "moore-svlog 0.8.0-dev",
  "moore-vhdl 0.8.0-dev",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -425,6 +426,10 @@ dependencies = [
  "slog 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "typed-arena 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "moore-derive"
+version = "0.8.0-dev"
 
 [[package]]
 name = "moore-svlog"
