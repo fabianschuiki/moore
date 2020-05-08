@@ -54,65 +54,7 @@ pub use self::TypeData::*;
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Root {
     pub timeunits: Timeunit,
-    pub items: Vec<Item>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
-pub enum Item {
-    Module(ModDecl),
-    Interface(IntfDecl),
-    Package(PackageDecl),
-    Class(ClassDecl),
-    Item(HierarchyItem),
-    // Program(ProgramDecl),
-    // Bind(BindDirective),
-    // Config(ConfigDecl),
-}
-
-impl HasSpan for Item {
-    fn span(&self) -> Span {
-        match *self {
-            Item::Module(ref decl) => decl.span(),
-            Item::Interface(ref decl) => decl.span,
-            Item::Package(ref decl) => decl.span,
-            Item::Class(ref decl) => decl.span,
-            Item::Item(ref item) => item.span(),
-        }
-    }
-
-    fn human_span(&self) -> Span {
-        match *self {
-            Item::Module(ref decl) => decl.human_span(),
-            Item::Item(ref item) => item.human_span(),
-            _ => self.span(),
-        }
-    }
-}
-
-impl HasDesc for Item {
-    fn desc(&self) -> &'static str {
-        match *self {
-            Item::Module(ref decl) => decl.desc(),
-            Item::Interface(ref decl) => "interface declaration",
-            Item::Package(ref decl) => "package declaration",
-            Item::Class(ref decl) => "class declaration",
-            Item::Item(ref item) => item.desc(),
-        }
-    }
-
-    fn desc_full(&self) -> String {
-        match *self {
-            Item::Module(ref decl) => decl.desc_full(),
-            Item::Item(ref item) => item.desc_full(),
-            _ => self.desc().into(),
-        }
-    }
-}
-
-impl Item {
-    pub fn as_str(&self) -> &'static str {
-        self.desc()
-    }
+    pub items: Vec<HierarchyItem>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -213,10 +155,14 @@ pub struct Timeunit {
 #[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
 pub enum HierarchyItem {
     Dummy,
+    ModuleDecl(ModDecl),
+    InterfaceDecl(IntfDecl),
+    PackageDecl(PackageDecl),
+    ClassDecl(ClassDecl),
+    ProgramDecl(()),
     ImportDecl(ImportDecl),
     ParamDecl(ParamDecl),
     ModportDecl(ModportDecl),
-    ClassDecl(ClassDecl),
     Typedef(Typedef),
     PortDecl(PortDecl),
     Procedure(Procedure),
@@ -236,8 +182,12 @@ pub enum HierarchyItem {
 impl HasSpan for HierarchyItem {
     fn span(&self) -> Span {
         match *self {
+            HierarchyItem::ModuleDecl(ref decl) => decl.span(),
+            HierarchyItem::InterfaceDecl(ref decl) => decl.span,
+            HierarchyItem::PackageDecl(ref decl) => decl.span,
             HierarchyItem::ImportDecl(ref decl) => decl.span,
             HierarchyItem::ParamDecl(ref decl) => decl.span,
+            HierarchyItem::ProgramDecl(ref decl) => INVALID_SPAN,
             HierarchyItem::ModportDecl(ref decl) => decl.span,
             HierarchyItem::ClassDecl(ref decl) => decl.span,
             HierarchyItem::PortDecl(ref decl) => decl.span,
@@ -247,7 +197,14 @@ impl HasSpan for HierarchyItem {
             HierarchyItem::NetDecl(ref decl) => decl.span,
             HierarchyItem::VarDecl(ref decl) => decl.span,
             HierarchyItem::Inst(ref inst) => inst.span,
-            _ => unimplemented!(), // TODO remove this and have the compiler complain
+            _ => INVALID_SPAN,
+        }
+    }
+
+    fn human_span(&self) -> Span {
+        match *self {
+            HierarchyItem::ModuleDecl(ref decl) => decl.human_span(),
+            _ => self.span(),
         }
     }
 }
@@ -255,8 +212,12 @@ impl HasSpan for HierarchyItem {
 impl HasDesc for HierarchyItem {
     fn desc(&self) -> &'static str {
         match *self {
+            HierarchyItem::ModuleDecl(ref decl) => decl.desc(),
+            HierarchyItem::InterfaceDecl(ref decl) => "interface declaration",
+            HierarchyItem::PackageDecl(ref decl) => "package declaration",
             HierarchyItem::ImportDecl(ref decl) => "import declaration",
             HierarchyItem::ParamDecl(ref decl) => "parameter declaration",
+            HierarchyItem::ProgramDecl(ref decl) => "program declaration",
             HierarchyItem::ModportDecl(ref decl) => "modport declaration",
             HierarchyItem::ClassDecl(ref decl) => "class declaration",
             HierarchyItem::PortDecl(ref decl) => "port declaration",
@@ -266,7 +227,14 @@ impl HasDesc for HierarchyItem {
             HierarchyItem::NetDecl(ref decl) => "net declaration",
             HierarchyItem::VarDecl(ref decl) => "variable declaration",
             HierarchyItem::Inst(ref inst) => "instantiation",
-            _ => unimplemented!(), // TODO remove this and have the compiler complain
+            _ => "<invalid item>",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match *self {
+            HierarchyItem::ModuleDecl(ref decl) => decl.desc_full(),
+            _ => self.desc().into(),
         }
     }
 }

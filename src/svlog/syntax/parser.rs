@@ -587,7 +587,7 @@ fn parse_source_text(p: &mut Parser) -> Root {
 
     // Parse the descriptions in the source text.
     while !p.is_fatal() && p.peek(0).0 != Eof {
-        match parse_item(p) {
+        match parse_hierarchy_item(p) {
             Ok(item) => root.items.push(item),
             Err(()) => (), // parse_item handles recovery, so no need to do anything here
         }
@@ -636,44 +636,6 @@ fn parse_time_literal(p: &mut dyn AbstractParser) -> ReportedResult<Spanned<Lit>
     }
 }
 
-fn parse_item(p: &mut Parser) -> ReportedResult<ast::Item> {
-    let (tkn, sp) = p.peek(0);
-    match tkn {
-        Keyword(Kw::Module) => parse_module_decl(p).map(|d| ast::Item::Module(d)),
-        Keyword(Kw::Interface) => parse_interface_decl(p).map(|d| ast::Item::Interface(d)),
-        Keyword(Kw::Package) => parse_package_decl(p).map(|d| ast::Item::Package(d)),
-        // Keyword(Kw::Program) => parse_program_decl(p).map(|d| ast::Item::Program(d)),
-        Keyword(Kw::Class) => parse_class_decl(p).map(|d| ast::Item::Class(d)),
-        Keyword(Kw::Import) => {
-            parse_import_decl(p).map(|i| ast::Item::Item(HierarchyItem::ImportDecl(i)))
-        }
-        Keyword(Kw::Typedef) => {
-            parse_typedef(p).map(|d| ast::Item::Item(HierarchyItem::Typedef(d)))
-        }
-        // TODO: Actually according to the standard, any package_item can appear
-        // at this level of the source text. No clue how wires or variables
-        // would behave if they are declared at such a high level,. Maybe we
-        // should just accept these items here, and complain about what we do
-        // not support during lowering to HIR.
-        _ => parse_hierarchy_item(p).map(ast::Item::Item),
-        // tkn => {
-        //     p.add_diag(DiagBuilder2::error(format!("expected module, interface, package, program, class, import, or typedef, instead got `{}`", tkn)).span(sp));
-        //     p.recover_balanced(
-        //         &[
-        //             Keyword(Kw::Module),
-        //             Keyword(Kw::Interface),
-        //             Keyword(Kw::Package),
-        //             Keyword(Kw::Program),
-        //             Keyword(Kw::Class),
-        //             Keyword(Kw::Typedef),
-        //         ],
-        //         false,
-        //     );
-        //     Err(())
-        // }
-    }
-}
-
 /// Convert a token to the corresponding lifetime. Yields `None` if the token
 /// does not correspond to a lifetime.
 fn as_lifetime(tkn: Token) -> Option<Lifetime> {
@@ -684,7 +646,7 @@ fn as_lifetime(tkn: Token) -> Option<Lifetime> {
     }
 }
 
-fn parse_interface_decl(p: &mut Parser) -> ReportedResult<IntfDecl> {
+fn parse_interface_decl(p: &mut dyn AbstractParser) -> ReportedResult<IntfDecl> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Interface))?;
     let result = recovered(p, Keyword(Kw::Endinterface), |p| {
@@ -878,7 +840,7 @@ fn parse_constant_expr(p: &mut dyn AbstractParser) -> ReportedResult<()> {
 
 /// Parse a module declaration, assuming that the leading `module` keyword has
 /// already been consumed.
-fn parse_module_decl(p: &mut Parser) -> ReportedResult<ModDecl> {
+fn parse_module_decl(p: &mut dyn AbstractParser) -> ReportedResult<ModDecl> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Module))?;
     let result = recovered(p, Keyword(Kw::Endmodule), |p| {
@@ -1026,8 +988,15 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
     // First attempt the simple cases where a keyword reliably identifies the
     // following item.
     match p.peek(0).0 {
-        // Keyword(Kw::Localparam) => return parse_localparam_decl(p).map(|x| HierarchyItem::LocalparamDecl(x)),
-        // Keyword(Kw::Parameter)  => return parse_parameter_decl(p).map(|x| HierarchyItem::ParameterDecl(x)),
+        Keyword(Kw::Module) => return parse_module_decl(p).map(HierarchyItem::ModuleDecl),
+        Keyword(Kw::Interface) | Keyword(Kw::Virtual) if p.peek(1).0 == Keyword(Kw::Class) => {
+            return parse_class_decl(p).map(HierarchyItem::ClassDecl)
+        }
+        Keyword(Kw::Class) => return parse_class_decl(p).map(HierarchyItem::ClassDecl),
+        Keyword(Kw::Interface) => return parse_interface_decl(p).map(HierarchyItem::InterfaceDecl),
+        Keyword(Kw::Package) => return parse_package_decl(p).map(HierarchyItem::PackageDecl),
+        Keyword(Kw::Program) => return parse_program_decl(p).map(HierarchyItem::ProgramDecl),
+
         Keyword(Kw::Localparam) | Keyword(Kw::Parameter) => {
             let decl = parse_param_decl(p, false)?;
             p.require_reported(Semicolon)?;
@@ -1036,7 +1005,6 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
         Keyword(Kw::Modport) => {
             return parse_modport_decl(p).map(|x| HierarchyItem::ModportDecl(x))
         }
-        Keyword(Kw::Class) => return parse_class_decl(p).map(|x| HierarchyItem::ClassDecl(x)),
         Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| HierarchyItem::Typedef(x)),
         Keyword(Kw::Import) => return parse_import_decl(p).map(|x| HierarchyItem::ImportDecl(x)),
 
@@ -1108,9 +1076,6 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
             return Ok(HierarchyItem::Dummy);
         }
 
-        // Elaboration system tasks.
-        SysIdent(..) => return parse_elab_system_task(p).map(|_| HierarchyItem::Dummy),
-
         // Default clocking and disable declarations.
         Keyword(Kw::Default) => {
             p.bump();
@@ -1134,6 +1099,9 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
             p.recover_balanced(&[Semicolon], true);
             return Err(());
         }
+
+        // Unsupported constructs as of now.
+        SysIdent(..) => return parse_elab_system_task(p).map(|_| HierarchyItem::Dummy),
 
         _ => (),
     }

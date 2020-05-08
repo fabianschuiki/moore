@@ -1433,6 +1433,33 @@ fn lower_module_block<'gcx>(
     for item in items {
         match *item {
             ast::HierarchyItem::Dummy => (),
+            ast::HierarchyItem::ModuleDecl(ref decl) => {
+                let id = cx.map_ast_with_parent(AstNode::Module(decl), next_rib);
+                next_rib = id;
+                procs.push(id);
+            }
+            ast::HierarchyItem::PackageDecl(ref decl) => {
+                let id = cx.map_ast_with_parent(AstNode::Package(decl), next_rib);
+                next_rib = id;
+                procs.push(id);
+            }
+            ast::HierarchyItem::InterfaceDecl(ref decl) => {
+                // let id = cx.map_ast_with_parent(AstNode::Interface(decl), next_rib);
+                // next_rib = id;
+                // procs.push(id);
+                cx.emit(
+                    DiagBuilder2::warning("unsupported: interface declaration; ignored")
+                        .span(decl.span),
+                );
+            }
+            ast::HierarchyItem::ProgramDecl(ref _decl) => {
+                // let id = cx.map_ast_with_parent(AstNode::Program(decl), next_rib);
+                // next_rib = id;
+                // procs.push(id);
+                cx.emit(DiagBuilder2::warning(
+                    "unsupported: program declaration; ignored",
+                ));
+            }
             ast::HierarchyItem::Inst(ref inst) => {
                 let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
                 next_rib = target_id;
