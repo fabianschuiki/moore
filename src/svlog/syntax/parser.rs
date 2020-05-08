@@ -1992,11 +1992,19 @@ fn parse_expr_prec(p: &mut dyn AbstractParser, precedence: Precedence) -> Report
                     data: ConstructorCallExpr(args),
                 });
             } else {
-                let expr = parse_expr(p)?;
+                // Parse the optional expression.
+                let mut bp = BranchParser::new(p);
+                let expr = match parse_expr(&mut bp) {
+                    Ok(x) => {
+                        bp.commit();
+                        Some(Box::new(x))
+                    }
+                    Err(_) => None,
+                };
                 span.expand(p.last_span());
                 return Ok(Expr {
                     span: span,
-                    data: ClassNewExpr(Some(Box::new(expr))),
+                    data: ClassNewExpr(expr),
                 });
             }
         }
@@ -4437,8 +4445,9 @@ fn parse_generate_block(p: &mut dyn AbstractParser) -> ReportedResult<GenerateBl
 fn parse_class_decl(p: &mut dyn AbstractParser) -> ReportedResult<ClassDecl> {
     let mut span = p.peek(0).1;
     let result = recovered(p, Keyword(Kw::Endclass), |p| {
-        // Eat the optional "virtual" keyword.
+        // Eat the optional "virtual" or "interface" keyword.
         let virt = p.try_eat(Keyword(Kw::Virtual));
+        let intf = p.try_eat(Keyword(Kw::Interface));
 
         // Eat the "class" keyword.
         p.require_reported(Keyword(Kw::Class))?;
@@ -4470,15 +4479,25 @@ fn parse_class_decl(p: &mut dyn AbstractParser) -> ReportedResult<ClassDecl> {
         } else {
             None
         };
+
+        // Parse the optional implementation clause.
+        let impls = if p.try_eat(Keyword(Kw::Implements)) {
+            comma_list_nonempty(p, Semicolon, "interface class", |p| {
+                parse_identifier(p, "class name")
+            })?
+        } else {
+            vec![]
+        };
+
         p.require_reported(Semicolon)?;
 
         // Parse the class items.
-        let items = repeat_until(p, Keyword(Kw::Endclass), parse_class_item)?;
-        Ok((virt, lifetime, name, params, extends, items))
+        let items = repeat_until(p, Keyword(Kw::Endclass), |p| parse_class_item(p, intf))?;
+        Ok((virt, lifetime, name, params, extends, impls, items))
     });
     p.require_reported(Keyword(Kw::Endclass))?;
 
-    let (virt, lifetime, name, params, extends, items) = result?;
+    let (virt, lifetime, name, params, extends, impls, items) = result?;
 
     // Parse the optional class name after "endclass".
     if p.try_eat(Colon) {
@@ -4497,24 +4516,25 @@ fn parse_class_decl(p: &mut dyn AbstractParser) -> ReportedResult<ClassDecl> {
 
     span.expand(p.last_span());
     Ok(ClassDecl {
-        span: span,
-        virt: virt,
-        lifetime: lifetime,
-        name: name,
-        params: params,
-        extends: extends,
-        items: items,
+        span,
+        virt,
+        lifetime,
+        name,
+        params,
+        extends,
+        impls,
+        items,
     })
 }
 
-fn parse_class_item(p: &mut dyn AbstractParser) -> ReportedResult<ClassItem> {
+fn parse_class_item(p: &mut dyn AbstractParser, intf: bool) -> ReportedResult<ClassItem> {
     let mut span = p.peek(0).1;
 
     // Easy path for null class items.
     if p.try_eat(Semicolon) {
         return Ok(ClassItem {
-            span: span,
-            qualifiers: Vec::new(),
+            span,
+            qualifiers: vec![],
             data: ClassItemData::Null,
         });
     }
@@ -4522,32 +4542,38 @@ fn parse_class_item(p: &mut dyn AbstractParser) -> ReportedResult<ClassItem> {
     // Parse localparam and parameter declarations.
     // TODO: Replace these by calls to parse_param_decl.
     match p.peek(0).0 {
-        Keyword(Kw::Localparam) => {
+        Keyword(Kw::Localparam) | Keyword(Kw::Parameter) => {
+            let decl = parse_param_decl(p, false)?;
+            span.expand(p.last_span());
+            p.require_reported(Semicolon)?;
             return Ok(ClassItem {
-                span: span,
-                qualifiers: Vec::new(),
-                data: ClassItemData::LocalparamDecl(parse_localparam_decl(p)?),
+                span,
+                qualifiers: vec![],
+                data: ClassItemData::ParamDecl(decl),
             });
         }
-        Keyword(Kw::Parameter) => {
+        // Parse "extern" task and function prototypes.
+        Keyword(Kw::Extern) => {
+            p.bump();
+            let proto = parse_subroutine_prototype(p)?;
+            span.expand(p.last_span());
             return Ok(ClassItem {
-                span: span,
-                qualifiers: Vec::new(),
-                data: ClassItemData::ParameterDecl(parse_parameter_decl(p)?),
+                span,
+                qualifiers: vec![],
+                data: ClassItemData::ExternSubroutine(proto),
+            });
+        }
+        // Parse type defs.
+        Keyword(Kw::Typedef) => {
+            let def = parse_typedef(p)?;
+            span.expand(p.last_span());
+            return Ok(ClassItem {
+                span,
+                qualifiers: vec![],
+                data: ClassItemData::Typedef(def),
             });
         }
         _ => (),
-    }
-
-    // Parse "extern" task and function prototypes.
-    if p.try_eat(Keyword(Kw::Extern)) {
-        let proto = parse_subroutine_prototype(p)?;
-        span.expand(p.last_span());
-        return Ok(ClassItem {
-            span: span,
-            qualifiers: Vec::new(),
-            data: ClassItemData::ExternSubroutine(proto),
-        });
     }
 
     // Parse the optional class item qualifiers.
@@ -4566,11 +4592,17 @@ fn parse_class_item(p: &mut dyn AbstractParser) -> ReportedResult<ClassItem> {
             p.require_reported(Semicolon)?;
             Ok(ClassItemData::Property)
         });
-        pp.add("class function or task", |p| {
-            parse_subroutine_decl(p).map(|d| ClassItemData::SubroutineDecl(d))
-        });
+        if intf {
+            pp.add("class function or task prototype", |p| {
+                parse_subroutine_prototype(p).map(ClassItemData::ExternSubroutine)
+            });
+        } else {
+            pp.add("class function or task", |p| {
+                parse_subroutine_decl(p).map(ClassItemData::SubroutineDecl)
+            });
+        }
         pp.add("class constraint", |p| {
-            parse_constraint(p).map(|c| ClassItemData::Constraint(c))
+            parse_constraint(p).map(ClassItemData::Constraint)
         });
         pp.finish(p, "class item")?
     };

@@ -1030,6 +1030,7 @@ pub struct ClassDecl {
     pub name: Identifier,
     pub params: Vec<ParamDecl>,
     pub extends: Option<(Type, Vec<CallArg>)>,
+    pub impls: Vec<Identifier>,
     pub items: Vec<ClassItem>,
 }
 
@@ -1055,13 +1056,13 @@ pub enum ClassItemQualifier {
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ClassItemData {
     Property,
+    Typedef(Typedef),
     SubroutineDecl(SubroutineDecl),
     ExternSubroutine(SubroutinePrototype),
     Constraint(Constraint),
     ClassDecl,
     CovergroupDecl,
-    LocalparamDecl(()),
-    ParameterDecl(()),
+    ParamDecl(ParamDecl),
     Null,
 }
 
