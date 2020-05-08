@@ -54,7 +54,7 @@ pub use self::TypeData::*;
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Root {
     pub timeunits: Timeunit,
-    pub items: Vec<HierarchyItem>,
+    pub items: Vec<Item>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -67,7 +67,7 @@ pub struct ModDecl {
     pub imports: Vec<ImportDecl>,
     pub params: Vec<ParamDecl>,
     pub ports: Vec<Port>,
-    pub items: Vec<HierarchyItem>,
+    pub items: Vec<Item>,
 }
 
 impl HasSpan for ModDecl {
@@ -99,7 +99,7 @@ pub struct IntfDecl {
     pub name_span: Span,
     pub params: Vec<ParamDecl>,
     pub ports: Vec<Port>,
-    pub items: Vec<HierarchyItem>,
+    pub items: Vec<Item>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
@@ -110,7 +110,7 @@ pub struct PackageDecl {
     pub name: Name,
     pub name_span: Span,
     pub timeunits: Timeunit,
-    pub items: Vec<HierarchyItem>,
+    pub items: Vec<Item>,
 }
 
 impl HasSpan for PackageDecl {
@@ -153,7 +153,7 @@ pub struct Timeunit {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
-pub enum HierarchyItem {
+pub enum Item {
     Dummy,
     ModuleDecl(ModDecl),
     InterfaceDecl(IntfDecl),
@@ -169,7 +169,7 @@ pub enum HierarchyItem {
     SubroutineDecl(SubroutineDecl),
     ContAssign(ContAssign),
     GenvarDecl(Vec<GenvarDecl>),
-    GenerateRegion(Span, Vec<HierarchyItem>),
+    GenerateRegion(Span, Vec<Item>),
     GenerateFor(GenerateFor),
     GenerateIf(GenerateIf),
     GenerateCase(GenerateCase),
@@ -179,61 +179,61 @@ pub enum HierarchyItem {
     Inst(Inst),
 }
 
-impl HasSpan for HierarchyItem {
+impl HasSpan for Item {
     fn span(&self) -> Span {
         match *self {
-            HierarchyItem::ModuleDecl(ref decl) => decl.span(),
-            HierarchyItem::InterfaceDecl(ref decl) => decl.span,
-            HierarchyItem::PackageDecl(ref decl) => decl.span,
-            HierarchyItem::ImportDecl(ref decl) => decl.span,
-            HierarchyItem::ParamDecl(ref decl) => decl.span,
-            HierarchyItem::ProgramDecl(ref decl) => INVALID_SPAN,
-            HierarchyItem::ModportDecl(ref decl) => decl.span,
-            HierarchyItem::ClassDecl(ref decl) => decl.span,
-            HierarchyItem::PortDecl(ref decl) => decl.span,
-            HierarchyItem::Procedure(ref prc) => prc.span,
-            HierarchyItem::SubroutineDecl(ref decl) => decl.span,
-            HierarchyItem::Assertion(ref assertion) => assertion.span,
-            HierarchyItem::NetDecl(ref decl) => decl.span,
-            HierarchyItem::VarDecl(ref decl) => decl.span,
-            HierarchyItem::Inst(ref inst) => inst.span,
+            Item::ModuleDecl(ref decl) => decl.span(),
+            Item::InterfaceDecl(ref decl) => decl.span,
+            Item::PackageDecl(ref decl) => decl.span,
+            Item::ImportDecl(ref decl) => decl.span,
+            Item::ParamDecl(ref decl) => decl.span,
+            Item::ProgramDecl(ref decl) => INVALID_SPAN,
+            Item::ModportDecl(ref decl) => decl.span,
+            Item::ClassDecl(ref decl) => decl.span,
+            Item::PortDecl(ref decl) => decl.span,
+            Item::Procedure(ref prc) => prc.span,
+            Item::SubroutineDecl(ref decl) => decl.span,
+            Item::Assertion(ref assertion) => assertion.span,
+            Item::NetDecl(ref decl) => decl.span,
+            Item::VarDecl(ref decl) => decl.span,
+            Item::Inst(ref inst) => inst.span,
             _ => INVALID_SPAN,
         }
     }
 
     fn human_span(&self) -> Span {
         match *self {
-            HierarchyItem::ModuleDecl(ref decl) => decl.human_span(),
+            Item::ModuleDecl(ref decl) => decl.human_span(),
             _ => self.span(),
         }
     }
 }
 
-impl HasDesc for HierarchyItem {
+impl HasDesc for Item {
     fn desc(&self) -> &'static str {
         match *self {
-            HierarchyItem::ModuleDecl(ref decl) => decl.desc(),
-            HierarchyItem::InterfaceDecl(ref decl) => "interface declaration",
-            HierarchyItem::PackageDecl(ref decl) => "package declaration",
-            HierarchyItem::ImportDecl(ref decl) => "import declaration",
-            HierarchyItem::ParamDecl(ref decl) => "parameter declaration",
-            HierarchyItem::ProgramDecl(ref decl) => "program declaration",
-            HierarchyItem::ModportDecl(ref decl) => "modport declaration",
-            HierarchyItem::ClassDecl(ref decl) => "class declaration",
-            HierarchyItem::PortDecl(ref decl) => "port declaration",
-            HierarchyItem::Procedure(ref prc) => "procedure declaration",
-            HierarchyItem::SubroutineDecl(ref decl) => "subroutine declaration",
-            HierarchyItem::Assertion(ref assertion) => "assertion",
-            HierarchyItem::NetDecl(ref decl) => "net declaration",
-            HierarchyItem::VarDecl(ref decl) => "variable declaration",
-            HierarchyItem::Inst(ref inst) => "instantiation",
+            Item::ModuleDecl(ref decl) => decl.desc(),
+            Item::InterfaceDecl(ref decl) => "interface declaration",
+            Item::PackageDecl(ref decl) => "package declaration",
+            Item::ImportDecl(ref decl) => "import declaration",
+            Item::ParamDecl(ref decl) => "parameter declaration",
+            Item::ProgramDecl(ref decl) => "program declaration",
+            Item::ModportDecl(ref decl) => "modport declaration",
+            Item::ClassDecl(ref decl) => "class declaration",
+            Item::PortDecl(ref decl) => "port declaration",
+            Item::Procedure(ref prc) => "procedure declaration",
+            Item::SubroutineDecl(ref decl) => "subroutine declaration",
+            Item::Assertion(ref assertion) => "assertion",
+            Item::NetDecl(ref decl) => "net declaration",
+            Item::VarDecl(ref decl) => "variable declaration",
+            Item::Inst(ref inst) => "instantiation",
             _ => "<invalid item>",
         }
     }
 
     fn desc_full(&self) -> String {
         match *self {
-            HierarchyItem::ModuleDecl(ref decl) => decl.desc_full(),
+            Item::ModuleDecl(ref decl) => decl.desc_full(),
             _ => self.desc().into(),
         }
     }
@@ -1714,7 +1714,7 @@ impl HasDesc for GenerateCase {
 pub struct GenerateBlock {
     pub span: Span,
     pub label: Option<Name>,
-    pub items: Vec<HierarchyItem>,
+    pub items: Vec<Item>,
 }
 
 impl HasSpan for GenerateBlock {

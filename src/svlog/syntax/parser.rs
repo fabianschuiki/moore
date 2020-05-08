@@ -978,7 +978,7 @@ fn parse_program_decl(p: &mut dyn AbstractParser) -> ReportedResult<()> {
     result
 }
 
-fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyItem> {
+fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<Item> {
     // Consume optional leading label.
     if p.is_ident() && p.peek(1).0 == Colon {
         p.bump();
@@ -988,60 +988,55 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
     // First attempt the simple cases where a keyword reliably identifies the
     // following item.
     match p.peek(0).0 {
-        Keyword(Kw::Module) => return parse_module_decl(p).map(HierarchyItem::ModuleDecl),
+        Keyword(Kw::Module) => return parse_module_decl(p).map(Item::ModuleDecl),
         Keyword(Kw::Interface) | Keyword(Kw::Virtual) if p.peek(1).0 == Keyword(Kw::Class) => {
-            return parse_class_decl(p).map(HierarchyItem::ClassDecl)
+            return parse_class_decl(p).map(Item::ClassDecl)
         }
-        Keyword(Kw::Class) => return parse_class_decl(p).map(HierarchyItem::ClassDecl),
-        Keyword(Kw::Interface) => return parse_interface_decl(p).map(HierarchyItem::InterfaceDecl),
-        Keyword(Kw::Package) => return parse_package_decl(p).map(HierarchyItem::PackageDecl),
-        Keyword(Kw::Program) => return parse_program_decl(p).map(HierarchyItem::ProgramDecl),
+        Keyword(Kw::Class) => return parse_class_decl(p).map(Item::ClassDecl),
+        Keyword(Kw::Interface) => return parse_interface_decl(p).map(Item::InterfaceDecl),
+        Keyword(Kw::Package) => return parse_package_decl(p).map(Item::PackageDecl),
+        Keyword(Kw::Program) => return parse_program_decl(p).map(Item::ProgramDecl),
 
         Keyword(Kw::Localparam) | Keyword(Kw::Parameter) => {
             let decl = parse_param_decl(p, false)?;
             p.require_reported(Semicolon)?;
-            return Ok(HierarchyItem::ParamDecl(decl));
+            return Ok(Item::ParamDecl(decl));
         }
-        Keyword(Kw::Modport) => {
-            return parse_modport_decl(p).map(|x| HierarchyItem::ModportDecl(x))
-        }
-        Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| HierarchyItem::Typedef(x)),
-        Keyword(Kw::Import) => return parse_import_decl(p).map(|x| HierarchyItem::ImportDecl(x)),
+        Keyword(Kw::Modport) => return parse_modport_decl(p).map(|x| Item::ModportDecl(x)),
+        Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| Item::Typedef(x)),
+        Keyword(Kw::Import) => return parse_import_decl(p).map(|x| Item::ImportDecl(x)),
 
         // Structured procedures as per IEEE 1800-2009 section 9.2
         Keyword(Kw::Initial) => {
-            return parse_procedure(p, ProcedureKind::Initial).map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::Initial).map(|x| Item::Procedure(x));
         }
         Keyword(Kw::Always) => {
-            return parse_procedure(p, ProcedureKind::Always).map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::Always).map(|x| Item::Procedure(x));
         }
         Keyword(Kw::AlwaysComb) => {
-            return parse_procedure(p, ProcedureKind::AlwaysComb)
-                .map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysComb).map(|x| Item::Procedure(x));
         }
         Keyword(Kw::AlwaysLatch) => {
-            return parse_procedure(p, ProcedureKind::AlwaysLatch)
-                .map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysLatch).map(|x| Item::Procedure(x));
         }
         Keyword(Kw::AlwaysFf) => {
-            return parse_procedure(p, ProcedureKind::AlwaysFf)
-                .map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysFf).map(|x| Item::Procedure(x));
         }
         Keyword(Kw::Final) => {
-            return parse_procedure(p, ProcedureKind::Final).map(|x| HierarchyItem::Procedure(x));
+            return parse_procedure(p, ProcedureKind::Final).map(|x| Item::Procedure(x));
         }
         Keyword(Kw::Function) | Keyword(Kw::Task) => {
-            return parse_subroutine_decl(p).map(|x| HierarchyItem::SubroutineDecl(x));
+            return parse_subroutine_decl(p).map(|x| Item::SubroutineDecl(x));
         }
 
         // Port declarations
         Keyword(Kw::Inout) | Keyword(Kw::Input) | Keyword(Kw::Output) | Keyword(Kw::Ref) => {
-            return parse_port_decl(p).map(|x| HierarchyItem::PortDecl(x));
+            return parse_port_decl(p).map(|x| Item::PortDecl(x));
         }
 
         // Continuous assign
         Keyword(Kw::Assign) => {
-            return parse_continuous_assign(p).map(|x| HierarchyItem::ContAssign(x));
+            return parse_continuous_assign(p).map(|x| Item::ContAssign(x));
         }
 
         // Genvar declaration
@@ -1049,7 +1044,7 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
             p.bump();
             let decl = comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
             p.require_reported(Semicolon)?;
-            return Ok(HierarchyItem::GenvarDecl(decl));
+            return Ok(Item::GenvarDecl(decl));
         }
 
         // Generate region and constructs
@@ -1059,21 +1054,21 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
             let items = repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
             p.require_reported(Keyword(Kw::Endgenerate))?;
             span.expand(p.last_span());
-            return Ok(HierarchyItem::GenerateRegion(span, items));
+            return Ok(Item::GenerateRegion(span, items));
         }
-        Keyword(Kw::For) => return parse_generate_for(p).map(|x| HierarchyItem::GenerateFor(x)),
-        Keyword(Kw::If) => return parse_generate_if(p).map(|x| HierarchyItem::GenerateIf(x)),
-        Keyword(Kw::Case) => return parse_generate_case(p).map(|x| HierarchyItem::GenerateCase(x)),
+        Keyword(Kw::For) => return parse_generate_for(p).map(|x| Item::GenerateFor(x)),
+        Keyword(Kw::If) => return parse_generate_if(p).map(|x| Item::GenerateIf(x)),
+        Keyword(Kw::Case) => return parse_generate_case(p).map(|x| Item::GenerateCase(x)),
 
         // Assertions
         Keyword(Kw::Assert)
         | Keyword(Kw::Assume)
         | Keyword(Kw::Cover)
         | Keyword(Kw::Expect)
-        | Keyword(Kw::Restrict) => return parse_assertion(p).map(|x| HierarchyItem::Assertion(x)),
+        | Keyword(Kw::Restrict) => return parse_assertion(p).map(|x| Item::Assertion(x)),
         Semicolon => {
             p.bump();
-            return Ok(HierarchyItem::Dummy);
+            return Ok(Item::Dummy);
         }
 
         // Default clocking and disable declarations.
@@ -1084,14 +1079,14 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
                 let name = p.eat_ident("clocking identifier")?;
                 p.require_reported(Semicolon)?;
                 span.expand(p.last_span());
-                return Ok(HierarchyItem::Dummy);
+                return Ok(Item::Dummy);
             }
             if p.try_eat(Keyword(Kw::Disable)) {
                 p.require_reported(Keyword(Kw::Iff))?;
                 let expr = parse_expr(p)?;
                 p.require_reported(Semicolon)?;
                 span.expand(p.last_span());
-                return Ok(HierarchyItem::Dummy);
+                return Ok(Item::Dummy);
             }
             p.add_diag(
                 DiagBuilder2::error("expected `clocking` or `disable` after `default`").span(span),
@@ -1101,7 +1096,7 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
         }
 
         // Unsupported constructs as of now.
-        SysIdent(..) => return parse_elab_system_task(p).map(|_| HierarchyItem::Dummy),
+        SysIdent(..) => return parse_elab_system_task(p).map(|_| Item::Dummy),
 
         _ => (),
     }
@@ -1109,13 +1104,11 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyI
     // Handle the possibly ambiguous cases.
     let mut pp = ParallelParser::new();
     pp.add_greedy("net declaration", |p| {
-        parse_net_decl(p).map(|d| HierarchyItem::NetDecl(d))
+        parse_net_decl(p).map(|d| Item::NetDecl(d))
     });
-    pp.add("instantiation", |p| {
-        parse_inst(p).map(|i| HierarchyItem::Inst(i))
-    });
+    pp.add("instantiation", |p| parse_inst(p).map(|i| Item::Inst(i)));
     pp.add("variable declaration", |p| {
-        parse_var_decl(p).map(|d| HierarchyItem::VarDecl(d))
+        parse_var_decl(p).map(|d| Item::VarDecl(d))
     });
     let res = pp.finish(p, "hierarchy item");
     if res.is_err() {
@@ -4293,11 +4286,11 @@ fn parse_genvar_decl(p: &mut dyn AbstractParser) -> ReportedResult<GenvarDecl> {
     })
 }
 
-fn parse_generate_item(p: &mut dyn AbstractParser) -> ReportedResult<HierarchyItem> {
+fn parse_generate_item(p: &mut dyn AbstractParser) -> ReportedResult<Item> {
     match p.peek(0).0 {
-        Keyword(Kw::For) => parse_generate_for(p).map(|x| HierarchyItem::GenerateFor(x)),
-        Keyword(Kw::If) => parse_generate_if(p).map(|x| HierarchyItem::GenerateIf(x)),
-        Keyword(Kw::Case) => parse_generate_case(p).map(|x| HierarchyItem::GenerateCase(x)),
+        Keyword(Kw::For) => parse_generate_for(p).map(|x| Item::GenerateFor(x)),
+        Keyword(Kw::If) => parse_generate_if(p).map(|x| Item::GenerateIf(x)),
+        Keyword(Kw::Case) => parse_generate_case(p).map(|x| Item::GenerateCase(x)),
         _ => parse_hierarchy_item(p),
     }
 }

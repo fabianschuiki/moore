@@ -559,7 +559,7 @@ fn lower_module<'gcx>(
 fn lower_module_ports<'gcx>(
     cx: &impl Context<'gcx>,
     ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::HierarchyItem],
+    ast_items: &'gcx [ast::Item],
     module: NodeId,
     next_rib: &mut NodeId,
 ) -> PortList {
@@ -710,14 +710,14 @@ fn lower_module_ports<'gcx>(
 fn lower_module_ports_ansi<'gcx>(
     cx: &impl Context<'gcx>,
     ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::HierarchyItem],
+    ast_items: &'gcx [ast::Item],
     first_span: Span,
     module: NodeId,
 ) -> PartialPortList<'gcx> {
     // Emit errors for any port declarations inside the module.
     for item in ast_items {
         let ast = match item {
-            ast::HierarchyItem::PortDecl(pd) => pd,
+            ast::Item::PortDecl(pd) => pd,
             _ => continue,
         };
         cx.emit(
@@ -924,7 +924,7 @@ fn lower_module_ports_ansi<'gcx>(
 fn lower_module_ports_nonansi<'gcx>(
     cx: &impl Context<'gcx>,
     ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::HierarchyItem],
+    ast_items: &'gcx [ast::Item],
     first_span: Span,
     module: NodeId,
 ) -> PartialPortList<'gcx> {
@@ -934,7 +934,7 @@ fn lower_module_ports_nonansi<'gcx>(
     let mut decl_names = HashMap::new();
     for item in ast_items {
         let ast = match item {
-            ast::HierarchyItem::PortDecl(pd) => pd,
+            ast::Item::PortDecl(pd) => pd,
             _ => continue,
         };
         // trace!("Found {:#?}", ast);
@@ -975,7 +975,7 @@ fn lower_module_ports_nonansi<'gcx>(
     // module body which further specify a port.
     for item in ast_items {
         match item {
-            ast::HierarchyItem::VarDecl(vd) => {
+            ast::Item::VarDecl(vd) => {
                 for name in &vd.names {
                     let index = match decl_names.get(&name.name) {
                         Some(&e) => e,
@@ -995,7 +995,7 @@ fn lower_module_ports_nonansi<'gcx>(
                     }
                 }
             }
-            ast::HierarchyItem::NetDecl(nd) => {
+            ast::Item::NetDecl(nd) => {
                 for name in &nd.names {
                     let index = match decl_names.get(&name.name) {
                         Some(&e) => e,
@@ -1420,7 +1420,7 @@ struct PartialPortList<'a> {
 fn lower_module_block<'gcx>(
     cx: &impl Context<'gcx>,
     parent_rib: NodeId,
-    items: impl IntoIterator<Item = &'gcx ast::HierarchyItem>,
+    items: impl IntoIterator<Item = &'gcx ast::Item>,
     allow_ports: bool,
 ) -> Result<hir::ModuleBlock> {
     let mut next_rib = parent_rib;
@@ -1432,18 +1432,18 @@ fn lower_module_block<'gcx>(
     let mut assigns = Vec::new();
     for item in items {
         match *item {
-            ast::HierarchyItem::Dummy => (),
-            ast::HierarchyItem::ModuleDecl(ref decl) => {
+            ast::Item::Dummy => (),
+            ast::Item::ModuleDecl(ref decl) => {
                 let id = cx.map_ast_with_parent(AstNode::Module(decl), next_rib);
                 next_rib = id;
                 procs.push(id);
             }
-            ast::HierarchyItem::PackageDecl(ref decl) => {
+            ast::Item::PackageDecl(ref decl) => {
                 let id = cx.map_ast_with_parent(AstNode::Package(decl), next_rib);
                 next_rib = id;
                 procs.push(id);
             }
-            ast::HierarchyItem::InterfaceDecl(ref decl) => {
+            ast::Item::InterfaceDecl(ref decl) => {
                 // let id = cx.map_ast_with_parent(AstNode::Interface(decl), next_rib);
                 // next_rib = id;
                 // procs.push(id);
@@ -1452,7 +1452,7 @@ fn lower_module_block<'gcx>(
                         .span(decl.span),
                 );
             }
-            ast::HierarchyItem::ProgramDecl(ref _decl) => {
+            ast::Item::ProgramDecl(ref _decl) => {
                 // let id = cx.map_ast_with_parent(AstNode::Program(decl), next_rib);
                 // next_rib = id;
                 // procs.push(id);
@@ -1460,7 +1460,7 @@ fn lower_module_block<'gcx>(
                     "unsupported: program declaration; ignored",
                 ));
             }
-            ast::HierarchyItem::Inst(ref inst) => {
+            ast::Item::Inst(ref inst) => {
                 let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
                 next_rib = target_id;
                 trace!(
@@ -1475,40 +1475,40 @@ fn lower_module_block<'gcx>(
                     insts.push(inst_id);
                 }
             }
-            ast::HierarchyItem::VarDecl(ref decl) => {
+            ast::Item::VarDecl(ref decl) => {
                 next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
             }
-            ast::HierarchyItem::NetDecl(ref decl) => {
+            ast::Item::NetDecl(ref decl) => {
                 next_rib = alloc_net_decl(cx, decl, next_rib, &mut decls);
             }
-            ast::HierarchyItem::Procedure(ref prok) => {
+            ast::Item::Procedure(ref prok) => {
                 let id = cx.map_ast_with_parent(AstNode::Proc(prok), next_rib);
                 next_rib = id;
                 procs.push(id);
             }
-            ast::HierarchyItem::GenerateIf(ref gen) => {
+            ast::Item::GenerateIf(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenIf(gen), next_rib);
                 next_rib = id;
                 gens.push(id);
             }
-            ast::HierarchyItem::GenerateFor(ref gen) => {
+            ast::Item::GenerateFor(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenFor(gen), next_rib);
                 next_rib = id;
                 gens.push(id);
             }
-            ast::HierarchyItem::GenerateCase(ref gen) => {
+            ast::Item::GenerateCase(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenCase(gen), next_rib);
                 next_rib = id;
                 gens.push(id);
             }
-            ast::HierarchyItem::ParamDecl(ref param) => {
+            ast::Item::ParamDecl(ref param) => {
                 next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
             }
-            ast::HierarchyItem::Typedef(ref def) => {
+            ast::Item::Typedef(ref def) => {
                 let id = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
                 next_rib = id;
             }
-            ast::HierarchyItem::ContAssign(ref assign) => {
+            ast::Item::ContAssign(ref assign) => {
                 for &(ref lhs, ref rhs) in &assign.assignments {
                     let id =
                         cx.map_ast_with_parent(AstNode::ContAssign(assign, lhs, rhs), next_rib);
@@ -1516,13 +1516,13 @@ fn lower_module_block<'gcx>(
                     assigns.push(id);
                 }
             }
-            ast::HierarchyItem::ImportDecl(ref decl) => {
+            ast::Item::ImportDecl(ref decl) => {
                 for item in &decl.items {
                     let id = cx.map_ast_with_parent(AstNode::Import(item), next_rib);
                     next_rib = id;
                 }
             }
-            ast::HierarchyItem::PortDecl(ref decl) => {
+            ast::Item::PortDecl(ref decl) => {
                 if !allow_ports {
                     cx.emit(
                         DiagBuilder2::error("misplaced port declaration")
@@ -1533,30 +1533,30 @@ fn lower_module_block<'gcx>(
                     );
                 }
             }
-            ast::HierarchyItem::ModportDecl(ref decl) => {
+            ast::Item::ModportDecl(ref decl) => {
                 cx.emit(
                     DiagBuilder2::error("modport declaration in module")
                         .span(decl.span)
                         .add_note("Modport declarations can only appear in an interface"),
                 );
             }
-            ast::HierarchyItem::ClassDecl(ref decl) => {
+            ast::Item::ClassDecl(ref decl) => {
                 cx.emit(
                     DiagBuilder2::warning("unsupported: class declaration; ignored")
                         .span(decl.span),
                 );
             }
-            ast::HierarchyItem::SubroutineDecl(ref decl) => {
+            ast::Item::SubroutineDecl(ref decl) => {
                 let id = cx.map_ast_with_parent(AstNode::SubroutineDecl(decl), next_rib);
                 next_rib = id;
             }
-            ast::HierarchyItem::Assertion(ref assert) => {
+            ast::Item::Assertion(ref assert) => {
                 cx.emit(
                     DiagBuilder2::warning("unsupported: concurrent assertion; ignored")
                         .span(assert.span),
                 );
             }
-            ast::HierarchyItem::GenvarDecl(..) | ast::HierarchyItem::GenerateRegion(..) => (),
+            ast::Item::GenvarDecl(..) | ast::Item::GenerateRegion(..) => (),
         }
     }
     Ok(hir::ModuleBlock {
@@ -2362,17 +2362,17 @@ fn lower_package<'gcx>(
     let mut params = Vec::new();
     for item in &ast.items {
         match *item {
-            ast::HierarchyItem::VarDecl(ref decl) => {
+            ast::Item::VarDecl(ref decl) => {
                 next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
             }
-            ast::HierarchyItem::ParamDecl(ref param) => {
+            ast::Item::ParamDecl(ref param) => {
                 next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
             }
-            ast::HierarchyItem::Typedef(ref def) => {
+            ast::Item::Typedef(ref def) => {
                 next_rib = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
                 names.push((Spanned::new(def.name.name, def.name.span), next_rib));
             }
-            ast::HierarchyItem::SubroutineDecl(ref decl) => warn!(
+            ast::Item::SubroutineDecl(ref decl) => warn!(
                 "ignoring unsupported subroutine `{}`",
                 decl.prototype.name.name
             ),

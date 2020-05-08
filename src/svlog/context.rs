@@ -86,11 +86,11 @@ impl<'gcx> GlobalContext<'gcx> {
         for root in ast {
             for item in &root.items {
                 match *item {
-                    ast::HierarchyItem::ModuleDecl(ref m) => {
+                    ast::Item::ModuleDecl(ref m) => {
                         let id = self.map_ast(AstNode::Module(m));
                         self.modules.borrow_mut().insert(m.name, id);
                     }
-                    ast::HierarchyItem::PackageDecl(ref p) => {
+                    ast::Item::PackageDecl(ref p) => {
                         let id = self.map_ast(AstNode::Package(p));
                         self.packages.borrow_mut().insert(p.name, id);
                     }
