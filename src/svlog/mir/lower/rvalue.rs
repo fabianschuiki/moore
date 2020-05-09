@@ -116,6 +116,7 @@ fn try_lower_expr<'gcx>(
     // Determine the expression type and match on the various forms.
     let ty = builder.cx.type_of(expr_id, env)?;
     match hir.kind {
+        // Literals
         hir::ExprKind::IntConst {
             value: ref k,
             ref special_bits,
@@ -136,15 +137,31 @@ fn try_lower_expr<'gcx>(
             vec![cx.intern_value(value::make_int(&ty::BYTE_TYPE, num::zero()))],
         ))),
 
-        // hir::ExprKind::IntConst { .. }
-        // | hir::ExprKind::UnsizedConst(..)
-        // | hir::ExprKind::TimeConst(_)
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
-            let k = builder.cx.constant_value_of(expr_id, env)?;
-            Ok(builder.build(k.ty, RvalueKind::Const(k)))
+        // Built-in function calls
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
+            Ok(builder.constant(value::make_int(ty, num::zero())))
         }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
+            let arg_val = cx.constant_value_of(arg, env)?;
+            let arg_int = match arg_val.kind {
+                ValueKind::Int(ref arg, ..) => arg,
+                _ => unreachable!(),
+            };
+            let value = if arg_int <= &BigInt::one() {
+                BigInt::zero()
+            } else {
+                BigInt::from((arg_int - BigInt::one()).bits())
+            };
+            Ok(builder.constant(value::make_int(arg_val.ty, value)))
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
+            let ty = cx.type_of(arg, env)?;
+            Ok(builder.constant(value::make_int(
+                cx.mkty_int(32),
+                ty::bit_size_of_type(cx, ty, env)?.into(),
+            )))
+        }
+
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = builder.cx.resolve_node(expr_id, env)?;
             match builder.cx.hir_of(binding)? {

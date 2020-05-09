@@ -243,29 +243,6 @@ fn const_expr<'gcx>(
     let ty = cx.type_of(expr.id, env)?;
     #[allow(unreachable_patterns)]
     match expr.kind {
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
-            Ok(cx.intern_value(make_int(ty, num::zero())))
-        }
-        hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
-            let arg_val = cx.constant_value_of(arg, env)?;
-            let arg_int = match arg_val.kind {
-                ValueKind::Int(ref arg, ..) => arg,
-                _ => unreachable!(),
-            };
-            let value = if arg_int <= &BigInt::one() {
-                BigInt::zero()
-            } else {
-                BigInt::from((arg_int - BigInt::one()).bits())
-            };
-            Ok(cx.intern_value(make_int(arg_val.ty, value)))
-        }
-        hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
-            let ty = cx.type_of(arg, env)?;
-            Ok(cx.intern_value(make_int(
-                cx.mkty_int(32),
-                bit_size_of_type(cx, ty, env)?.into(),
-            )))
-        }
         _ => {
             let mir = cx.mir_rvalue(expr.id, env);
             Ok(const_mir(cx, mir))
