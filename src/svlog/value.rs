@@ -285,13 +285,6 @@ fn const_expr<'gcx>(
                 bit_size_of_type(cx, ty, env)?.into(),
             )))
         }
-        hir::ExprKind::Ternary(cond, true_expr, false_expr) => {
-            let cond_val = cx.constant_value_of(cond, env)?;
-            match cond_val.is_true() {
-                true => cx.constant_value_of(true_expr, env),
-                false => cx.constant_value_of(false_expr, env),
-            }
-        }
         hir::ExprKind::Field(target, _field_name) => {
             let (_, field_index, _) = cx.resolve_field_access(expr.id, env)?;
             let target_value = cx.constant_value_of(target, env)?;
@@ -481,6 +474,20 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
                     cx.emit(DiagBuilder2::note("constant value needed here").span(mir.span));
                     cx.intern_value(make_error(mir.ty))
                 }
+            }
+        }
+
+        mir::RvalueKind::Ternary {
+            cond,
+            true_value,
+            false_value,
+        } => {
+            let cond_val = const_mir(cx, cond);
+            let true_val = const_mir(cx, true_value);
+            let false_val = const_mir(cx, false_value);
+            match cond_val.is_true() {
+                true => true_val,
+                false => false_val,
             }
         }
 
