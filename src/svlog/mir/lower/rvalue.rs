@@ -90,6 +90,7 @@ fn try_lower_expr<'gcx>(
     // Check whether the node has a constant value. This will allow us to
     // quickly emit parameters and genvars.
     let is_const = builder.cx.is_constant(expr_id).unwrap_or(false);
+    let ty = builder.cx.type_of(expr_id, env)?;
 
     // Try to extract the expr HIR for this node. Handle a few special cases
     // where the node is not technically an expression, but can be used as a
@@ -97,24 +98,27 @@ fn try_lower_expr<'gcx>(
     let hir = match builder.cx.hir_of(expr_id)? {
         HirNode::Expr(x) => x,
         HirNode::VarDecl(decl) => {
-            return Ok(builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id)))
+            let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id));
+            return Ok(lower_implicit_cast(builder, v, ty));
         }
         HirNode::IntPort(port) => {
-            return Ok(builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id)))
+            let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id));
+            return Ok(lower_implicit_cast(builder, v, ty));
         }
         HirNode::EnumVariant(..) => {
             let k = builder.cx.constant_value_of(expr_id, env)?;
-            return Ok(builder.build(k.ty, RvalueKind::Const(k)));
+            let v = builder.build(k.ty, RvalueKind::Const(k));
+            return Ok(lower_implicit_cast(builder, v, ty));
         }
         _ if is_const => {
             let k = builder.cx.constant_value_of(expr_id, env)?;
-            return Ok(builder.build(k.ty, RvalueKind::Const(k)));
+            let v = builder.build(k.ty, RvalueKind::Const(k));
+            return Ok(lower_implicit_cast(builder, v, ty));
         }
         x => unreachable!("rvalue for {:#?}", x),
     };
 
     // Determine the expression type and match on the various forms.
-    let ty = builder.cx.type_of(expr_id, env)?;
     match hir.kind {
         // Literals
         hir::ExprKind::IntConst {

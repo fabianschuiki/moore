@@ -310,7 +310,12 @@ fn const_mir_rvalue_inner<'gcx>(
                     ))
                     .span(value.span),
             );
-            const_mir_rvalue(cx, value)
+            let v = const_mir_rvalue(cx, value);
+            // TODO: This is an incredibly ugly hack.
+            cx.intern_value(ValueData {
+                ty: mir.ty,
+                kind: v.kind.clone(),
+            })
         }
 
         mir::RvalueKind::CastToBool(value) => {

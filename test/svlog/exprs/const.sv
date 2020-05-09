@@ -20,44 +20,44 @@ module foo;
     // TODO: Fix these to i32 once #141 lands.
     bar #(!a) i0();
     bar #(!z) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(&z) i0();
     bar #(&w) i0();
     bar #(&x) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(~&z) i0();
     bar #(~&w) i0();
     bar #(~&x) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(|z) i0();
     bar #(|w) i0();
     bar #(|x) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 1
     bar #(~|z) i0();
     bar #(~|w) i0();
     bar #(~|x) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 0
     bar #(^a) i0();
     bar #(^b) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(~^a) i0();
     bar #(~^b) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(^~a) i0();
     bar #(^~b) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
 
     // Binary Operators
 
@@ -76,52 +76,52 @@ module foo;
     // TODO: Fix these to i32 once #141 lands.
     bar #(a == a) i0();
     bar #(a == b) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(a === a) i0();
     bar #(a === b) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(a ==? a) i0();
     bar #(a ==? b) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(a != a) i0();
     bar #(a != b) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(a !== a) i0();
     bar #(a !== b) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(a !=? a) i0();
     bar #(a !=? b) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(a < a) i0();
     bar #(a < b) i0();
     bar #(b < a) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(a <= a) i0();
     bar #(a <= b) i0();
     bar #(b <= a) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
     bar #(a > a) i0();
     bar #(a > b) i0();
     bar #(b > a) i0();
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(a >= a) i0();
     bar #(a >= b) i0();
     bar #(b >= a) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
     bar #(a << b) i0();
     // CHECK: %0 = const i32 21504
     bar #(a <<< b) i0();
@@ -152,15 +152,15 @@ module foo;
     bar #(a && b) i0();
     bar #(z && b) i0();
     bar #(z && z) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
+    // CHECK: %0 = const i32 0
     bar #(a || b) i0();
     bar #(z || b) i0();
     bar #(z || z) i0();
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 1
-    // CHECK: %0 = const i1 0
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 1
+    // CHECK: %0 = const i32 0
 
     // Ternary Operator
 
