@@ -262,23 +262,6 @@ fn const_expr<'gcx>(
             cx.mkty_packed_array(1, &ty::BYTE_TYPE),
             vec![cx.intern_value(make_int(&ty::BYTE_TYPE, num::zero()))],
         ))),
-        hir::ExprKind::Ident(_) | hir::ExprKind::Scope(..) => {
-            let binding = cx.resolve_node(expr.id, env)?;
-            match cx.constant_value_of(binding, env) {
-                Ok(k) => Ok(k),
-                Err(_) => {
-                    let hir = cx.hir_of(binding)?;
-                    cx.emit(
-                        DiagBuilder2::note(format!(
-                            "constant value of {} needed here",
-                            hir.desc_full()
-                        ))
-                        .span(cx.span(expr.id)),
-                    );
-                    Err(())
-                }
-            }
-        }
         hir::ExprKind::Binary(op, lhs, rhs) => {
             let lhs_val = cx.constant_value_of(lhs, env)?;
             let rhs_val = cx.constant_value_of(rhs, env)?;
@@ -451,6 +434,16 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
                 result |= const_mir(cx, value).get_int().expect("concat non-integer");
             }
             cx.intern_value(make_int(mir.ty, result))
+        }
+
+        mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
+            match cx.constant_value_of(id, mir.env) {
+                Ok(k) => k,
+                Err(_) => {
+                    cx.emit(DiagBuilder2::note("constant value needed here").span(mir.span));
+                    cx.intern_value(make_error(mir.ty))
+                }
+            }
         }
 
         mir::RvalueKind::Reduction { op, arg } => {
