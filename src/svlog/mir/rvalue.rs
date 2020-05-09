@@ -30,6 +30,13 @@ pub struct Rvalue<'a> {
     pub kind: RvalueKind<'a>,
 }
 
+impl<'a> Rvalue<'a> {
+    /// Check whether the rvalue represents a lowering error tombstone.
+    pub fn is_error(&self) -> bool {
+        self.ty.is_error() || self.kind.is_error()
+    }
+}
+
 /// The different forms an rvalue expression may take.
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
