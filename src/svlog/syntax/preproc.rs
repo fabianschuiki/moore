@@ -9,6 +9,8 @@ use moore_common::errors::{DiagBuilder2, DiagResult2};
 use moore_common::source::*;
 use std::{collections::HashMap, fmt, path::Path, rc::Rc};
 
+use once_cell::sync::Lazy;
+
 type TokenAndSpan = (CatTokenKind, Span);
 
 pub struct Preprocessor<'a> {
@@ -117,7 +119,9 @@ impl<'a> Preprocessor<'a> {
     fn handle_directive<S: AsRef<str>>(&mut self, dir_name: S, span: Span) -> DiagResult2<()> {
         let dir_name = dir_name.as_ref();
         let dir = DIRECTIVES_TABLE
-            .with(|tbl| tbl.get(dir_name).map(|x| *x).unwrap_or(Directive::Unknown));
+            .get(dir_name)
+            .map(|x| *x)
+            .unwrap_or(Directive::Unknown);
 
         match dir {
             Directive::Include => {
@@ -1027,7 +1031,7 @@ impl fmt::Display for Directive {
     }
 }
 
-thread_local!(static DIRECTIVES_TABLE: HashMap<&'static str, Directive> = {
+static DIRECTIVES_TABLE: Lazy<HashMap<&'static str, Directive>> = Lazy::new(|| {
     let mut table = HashMap::new();
     table.insert("include", Directive::Include);
     table.insert("define", Directive::Define);

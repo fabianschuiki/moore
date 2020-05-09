@@ -217,12 +217,16 @@ macro_rules! declare_keywords {(
 
     pub fn find_keyword<S: AsRef<str>>(name: S) -> Option<Kw> {
         use std::collections::HashMap;
-        thread_local!(static TBL: HashMap<String,Kw> = {
+        use once_cell::sync::Lazy;
+        static TBL: Lazy<HashMap<&'static str, Kw>> = Lazy::new(|| {
             let mut tbl = HashMap::new();
-            $(tbl.insert($string.to_lowercase(), Kw::$konst);)*
+            $(
+                assert!($string.chars().all(|c| !c.is_uppercase()));
+                tbl.insert($string, Kw::$konst);
+            )*
             tbl
         });
-        TBL.with(|tbl| tbl.get(&name.as_ref().to_lowercase()).map(|kw| *kw))
+        TBL.get(name.as_ref().to_lowercase().as_str()).map(|kw| *kw)
     }
 }}
 
