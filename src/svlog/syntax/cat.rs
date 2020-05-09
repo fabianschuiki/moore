@@ -155,40 +155,12 @@ fn is_digit(c: char) -> bool {
 /// Check whether the given character is considered a symbol in SystemVerilog.
 fn is_symbol(c: char) -> bool {
     match c {
-		'(' |
-		')' |
-		'[' |
-		']' |
-		'{' |
-		'}' |
-		'#' |
-		':' |
-		';' |
-		'.' |
-		',' |
-		'=' |
-		'+' |
-		'-' |
-		'*' |
-		'/' |
-		'~' |
-		'|' |
-		'<' |
-		'>' |
-		'!' |
-		'%' |
-		'^' |
-		'&' |
-		'?' |
-		'\'' |
-		'"' |
-		'`' |
-		'$' |
-		'\\' |
-		// '_' |
-		'@' => true,
-		_ => false,
-	}
+        '(' | ')' | '[' | ']' | '{' | '}' | '#' | ':' | ';' | '.' | ',' | '=' | '+' | '-' | '*'
+        | '/' | '~' | '|' | '<' | '>' | '!' | '%' | '^' | '&' | '?' | '\'' | '"' | '`' | '$'
+        | '\\' | '@' => true,
+        //'_' => true,
+        _ => false,
+    }
 }
 
 /// A token emitted by the categorizing lexer.

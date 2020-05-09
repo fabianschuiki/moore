@@ -111,18 +111,18 @@ pub trait Grinder {
 
 // All Grinder implement UnventedGrinder.
 // impl<T: Grinder> UnventedGrinder for T {
-// 	type Item = T::Item;
-
-// 	fn next(&mut self) -> Self::Item {
-// 		self.next()
-// 	}
+//     type Item = T::Item;
+//
+//     fn next(&mut self) -> Self::Item {
+//         self.next()
+//     }
 // }
-
+//
 // impl<I: Chisel, E: Debug> Iterator for Grinder<Item=I, Error=E> {
-// 	type Item = <Self as Grinder>::Item;
-// 	fn next(&mut self) -> Option<Self::Item> {
-// 		self.next().value()
-// 	}
+//     type Item = <Self as Grinder>::Item;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         self.next().value()
+//     }
 // }
 
 impl<I, C: Chisel<Value = I>, E> Iterator for dyn Grinder<Item = C, Error = E> {
@@ -210,8 +210,8 @@ impl<R: std::io::Read> Grinder for Read<R> {
 }
 
 // pub fn from_read<T: std::io::Read>(read: T) -> Iter<std::io::Bytes<std::io::BufReader<T>>> {
-// 	use std::io::Read;
-// 	from_iter(std::io::BufReader::with_capacity(1024, read).bytes())
+//     use std::io::Read;
+//     from_iter(std::io::BufReader::with_capacity(1024, read).bytes())
 // }
 
 pub fn from_read<T: std::io::Read>(read: T) -> Read<T> {

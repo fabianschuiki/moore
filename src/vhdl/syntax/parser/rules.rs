@@ -307,10 +307,13 @@ pub fn parse_name_suffix<P: Parser>(
                 } else {
                     let Spanned { value: wrong, span } = p.peek(0);
                     p.emit(
-						DiagBuilder2::error("Expected identifier, character literal, operator symbol, or `all` after `.`")
-						.span(span)
-						.add_note("see IEEE 1076-2008 section 8.3")
-					);
+                        DiagBuilder2::error(
+                            "Expected identifier, character \
+                            literal, operator symbol, or `all` after `.`",
+                        )
+                        .span(span)
+                        .add_note("see IEEE 1076-2008 section 8.3"),
+                    );
                     return Err(Reported);
                 }
             }
@@ -685,14 +688,20 @@ pub fn parse_intf_decl<P: Parser>(
                 k
             } else {
                 p.emit(
-					DiagBuilder2::error("Expected an interface declaration")
-					.span(span)
-					.add_note("`constant`, `signal`, `variable`, and `file` start an object declaration")
-					.add_note("`type` starts a type declaration")
-					.add_note("`procedure`, `function`, `pure function`, or `impure function` start a subprogram declaration")
-					.add_note("`package` starts a package declaration")
-					.add_note("see IEEE 1076-2008 section 6.5")
-				);
+                    DiagBuilder2::error("Expected an interface declaration")
+                        .span(span)
+                        .add_note(
+                            "`constant`, `signal`, `variable`, and \
+                            `file` start an object declaration",
+                        )
+                        .add_note("`type` starts a type declaration")
+                        .add_note(
+                            "`procedure`, `function`, `pure function`, or `impure \
+                            function` start a subprogram declaration",
+                        )
+                        .add_note("`package` starts a package declaration")
+                        .add_note("see IEEE 1076-2008 section 6.5"),
+                );
                 return Err(Reported);
             }
         }
@@ -1014,10 +1023,13 @@ pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Par
             if let Some(second) = it.next() {
                 let span = it.fold(second, Span::union);
                 p.emit(
-					DiagBuilder2::error("Superfluous additional expressions")
-					.span(span)
-					.add_note("If you wanted an association list, did you forget a `=>` after the list of choices?")
-				);
+                    DiagBuilder2::error("Superfluous additional expressions")
+                        .span(span)
+                        .add_note(
+                            "If you wanted an association list, did you \
+                            forget a `=>` after the list of choices?",
+                        ),
+                );
                 return Err(Reported);
             }
 
@@ -1072,31 +1084,31 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
             span.expand(p.last_span());
             Some(ast::NewExpr(Box::new(expr)))
             // let mut expr_span = p.peek(0).span;
-
+            //
             // // Try to parse a name or qualified expression.
             // if let Some(expr) = try_name_or_qualified_primary_expr(p)? {
-            // 	span.expand(p.last_span());
-            // 	Some(ast::NewExpr(expr))
+            //     span.expand(p.last_span());
+            //     Some(ast::NewExpr(expr))
             // }
-
+            //
             // // Try to parse a name prefixed by parenthesis.
             // else if let Some(paren) = try_paren_expr(p)? {
-            // 	let name = parse_name(p)?;
-            // 	span.expand(p.last_span());
-            // 	expr_span.expand(p.last_span());
-            // 	Some(ast::NewExpr(ast::Expr{
-            // 		span: expr_span,
-            // 		data: ast::ParenPrefixExpr(paren, )
-            // 	}))
+            //     let name = parse_name(p)?;
+            //     span.expand(p.last_span());
+            //     expr_span.expand(p.last_span());
+            //     Some(ast::NewExpr(ast::Expr{
+            //         span: expr_span,
+            //         data: ast::ParenPrefixExpr(paren, )
+            //     }))
             // }
-
+            //
             // // Throw an error.
             // else {
-            // 	p.emit(
-            // 		DiagBuilder2::error("Expected subtype or qualified expression after `new`")
-            // 		.span(span)
-            // 	);
-            // 	return Err(Reported);
+            //     p.emit(
+            //         DiagBuilder2::error("Expected subtype or qualified expression after `new`")
+            //         .span(span)
+            //     );
+            //     return Err(Reported);
             // }
         }
 
@@ -1143,10 +1155,18 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
     // primary expression may entail.
     let q = p.peek(0).span;
     p.emit(
-		DiagBuilder2::error(format!("Expected a primary expression, found {} instead", tkn))
-		.span(q)
-		.add_note("A primary expression is either an abstract, bit string, character, or string literal; a name; a parenthesized expression `( ... )`; an allocation `new ...`; or the constants `null`, `open`, or `others`.")
-	);
+        DiagBuilder2::error(format!(
+            "Expected a primary expression, found {} instead",
+            tkn
+        ))
+        .span(q)
+        .add_note(
+            "A primary expression is either an abstract, \
+            bit string, character, or string literal; a name; \
+            a parenthesized expression `( ... )`; an allocation \
+            `new ...`; or the constants `null`, `open`, or `others`.",
+        ),
+    );
     Err(Reported)
 }
 
@@ -1179,11 +1199,14 @@ pub fn try_name_or_qualified_primary_expr<P: Parser>(
             } else {
                 let q = p.last_span();
                 p.emit(
-					DiagBuilder2::error("Expected a parenthesized expression after `'`")
-					.span(q)
-					.add_note("`'` introduces a qualified expression, which is of the form `<name>'(<expr>)`")
-					.add_note("see IEEE 1076-2008 section 9.3.5")
-				);
+                    DiagBuilder2::error("Expected a parenthesized expression after `'`")
+                        .span(q)
+                        .add_note(
+                            "`'` introduces a qualified expression, \
+                            which is of the form `<name>'(<expr>)`",
+                        )
+                        .add_note("see IEEE 1076-2008 section 9.3.5"),
+                );
                 return Err(Reported);
             }
         }
@@ -1689,11 +1712,18 @@ pub fn parse_alias_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::AliasDecl> 
         None => {
             let pk = p.peek(0);
             p.emit(
-				DiagBuilder2::error(format!("Expected alias designator after keyword `alias`, found {} instead", pk.value))
-				.span(pk.span)
-				.add_note("An alias designator is either an identifier, a character literal, or an operator symbol")
-				.add_note("see IEEE 1076-2008 section 6.6")
-			);
+                DiagBuilder2::error(format!(
+                    "Expected alias designator after \
+                    keyword `alias`, found {} instead",
+                    pk.value
+                ))
+                .span(pk.span)
+                .add_note(
+                    "An alias designator is either an identifier, \
+                    a character literal, or an operator symbol",
+                )
+                .add_note("see IEEE 1076-2008 section 6.6"),
+            );
             return Err(Reported);
         }
     };
@@ -2220,9 +2250,13 @@ pub fn parse_block_comp_spec<P: Parser>(p: &mut P) -> ReportedResult<Spanned<ast
             } else {
                 let sp = p.peek(0).span;
                 p.emit(
-					DiagBuilder2::error(format!("Expected block name, component label, `all`, or `others`, found {} instead", wrong))
-					.span(sp)
-				);
+                    DiagBuilder2::error(format!(
+                        "Expected block name, component label, \
+                        `all`, or `others`, found {} instead",
+                        wrong
+                    ))
+                    .span(sp),
+                );
                 return Err(Reported);
             }
         }
@@ -2389,11 +2423,18 @@ pub fn parse_entity_class<P: Parser>(p: &mut P) -> ReportedResult<ast::EntityCla
         Keyword(Kw::Variable) => ast::EntityClass::Var,
         wrong => {
             p.emit(
-				DiagBuilder2::error(format!("Expected entity class, found {} instead", wrong))
-				.span(pk.span)
-				.add_note("An entity class is any of the keywords `architecture`, `component`, `configuration`, `constant`, `entity`, `file`, `function`, `group`, `label`, `literal`, `package`, `procedure`, `property`, `sequence`, `signal`, `subtype`, `type`, `units`, or `variable`")
-				.add_note("see IEEE 1076-2008 section 7.2")
-			);
+                DiagBuilder2::error(format!("Expected entity class, found {} instead", wrong))
+                    .span(pk.span)
+                    .add_note(
+                        "An entity class is any of the keywords \
+                        `architecture`, `component`, `configuration`, \
+                        `constant`, `entity`, `file`, `function`, `group`, \
+                        `label`, `literal`, `package`, `procedure`, `property`, \
+                        `sequence`, `signal`, `subtype`, `type`, `units`, or \
+                        `variable`",
+                    )
+                    .add_note("see IEEE 1076-2008 section 7.2"),
+            );
             return Err(Reported);
         }
     };
@@ -3084,9 +3125,13 @@ where
     if !decl_items.is_empty() && !has_begin {
         let pk = p.peek(0);
         p.emit(
-			DiagBuilder2::error(format!("`begin` is required before {}, to separate it from the preceding declarative items", pk.value))
-			.span(pk.span)
-		);
+            DiagBuilder2::error(format!(
+                "`begin` is required before {}, to separate \
+                it from the preceding declarative items",
+                pk.value
+            ))
+            .span(pk.span),
+        );
         return Err(Reported);
     }
 

@@ -104,9 +104,9 @@ mod test {
     fn basic_ident() {
         check(
             r"
-			COUNT    X     c_out        FFT                Decoder
-			VHSIC    X1    PageCount    STORE_NEXT_ITEM    As49__8
-		",
+            COUNT    X     c_out        FFT                Decoder
+            VHSIC    X1    PageCount    STORE_NEXT_ITEM    As49__8
+        ",
             &[
                 Ident(name("COUNT")),
                 Ident(name("X")),
@@ -126,18 +126,18 @@ mod test {
     fn extended_ident() {
         check(
             r"
-			-- Two different identifiers, neither of which is the reserved word bus.
-			\BUS\  \bus\
+            -- Two different identifiers, neither of which is the reserved word bus.
+            \BUS\  \bus\
 
-			-- An identifier containing three characters.
-			\a\\b\
+            -- An identifier containing three characters.
+            \a\\b\
 
-			-- Three distinct identifiers.
-			VHDL  \VHDL\  \vhdl\
+            -- Three distinct identifiers.
+            VHDL  \VHDL\  \vhdl\
 
-			-- Use of spaces and special characters.
-			\A B\  \!@#\  \_+`'''1#{}\
-		",
+            -- Use of spaces and special characters.
+            \A B\  \!@#\  \_+`'''1#{}\
+        ",
             &[
                 Ident(name_case("\\BUS\\")),
                 Ident(name_case("\\bus\\")),
@@ -156,10 +156,10 @@ mod test {
     fn decimal_literal() {
         check(
             r"
-			12         0        1E6         123_456      -- Integer literals.
-			12.0       0.0      0.456       3.14159_26   -- Real literals.
-			1.34E-12   1.0E+6   6.023E+24                -- Real literals with exponents.
-		",
+            12         0        1E6         123_456      -- Integer literals.
+            12.0       0.0      0.456       3.14159_26   -- Real literals.
+            1.34E-12   1.0E+6   6.023E+24                -- Real literals with exponents.
+        ",
             &[
                 Lit(Literal::Abstract(None, name_case("12"), None, None)),
                 Lit(Literal::Abstract(None, name_case("0"), None, None)),
@@ -220,10 +220,10 @@ mod test {
     fn based_literal() {
         check(
             r"
-			2#1111_1111#   16#FF#   016#0FF#       -- Integer literals of value 255
-			16#E#E1        2#1110_0000#            -- Integer literals of value 224
-			16#F.FF#E+2    2#1.1111_1111_111#E11   -- Real literals of value 4095.0
-		",
+            2#1111_1111#   16#FF#   016#0FF#       -- Integer literals of value 255
+            16#E#E1        2#1110_0000#            -- Integer literals of value 224
+            16#F.FF#E+2    2#1.1111_1111_111#E11   -- Real literals of value 4095.0
+        ",
             &[
                 Lit(Literal::Abstract(
                     Some(name_case("2")),
@@ -275,27 +275,27 @@ mod test {
     fn bit_string_literal() {
         check(
             "
-			B\"1111_1111_1111\"  -- Equivalent to the string literal \"111111111111\".
-			X\"FFF\"             -- Equivalent to B\"1111_1111_1111\".
-			O\"777\"             -- Equivalent to B\"111_111_111\".
-			X\"777\"             -- Equivalent to B\"0111_0111_0111\".
+            B\"1111_1111_1111\"  -- Equivalent to the string literal \"111111111111\".
+            X\"FFF\"             -- Equivalent to B\"1111_1111_1111\".
+            O\"777\"             -- Equivalent to B\"111_111_111\".
+            X\"777\"             -- Equivalent to B\"0111_0111_0111\".
 
-			B\"XXXX_01LH\"       -- Equivalent to the string literal \"XXXX01LH\"
-			UO\"27\"             -- Equivalent to B\"010_111\"
-			UO\"2C\"             -- Equivalent to B\"011_CCC\"
-			SX\"3W\"             -- Equivalent to B\"0011_WWWW\"
-			D\"35\"              -- Equivalent to B\"100011\"
+            B\"XXXX_01LH\"       -- Equivalent to the string literal \"XXXX01LH\"
+            UO\"27\"             -- Equivalent to B\"010_111\"
+            UO\"2C\"             -- Equivalent to B\"011_CCC\"
+            SX\"3W\"             -- Equivalent to B\"0011_WWWW\"
+            D\"35\"              -- Equivalent to B\"100011\"
 
-			12UB\"X1\"           -- Equivalent to B\"0000_0000_00X1\"
-			12SB\"X1\"           -- Equivalent to B\"XXXX_XXXX_XXX1\"
-			12UX\"F-\"           -- Equivalent to B\"0000_1111_----\"
-			12SX\"F-\"           -- Equivalent to B\"1111_1111_----\"
-			12D\"13\"            -- Equivalent to B\"0000_0000_1101\"
+            12UB\"X1\"           -- Equivalent to B\"0000_0000_00X1\"
+            12SB\"X1\"           -- Equivalent to B\"XXXX_XXXX_XXX1\"
+            12UX\"F-\"           -- Equivalent to B\"0000_1111_----\"
+            12SX\"F-\"           -- Equivalent to B\"1111_1111_----\"
+            12D\"13\"            -- Equivalent to B\"0000_0000_1101\"
 
-			12UX\"000WWW\"       -- Equivalent to B\"WWWW_WWWW_WWWW\"
-			12SX\"FFFC00\"       -- Equivalent to B\"1100_0000_0000\"
-			12SX\"XXXX00\"       -- Equivalent to B\"XXXX_0000_0000\"
-		",
+            12UX\"000WWW\"       -- Equivalent to B\"WWWW_WWWW_WWWW\"
+            12SX\"FFFC00\"       -- Equivalent to B\"1100_0000_0000\"
+            12SX\"XXXX00\"       -- Equivalent to B\"XXXX_0000_0000\"
+        ",
             &[
                 Lit(Literal::BitString(
                     None,
@@ -362,8 +362,8 @@ mod test {
     fn character_literal() {
         check(
             "
-			'A'  '*'  '''  ' '
-		",
+            'A'  '*'  '''  ' '
+        ",
             &[
                 Lit(Literal::Char('A')),
                 Lit(Literal::Char('*')),
@@ -377,11 +377,11 @@ mod test {
     fn string_literal() {
         check(
             "
-			\"Setup time is too short\"  --  An error message.
-			\"\"                         --  An empty string literal.
-			\" \"   \"A\"   \"\"\"\"     --  Three string literals of length 1.
-			\"Characters such as $, %, and } are allowed in string literals.\"
-		",
+            \"Setup time is too short\"  --  An error message.
+            \"\"                         --  An empty string literal.
+            \" \"   \"A\"   \"\"\"\"     --  Three string literals of length 1.
+            \"Characters such as $, %, and } are allowed in string literals.\"
+        ",
             &[
                 Lit(Literal::String(name_case("Setup time is too short"))),
                 Lit(Literal::String(name_case(""))),
@@ -399,13 +399,13 @@ mod test {
     fn symbols() {
         check(
             "
-			(    )
-			.    ,    :    ;    '    &
-			=>   ??   <>   :=   <<   >>
-			=    /=   <    <=   >    >=
-			?=   ?/=  ?<   ?<=  ?>   ?>=
-			+    -    *    /    **
-		",
+            (    )
+            .    ,    :    ;    '    &
+            =>   ??   <>   :=   <<   >>
+            =    /=   <    <=   >    >=
+            ?=   ?/=  ?<   ?<=  ?>   ?>=
+            +    -    *    /    **
+        ",
             &[
                 OpenDelim(Paren),
                 CloseDelim(Paren),
@@ -446,19 +446,19 @@ mod test {
     fn keywords() {
         check(
             "
-			abs access after alias all and architecture array assert assume
-			assume_guarantee attribute begin block body buffer bus case
-			component configuration constant context cover default disconnect
-			downto else elsif end entity exit fairness file for force function
-			generate generic group guarded if impure in inertial inout is label
-			library linkage literal loop map mod nand new next nor not null of
-			on open or others out package parameter port postponed procedure
-			process property protected pure range record register reject release
-			rem report restrict restrict_guarantee return rol ror select
-			sequence severity shared signal sla sll sra srl strong subtype then
-			to transport type unaffected units until use variable vmode vprop
-			vunit wait when while with xnor xor
-		",
+            abs access after alias all and architecture array assert assume
+            assume_guarantee attribute begin block body buffer bus case
+            component configuration constant context cover default disconnect
+            downto else elsif end entity exit fairness file for force function
+            generate generic group guarded if impure in inertial inout is label
+            library linkage literal loop map mod nand new next nor not null of
+            on open or others out package parameter port postponed procedure
+            process property protected pure range record register reject release
+            rem report restrict restrict_guarantee return rol ror select
+            sequence severity shared signal sla sll sra srl strong subtype then
+            to transport type unaffected units until use variable vmode vprop
+            vunit wait when while with xnor xor
+        ",
             &[
                 Keyword(Kw::Abs),
                 Keyword(Kw::Access),

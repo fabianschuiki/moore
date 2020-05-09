@@ -194,36 +194,36 @@ pub enum BitStringBase {
 
 /// Generates a `Kw` enum from a list of keywords.
 macro_rules! declare_keywords {(
-	$( ($konst: ident, $string: expr) )*
+    $( ($konst: ident, $string: expr) )*
 ) => {
-	#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Hash)]
-	pub enum Kw {
-		$($konst,)*
-	}
+    #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Hash)]
+    pub enum Kw {
+        $($konst,)*
+    }
 
-	impl Kw {
-		pub fn as_str(self) -> &'static str {
-			match self {
-				$(Kw::$konst => $string,)*
-			}
-		}
-	}
+    impl Kw {
+        pub fn as_str(self) -> &'static str {
+            match self {
+                $(Kw::$konst => $string,)*
+            }
+        }
+    }
 
-	impl std::fmt::Display for Kw {
-		fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-			write!(f, "{}", self.as_str())
-		}
-	}
+    impl std::fmt::Display for Kw {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "{}", self.as_str())
+        }
+    }
 
-	pub fn find_keyword<S: AsRef<str>>(name: S) -> Option<Kw> {
-		use std::collections::HashMap;
-		thread_local!(static TBL: HashMap<String,Kw> = {
-			let mut tbl = HashMap::new();
-			$(tbl.insert($string.to_lowercase(), Kw::$konst);)*
-			tbl
-		});
-		TBL.with(|tbl| tbl.get(&name.as_ref().to_lowercase()).map(|kw| *kw))
-	}
+    pub fn find_keyword<S: AsRef<str>>(name: S) -> Option<Kw> {
+        use std::collections::HashMap;
+        thread_local!(static TBL: HashMap<String,Kw> = {
+            let mut tbl = HashMap::new();
+            $(tbl.insert($string.to_lowercase(), Kw::$konst);)*
+            tbl
+        });
+        TBL.with(|tbl| tbl.get(&name.as_ref().to_lowercase()).map(|kw| *kw))
+    }
 }}
 
 declare_keywords! {
