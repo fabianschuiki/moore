@@ -285,14 +285,6 @@ fn const_expr<'gcx>(
                 bit_size_of_type(cx, ty, env)?.into(),
             )))
         }
-        hir::ExprKind::Field(target, _field_name) => {
-            let (_, field_index, _) = cx.resolve_field_access(expr.id, env)?;
-            let target_value = cx.constant_value_of(target, env)?;
-            match target_value.kind {
-                ValueKind::StructOrArray(ref fields) => Ok(fields[field_index]),
-                _ => Err(()),
-            }
-        }
         hir::ExprKind::PositionalPattern(..) => {
             let mut resolved = resolver::resolve_pattern(cx, expr.id, env)?;
             resolved.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -331,6 +323,11 @@ fn const_expr<'gcx>(
 }
 
 fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
+    // Propagate MIR tombstones immediately.
+    if mir.is_error() {
+        return cx.intern_value(make_error(mir.ty));
+    }
+
     match mir.kind {
         // TODO: Casts are just transparent at the moment. That's pretty bad.
         mir::RvalueKind::CastValueDomain { value, .. }
@@ -481,6 +478,17 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
                     cx.emit(DiagBuilder2::note("constant value needed here").span(mir.span));
                     cx.intern_value(make_error(mir.ty))
                 }
+            }
+        }
+
+        mir::RvalueKind::Member { value, field } => {
+            let value_const = const_mir(cx, value);
+            if value_const.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match value_const.kind {
+                ValueKind::StructOrArray(ref fields) => fields[field],
+                _ => unreachable!("member access on non-struct should be caught in typeck"),
             }
         }
 
