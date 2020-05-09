@@ -9,7 +9,7 @@ use crate::{
     hir::PatternMapping,
     mir::rvalue::*,
     ty::{Type, TypeKind},
-    value::ValueKind,
+    value::{self, ValueData, ValueKind},
     ParamEnv,
 };
 use num::{BigInt, One, Signed, ToPrimitive, Zero};
@@ -52,6 +52,11 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     /// and a marker node is needed to indicate that part of the MIR is invalid.
     fn error(&self) -> &'a Rvalue<'a> {
         self.build(&ty::ERROR_TYPE, RvalueKind::Error)
+    }
+
+    /// Create a constant node.
+    fn constant(&self, value: ValueData<'a>) -> &'a Rvalue<'a> {
+        self.build(value.ty, RvalueKind::Const(self.cx.intern_value(value)))
     }
 }
 
@@ -111,10 +116,30 @@ fn try_lower_expr<'gcx>(
     // Determine the expression type and match on the various forms.
     let ty = builder.cx.type_of(expr_id, env)?;
     match hir.kind {
-        hir::ExprKind::IntConst { .. }
-        | hir::ExprKind::UnsizedConst(..)
-        | hir::ExprKind::TimeConst(_)
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
+        hir::ExprKind::IntConst {
+            value: ref k,
+            ref special_bits,
+            ref x_bits,
+            ..
+        } => Ok(builder.constant(value::make_int_special(
+            ty,
+            k.clone(),
+            special_bits.clone(),
+            x_bits.clone(),
+        ))),
+        hir::ExprKind::UnsizedConst('0') => Ok(builder.constant(value::make_int(ty, num::zero()))),
+        hir::ExprKind::UnsizedConst('1') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::TimeConst(ref k) => Ok(builder.constant(value::make_time(k.clone()))),
+        hir::ExprKind::StringConst(_) => Ok(builder.constant(value::make_array(
+            // TODO(fschuiki): Actually assemble a real string here!
+            cx.mkty_packed_array(1, &ty::BYTE_TYPE),
+            vec![cx.intern_value(value::make_int(&ty::BYTE_TYPE, num::zero()))],
+        ))),
+
+        // hir::ExprKind::IntConst { .. }
+        // | hir::ExprKind::UnsizedConst(..)
+        // | hir::ExprKind::TimeConst(_)
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
             let k = builder.cx.constant_value_of(expr_id, env)?;

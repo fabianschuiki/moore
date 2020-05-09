@@ -243,25 +243,6 @@ fn const_expr<'gcx>(
     let ty = cx.type_of(expr.id, env)?;
     #[allow(unreachable_patterns)]
     match expr.kind {
-        hir::ExprKind::IntConst {
-            value: ref k,
-            ref special_bits,
-            ref x_bits,
-            ..
-        } => Ok(cx.intern_value(make_int_special(
-            ty,
-            k.clone(),
-            special_bits.clone(),
-            x_bits.clone(),
-        ))),
-        hir::ExprKind::UnsizedConst('0') => Ok(cx.intern_value(make_int(ty, num::zero()))),
-        hir::ExprKind::UnsizedConst('1') => Ok(cx.intern_value(make_int(ty, num::one()))),
-        hir::ExprKind::TimeConst(ref k) => Ok(cx.intern_value(make_time(k.clone()))),
-        hir::ExprKind::StringConst(_) => Ok(cx.intern_value(make_array(
-            // TODO(fschuiki): Actually assemble a real string here!
-            cx.mkty_packed_array(1, &ty::BYTE_TYPE),
-            vec![cx.intern_value(make_int(&ty::BYTE_TYPE, num::zero()))],
-        ))),
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
             Ok(cx.intern_value(make_int(ty, num::zero())))
         }
@@ -284,34 +265,6 @@ fn const_expr<'gcx>(
                 cx.mkty_int(32),
                 bit_size_of_type(cx, ty, env)?.into(),
             )))
-        }
-        hir::ExprKind::PositionalPattern(..) => {
-            let mut resolved = resolver::resolve_pattern(cx, expr.id, env)?;
-            resolved.sort_by(|(a, _), (b, _)| a.cmp(b));
-            trace!("resolved {:?} to {:#?}", expr.kind, resolved);
-            let fields = resolved
-                .into_iter()
-                .map(|(_, v)| cx.constant_value_of(v, env))
-                .collect::<Result<Vec<_>>>()?;
-            let ty = cx.type_of(expr.id, env)?;
-            let v = cx.intern_value(match *ty {
-                TypeKind::Named(_, _, TypeKind::Struct(..)) | TypeKind::Struct(..) => {
-                    make_struct(ty, fields)
-                }
-                TypeKind::Named(_, _, TypeKind::PackedArray(..)) | TypeKind::PackedArray(..) => {
-                    make_array(ty, fields)
-                }
-                _ => unreachable!(),
-            });
-            trace!("pattern yielded {:#?}", v);
-            Ok(v)
-        }
-        hir::ExprKind::EmptyPattern => {
-            cx.emit(
-                DiagBuilder2::error(format!("{} has no constant value", expr.desc_full()))
-                    .span(expr.span()),
-            );
-            Err(())
         }
         _ => {
             let mir = cx.mir_rvalue(expr.id, env);

@@ -44,7 +44,7 @@ module D (
 	initial y = ~x;
 endmodule
 
-// CHECK: proc %D.initial.248.0 (i1$ %x) -> (i1$ %y) {
+// CHECK: proc %D.initial.250.0 (i1$ %x) -> (i1$ %y) {
 // CHECK: 0:
 // CHECK:     %x1 = prb i1$ %x
 // CHECK:     %1 = not i1 %x1
@@ -54,7 +54,7 @@ endmodule
 // CHECK: }
 // CHECK:
 // CHECK: entity @D (i1$ %x) -> (i1$ %y) {
-// CHECK:     inst %D.initial.248.0 (i1$ %x) -> (i1$ %y)
+// CHECK:     inst %D.initial.250.0 (i1$ %x) -> (i1$ %y)
 // CHECK: }
 
 
