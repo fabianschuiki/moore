@@ -825,6 +825,7 @@ where
                     .collect();
                 Ok(self.builder.ins().strukt(fields?))
             }
+            (&TypeKind::Error, _) | (_, &ValueKind::Error) => Err(()),
             _ => panic!("invalid type/value combination {:#?}", value),
         }
     }
