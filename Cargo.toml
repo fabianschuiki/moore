@@ -19,16 +19,13 @@ moore-common = { path = "src/common", version = "0.8.0-dev" }
 moore-derive = { path = "src/derive", version = "0.8.0-dev" }
 moore-svlog = { path = "src/svlog", version = "0.8.0-dev" }
 moore-vhdl = { path = "src/vhdl", version = "0.8.0-dev" }
-bincode = "0.6.1"
 clap = "2"
 # llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "master", version = "0.9" }
 llhd = "0.9"
 num = "0.1"
-rustc-serialize = "0.3.22"
+rustc-serialize = "0.3.24"
 serde = "1"
-sha1 = "0.2.0"
-slog = "2.0.12"
-typed-arena = "1.3.0"
+typed-arena = "2.0.1"
 log = "0.4"
 stderrlog = "0.4"
 
