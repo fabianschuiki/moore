@@ -290,10 +290,10 @@ lazy_static! {
 
         // // Define the default operator implementations.
         // for op in BUILTIN_UNARY_OPS.iter() {
-        // 	define_builtin_op(&mut scope, op.op, op.id);
+        //     define_builtin_op(&mut scope, op.op, op.id);
         // }
         // for op in BUILTIN_BINARY_OPS.iter() {
-        // 	define_builtin_op(&mut scope, op.op, op.id);
+        //     define_builtin_op(&mut scope, op.op, op.id);
         // }
 
         scope

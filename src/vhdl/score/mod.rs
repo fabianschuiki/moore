@@ -37,16 +37,16 @@ use crate::typeck::{Typeck, TypeckContext};
 /// This macro implements the `NodeMaker` trait for a specific combination of
 /// identifier and output type.
 macro_rules! impl_make {
-	($slf:tt, $id:ident: $id_ty:ty => &$out_ty:ty $blk:block) => {
-		impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-			fn make(&$slf, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
-		}
-	};
-	($slf:tt, $id:ident: $id_ty:ty => $out_ty:ty $blk:block) => {
-		impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<$id_ty, $out_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
-			fn make(&$slf, $id: $id_ty) -> Result<$out_ty> $blk
-		}
-	}
+    ($slf:tt, $id:ident: $id_ty:ty => &$out_ty:ty $blk:block) => {
+        impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<$id_ty, &'ctx $out_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+            fn make(&$slf, $id: $id_ty) -> Result<&'ctx $out_ty> $blk
+        }
+    };
+    ($slf:tt, $id:ident: $id_ty:ty => $out_ty:ty $blk:block) => {
+        impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<$id_ty, $out_ty> for ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
+            fn make(&$slf, $id: $id_ty) -> Result<$out_ty> $blk
+        }
+    }
 }
 
 mod cval;
@@ -1812,7 +1812,7 @@ node_storage!(HirTable<'ctx>:
 );
 
 // node_storage!(LazyHirTable<'ast, 'ctx>:
-// 	wait_stmts: WaitStmtRef => LazyNode<'ctx, hir::Stmt<hir::WaitStmt>, &'ast ()>,
+//     wait_stmts: WaitStmtRef => LazyNode<'ctx, hir::Stmt<hir::WaitStmt>, &'ast ()>,
 // );
 
 lazy_static! {
@@ -1835,8 +1835,8 @@ lazy_static! {
             let defs = HashMap::new();
             // TODO: Insert builtin definitions here.
             // defs.insert(
-            // 	nt.intern("integer", false).into(),
-            // 	vec![Spanned::new(Def::BuiltinTy(IntTy), INVALID_SPAN)]
+            //     nt.intern("integer", false).into(),
+            //     vec![Spanned::new(Def::BuiltinTy(IntTy), INVALID_SPAN)]
             // );
             defs
         });

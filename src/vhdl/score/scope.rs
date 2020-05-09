@@ -6,15 +6,15 @@ use crate::defs::*;
 use crate::score::*;
 
 macro_rules! impl_make_defs {
-	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl_make!($slf, $id: $id_ty => &Defs $blk);
-	}
+    ($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+        impl_make!($slf, $id: $id_ty => &Defs $blk);
+    }
 }
 
 macro_rules! impl_make_scope {
-	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl_make!($slf, $id: $id_ty => &Scope $blk);
-	}
+    ($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+        impl_make!($slf, $id: $id_ty => &Scope $blk);
+    }
 }
 
 impl_make_defs!(self, id: ScopeRef => {
@@ -167,7 +167,7 @@ impl_make_defs!(self, _id: PkgDeclRef => {
     let ctx = DefsContext::new(self);
     // let hir = self.hir(id)?;
     // for &decl in &hir.decls {
-    // 	ctx.declare_any_in_pkg(decl);
+    //     ctx.declare_any_in_pkg(decl);
     // }
     Ok(self.sb.arenas.defs.alloc(ctx.finish()?))
 });
@@ -400,19 +400,19 @@ impl_make_scope!(self, id: ProcessStmtRef => {
 // DeclInPkgRef::Pkg(id) => vec![(self.ast(id).1.name.map_into(), Def::Pkg(id))],
 // DeclInPkgRef::PkgInst(id) => vec![(self.ast(id).1.name.map_into(), Def::PkgInst(id))],
 // DeclInPkgRef::Type(id) => {
-// 	let hir = self.hir(id)?;
-// 	let mut v = vec![(hir.name.map_into(), Def::Type(id))];
-// 	match hir.data {
-// 		Some(hir::TypeData::Enum(_, ref lits)) => {
-// 			for (i, lit) in lits.iter().enumerate() {
-// 				match *lit {
-// 					hir::EnumLit::Ident(n) => v.push((n.map_into(), Def::Enum(EnumRef(id, i)))),
-// 					hir::EnumLit::Char(c) => v.push((c.map_into(), Def::Enum(EnumRef(id, i)))),
-// 				}
-// 			}
-// 		}
-// 		_ => ()
-// 	}
-// 	v
+//     let hir = self.hir(id)?;
+//     let mut v = vec![(hir.name.map_into(), Def::Type(id))];
+//     match hir.data {
+//         Some(hir::TypeData::Enum(_, ref lits)) => {
+//             for (i, lit) in lits.iter().enumerate() {
+//                 match *lit {
+//                     hir::EnumLit::Ident(n) => v.push((n.map_into(), Def::Enum(EnumRef(id, i)))),
+//                     hir::EnumLit::Char(c) => v.push((c.map_into(), Def::Enum(EnumRef(id, i)))),
+//                 }
+//             }
+//         }
+//         _ => ()
+//     }
+//     v
 // }
 // DeclInPkgRef::Subtype(id) => vec![(self.ast(id).1.name.map_into(), Def::Subtype(id))],

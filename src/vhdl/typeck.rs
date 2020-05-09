@@ -509,11 +509,13 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 };
                 if ty_lo > subty_lo || ty_hi < subty_hi {
                     self.emit(
-						DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", subty, ty))
-						.span(span)
-						.add_note("The range of a subtype must be entirely contained within the range of the target type.")
-						// TODO: Add reference to standard.
-					);
+                        DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", subty, ty))
+                            .span(span)
+                            .add_note(
+                                "The range of a subtype must be entirely \
+                                contained within the range of the target type.",
+                            ), // TODO: Add reference to standard.
+                    );
                 }
                 let lo = max(ty_lo, subty_lo);
                 let hi = min(ty_hi, subty_hi);
@@ -596,24 +598,24 @@ pub trait Typeck<I> {
 
 /// A macro to implement the `Typeck` trait.
 macro_rules! impl_typeck {
-	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
-			fn typeck(&$slf, $id: $id_ty) $blk
-		}
-	}
+    ($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+        impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
+            fn typeck(&$slf, $id: $id_ty) $blk
+        }
+    }
 }
 
 /// A macro to implement the `Typeck` trait.
 macro_rules! impl_typeck_err {
-	($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
-		impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
-			fn typeck(&$slf, $id: $id_ty) {
-				use std;
-				let res = (move || -> Result<()> { $blk })();
-				std::mem::forget(res);
-			}
-		}
-	}
+    ($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
+        impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
+            fn typeck(&$slf, $id: $id_ty) {
+                use std;
+                let res = (move || -> Result<()> { $blk })();
+                std::mem::forget(res);
+            }
+        }
+    }
 }
 
 // Implement the `Typeck` trait for everything that supports type calculation.
@@ -754,7 +756,7 @@ impl_typeck!(self, id: GenericRef => {
 });
 
 // impl_typeck!(self, id: IntfSignalRef => {
-// 	self.typeck(self.hir(id)?.ty)
+//     self.typeck(self.hir(id)?.ty)
 // });
 
 impl_typeck!(self, id: IntfTypeRef => {
@@ -1056,9 +1058,9 @@ impl_typeck_err!(self, id: SigAssignStmtRef => {
     };
     // let mut ctx = TypeckContext::new(self);
     // let typeck_dm = |dm| match dm {
-    // 	// TODO: typeck time expression
-    // 	// &hir::DelayMechanism::RejectInertial(expr) => self.typeck_node(expr, self.intern_ty(/* time type */))?,
-    // 	_ => Ok(()),
+    //     // TODO: typeck time expression
+    //     // &hir::DelayMechanism::RejectInertial(expr) => self.typeck_node(expr, self.intern_ty(/* time type */))?,
+    //     _ => Ok(()),
     // };
     match hir.kind {
         hir::SigAssignKind::SimpleWave(ref dm, ref wave) => {
@@ -1119,16 +1121,16 @@ impl_make!(self, id: SubtypeIndRef => &Ty {
     // let ctx = TypeckContext::new(self);
     // let inner = self.intern_ty(Ty::Named(hir.type_mark.span, hir.type_mark.value));
     // match hir.constraint {
-    // 	None => Ok(inner),
-    // 	Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
-    // 		ctx.apply_range_constraint(inner, Spanned::new(con, span))
-    // 	}
-    // 	Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
-    // 		ctx.apply_array_constraint(inner, Spanned::new(ac, span))
-    // 	}
-    // 	Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
-    // 		ctx.apply_record_constraint(inner, Spanned::new(rc, span))
-    // 	}
+    //     None => Ok(inner),
+    //     Some(Spanned{ value: hir::Constraint::Range(ref con), span }) => {
+    //         ctx.apply_range_constraint(inner, Spanned::new(con, span))
+    //     }
+    //     Some(Spanned{ value: hir::Constraint::Array(ref ac), span }) => {
+    //         ctx.apply_array_constraint(inner, Spanned::new(ac, span))
+    //     }
+    //     Some(Spanned{ value: hir::Constraint::Record(ref rc), span }) => {
+    //         ctx.apply_record_constraint(inner, Spanned::new(rc, span))
+    //     }
     // }
 });
 
@@ -1285,53 +1287,53 @@ impl_make!(self, id: SubtypeDeclRef => &Ty {
 
 /// Determine the type of a signal declaration.
 // impl_make!(self, id: SignalDeclRef => &Ty {
-// 	let hir = self.lazy_hir(id)?;
-// 	self.lazy_typeval(hir.decl.ty)
+//     let hir = self.lazy_hir(id)?;
+//     self.lazy_typeval(hir.decl.ty)
 // });
-
+//
 // /// Determine the type of an expression.
 // impl_make!(self, id: ExprRef => &Ty {
-// 	let hir = self.hir(id)?;
-// 	match hir.data {
-// 		hir::ExprData::IntegerLiteral(ref c) => {
-// 			// Integer literals either have a type attached, or they inherit
-// 			// their type from the context.
-// 			if let Some(ref ty) = c.ty {
-// 				return Ok(self.intern_ty(ty.clone()));
-// 			}
-// 			if let Some(ty) = self.type_context_resolved(id)? {
-// 				if let &Ty::Int(_) = self.deref_named_type(ty)? {
-// 					return Ok(ty);
-// 				}
-// 			}
-// 			self.emit(
-// 				DiagBuilder2::error(format!("cannot infer type of `{}` from context", hir.span.extract()))
-// 				.span(hir.span)
-// 			);
-// 			Err(())
-// 		}
-
-// 		hir::ExprData::FloatLiteral(ref _c) => {
-// 			unimp_err!(self, id);
-// 			// // Float literals either have a type attached, or they inherit their
-// 			// // type from the context.
-// 			// if let Some(ref ty) = c.ty {
-// 			// 	return Ok(self.intern_ty(ty.clone()));
-// 			// }
-// 			// if let Some(ty) = self.type_context_resolved(id)? {
-// 			// 	if let &Ty::Float(_) = self.deref_named_type(ty)? {
-// 			// 		return Ok(ty);
-// 			// 	}
-// 			// }
-// 			// self.emit(
-// 			// 	DiagBuilder2::error("cannot infer type of float literal from context")
-// 			// 	.span(hir.span)
-// 			// );
-// 			// Err(())
-// 		}
-
-// 		_ => unimp_err!(self, id),
-// 	}
+//     let hir = self.hir(id)?;
+//     match hir.data {
+//         hir::ExprData::IntegerLiteral(ref c) => {
+//             // Integer literals either have a type attached, or they inherit
+//             // their type from the context.
+//             if let Some(ref ty) = c.ty {
+//                 return Ok(self.intern_ty(ty.clone()));
+//             }
+//             if let Some(ty) = self.type_context_resolved(id)? {
+//                 if let &Ty::Int(_) = self.deref_named_type(ty)? {
+//                     return Ok(ty);
+//                 }
+//             }
+//             self.emit(
+//                 DiagBuilder2::error(format!("cannot infer type of `{}` from context", hir.span.extract()))
+//                 .span(hir.span)
+//             );
+//             Err(())
+//         }
+//
+//         hir::ExprData::FloatLiteral(ref _c) => {
+//             unimp_err!(self, id);
+//             // // Float literals either have a type attached, or they inherit their
+//             // // type from the context.
+//             // if let Some(ref ty) = c.ty {
+//             //     return Ok(self.intern_ty(ty.clone()));
+//             // }
+//             // if let Some(ty) = self.type_context_resolved(id)? {
+//             //     if let &Ty::Float(_) = self.deref_named_type(ty)? {
+//             //         return Ok(ty);
+//             //     }
+//             // }
+//             // self.emit(
+//             //     DiagBuilder2::error("cannot infer type of float literal from context")
+//             //     .span(hir.span)
+//             // );
+//             // Err(())
+//         }
+//
+//         _ => unimp_err!(self, id),
+//     }
 // });
 
 /// Determine the type of a typed node.
@@ -1363,12 +1365,12 @@ impl_make!(self, id: LatentTypeMarkRef => &Ty {
 });
 
 // impl_make!(self, id: LatentSubprogRef => &Ty {
-// 	self.ty(self.hir(id)?.value)
+//     self.ty(self.hir(id)?.value)
 // });
-
+//
 // impl_make!(self, id: SubprogRef => &Ty {
-// 	match id {
-// 		SubprogRef::Decl(id) => self.make(id),
-// 		SubprogRef::Inst(id) => self.make(id),
-// 	}
+//     match id {
+//         SubprogRef::Decl(id) => self.make(id),
+//         SubprogRef::Inst(id) => self.make(id),
+//     }
 // });

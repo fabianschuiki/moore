@@ -107,9 +107,14 @@ where
                         break;
                     }
                 } else if d == '\n' {
-                    self.emit(DiagBuilder2::error("String literal must not contain line breaks.")
-						.span(sp.end())
-						.add_note("Use string concatenation (e.g. \"abc\" & \"def\") to break strings across lines"));
+                    self.emit(
+                        DiagBuilder2::error("String literal must not contain line breaks.")
+                            .span(sp.end())
+                            .add_note(
+                                "Use string concatenation (e.g. \"abc\" & \
+                                \"def\") to break strings across lines",
+                            ),
+                    );
                 } else {
                     s.push(d);
                 }

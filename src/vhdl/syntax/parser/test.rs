@@ -107,13 +107,13 @@ fn context_decl() {
     // parse!("context foo is end context bar;", parse_context_decl); // check if this emits a warning
     parse!(
         "
-		context project_context is
-			library project_lib;
-			use project_lib.project_defs.all;
-			library IP_lib;
-			context IP_lib.IP_context;
-		end context project_context;
-	",
+        context project_context is
+            library project_lib;
+            use project_lib.project_defs.all;
+            library IP_lib;
+            context IP_lib.IP_context;
+        end context project_context;
+    ",
         parse_context_decl
     );
 }
@@ -131,26 +131,26 @@ fn entity_decl() {
 fn entity_header() {
     parse!(
         "
-		entity Full_Adder is
-			port (X, Y, Cin: in Bit; Cout, Sum: out Bit);
-		end Full_Adder;
-	",
+        entity Full_Adder is
+            port (X, Y, Cin: in Bit; Cout, Sum: out Bit);
+        end Full_Adder;
+    ",
         parse_entity_decl
     );
     parse!(
         "
-		entity AndGate is
-			generic (N: Natural := 2);
-			port (Inputs: in Bit_Vector (1 to N); Result: out Bit);
-		end entity AndGate;
-	",
+        entity AndGate is
+            generic (N: Natural := 2);
+            port (Inputs: in Bit_Vector (1 to N); Result: out Bit);
+        end entity AndGate;
+    ",
         parse_entity_decl
     );
     parse!(
         "
-		entity TestBench is
-		end TestBench;
-	",
+        entity TestBench is
+        end TestBench;
+    ",
         parse_entity_decl
     );
 }
@@ -159,21 +159,21 @@ fn entity_header() {
 fn entity_decl_part() {
     parse!(
         "
-		entity ROM is
-			port (
-				Addr: in Word;
-				Data: out Word;
-				Sel: in Bit);
-			type Instruction is array (1 to 5) of Natural;
-			type Program is array (Natural range <>) of Instruction;
-			use Work.OpCodes.all, Work.RegisterNames.all;
-			constant ROM_Code: Program := (
-				(STM, R14, R12, 12, R13),
-				(LD,  R7,  32,  0,  R1 ),
-				(BAL, R14, 0,   0,  R7 )
-			);
-		end ROM;
-	",
+        entity ROM is
+            port (
+                Addr: in Word;
+                Data: out Word;
+                Sel: in Bit);
+            type Instruction is array (1 to 5) of Natural;
+            type Program is array (Natural range <>) of Instruction;
+            use Work.OpCodes.all, Work.RegisterNames.all;
+            constant ROM_Code: Program := (
+                (STM, R14, R12, 12, R13),
+                (LD,  R7,  32,  0,  R1 ),
+                (BAL, R14, 0,   0,  R7 )
+            );
+        end ROM;
+    ",
         parse_entity_decl
     );
 }
@@ -182,50 +182,50 @@ fn entity_decl_part() {
 fn intf_decl() {
     parse!(
         "
-		constant a : std_logic;
-		constant a, b, c : in std_logic;
-		constant a, b, c : in std_logic := '0';
+        constant a : std_logic;
+        constant a, b, c : in std_logic;
+        constant a, b, c : in std_logic := '0';
 
-		signal a : std_logic;
-		signal a, b, c : in std_logic;
-		signal a, b, c : out std_logic;
-		signal a, b, c : inout std_logic;
-		signal a, b, c : buffer std_logic;
-		signal a, b, c : linkage std_logic;
-		signal a, b, c : in std_logic bus;
-		signal a, b, c : in std_logic bus := '0';
+        signal a : std_logic;
+        signal a, b, c : in std_logic;
+        signal a, b, c : out std_logic;
+        signal a, b, c : inout std_logic;
+        signal a, b, c : buffer std_logic;
+        signal a, b, c : linkage std_logic;
+        signal a, b, c : in std_logic bus;
+        signal a, b, c : in std_logic bus := '0';
 
-		variable a : std_logic;
-		variable a, b, c : in std_logic;
-		variable a, b, c : out std_logic;
-		variable a, b, c : inout std_logic;
-		variable a, b, c : buffer std_logic;
-		variable a, b, c : linkage std_logic;
-		variable a, b, c : in std_logic := '0';
+        variable a : std_logic;
+        variable a, b, c : in std_logic;
+        variable a, b, c : out std_logic;
+        variable a, b, c : inout std_logic;
+        variable a, b, c : buffer std_logic;
+        variable a, b, c : linkage std_logic;
+        variable a, b, c : in std_logic := '0';
 
-		file i : integer;
-		type foo;
+        file i : integer;
+        type foo;
 
-		procedure foo;
-		procedure \"+\";
-		procedure foo is bar;
-		procedure foo is <>;
-		procedure foo (hello : INTEGER);
-		procedure foo parameter (hello: INTEGER);
+        procedure foo;
+        procedure \"+\";
+        procedure foo is bar;
+        procedure foo is <>;
+        procedure foo (hello : INTEGER);
+        procedure foo parameter (hello: INTEGER);
 
-		function foo return integer;
-		function \"+\" return integer;
-		function foo return integer is bar;
-		function foo return integer is <>;
-		function foo (hello : INTEGER) return integer;
-		function foo parameter (hello : INTEGER) return integer;
-		pure function foo return integer;
-		impure function foo return integer;
+        function foo return integer;
+        function \"+\" return integer;
+        function foo return integer is bar;
+        function foo return integer is <>;
+        function foo (hello : INTEGER) return integer;
+        function foo parameter (hello : INTEGER) return integer;
+        pure function foo return integer;
+        impure function foo return integer;
 
-		package foo is new bar generic map (a => b, c => d);
-		package foo is new bar generic map (<>);
-		package foo is new bar generic map (default);
-	",
+        package foo is new bar generic map (a => b, c => d);
+        package foo is new bar generic map (<>);
+        package foo is new bar generic map (default);
+    ",
         |p| separated_nonempty(
             p,
             token::Semicolon,
@@ -286,14 +286,14 @@ fn package_inst() {
 fn decl_items() {
     parse!(
         "
-		package foo is
-			-- package_{decl,body,inst}
-			package bar is end;
-			package body bar is end;
-			package baz is new foo;
-			package baz is new foo generic map (STUFF => 8);
-		end;
-	",
+        package foo is
+            -- package_{decl,body,inst}
+            package bar is end;
+            package body bar is end;
+            package baz is new foo;
+            package baz is new foo generic map (STUFF => 8);
+        end;
+    ",
         parse_package_decl
     );
 }
@@ -302,32 +302,32 @@ fn decl_items() {
 fn protected_type_decl() {
     parse!(
         "
-		type SharedCounter is protected
-			procedure increment (N: Integer := 1);
-			procedure decrement (N: Integer := 1);
-			impure function value return Integer;
-		end protected SharedCounter;
-	",
+        type SharedCounter is protected
+            procedure increment (N: Integer := 1);
+            procedure decrement (N: Integer := 1);
+            impure function value return Integer;
+        end protected SharedCounter;
+    ",
         |p| parse_type_decl(p, true)
     );
 
     parse!(
         "
-		type ComplexNumber is protected
-			procedure extract (variable r, i: out Real);
-			procedure add (variable a, b: inout ComplexNumber);
-		end protected ComplexNumber;
-	",
+        type ComplexNumber is protected
+            procedure extract (variable r, i: out Real);
+            procedure add (variable a, b: inout ComplexNumber);
+        end protected ComplexNumber;
+    ",
         |p| parse_type_decl(p, true)
     );
 
     parse!(
         "
-		type VariableSizeBitArray is protected
-			procedure add_bit (index: Positive; value: Bit);
-			impure function size return Natural;
-		end protected VariableSizeBitArray;
-	",
+        type VariableSizeBitArray is protected
+            procedure add_bit (index: Positive; value: Bit);
+            impure function size return Natural;
+        end protected VariableSizeBitArray;
+    ",
         |p| parse_type_decl(p, true)
     );
 }
@@ -336,82 +336,82 @@ fn protected_type_decl() {
 fn protected_type_body() {
     parse!(
         "
-		type SharedCounter is protected body
-			variable counter: Integer := 0;
+        type SharedCounter is protected body
+            variable counter: Integer := 0;
 
-			procedure increment (N: Integer := 1) is
-			begin
-				counter := counter + N;
-			end procedure increment;
+            procedure increment (N: Integer := 1) is
+            begin
+                counter := counter + N;
+            end procedure increment;
 
-			procedure decrement (N: Integer := 1) is
-			begin
-				counter := counter - N;
-			end procedure decrement;
+            procedure decrement (N: Integer := 1) is
+            begin
+                counter := counter - N;
+            end procedure decrement;
 
-			impure function value return Integer is
-			begin
-				return counter;
-			end function value;
-		end protected body SharedCounter;
-	",
+            impure function value return Integer is
+            begin
+                return counter;
+            end function value;
+        end protected body SharedCounter;
+    ",
         |p| parse_type_decl(p, true)
     );
 
     parse!(
         "
-		type ComplexNumber is protected body
-			variable re, im: Real;
+        type ComplexNumber is protected body
+            variable re, im: Real;
 
-			procedure extract (r, i: out Real) is
-			begin
-				r := re;
-				i := im;
-			end procedure extract;
+            procedure extract (r, i: out Real) is
+            begin
+                r := re;
+                i := im;
+            end procedure extract;
 
-			procedure add (variable a, b: inout ComplexNumber) is
-				variable a_real, b_real: Real;
-				variable a_imag, b_imag: Real;
-			begin
-				a.extract (a_real, a_imag);
-				b.extract (b_real, b_imag);
-				re := a_real + b_real;
-				im := a_imag + b_imag;
-			end procedure add;
-		end protected body ComplexNumber;
-	",
+            procedure add (variable a, b: inout ComplexNumber) is
+                variable a_real, b_real: Real;
+                variable a_imag, b_imag: Real;
+            begin
+                a.extract (a_real, a_imag);
+                b.extract (b_real, b_imag);
+                re := a_real + b_real;
+                im := a_imag + b_imag;
+            end procedure add;
+        end protected body ComplexNumber;
+    ",
         |p| parse_type_decl(p, true)
     );
 
     parse!(
         "
-		type VariableSizeBitArray is protected body
-			type bit_vector_access is access Bit_Vector;
+        type VariableSizeBitArray is protected body
+            type bit_vector_access is access Bit_Vector;
 
-			variable bit_array: bit_vector_access := null;
-			variable bit_array_length: Natural := 0;
+            variable bit_array: bit_vector_access := null;
+            variable bit_array_length: Natural := 0;
 
-			procedure add_bit (index: Positive; value: Bit) is
-				variable tmp: bit_vector_access;
-			begin
-				if index > bit_array_length then
-					tmp := bit_array;
-					bit_array := new bit_vector (1 to index);
-					if tmp /= null then
-						bit_array (1 to bit_array_length) := tmp.all;
-						deallocate (tmp);
-					end if;
-					bit_array_length := index;
-				end if;
-				bit_array (index) := value;
-			end procedure add_bit;
+            procedure add_bit (index: Positive; value: Bit) is
+                variable tmp: bit_vector_access;
+            begin
+                if index > bit_array_length then
+                    tmp := bit_array;
+                    bit_array := new bit_vector (1 to index);
+                    if tmp /= null then
+                        bit_array (1 to bit_array_length) := tmp.all;
+                        deallocate (tmp);
+                    end if;
+                    bit_array_length := index;
+                end if;
+                bit_array (index) := value;
+            end procedure add_bit;
 
-			impure function size return Natural is
-			begin
-				return bit_array_length;
-			end function size;
-		end protected body VariableSizeBitArray;
-	",
+            impure function size return Natural is
+            begin
+                return bit_array_length;
+            end function size;
+        end protected body VariableSizeBitArray;
+    ",
         |p| parse_type_decl(p, true)
     );
 }
@@ -506,35 +506,35 @@ fn discon_spec() {
 fn config_decl() {
     parse!(
         "
-		architecture Structure of Half_Adder is
-			for L1: XOR_GATE use
-				entity WORK.XOR_GATE(Behavior)
-					generic map (3 ns, 3 ns)
-					port map (I1 => I1, I2 => I2, O => O);
-			for L2: AND_GATE use
-				entity WORK.AND_GATE(Behavior)
-					generic map (3 ns, 4 ns)
-					port map (I1, open, O);
-		begin
-		end architecture Structure;
-	",
+        architecture Structure of Half_Adder is
+            for L1: XOR_GATE use
+                entity WORK.XOR_GATE(Behavior)
+                    generic map (3 ns, 3 ns)
+                    port map (I1 => I1, I2 => I2, O => O);
+            for L2: AND_GATE use
+                entity WORK.AND_GATE(Behavior)
+                    generic map (3 ns, 4 ns)
+                    port map (I1, open, O);
+        begin
+        end architecture Structure;
+    ",
         parse_arch_body
     );
 
     parse!(
         "
-		configuration Different of Half_Adder is
-			for Structure
-				for L1: XOR_GATE
-					generic map (2.9 ns, 3.6 ns);
-				end for;
-				for L2: AND_GATE
-					generic map (2.8 ns, 3.25 ns)
-					port map (I2 => Tied_High);
-				end for;
-			end for;
-		end configuration Different;
-	",
+        configuration Different of Half_Adder is
+            for Structure
+                for L1: XOR_GATE
+                    generic map (2.9 ns, 3.6 ns);
+                end for;
+                for L2: AND_GATE
+                    generic map (2.8 ns, 3.25 ns)
+                    port map (I2 => Tied_High);
+                end for;
+            end for;
+        end configuration Different;
+    ",
         parse_config_decl
     );
 }
