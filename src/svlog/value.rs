@@ -32,6 +32,37 @@ pub struct ValueData<'t> {
     pub kind: ValueKind<'t>,
 }
 
+impl<'t> ValueData<'t> {
+    /// Check if the value represents a computation error tombstone.
+    pub fn is_error(&self) -> bool {
+        self.ty.is_error() || self.kind.is_error()
+    }
+
+    /// Check if this value evaluates to true.
+    pub fn is_true(&self) -> bool {
+        !self.is_false()
+    }
+
+    /// Check if this value evaluates to false.
+    pub fn is_false(&self) -> bool {
+        match self.kind {
+            ValueKind::Void => true,
+            ValueKind::Int(ref v, ..) => v.is_zero(),
+            ValueKind::Time(ref v) => v.is_zero(),
+            ValueKind::StructOrArray(_) => false,
+            ValueKind::Error => true,
+        }
+    }
+
+    /// Convert the value to an integer.
+    pub fn get_int(&self) -> Option<&BigInt> {
+        match self.kind {
+            ValueKind::Int(ref v, ..) => Some(v),
+            _ => None,
+        }
+    }
+}
+
 /// The different forms a value can assume.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueKind<'t> {
@@ -46,29 +77,16 @@ pub enum ValueKind<'t> {
     Time(BigRational),
     /// A struct.
     StructOrArray(Vec<Value<'t>>),
+    /// An error occurred during value computation.
+    Error,
 }
 
-impl<'t> ValueData<'t> {
-    /// Check if this value evaluates to true.
-    pub fn is_true(&self) -> bool {
-        !self.is_false()
-    }
-
-    /// Check if this value evaluates to false.
-    pub fn is_false(&self) -> bool {
-        match self.kind {
-            ValueKind::Void => true,
-            ValueKind::Int(ref v, ..) => v.is_zero(),
-            ValueKind::Time(ref v) => v.is_zero(),
-            ValueKind::StructOrArray(_) => false,
-        }
-    }
-
-    /// Convert the value to an integer.
-    pub fn get_int(&self) -> Option<&BigInt> {
-        match self.kind {
-            ValueKind::Int(ref v, ..) => Some(v),
-            _ => None,
+impl<'t> ValueKind<'t> {
+    /// Check if the value represents a computation error tombstone.
+    pub fn is_error(&self) -> bool {
+        match self {
+            ValueKind::Error => true,
+            _ => false,
         }
     }
 }
