@@ -987,9 +987,10 @@ fn parse_hierarchy_item(p: &mut dyn AbstractParser) -> ReportedResult<Item> {
 
     // First attempt the simple cases where a keyword reliably identifies the
     // following item.
+    let class_follows = p.peek(1).0 == Keyword(Kw::Class);
     match p.peek(0).0 {
         Keyword(Kw::Module) => return parse_module_decl(p).map(Item::ModuleDecl),
-        Keyword(Kw::Interface) | Keyword(Kw::Virtual) if p.peek(1).0 == Keyword(Kw::Class) => {
+        Keyword(Kw::Interface) | Keyword(Kw::Virtual) if class_follows => {
             return parse_class_decl(p).map(Item::ClassDecl)
         }
         Keyword(Kw::Class) => return parse_class_decl(p).map(Item::ClassDecl),
