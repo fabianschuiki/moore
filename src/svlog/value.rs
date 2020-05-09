@@ -262,29 +262,6 @@ fn const_expr<'gcx>(
             cx.mkty_packed_array(1, &ty::BYTE_TYPE),
             vec![cx.intern_value(make_int(&ty::BYTE_TYPE, num::zero()))],
         ))),
-        hir::ExprKind::Binary(op, lhs, rhs) => {
-            let lhs_val = cx.constant_value_of(lhs, env)?;
-            let rhs_val = cx.constant_value_of(rhs, env)?;
-            match (&lhs_val.kind, &rhs_val.kind) {
-                (&ValueKind::Int(ref lhs, ..), &ValueKind::Int(ref rhs, ..)) => {
-                    let op_ty = cx.operation_type(expr.id, env).unwrap();
-                    Ok(cx.intern_value(make_int(
-                        ty,
-                        const_binary_op_on_int(cx, expr.span, op_ty, op, lhs, rhs)?,
-                    )))
-                }
-                _ => {
-                    cx.emit(
-                        DiagBuilder2::error(format!(
-                            "{} cannot be applied to the given arguments",
-                            op.desc_full(),
-                        ))
-                        .span(expr.span()),
-                    );
-                    Err(())
-                }
-            }
-        }
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
             Ok(cx.intern_value(make_int(ty, num::zero())))
         }
@@ -426,6 +403,23 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
             }
         }
 
+        mir::RvalueKind::BinaryBitwise { op, lhs, rhs } => {
+            let lhs_val = const_mir(cx, lhs);
+            let rhs_val = const_mir(cx, rhs);
+            if lhs_val.is_error() || rhs_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match (&lhs_val.kind, &rhs_val.kind) {
+                (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
+                    cx.intern_value(make_int(
+                        mir.ty,
+                        const_binary_bitwise_int(cx, lhs.ty, op, lhs_int, rhs_int),
+                    ))
+                }
+                _ => unreachable!(),
+            }
+        }
+
         mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
             let arg_val = const_mir(cx, arg);
             if arg_val.is_error() {
@@ -436,6 +430,37 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
                     mir.ty,
                     const_unary_arith_int(cx, arg.ty, op, arg_int),
                 )),
+                _ => unreachable!(),
+            }
+        }
+
+        mir::RvalueKind::IntBinaryArith { op, lhs, rhs, .. } => {
+            let lhs_val = const_mir(cx, lhs);
+            let rhs_val = const_mir(cx, rhs);
+            if lhs_val.is_error() || rhs_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match (&lhs_val.kind, &rhs_val.kind) {
+                (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
+                    cx.intern_value(make_int(
+                        mir.ty,
+                        const_binary_arith_int(cx, lhs.ty, op, lhs_int, rhs_int),
+                    ))
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        mir::RvalueKind::IntComp { op, lhs, rhs, .. } => {
+            let lhs_val = const_mir(cx, lhs);
+            let rhs_val = const_mir(cx, rhs);
+            if lhs_val.is_error() || rhs_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match (&lhs_val.kind, &rhs_val.kind) {
+                (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => cx.intern_value(
+                    make_int(mir.ty, const_comp_int(cx, lhs.ty, op, lhs_int, rhs_int)),
+                ),
                 _ => unreachable!(),
             }
         }
@@ -456,6 +481,29 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
                     cx.emit(DiagBuilder2::note("constant value needed here").span(mir.span));
                     cx.intern_value(make_error(mir.ty))
                 }
+            }
+        }
+
+        mir::RvalueKind::Shift {
+            op,
+            arith,
+            value,
+            amount,
+            ..
+        } => {
+            let value_val = const_mir(cx, value);
+            let amount_val = const_mir(cx, amount);
+            if value_val.is_error() || amount_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match (&value_val.kind, &amount_val.kind) {
+                (ValueKind::Int(value_int, ..), ValueKind::Int(amount_int, ..)) => {
+                    cx.intern_value(make_int(
+                        mir.ty,
+                        const_shift_int(cx, value.ty, op, arith, value_int, amount_int),
+                    ))
+                }
+                _ => unreachable!(),
             }
         }
 
@@ -497,6 +545,20 @@ fn const_unary_bitwise_int<'gcx>(
     }
 }
 
+fn const_binary_bitwise_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    _ty: Type,
+    op: mir::BinaryBitwiseOp,
+    lhs: &BigInt,
+    rhs: &BigInt,
+) -> BigInt {
+    match op {
+        mir::BinaryBitwiseOp::And => lhs & rhs,
+        mir::BinaryBitwiseOp::Or => lhs | rhs,
+        mir::BinaryBitwiseOp::Xor => lhs ^ rhs,
+    }
+}
+
 fn const_unary_arith_int<'gcx>(
     _cx: &impl Context<'gcx>,
     _ty: Type,
@@ -505,6 +567,70 @@ fn const_unary_arith_int<'gcx>(
 ) -> BigInt {
     match op {
         mir::IntUnaryArithOp::Neg => -arg,
+    }
+}
+
+fn const_binary_arith_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    _ty: Type,
+    op: mir::IntBinaryArithOp,
+    lhs: &BigInt,
+    rhs: &BigInt,
+) -> BigInt {
+    match op {
+        mir::IntBinaryArithOp::Add => lhs + rhs,
+        mir::IntBinaryArithOp::Sub => lhs - rhs,
+        mir::IntBinaryArithOp::Mul => lhs * rhs,
+        mir::IntBinaryArithOp::Div => lhs / rhs,
+        mir::IntBinaryArithOp::Mod => lhs % rhs,
+        mir::IntBinaryArithOp::Pow => {
+            let mut result = num::one();
+            let mut cnt = rhs.clone();
+            while !cnt.is_zero() {
+                result = result * lhs;
+                cnt = cnt - 1;
+            }
+            result
+        }
+    }
+}
+
+fn const_comp_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    _ty: Type,
+    op: mir::IntCompOp,
+    lhs: &BigInt,
+    rhs: &BigInt,
+) -> BigInt {
+    match op {
+        mir::IntCompOp::Eq => ((lhs == rhs) as usize).into(),
+        mir::IntCompOp::Neq => ((lhs != rhs) as usize).into(),
+        mir::IntCompOp::Lt => ((lhs < rhs) as usize).into(),
+        mir::IntCompOp::Leq => ((lhs <= rhs) as usize).into(),
+        mir::IntCompOp::Gt => ((lhs > rhs) as usize).into(),
+        mir::IntCompOp::Geq => ((lhs >= rhs) as usize).into(),
+    }
+}
+
+fn const_shift_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    _ty: Type,
+    op: mir::ShiftOp,
+    _arith: bool,
+    value: &BigInt,
+    amount: &BigInt,
+) -> BigInt {
+    match op {
+        mir::ShiftOp::Left => match amount.to_isize() {
+            Some(sh) if sh < 0 => value >> -sh as usize,
+            Some(sh) => value << sh as usize,
+            None => num::zero(),
+        },
+        mir::ShiftOp::Right => match amount.to_isize() {
+            Some(sh) if sh < 0 => value << -sh as usize,
+            Some(sh) => value >> sh as usize,
+            None => num::zero(),
+        },
     }
 }
 
@@ -528,111 +654,6 @@ fn const_reduction_int<'gcx>(
             .is_odd() as usize)
             .into(),
     }
-}
-
-fn const_unary_op_on_int<'gcx>(
-    cx: &impl Context<'gcx>,
-    span: Span,
-    ty: Type<'gcx>,
-    op: hir::UnaryOp,
-    arg: &BigInt,
-) -> Result<BigInt> {
-    Ok(match op {
-        hir::UnaryOp::Pos => arg.clone(),
-        hir::UnaryOp::Neg => -arg,
-        hir::UnaryOp::BitNot => (BigInt::one() << ty.width()) - 1 - arg,
-        hir::UnaryOp::LogicNot => (arg.is_zero() as usize).into(),
-        hir::UnaryOp::RedAnd => ((arg == &((BigInt::one() << ty.width()) - 1)) as usize).into(),
-        hir::UnaryOp::RedNand => ((arg != &((BigInt::one() << ty.width()) - 1)) as usize).into(),
-        hir::UnaryOp::RedOr => ((!arg.is_zero()) as usize).into(),
-        hir::UnaryOp::RedNor => (arg.is_zero() as usize).into(),
-        hir::UnaryOp::RedXor => (arg
-            .to_bytes_le()
-            .1
-            .into_iter()
-            .map(|v| v.count_ones())
-            .sum::<u32>()
-            .is_odd() as usize)
-            .into(),
-        hir::UnaryOp::RedXnor => (arg
-            .to_bytes_le()
-            .1
-            .into_iter()
-            .map(|v| v.count_ones())
-            .sum::<u32>()
-            .is_even() as usize)
-            .into(),
-        hir::UnaryOp::PreInc
-        | hir::UnaryOp::PreDec
-        | hir::UnaryOp::PostInc
-        | hir::UnaryOp::PostDec => {
-            cx.emit(
-                DiagBuilder2::error(format!(
-                    "{} cannot be applied to integer `{}`",
-                    op.desc_full(),
-                    arg,
-                ))
-                .span(span),
-            );
-            return Err(());
-        }
-    })
-}
-
-fn const_binary_op_on_int<'gcx>(
-    cx: &impl Context<'gcx>,
-    span: Span,
-    ty: Type<'gcx>,
-    op: hir::BinaryOp,
-    lhs: &BigInt,
-    rhs: &BigInt,
-) -> Result<BigInt> {
-    Ok(match op {
-        hir::BinaryOp::Add => lhs + rhs,
-        hir::BinaryOp::Sub => lhs - rhs,
-        hir::BinaryOp::Mul => lhs * rhs,
-        hir::BinaryOp::Div => lhs / rhs,
-        hir::BinaryOp::Mod => lhs % rhs,
-        hir::BinaryOp::Pow => {
-            let mut result = num::one();
-            let mut cnt = rhs.clone();
-            while !cnt.is_zero() {
-                result = result * lhs;
-                cnt = cnt - 1;
-            }
-            result
-        }
-        hir::BinaryOp::Eq => ((lhs == rhs) as usize).into(),
-        hir::BinaryOp::Neq => ((lhs != rhs) as usize).into(),
-        hir::BinaryOp::Lt => ((lhs < rhs) as usize).into(),
-        hir::BinaryOp::Leq => ((lhs <= rhs) as usize).into(),
-        hir::BinaryOp::Gt => ((lhs > rhs) as usize).into(),
-        hir::BinaryOp::Geq => ((lhs >= rhs) as usize).into(),
-        hir::BinaryOp::LogicShL | hir::BinaryOp::ArithShL => match rhs.to_isize() {
-            Some(sh) if sh < 0 => lhs >> -sh as usize,
-            Some(sh) => lhs << sh as usize,
-            None => num::zero(),
-        },
-        hir::BinaryOp::LogicShR | hir::BinaryOp::ArithShR => match rhs.to_isize() {
-            Some(sh) if sh < 0 => lhs << -sh as usize,
-            Some(sh) => lhs >> sh as usize,
-            None => num::zero(),
-        },
-        hir::BinaryOp::BitAnd => lhs & rhs,
-        hir::BinaryOp::BitOr => lhs | rhs,
-        hir::BinaryOp::BitXor => lhs ^ rhs,
-        hir::BinaryOp::BitNand => {
-            const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs & rhs))?
-        }
-        hir::BinaryOp::BitNor => {
-            const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs | rhs))?
-        }
-        hir::BinaryOp::BitXnor => {
-            const_unary_op_on_int(cx, span, ty, hir::UnaryOp::BitNot, &(lhs ^ rhs))?
-        }
-        hir::BinaryOp::LogicAnd => ((!lhs.is_zero() && !rhs.is_zero()) as usize).into(),
-        hir::BinaryOp::LogicOr => ((!lhs.is_zero() || !rhs.is_zero()) as usize).into(),
-    })
 }
 
 /// Check if a node has a constant value.
