@@ -5,7 +5,10 @@ use crate::common::*;
 
 /// Compile a module in a piece of verilog code and return the LLHD.
 fn compile_module(name: &str, code: &str) -> String {
-    simple_logger::init().is_ok();
+    // Make sure the logger is initialize only once.
+    static INIT_LOGGER: std::sync::Once = std::sync::Once::new();
+    INIT_LOGGER.call_once(|| simple_logger::init().unwrap());
+
     let sess = Session::new();
     let store = GlobalArenas::default();
     let ast = parse(code);
