@@ -59,6 +59,7 @@ fn main() {
                     "names",
                     "casts",
                     "ports",
+                    "consts",
                 ])
                 .global(true),
         )
@@ -180,6 +181,7 @@ fn main() {
             "names" => Verbosity::NAMES,
             "casts" => Verbosity::CASTS,
             "ports" => Verbosity::PORTS,
+            "consts" => Verbosity::CONSTS,
             _ => unreachable!(),
         };
     }

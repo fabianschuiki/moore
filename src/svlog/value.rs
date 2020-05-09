@@ -18,6 +18,7 @@ use crate::{
     ParamEnv, ParamEnvBinding,
 };
 use bit_vec::BitVec;
+use itertools::Itertools;
 use num::{BigInt, BigRational, Integer, One, ToPrimitive, Zero};
 
 /// A verilog value.
@@ -87,6 +88,20 @@ impl<'t> ValueKind<'t> {
         match self {
             ValueKind::Error => true,
             _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for ValueKind<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ValueKind::Void => write!(f, "void"),
+            ValueKind::Int(v, ..) => write!(f, "{}", v),
+            ValueKind::Time(v) => write!(f, "{}", v),
+            ValueKind::StructOrArray(v) => {
+                write!(f, "{{ {} }}", v.iter().map(|v| &v.kind).format(", "))
+            }
+            ValueKind::Error => write!(f, "<error>"),
         }
     }
 }
@@ -172,6 +187,25 @@ pub(crate) fn constant_value_of<'gcx>(
     node_id: NodeId,
     env: ParamEnv,
 ) -> Result<Value<'gcx>> {
+    let v = const_node(cx, node_id, env);
+    if cx.sess().has_verbosity(Verbosity::CONSTS) {
+        let vp = v
+            .as_ref()
+            .map(|v| format!("{}, {}", v.ty, v.kind))
+            .unwrap_or_else(|_| format!("<error>"));
+        let span = cx.span(node_id);
+        let ext = span.extract();
+        let line = span.begin().human_line();
+        println!("{}: const({}) = {}", line, ext, vp);
+    }
+    v
+}
+
+fn const_node<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Result<Value<'gcx>> {
     let hir = cx.hir_of(node_id)?;
     match hir {
         HirNode::Expr(expr) => {
@@ -238,6 +272,19 @@ pub(crate) fn constant_value_of<'gcx>(
 }
 
 fn const_mir_rvalue<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
+    let v = const_mir_rvalue_inner(cx, mir);
+    if cx.sess().has_verbosity(Verbosity::CONSTS) {
+        let ext = mir.span.extract();
+        let line = mir.span.begin().human_line();
+        println!("{}: const_mir({}) = {}, {}", line, ext, v.ty, v.kind);
+    }
+    v
+}
+
+fn const_mir_rvalue_inner<'gcx>(
+    cx: &impl Context<'gcx>,
+    mir: &'gcx mir::Rvalue<'gcx>,
+) -> Value<'gcx> {
     // Propagate MIR tombstones immediately.
     if mir.is_error() {
         return cx.intern_value(make_error(mir.ty));
