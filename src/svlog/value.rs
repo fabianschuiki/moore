@@ -91,6 +91,14 @@ impl<'t> ValueKind<'t> {
     }
 }
 
+/// Create a new tombstone value.
+pub fn make_error(ty: Type) -> ValueData {
+    ValueData {
+        ty,
+        kind: ValueKind::Error,
+    }
+}
+
 /// Create a new integer value.
 ///
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
@@ -271,28 +279,6 @@ fn const_expr<'gcx>(
                 }
             }
         }
-        hir::ExprKind::Unary(op, arg) => {
-            let arg_val = cx.constant_value_of(arg, env)?;
-            match arg_val.kind {
-                ValueKind::Int(ref arg, ..) => {
-                    let op_ty = cx.operation_type(expr.id, env).unwrap();
-                    Ok(cx.intern_value(make_int(
-                        ty,
-                        const_unary_op_on_int(cx, expr.span, op_ty, op, arg)?,
-                    )))
-                }
-                _ => {
-                    cx.emit(
-                        DiagBuilder2::error(format!(
-                            "{} cannot be applied to the given arguments",
-                            op.desc_full(),
-                        ))
-                        .span(expr.span()),
-                    );
-                    Err(())
-                }
-            }
-        }
         hir::ExprKind::Binary(op, lhs, rhs) => {
             let lhs_val = cx.constant_value_of(lhs, env)?;
             let rhs_val = cx.constant_value_of(rhs, env)?;
@@ -354,9 +340,7 @@ fn const_expr<'gcx>(
                 _ => Err(()),
             }
         }
-        hir::ExprKind::PositionalPattern(..)
-        | hir::ExprKind::NamedPattern(..)
-        | hir::ExprKind::RepeatPattern(..) => {
+        hir::ExprKind::PositionalPattern(..) | hir::ExprKind::RepeatPattern(..) => {
             let mut resolved = resolver::resolve_pattern(cx, expr.id, env)?;
             resolved.sort_by(|(a, _), (b, _)| a.cmp(b));
             trace!("resolved {:?} to {:#?}", expr.kind, resolved);
@@ -384,10 +368,6 @@ fn const_expr<'gcx>(
             );
             Err(())
         }
-        hir::ExprKind::Concat(..) => {
-            let mir = cx.mir_rvalue(expr.id, env);
-            const_mir(cx, mir)
-        }
         // TODO: Casts are just transparent at the moment. That's pretty bad.
         hir::ExprKind::Cast(_, arg)
         | hir::ExprKind::CastSign(_, arg)
@@ -395,9 +375,152 @@ fn const_expr<'gcx>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx.constant_value_of(arg, env),
         _ => {
-            error!("{:?}", expr);
-            cx.unimp_msg("constant value computation of", expr)
+            let mir = cx.mir_rvalue(expr.id, env);
+            Ok(const_mir(cx, mir))
+            // error!("{:?}", expr);
+            // cx.unimp_msg("constant value computation of", expr)
         }
+    }
+}
+
+fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
+    match mir.kind {
+        // TODO: Casts are just transparent at the moment. That's pretty bad.
+        mir::RvalueKind::CastValueDomain { value, .. }
+        | mir::RvalueKind::CastVectorToAtom { value, .. }
+        | mir::RvalueKind::CastAtomToVector { value, .. }
+        | mir::RvalueKind::CastSign(_, value)
+        | mir::RvalueKind::Truncate(_, value)
+        | mir::RvalueKind::ZeroExtend(_, value)
+        | mir::RvalueKind::SignExtend(_, value) => const_mir(cx, value),
+
+        mir::RvalueKind::CastToBool(value) => {
+            let value = const_mir(cx, value);
+            if value.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            cx.intern_value(make_int(mir.ty, (value.is_true() as usize).into()))
+        }
+
+        mir::RvalueKind::ConstructArray(ref values) => cx.intern_value(make_array(
+            mir.ty,
+            (0..values.len())
+                .map(|index| const_mir(cx, values[&index]))
+                .collect(),
+        )),
+
+        mir::RvalueKind::ConstructStruct(ref values) => cx.intern_value(make_struct(
+            mir.ty,
+            values.iter().map(|value| const_mir(cx, value)).collect(),
+        )),
+
+        mir::RvalueKind::Const(value) => value,
+
+        mir::RvalueKind::UnaryBitwise { op, arg } => {
+            let arg_val = const_mir(cx, arg);
+            if arg_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match arg_val.kind {
+                ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
+                    mir.ty,
+                    const_unary_bitwise_int(cx, arg.ty, op, arg_int),
+                )),
+                _ => unreachable!(),
+            }
+        }
+
+        mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
+            let arg_val = const_mir(cx, arg);
+            if arg_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match arg_val.kind {
+                ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
+                    mir.ty,
+                    const_unary_arith_int(cx, arg.ty, op, arg_int),
+                )),
+                _ => unreachable!(),
+            }
+        }
+
+        mir::RvalueKind::Concat(ref values) => {
+            let mut result = BigInt::zero();
+            for value in values {
+                result <<= value.ty.width();
+                result |= const_mir(cx, value).get_int().expect("concat non-integer");
+            }
+            cx.intern_value(make_int(mir.ty, result))
+        }
+
+        mir::RvalueKind::Reduction { op, arg } => {
+            let arg_val = const_mir(cx, arg);
+            if arg_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match arg_val.kind {
+                ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
+                    mir.ty,
+                    const_reduction_int(cx, arg.ty, op, arg_int),
+                )),
+                _ => unreachable!(),
+            }
+        }
+
+        // Propagate tombstones.
+        mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
+
+        // TODO: This should eventually not be necessary, because each MIR is
+        // either handled or throws an error.
+        _ => {
+            cx.emit(DiagBuilder2::bug("constant value of rvalue not implemented").span(mir.span));
+            error!("Offending MIR is: {:#?}", mir);
+            cx.intern_value(make_error(mir.ty))
+        }
+    }
+}
+
+fn const_unary_bitwise_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    ty: Type,
+    op: mir::UnaryBitwiseOp,
+    arg: &BigInt,
+) -> BigInt {
+    match op {
+        mir::UnaryBitwiseOp::Not => (BigInt::one() << ty.width()) - 1 - arg,
+    }
+}
+
+fn const_unary_arith_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    _ty: Type,
+    op: mir::IntUnaryArithOp,
+    arg: &BigInt,
+) -> BigInt {
+    match op {
+        mir::IntUnaryArithOp::Neg => -arg,
+    }
+}
+
+fn const_reduction_int<'gcx>(
+    _cx: &impl Context<'gcx>,
+    ty: Type,
+    op: mir::BinaryBitwiseOp,
+    arg: &BigInt,
+) -> BigInt {
+    match op {
+        mir::BinaryBitwiseOp::And => {
+            ((arg == &((BigInt::one() << ty.width()) - 1)) as usize).into()
+        }
+        mir::BinaryBitwiseOp::Or => ((!arg.is_zero()) as usize).into(),
+        mir::BinaryBitwiseOp::Xor => (arg
+            .to_bytes_le()
+            .1
+            .into_iter()
+            .map(|v| v.count_ones())
+            .sum::<u32>()
+            .is_odd() as usize)
+            .into(),
     }
 }
 
@@ -504,23 +627,6 @@ fn const_binary_op_on_int<'gcx>(
         hir::BinaryOp::LogicAnd => ((!lhs.is_zero() && !rhs.is_zero()) as usize).into(),
         hir::BinaryOp::LogicOr => ((!lhs.is_zero() || !rhs.is_zero()) as usize).into(),
     })
-}
-
-fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Result<Value<'gcx>> {
-    match mir.kind {
-        mir::RvalueKind::Concat(ref values) => {
-            let mut result = BigInt::zero();
-            for value in values {
-                result <<= value.ty.width();
-                result |= const_mir(cx, value)?.get_int().expect("concat non-integer");
-            }
-            Ok(cx.intern_value(make_int(mir.ty, result)))
-        }
-
-        // By default fall back to the usual method of constant value
-        // computation.
-        _ => cx.constant_value_of(mir.origin, mir.env),
-    }
 }
 
 /// Check if a node has a constant value.
