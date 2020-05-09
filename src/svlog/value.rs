@@ -14,7 +14,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{bit_size_of_type, Type, TypeKind},
+    ty::{Type, TypeKind},
     ParamEnv, ParamEnvBinding,
 };
 use bit_vec::BitVec;
@@ -174,7 +174,10 @@ pub(crate) fn constant_value_of<'gcx>(
 ) -> Result<Value<'gcx>> {
     let hir = cx.hir_of(node_id)?;
     match hir {
-        HirNode::Expr(expr) => const_expr(cx, expr, env),
+        HirNode::Expr(expr) => {
+            let mir = cx.mir_rvalue(expr.id, env);
+            Ok(const_mir_rvalue(cx, mir))
+        }
         HirNode::ValueParam(param) => {
             let env_data = cx.param_env_data(env);
             match env_data.find_value(node_id) {
@@ -234,25 +237,7 @@ pub(crate) fn constant_value_of<'gcx>(
     }
 }
 
-/// Determine the constant value of an expression.
-fn const_expr<'gcx>(
-    cx: &impl Context<'gcx>,
-    expr: &hir::Expr,
-    env: ParamEnv,
-) -> Result<Value<'gcx>> {
-    let ty = cx.type_of(expr.id, env)?;
-    #[allow(unreachable_patterns)]
-    match expr.kind {
-        _ => {
-            let mir = cx.mir_rvalue(expr.id, env);
-            Ok(const_mir(cx, mir))
-            // error!("{:?}", expr);
-            // cx.unimp_msg("constant value computation of", expr)
-        }
-    }
-}
-
-fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
+fn const_mir_rvalue<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
     // Propagate MIR tombstones immediately.
     if mir.is_error() {
         return cx.intern_value(make_error(mir.ty));
@@ -278,11 +263,11 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
                     ))
                     .span(value.span),
             );
-            const_mir(cx, value)
+            const_mir_rvalue(cx, value)
         }
 
         mir::RvalueKind::CastToBool(value) => {
-            let value = const_mir(cx, value);
+            let value = const_mir_rvalue(cx, value);
             if value.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -292,19 +277,22 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         mir::RvalueKind::ConstructArray(ref values) => cx.intern_value(make_array(
             mir.ty,
             (0..values.len())
-                .map(|index| const_mir(cx, values[&index]))
+                .map(|index| const_mir_rvalue(cx, values[&index]))
                 .collect(),
         )),
 
         mir::RvalueKind::ConstructStruct(ref values) => cx.intern_value(make_struct(
             mir.ty,
-            values.iter().map(|value| const_mir(cx, value)).collect(),
+            values
+                .iter()
+                .map(|value| const_mir_rvalue(cx, value))
+                .collect(),
         )),
 
         mir::RvalueKind::Const(value) => value,
 
         mir::RvalueKind::UnaryBitwise { op, arg } => {
-            let arg_val = const_mir(cx, arg);
+            let arg_val = const_mir_rvalue(cx, arg);
             if arg_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -318,8 +306,8 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         }
 
         mir::RvalueKind::BinaryBitwise { op, lhs, rhs } => {
-            let lhs_val = const_mir(cx, lhs);
-            let rhs_val = const_mir(cx, rhs);
+            let lhs_val = const_mir_rvalue(cx, lhs);
+            let rhs_val = const_mir_rvalue(cx, rhs);
             if lhs_val.is_error() || rhs_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -335,7 +323,7 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         }
 
         mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
-            let arg_val = const_mir(cx, arg);
+            let arg_val = const_mir_rvalue(cx, arg);
             if arg_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -349,8 +337,8 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         }
 
         mir::RvalueKind::IntBinaryArith { op, lhs, rhs, .. } => {
-            let lhs_val = const_mir(cx, lhs);
-            let rhs_val = const_mir(cx, rhs);
+            let lhs_val = const_mir_rvalue(cx, lhs);
+            let rhs_val = const_mir_rvalue(cx, rhs);
             if lhs_val.is_error() || rhs_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -366,8 +354,8 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         }
 
         mir::RvalueKind::IntComp { op, lhs, rhs, .. } => {
-            let lhs_val = const_mir(cx, lhs);
-            let rhs_val = const_mir(cx, rhs);
+            let lhs_val = const_mir_rvalue(cx, lhs);
+            let rhs_val = const_mir_rvalue(cx, rhs);
             if lhs_val.is_error() || rhs_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -383,13 +371,15 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
             let mut result = BigInt::zero();
             for value in values {
                 result <<= value.ty.width();
-                result |= const_mir(cx, value).get_int().expect("concat non-integer");
+                result |= const_mir_rvalue(cx, value)
+                    .get_int()
+                    .expect("concat non-integer");
             }
             cx.intern_value(make_int(mir.ty, result))
         }
 
         mir::RvalueKind::Repeat(count, value) => {
-            let value_const = const_mir(cx, value);
+            let value_const = const_mir_rvalue(cx, value);
             if value_const.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -412,7 +402,7 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         }
 
         mir::RvalueKind::Member { value, field } => {
-            let value_const = const_mir(cx, value);
+            let value_const = const_mir_rvalue(cx, value);
             if value_const.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -427,9 +417,9 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
             true_value,
             false_value,
         } => {
-            let cond_val = const_mir(cx, cond);
-            let true_val = const_mir(cx, true_value);
-            let false_val = const_mir(cx, false_value);
+            let cond_val = const_mir_rvalue(cx, cond);
+            let true_val = const_mir_rvalue(cx, true_value);
+            let false_val = const_mir_rvalue(cx, false_value);
             match cond_val.is_true() {
                 true => true_val,
                 false => false_val,
@@ -443,8 +433,8 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
             amount,
             ..
         } => {
-            let value_val = const_mir(cx, value);
-            let amount_val = const_mir(cx, amount);
+            let value_val = const_mir_rvalue(cx, value);
+            let amount_val = const_mir_rvalue(cx, amount);
             if value_val.is_error() || amount_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -460,7 +450,7 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         }
 
         mir::RvalueKind::Reduction { op, arg } => {
-            let arg_val = const_mir(cx, arg);
+            let arg_val = const_mir_rvalue(cx, arg);
             if arg_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }

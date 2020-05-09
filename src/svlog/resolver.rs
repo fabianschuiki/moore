@@ -417,6 +417,7 @@ pub(crate) fn resolve_field_access<'gcx>(
 }
 
 /// Resolve the fields in an assignment pattern.
+#[allow(dead_code)]
 pub(crate) fn resolve_pattern<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
