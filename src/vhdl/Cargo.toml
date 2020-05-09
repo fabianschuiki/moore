@@ -14,11 +14,9 @@ path = "lib.rs"
 [dependencies]
 moore-common = { path = "../common", version = "0.8.0-dev" }
 moore-vhdl-syntax = { path = "syntax", version = "0.8.0-dev" }
-bincode = "0.6"
 lazy_static = "1.4"
 llhd = "0.5"
 num = "0.1"
 rustc-serialize = "0.3"
-slog = "2.0.12"
-typed-arena = "1.3.0"
+typed-arena = "2.0.1"
 # futures = "0.1"
