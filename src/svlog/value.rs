@@ -293,7 +293,7 @@ fn const_expr<'gcx>(
                 _ => Err(()),
             }
         }
-        hir::ExprKind::PositionalPattern(..) | hir::ExprKind::RepeatPattern(..) => {
+        hir::ExprKind::PositionalPattern(..) => {
             let mut resolved = resolver::resolve_pattern(cx, expr.id, env)?;
             resolved.sort_by(|(a, _), (b, _)| a.cmp(b));
             trace!("resolved {:?} to {:#?}", expr.kind, resolved);
@@ -457,6 +457,19 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
             for value in values {
                 result <<= value.ty.width();
                 result |= const_mir(cx, value).get_int().expect("concat non-integer");
+            }
+            cx.intern_value(make_int(mir.ty, result))
+        }
+
+        mir::RvalueKind::Repeat(count, value) => {
+            let value_const = const_mir(cx, value);
+            if value_const.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            let mut result = BigInt::zero();
+            for _ in 0..count {
+                result <<= value.ty.width();
+                result |= value_const.get_int().expect("repeat non-integer");
             }
             cx.intern_value(make_int(mir.ty, result))
         }
