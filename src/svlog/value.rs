@@ -375,7 +375,20 @@ fn const_mir<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Val
         | mir::RvalueKind::CastSign(_, value)
         | mir::RvalueKind::Truncate(_, value)
         | mir::RvalueKind::ZeroExtend(_, value)
-        | mir::RvalueKind::SignExtend(_, value) => const_mir(cx, value),
+        | mir::RvalueKind::SignExtend(_, value) => {
+            cx.emit(
+                DiagBuilder2::warning("cast ignored during constant evaluation")
+                    .span(mir.span)
+                    .add_note(format!(
+                        "Casts `{}` from `{}` to `{}`",
+                        value.span.extract(),
+                        value.ty,
+                        mir.ty
+                    ))
+                    .span(value.span),
+            );
+            const_mir(cx, value)
+        }
 
         mir::RvalueKind::CastToBool(value) => {
             let value = const_mir(cx, value);
