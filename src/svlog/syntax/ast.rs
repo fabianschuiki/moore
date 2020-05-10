@@ -9,6 +9,21 @@ use moore_common::{
     util::{HasDesc, HasSpan},
 };
 use moore_derive::CommonNode;
+use std::cell::Cell;
+
+/// Common denominator across all AST nodes.
+pub struct Node<'a, T> {
+    /// Full span the node covers in the input.
+    pub span: Span,
+    /// Parent node.
+    pub parent: Cell<Option<&'a ()>>,
+    /// Lexical predecessor node.
+    pub lex_pred: Cell<Option<&'a ()>>,
+    /// Lexical successor node.
+    pub lex_succ: Cell<Option<&'a ()>>,
+    /// Per-node data.
+    pub data: T,
+}
 
 /// Common interface to all AST nodes.
 pub trait CommonNode {
@@ -795,6 +810,20 @@ impl HasSpan for Expr {
 }
 
 impl HasDesc for Expr {
+    fn desc(&self) -> &'static str {
+        "expression"
+    }
+}
+
+pub type Expr2<'a> = Node<'a, ExprData>;
+
+impl HasSpan for Expr2<'_> {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl HasDesc for Expr2<'_> {
     fn desc(&self) -> &'static str {
         "expression"
     }
