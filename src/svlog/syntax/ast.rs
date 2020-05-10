@@ -36,24 +36,24 @@ pub use self::StmtData::*;
 pub use self::TypeData::*;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Root {
+pub struct Root<'a> {
     pub timeunits: Timeunit,
-    pub items: Vec<Item>,
+    pub items: Vec<Item<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ModDecl {
+pub struct ModDecl<'a> {
     pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
     pub imports: Vec<ImportDecl>,
-    pub params: Vec<ParamDecl>,
-    pub ports: Vec<Port>,
-    pub items: Vec<Item>,
+    pub params: Vec<ParamDecl<'a>>,
+    pub ports: Vec<Port<'a>>,
+    pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for ModDecl {
+impl HasSpan for ModDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -63,7 +63,7 @@ impl HasSpan for ModDecl {
     }
 }
 
-impl HasDesc for ModDecl {
+impl HasDesc for ModDecl<'_> {
     fn desc(&self) -> &'static str {
         "module declaration"
     }
@@ -74,27 +74,27 @@ impl HasDesc for ModDecl {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IntfDecl {
+pub struct IntfDecl<'a> {
     pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
-    pub params: Vec<ParamDecl>,
-    pub ports: Vec<Port>,
-    pub items: Vec<Item>,
+    pub params: Vec<ParamDecl<'a>>,
+    pub ports: Vec<Port<'a>>,
+    pub items: Vec<Item<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PackageDecl {
+pub struct PackageDecl<'a> {
     pub span: Span,
     pub lifetime: Lifetime,
     pub name: Name,
     pub name_span: Span,
     pub timeunits: Timeunit,
-    pub items: Vec<Item>,
+    pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for PackageDecl {
+impl HasSpan for PackageDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -104,7 +104,7 @@ impl HasSpan for PackageDecl {
     }
 }
 
-impl HasDesc for PackageDecl {
+impl HasDesc for PackageDecl<'_> {
     fn desc(&self) -> &'static str {
         "package declaration"
     }
@@ -134,33 +134,33 @@ pub struct Timeunit {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Item {
+pub enum Item<'a> {
     Dummy,
-    ModuleDecl(ModDecl),
-    InterfaceDecl(IntfDecl),
-    PackageDecl(PackageDecl),
-    ClassDecl(ClassDecl),
+    ModuleDecl(ModDecl<'a>),
+    InterfaceDecl(IntfDecl<'a>),
+    PackageDecl(PackageDecl<'a>),
+    ClassDecl(ClassDecl<'a>),
     ProgramDecl(()),
     ImportDecl(ImportDecl),
-    ParamDecl(ParamDecl),
+    ParamDecl(ParamDecl<'a>),
     ModportDecl(ModportDecl),
-    Typedef(Typedef),
-    PortDecl(PortDecl),
-    Procedure(Procedure),
-    SubroutineDecl(SubroutineDecl),
-    ContAssign(ContAssign),
-    GenvarDecl(Vec<GenvarDecl>),
-    GenerateRegion(Span, Vec<Item>),
-    GenerateFor(GenerateFor),
-    GenerateIf(GenerateIf),
+    Typedef(Typedef<'a>),
+    PortDecl(PortDecl<'a>),
+    Procedure(Procedure<'a>),
+    SubroutineDecl(SubroutineDecl<'a>),
+    ContAssign(ContAssign<'a>),
+    GenvarDecl(Vec<GenvarDecl<'a>>),
+    GenerateRegion(Span, Vec<Item<'a>>),
+    GenerateFor(GenerateFor<'a>),
+    GenerateIf(GenerateIf<'a>),
     GenerateCase(GenerateCase),
-    Assertion(Assertion),
-    NetDecl(NetDecl),
-    VarDecl(VarDecl),
-    Inst(Inst),
+    Assertion(Assertion<'a>),
+    NetDecl(NetDecl<'a>),
+    VarDecl(VarDecl<'a>),
+    Inst(Inst<'a>),
 }
 
-impl HasSpan for Item {
+impl HasSpan for Item<'_> {
     fn span(&self) -> Span {
         match *self {
             Item::ModuleDecl(ref decl) => decl.span(),
@@ -190,7 +190,7 @@ impl HasSpan for Item {
     }
 }
 
-impl HasDesc for Item {
+impl HasDesc for Item<'_> {
     fn desc(&self) -> &'static str {
         match *self {
             Item::ModuleDecl(ref decl) => decl.desc(),
@@ -221,20 +221,20 @@ impl HasDesc for Item {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Type {
+pub struct Type<'a> {
     pub span: Span,
-    pub data: TypeData,
+    pub data: TypeData<'a>,
     pub sign: TypeSign,
-    pub dims: Vec<TypeDim>,
+    pub dims: Vec<TypeDim<'a>>,
 }
 
-impl HasSpan for Type {
+impl HasSpan for Type<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for Type {
+impl HasDesc for Type<'_> {
     fn desc(&self) -> &'static str {
         match self.data {
             ImplicitType => "implicit type",
@@ -251,7 +251,7 @@ impl HasDesc for Type {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeData {
+pub enum TypeData<'a> {
     ImplicitType,
     VoidType,
     NamedType(Identifier),
@@ -265,7 +265,7 @@ pub enum TypeData {
 
     // Scoping
     ScopedType {
-        ty: Box<Type>,
+        ty: Box<Type<'a>>,
         member: bool,
         name: Identifier,
     },
@@ -289,16 +289,16 @@ pub enum TypeData {
     RealtimeType,
 
     // Enumerations
-    EnumType(Option<Box<Type>>, Vec<EnumName>),
+    EnumType(Option<Box<Type<'a>>>, Vec<EnumName<'a>>),
     StructType {
         kind: StructKind,
         packed: bool,
         signing: TypeSign,
-        members: Vec<StructMember>,
+        members: Vec<StructMember<'a>>,
     },
 
     // Specialization
-    SpecializedType(Box<Type>, Vec<ParamAssignment>),
+    SpecializedType(Box<Type<'a>>, Vec<ParamAssignment<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -309,15 +309,15 @@ pub enum TypeSign {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeDim {
-    Expr(Expr),
-    Range(Expr, Expr),
+pub enum TypeDim<'a> {
+    Expr(Expr<'a>),
+    Range(Expr<'a>, Expr<'a>),
     Queue,
     Unsized,
     Associative,
 }
 
-impl HasDesc for TypeDim {
+impl HasDesc for TypeDim<'_> {
     fn desc(&self) -> &'static str {
         "type dimension"
     }
@@ -336,20 +336,20 @@ impl HasDesc for TypeDim {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EnumName {
+pub struct EnumName<'a> {
     pub span: Span,
     pub name: Identifier,
-    pub range: Option<Expr>,
-    pub value: Option<Expr>,
+    pub range: Option<Expr<'a>>,
+    pub value: Option<Expr<'a>>,
 }
 
-impl HasSpan for EnumName {
+impl HasSpan for EnumName<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for EnumName {
+impl HasDesc for EnumName<'_> {
     fn desc(&self) -> &'static str {
         "enum variant"
     }
@@ -363,53 +363,53 @@ pub enum StructKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StructMember {
+pub struct StructMember<'a> {
     pub span: Span,
     pub rand_qualifier: Option<RandomQualifier>,
-    pub ty: Box<Type>,
-    pub names: Vec<VarDeclName>,
+    pub ty: Box<Type<'a>>,
+    pub names: Vec<VarDeclName<'a>>,
 }
 
-impl HasSpan for StructMember {
+impl HasSpan for StructMember<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for StructMember {
+impl HasDesc for StructMember<'_> {
     fn desc(&self) -> &'static str {
         "struct member"
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Port {
+pub enum Port<'a> {
     Intf {
         span: Span,
         modport: Option<Identifier>,
         name: Identifier,
-        dims: Vec<TypeDim>,
-        expr: Option<Expr>,
+        dims: Vec<TypeDim<'a>>,
+        expr: Option<Expr<'a>>,
     },
     Explicit {
         span: Span,
         dir: Option<PortDir>,
         name: Identifier,
-        expr: Option<Expr>,
+        expr: Option<Expr<'a>>,
     },
     Named {
         span: Span,
         dir: Option<PortDir>,
         kind: Option<PortKind>,
-        ty: Type,
+        ty: Type<'a>,
         name: Identifier,
-        dims: Vec<TypeDim>,
-        expr: Option<Expr>,
+        dims: Vec<TypeDim<'a>>,
+        expr: Option<Expr<'a>>,
     },
-    Implicit(Expr),
+    Implicit(Expr<'a>),
 }
 
-impl HasSpan for Port {
+impl HasSpan for Port<'_> {
     fn span(&self) -> Span {
         match *self {
             Port::Intf { span, .. } => span,
@@ -429,7 +429,7 @@ impl HasSpan for Port {
     }
 }
 
-impl HasDesc for Port {
+impl HasDesc for Port<'_> {
     fn desc(&self) -> &'static str {
         match *self {
             Port::Intf { name, .. } => "interface port",
@@ -450,12 +450,12 @@ impl HasDesc for Port {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortDecl {
+pub struct PortDecl<'a> {
     pub span: Span,
     pub dir: PortDir,
     pub kind: Option<PortKind>,
-    pub ty: Type,
-    pub names: Vec<VarDeclName>,
+    pub ty: Type<'a>,
+    pub names: Vec<VarDeclName<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -528,19 +528,19 @@ impl std::fmt::Display for NetType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Procedure {
+pub struct Procedure<'a> {
     pub span: Span,
     pub kind: ProcedureKind,
-    pub stmt: Stmt,
+    pub stmt: Stmt<'a>,
 }
 
-impl HasSpan for Procedure {
+impl HasSpan for Procedure<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for Procedure {
+impl HasDesc for Procedure<'_> {
     fn desc(&self) -> &'static str {
         "procedure"
     }
@@ -557,77 +557,77 @@ pub enum ProcedureKind {
 }
 
 #[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub struct Stmt {
+pub struct Stmt<'a> {
     pub span: Span,
     #[ignore_child]
     pub label: Option<Name>,
-    pub data: StmtData,
+    pub data: StmtData<'a>,
 }
 
-impl HasSpan for Stmt {
+impl HasSpan for Stmt<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for Stmt {
+impl HasDesc for Stmt<'_> {
     fn desc(&self) -> &'static str {
         "statement"
     }
 }
 
 #[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub enum StmtData {
+pub enum StmtData<'a> {
     NullStmt,
-    SequentialBlock(Vec<Stmt>),
-    ParallelBlock(Vec<Stmt>, JoinKind),
+    SequentialBlock(Vec<Stmt<'a>>),
+    ParallelBlock(Vec<Stmt<'a>>, JoinKind),
     IfStmt {
         up: Option<UniquePriority>,
-        cond: Expr,
-        main_stmt: Box<Stmt>,
-        else_stmt: Option<Box<Stmt>>,
+        cond: Expr<'a>,
+        main_stmt: Box<Stmt<'a>>,
+        else_stmt: Option<Box<Stmt<'a>>>,
     },
     BlockingAssignStmt {
-        lhs: Expr,
-        rhs: Expr,
+        lhs: Expr<'a>,
+        rhs: Expr<'a>,
         op: AssignOp,
     },
     NonblockingAssignStmt {
-        lhs: Expr,
-        rhs: Expr,
-        delay: Option<DelayControl>,
+        lhs: Expr<'a>,
+        rhs: Expr<'a>,
+        delay: Option<DelayControl<'a>>,
         event: Option<()>,
     },
-    TimedStmt(TimingControl, Box<Stmt>),
+    TimedStmt(TimingControl<'a>, Box<Stmt<'a>>),
     CaseStmt {
         up: Option<UniquePriority>,
         kind: CaseKind,
-        expr: Expr,
+        expr: Expr<'a>,
         mode: CaseMode,
-        items: Vec<CaseItem>,
+        items: Vec<CaseItem<'a>>,
     },
-    ForeverStmt(Box<Stmt>),
-    RepeatStmt(Expr, Box<Stmt>),
-    WhileStmt(Expr, Box<Stmt>),
-    DoStmt(Box<Stmt>, Expr),
-    ForStmt(Box<Stmt>, Expr, Expr, Box<Stmt>),
-    ForeachStmt(Expr, Vec<Option<Identifier>>, Box<Stmt>),
-    ExprStmt(Expr),
-    VarDeclStmt(VarDecl),
-    GenvarDeclStmt(Vec<GenvarDecl>),
+    ForeverStmt(Box<Stmt<'a>>),
+    RepeatStmt(Expr<'a>, Box<Stmt<'a>>),
+    WhileStmt(Expr<'a>, Box<Stmt<'a>>),
+    DoStmt(Box<Stmt<'a>>, Expr<'a>),
+    ForStmt(Box<Stmt<'a>>, Expr<'a>, Expr<'a>, Box<Stmt<'a>>),
+    ForeachStmt(Expr<'a>, Vec<Option<Identifier>>, Box<Stmt<'a>>),
+    ExprStmt(Expr<'a>),
+    VarDeclStmt(VarDecl<'a>),
+    GenvarDeclStmt(Vec<GenvarDecl<'a>>),
     ContinueStmt,
     BreakStmt,
-    ReturnStmt(Option<Expr>),
+    ReturnStmt(Option<Expr<'a>>),
     ImportStmt(ImportDecl),
-    AssertionStmt(Box<Assertion>),
-    WaitExprStmt(Expr, Box<Stmt>),
+    AssertionStmt(Box<Assertion<'a>>),
+    WaitExprStmt(Expr<'a>, Box<Stmt<'a>>),
     WaitForkStmt,
     DisableForkStmt,
     DisableStmt(Name),
 }
 
-impl Stmt {
-    pub fn new_null(span: Span) -> Stmt {
+impl Stmt<'_> {
+    pub fn new_null(span: Span) -> Stmt<'static> {
         Stmt {
             span: span,
             label: None,
@@ -665,36 +665,36 @@ pub enum CaseMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CaseItem {
-    Default(Box<Stmt>),
-    Expr(Vec<Expr>, Box<Stmt>),
+pub enum CaseItem<'a> {
+    Default(Box<Stmt<'a>>),
+    Expr(Vec<Expr<'a>>, Box<Stmt<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DelayControl {
+pub struct DelayControl<'a> {
     pub span: Span,
-    pub expr: Expr,
+    pub expr: Expr<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EventControl {
+pub struct EventControl<'a> {
     pub span: Span,
-    pub data: EventControlData,
+    pub data: EventControlData<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EventControlData {
+pub enum EventControlData<'a> {
     Implicit,
-    Expr(EventExpr),
+    Expr(EventExpr<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CycleDelay {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TimingControl {
-    Delay(DelayControl),
-    Event(EventControl),
+pub enum TimingControl<'a> {
+    Delay(DelayControl<'a>),
+    Event(EventControl<'a>),
     Cycle(CycleDelay),
 }
 
@@ -716,37 +716,37 @@ pub enum AssignOp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VarDecl {
+pub struct VarDecl<'a> {
     pub span: Span,
     pub konst: bool,
     pub var: bool,
     pub lifetime: Option<Lifetime>,
-    pub ty: Type,
-    pub names: Vec<VarDeclName>,
+    pub ty: Type<'a>,
+    pub names: Vec<VarDeclName<'a>>,
 }
 
-impl HasSpan for VarDecl {
+impl HasSpan for VarDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for VarDecl {
+impl HasDesc for VarDecl<'_> {
     fn desc(&self) -> &'static str {
         "variable declaration"
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VarDeclName {
+pub struct VarDeclName<'a> {
     pub span: Span,
     pub name: Name,
     pub name_span: Span,
-    pub dims: Vec<TypeDim>,
-    pub init: Option<Expr>,
+    pub dims: Vec<TypeDim<'a>>,
+    pub init: Option<Expr<'a>>,
 }
 
-impl HasSpan for VarDeclName {
+impl HasSpan for VarDeclName<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -756,7 +756,7 @@ impl HasSpan for VarDeclName {
     }
 }
 
-impl HasDesc for VarDeclName {
+impl HasDesc for VarDeclName<'_> {
     fn desc(&self) -> &'static str {
         "variable"
     }
@@ -767,14 +767,14 @@ impl HasDesc for VarDeclName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GenvarDecl {
+pub struct GenvarDecl<'a> {
     pub span: Span,
     pub name: Name,
     pub name_span: Span,
-    pub init: Option<Expr>,
+    pub init: Option<Expr<'a>>,
 }
 
-impl HasSpan for GenvarDecl {
+impl HasSpan for GenvarDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -784,7 +784,7 @@ impl HasSpan for GenvarDecl {
     }
 }
 
-impl HasDesc for GenvarDecl {
+impl HasDesc for GenvarDecl<'_> {
     fn desc(&self) -> &'static str {
         "genvar"
     }
@@ -794,114 +794,94 @@ impl HasDesc for GenvarDecl {
     }
 }
 
-// TODO: Assign an id to each and every expression. This will later allow the
-// types of each expression to be recorded properly, and simplifies the act of
-// assigning IDs. Maybe expression IDs should be distinct from node IDs?
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub struct Expr {
-    pub span: Span,
-    pub data: ExprData,
-}
+/// An expression.
+pub type Expr<'a> = Node<'a, ExprData<'a>>;
 
-impl HasSpan for Expr {
+impl HasSpan for Expr<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for Expr {
-    fn desc(&self) -> &'static str {
-        "expression"
-    }
-}
-
-pub type Expr2<'a> = Node<'a, ExprData>;
-
-impl HasSpan for Expr2<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for Expr2<'_> {
+impl HasDesc for Expr<'_> {
     fn desc(&self) -> &'static str {
         "expression"
     }
 }
 
 #[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub enum ExprData {
+pub enum ExprData<'a> {
     DummyExpr,
     LiteralExpr(Lit),
     IdentExpr(Identifier),
     SysIdentExpr(Identifier),
-    ScopeExpr(Box<Expr>, Identifier),
+    ScopeExpr(Box<Expr<'a>>, Identifier),
     IndexExpr {
-        indexee: Box<Expr>,
-        index: Box<Expr>,
+        indexee: Box<Expr<'a>>,
+        index: Box<Expr<'a>>,
     },
     UnaryExpr {
         op: Op,
-        expr: Box<Expr>,
+        expr: Box<Expr<'a>>,
         postfix: bool,
     },
     BinaryExpr {
         op: Op,
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
+        lhs: Box<Expr<'a>>,
+        rhs: Box<Expr<'a>>,
     },
     TernaryExpr {
-        cond: Box<Expr>,
-        true_expr: Box<Expr>,
-        false_expr: Box<Expr>,
+        cond: Box<Expr<'a>>,
+        true_expr: Box<Expr<'a>>,
+        false_expr: Box<Expr<'a>>,
     },
     AssignExpr {
         op: AssignOp,
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
+        lhs: Box<Expr<'a>>,
+        rhs: Box<Expr<'a>>,
     },
-    CallExpr(Box<Expr>, Vec<CallArg>),
-    TypeExpr(Box<Type>), // TODO: Check if this is still needed, otherwise remove
-    ConstructorCallExpr(Vec<CallArg>),
-    ClassNewExpr(Option<Box<Expr>>),
-    ArrayNewExpr(Box<Expr>, Option<Box<Expr>>),
+    CallExpr(Box<Expr<'a>>, Vec<CallArg<'a>>),
+    TypeExpr(Box<Type<'a>>), // TODO: Check if this is still needed, otherwise remove
+    ConstructorCallExpr(Vec<CallArg<'a>>),
+    ClassNewExpr(Option<Box<Expr<'a>>>),
+    ArrayNewExpr(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
     EmptyQueueExpr,
     StreamConcatExpr {
-        slice: Option<StreamConcatSlice>,
-        exprs: Vec<StreamExpr>,
+        slice: Option<StreamConcatSlice<'a>>,
+        exprs: Vec<StreamExpr<'a>>,
     },
     ConcatExpr {
-        repeat: Option<Box<Expr>>,
-        exprs: Vec<Expr>,
+        repeat: Option<Box<Expr<'a>>>,
+        exprs: Vec<Expr<'a>>,
     },
     MinTypMaxExpr {
-        min: Box<Expr>,
-        typ: Box<Expr>,
-        max: Box<Expr>,
+        min: Box<Expr<'a>>,
+        typ: Box<Expr<'a>>,
+        max: Box<Expr<'a>>,
     },
     RangeExpr {
         mode: RangeMode,
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
+        lhs: Box<Expr<'a>>,
+        rhs: Box<Expr<'a>>,
     },
     MemberExpr {
-        expr: Box<Expr>,
+        expr: Box<Expr<'a>>,
         name: Identifier,
     },
-    PatternExpr(Vec<PatternField>),
-    InsideExpr(Box<Expr>, Vec<ValueRange>),
-    CastExpr(Type, Box<Expr>),
-    CastSizeExpr(Box<Expr>, Box<Expr>),
-    CastSignExpr(Spanned<TypeSign>, Box<Expr>),
+    PatternExpr(Vec<PatternField<'a>>),
+    InsideExpr(Box<Expr<'a>>, Vec<ValueRange<'a>>),
+    CastExpr(Type<'a>, Box<Expr<'a>>),
+    CastSizeExpr(Box<Expr<'a>>, Box<Expr<'a>>),
+    CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeOrExpr {
-    Type(Type),
-    Expr(Expr),
+pub enum TypeOrExpr<'a> {
+    Type(Type<'a>),
+    Expr(Expr<'a>),
 }
 
-impl HasSpan for TypeOrExpr {
+impl HasSpan for TypeOrExpr<'_> {
     fn span(&self) -> Span {
         match *self {
             TypeOrExpr::Type(ref x) => x.span(),
@@ -917,7 +897,7 @@ impl HasSpan for TypeOrExpr {
     }
 }
 
-impl HasDesc for TypeOrExpr {
+impl HasDesc for TypeOrExpr<'_> {
     fn desc(&self) -> &'static str {
         match *self {
             TypeOrExpr::Type(ref x) => x.desc(),
@@ -934,9 +914,13 @@ impl HasDesc for TypeOrExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValueRange {
-    Single(Expr),
-    Range { lo: Expr, hi: Expr, span: Span },
+pub enum ValueRange<'a> {
+    Single(Expr<'a>),
+    Range {
+        lo: Expr<'a>,
+        hi: Expr<'a>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -953,41 +937,41 @@ pub struct Identifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CallArg {
+pub struct CallArg<'a> {
     pub span: Span,
     pub name_span: Span,
     pub name: Option<Name>,
-    pub expr: Option<Expr>,
+    pub expr: Option<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StreamConcatSlice {
-    Expr(Box<Expr>),
-    Type(Type),
+pub enum StreamConcatSlice<'a> {
+    Expr(Box<Expr<'a>>),
+    Type(Type<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StreamExpr {
-    pub expr: Box<Expr>,
-    pub range: Option<Box<Expr>>,
+pub struct StreamExpr<'a> {
+    pub expr: Box<Expr<'a>>,
+    pub range: Option<Box<Expr<'a>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EventExpr {
+pub enum EventExpr<'a> {
     Edge {
         span: Span,
         edge: EdgeIdent,
-        value: Expr,
+        value: Expr<'a>,
     },
     Iff {
         span: Span,
-        expr: Box<EventExpr>,
-        cond: Expr,
+        expr: Box<EventExpr<'a>>,
+        cond: Expr<'a>,
     },
     Or {
         span: Span,
-        lhs: Box<EventExpr>,
-        rhs: Box<EventExpr>,
+        lhs: Box<EventExpr<'a>>,
+        rhs: Box<EventExpr<'a>>,
     },
 }
 
@@ -999,7 +983,7 @@ pub enum EdgeIdent {
     Negedge,
 }
 
-impl HasSpan for EventExpr {
+impl HasSpan for EventExpr<'_> {
     fn span(&self) -> Span {
         match *self {
             EventExpr::Edge { span: sp, .. } => sp,
@@ -1009,29 +993,29 @@ impl HasSpan for EventExpr {
     }
 }
 
-impl HasDesc for EventExpr {
+impl HasDesc for EventExpr<'_> {
     fn desc(&self) -> &'static str {
         "event expression"
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClassDecl {
+pub struct ClassDecl<'a> {
     pub span: Span,
     pub virt: bool,
     pub lifetime: Lifetime, // default static
     pub name: Identifier,
-    pub params: Vec<ParamDecl>,
-    pub extends: Option<(Type, Vec<CallArg>)>,
+    pub params: Vec<ParamDecl<'a>>,
+    pub extends: Option<(Type<'a>, Vec<CallArg<'a>>)>,
     pub impls: Vec<Identifier>,
-    pub items: Vec<ClassItem>,
+    pub items: Vec<ClassItem<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClassItem {
+pub struct ClassItem<'a> {
     pub span: Span,
     pub qualifiers: Vec<(ClassItemQualifier, Span)>,
-    pub data: ClassItemData,
+    pub data: ClassItemData<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1047,15 +1031,15 @@ pub enum ClassItemQualifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ClassItemData {
+pub enum ClassItemData<'a> {
     Property,
-    Typedef(Typedef),
-    SubroutineDecl(SubroutineDecl),
-    ExternSubroutine(SubroutinePrototype),
-    Constraint(Constraint),
+    Typedef(Typedef<'a>),
+    SubroutineDecl(SubroutineDecl<'a>),
+    ExternSubroutine(SubroutinePrototype<'a>),
+    Constraint(Constraint<'a>),
     ClassDecl,
     CovergroupDecl,
-    ParamDecl(ParamDecl),
+    ParamDecl(ParamDecl<'a>),
     Null,
 }
 
@@ -1066,14 +1050,14 @@ pub enum RandomQualifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Typedef {
+pub struct Typedef<'a> {
     pub span: Span,
     pub name: Identifier,
-    pub ty: Type,
-    pub dims: Vec<TypeDim>,
+    pub ty: Type<'a>,
+    pub dims: Vec<TypeDim<'a>>,
 }
 
-impl HasSpan for Typedef {
+impl HasSpan for Typedef<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -1083,7 +1067,7 @@ impl HasSpan for Typedef {
     }
 }
 
-impl HasDesc for Typedef {
+impl HasDesc for Typedef<'_> {
     fn desc(&self) -> &'static str {
         "typedef"
     }
@@ -1094,13 +1078,13 @@ impl HasDesc for Typedef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Constraint {
+pub struct Constraint<'a> {
     pub span: Span,
     pub kind: ConstraintKind,
     pub statik: bool,
     pub name: Name,
     pub name_span: Span,
-    pub items: Vec<ConstraintItem>,
+    pub items: Vec<ConstraintItem<'a>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1112,26 +1096,26 @@ pub enum ConstraintKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConstraintItem {
+pub struct ConstraintItem<'a> {
     pub span: Span,
-    pub data: ConstraintItemData,
+    pub data: ConstraintItemData<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConstraintItemData {
+pub enum ConstraintItemData<'a> {
     If,
     Foreach,
-    Expr(Expr),
+    Expr(Expr<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubroutineDecl {
+pub struct SubroutineDecl<'a> {
     pub span: Span,
-    pub prototype: SubroutinePrototype,
-    pub items: Vec<SubroutineItem>,
+    pub prototype: SubroutinePrototype<'a>,
+    pub items: Vec<SubroutineItem<'a>>,
 }
 
-impl HasSpan for SubroutineDecl {
+impl HasSpan for SubroutineDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -1141,7 +1125,7 @@ impl HasSpan for SubroutineDecl {
     }
 }
 
-impl HasDesc for SubroutineDecl {
+impl HasDesc for SubroutineDecl<'_> {
     fn desc(&self) -> &'static str {
         match self.prototype.kind {
             SubroutineKind::Func => "function declaration",
@@ -1158,13 +1142,13 @@ impl HasDesc for SubroutineDecl {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubroutinePrototype {
+pub struct SubroutinePrototype<'a> {
     pub span: Span,
     pub kind: SubroutineKind,
     pub lifetime: Option<Lifetime>,
     pub name: Identifier,
-    pub args: Vec<SubroutinePort>,
-    pub retty: Option<Type>,
+    pub args: Vec<SubroutinePort<'a>>,
+    pub retty: Option<Type<'a>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -1174,34 +1158,34 @@ pub enum SubroutineKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubroutinePort {
+pub struct SubroutinePort<'a> {
     pub span: Span,
     pub dir: Option<SubroutinePortDir>,
     pub var: bool,
-    pub ty: Type,
-    pub name: Option<SubroutinePortName>,
+    pub ty: Type<'a>,
+    pub name: Option<SubroutinePortName<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubroutinePortName {
+pub struct SubroutinePortName<'a> {
     pub name: Identifier,
-    pub dims: Vec<TypeDim>,
-    pub expr: Option<Expr>,
+    pub dims: Vec<TypeDim<'a>>,
+    pub expr: Option<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SubroutineItem {
-    PortDecl(SubroutinePortDecl),
-    Stmt(Stmt),
+pub enum SubroutineItem<'a> {
+    PortDecl(SubroutinePortDecl<'a>),
+    Stmt(Stmt<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubroutinePortDecl {
+pub struct SubroutinePortDecl<'a> {
     pub span: Span,
     pub dir: SubroutinePortDir,
     pub var: bool,
-    pub ty: Type,
-    pub names: Vec<VarDeclName>,
+    pub ty: Type<'a>,
+    pub names: Vec<VarDeclName<'a>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1214,23 +1198,23 @@ pub enum SubroutinePortDir {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetDecl {
+pub struct NetDecl<'a> {
     pub span: Span,
     pub net_type: NetType,
     pub strength: Option<NetStrength>,
     pub kind: NetKind,
-    pub ty: Type,
-    pub delay: Option<DelayControl>,
-    pub names: Vec<VarDeclName>,
+    pub ty: Type<'a>,
+    pub delay: Option<DelayControl<'a>>,
+    pub names: Vec<VarDeclName<'a>>,
 }
 
-impl HasSpan for NetDecl {
+impl HasSpan for NetDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for NetDecl {
+impl HasDesc for NetDecl<'_> {
     fn desc(&self) -> &'static str {
         "net declaration"
     }
@@ -1271,18 +1255,18 @@ pub enum ChargeStrength {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PatternField {
+pub struct PatternField<'a> {
     pub span: Span,
-    pub data: PatternFieldData,
+    pub data: PatternFieldData<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PatternFieldData {
-    Default(Box<Expr>),
-    Member(Box<Expr>, Box<Expr>),
-    Type(Type, Box<Expr>),
-    Expr(Box<Expr>),
-    Repeat(Box<Expr>, Vec<Expr>),
+pub enum PatternFieldData<'a> {
+    Default(Box<Expr<'a>>),
+    Member(Box<Expr<'a>>, Box<Expr<'a>>),
+    Type(Type<'a>, Box<Expr<'a>>),
+    Expr(Box<Expr<'a>>),
+    Repeat(Box<Expr<'a>>, Vec<Expr<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1314,17 +1298,17 @@ impl HasDesc for ImportItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Assertion {
+pub struct Assertion<'a> {
     pub span: Span,
     pub label: Option<(Name, Span)>,
-    pub data: AssertionData,
+    pub data: AssertionData<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AssertionData {
-    Immediate(BlockingAssertion),
-    Deferred(AssertionDeferred, BlockingAssertion),
-    Concurrent(ConcurrentAssertion),
+pub enum AssertionData<'a> {
+    Immediate(BlockingAssertion<'a>),
+    Deferred(AssertionDeferred, BlockingAssertion<'a>),
+    Concurrent(ConcurrentAssertion<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1336,50 +1320,50 @@ pub enum AssertionDeferred {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BlockingAssertion {
-    Assert(Expr, AssertionActionBlock),
-    Assume(Expr, AssertionActionBlock),
-    Cover(Expr, Stmt),
+pub enum BlockingAssertion<'a> {
+    Assert(Expr<'a>, AssertionActionBlock<'a>),
+    Assume(Expr<'a>, AssertionActionBlock<'a>),
+    Cover(Expr<'a>, Stmt<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConcurrentAssertion {
-    AssertProperty(PropSpec, AssertionActionBlock),
-    AssumeProperty(PropSpec, AssertionActionBlock),
-    CoverProperty(PropSpec, Stmt),
+pub enum ConcurrentAssertion<'a> {
+    AssertProperty(PropSpec, AssertionActionBlock<'a>),
+    AssumeProperty(PropSpec, AssertionActionBlock<'a>),
+    CoverProperty(PropSpec, Stmt<'a>),
     CoverSequence,
-    ExpectProperty(PropSpec, AssertionActionBlock),
+    ExpectProperty(PropSpec, AssertionActionBlock<'a>),
     RestrictProperty(PropSpec),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AssertionActionBlock {
-    Positive(Stmt),
-    Negative(Stmt),
-    Both(Stmt, Stmt),
+pub enum AssertionActionBlock<'a> {
+    Positive(Stmt<'a>),
+    Negative(Stmt<'a>),
+    Both(Stmt<'a>, Stmt<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SeqExpr {
+pub struct SeqExpr<'a> {
     pub span: Span,
-    pub data: SeqExprData,
+    pub data: SeqExprData<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SeqExprData {
-    Expr(Expr, Option<SeqRep>),
-    BinOp(SeqBinOp, Box<SeqExpr>, Box<SeqExpr>),
-    Throughout(Expr, Box<SeqExpr>),
-    Clocked(EventExpr, Box<SeqExpr>),
+pub enum SeqExprData<'a> {
+    Expr(Expr<'a>, Option<SeqRep<'a>>),
+    BinOp(SeqBinOp, Box<SeqExpr<'a>>, Box<SeqExpr<'a>>),
+    Throughout(Expr<'a>, Box<SeqExpr<'a>>),
+    Clocked(EventExpr<'a>, Box<SeqExpr<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SeqRep {
-    Consec(Expr),    // [* expr]
-    ConsecStar,      // [*]
-    ConsecPlus,      // [+]
-    Nonconsec(Expr), // [= expr]
-    Goto(Expr),      // [-> expr]
+pub enum SeqRep<'a> {
+    Consec(Expr<'a>),    // [* expr]
+    ConsecStar,          // [*]
+    ConsecPlus,          // [+]
+    Nonconsec(Expr<'a>), // [= expr]
+    Goto(Expr<'a>),      // [-> expr]
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1394,18 +1378,18 @@ pub enum SeqBinOp {
 pub struct PropSpec;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PropExpr {
+pub struct PropExpr<'a> {
     pub span: Span,
-    pub data: PropExprData,
+    pub data: PropExprData<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PropExprData {
-    SeqOp(PropSeqOp, SeqExpr),
-    SeqBinOp(PropSeqBinOp, PropSeqOp, SeqExpr, Box<PropExpr>),
-    Not(Box<PropExpr>),
-    BinOp(PropBinOp, Box<PropExpr>, Box<PropExpr>),
-    Clocked(EventExpr, Box<PropExpr>),
+pub enum PropExprData<'a> {
+    SeqOp(PropSeqOp, SeqExpr<'a>),
+    SeqBinOp(PropSeqBinOp, PropSeqOp, SeqExpr<'a>, Box<PropExpr<'a>>),
+    Not(Box<PropExpr<'a>>),
+    BinOp(PropBinOp, Box<PropExpr<'a>>, Box<PropExpr<'a>>),
+    Clocked(EventExpr<'a>, Box<PropExpr<'a>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1440,17 +1424,17 @@ pub enum PropBinOp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Inst {
+pub struct Inst<'a> {
     pub span: Span,
     /// The name of the module to instantiate.
     pub target: Identifier,
     /// The parameters in the module to be assigned.
-    pub params: Vec<ParamAssignment>,
+    pub params: Vec<ParamAssignment<'a>>,
     /// The names and ports of the module instantiations.
-    pub names: Vec<InstName>,
+    pub names: Vec<InstName<'a>>,
 }
 
-impl HasSpan for Inst {
+impl HasSpan for Inst<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -1460,7 +1444,7 @@ impl HasSpan for Inst {
     }
 }
 
-impl HasDesc for Inst {
+impl HasDesc for Inst<'_> {
     fn desc(&self) -> &'static str {
         "instantiation"
     }
@@ -1471,14 +1455,14 @@ impl HasDesc for Inst {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstName {
+pub struct InstName<'a> {
     pub span: Span,
     pub name: Identifier,
-    pub dims: Vec<TypeDim>,
-    pub conns: Vec<PortConn>,
+    pub dims: Vec<TypeDim<'a>>,
+    pub conns: Vec<PortConn<'a>>,
 }
 
-impl HasSpan for InstName {
+impl HasSpan for InstName<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -1488,7 +1472,7 @@ impl HasSpan for InstName {
     }
 }
 
-impl HasDesc for InstName {
+impl HasDesc for InstName<'_> {
     fn desc(&self) -> &'static str {
         "instance"
     }
@@ -1525,28 +1509,28 @@ pub enum ModportPort {
 /// "parameter" "type" list_of_type_assignments
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParamDecl {
+pub struct ParamDecl<'a> {
     pub span: Span,
     pub local: bool,
-    pub kind: ParamKind,
+    pub kind: ParamKind<'a>,
 }
 
-impl HasSpan for ParamDecl {
+impl HasSpan for ParamDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for ParamDecl {
+impl HasDesc for ParamDecl<'_> {
     fn desc(&self) -> &'static str {
         "parameter"
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParamKind {
-    Type(Vec<ParamTypeDecl>),
-    Value(Vec<ParamValueDecl>),
+pub enum ParamKind<'a> {
+    Type(Vec<ParamTypeDecl<'a>>),
+    Value(Vec<ParamValueDecl<'a>>),
 }
 
 /// A single type assignment within a parameter or localparam declaration.
@@ -1555,13 +1539,13 @@ pub enum ParamKind {
 /// ident ["=" type]
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParamTypeDecl {
+pub struct ParamTypeDecl<'a> {
     pub span: Span,
     pub name: Identifier,
-    pub ty: Option<Type>,
+    pub ty: Option<Type<'a>>,
 }
 
-impl HasSpan for ParamTypeDecl {
+impl HasSpan for ParamTypeDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -1571,7 +1555,7 @@ impl HasSpan for ParamTypeDecl {
     }
 }
 
-impl HasDesc for ParamTypeDecl {
+impl HasDesc for ParamTypeDecl<'_> {
     fn desc(&self) -> &'static str {
         "parameter"
     }
@@ -1587,15 +1571,15 @@ impl HasDesc for ParamTypeDecl {
 /// [type_or_implicit] ident {dimension} ["=" expr]
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParamValueDecl {
+pub struct ParamValueDecl<'a> {
     pub span: Span,
-    pub ty: Type,
+    pub ty: Type<'a>,
     pub name: Identifier,
-    pub dims: Vec<TypeDim>,
-    pub expr: Option<Expr>,
+    pub dims: Vec<TypeDim<'a>>,
+    pub expr: Option<Expr<'a>>,
 }
 
-impl HasSpan for ParamValueDecl {
+impl HasSpan for ParamValueDecl<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -1605,7 +1589,7 @@ impl HasSpan for ParamValueDecl {
     }
 }
 
-impl HasDesc for ParamValueDecl {
+impl HasDesc for ParamValueDecl<'_> {
     fn desc(&self) -> &'static str {
         "parameter"
     }
@@ -1622,66 +1606,65 @@ impl HasDesc for ParamValueDecl {
 /// "assign" [delay_control] list_of_assignments ";"
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ContAssign {
+pub struct ContAssign<'a> {
     pub span: Span,
     pub strength: Option<(DriveStrength, DriveStrength)>,
-    pub delay: Option<Expr>,
-    pub delay_control: Option<DelayControl>,
-    pub assignments: Vec<(Expr, Expr)>,
+    pub delay: Option<Expr<'a>>,
+    pub delay_control: Option<DelayControl<'a>>,
+    pub assignments: Vec<(Expr<'a>, Expr<'a>)>,
 }
 
-impl HasSpan for ContAssign {
+impl HasSpan for ContAssign<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for ContAssign {
+impl HasDesc for ContAssign<'_> {
     fn desc(&self) -> &'static str {
         "continuous assignment"
     }
 }
 
 #[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub struct GenerateFor {
-    #[ignore_child]
+pub struct GenerateFor<'a> {
     pub span: Span,
-    pub init: Stmt,
-    pub cond: Expr,
-    pub step: Expr,
-    pub block: GenerateBlock,
+    pub init: Stmt<'a>,
+    pub cond: Expr<'a>,
+    pub step: Expr<'a>,
+    pub block: GenerateBlock<'a>,
 }
 
-impl HasSpan for GenerateFor {
+impl HasSpan for GenerateFor<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for GenerateFor {
+impl HasDesc for GenerateFor<'_> {
     fn desc(&self) -> &'static str {
         "for-generate statement"
     }
 }
 
 #[derive(CommonNode)]
-pub struct TupleDummy(usize, usize, Expr);
+pub struct TupleDummy<'a>(usize, usize, Expr<'a>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GenerateIf {
+pub struct GenerateIf<'a> {
     pub span: Span,
-    pub cond: Expr,
-    pub main_block: GenerateBlock,
-    pub else_block: Option<GenerateBlock>,
+    pub cond: Expr<'a>,
+    pub main_block: GenerateBlock<'a>,
+    pub else_block: Option<GenerateBlock<'a>>,
 }
 
-impl HasSpan for GenerateIf {
+impl HasSpan for GenerateIf<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for GenerateIf {
+impl HasDesc for GenerateIf<'_> {
     fn desc(&self) -> &'static str {
         "if-generate statement"
     }
@@ -1708,51 +1691,51 @@ impl HasDesc for GenerateCase {
 /// A body of a generate construct. May contains hierarchy items or more
 /// generate constructs.
 #[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub struct GenerateBlock {
+pub struct GenerateBlock<'a> {
     pub span: Span,
     #[ignore_child]
     pub label: Option<Name>,
     #[ignore_child]
-    pub items: Vec<Item>,
+    pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for GenerateBlock {
+impl HasSpan for GenerateBlock<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for GenerateBlock {
+impl HasDesc for GenerateBlock<'_> {
     fn desc(&self) -> &'static str {
         "generate statement"
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParamAssignment {
+pub struct ParamAssignment<'a> {
     pub span: Span,
     pub name: Option<Identifier>,
-    pub expr: TypeOrExpr,
+    pub expr: TypeOrExpr<'a>,
 }
 
 /// A port connection as given in an instantiation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortConn {
+pub struct PortConn<'a> {
     pub span: Span,
-    pub kind: PortConnKind,
+    pub kind: PortConnKind<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PortConnKind {
-    Auto,                            // `.*` case
-    Named(Identifier, PortConnMode), // `.name`, `.name()`, `.name(expr)` cases
-    Positional(Expr),                // `expr` case
+pub enum PortConnKind<'a> {
+    Auto,                                // `.*` case
+    Named(Identifier, PortConnMode<'a>), // `.name`, `.name()`, `.name(expr)` cases
+    Positional(Expr<'a>),                // `expr` case
 }
 
 /// Represents how a named port connection is made.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PortConnMode {
-    Auto,            // `.name` case
-    Unconnected,     // `.name()` case
-    Connected(Expr), // `.name(expr)` case
+pub enum PortConnMode<'a> {
+    Auto,                // `.name` case
+    Unconnected,         // `.name()` case
+    Connected(Expr<'a>), // `.name(expr)` case
 }
