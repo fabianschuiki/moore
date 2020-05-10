@@ -9,51 +9,12 @@ use moore_common::{
     util::{HasDesc, HasSpan},
 };
 use moore_derive::CommonNode;
-use std::fmt;
 
-/// A positive, small ID assigned to each node in the AST. Used as a lightweight
-/// way to refer to individual nodes, e.g. during symbol table construction and
-/// name resolution.
-#[derive(
-    Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, RustcEncodable, RustcDecodable,
-)]
-pub struct NodeId(u32);
-
-impl NodeId {
-    pub fn new(x: usize) -> NodeId {
-        use std::u32;
-        assert!(x < (u32::MAX as usize));
-        NodeId(x as u32)
-    }
-
-    pub fn from_u32(x: u32) -> NodeId {
-        NodeId(x)
-    }
-
-    pub fn as_usize(&self) -> usize {
-        self.0 as usize
-    }
-
-    pub fn as_u32(&self) -> u32 {
-        self.0
-    }
-}
-
-impl fmt::Display for NodeId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
-
+/// Common interface to all AST nodes.
 pub trait CommonNode {
     /// Apply a function to each child node.
     fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode));
 }
-
-/// During parsing and syntax tree construction, we assign each node this ID.
-/// Only later, during the renumbering pass do we assign actual IDs to each
-/// node.
-pub const DUMMY_NODE_ID: NodeId = NodeId(0);
 
 pub use self::ExprData::*;
 pub use self::StmtData::*;
@@ -67,7 +28,6 @@ pub struct Root {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ModDecl {
-    pub id: NodeId,
     pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
@@ -100,7 +60,6 @@ impl HasDesc for ModDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct IntfDecl {
-    pub id: NodeId,
     pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
@@ -112,7 +71,6 @@ pub struct IntfDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct PackageDecl {
-    pub id: NodeId,
     pub span: Span,
     pub lifetime: Lifetime,
     pub name: Name,
@@ -766,7 +724,6 @@ impl HasDesc for VarDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct VarDeclName {
-    pub id: NodeId,
     pub span: Span,
     pub name: Name,
     pub name_span: Span,
@@ -796,7 +753,6 @@ impl HasDesc for VarDeclName {
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenvarDecl {
-    pub id: NodeId,
     pub span: Span,
     pub name: Name,
     pub name_span: Span,
@@ -963,7 +919,6 @@ pub enum RangeMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Identifier {
-    pub id: NodeId,
     pub span: Span,
     pub name: Name,
 }

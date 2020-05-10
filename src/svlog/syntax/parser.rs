@@ -485,7 +485,6 @@ fn parse_identifier<M: std::fmt::Display>(
         Ident(n) | EscIdent(n) => {
             p.bump();
             Ok(ast::Identifier {
-                id: DUMMY_NODE_ID,
                 span: span,
                 name: n,
             })
@@ -506,7 +505,6 @@ fn try_identifier(p: &mut dyn AbstractParser) -> ReportedResult<Option<ast::Iden
         Ident(n) | EscIdent(n) => {
             p.bump();
             Ok(Some(ast::Identifier {
-                id: DUMMY_NODE_ID,
                 span: span,
                 name: n,
             }))
@@ -701,7 +699,6 @@ fn parse_interface_decl(p: &mut dyn AbstractParser) -> ReportedResult<IntfDecl> 
 
         span.expand(p.last_span());
         Ok(IntfDecl {
-            id: DUMMY_NODE_ID,
             span: span,
             lifetime: lifetime,
             name: name,
@@ -898,7 +895,6 @@ fn parse_module_decl(p: &mut dyn AbstractParser) -> ReportedResult<ModDecl> {
 
         span.expand(p.last_span());
         Ok(ModDecl {
-            id: DUMMY_NODE_ID,
             span,
             lifetime,
             name,
@@ -951,7 +947,6 @@ fn parse_package_decl(p: &mut dyn AbstractParser) -> ReportedResult<PackageDecl>
 
         span.expand(p.last_span());
         Ok(PackageDecl {
-            id: DUMMY_NODE_ID,
             span: span,
             lifetime: lifetime,
             name: name,
@@ -1642,11 +1637,7 @@ fn parse_type_data(p: &mut dyn AbstractParser) -> ReportedResult<TypeData> {
         // Named types
         Ident(n) | EscIdent(n) => {
             p.bump();
-            Ok(ast::NamedType(ast::Identifier {
-                id: DUMMY_NODE_ID,
-                span: sp,
-                name: n,
-            }))
+            Ok(ast::NamedType(ast::Identifier { span: sp, name: n }))
         }
 
         // Virtual Interface Type
@@ -2097,7 +2088,6 @@ fn parse_expr_suffix(
                 data: MemberExpr {
                     expr: Box::new(prefix),
                     name: Identifier {
-                        id: DUMMY_NODE_ID,
                         span: name_span,
                         name: name,
                     },
@@ -2314,22 +2304,14 @@ fn parse_primary_expr(p: &mut dyn AbstractParser) -> ReportedResult<Expr> {
             p.bump();
             return Ok(Expr {
                 span: sp,
-                data: IdentExpr(Identifier {
-                    id: DUMMY_NODE_ID,
-                    span: sp,
-                    name: n,
-                }),
+                data: IdentExpr(Identifier { span: sp, name: n }),
             });
         }
         SysIdent(n) => {
             p.bump();
             return Ok(Expr {
                 span: sp,
-                data: SysIdentExpr(Identifier {
-                    id: DUMMY_NODE_ID,
-                    span: sp,
-                    name: n,
-                }),
+                data: SysIdentExpr(Identifier { span: sp, name: n }),
             });
         }
 
@@ -2895,7 +2877,6 @@ fn parse_port_list(p: &mut dyn AbstractParser) -> ReportedResult<Vec<Port>> {
 //  span.expand(p.last_span());
 
 //  Ok(Port {
-//      id: DUMMY_NODE_ID,
 //      span: span,
 //      name: name,
 //      name_span: name_span,
@@ -3210,7 +3191,6 @@ fn parse_subroutine_prototype_tail(
     // TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
     let name = if p.try_eat(Keyword(Kw::New)) {
         ast::Identifier {
-            id: DUMMY_NODE_ID,
             span: p.last_span(),
             name: get_name_table().intern("new", true),
         }
@@ -4255,7 +4235,6 @@ fn parse_variable_decl_assignment(p: &mut dyn AbstractParser) -> ReportedResult<
     span.expand(p.last_span());
 
     Ok(VarDeclName {
-        id: DUMMY_NODE_ID,
         span: span,
         name: name,
         name_span: name_span,
@@ -4279,7 +4258,6 @@ fn parse_genvar_decl(p: &mut dyn AbstractParser) -> ReportedResult<GenvarDecl> {
     span.expand(p.last_span());
 
     Ok(GenvarDecl {
-        id: DUMMY_NODE_ID,
         span: span,
         name: name,
         name_span: name_span,
@@ -5215,11 +5193,7 @@ fn parse_import_decl(p: &mut dyn AbstractParser) -> ReportedResult<ImportDecl> {
                 p.bump();
                 Ok(ImportItem {
                     pkg: pkg,
-                    name: Some(ast::Identifier {
-                        id: DUMMY_NODE_ID,
-                        span: sp,
-                        name: n,
-                    }),
+                    name: Some(ast::Identifier { span: sp, name: n }),
                 })
             }
 
