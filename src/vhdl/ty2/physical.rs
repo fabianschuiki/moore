@@ -114,7 +114,7 @@ impl PhysicalBasetype {
     ///
     /// ```
     /// use moore_vhdl::ty2::{PhysicalBasetype, PhysicalUnit, Range};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let ty = PhysicalBasetype::new(Range::ascending(0, 1_000_000), vec![
     ///     PhysicalUnit::primary(get_name_table().intern("fs", false), 1),
@@ -215,7 +215,7 @@ impl<'t> PhysicalSubtype<'t> {
     ///
     /// ```
     /// use moore_vhdl::ty2::{Type, TypeMark, PhysicalUnit, PhysicalBasetype, PhysicalSubtype, Range};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let ty = PhysicalBasetype::new(Range::ascending(-1000isize, 1000isize), vec![
     ///     PhysicalUnit::primary(get_name_table().intern("fs", false), 1),
@@ -319,7 +319,7 @@ impl PhysicalUnit {
     ///
     /// ```
     /// use moore_vhdl::ty2::{PhysicalUnit, BigInt};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let name = get_name_table().intern("fs", false);
     /// let unit = PhysicalUnit::new(name, 1, Some((1000, 0)));
@@ -345,7 +345,7 @@ impl PhysicalUnit {
     ///
     /// ```
     /// use moore_vhdl::ty2::{PhysicalUnit, BigInt};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let name = get_name_table().intern("fs", false);
     /// let unit = PhysicalUnit::primary(name, 1);
@@ -371,7 +371,7 @@ impl PhysicalUnit {
     ///
     /// ```
     /// use moore_vhdl::ty2::{PhysicalUnit, BigInt};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let name = get_name_table().intern("fs", false);
     /// let unit = PhysicalUnit::secondary(name, 1, 1000, 0);

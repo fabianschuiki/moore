@@ -191,8 +191,8 @@ impl<'t> FloatingSubtype<'t> {
     /// # Example
     ///
     /// ```
+    /// use moore_common::name::get_name_table;
     /// use moore_vhdl::ty2::{Type, TypeMark, FloatingBasetype, FloatingSubtype, Range};
-    /// use moore_vhdl::common::name::get_name_table;
     ///
     /// let ty = FloatingBasetype::new(Range::ascending(0.0, 1.0));
     /// let tm = TypeMark::new(

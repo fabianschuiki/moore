@@ -189,7 +189,7 @@ impl<'t> EnumSubtype<'t> {
     ///
     /// ```
     /// use moore_vhdl::ty2::{Type, TypeMark, EnumBasetype, EnumSubtype, Range};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let ty = EnumBasetype::new(vec![
     ///     "first".into(),

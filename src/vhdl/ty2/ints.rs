@@ -193,7 +193,7 @@ impl<'t> IntegerSubtype<'t> {
     ///
     /// ```
     /// use moore_vhdl::ty2::{Type, TypeMark, IntegerBasetype, IntegerSubtype, Range};
-    /// use moore_vhdl::common::name::get_name_table;
+    /// use moore_common::name::get_name_table;
     ///
     /// let ty = IntegerBasetype::new(Range::ascending(0usize, 255usize));
     /// let tm = TypeMark::new(

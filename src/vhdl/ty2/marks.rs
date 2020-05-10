@@ -90,7 +90,7 @@ impl Debug for TypeName {
 ///
 /// ```
 /// use moore_vhdl::ty2::{Type, TypeDecl, IntegerBasetype, Range};
-/// use moore_vhdl::common::name::get_name_table;
+/// use moore_common::name::get_name_table;
 ///
 /// let ta = IntegerBasetype::new(Range::descending(31, 0));
 /// let a = TypeDecl::new(
@@ -190,7 +190,7 @@ pub struct SubtypeDecl<'t> {
 ///
 /// ```
 /// use moore_vhdl::ty2::{Type, TypeMark, NullType};
-/// use moore_vhdl::common::name::get_name_table;
+/// use moore_common::name::get_name_table;
 ///
 /// let ta = NullType;
 /// let a = TypeMark::new(
