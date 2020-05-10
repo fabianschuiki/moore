@@ -80,7 +80,7 @@ impl<'gcx> GlobalContext<'gcx> {
     ///
     /// Use the `find_global_item` function afterwards to look up the id of
     /// modules that were added.
-    pub fn add_root_nodes(&self, ast: impl Iterator<Item = &'gcx ast::Root>) {
+    pub fn add_root_nodes(&self, ast: impl Iterator<Item = &'gcx ast::Root<'gcx>>) {
         for root in ast {
             for item in &root.items {
                 match *item {
@@ -159,9 +159,9 @@ pub struct GlobalArenas<'t> {
     mir_lvalue: TypedArena<mir::Lvalue<'t>>,
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
     /// Additional AST types generated during HIR lowering.
-    ast_types: TypedArena<ast::Type>,
+    ast_types: TypedArena<ast::Type<'t>>,
     /// Additional AST expressions generated during HIR lowering.
-    ast_exprs: TypedArena<ast::Expr>,
+    ast_exprs: TypedArena<ast::Expr<'t>>,
 }
 
 impl<'t> GlobalArenas<'t> {
@@ -195,12 +195,12 @@ impl<'t> GlobalArenas<'t> {
     }
 
     /// Allocate an AST type.
-    pub fn alloc_ast_type(&'t self, ast: ast::Type) -> &'t ast::Type {
+    pub fn alloc_ast_type(&'t self, ast: ast::Type<'t>) -> &'t ast::Type {
         self.ast_types.alloc(ast)
     }
 
     /// Allocate an AST expression.
-    pub fn alloc_ast_expr(&'t self, ast: ast::Expr) -> &'t ast::Expr {
+    pub fn alloc_ast_expr(&'t self, ast: ast::Expr<'t>) -> &'t ast::Expr {
         self.ast_exprs.alloc(ast)
     }
 }

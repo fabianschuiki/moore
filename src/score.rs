@@ -45,7 +45,7 @@ pub struct ScoreBoard<'ast, 'ctx> {
     pub root: RootRef,
     /// A table of library nodes. This is the only node that is actively
     /// maintained by the global scoreboard.
-    libs: RefCell<HashMap<LibRef, (Name, &'ast [Ast])>>,
+    libs: RefCell<HashMap<LibRef, (Name, &'ast [Ast<'ast>])>>,
     /// A table of definitions in each scope.
     defs: RefCell<HashMap<ScopeRef, &'ctx Defs>>,
 }
@@ -93,7 +93,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Add a library to the scoreboard.
-    pub fn add_library(&self, name: Name, asts: &'ast [Ast]) -> LibRef {
+    pub fn add_library(&self, name: Name, asts: &'ast [Ast<'ast>]) -> LibRef {
         let id = LibRef::new(NodeId::alloc());
         self.sb.libs.borrow_mut().insert(id, (name, asts));
 
@@ -248,9 +248,9 @@ impl Arenas {
 /// Roots for every AST that we support. During parsing, a list of these entries
 /// is generated that is then passed to the `ScoreBoard` as a reference.
 #[derive(Debug)]
-pub enum Ast {
+pub enum Ast<'a> {
     Vhdl(Vec<vhdl_ast::DesignUnit>),
-    Svlog(svlog_ast::Root),
+    Svlog(svlog_ast::Root<'a>),
 }
 
 /// The definitions in a scope.

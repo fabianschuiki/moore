@@ -37,55 +37,71 @@ impl<'ast> AstMap<'ast> {
 #[derive(Clone, Copy, Debug)]
 pub enum AstNode<'ast> {
     /// A module.
-    Module(&'ast ast::ModDecl),
+    Module(&'ast ast::ModDecl<'ast>),
     /// A module or interface port placeholder (defined in HIR).
     Port(Span),
     /// A type.
-    Type(&'ast ast::Type),
+    Type(&'ast ast::Type<'ast>),
     /// An expression.
-    Expr(&'ast ast::Expr),
+    Expr(&'ast ast::Expr<'ast>),
     /// The module/interface name and parameters of an instantiation.
-    InstTarget(&'ast ast::Inst),
+    InstTarget(&'ast ast::Inst<'ast>),
     /// An instance name and reference to its target.
-    Inst(&'ast ast::InstName, NodeId),
+    Inst(&'ast ast::InstName<'ast>, NodeId),
     /// A type parameter.
-    TypeParam(&'ast ast::ParamDecl, &'ast ast::ParamTypeDecl),
+    TypeParam(&'ast ast::ParamDecl<'ast>, &'ast ast::ParamTypeDecl<'ast>),
     /// A value parameter.
-    ValueParam(&'ast ast::ParamDecl, &'ast ast::ParamValueDecl),
+    ValueParam(&'ast ast::ParamDecl<'ast>, &'ast ast::ParamValueDecl<'ast>),
     /// A type or expression.
-    TypeOrExpr(&'ast ast::TypeOrExpr),
+    TypeOrExpr(&'ast ast::TypeOrExpr<'ast>),
     /// A variable declaration.
-    VarDecl(&'ast ast::VarDeclName, &'ast ast::VarDecl, NodeId),
+    VarDecl(
+        &'ast ast::VarDeclName<'ast>,
+        &'ast ast::VarDecl<'ast>,
+        NodeId,
+    ),
     /// A net declaration.
-    NetDecl(&'ast ast::VarDeclName, &'ast ast::NetDecl, NodeId),
+    NetDecl(
+        &'ast ast::VarDeclName<'ast>,
+        &'ast ast::NetDecl<'ast>,
+        NodeId,
+    ),
     /// A procedure.
-    Proc(&'ast ast::Procedure),
+    Proc(&'ast ast::Procedure<'ast>),
     /// A statement.
-    Stmt(&'ast ast::Stmt),
+    Stmt(&'ast ast::Stmt<'ast>),
     /// An event expression.
-    EventExpr(&'ast ast::EventExpr),
+    EventExpr(&'ast ast::EventExpr<'ast>),
     /// An if-generate statement.
-    GenIf(&'ast ast::GenerateIf),
+    GenIf(&'ast ast::GenerateIf<'ast>),
     /// A for-generate statement.
-    GenFor(&'ast ast::GenerateFor),
+    GenFor(&'ast ast::GenerateFor<'ast>),
     /// A case-generate statement.
     GenCase(&'ast ast::GenerateCase),
     /// A genvar declaration.
-    GenvarDecl(&'ast ast::GenvarDecl),
+    GenvarDecl(&'ast ast::GenvarDecl<'ast>),
     /// A typedef.
-    Typedef(&'ast ast::Typedef),
+    Typedef(&'ast ast::Typedef<'ast>),
     /// A continuous assignment.
-    ContAssign(&'ast ast::ContAssign, &'ast ast::Expr, &'ast ast::Expr),
+    ContAssign(
+        &'ast ast::ContAssign<'ast>,
+        &'ast ast::Expr<'ast>,
+        &'ast ast::Expr<'ast>,
+    ),
     /// A struct member.
-    StructMember(&'ast ast::VarDeclName, &'ast ast::StructMember, NodeId),
+    StructMember(
+        &'ast ast::VarDeclName<'ast>,
+        &'ast ast::StructMember<'ast>,
+        NodeId,
+    ),
     /// A package.
-    Package(&'ast ast::PackageDecl),
+    Package(&'ast ast::PackageDecl<'ast>),
     /// An enum variant, given as `(variant, enum_def, index)`.
-    EnumVariant(&'ast ast::EnumName, NodeId, usize),
+    EnumVariant(&'ast ast::EnumName<'ast>, NodeId, usize),
     /// An import.
     Import(&'ast ast::ImportItem),
     /// A subroutine declaration.
-    SubroutineDecl(&'ast ast::SubroutineDecl),
+    SubroutineDecl(&'ast ast::SubroutineDecl<'ast>),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {

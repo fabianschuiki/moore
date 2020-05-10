@@ -511,7 +511,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
 fn lower_module<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    ast: &'gcx ast::ModDecl,
+    ast: &'gcx ast::ModDecl<'gcx>,
 ) -> Result<HirNode<'gcx>> {
     let mut next_rib = node_id;
 
@@ -558,8 +558,8 @@ fn lower_module<'gcx>(
 /// ahead and create the external and internal views of the ports.
 fn lower_module_ports<'gcx>(
     cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::Item],
+    ast_ports: &'gcx [ast::Port<'gcx>],
+    ast_items: &'gcx [ast::Item<'gcx>],
     module: NodeId,
     next_rib: &mut NodeId,
 ) -> PortList {
@@ -709,8 +709,8 @@ fn lower_module_ports<'gcx>(
 /// Lower the ANSI ports of a module.
 fn lower_module_ports_ansi<'gcx>(
     cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::Item],
+    ast_ports: &'gcx [ast::Port<'gcx>],
+    ast_items: &'gcx [ast::Item<'gcx>],
     first_span: Span,
     module: NodeId,
 ) -> PartialPortList<'gcx> {
@@ -923,8 +923,8 @@ fn lower_module_ports_ansi<'gcx>(
 /// Lower the non-ANSI ports of a module.
 fn lower_module_ports_nonansi<'gcx>(
     cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port],
-    ast_items: &'gcx [ast::Item],
+    ast_ports: &'gcx [ast::Port<'gcx>],
+    ast_items: &'gcx [ast::Item<'gcx>],
     first_span: Span,
     module: NodeId,
 ) -> PartialPortList<'gcx> {
@@ -1321,7 +1321,7 @@ fn lower_module_ports_nonansi<'gcx>(
 /// ```
 fn lower_port_expr<'gcx>(
     cx: &impl Context<'gcx>,
-    expr: &'gcx ast::Expr,
+    expr: &'gcx ast::Expr<'gcx>,
     parent: NodeId,
 ) -> Vec<PartialPortExpr> {
     match &expr.data {
@@ -1343,7 +1343,7 @@ fn lower_port_expr<'gcx>(
 /// ```
 fn lower_port_ref<'gcx>(
     cx: &impl Context<'gcx>,
-    expr: &'gcx ast::Expr,
+    expr: &'gcx ast::Expr<'gcx>,
     parent: NodeId,
 ) -> Option<PartialPortExpr> {
     match &expr.data {
@@ -1378,24 +1378,24 @@ struct PartialPort<'a> {
     dir: ast::PortDir,
     kind: Option<ast::PortKind>,
     sign: ast::TypeSign,
-    ty: &'a ast::TypeData,
-    packed_dims: &'a [ast::TypeDim],
-    unpacked_dims: &'a [ast::TypeDim],
+    ty: &'a ast::TypeData<'a>,
+    packed_dims: &'a [ast::TypeDim<'a>],
+    unpacked_dims: &'a [ast::TypeDim<'a>],
     /// The default value assigned to this port if left unconnected.
-    default: Option<&'a ast::Expr>,
+    default: Option<&'a ast::Expr<'a>>,
     /// Whether the port characteristics are inferred from a declaration in the
     /// module. This is used for explicitly-named ANSI ports.
     inferred: bool,
     /// The variable declaration associated with a non-ANSI port.
-    var_decl: Option<(&'a ast::VarDecl, &'a ast::VarDeclName)>,
+    var_decl: Option<(&'a ast::VarDecl<'a>, &'a ast::VarDeclName<'a>)>,
     /// The net declaration associated with a non-ANSI port.
-    net_decl: Option<(&'a ast::NetDecl, &'a ast::VarDeclName)>,
+    net_decl: Option<(&'a ast::NetDecl<'a>, &'a ast::VarDeclName<'a>)>,
     /// Redundant type information which must be checked against the non-ANSI
     /// port later.
     match_ty: Option<(
-        Option<&'a ast::TypeData>,
-        &'a [ast::TypeDim],
-        &'a [ast::TypeDim],
+        Option<&'a ast::TypeData<'a>>,
+        &'a [ast::TypeDim<'a>],
+        &'a [ast::TypeDim<'a>],
     )>,
 }
 
@@ -1420,7 +1420,7 @@ struct PartialPortList<'a> {
 fn lower_module_block<'gcx>(
     cx: &impl Context<'gcx>,
     parent_rib: NodeId,
-    items: impl IntoIterator<Item = &'gcx ast::Item>,
+    items: impl IntoIterator<Item = &'gcx ast::Item<'gcx>>,
     allow_ports: bool,
 ) -> Result<hir::ModuleBlock> {
     let mut next_rib = parent_rib;
@@ -1573,7 +1573,7 @@ fn lower_module_block<'gcx>(
 fn lower_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    ty: &'gcx ast::Type,
+    ty: &'gcx ast::Type<'gcx>,
 ) -> Result<HirNode<'gcx>> {
     let mut kind = match ty.data {
         ast::ImplicitType => hir::TypeKind::Implicit,
@@ -1660,7 +1660,7 @@ fn lower_type<'gcx>(
 fn lower_expr<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    expr: &'gcx ast::Expr,
+    expr: &'gcx ast::Expr<'gcx>,
 ) -> Result<HirNode<'gcx>> {
     use crate::syntax::token::{Lit, Op};
     let kind = match expr.data {
@@ -2101,10 +2101,9 @@ fn lower_expr<'gcx>(
                         cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
                     ),
                     _ => {
-                        let size_expr = cx.arena().alloc_ast_expr(ast::Expr {
-                            span: ty.span,
-                            data: ast::IdentExpr(n),
-                        });
+                        let size_expr = cx
+                            .arena()
+                            .alloc_ast_expr(ast::Expr::new(ty.span, ast::IdentExpr(n)));
                         hir::ExprKind::CastSize(
                             cx.map_ast_with_parent(AstNode::Expr(size_expr), node_id),
                             cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
@@ -2203,7 +2202,7 @@ fn parse_fixed_point_number<'gcx>(
 
 fn lower_event_expr<'gcx>(
     cx: &impl Context<'gcx>,
-    expr: &'gcx ast::EventExpr,
+    expr: &'gcx ast::EventExpr<'gcx>,
     parent_id: NodeId,
     into: &mut Vec<hir::Event>,
     cond_stack: &mut Vec<NodeId>,
@@ -2241,7 +2240,7 @@ fn lower_event_expr<'gcx>(
 /// Lower a list of genvar declarations.
 fn alloc_genvar_init<'gcx>(
     cx: &impl Context<'gcx>,
-    stmt: &'gcx ast::Stmt,
+    stmt: &'gcx ast::Stmt<'gcx>,
     mut parent_id: NodeId,
 ) -> Result<Vec<NodeId>> {
     let mut ids = vec![];
@@ -2270,7 +2269,7 @@ fn alloc_genvar_init<'gcx>(
 /// Allocate node IDs for a parameter declaration.
 fn alloc_param_decl<'gcx>(
     cx: &impl Context<'gcx>,
-    param: &'gcx ast::ParamDecl,
+    param: &'gcx ast::ParamDecl<'gcx>,
     mut next_rib: NodeId,
     into: &mut Vec<NodeId>,
 ) -> NodeId {
@@ -2298,7 +2297,7 @@ fn alloc_param_decl<'gcx>(
 /// Allocate node IDs for a variable declaration.
 fn alloc_var_decl<'gcx>(
     cx: &impl Context<'gcx>,
-    decl: &'gcx ast::VarDecl,
+    decl: &'gcx ast::VarDecl<'gcx>,
     mut next_rib: NodeId,
     into: &mut Vec<NodeId>,
 ) -> NodeId {
@@ -2315,7 +2314,7 @@ fn alloc_var_decl<'gcx>(
 /// Allocate node IDs for a net declaration.
 fn alloc_net_decl<'gcx>(
     cx: &impl Context<'gcx>,
-    decl: &'gcx ast::NetDecl,
+    decl: &'gcx ast::NetDecl<'gcx>,
     mut next_rib: NodeId,
     into: &mut Vec<NodeId>,
 ) -> NodeId {
@@ -2332,7 +2331,7 @@ fn alloc_net_decl<'gcx>(
 /// Allocate node IDs for a struct member.
 fn alloc_struct_member<'gcx>(
     cx: &impl Context<'gcx>,
-    member: &'gcx ast::StructMember,
+    member: &'gcx ast::StructMember<'gcx>,
     mut next_rib: NodeId,
     into: &mut Vec<NodeId>,
 ) -> NodeId {
@@ -2354,7 +2353,7 @@ fn alloc_struct_member<'gcx>(
 fn lower_package<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    ast: &'gcx ast::PackageDecl,
+    ast: &'gcx ast::PackageDecl<'gcx>,
 ) -> Result<HirNode<'gcx>> {
     let mut next_rib = node_id;
     let mut names = Vec::new();
@@ -2400,7 +2399,7 @@ fn lower_package<'gcx>(
 
 fn lower_index_mode<'gcx>(
     cx: &impl Context<'gcx>,
-    index: &'gcx ast::Expr,
+    index: &'gcx ast::Expr<'gcx>,
     parent: NodeId,
 ) -> hir::IndexMode {
     match index.data {
@@ -2420,7 +2419,7 @@ fn lower_index_mode<'gcx>(
 /// Lower a function or method call argument to HIR.
 fn lower_call_arg<'gcx>(
     cx: &impl Context<'gcx>,
-    ast: &'gcx ast::CallArg,
+    ast: &'gcx ast::CallArg<'gcx>,
     parent: NodeId,
 ) -> hir::CallArg {
     hir::CallArg {
