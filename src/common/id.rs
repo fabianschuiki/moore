@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A positive, small ID assigned to nodes in the AST and derived data
 /// structures. Used as a lightweight way to refer to individual nodes, e.g.
 /// during symbol table construction and name resolution.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct NodeId(u32);
 
 impl NodeId {

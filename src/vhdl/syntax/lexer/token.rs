@@ -123,7 +123,7 @@ impl Display for Token {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Literal {
     Abstract(
         /// Base
@@ -164,7 +164,7 @@ pub enum DelimToken {
     Brack,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Exponent(
     /// Sign
     pub ExponentSign,
@@ -172,13 +172,13 @@ pub struct Exponent(
     pub Name,
 );
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ExponentSign {
     Positive,
     Negative,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum BitStringBase {
     B,
     O,

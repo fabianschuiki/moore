@@ -115,7 +115,7 @@ impl Scope {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DefName {
     Ident(Name),
     Char(char),
@@ -132,7 +132,7 @@ impl std::fmt::Display for DefName {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Def {
     Lib(NodeId),
     Entity(NodeId),

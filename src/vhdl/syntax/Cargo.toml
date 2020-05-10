@@ -13,5 +13,4 @@ path = "lib.rs"
 
 [dependencies]
 moore-common = { path = "../../common", version = "0.8.0-dev" }
-rustc-serialize = "0.3"
 once_cell = "1.3"

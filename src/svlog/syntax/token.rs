@@ -117,7 +117,7 @@ pub enum DelimToken {
 }
 
 /// Abstract literals such as strings.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Lit {
     Str(Name),
     BasedInteger(Option<Name>, bool, char, Name),
@@ -130,7 +130,7 @@ pub enum Lit {
 }
 
 /// The unit of a time literal.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum TimeUnit {
     Second,
     MilliSecond,
@@ -141,7 +141,7 @@ pub enum TimeUnit {
 }
 
 /// Operator symbols.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Op {
     // Assignment
     Assign,

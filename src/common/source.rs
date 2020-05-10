@@ -6,7 +6,6 @@
 
 use crate::name::RcStr;
 use memmap::Mmap;
-use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std;
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -65,30 +64,30 @@ impl fmt::Display for Source {
     }
 }
 
-impl Encodable for Source {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_bool(self.0 == 0)?;
-        if self.0 > 0 {
-            s.emit_str(self.get_path().borrow())?
-        }
-        Ok(())
-    }
-}
+// impl Encodable for Source {
+//     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+//         s.emit_bool(self.0 == 0)?;
+//         if self.0 > 0 {
+//             s.emit_str(self.get_path().borrow())?
+//         }
+//         Ok(())
+//     }
+// }
 
-impl Decodable for Source {
-    fn decode<S: Decoder>(s: &mut S) -> Result<Source, S::Error> {
-        let invalid = s.read_bool()?;
-        if !invalid {
-            let path = s.read_str()?;
-            match get_source_manager().open(&path) {
-                Some(x) => Ok(x),
-                None => panic!("trying to decode invalid source `{}`", path),
-            }
-        } else {
-            Ok(INVALID_SOURCE)
-        }
-    }
-}
+// impl Decodable for Source {
+//     fn decode<S: Decoder>(s: &mut S) -> Result<Source, S::Error> {
+//         let invalid = s.read_bool()?;
+//         if !invalid {
+//             let path = s.read_str()?;
+//             match get_source_manager().open(&path) {
+//                 Some(x) => Ok(x),
+//                 None => panic!("trying to decode invalid source `{}`", path),
+//             }
+//         } else {
+//             Ok(INVALID_SOURCE)
+//         }
+//     }
+// }
 
 pub trait SourceFile {
     fn get_id(&self) -> Source;
@@ -369,7 +368,7 @@ impl SourceContent for DiskSourceContent {
 pub type CharIter<'a> = dyn DoubleEndedIterator<Item = (usize, char)> + 'a;
 
 /// A single location within a source file, expressed as a byte offset.
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct Location {
     pub source: Source,
     pub offset: usize,
@@ -454,7 +453,7 @@ impl Into<Span> for Location {
 
 /// A span of locations within a source file, expressed as a half-open interval
 /// of bytes `[begin,end)`.
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, RustcEncodable, RustcDecodable)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct Span {
     pub source: Source,
     pub begin: usize,
@@ -530,7 +529,7 @@ impl fmt::Debug for Span {
 }
 
 /// A wrapper that associates a span with a value.
-#[derive(PartialOrd, Ord, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(PartialOrd, Ord, PartialEq, Eq)]
 pub struct Spanned<T> {
     pub value: T,
     pub span: Span,

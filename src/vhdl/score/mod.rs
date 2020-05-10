@@ -1344,9 +1344,7 @@ node_ref!(BuiltinOpRef);
 
 /// A reference to an enumeration literal, expressed as the type declaration
 /// which defines the enumeration and the index of the literal.
-#[derive(
-    Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug,
-)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct EnumRef(pub TypeDeclRef, pub usize);
 
 impl Into<NodeId> for EnumRef {
@@ -1357,9 +1355,7 @@ impl Into<NodeId> for EnumRef {
 
 /// A reference to a physical unit, expressed as the type declaration which
 /// defines the unit and the index of it.
-#[derive(
-    Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash, Debug,
-)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct UnitRef(pub TypeDeclRef, pub usize);
 
 impl Into<NodeId> for UnitRef {

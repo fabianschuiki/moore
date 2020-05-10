@@ -4,7 +4,6 @@
 //! IEEE 1076-2008.
 
 extern crate moore_common;
-extern crate rustc_serialize;
 
 pub mod ast;
 pub mod lexer;

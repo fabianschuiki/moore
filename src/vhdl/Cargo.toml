@@ -17,6 +17,5 @@ moore-vhdl-syntax = { path = "syntax", version = "0.8.0-dev" }
 lazy_static = "1.4"
 llhd = "0.5"
 num = "0.1"
-rustc-serialize = "0.3"
 typed-arena = "2.0.1"
 # futures = "0.1"

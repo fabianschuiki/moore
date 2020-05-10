@@ -12,7 +12,6 @@ extern crate llhd;
 pub extern crate moore_common;
 pub extern crate moore_vhdl_syntax as syntax;
 extern crate num;
-extern crate rustc_serialize;
 extern crate typed_arena;
 // extern crate futures;
 

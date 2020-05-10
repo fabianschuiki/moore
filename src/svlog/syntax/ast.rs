@@ -35,13 +35,13 @@ pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
 
-#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Root {
     pub timeunits: Timeunit,
     pub items: Vec<Item>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModDecl {
     pub span: Span,
     pub lifetime: Lifetime, // default static
@@ -73,7 +73,7 @@ impl HasDesc for ModDecl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntfDecl {
     pub span: Span,
     pub lifetime: Lifetime, // default static
@@ -84,7 +84,7 @@ pub struct IntfDecl {
     pub items: Vec<Item>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PackageDecl {
     pub span: Span,
     pub lifetime: Lifetime,
@@ -115,7 +115,7 @@ impl HasDesc for PackageDecl {
 }
 
 /// Lifetime specifier for variables, tasks, and functions. Defaults to static.
-#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Lifetime {
     Static,
     Automatic,
@@ -127,13 +127,13 @@ pub enum Lifetime {
 /// "timeunit" time_literal ["/" time_literal] ";"
 /// "timeprecision" time_literal ";"
 /// ```
-#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Timeunit {
     pub unit: Option<Spanned<Lit>>,
     pub prec: Option<Spanned<Lit>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Item {
     Dummy,
     ModuleDecl(ModDecl),
@@ -220,7 +220,7 @@ impl HasDesc for Item {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Type {
     pub span: Span,
     pub data: TypeData,
@@ -250,7 +250,7 @@ impl HasDesc for Type {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeData {
     ImplicitType,
     VoidType,
@@ -301,14 +301,14 @@ pub enum TypeData {
     SpecializedType(Box<Type>, Vec<ParamAssignment>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum TypeSign {
     None,
     Signed,
     Unsigned,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeDim {
     Expr(Expr),
     Range(Expr, Expr),
@@ -335,7 +335,7 @@ impl HasDesc for TypeDim {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumName {
     pub span: Span,
     pub name: Identifier,
@@ -355,14 +355,14 @@ impl HasDesc for EnumName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum StructKind {
     Struct,
     Union,
     TaggedUnion,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructMember {
     pub span: Span,
     pub rand_qualifier: Option<RandomQualifier>,
@@ -382,7 +382,7 @@ impl HasDesc for StructMember {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Port {
     Intf {
         span: Span,
@@ -449,7 +449,7 @@ impl HasDesc for Port {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortDecl {
     pub span: Span,
     pub dir: PortDir,
@@ -458,7 +458,7 @@ pub struct PortDecl {
     pub names: Vec<VarDeclName>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum PortKind {
     Net(NetType),
     Var,
@@ -473,7 +473,7 @@ impl std::fmt::Display for PortKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum PortDir {
     Input,
     Output,
@@ -492,7 +492,7 @@ impl std::fmt::Display for PortDir {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum NetType {
     Supply0,
     Supply1,
@@ -527,7 +527,7 @@ impl std::fmt::Display for NetType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Procedure {
     pub span: Span,
     pub kind: ProcedureKind,
@@ -546,7 +546,7 @@ impl HasDesc for Procedure {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ProcedureKind {
     Initial,
     Always,
@@ -556,7 +556,7 @@ pub enum ProcedureKind {
     Final,
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
 pub struct Stmt {
     pub span: Span,
     #[ignore_child]
@@ -576,7 +576,7 @@ impl HasDesc for Stmt {
     }
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
 pub enum StmtData {
     NullStmt,
     SequentialBlock(Vec<Stmt>),
@@ -636,69 +636,69 @@ impl Stmt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum JoinKind {
     All,
     Any,
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum UniquePriority {
     Unique,
     Unique0,
     Priority,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum CaseKind {
     Normal,
     DontCareZ,
     DontCareXZ,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum CaseMode {
     Normal,
     Inside,
     Pattern,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaseItem {
     Default(Box<Stmt>),
     Expr(Vec<Expr>, Box<Stmt>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DelayControl {
     pub span: Span,
     pub expr: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventControl {
     pub span: Span,
     pub data: EventControlData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventControlData {
     Implicit,
     Expr(EventExpr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CycleDelay {}
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TimingControl {
     Delay(DelayControl),
     Event(EventControl),
     Cycle(CycleDelay),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssignOp {
     Identity,
     Add,
@@ -715,7 +715,7 @@ pub enum AssignOp {
     ArithShR,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDecl {
     pub span: Span,
     pub konst: bool,
@@ -737,7 +737,7 @@ impl HasDesc for VarDecl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDeclName {
     pub span: Span,
     pub name: Name,
@@ -766,7 +766,7 @@ impl HasDesc for VarDeclName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenvarDecl {
     pub span: Span,
     pub name: Name,
@@ -797,7 +797,7 @@ impl HasDesc for GenvarDecl {
 // TODO: Assign an id to each and every expression. This will later allow the
 // types of each expression to be recorded properly, and simplifies the act of
 // assigning IDs. Maybe expression IDs should be distinct from node IDs?
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
 pub struct Expr {
     pub span: Span,
     pub data: ExprData,
@@ -829,7 +829,7 @@ impl HasDesc for Expr2<'_> {
     }
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
 pub enum ExprData {
     DummyExpr,
     LiteralExpr(Lit),
@@ -895,7 +895,7 @@ pub enum ExprData {
     CastSignExpr(Spanned<TypeSign>, Box<Expr>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeOrExpr {
     Type(Type),
     Expr(Expr),
@@ -933,26 +933,26 @@ impl HasDesc for TypeOrExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueRange {
     Single(Expr),
     Range { lo: Expr, hi: Expr, span: Span },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RangeMode {
     Absolute,
     RelativeDown,
     RelativeUp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Identifier {
     pub span: Span,
     pub name: Name,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg {
     pub span: Span,
     pub name_span: Span,
@@ -960,19 +960,19 @@ pub struct CallArg {
     pub expr: Option<Expr>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamConcatSlice {
     Expr(Box<Expr>),
     Type(Type),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamExpr {
     pub expr: Box<Expr>,
     pub range: Option<Box<Expr>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventExpr {
     Edge {
         span: Span,
@@ -991,7 +991,7 @@ pub enum EventExpr {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeIdent {
     Implicit,
     Edge,
@@ -1015,7 +1015,7 @@ impl HasDesc for EventExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDecl {
     pub span: Span,
     pub virt: bool,
@@ -1027,14 +1027,14 @@ pub struct ClassDecl {
     pub items: Vec<ClassItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassItem {
     pub span: Span,
     pub qualifiers: Vec<(ClassItemQualifier, Span)>,
     pub data: ClassItemData,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassItemQualifier {
     Static,
     Protected,
@@ -1046,7 +1046,7 @@ pub enum ClassItemQualifier {
     Const,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassItemData {
     Property,
     Typedef(Typedef),
@@ -1059,13 +1059,13 @@ pub enum ClassItemData {
     Null,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RandomQualifier {
     Rand,
     Randc,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Typedef {
     pub span: Span,
     pub name: Identifier,
@@ -1093,7 +1093,7 @@ impl HasDesc for Typedef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Constraint {
     pub span: Span,
     pub kind: ConstraintKind,
@@ -1103,7 +1103,7 @@ pub struct Constraint {
     pub items: Vec<ConstraintItem>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstraintKind {
     Decl,
     Proto,
@@ -1111,20 +1111,20 @@ pub enum ConstraintKind {
     PureProto,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstraintItem {
     pub span: Span,
     pub data: ConstraintItemData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConstraintItemData {
     If,
     Foreach,
     Expr(Expr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutineDecl {
     pub span: Span,
     pub prototype: SubroutinePrototype,
@@ -1157,7 +1157,7 @@ impl HasDesc for SubroutineDecl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePrototype {
     pub span: Span,
     pub kind: SubroutineKind,
@@ -1167,13 +1167,13 @@ pub struct SubroutinePrototype {
     pub retty: Option<Type>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SubroutineKind {
     Func,
     Task,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePort {
     pub span: Span,
     pub dir: Option<SubroutinePortDir>,
@@ -1182,20 +1182,20 @@ pub struct SubroutinePort {
     pub name: Option<SubroutinePortName>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortName {
     pub name: Identifier,
     pub dims: Vec<TypeDim>,
     pub expr: Option<Expr>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubroutineItem {
     PortDecl(SubroutinePortDecl),
     Stmt(Stmt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortDecl {
     pub span: Span,
     pub dir: SubroutinePortDir,
@@ -1204,7 +1204,7 @@ pub struct SubroutinePortDecl {
     pub names: Vec<VarDeclName>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubroutinePortDir {
     Input,
     Output,
@@ -1213,7 +1213,7 @@ pub enum SubroutinePortDir {
     ConstRef,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetDecl {
     pub span: Span,
     pub net_type: NetType,
@@ -1236,20 +1236,20 @@ impl HasDesc for NetDecl {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetKind {
     Vectored,
     Scalared,
     None,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetStrength {
     Drive(DriveStrength, DriveStrength),
     Charge(ChargeStrength),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DriveStrength {
     Supply0,
     Strong0,
@@ -1263,20 +1263,20 @@ pub enum DriveStrength {
     HighZ1,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChargeStrength {
     Small,
     Medium,
     Large,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PatternField {
     pub span: Span,
     pub data: PatternFieldData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatternFieldData {
     Default(Box<Expr>),
     Member(Box<Expr>, Box<Expr>),
@@ -1285,13 +1285,13 @@ pub enum PatternFieldData {
     Repeat(Box<Expr>, Vec<Expr>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportDecl {
     pub span: Span,
     pub items: Vec<ImportItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportItem {
     pub pkg: Identifier,
     pub name: Option<Identifier>, // None means `import pkg::*`
@@ -1313,21 +1313,21 @@ impl HasDesc for ImportItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assertion {
     pub span: Span,
     pub label: Option<(Name, Span)>,
     pub data: AssertionData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionData {
     Immediate(BlockingAssertion),
     Deferred(AssertionDeferred, BlockingAssertion),
     Concurrent(ConcurrentAssertion),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionDeferred {
     /// `assert #0`
     Observed,
@@ -1335,14 +1335,14 @@ pub enum AssertionDeferred {
     Final,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockingAssertion {
     Assert(Expr, AssertionActionBlock),
     Assume(Expr, AssertionActionBlock),
     Cover(Expr, Stmt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConcurrentAssertion {
     AssertProperty(PropSpec, AssertionActionBlock),
     AssumeProperty(PropSpec, AssertionActionBlock),
@@ -1352,20 +1352,20 @@ pub enum ConcurrentAssertion {
     RestrictProperty(PropSpec),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionActionBlock {
     Positive(Stmt),
     Negative(Stmt),
     Both(Stmt, Stmt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeqExpr {
     pub span: Span,
     pub data: SeqExprData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeqExprData {
     Expr(Expr, Option<SeqRep>),
     BinOp(SeqBinOp, Box<SeqExpr>, Box<SeqExpr>),
@@ -1373,7 +1373,7 @@ pub enum SeqExprData {
     Clocked(EventExpr, Box<SeqExpr>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeqRep {
     Consec(Expr),    // [* expr]
     ConsecStar,      // [*]
@@ -1382,7 +1382,7 @@ pub enum SeqRep {
     Goto(Expr),      // [-> expr]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeqBinOp {
     Or,
     And,
@@ -1390,16 +1390,16 @@ pub enum SeqBinOp {
     Within,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropSpec;
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropExpr {
     pub span: Span,
     pub data: PropExprData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PropExprData {
     SeqOp(PropSeqOp, SeqExpr),
     SeqBinOp(PropSeqBinOp, PropSeqOp, SeqExpr, Box<PropExpr>),
@@ -1408,14 +1408,14 @@ pub enum PropExprData {
     Clocked(EventExpr, Box<PropExpr>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropSeqOp {
     None,
     Weak,
     Strong,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropSeqBinOp {
     ImplOverlap,
     ImplNonoverlap,
@@ -1423,7 +1423,7 @@ pub enum PropSeqBinOp {
     FollowNonoverlap,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropBinOp {
     Or,
     And,
@@ -1439,7 +1439,7 @@ pub enum PropBinOp {
     SeqFollowNol,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inst {
     pub span: Span,
     /// The name of the module to instantiate.
@@ -1470,7 +1470,7 @@ impl HasDesc for Inst {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstName {
     pub span: Span,
     pub name: Identifier,
@@ -1498,20 +1498,20 @@ impl HasDesc for InstName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModportDecl {
     pub span: Span,
     pub items: Vec<ModportItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModportItem {
     pub span: Span,
     pub name: Identifier,
     pub ports: Vec<ModportPort>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModportPort {
     Port,
 }
@@ -1524,7 +1524,7 @@ pub enum ModportPort {
 /// "parameter" data_type_or_implicit list_of_param_assignments
 /// "parameter" "type" list_of_type_assignments
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamDecl {
     pub span: Span,
     pub local: bool,
@@ -1543,7 +1543,7 @@ impl HasDesc for ParamDecl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParamKind {
     Type(Vec<ParamTypeDecl>),
     Value(Vec<ParamValueDecl>),
@@ -1554,7 +1554,7 @@ pub enum ParamKind {
 /// ```text
 /// ident ["=" type]
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamTypeDecl {
     pub span: Span,
     pub name: Identifier,
@@ -1586,7 +1586,7 @@ impl HasDesc for ParamTypeDecl {
 /// ```text
 /// [type_or_implicit] ident {dimension} ["=" expr]
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamValueDecl {
     pub span: Span,
     pub ty: Type,
@@ -1621,7 +1621,7 @@ impl HasDesc for ParamValueDecl {
 /// "assign" [drive_strength] [delay3] list_of_assignments ";"
 /// "assign" [delay_control] list_of_assignments ";"
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContAssign {
     pub span: Span,
     pub strength: Option<(DriveStrength, DriveStrength)>,
@@ -1642,7 +1642,7 @@ impl HasDesc for ContAssign {
     }
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
 pub struct GenerateFor {
     #[ignore_child]
     pub span: Span,
@@ -1667,7 +1667,7 @@ impl HasDesc for GenerateFor {
 #[derive(CommonNode)]
 pub struct TupleDummy(usize, usize, Expr);
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateIf {
     pub span: Span,
     pub cond: Expr,
@@ -1687,7 +1687,7 @@ impl HasDesc for GenerateIf {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateCase {
     // TODO
 }
@@ -1707,7 +1707,7 @@ impl HasDesc for GenerateCase {
 
 /// A body of a generate construct. May contains hierarchy items or more
 /// generate constructs.
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
 pub struct GenerateBlock {
     pub span: Span,
     #[ignore_child]
@@ -1728,7 +1728,7 @@ impl HasDesc for GenerateBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamAssignment {
     pub span: Span,
     pub name: Option<Identifier>,
@@ -1736,13 +1736,13 @@ pub struct ParamAssignment {
 }
 
 /// A port connection as given in an instantiation.
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortConn {
     pub span: Span,
     pub kind: PortConnKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortConnKind {
     Auto,                            // `.*` case
     Named(Identifier, PortConnMode), // `.name`, `.name()`, `.name(expr)` cases
@@ -1750,7 +1750,7 @@ pub enum PortConnKind {
 }
 
 /// Represents how a named port connection is made.
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortConnMode {
     Auto,            // `.name` case
     Unconnected,     // `.name()` case

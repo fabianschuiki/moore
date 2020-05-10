@@ -4,7 +4,6 @@
 //! to be referred to by a lightweight tag. This structure is heavily inspired
 //! by the interner used in the Rust compiler.
 
-use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -46,21 +45,21 @@ impl fmt::Display for Name {
     }
 }
 
-impl Encodable for Name {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_bool(self.is_case_sensitive())?;
-        s.emit_str(self.as_str().borrow())?;
-        Ok(())
-    }
-}
+// impl Encodable for Name {
+//     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+//         s.emit_bool(self.is_case_sensitive())?;
+//         s.emit_str(self.as_str().borrow())?;
+//         Ok(())
+//     }
+// }
 
-impl Decodable for Name {
-    fn decode<S: Decoder>(s: &mut S) -> Result<Name, S::Error> {
-        let case = s.read_bool()?;
-        let name = s.read_str()?;
-        Ok(get_name_table().intern(&name, case))
-    }
-}
+// impl Decodable for Name {
+//     fn decode<S: Decoder>(s: &mut S) -> Result<Name, S::Error> {
+//         let case = s.read_bool()?;
+//         let name = s.read_str()?;
+//         Ok(get_name_table().intern(&name, case))
+//     }
+// }
 
 impl Into<String> for Name {
     fn into(self) -> String {

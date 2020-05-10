@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix non-constant initial expressions in variabel declarations
 - Fix parsing of `new` expression without argument
 
+### Removed
+- Remove `rustc-serialize` dependency (#157)
+
 ## 0.7.0 - 2020-04-30
 ### Added
 - Add the `--syntax` option to only syntax-check input files.

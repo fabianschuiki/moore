@@ -23,7 +23,6 @@ clap = "2"
 # llhd = { git = "https://github.com/fabianschuiki/llhd", rev = "master", version = "0.9" }
 llhd = "0.9"
 num = "0.1"
-rustc-serialize = "0.3.24"
 serde = "1"
 typed-arena = "2.0.1"
 log = "0.4"

@@ -413,7 +413,6 @@ dependencies = [
  "moore-svlog 0.8.0-dev",
  "moore-vhdl 0.8.0-dev",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.107 (registry+https://github.com/rust-lang/crates.io-index)",
  "stderrlog 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -425,7 +424,6 @@ version = "0.8.0-dev"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.107 (registry+https://github.com/rust-lang/crates.io-index)",
  "typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -468,7 +466,6 @@ dependencies = [
  "moore-common 0.8.0-dev",
  "moore-derive 0.8.0-dev",
  "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -480,7 +477,6 @@ dependencies = [
  "moore-common 0.8.0-dev",
  "moore-vhdl-syntax 0.8.0-dev",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -490,7 +486,6 @@ version = "0.8.0-dev"
 dependencies = [
  "moore-common 0.8.0-dev",
  "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

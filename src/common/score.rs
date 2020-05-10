@@ -234,9 +234,7 @@ pub trait NodeRef: Copy + Eq + Ord + Hash + Debug + Into<NodeId> {
 #[macro_export]
 macro_rules! node_ref {
     ($name:ident) => {
-        #[derive(
-            Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash,
-        )]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name($crate::NodeId);
 
         impl std::fmt::Debug for $name {
@@ -266,7 +264,7 @@ macro_rules! node_ref {
 #[macro_export]
 macro_rules! node_ref_group {
     ($name:ident: $($var:ident($ty:ty),)+) => {
-        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable, Hash)]
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name {
             $($var($ty),)*
         }
