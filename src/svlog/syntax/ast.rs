@@ -649,8 +649,8 @@ pub enum StmtData<'a> {
     DisableStmt(Name),
 }
 
-impl Stmt<'_> {
-    pub fn new_null(span: Span) -> Stmt<'static> {
+impl<'a> Stmt<'a> {
+    pub fn new_null(span: Span) -> Stmt<'a> {
         Stmt {
             span: span,
             label: None,
