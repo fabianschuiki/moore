@@ -11,7 +11,14 @@ use moore_common::{
 use moore_derive::CommonNode;
 use std::cell::Cell;
 
+/// Common interface to all AST nodes.
+pub trait CommonNode {
+    /// Apply a function to each child node.
+    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode));
+}
+
 /// Common denominator across all AST nodes.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Node<'a, T> {
     /// Full span the node covers in the input.
     pub span: Span,
@@ -25,10 +32,26 @@ pub struct Node<'a, T> {
     pub data: T,
 }
 
-/// Common interface to all AST nodes.
-pub trait CommonNode {
-    /// Apply a function to each child node.
-    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode));
+impl<'a, T> Node<'a, T> {
+    /// Create a new AST node.
+    pub fn new(span: Span, data: T) -> Self {
+        Node {
+            span,
+            data,
+            parent: Default::default(),
+            lex_pred: Default::default(),
+            lex_succ: Default::default(),
+        }
+    }
+}
+
+impl<'a, T> CommonNode for Node<'a, T>
+where
+    T: CommonNode,
+{
+    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
+        self.data.for_each_child(f)
+    }
 }
 
 pub use self::ExprData::*;
