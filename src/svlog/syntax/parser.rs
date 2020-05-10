@@ -299,6 +299,7 @@ impl Parser<'_, '_> {
             last_span: INVALID_SPAN,
             severity: Severity::Note,
             consumed: 0,
+            arena_dummy: Default::default(),
         }
     }
 
@@ -780,7 +781,7 @@ fn parse_parameter_port_list<'n>(
 
                 fn tail<'n>(
                     p: &mut dyn AbstractParser<'n>,
-                    ty: Type,
+                    ty: Type<'n>,
                 ) -> ReportedResult<ast::ParamValueDecl<'n>> {
                     let mut span = p.peek(0).1;
                     let name = parse_identifier(p, "parameter name")?;
@@ -1426,7 +1427,7 @@ fn parse_explicit_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typ
     parse_type_suffix(p, ty)
 }
 
-fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type) -> ReportedResult<Type<'n>> {
+fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type<'n>) -> ReportedResult<Type<'n>> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         // Interfaces allow their internal modports and typedefs to be accessed
@@ -1493,7 +1494,7 @@ fn parse_implicit_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typ
 fn parse_type_signing_and_dimensions<'n>(
     p: &mut dyn AbstractParser<'n>,
     mut span: Span,
-    data: TypeData,
+    data: TypeData<'n>,
 ) -> ReportedResult<Type<'n>> {
     // Parse the optional sign information.
     let sign = match p.peek(0).0 {
@@ -1953,17 +1954,14 @@ fn parse_expr_prec<'n>(
         if let Some(dim_expr) = try_flanked(p, Brack, parse_expr)? {
             let expr = try_flanked(p, Paren, parse_expr)?;
             span.expand(p.last_span());
-            return Ok(Expr {
-                span: span,
-                data: ArrayNewExpr(Box::new(dim_expr), expr.map(|x| Box::new(x))),
-            });
+            return Ok(Expr::new(
+                span,
+                ArrayNewExpr(Box::new(dim_expr), expr.map(|x| Box::new(x))),
+            ));
         } else {
             if let Some(args) = try_flanked(p, Paren, parse_call_args)? {
                 span.expand(p.last_span());
-                return Ok(Expr {
-                    span: span,
-                    data: ConstructorCallExpr(args),
-                });
+                return Ok(Expr::new(span, ConstructorCallExpr(args)));
             } else {
                 // Parse the optional expression.
                 let mut bp = BranchParser::new(p);
@@ -1975,10 +1973,7 @@ fn parse_expr_prec<'n>(
                     Err(_) => None,
                 };
                 span.expand(p.last_span());
-                return Ok(Expr {
-                    span: span,
-                    data: ClassNewExpr(expr),
-                });
+                return Ok(Expr::new(span, ClassNewExpr(expr)));
             }
         }
     }
@@ -1994,10 +1989,7 @@ fn parse_expr_prec<'n>(
                 bp.commit();
                 let expr = flanked(p, Paren, parse_expr)?;
                 span.expand(p.last_span());
-                let cast = Expr {
-                    span,
-                    data: CastExpr(ty, Box::new(expr)),
-                };
+                let cast = Expr::new(span, CastExpr(ty, Box::new(expr)));
                 return parse_expr_suffix(p, cast, precedence);
             }
             _ => (),
@@ -2012,10 +2004,7 @@ fn parse_expr_prec<'n>(
         p.require_reported(Apostrophe)?;
         let expr = flanked(p, Paren, parse_expr)?;
         span.expand(p.last_span());
-        let cast = Expr {
-            span,
-            data: CastSignExpr(sign, Box::new(expr)),
-        };
+        let cast = Expr::new(span, CastSignExpr(sign, Box::new(expr)));
         return parse_expr_suffix(p, cast, precedence);
     }
 
@@ -2028,7 +2017,7 @@ fn parse_expr_prec<'n>(
 
 fn parse_expr_suffix<'n>(
     p: &mut dyn AbstractParser<'n>,
-    prefix: Expr,
+    prefix: Expr<'n>,
     precedence: Precedence,
 ) -> ReportedResult<Expr<'n>> {
     // p.add_diag(DiagBuilder2::note(format!("expr_suffix with precedence {:?}", precedence)).span(prefix.span));
@@ -2047,23 +2036,23 @@ fn parse_expr_suffix<'n>(
                 }
             };
             p.require_reported(CloseDelim(Brack))?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: IndexExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                IndexExpr {
                     indexee: Box::new(prefix),
                     index: Box::new(expr),
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
         // Call: "(" [list_of_arguments] ")"
         OpenDelim(Paren) if precedence <= Precedence::Postfix => {
             let args = flanked(p, Paren, parse_call_args)?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: CallExpr(Box::new(prefix), args),
-            };
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                CallExpr(Box::new(prefix), args),
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
@@ -2071,16 +2060,16 @@ fn parse_expr_suffix<'n>(
         Period if precedence <= Precedence::Scope => {
             p.bump();
             let (name, name_span) = p.eat_ident("member name")?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: MemberExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                MemberExpr {
                     expr: Box::new(prefix),
                     name: Identifier {
                         span: name_span,
                         name: name,
                     },
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
@@ -2088,38 +2077,38 @@ fn parse_expr_suffix<'n>(
         Namespace if precedence <= Precedence::Scope => {
             p.bump();
             let ident = parse_identifier(p, "scope name")?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: ScopeExpr(Box::new(prefix), ident),
-            };
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                ScopeExpr(Box::new(prefix), ident),
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
         // expr "++"
         Operator(Op::Inc) if precedence <= Precedence::Unary => {
             p.bump();
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: UnaryExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                UnaryExpr {
                     op: Op::Inc,
                     expr: Box::new(prefix),
                     postfix: true,
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
         // expr "--"
         Operator(Op::Dec) if precedence <= Precedence::Unary => {
             p.bump();
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: UnaryExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                UnaryExpr {
                     op: Op::Dec,
                     expr: Box::new(prefix),
                     postfix: true,
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
@@ -2129,14 +2118,14 @@ fn parse_expr_suffix<'n>(
             let true_expr = parse_expr_prec(p, Precedence::Ternary)?;
             p.require_reported(Colon)?;
             let false_expr = parse_expr_prec(p, Precedence::Ternary)?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: TernaryExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                TernaryExpr {
                     cond: Box::new(prefix),
                     true_expr: Box::new(true_expr),
                     false_expr: Box::new(false_expr),
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
@@ -2159,10 +2148,10 @@ fn parse_expr_suffix<'n>(
                     }
                 })
             })?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: InsideExpr(Box::new(prefix), set),
-            };
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                InsideExpr(Box::new(prefix), set),
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
 
@@ -2170,10 +2159,10 @@ fn parse_expr_suffix<'n>(
         Apostrophe if precedence <= Precedence::Postfix => {
             p.bump();
             let inner = flanked(p, Paren, |p| parse_expr(p))?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: CastSizeExpr(Box::new(prefix), Box::new(inner)),
-            };
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                CastSizeExpr(Box::new(prefix), Box::new(inner)),
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
         _ => (),
@@ -2184,14 +2173,14 @@ fn parse_expr_suffix<'n>(
         if precedence <= Precedence::Assignment {
             p.bump();
             let rhs = parse_expr_prec(p, Precedence::Assignment)?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: AssignExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                AssignExpr {
                     op: op,
                     lhs: Box::new(prefix),
                     rhs: Box::new(rhs),
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
     }
@@ -2202,14 +2191,14 @@ fn parse_expr_suffix<'n>(
         if precedence < prec {
             p.bump();
             let rhs = parse_expr_prec(p, prec)?;
-            let expr = Expr {
-                span: Span::union(prefix.span, p.last_span()),
-                data: BinaryExpr {
+            let expr = Expr::new(
+                Span::union(prefix.span, p.last_span()),
+                BinaryExpr {
                     op: op,
                     lhs: Box::new(prefix),
                     rhs: Box::new(rhs),
                 },
-            };
+            );
             return parse_expr_suffix(p, expr, precedence);
         }
     }
@@ -2229,27 +2218,27 @@ fn parse_expr_first<'n>(
         (Operator(Op::Inc), _) if precedence <= Precedence::Unary => {
             p.bump();
             let expr = parse_expr_prec(p, Precedence::Unary)?;
-            return Ok(Expr {
-                span: Span::union(first, p.last_span()),
-                data: UnaryExpr {
+            return Ok(Expr::new(
+                Span::union(first, p.last_span()),
+                UnaryExpr {
                     op: Op::Inc,
                     expr: Box::new(expr),
                     postfix: false,
                 },
-            });
+            ));
         }
 
         (Operator(Op::Dec), _) if precedence <= Precedence::Unary => {
             p.bump();
             let expr = parse_expr_prec(p, Precedence::Unary)?;
-            return Ok(Expr {
-                span: Span::union(first, p.last_span()),
-                data: UnaryExpr {
+            return Ok(Expr::new(
+                Span::union(first, p.last_span()),
+                UnaryExpr {
                     op: Op::Dec,
                     expr: Box::new(expr),
                     postfix: false,
                 },
-            });
+            ));
         }
 
         (Keyword(Kw::Tagged), sp) => {
@@ -2264,14 +2253,14 @@ fn parse_expr_first<'n>(
     if let Some(op) = as_unary_operator(p.peek(0).0) {
         p.bump();
         let expr = parse_expr_prec(p, Precedence::Unary)?;
-        return Ok(Expr {
-            span: Span::union(first, p.last_span()),
-            data: UnaryExpr {
+        return Ok(Expr::new(
+            Span::union(first, p.last_span()),
+            UnaryExpr {
                 op: op,
                 expr: Box::new(expr),
                 postfix: false,
             },
-        });
+        ));
     }
 
     // Since none of the above matched, this must be a primary expression.
@@ -2284,36 +2273,27 @@ fn parse_primary_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr
         // Primary Literals
         Literal(lit) => {
             p.bump();
-            return Ok(Expr {
-                span: sp,
-                data: LiteralExpr(lit),
-            });
+            return Ok(Expr::new(sp, LiteralExpr(lit)));
         }
 
         // Identifiers
         Ident(n) | EscIdent(n) => {
             p.bump();
-            return Ok(Expr {
-                span: sp,
-                data: IdentExpr(Identifier { span: sp, name: n }),
-            });
+            return Ok(Expr::new(sp, IdentExpr(Identifier { span: sp, name: n })));
         }
         SysIdent(n) => {
             p.bump();
-            return Ok(Expr {
-                span: sp,
-                data: SysIdentExpr(Identifier { span: sp, name: n }),
-            });
+            return Ok(Expr::new(
+                sp,
+                SysIdentExpr(Identifier { span: sp, name: n }),
+            ));
         }
 
         // Concatenation and empty queue
         OpenDelim(Brace) => {
             p.bump();
             if p.try_eat(CloseDelim(Brace)) {
-                return Ok(Expr {
-                    span: Span::union(sp, p.last_span()),
-                    data: EmptyQueueExpr,
-                });
+                return Ok(Expr::new(Span::union(sp, p.last_span()), EmptyQueueExpr));
             }
             let data = match parse_concat_expr(p) {
                 Ok(x) => x,
@@ -2323,10 +2303,7 @@ fn parse_primary_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr
                 }
             };
             p.require_reported(CloseDelim(Brace))?;
-            return Ok(Expr {
-                span: Span::union(sp, p.last_span()),
-                data: data,
-            });
+            return Ok(Expr::new(Span::union(sp, p.last_span()), data));
         }
 
         // Parenthesis
@@ -2349,10 +2326,10 @@ fn parse_primary_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr
             let fields = flanked(p, Brace, |p| {
                 comma_list_nonempty(p, CloseDelim(Brace), "pattern field", parse_pattern_field)
             })?;
-            return Ok(Expr {
-                span: Span::union(sp, p.last_span()),
-                data: PatternExpr(fields),
-            });
+            return Ok(Expr::new(
+                Span::union(sp, p.last_span()),
+                PatternExpr(fields),
+            ));
         }
 
         tkn => {
@@ -2571,14 +2548,14 @@ fn parse_primary_parenthesis<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResu
         let typ = parse_expr_prec(p, Precedence::Min)?;
         p.require_reported(Colon)?;
         let max = parse_expr_prec(p, Precedence::Min)?;
-        Ok(Expr {
-            span: Span::union(first.span, max.span),
-            data: MinTypMaxExpr {
+        Ok(Expr::new(
+            Span::union(first.span, max.span),
+            MinTypMaxExpr {
                 min: Box::new(first),
                 typ: Box::new(typ),
                 max: Box::new(max),
             },
-        })
+        ))
     } else {
         Ok(first)
     }
@@ -2607,14 +2584,14 @@ fn parse_range_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr<'
     p.bump(); // skip the operator
     let second_expr = parse_expr(p)?;
     span.expand(p.last_span());
-    Ok(Expr {
-        span: span,
-        data: RangeExpr {
+    Ok(Expr::new(
+        span,
+        RangeExpr {
             mode: mode,
             lhs: Box::new(first_expr),
             rhs: Box::new(second_expr),
         },
-    })
+    ))
 }
 
 /// Convert a token to the corresponding unary operator. Return `None` if the
@@ -4119,7 +4096,7 @@ fn parse_event_expr<'n>(
 
 fn parse_event_expr_suffix<'n>(
     p: &mut dyn AbstractParser<'n>,
-    expr: EventExpr,
+    expr: EventExpr<'n>,
     precedence: EventPrecedence,
 ) -> ReportedResult<EventExpr<'n>> {
     match p.peek(0).0 {
@@ -5557,7 +5534,7 @@ fn parse_propexpr_seq<'n>(
 
 fn parse_propexpr_suffix<'n>(
     p: &mut dyn AbstractParser<'n>,
-    prefix: PropExpr,
+    prefix: PropExpr<'n>,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<PropExpr<'n>> {
     // Handle the binary operators that have a property expression on both their
@@ -5649,7 +5626,7 @@ fn parse_seqexpr_nonexpr<'n>(
 
 fn parse_seqexpr_suffix<'n>(
     p: &mut dyn AbstractParser<'n>,
-    prefix: SeqExpr,
+    prefix: SeqExpr<'n>,
     precedence: PropSeqPrecedence,
 ) -> ReportedResult<SeqExpr<'n>> {
     // TODO: Handle all the binary operators.
@@ -5882,7 +5859,7 @@ fn parse_param_decl<'n>(
 
             fn tail<'n>(
                 p: &mut dyn AbstractParser<'n>,
-                ty: Type,
+                ty: Type<'n>,
             ) -> ReportedResult<ast::ParamValueDecl<'n>> {
                 let mut span = p.peek(0).1;
                 let name = parse_identifier(p, "parameter name")?;
