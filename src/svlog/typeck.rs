@@ -1031,7 +1031,11 @@ pub(crate) fn type_context<'gcx>(
                 None
             }
         }
-        // TODO(fschuiki): Ports
+        HirNode::IntPort(hir::IntPort { data: Some(v), .. })
+            if v.default == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
+        {
+            Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
+        }
         HirNode::VarDecl(v)
             if v.init == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
         {
