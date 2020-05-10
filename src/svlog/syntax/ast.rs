@@ -2,10 +2,13 @@
 
 #![allow(unused_variables)]
 
-use super::token::{Lit, Op};
-use moore_common::name::Name;
-use moore_common::source::{Span, Spanned, INVALID_SPAN};
-use moore_common::util::{HasDesc, HasSpan};
+use crate::token::{Lit, Op};
+use moore_common::{
+    name::Name,
+    source::{Span, Spanned, INVALID_SPAN},
+    util::{HasDesc, HasSpan},
+};
+use moore_derive::CommonNode;
 use std::fmt;
 
 /// A positive, small ID assigned to each node in the AST. Used as a lightweight
@@ -40,6 +43,11 @@ impl fmt::Display for NodeId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }
+}
+
+pub trait CommonNode {
+    /// Apply a function to each child node.
+    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode));
 }
 
 /// During parsing and syntax tree construction, we assign each node this ID.
@@ -575,9 +583,10 @@ pub enum ProcedureKind {
     Final,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Stmt {
     pub span: Span,
+    #[ignore_child]
     pub label: Option<Name>,
     pub data: StmtData,
 }
@@ -594,7 +603,7 @@ impl HasDesc for Stmt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum StmtData {
     NullStmt,
     SequentialBlock(Vec<Stmt>),
@@ -817,7 +826,7 @@ impl HasDesc for GenvarDecl {
 // TODO: Assign an id to each and every expression. This will later allow the
 // types of each expression to be recorded properly, and simplifies the act of
 // assigning IDs. Maybe expression IDs should be distinct from node IDs?
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct Expr {
     pub span: Span,
     pub data: ExprData,
@@ -835,7 +844,7 @@ impl HasDesc for Expr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub enum ExprData {
     DummyExpr,
     LiteralExpr(Lit),
@@ -1649,8 +1658,9 @@ impl HasDesc for ContAssign {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenerateFor {
+    #[ignore_child]
     pub span: Span,
     pub init: Stmt,
     pub cond: Expr,
@@ -1669,6 +1679,9 @@ impl HasDesc for GenerateFor {
         "for-generate statement"
     }
 }
+
+#[derive(CommonNode)]
+pub struct TupleDummy(usize, usize, Expr);
 
 #[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenerateIf {
@@ -1710,10 +1723,12 @@ impl HasDesc for GenerateCase {
 
 /// A body of a generate construct. May contains hierarchy items or more
 /// generate constructs.
-#[derive(Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
+#[derive(CommonNode, Debug, Clone, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct GenerateBlock {
     pub span: Span,
+    #[ignore_child]
     pub label: Option<Name>,
+    #[ignore_child]
     pub items: Vec<Item>,
 }
 
