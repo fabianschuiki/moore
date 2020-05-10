@@ -13,10 +13,8 @@
 //! # Example
 //!
 //! ```
-//! # extern crate moore_common as common;
-//! # extern crate moore_svlog as svlog;
-//! # use common::Session;
-//! # use svlog::{GlobalContext, GlobalArenas};
+//! # use moore_common::Session;
+//! # use moore_svlog::{GlobalContext, GlobalArenas};
 //! let sess = Session::new();
 //! let arena = GlobalArenas::default();
 //! let gcx = GlobalContext::new(&sess, &arena);

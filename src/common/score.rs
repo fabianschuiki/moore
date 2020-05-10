@@ -221,7 +221,6 @@ pub trait NodeRef: Copy + Eq + Ord + Hash + Debug + Into<NodeId> {
 /// ```
 /// #[macro_use]
 /// extern crate moore_common;
-/// # extern crate rustc_serialize;
 ///
 /// # fn main() {
 /// node_ref!(FooRef);
@@ -307,7 +306,6 @@ macro_rules! node_ref_group {
 /// #[macro_use]
 /// extern crate moore_common;
 /// use moore_common::score::NodeStorage;
-/// # extern crate rustc_serialize;
 /// # use std::collections::HashMap;
 ///
 /// #[derive(PartialEq, Eq, Hash, Debug)]

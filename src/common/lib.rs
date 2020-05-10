@@ -5,8 +5,6 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate memmap;
-extern crate typed_arena;
 
 #[macro_use]
 pub mod arenas;

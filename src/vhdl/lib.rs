@@ -7,16 +7,12 @@
 
 #[macro_use]
 extern crate lazy_static;
-extern crate llhd;
 #[macro_use]
-pub extern crate moore_common;
-pub extern crate moore_vhdl_syntax as syntax;
-extern crate num;
-extern crate typed_arena;
-// extern crate futures;
+extern crate moore_common;
+pub extern crate moore_vhdl_syntax as _;
 
-// TODO: Merge this into the `extern crate` above.
-pub use moore_common as common;
+pub(crate) use moore_common as common;
+pub use moore_vhdl_syntax as syntax;
 
 #[macro_use]
 pub mod arenas;

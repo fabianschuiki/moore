@@ -7,14 +7,12 @@
 
 #[macro_use]
 extern crate log;
-
-// Re-export everything from the common crate.
 #[macro_use]
-pub extern crate moore_common as common;
-pub use crate::common::*;
+pub extern crate moore_common as _;
 
-// Pull in subcrates. We might want to feature-gate this at some point.
-pub extern crate moore_svlog as svlog;
-pub extern crate moore_vhdl as vhdl;
+pub use moore_common as common;
+pub use moore_common::*;
+pub use moore_svlog as svlog;
+pub use moore_vhdl as vhdl;
 
 pub mod score;
