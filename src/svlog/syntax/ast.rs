@@ -17,6 +17,28 @@ pub trait CommonNode {
     fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode));
 }
 
+impl<T> CommonNode for Vec<T>
+where
+    T: CommonNode,
+{
+    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
+        for c in self {
+            f(c)
+        }
+    }
+}
+
+impl<T> CommonNode for Option<T>
+where
+    T: CommonNode,
+{
+    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
+        if let Some(c) = self {
+            f(c)
+        }
+    }
+}
+
 /// Common denominator across all AST nodes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Node<'a, T> {
@@ -77,6 +99,9 @@ pub trait Visitor {
     fn visit_generate_block(&mut self, node: &GenerateBlock) {
         node.accept(self);
     }
+    fn visit_timeunit(&mut self, node: &Timeunit) {
+        node.accept(self);
+    }
 }
 
 /// A node that accepts `Visitor`s.
@@ -84,11 +109,33 @@ pub trait AcceptVisitor {
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V);
 }
 
+impl<T> AcceptVisitor for Vec<T>
+where
+    T: AcceptVisitor,
+{
+    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        for c in self {
+            c.accept(visitor);
+        }
+    }
+}
+
+impl<T> AcceptVisitor for Option<T>
+where
+    T: AcceptVisitor,
+{
+    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        if let Some(c) = self {
+            c.accept(visitor);
+        }
+    }
+}
+
 pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(CommonNode, Debug, PartialEq, Eq)]
 pub struct Root<'a> {
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
@@ -180,13 +227,13 @@ pub enum Lifetime {
 /// "timeunit" time_literal ["/" time_literal] ";"
 /// "timeprecision" time_literal ";"
 /// ```
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(CommonNode, Debug, PartialEq, Eq, Clone)]
 pub struct Timeunit {
     pub unit: Option<Spanned<Lit>>,
     pub prec: Option<Spanned<Lit>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(CommonNode, Debug, PartialEq, Eq, Clone)]
 pub enum Item<'a> {
     Dummy,
     ModuleDecl(ModDecl<'a>),

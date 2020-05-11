@@ -13,7 +13,11 @@ fn is_child_field(field: &syn::Field) -> bool {
     if tystr.chars().nth(0).unwrap().is_lowercase() {
         return false;
     }
-    if tystr == "Span" || tystr == "Spanned" {
+    if tystr == "Span"
+        || tystr.starts_with("Spanned")
+        // || tystr.starts_with("Vec")
+        || tystr.starts_with("Option")
+    {
         return false;
     }
     if field
@@ -69,13 +73,14 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         }
         match &field.ty {
             syn::Type::Path(path) => {
-                let ident = &path.path.segments.last().unwrap().ident;
-                let method_name = format_ident!(
-                    "visit_{}",
-                    ident.to_string().to_snake_case(),
-                    span = field.ty.span(),
-                );
-                Some(quote! { visitor.#method_name(&self.#name); })
+                let ident = &path.path.segments.last().unwrap().ident.to_string();
+                if ident == "Vec" || ident == "Option" {
+                    Some(quote! { self.#name.accept(visitor); })
+                } else {
+                    let method_name =
+                        format_ident!("visit_{}", ident.to_snake_case(), span = field.ty.span());
+                    Some(quote! { visitor.#method_name(&self.#name); })
+                }
             }
             _ => None,
         }
