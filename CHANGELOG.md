@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add `moore-derive` crate
 - Add `-Vconsts` verbosity option
 
+### Changed
+- Update `llhd` to 0.13
+
 ### Fixed
 - Fix sign casts (#138)
 - Fix parsing of import declarations in module headers (#136)

@@ -9,7 +9,6 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv, ParamEnvSource, PortMappingSource,
 };
-use llhd::ir::{Unit, UnitBuilder};
 use num::{BigInt, One, Zero};
 use std::{
     collections::{HashMap, HashSet},
@@ -48,7 +47,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 
 #[derive(Default)]
 struct Tables<'gcx> {
-    module_defs: HashMap<NodeEnvId, Result<llhd::ir::ModUnit>>,
+    module_defs: HashMap<NodeEnvId, Result<llhd::ir::UnitId>>,
     module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
     interned_types: HashMap<(Type<'gcx>, ParamEnv), Result<llhd::Type>>,
 }
@@ -63,12 +62,12 @@ impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
 
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::ir::ModUnit> {
+    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::ir::UnitId> {
         self.emit_module_with_env(id, self.default_param_env())
     }
 
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ir::ModUnit> {
+    pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ir::UnitId> {
         if let Some(x) = self.tables.module_defs.get(&(id, env)) {
             return x.clone();
         }
@@ -113,8 +112,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let name = llhd::ir::UnitName::Global(entity_name.clone());
 
         // Create entity.
-        let mut ent = llhd::ir::Entity::new(name.clone(), sig.clone());
-        let mut builder = llhd::ir::EntityBuilder::new(&mut ent);
+        let mut ent =
+            llhd::ir::UnitData::new(llhd::ir::UnitKind::Entity, name.clone(), sig.clone());
+        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut ent);
         self.tables.module_signatures.insert((id, env), (name, sig));
         let mut values = HashMap::<NodeId, llhd::ir::Value>::new();
         let mut gen = UnitGenerator {
@@ -129,16 +129,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Assign proper port names and collect ports into a lookup table.
         for (index, port_id) in inputs.into_iter().enumerate() {
-            let arg = gen.builder.entity.input_arg(index);
+            let arg = gen.builder.input_arg(index);
             gen.builder
-                .dfg_mut()
                 .set_name(arg, port_id_to_name[&port_id].value.to_string());
             gen.values.insert(port_id, arg);
         }
         for (index, &port_id) in outputs.iter().enumerate() {
-            let arg = gen.builder.entity.output_arg(index);
+            let arg = gen.builder.output_arg(index);
             gen.builder
-                .dfg_mut()
                 .set_name(arg, port_id_to_name[&port_id].value.to_string());
             gen.values.insert(port_id, arg);
         }
@@ -150,15 +148,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         for port_id in outputs {
             let driven = {
                 let value = gen.values[&port_id];
-                gen.builder.inst_layout().insts().any(|inst| {
-                    match gen.builder.dfg()[inst].opcode() {
-                        llhd::ir::Opcode::Drv => gen.builder.dfg()[inst].args()[0] == value,
-                        llhd::ir::Opcode::Inst => {
-                            gen.builder.dfg()[inst].output_args().contains(&value)
-                        }
+                gen.builder
+                    .all_insts()
+                    .any(|inst| match gen.builder[inst].opcode() {
+                        llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value,
+                        llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value),
                         _ => false,
-                    }
-                })
+                    })
             };
             if driven {
                 continue;
@@ -179,15 +175,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 },
                 env,
             )?;
-            let zero_time = llhd::ConstTime::new(num::zero(), 0, 0);
+            let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
             let zero_time = gen.builder.ins().const_time(zero_time);
             gen.builder
                 .ins()
                 .drv(gen.values[&port_id], default_value, zero_time);
         }
 
-        trace!("{}", ent.dump());
-        let result = Ok(self.into.add_entity(ent));
+        trace!("{}", gen.builder.unit());
+        let result = Ok(self.into.add_unit(ent));
         self.tables.module_defs.insert((id, env), result.clone());
         result
     }
@@ -240,8 +236,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             id.as_usize(),
             env.0,
         );
-        let mut prok = llhd::ir::Process::new(llhd::ir::UnitName::Local(proc_name), sig);
-        let mut builder = llhd::ir::ProcessBuilder::new(&mut prok);
+        let mut prok = llhd::ir::UnitData::new(
+            llhd::ir::UnitKind::Process,
+            llhd::ir::UnitName::Local(proc_name),
+            sig,
+        );
+        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
 
         // Assign names to inputs and outputs.
         let guess_name = |id| match self.hir_of(id).ok()? {
@@ -251,14 +251,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
         for (i, &id) in inputs.iter().enumerate() {
             if let Some(name) = guess_name(id) {
-                let value = builder.prok.input_arg(i);
-                builder.dfg_mut().set_name(value, format!("{}", name));
+                let value = builder.input_arg(i);
+                builder.set_name(value, format!("{}", name));
             }
         }
         for (i, &id) in outputs.iter().enumerate() {
             if let Some(name) = guess_name(id) {
-                let value = builder.prok.output_arg(i);
-                builder.dfg_mut().set_name(value, format!("{}", name));
+                let value = builder.output_arg(i);
+                builder.set_name(value, format!("{}", name));
             }
         }
 
@@ -266,8 +266,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut values = HashMap::new();
         for (&id, arg) in inputs
             .iter()
-            .zip(builder.prok.input_args())
-            .chain(outputs.iter().zip(builder.prok.output_args()))
+            .zip(builder.input_args())
+            .chain(outputs.iter().zip(builder.output_args()))
         {
             values.insert(id, arg);
         }
@@ -293,11 +293,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let shadow = pg.builder.ins().var(init);
             if let Some(name) = pg
                 .builder
-                .dfg()
                 .get_name(pg.values[&id])
                 .map(|name| format!("{}.shadow", name))
             {
-                pg.builder.dfg_mut().set_name(shadow, name);
+                pg.builder.set_name(shadow, name);
             }
             pg.shadows.insert(id, shadow);
         }
@@ -321,14 +320,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ast::ProcedureKind::Final => {
                 // TODO(fschuiki): Replace this with a cleverer way to implement a trigger-on-end.
                 let body_blk = pg.add_named_block("body");
-                let endtimes = pg.builder.ins().const_time(llhd::ConstTime::new(
+                let endtimes = pg.builder.ins().const_time(llhd::value::TimeValue::new(
                     "9001".parse().unwrap(),
                     0,
                     0,
                 ));
-                pg.builder
-                    .dfg_mut()
-                    .set_name(endtimes, "endtimes".to_string());
+                pg.builder.set_name(endtimes, "endtimes".to_string());
                 pg.builder.ins().wait_time(body_blk, endtimes, vec![]);
                 pg.builder.append_to(body_blk);
                 pg.emit_shadow_update();
@@ -357,7 +354,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         Ok(EmittedProcedure {
-            unit: self.into.add_process(prok),
+            unit: self.into.add_unit(prok),
             inputs,
             outputs,
         })
@@ -459,11 +456,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 }
 
 /// A code generator for functions, processes, and entities.
-struct UnitGenerator<'a, 'gcx, C, UB> {
+struct UnitGenerator<'a, 'gcx, C> {
     /// The global code generator.
     gen: &'a mut CodeGenerator<'gcx, C>,
     /// The builder into which instructions are emitted.
-    builder: &'a mut UB,
+    builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
     values: &'a mut HashMap<NodeId, llhd::ir::Value>,
     /// The constant values emitted into the unit.
@@ -478,7 +475,7 @@ struct UnitGenerator<'a, 'gcx, C, UB> {
     shadows: HashMap<NodeId, llhd::ir::Value>,
 }
 
-impl<'a, 'gcx, C, UB> Deref for UnitGenerator<'a, 'gcx, C, UB> {
+impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
     type Target = CodeGenerator<'gcx, C>;
 
     fn deref(&self) -> &CodeGenerator<'gcx, C> {
@@ -486,16 +483,15 @@ impl<'a, 'gcx, C, UB> Deref for UnitGenerator<'a, 'gcx, C, UB> {
     }
 }
 
-impl<'a, 'gcx, C, UB> DerefMut for UnitGenerator<'a, 'gcx, C, UB> {
+impl<'a, 'gcx, C> DerefMut for UnitGenerator<'a, 'gcx, C> {
     fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
         &mut self.gen
     }
 }
 
-impl<'a, 'b, 'gcx, C, UB> UnitGenerator<'a, 'gcx, &'b C, UB>
+impl<'a, 'b, 'gcx, C> UnitGenerator<'a, 'gcx, &'b C>
 where
     C: Context<'gcx> + 'b,
-    UB: UnitBuilder,
 {
     fn emitted_value(&self, node_id: NodeId) -> llhd::ir::Value {
         match self.values.get(&node_id) {
@@ -534,9 +530,7 @@ where
                 env,
             )?;
             let value = self.builder.ins().sig(init);
-            self.builder
-                .dfg_mut()
-                .set_name(value, hir.name.value.into());
+            self.builder.set_name(value, hir.name.value.into());
             self.values.insert(decl_id, value.into());
         }
 
@@ -553,7 +547,7 @@ where
             let rhs = mir::lower::rvalue::cast_to_type(self.cx, rhs, env, lhs.ty);
             let lhs = self.emit_mir_lvalue(lhs)?.0;
             let rhs = self.emit_mir_rvalue(rhs)?;
-            let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
+            let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
             let one_epsilon = self.builder.ins().const_time(one_epsilon);
             self.builder.ins().drv(lhs, rhs, one_epsilon);
         }
@@ -684,9 +678,8 @@ where
                             self.builder.ins().sig(v)
                         }
                     };
-                    if self.builder.dfg().get_name(value).is_none() {
+                    if self.builder.get_name(value).is_none() {
                         self.builder
-                            .dfg_mut()
                             .set_name(value, format!("{}.{}.default", inst_hir.name, port.name));
                     }
                     value
@@ -700,8 +693,8 @@ where
             // Emit the instantiated module, and instantiate it.
             let target = self.emit_module_with_env(module, inst_env)?;
             let ext_unit = self.builder.add_extern(
-                self.into[target].name().clone(),
-                self.into[target].sig().clone(),
+                self.into.unit(target).name().clone(),
+                self.into.unit(target).sig().clone(),
             );
             self.builder.ins().inst(ext_unit, inputs, outputs);
             // TODO: Annotate instance name once LLHD allows that.
@@ -768,8 +761,8 @@ where
             let inputs = prok.inputs.iter().map(lookup_value).collect();
             let outputs = prok.outputs.iter().map(lookup_value).collect();
             let ext_unit = self.builder.add_extern(
-                self.into[prok.unit].name().clone(),
-                self.into[prok.unit].sig().clone(),
+                self.into.unit(prok.unit).name().clone(),
+                self.into.unit(prok.unit).sig().clone(),
             );
             self.builder.ins().inst(ext_unit, inputs, outputs);
         }
@@ -802,14 +795,14 @@ where
                     ..
                 },
                 &ValueKind::Int(ref k, ..),
-            ) => Ok(self.builder.ins().const_int(width, k.clone())),
+            ) => Ok(self.builder.ins().const_int((width, k.clone()))),
             (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(self
                 .builder
                 .ins()
-                .const_time(llhd::ConstTime::new(k.clone(), 0, 0))),
+                .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0))),
             (&TypeKind::Bit(_), &ValueKind::Int(ref k, ..))
             | (&TypeKind::BitScalar { .. }, &ValueKind::Int(ref k, ..)) => {
-                Ok(self.builder.ins().const_int(1, k.clone()))
+                Ok(self.builder.ins().const_int((1, k.clone())))
             }
             (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {
                 let fields: Result<Vec<_>> = v
@@ -853,9 +846,9 @@ where
             llhd::TimeType => {
                 self.builder
                     .ins()
-                    .const_time(llhd::ConstTime::new(num::zero(), 0, 0))
+                    .const_time(llhd::value::TimeValue::new(num::zero(), 0, 0))
             }
-            llhd::IntType(w) => self.builder.ins().const_int(w, 0),
+            llhd::IntType(w) => self.builder.ins().const_int((w, 0)),
             llhd::SignalType(ref ty) => {
                 let inner = self.emit_zero_for_type(ty);
                 self.builder.ins().sig(inner)
@@ -874,7 +867,7 @@ where
 
     /// Get the type of an LLHD value.
     fn llhd_type(&self, value: llhd::ir::Value) -> llhd::Type {
-        self.builder.dfg().value_type(value)
+        self.builder.value_type(value)
     }
 
     /// Emit the code for an rvalue.
@@ -898,7 +891,7 @@ where
                 let ty = self.llhd_type(value);
                 let init = self.emit_zero_for_type(&ty);
                 let sig = self.builder.ins().sig(init);
-                let delay = llhd::ConstTime::new(num::zero(), 0, 1);
+                let delay = llhd::value::TimeValue::new(num::zero(), 0, 1);
                 let delay_const = self.builder.ins().const_time(delay);
                 self.builder.ins().drv(sig, value, delay_const);
                 Ok(sig)
@@ -932,14 +925,12 @@ where
                     llhd::SignalType(_) => {
                         let value = self.builder.ins().prb(value);
                         self.builder
-                            .dfg_mut()
                             .set_name(value, format!("{}", mir.span.extract()));
                         value
                     }
                     llhd::PointerType(_) => {
                         let value = self.builder.ins().ld(value);
                         self.builder
-                            .dfg_mut()
                             .set_name(value, format!("{}", mir.span.extract()));
                         value
                     }
@@ -955,7 +946,6 @@ where
                     .unwrap_or_else(|| self.emitted_value(id));
                 let value = self.builder.ins().prb(value);
                 self.builder
-                    .dfg_mut()
                     .set_name(value, format!("{}", mir.span.extract()));
                 Ok(value)
             }
@@ -1055,13 +1045,13 @@ where
                 // let name = format!(
                 //     "{}.{}",
                 //     self.builder
-                //         .dfg()
+                //
                 //         .get_name(target)
                 //         .map(String::from)
                 //         .unwrap_or_else(|| "struct".into()),
                 //     field
                 // );
-                // self.builder.dfg_mut().set_name(value, name);
+                // self.builder.set_name(value, name);
                 Ok(value)
             }
 
@@ -1343,13 +1333,13 @@ where
         lhs: llhd::ir::Value,
         rhs: llhd::ir::Value,
     ) -> llhd::ir::Value {
-        let ty = self.builder.dfg().value_type(lhs);
+        let ty = self.builder.value_type(lhs);
         let width = if ty.is_signal() {
             ty.unwrap_signal().unwrap_int()
         } else {
             ty.unwrap_int()
         };
-        let zeros = self.builder.ins().const_int(width, 0);
+        let zeros = self.builder.ins().const_int((width, 0));
         let hidden = if arith && dir == ShiftDir::Right {
             let ones = self.builder.ins().not(zeros);
             let sign = self.builder.ins().ext_slice(lhs, width - 1, 1);
@@ -1372,7 +1362,7 @@ where
     /// Add a named block.
     fn add_named_block(&mut self, name: impl Into<String>) -> llhd::ir::Block {
         let bb = self.builder.block();
-        self.builder.cfg_mut().set_name(bb, name.into());
+        self.builder.set_block_name(bb, name.into());
         bb
     }
 
@@ -1441,7 +1431,7 @@ where
                         self.emit_blocking_assign_llhd(lhs_lv, value)?;
                     }
                     hir::AssignKind::Nonblock => {
-                        let delay = llhd::ConstTime::new(num::zero(), 1, 0);
+                        let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
                         let delay_const = self.builder.ins().const_time(delay);
                         self.builder.ins().drv(lhs_lv.0, rhs_rv, delay_const);
                     }
@@ -1516,14 +1506,12 @@ where
                     for &iff in &event.iff {
                         let iff_value = self.emit_rvalue_bool(iff, env)?;
                         trigger = self.builder.ins().and(trigger, iff_value);
-                        self.builder.dfg_mut().set_name(trigger, "iff".to_string());
+                        self.builder.set_name(trigger, "iff".to_string());
                     }
                     event_cond = Some(match event_cond {
                         Some(chain) => {
                             let value = self.builder.ins().or(chain, trigger);
-                            self.builder
-                                .dfg_mut()
-                                .set_name(value, "event_or".to_string());
+                            self.builder.set_name(value, "event_or".to_string());
                             value
                         }
                         None => trigger,
@@ -1594,9 +1582,7 @@ where
                         let ty = self.type_of(count, env)?;
                         let count = self.emit_rvalue(count, env)?;
                         let var = self.builder.ins().var(count);
-                        self.builder
-                            .dfg_mut()
-                            .set_name(var, "loop_count".to_string());
+                        self.builder.set_name(var, "loop_count".to_string());
                         Some((var, ty))
                     }
                     hir::LoopKind::While(_) => None,
@@ -1671,7 +1657,7 @@ where
                 let expr = self.emit_rvalue(expr, env)?;
                 let final_blk = self.add_named_block("case_exit");
                 for &(ref way_exprs, stmt) in ways {
-                    let mut last_check = self.builder.ins().const_int(1, 0);
+                    let mut last_check = self.builder.ins().const_int((1, 0));
                     for &way_expr in way_exprs {
                         // Determine the constant value of the label.
                         let way_const = self.constant_value_of(way_expr, env)?;
@@ -1705,7 +1691,7 @@ where
                                     mask |= BigInt::one();
                                 }
                             }
-                            self.builder.ins().const_int(way_width, mask)
+                            self.builder.ins().const_int((way_width, mask))
                         });
 
                         // Filter the comparison values through the mask.
@@ -1760,9 +1746,7 @@ where
             None => self.emit_zero_for_type(&ty),
         };
         let value = self.builder.ins().var(init);
-        self.builder
-            .dfg_mut()
-            .set_name(value, hir.name.value.to_string());
+        self.builder.set_name(value, hir.name.value.to_string());
         self.set_emitted_value(decl_id, value);
         Ok(())
     }
@@ -1783,9 +1767,7 @@ where
                 let prev_eq_0 = self.builder.ins().eq(prev, zero);
                 let now_neq_0 = self.builder.ins().neq(now, zero);
                 let value = self.builder.ins().and(prev_eq_0, now_neq_0);
-                self.builder
-                    .dfg_mut()
-                    .set_name(value, "posedge".to_string());
+                self.builder.set_name(value, "posedge".to_string());
                 Some(value)
             }
             _ => None,
@@ -1798,9 +1780,7 @@ where
                 let prev_neq_0 = self.builder.ins().neq(prev, zero);
                 let now_eq_0 = self.builder.ins().eq(now, zero);
                 let value = self.builder.ins().and(now_eq_0, prev_neq_0);
-                self.builder
-                    .dfg_mut()
-                    .set_name(value, "negedge".to_string());
+                self.builder.set_name(value, "negedge".to_string());
                 Some(value)
             }
             _ => None,
@@ -1811,16 +1791,14 @@ where
         Ok(match (posedge, negedge) {
             (Some(a), Some(b)) => {
                 let value = self.builder.ins().or(a, b);
-                self.builder.dfg_mut().set_name(value, "edge".to_string());
+                self.builder.set_name(value, "edge".to_string());
                 value
             }
             (Some(a), None) => a,
             (None, Some(b)) => b,
             (None, None) => {
                 let value = self.builder.ins().neq(prev, now);
-                self.builder
-                    .dfg_mut()
-                    .set_name(value, "impledge".to_string());
+                self.builder.set_name(value, "impledge".to_string());
                 value
             }
         })
@@ -1847,7 +1825,7 @@ where
             let lty = self.llhd_type(lvalue);
             match *lty {
                 llhd::SignalType(..) => {
-                    let one_epsilon = llhd::ConstTime::new(num::zero(), 0, 1);
+                    let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
                     let one_epsilon = self.builder.ins().const_time(one_epsilon);
                     self.builder.ins().drv(lvalue, rvalue, one_epsilon);
                     // // Emit a wait statement to allow for the assignment to take
@@ -1958,7 +1936,7 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module, env: Para
 
 /// Result of emitting a procedure.
 struct EmittedProcedure {
-    unit: llhd::ir::ModUnit,
+    unit: llhd::ir::UnitId,
     inputs: Vec<NodeId>,
     outputs: Vec<NodeId>,
 }

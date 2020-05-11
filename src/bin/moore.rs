@@ -7,6 +7,7 @@ extern crate log;
 
 use clap::{App, Arg, ArgMatches};
 use llhd;
+use llhd::opt::{Pass, PassContext};
 use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
@@ -466,8 +467,9 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             cg.emit_module(m)?;
             let mut module = cg.finalize();
             if ctx.sess.opts.opt_level > 0 {
-                llhd::pass::const_folding::run_on_module(&mut module);
-                llhd::pass::dead_code_elim::run_on_module(&mut module);
+                let ctx = PassContext;
+                llhd::pass::ConstFolding::run_on_module(&ctx, &mut module);
+                llhd::pass::DeadCodeElim::run_on_module(&ctx, &mut module);
             }
             llhd::assembly::write_module(&mut std::io::stdout().lock(), &module);
         }

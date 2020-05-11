@@ -14,7 +14,7 @@ module foo;
     bar #(+a) i0();
     // CHECK: %0 = const i32 42
     bar #(-a) i0();
-    // CHECK: %0 = const i32 -42
+    // CHECK: %0 = const i32 4294967254
     bar #(~a) i0();
     // CHECK: %0 = const i32 4294967253
     // TODO: Fix these to i32 once #141 lands.
