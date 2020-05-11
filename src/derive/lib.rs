@@ -3,9 +3,10 @@
 //! Procedural macros for the moore compiler.
 
 extern crate proc_macro;
+use heck::SnakeCase;
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{parse_macro_input, DeriveInput};
+use quote::{format_ident, quote, ToTokens};
+use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 
 fn is_child_field(field: &syn::Field) -> bool {
     let tystr = field.ty.to_token_stream().to_string();
@@ -30,24 +31,20 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     // println!("derive(CommonNode) on `{}`", input.ident);
 
-    // Assemble the body of the `children()` method.
-    let mut child_fields = vec![];
+    // Gather all fields in the structure.
+    let mut all_fields = vec![];
     match &input.data {
         syn::Data::Struct(data) => match &data.fields {
             syn::Fields::Named(fields) => {
                 for field in &fields.named {
-                    if is_child_field(field) {
-                        let n = field.ident.as_ref().unwrap();
-                        child_fields.push(quote! { #n });
-                    }
+                    let n = field.ident.as_ref().unwrap();
+                    all_fields.push((quote! { #n }, field));
                 }
             }
             syn::Fields::Unnamed(fields) => {
                 for (i, field) in fields.unnamed.iter().enumerate() {
-                    if is_child_field(field) {
-                        let i = syn::Index::from(i);
-                        child_fields.push(quote! { #i });
-                    }
+                    let i = syn::Index::from(i);
+                    all_fields.push((quote! { #i }, field));
                 }
             }
             syn::Fields::Unit => (),
@@ -56,6 +53,34 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         syn::Data::Union(_) => (),
     }
 
+    // Assemble the body of the `for_each_child` method.
+    let child_fields = all_fields.iter().flat_map(|(name, field)| {
+        if is_child_field(field) {
+            Some(name)
+        } else {
+            None
+        }
+    });
+
+    // Assemble the body of the `AcceptVisitor` trait.
+    let visit_fields = all_fields.iter().flat_map(|(name, field)| {
+        if !is_child_field(field) {
+            return None;
+        }
+        match &field.ty {
+            syn::Type::Path(path) => {
+                let ident = &path.path.segments.last().unwrap().ident;
+                let method_name = format_ident!(
+                    "visit_{}",
+                    ident.to_string().to_snake_case(),
+                    span = field.ty.span(),
+                );
+                Some(quote! { visitor.#method_name(&self.#name); })
+            }
+            _ => None,
+        }
+    });
+
     // Emit the trait implementation.
     let name = &input.ident;
     let generics = &input.generics;
@@ -63,6 +88,12 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         impl #generics CommonNode for #name #generics {
             fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
                 #( f(&self.#child_fields); )*
+            }
+        }
+
+        impl #generics AcceptVisitor for #name #generics {
+            fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+                #(#visit_fields)*
             }
         }
     };

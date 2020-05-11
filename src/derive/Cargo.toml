@@ -15,3 +15,4 @@ path = "lib.rs"
 [dependencies]
 syn = { version = "1", features = ["extra-traits"] }
 quote = "1"
+heck = "0.3"

@@ -54,6 +54,36 @@ where
     }
 }
 
+impl<'a, T> AcceptVisitor for Node<'a, T>
+where
+    T: AcceptVisitor,
+{
+    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        self.data.accept(visitor)
+    }
+}
+
+/// A visitor for the AST.
+pub trait Visitor {
+    fn visit_stmt_data(&mut self, node: &StmtData) {
+        node.accept(self);
+    }
+    fn visit_stmt(&mut self, node: &Stmt) {
+        node.accept(self);
+    }
+    fn visit_expr(&mut self, node: &Expr) {
+        node.accept(self);
+    }
+    fn visit_generate_block(&mut self, node: &GenerateBlock) {
+        node.accept(self);
+    }
+}
+
+/// A node that accepts `Visitor`s.
+pub trait AcceptVisitor {
+    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V);
+}
+
 pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
