@@ -36,6 +36,8 @@ pub trait Visitor<'a>: Sized {
             HirNode::Typedef(x) => self.visit_typedef(x),
             HirNode::VarDecl(x) => self.visit_var_decl(x),
             HirNode::Assign(x) => self.visit_assign(x),
+            HirNode::IntPort(x) => self.visit_int_port(x),
+            HirNode::ExtPort(x) => self.visit_ext_port(x),
             _ => (),
         }
     }
@@ -82,6 +84,14 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_assign(&mut self, assign: &'a Assign) {
         walk_assign(self, assign);
+    }
+
+    fn visit_int_port(&mut self, int_port: &'a IntPort) {
+        walk_int_port(self, int_port);
+    }
+
+    fn visit_ext_port(&mut self, ext_port: &'a ExtPort) {
+        walk_ext_port(self, ext_port);
     }
 }
 
@@ -347,3 +357,16 @@ pub fn walk_assign<'a>(visitor: &mut impl Visitor<'a>, assign: &'a Assign) {
     visitor.visit_node_with_id(assign.lhs, true);
     visitor.visit_node_with_id(assign.rhs, false);
 }
+
+/// Walk the contents of an internal port.
+pub fn walk_int_port<'a>(visitor: &mut impl Visitor<'a>, int_port: &'a IntPort) {
+    if let Some(data) = &int_port.data {
+        visitor.visit_node_with_id(data.ty, false);
+        if let Some(default) = data.default {
+            visitor.visit_node_with_id(default, false);
+        }
+    }
+}
+
+/// Walk the contents of an external port.
+pub fn walk_ext_port<'a>(_visitor: &mut impl Visitor<'a>, _ext_port: &'a ExtPort) {}
