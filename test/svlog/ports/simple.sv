@@ -1,4 +1,4 @@
-// RUN: moore %s -e A -e B -e C -e D -e E
+// RUN: moore %s -e A -e B -e C -e D -e E -O0
 
 module A;
 endmodule

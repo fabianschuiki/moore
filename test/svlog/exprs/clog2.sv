@@ -1,4 +1,4 @@
-// RUN: moore %s -e foo
+// RUN: moore %s -e foo -O0
 
 module foo;
     int v0 = $clog2(0);

@@ -1,4 +1,4 @@
-// RUN: moore %s -e foo
+// RUN: moore %s -e foo -O0
 module foo;
 	initial begin
 		int a, b, c;

@@ -11,14 +11,12 @@ endmodule
 // CHECK: entity @A () -> () {
 // CHECK:     %0 = const i32 0
 // CHECK:     %a = sig i32 %0
-// CHECK:     %1 = const i32 0
-// CHECK:     %b = sig i32 %1
+// CHECK:     %b = sig i32 %0
 // CHECK:     %a1 = prb i32$ %a
-// CHECK:     %2 = const i32 0
-// CHECK:     %3 = sig i32 %2
-// CHECK:     %4 = const time 0s 1e
-// CHECK:     drv i32$ %3, %a1, %4
-// CHECK:     inst @X (i32$ %3) -> (i32$ %b)
+// CHECK:     %1 = sig i32 %0
+// CHECK:     %2 = const time 0s 1e
+// CHECK:     drv i32$ %1, %a1, %2
+// CHECK:     inst @X (i32$ %1) -> (i32$ %b)
 // CHECK: }
 
 // module B1 ({x,y});
@@ -40,16 +38,14 @@ endmodule
 // CHECK: entity @C () -> () {
 // CHECK:     %0 = const i32 0
 // CHECK:     %a = sig i32 %0
-// CHECK:     %1 = const i32 0
-// CHECK:     %b = sig i32 %1
+// CHECK:     %b = sig i32 %0
 // CHECK:     %a1 = prb i32$ %a
-// CHECK:     %2 = const i32 2
-// CHECK:     %3 = add i32 %a1, %2
-// CHECK:     %4 = const i32 0
-// CHECK:     %5 = sig i32 %4
-// CHECK:     %6 = const time 0s 1e
-// CHECK:     drv i32$ %5, %3, %6
-// CHECK:     inst @X (i32$ %5) -> (i32$ %b)
+// CHECK:     %1 = const i32 2
+// CHECK:     %2 = add i32 %a1, %1
+// CHECK:     %3 = sig i32 %0
+// CHECK:     %4 = const time 0s 1e
+// CHECK:     drv i32$ %3, %2, %4
+// CHECK:     inst @X (i32$ %3) -> (i32$ %b)
 // CHECK: }
 
 module N1;

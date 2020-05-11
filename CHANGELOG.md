@@ -13,7 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add `-Vconsts` verbosity option
 
 ### Changed
-- Update `llhd` to 0.13
+- Update `llhd` to 0.13 (#135)
+- Change default optimization level to `-O1` (#163)
 
 ### Fixed
 - Fix sign casts (#138)

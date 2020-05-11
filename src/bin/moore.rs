@@ -105,9 +105,11 @@ fn main() {
         .arg(
             Arg::with_name("opt-level")
                 .short("O")
+                .long("opt-level")
                 .help("Sets optimization level applied to the output")
-                .default_value("0")
-                .takes_value(true),
+                .default_value("1")
+                .takes_value(true)
+                .number_of_values(1),
         )
         .arg(
             Arg::with_name("lib")
@@ -466,10 +468,14 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             let mut cg = svlog::CodeGenerator::new(ctx.svlog);
             cg.emit_module(m)?;
             let mut module = cg.finalize();
+            let pass_ctx = PassContext;
             if ctx.sess.opts.opt_level > 0 {
-                let ctx = PassContext;
-                llhd::pass::ConstFolding::run_on_module(&ctx, &mut module);
-                llhd::pass::DeadCodeElim::run_on_module(&ctx, &mut module);
+                llhd::pass::ConstFolding::run_on_module(&pass_ctx, &mut module);
+                llhd::pass::VarToPhiPromotion::run_on_module(&pass_ctx, &mut module);
+                llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
+                llhd::pass::GlobalCommonSubexprElim::run_on_module(&pass_ctx, &mut module);
+                llhd::pass::InstSimplification::run_on_module(&pass_ctx, &mut module);
+                llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
             }
             llhd::assembly::write_module(&mut std::io::stdout().lock(), &module);
         }

@@ -1,4 +1,4 @@
-// RUN: moore %s -e A0 -e B -e C0
+// RUN: moore %s -e A0 -e B -e C0 -O0
 
 // Type parameter overrides
 
