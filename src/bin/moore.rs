@@ -13,7 +13,7 @@ use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
 use moore::*;
-use std::{path::Path, str::FromStr};
+use std::path::Path;
 
 #[derive(Debug)]
 enum Language {
@@ -23,6 +23,10 @@ enum Language {
 }
 
 fn main() {
+    // Configure the logger.
+    pretty_env_logger::init_custom_env("MOORE_LOG");
+
+    // Parse the command-line arguments.
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(clap::crate_version!())
         .author(clap::crate_authors!())
@@ -31,19 +35,6 @@ fn main() {
             Arg::with_name("trace_scoreboard")
                 .long("trace-scoreboard")
                 .global(true),
-        )
-        .arg(
-            Arg::with_name("verbosity")
-                .short("v")
-                .multiple(true)
-                .help("Increase message verbosity"),
-        )
-        .arg(
-            Arg::with_name("timestamp")
-                .short("t")
-                .help("Prepend log lines with a timestamp")
-                .takes_value(true)
-                .possible_values(&["none", "sec", "ms", "ns"]),
         )
         .arg(
             Arg::with_name("verbosity-opts")
@@ -137,36 +128,6 @@ fn main() {
                 .required(true),
         )
         .get_matches();
-
-    // Configure the logger.
-    let verbose = matches.occurrences_of("verbosity") as usize;
-    let quiet = !matches.is_present("verbosity");
-    let ts = matches
-        .value_of("timestamp")
-        .map(|v| {
-            stderrlog::Timestamp::from_str(v).unwrap_or_else(|_| {
-                clap::Error {
-                    message: "invalid value for 'timestamp'".into(),
-                    kind: clap::ErrorKind::InvalidValue,
-                    info: None,
-                }
-                .exit()
-            })
-        })
-        .unwrap_or(stderrlog::Timestamp::Off);
-
-    stderrlog::new()
-        .module("moore")
-        .module("moore_common")
-        .module("moore_svlog")
-        .module("moore_svlog_syntax")
-        .module("moore_vhdl")
-        .module("moore_vhdl_syntax")
-        .quiet(quiet)
-        .verbosity(verbose)
-        .timestamp(ts)
-        .init()
-        .unwrap();
 
     // Configure the session.
     let mut session = Session::new();
@@ -579,6 +540,11 @@ impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
         // Report the type.
         if let Ok(ty) = self.0.type_of(id, self.1) {
             println!("{}: type({}) = {}", line, ext, ty);
+        }
+
+        // Report the cast type.
+        if let Some(ty) = svlog::typeck::cast_type(self.0, id, self.1) {
+            println!("{}: cast_type({}) = {}", line, ext, ty);
         }
 
         // Report the self-determined type.

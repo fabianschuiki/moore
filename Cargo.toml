@@ -26,7 +26,7 @@ num = "0.1"
 serde = "1"
 typed-arena = "2.0.1"
 log = "0.4"
-stderrlog = "0.4"
+pretty_env_logger = "0.3"
 
 [features]
 unstable = []

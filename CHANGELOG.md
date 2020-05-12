@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add parsing support for `implements` in classs declarations
 - Add `moore-derive` crate
 - Add `-Vconsts` verbosity option
+- Executable honors the `MOORE_LOG` verbosity environment variable
 
 ### Changed
 - Update `llhd` to 0.13 (#135)
@@ -24,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 - Remove `rustc-serialize` dependency (#157)
+- Remove `-v` and `-t` logging controls
 
 ## 0.7.0 - 2020-04-30
 ### Added
