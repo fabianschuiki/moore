@@ -652,7 +652,7 @@ fn self_determined_expr_type<'gcx>(
             // directly index into, map it to the equivalent simple bit vector
             // type first.
             let target_ty = cx.type_of(target, env).unwrap_or(&ty::ERROR_TYPE);
-            match *target_ty.unname() {
+            match *target_ty.resolve_name() {
                 TypeKind::PackedArray(_, ty) => {
                     if let Some(width) = width {
                         cx.intern_type(TypeKind::PackedArray(width, ty))

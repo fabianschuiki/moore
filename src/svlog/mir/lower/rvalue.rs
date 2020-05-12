@@ -310,7 +310,7 @@ fn try_lower_expr<'gcx>(
             let target_ty = cx.type_of(target, env)?;
             let target = if target_ty.is_error() {
                 builder.error()
-            } else if target_ty.unname().is_array() {
+            } else if target_ty.resolve_name().is_array() {
                 // No need to cast arrays.
                 cx.mir_rvalue(target, env)
             } else {

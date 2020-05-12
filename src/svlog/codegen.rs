@@ -787,7 +787,7 @@ where
         value: Value<'gcx>,
         env: ParamEnv,
     ) -> Result<llhd::ir::Value> {
-        match (value.ty.unname(), &value.kind) {
+        match (value.ty.resolve_name(), &value.kind) {
             (&TypeKind::Int(width, _), &ValueKind::Int(ref k, ..))
             | (
                 &TypeKind::BitVector {

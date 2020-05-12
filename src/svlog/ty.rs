@@ -179,8 +179,8 @@ impl<'t> TypeKind<'t> {
     }
 
     /// Remove all typedefs and reveal the concrete fundamental type.
-    pub fn resolve_name(&'t self) -> Type<'t> {
-        match *self {
+    pub fn resolve_name(&self) -> &Self {
+        match self {
             TypeKind::Named(_, _, ty) => ty.resolve_name(),
             _ => self,
         }
@@ -243,36 +243,28 @@ impl<'t> TypeKind<'t> {
         }
     }
 
-    /// Dereference name aliases.
-    pub fn unname(&self) -> &Self {
-        match self {
-            TypeKind::Named(_, _, ty) => ty.unname(),
-            _ => self,
-        }
-    }
-
     /// Check if this type has a simple bit vector equivalent.
     pub fn has_simple_bit_vector(&self) -> bool {
-        match self.unname() {
+        match self.resolve_name() {
             TypeKind::Error | TypeKind::Void | TypeKind::Time => false,
             TypeKind::BitVector { .. } | TypeKind::BitScalar { .. } => true,
             TypeKind::Bit(..)
             | TypeKind::Int(..)
             | TypeKind::Struct(..)
             | TypeKind::PackedArray(..) => true,
-            TypeKind::Named(..) => unreachable!("handled by unname()"),
+            TypeKind::Named(..) => unreachable!("handled by resolve_name()"),
         }
     }
 
     /// Check if this type is a simple bit vector type.
     pub fn is_simple_bit_vector(&self) -> bool {
-        match self.unname() {
+        match self.resolve_name() {
             TypeKind::Error | TypeKind::Void | TypeKind::Time => false,
             TypeKind::BitVector { .. } | TypeKind::BitScalar { .. } => true,
             TypeKind::Bit(..) => true,
             TypeKind::Int(..) => true,
             TypeKind::Struct(..) | TypeKind::PackedArray(..) => false,
-            TypeKind::Named(..) => unreachable!("handled by unname()"),
+            TypeKind::Named(..) => unreachable!("handled by resolve_name()"),
         }
     }
 
@@ -296,7 +288,7 @@ impl<'t> TypeKind<'t> {
         env: ParamEnv,
         force_vector: bool,
     ) -> Option<Type<'gcx>> {
-        let bits = match *self.unname() {
+        let bits = match *self.resolve_name() {
             TypeKind::Error | TypeKind::Void | TypeKind::Time => return None,
             TypeKind::BitVector { .. } => return Some(self),
             TypeKind::BitScalar { .. } if force_vector => 1,
@@ -305,7 +297,7 @@ impl<'t> TypeKind<'t> {
             | TypeKind::Int(..)
             | TypeKind::Struct(..)
             | TypeKind::PackedArray(..) => bit_size_of_type(cx, self, env).ok()?,
-            TypeKind::Named(..) => unreachable!("handled by unname()"),
+            TypeKind::Named(..) => unreachable!("handled by resolve_name()"),
         };
         Some(cx.intern_type(TypeKind::BitVector {
             domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct

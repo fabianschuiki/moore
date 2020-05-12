@@ -136,7 +136,7 @@ pub fn make_int_special(
     special_bits: BitVec,
     x_bits: BitVec,
 ) -> ValueData {
-    match *ty.unname() {
+    match *ty.resolve_name() {
         TypeKind::Int(width, _)
         | TypeKind::BitVector {
             range: ty::Range { size: width, .. },

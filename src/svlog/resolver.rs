@@ -371,7 +371,7 @@ pub(crate) fn resolve_field_access<'gcx>(
         _ => unreachable!(),
     };
     let ty = cx.type_of(target_id, env)?;
-    let struct_def = match ty.unname() {
+    let struct_def = match ty.resolve_name() {
         &TypeKind::Struct(id) => id,
         _ => {
             let target_hir = cx.hir_of(target_id)?;
