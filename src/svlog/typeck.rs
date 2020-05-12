@@ -324,7 +324,7 @@ fn map_type_kind<'gcx>(
         hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(&ty::INT_TYPE),
         hir::TypeKind::Builtin(hir::BuiltinType::Integer) => Ok(&ty::INTEGER_TYPE),
         hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(&ty::LONGINT_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::Time) => Ok(&ty::LONGINT_TYPE), // TODO(fschuiki): Fix this
+        hir::TypeKind::Builtin(hir::BuiltinType::Time) => Ok(&ty::TIME_TYPE),
         hir::TypeKind::Builtin(hir::BuiltinType::String) => {
             Ok(cx.mkty_packed_array(1, &ty::BYTE_TYPE))
         }
