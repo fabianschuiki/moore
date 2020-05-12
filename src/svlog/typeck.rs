@@ -462,6 +462,13 @@ fn cast_expr_type<'gcx>(
         Some(c) => c,
         None => return inferred.into(),
     };
+    if let TypeContext::Type(ty) = context {
+        if ty::identical(ty, inferred) {
+            return inferred.into();
+        }
+    }
+
+    // Begin the cast sequence.
     let mut cast = CastType {
         init: inferred,
         ty: inferred,
@@ -489,7 +496,7 @@ fn cast_expr_type<'gcx>(
                             inferred
                         )),
                     );
-                    error!("Upon casting `{}` to bool", inferred);
+                    error!("Cast chain thus far: {}", cast);
                     return (&ty::ERROR_TYPE).into();
                 }
             }
@@ -503,7 +510,16 @@ fn cast_expr_type<'gcx>(
         return cast;
     }
 
-    unimplemented!("cast_expr_type of {:#?}", expr);
+    // If we arrive here, casting failed.
+    cx.emit(
+        DiagBuilder2::error(format!(
+            "cannot cast a value of type `{}` to `{}`",
+            inferred, context
+        ))
+        .span(expr.span),
+    );
+    error!("Cast chain thus far: {}", cast);
+    (&ty::ERROR_TYPE).into()
 }
 
 /// Get the self-determined type of a node.
