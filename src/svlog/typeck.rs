@@ -418,6 +418,94 @@ fn map_type_kind<'gcx>(
     }
 }
 
+/// Get the cast type of a node.
+pub fn cast_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    node_id: NodeId,
+    env: ParamEnv,
+) -> Option<CastType<'gcx>> {
+    let hir = match cx.hir_of(node_id) {
+        Ok(x) => x,
+        Err(()) => return Some((&ty::ERROR_TYPE).into()),
+    };
+    match hir {
+        HirNode::Expr(e) => Some(cast_expr_type(cx, e, env)),
+        _ => None,
+    }
+}
+
+/// Get the cast type of an expression.
+fn cast_expr_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx hir::Expr,
+    env: ParamEnv,
+) -> CastType<'gcx> {
+    trace!(
+        "Computing cast type of `{}` (line {})",
+        expr.span().extract(),
+        expr.span().begin().human_line()
+    );
+
+    // Determine the inferred type and type context of the expression.
+    let inferred = type_of_expr(cx, expr, env);
+    let context = type_context(cx, expr.id, env);
+    trace!("Inferred: {}", inferred);
+    trace!(
+        "Context:  {}",
+        context
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "<none>".to_string())
+    );
+
+    // If there is no type context which we have to cast to, return.
+    let context = match context {
+        Some(c) => c,
+        None => return inferred.into(),
+    };
+    let mut cast = CastType {
+        init: inferred,
+        ty: inferred,
+        casts: vec![],
+    };
+
+    // Cast the expression to a simple bit vector type if needed by the context.
+    if context == TypeContext::Bool {
+        if !cast.ty.is_simple_bit_vector() {
+            trace!("Casting to SBVT");
+            match cast.ty.get_simple_bit_vector(cx, env, false) {
+                Some(ty) => {
+                    cast.casts.push((CastOp::SimpleBitVector, ty));
+                    cast.ty = ty;
+                }
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "cannot cast a value of type `{}` to a boolean",
+                            inferred
+                        ))
+                        .span(expr.span)
+                        .add_note(format!(
+                            "`{}` has no simple bit-vector type representation",
+                            inferred
+                        )),
+                    );
+                    error!("Upon casting `{}` to bool", inferred);
+                    return (&ty::ERROR_TYPE).into();
+                }
+            }
+        }
+        if cast.ty.is_error() {
+            return cast;
+        }
+        trace!("Casting to bool");
+        cast.casts.push((CastOp::Bool, &ty::BIT_TYPE));
+        cast.ty = &ty::BIT_TYPE;
+        return cast;
+    }
+
+    unimplemented!("cast_expr_type of {:#?}", expr);
+}
+
 /// Get the self-determined type of a node.
 pub(crate) fn self_determined_type<'gcx>(
     cx: &impl Context<'gcx>,
@@ -1110,6 +1198,15 @@ impl<'a> From<Type<'a>> for TypeContext<'a> {
     }
 }
 
+impl std::fmt::Display for TypeContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TypeContext::Type(t) => write!(f, "{}", t),
+            TypeContext::Bool => write!(f, "<bool>"),
+        }
+    }
+}
+
 /// Get the type context imposed by an expression.
 ///
 /// Determine the type context `expr` imposes on `onto`.
@@ -1251,5 +1348,44 @@ fn type_context_imposed_by_stmt<'gcx>(
         }
 
         _ => None,
+    }
+}
+
+/// A type resulting from a sequence of casts.
+pub struct CastType<'a> {
+    /// The initial type before casting.
+    pub init: Type<'a>,
+    /// The final type after casting.
+    pub ty: Type<'a>,
+    /// The cast operations that lead to the result.
+    pub casts: Vec<(CastOp, Type<'a>)>,
+}
+
+/// A cast operation.
+#[derive(Debug)]
+pub enum CastOp {
+    /// Cast to a simple bit vector type.
+    SimpleBitVector,
+    /// Cast to a boolean.
+    Bool,
+}
+
+impl<'a> From<Type<'a>> for CastType<'a> {
+    fn from(ty: Type<'a>) -> CastType<'a> {
+        CastType {
+            init: ty,
+            ty,
+            casts: vec![],
+        }
+    }
+}
+
+impl std::fmt::Display for CastType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.init)?;
+        for (op, ty) in &self.casts {
+            write!(f, " -> ({:?}) {}", op, ty)?;
+        }
+        Ok(())
     }
 }
