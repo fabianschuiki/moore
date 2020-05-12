@@ -232,7 +232,7 @@ fn try_lower_expr<'gcx>(
                 .iter()
                 .map(|&expr| {
                     let ty = builder.cx.type_of(expr, env)?;
-                    let flat_ty = match map_to_simple_bit_type(builder.cx, ty, env) {
+                    let flat_ty = match ty.get_simple_bit_vector(builder.cx, env, false) {
                         Some(ty) => ty,
                         None => {
                             builder.cx.emit(
@@ -314,7 +314,7 @@ fn try_lower_expr<'gcx>(
                 // No need to cast arrays.
                 cx.mir_rvalue(target, env)
             } else {
-                let sbvt = match map_to_simple_bit_vector_type(cx, target_ty, env) {
+                let sbvt = match target_ty.get_simple_bit_vector(cx, env, true) {
                     Some(ty) => ty,
                     None => {
                         let span = builder.cx.span(target);
@@ -518,7 +518,10 @@ fn lower_expr_and_cast_sign<'gcx>(
     sign: ty::Sign,
 ) -> &'gcx Rvalue<'gcx> {
     let inner = builder.cx.mir_rvalue(expr_id, builder.env);
-    if let Some(ty) = map_to_simple_bit_type(builder.cx, inner.ty.resolve_name(), builder.env) {
+    if let Some(ty) = inner
+        .ty
+        .get_simple_bit_vector(builder.cx, builder.env, false)
+    {
         let ty = ty.change_sign(builder.cx, sign);
         lower_implicit_cast(builder, inner, ty)
     } else {
@@ -557,8 +560,8 @@ fn lower_implicit_cast<'gcx>(
     );
 
     // Try a truncation or extension cast.
-    let from_sbvt = map_to_simple_bit_vector_type(builder.cx, from_raw, builder.env);
-    let to_sbvt = map_to_simple_bit_vector_type(builder.cx, to_raw, builder.env);
+    let from_sbvt = from_raw.get_simple_bit_vector(builder.cx, builder.env, true);
+    let to_sbvt = to_raw.get_simple_bit_vector(builder.cx, builder.env, true);
     let from_size = from_sbvt.map(|ty| ty.width());
     let to_size = to_sbvt.map(|ty| ty.width());
 
@@ -604,8 +607,8 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Try a single-bit atom/vector conversion.
-    let from_sbt = map_to_simple_bit_type(builder.cx, from_raw, builder.env);
-    let to_sbt = map_to_simple_bit_type(builder.cx, to_raw, builder.env);
+    let from_sbt = from_raw.get_simple_bit_vector(builder.cx, builder.env, false);
+    let to_sbt = to_raw.get_simple_bit_vector(builder.cx, builder.env, false);
     match (from_sbt, to_sbt) {
         (
             Some(&TypeKind::BitVector {
@@ -814,7 +817,7 @@ fn pack_struct<'gcx>(
                 continue;
             }
         };
-        let sbvt = map_to_simple_bit_vector_type(builder.cx, field_ty, builder.env);
+        let sbvt = field_ty.get_simple_bit_vector(builder.cx, builder.env, true);
         let sbvt = match sbvt {
             Some(x) => x,
             None => {
@@ -837,7 +840,9 @@ fn pack_struct<'gcx>(
     if failed {
         builder.error()
     } else {
-        let ty = map_to_simple_bit_vector_type(builder.cx, value.ty, builder.env)
+        let ty = value
+            .ty
+            .get_simple_bit_vector(builder.cx, builder.env, true)
             .expect("struct must have sbvt");
         builder.build(ty, RvalueKind::Concat(packed_fields))
     }
@@ -853,7 +858,7 @@ fn pack_array<'gcx>(
 
     // Map the element type to its simple bit vector equivalent.
     let elem_ty = value.ty.get_array_element().expect("array element type");
-    let sbvt = match map_to_simple_bit_vector_type(builder.cx, elem_ty, builder.env) {
+    let sbvt = match elem_ty.get_simple_bit_vector(builder.cx, builder.env, true) {
         Some(x) => x,
         None => {
             builder.cx.emit(
@@ -891,7 +896,9 @@ fn pack_array<'gcx>(
     }
 
     // Concatenate the elements.
-    let ty = map_to_simple_bit_vector_type(builder.cx, value.ty, builder.env)
+    let ty = value
+        .ty
+        .get_simple_bit_vector(builder.cx, builder.env, true)
         .expect("array must have sbvt");
     builder.build(ty, RvalueKind::Concat(packed_elements))
 }
@@ -922,7 +929,7 @@ fn unpack_struct<'gcx>(
                 continue;
             }
         };
-        let sbvt = map_to_simple_bit_vector_type(builder.cx, field_ty, builder.env);
+        let sbvt = field_ty.get_simple_bit_vector(builder.cx, builder.env, true);
         let sbvt = match sbvt {
             Some(x) => x,
             None => {
@@ -977,7 +984,7 @@ fn unpack_array<'gcx>(
 
     // Map the element type to its simple bit vector equivalent.
     let elem_ty = ty.get_array_element().expect("array element type");
-    let sbvt = match map_to_simple_bit_vector_type(builder.cx, elem_ty, builder.env) {
+    let sbvt = match elem_ty.get_simple_bit_vector(builder.cx, builder.env, true) {
         Some(x) => x,
         None => {
             builder.cx.emit(
@@ -1312,68 +1319,6 @@ fn lower_struct_pattern<'gcx>(
     }
 }
 
-/// Try to convert a type to its equivalent simple bit vector type.
-///
-/// All *integral* data types have an equivalent *simple bit vector type*. These
-/// include the following:
-///
-/// - all basic integers
-/// - packed arrays
-/// - packed structures
-/// - packed unions
-/// - enums
-/// - time (excluded in this implementation)
-fn map_to_simple_bit_type<'gcx>(
-    cx: &impl Context<'gcx>,
-    ty: Type<'gcx>,
-    env: ParamEnv,
-) -> Option<Type<'gcx>> {
-    let bits = match *ty.unname() {
-        TypeKind::Error | TypeKind::Void | TypeKind::Time => return None,
-        TypeKind::BitVector { .. } => return Some(ty),
-        TypeKind::BitScalar { .. } => return Some(ty),
-        TypeKind::Bit(..)
-        | TypeKind::Int(..)
-        | TypeKind::Struct(..)
-        | TypeKind::PackedArray(..) => ty::bit_size_of_type(cx, ty, env).ok()?,
-        TypeKind::Named(..) => unreachable!("handled by unname()"),
-    };
-    Some(cx.intern_type(TypeKind::BitVector {
-        domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
-        sign: ty::Sign::Unsigned,
-        range: ty::Range {
-            size: bits,
-            dir: ty::RangeDir::Down,
-            offset: 0isize,
-        },
-        dubbed: false,
-    }))
-}
-
-/// Same as `map_to_simple_bit_type`, but forces the result to be a vector.
-///
-/// This operation would commonly be used to cast the operand of an operator
-/// which expects a vector. E.g. `foo[4]`.
-fn map_to_simple_bit_vector_type<'gcx>(
-    cx: &impl Context<'gcx>,
-    ty: Type<'gcx>,
-    env: ParamEnv,
-) -> Option<Type<'gcx>> {
-    match map_to_simple_bit_type(cx, ty, env) {
-        Some(&TypeKind::BitScalar { domain, sign }) => Some(cx.intern_type(TypeKind::BitVector {
-            domain,
-            sign,
-            range: ty::Range {
-                size: 1,
-                dir: ty::RangeDir::Down,
-                offset: 0isize,
-            },
-            dubbed: false,
-        })),
-        x => x,
-    }
-}
-
 /// Map a unary operator to MIR.
 fn lower_unary<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
@@ -1444,7 +1389,7 @@ fn lower_int_unary_arith<'gcx>(
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
         Some(ty) => ty,
         None => {
             builder.cx.emit(
@@ -1489,7 +1434,7 @@ fn lower_int_binary_arith<'gcx>(
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
         Some(ty) => ty,
         None => {
             builder.cx.emit(
@@ -1593,7 +1538,7 @@ fn lower_shift<'gcx>(
     amount: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
         Some(ty) => ty,
         None => {
             builder.cx.emit(
@@ -1610,7 +1555,7 @@ fn lower_shift<'gcx>(
         Ok(t) => t,
         Err(()) => return builder.error(),
     };
-    let shift_ty = match map_to_simple_bit_vector_type(builder.cx, shift_ty, builder.env) {
+    let shift_ty = match shift_ty.get_simple_bit_vector(builder.cx, builder.env, true) {
         Some(t) => t,
         None => {
             builder.cx.emit(
@@ -1658,7 +1603,7 @@ fn lower_unary_bitwise<'gcx>(
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
         Some(ty) => ty,
         None => {
             builder.cx.emit(
@@ -1721,7 +1666,7 @@ fn make_binary_bitwise<'gcx>(
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the simple bit vector type for the operator.
-    let result_ty = match map_to_simple_bit_type(builder.cx, ty, builder.env) {
+    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
         Some(ty) => ty,
         None => {
             builder.cx.emit(
@@ -1868,7 +1813,10 @@ fn implicit_cast_to_bool<'gcx>(
     value: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     // Map the value to a simple bit type.
-    let sbvt = match map_to_simple_bit_type(builder.cx, value.ty, builder.env) {
+    let sbvt = match value
+        .ty
+        .get_simple_bit_vector(builder.cx, builder.env, false)
+    {
         Some(sbvt) => sbvt,
         None => {
             builder.cx.emit(

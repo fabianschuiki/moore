@@ -250,6 +250,74 @@ impl<'t> TypeKind<'t> {
             _ => self,
         }
     }
+
+    /// Check if this type has a simple bit vector equivalent.
+    pub fn has_simple_bit_vector(&self) -> bool {
+        match self.unname() {
+            TypeKind::Error | TypeKind::Void | TypeKind::Time => false,
+            TypeKind::BitVector { .. } | TypeKind::BitScalar { .. } => true,
+            TypeKind::Bit(..)
+            | TypeKind::Int(..)
+            | TypeKind::Struct(..)
+            | TypeKind::PackedArray(..) => true,
+            TypeKind::Named(..) => unreachable!("handled by unname()"),
+        }
+    }
+
+    /// Check if this type is a simple bit vector type.
+    pub fn is_simple_bit_vector(&self) -> bool {
+        match self.unname() {
+            TypeKind::Error | TypeKind::Void | TypeKind::Time => false,
+            TypeKind::BitVector { .. } | TypeKind::BitScalar { .. } => true,
+            TypeKind::Bit(..) => true,
+            TypeKind::Int(..) => true,
+            TypeKind::Struct(..) | TypeKind::PackedArray(..) => false,
+            TypeKind::Named(..) => unreachable!("handled by unname()"),
+        }
+    }
+
+    /// Try to convert to an equivalent simple bit vector type.
+    ///
+    /// All *integral* data types have an equivalent *simple bit vector type*.
+    /// These include the following:
+    ///
+    /// - all basic integers
+    /// - packed arrays
+    /// - packed structures
+    /// - packed unions
+    /// - enums
+    /// - time (excluded in this implementation)
+    ///
+    /// If `force_vector` is `true`, the returned type has range `[0:0]` if it
+    /// would otherwise be a single bit.
+    pub fn get_simple_bit_vector<'gcx>(
+        &'gcx self,
+        cx: &impl Context<'gcx>,
+        env: ParamEnv,
+        force_vector: bool,
+    ) -> Option<Type<'gcx>> {
+        let bits = match *self.unname() {
+            TypeKind::Error | TypeKind::Void | TypeKind::Time => return None,
+            TypeKind::BitVector { .. } => return Some(self),
+            TypeKind::BitScalar { .. } if force_vector => 1,
+            TypeKind::BitScalar { .. } => return Some(self),
+            TypeKind::Bit(..)
+            | TypeKind::Int(..)
+            | TypeKind::Struct(..)
+            | TypeKind::PackedArray(..) => bit_size_of_type(cx, self, env).ok()?,
+            TypeKind::Named(..) => unreachable!("handled by unname()"),
+        };
+        Some(cx.intern_type(TypeKind::BitVector {
+            domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
+            sign: ty::Sign::Unsigned,
+            range: ty::Range {
+                size: bits,
+                dir: ty::RangeDir::Down,
+                offset: 0isize,
+            },
+            dubbed: false,
+        }))
+    }
 }
 
 impl<'t> Display for TypeKind<'t> {
