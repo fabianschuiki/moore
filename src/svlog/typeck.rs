@@ -1022,6 +1022,7 @@ pub(crate) fn type_context<'gcx>(
     };
     match hir {
         HirNode::Expr(e) => type_context_imposed_by_expr(cx, onto, e, env),
+        HirNode::Stmt(s) => type_context_imposed_by_stmt(cx, onto, s, env),
         HirNode::Assign(a) => {
             if a.lhs == onto {
                 cx.self_determined_type(a.rhs, env).map(Into::into)
@@ -1046,7 +1047,6 @@ pub(crate) fn type_context<'gcx>(
         {
             Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
         }
-        // TODO(fschuiki): Statements
         _ => None,
     }
 }
@@ -1150,9 +1150,10 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::BinaryOp::Lt
             | hir::BinaryOp::Leq
             | hir::BinaryOp::Gt
-            | hir::BinaryOp::Geq
-            | hir::BinaryOp::LogicAnd
-            | hir::BinaryOp::LogicOr => None,
+            | hir::BinaryOp::Geq => None,
+
+            // The logic operators require boolean arguments.
+            hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(TypeContext::Bool),
 
             // Exponentiation and shifts impose a type context on their left
             // hand side.
@@ -1192,6 +1193,61 @@ fn type_context_imposed_by_expr<'gcx>(
         hir::ExprKind::Builtin(hir::BuiltinCall::Signed(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(_)) => {
             cx.self_determined_type(expr.id, env).map(Into::into)
+        }
+
+        _ => None,
+    }
+}
+
+/// Get the type context imposed by a statement.
+///
+/// Determine the type context `stmt` imposes on `onto`.
+fn type_context_imposed_by_stmt<'gcx>(
+    cx: &impl Context<'gcx>,
+    onto: NodeId,
+    stmt: &'gcx hir::Stmt,
+    env: ParamEnv,
+) -> Option<TypeContext<'gcx>> {
+    match stmt.kind {
+        // Assignments impose the self-determined type of the other operand on
+        // an operand, if available.
+        hir::StmtKind::Assign { lhs, rhs, .. } => {
+            if lhs == onto {
+                cx.self_determined_type(rhs, env).map(Into::into)
+            } else if rhs == onto {
+                cx.self_determined_type(lhs, env).map(Into::into)
+            } else {
+                None
+            }
+        }
+
+        // If statements and do/while loops require a boolean condition.
+        hir::StmtKind::If { cond, .. } if onto == cond => Some(TypeContext::Bool),
+
+        // Do/while loops require a boolean condition.
+        hir::StmtKind::Loop { kind, .. } => {
+            match kind {
+                hir::LoopKind::Repeat(count) if onto == count => {
+                    // TODO: Actually this should require a simple 2-value bit vector type
+                    None
+                }
+                hir::LoopKind::Do(cond)
+                | hir::LoopKind::While(cond)
+                | hir::LoopKind::For(_, cond, _)
+                    if onto == cond =>
+                {
+                    Some(TypeContext::Bool)
+                }
+                _ => None,
+            }
+        }
+
+        // Case statements impose the switch expression's self-determined type
+        // on  the case arms.
+        hir::StmtKind::Case { expr, ref ways, .. }
+            if ways.iter().flat_map(|(x, _)| x.iter()).any(|&x| x == onto) =>
+        {
+            cx.self_determined_type(expr, env).map(Into::into)
         }
 
         _ => None,
