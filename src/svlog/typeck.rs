@@ -525,11 +525,38 @@ fn cast_expr_type<'gcx>(
         TypeContext::Type(ty) => ty,
     };
 
-    // Cast the sign.
+    // Change signs.
     if cast.ty.get_sign() != context.get_sign() && context.get_sign().is_some() {
-        trace!("  Casting sign");
+        trace!(
+            "  Casting sign from {:?} to {:?}",
+            cast.ty.get_sign(),
+            context.get_sign()
+        );
         let sign = context.get_sign().unwrap();
         cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
+    }
+    if cast.is_error() {
+        return cast;
+    }
+
+    // Change size.
+    let range = if context.is_simple_bit_vector() {
+        Some(context)
+    } else {
+        context.get_simple_bit_vector(cx, env, false)
+    }
+    .and_then(|ty| ty.get_range());
+    if cast.ty.get_range() != range && range.is_some() {
+        let range = range.unwrap();
+        trace!(
+            "  Casting range from {} to {}",
+            cast.ty.get_range().unwrap(),
+            range
+        );
+        cast.add_cast(
+            CastOp::Range(range, cast.ty.is_signed()),
+            cast.ty.change_range(cx, range),
+        );
     }
     if cast.is_error() {
         return cast;
@@ -1433,6 +1460,8 @@ pub enum CastOp {
     Bool,
     /// Cast to a different sign.
     Sign(ty::Sign),
+    /// Cast to a different range. Second argument indicates sign-extension.
+    Range(ty::Range, bool),
 }
 
 impl<'a> CastType<'a> {

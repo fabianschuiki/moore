@@ -208,6 +208,29 @@ impl<'t> TypeKind<'t> {
         }
     }
 
+    /// Return the range of the type, if it has one.
+    pub fn get_range(&self) -> Option<Range> {
+        match self {
+            TypeKind::Bit(..) => Some(Range {
+                size: 1,
+                dir: RangeDir::Down,
+                offset: 0isize,
+            }),
+            TypeKind::Int(..) => Some(Range {
+                size: 32,
+                dir: RangeDir::Down,
+                offset: 0isize,
+            }),
+            TypeKind::BitScalar { .. } => Some(Range {
+                size: 1,
+                dir: RangeDir::Down,
+                offset: 0isize,
+            }),
+            TypeKind::BitVector { range, .. } => Some(*range),
+            _ => None,
+        }
+    }
+
     /// Check whether the type is unsigned.
     ///
     /// Returns false for types which have no sign.
@@ -231,6 +254,42 @@ impl<'t> TypeKind<'t> {
             TypeKind::BitVector {
                 domain,
                 range,
+                dubbed,
+                ..
+            } => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed,
+            }),
+            _ => self,
+        }
+    }
+
+    /// Change the range of a simple bit type.
+    pub fn change_range<'gcx>(&'gcx self, cx: &impl Context<'gcx>, range: Range) -> Type<'gcx> {
+        match *self {
+            TypeKind::Bit(domain) => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign: Sign::Unsigned,
+                range,
+                dubbed: false,
+            }),
+            TypeKind::Int(_, domain) => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign: Sign::Signed,
+                range,
+                dubbed: false,
+            }),
+            TypeKind::BitScalar { domain, sign } => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed: false,
+            }),
+            TypeKind::BitVector {
+                domain,
+                sign,
                 dubbed,
                 ..
             } => cx.intern_type(TypeKind::BitVector {
@@ -309,6 +368,37 @@ impl<'t> TypeKind<'t> {
             },
             dubbed: false,
         }))
+    }
+
+    /// Compute the size of the type in bits.
+    pub fn try_bit_size<'gcx>(&'gcx self, cx: &impl Context<'gcx>, env: ParamEnv) -> Result<usize> {
+        match *self {
+            TypeKind::Error | TypeKind::Void => Ok(0),
+            TypeKind::Time => panic!("time value has no bit size"),
+            TypeKind::Bit(_) => Ok(1),
+            TypeKind::Int(width, _) => Ok(width),
+            TypeKind::Named(_, _, ty) => bit_size_of_type(cx, ty, env),
+            TypeKind::Struct(struct_id) => {
+                let fields = match cx.hir_of(struct_id)? {
+                    HirNode::Type(hir::Type {
+                        kind: hir::TypeKind::Struct(ref fields),
+                        ..
+                    }) => fields,
+                    _ => unreachable!(),
+                };
+                let mut size = 0;
+                for &field in fields {
+                    size += bit_size_of_type(cx, cx.type_of(field, env)?, env)?;
+                }
+                Ok(size)
+            }
+            TypeKind::PackedArray(elements, ty) => Ok(elements * bit_size_of_type(cx, ty, env)?),
+            TypeKind::BitScalar { .. } => Ok(1),
+            TypeKind::BitVector {
+                range: Range { size, .. },
+                ..
+            } => Ok(size),
+        }
     }
 }
 
@@ -512,33 +602,7 @@ pub fn bit_size_of_type<'gcx>(
     ty: Type<'gcx>,
     env: ParamEnv,
 ) -> Result<usize> {
-    match *ty {
-        TypeKind::Error | TypeKind::Void => Ok(0),
-        TypeKind::Time => panic!("time value has no bit size"),
-        TypeKind::Bit(_) => Ok(1),
-        TypeKind::Int(width, _) => Ok(width),
-        TypeKind::Named(_, _, ty) => bit_size_of_type(cx, ty, env),
-        TypeKind::Struct(struct_id) => {
-            let fields = match cx.hir_of(struct_id)? {
-                HirNode::Type(hir::Type {
-                    kind: hir::TypeKind::Struct(ref fields),
-                    ..
-                }) => fields,
-                _ => unreachable!(),
-            };
-            let mut size = 0;
-            for &field in fields {
-                size += bit_size_of_type(cx, cx.type_of(field, env)?, env)?;
-            }
-            Ok(size)
-        }
-        TypeKind::PackedArray(elements, ty) => Ok(elements * bit_size_of_type(cx, ty, env)?),
-        TypeKind::BitScalar { .. } => Ok(1),
-        TypeKind::BitVector {
-            range: Range { size, .. },
-            ..
-        } => Ok(size),
-    }
+    ty.try_bit_size(cx, env)
 }
 
 /// Check if two types are identical.
