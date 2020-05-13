@@ -457,15 +457,25 @@ fn cast_expr_type<'gcx>(
             .unwrap_or_else(|| "<none>".to_string())
     );
 
-    // If there is no type context which we have to cast to, return.
+    // No need to cast lvalues.
     if expr_is_lvalue(cx, expr.id, env) {
         trace!("  Not casting lvalue");
         return inferred.into();
     }
+
+    // If there is no type context which we have to cast to, return.
     let context = match context {
         Some(c) => c,
         None => return inferred.into(),
     };
+
+    // If any of the inputs are tombstones, return.
+    if inferred.is_error() || context.is_error() {
+        trace!("  Aborting due to errors");
+        return inferred.into();
+    }
+
+    // If types already match, return.
     if let TypeContext::Type(ty) = context {
         if ty::identical(ty, inferred) {
             return inferred.into();
@@ -479,49 +489,74 @@ fn cast_expr_type<'gcx>(
         casts: vec![],
     };
 
-    // Cast the expression to a simple bit vector type if needed by the context.
-    if context == TypeContext::Bool {
-        if !cast.ty.is_simple_bit_vector() {
-            trace!("  Casting to SBVT");
-            match cast.ty.get_simple_bit_vector(cx, env, false) {
-                Some(ty) => {
-                    cast.casts.push((CastOp::SimpleBitVector, ty));
-                    cast.ty = ty;
-                }
-                None => {
-                    cx.emit(
-                        DiagBuilder2::error(format!(
-                            "cannot cast a value of type `{}` to a boolean",
-                            inferred
-                        ))
-                        .span(expr.span)
-                        .add_note(format!(
-                            "`{}` has no simple bit-vector type representation",
-                            inferred
-                        )),
-                    );
-                    error!("Cast chain thus far: {}", cast);
-                    return (&ty::ERROR_TYPE).into();
-                }
+    // Cast the expression to a simple bit vector type.
+    if !cast.ty.is_simple_bit_vector() {
+        trace!("  Casting to SBVT");
+        match cast.ty.get_simple_bit_vector(cx, env, false) {
+            Some(ty) => cast.add_cast(CastOp::SimpleBitVector, ty),
+            None => {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "cannot cast a value of type `{}` to `{}`",
+                        inferred, context
+                    ))
+                    .span(expr.span)
+                    .add_note(format!(
+                        "`{}` has no simple bit-vector type representation",
+                        inferred
+                    )),
+                );
+                error!("Cast chain thus far: {}", cast);
+                return (&ty::ERROR_TYPE).into();
             }
         }
-        if cast.ty.is_error() {
+    }
+    if cast.is_error() {
+        return cast;
+    }
+
+    // Cast the SBVT to a boolean.
+    let context = match context {
+        TypeContext::Bool => {
+            trace!("  Casting to bool");
+            cast.add_cast(CastOp::Bool, &ty::BIT_TYPE);
             return cast;
         }
-        trace!("  Casting to bool");
-        cast.casts.push((CastOp::Bool, &ty::BIT_TYPE));
-        cast.ty = &ty::BIT_TYPE;
+        TypeContext::Type(ty) => ty,
+    };
+
+    // Cast the sign.
+    if cast.ty.get_sign() != context.get_sign() && context.get_sign().is_some() {
+        trace!("  Casting sign");
+        let sign = context.get_sign().unwrap();
+        cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
+    }
+    if cast.is_error() {
+        return cast;
+    }
+
+    // If types match now, we're good.
+    if ty::identical(context, cast.ty) {
         return cast;
     }
 
     // If we arrive here, casting failed.
-    cx.emit(
-        DiagBuilder2::error(format!(
-            "cannot cast a value of type `{}` to `{}`",
-            inferred, context
-        ))
-        .span(expr.span),
-    );
+    let mut d = DiagBuilder2::error(format!(
+        "cannot cast a value of type `{}` to `{}`",
+        inferred, context
+    ))
+    .span(expr.span);
+    if !cast.casts.is_empty() {
+        d = d.add_note(format!(
+            "`{}` can be cast to intermediate `{}`",
+            inferred, cast.ty
+        ));
+        d = d.add_note(format!(
+            "`{}` cannot be cast to final `{}`",
+            cast.ty, context
+        ));
+    }
+    cx.emit(d);
     error!("Cast chain thus far: {}", cast);
     (&ty::ERROR_TYPE).into()
 }
@@ -1210,6 +1245,14 @@ impl<'a> TypeContext<'a> {
             TypeContext::Bool => &ty::BIT_TYPE,
         }
     }
+
+    /// Check if the type context is a tombstone.
+    pub fn is_error(&self) -> bool {
+        match self {
+            TypeContext::Type(t) => t.is_error(),
+            TypeContext::Bool => false,
+        }
+    }
 }
 
 impl<'a> From<Type<'a>> for TypeContext<'a> {
@@ -1388,6 +1431,21 @@ pub enum CastOp {
     SimpleBitVector,
     /// Cast to a boolean.
     Bool,
+    /// Cast to a different sign.
+    Sign(ty::Sign),
+}
+
+impl<'a> CastType<'a> {
+    /// Check if this cast type is a tombstone.
+    pub fn is_error(&self) -> bool {
+        self.ty.is_error()
+    }
+
+    /// Add a cast operation.
+    pub fn add_cast(&mut self, op: CastOp, ty: Type<'a>) {
+        self.casts.push((op, ty));
+        self.ty = ty;
+    }
 }
 
 impl<'a> From<Type<'a>> for CastType<'a> {
