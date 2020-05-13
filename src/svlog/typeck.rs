@@ -449,15 +449,19 @@ fn cast_expr_type<'gcx>(
     // Determine the inferred type and type context of the expression.
     let inferred = type_of_expr(cx, expr, env);
     let context = type_context(cx, expr.id, env);
-    trace!("Inferred: {}", inferred);
+    trace!("  Inferred: {}", inferred);
     trace!(
-        "Context:  {}",
+        "  Context:  {}",
         context
             .map(|c| c.to_string())
             .unwrap_or_else(|| "<none>".to_string())
     );
 
     // If there is no type context which we have to cast to, return.
+    if expr_is_lvalue(cx, expr.id, env) {
+        trace!("  Not casting lvalue");
+        return inferred.into();
+    }
     let context = match context {
         Some(c) => c,
         None => return inferred.into(),
@@ -478,7 +482,7 @@ fn cast_expr_type<'gcx>(
     // Cast the expression to a simple bit vector type if needed by the context.
     if context == TypeContext::Bool {
         if !cast.ty.is_simple_bit_vector() {
-            trace!("Casting to SBVT");
+            trace!("  Casting to SBVT");
             match cast.ty.get_simple_bit_vector(cx, env, false) {
                 Some(ty) => {
                     cast.casts.push((CastOp::SimpleBitVector, ty));
@@ -504,7 +508,7 @@ fn cast_expr_type<'gcx>(
         if cast.ty.is_error() {
             return cast;
         }
-        trace!("Casting to bool");
+        trace!("  Casting to bool");
         cast.casts.push((CastOp::Bool, &ty::BIT_TYPE));
         cast.ty = &ty::BIT_TYPE;
         return cast;
@@ -1403,5 +1407,31 @@ impl std::fmt::Display for CastType<'_> {
             write!(f, " -> ({:?}) {}", op, ty)?;
         }
         Ok(())
+    }
+}
+
+/// Check if an expression is in lvalue position.
+pub(crate) fn expr_is_lvalue<'gcx>(cx: &impl Context<'gcx>, onto: NodeId, _env: ParamEnv) -> bool {
+    let hir = match cx.hir_of(cx.parent_node_id(onto).unwrap()) {
+        Ok(x) => x,
+        Err(()) => return false,
+    };
+    match hir {
+        HirNode::Expr(e) => match e.kind {
+            hir::ExprKind::Unary(op, _) => match op {
+                hir::UnaryOp::PreInc
+                | hir::UnaryOp::PreDec
+                | hir::UnaryOp::PostInc
+                | hir::UnaryOp::PostDec => true,
+                _ => false,
+            },
+            _ => false,
+        },
+        HirNode::Stmt(s) => match s.kind {
+            hir::StmtKind::Assign { lhs, .. } => lhs == onto,
+            _ => false,
+        },
+        HirNode::Assign(a) => a.lhs == onto,
+        _ => false,
     }
 }
