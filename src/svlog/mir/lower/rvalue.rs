@@ -9,6 +9,7 @@ use crate::{
     hir::PatternMapping,
     mir::rvalue::*,
     ty::{Type, TypeKind},
+    typeck::{CastOp, CastType},
     value::{self, ValueData, ValueKind},
     ParamEnv,
 };
@@ -73,16 +74,33 @@ pub fn lower_expr<'gcx>(
         expr: expr_id,
         env,
     };
-    try_lower_expr(&builder, expr_id).unwrap_or_else(|_| builder.error())
+
+    // Make sure we have an expression.
+    let hir = match cx.hir_of(expr_id) {
+        Ok(HirNode::Expr(x)) => x,
+        Err(_) => return builder.error(),
+        x => unreachable!("rvalue for {:?}", x),
+    };
+
+    // Determine the cast type.
+    let cast = cx.cast_type(expr_id, env).unwrap();
+
+    // Lower the expression.
+    let rvalue = lower_expr_inner(&builder, hir, cast.init).unwrap_or_else(|_| builder.error());
+
+    // Lower the casts.
+    lower_cast(&builder, rvalue, cast)
 }
 
 /// Lower an expression to an rvalue in the MIR.
 ///
 /// May return an error if any of the database queries break.
-fn try_lower_expr<'gcx>(
+fn lower_expr_inner<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    expr_id: NodeId,
+    hir: &'gcx hir::Expr,
+    ty: Type<'gcx>,
 ) -> Result<&'gcx Rvalue<'gcx>> {
+    let expr_id = hir.id;
     let cx = builder.cx;
     let span = cx.span(expr_id);
     let env = builder.env;
@@ -90,33 +108,32 @@ fn try_lower_expr<'gcx>(
     // Check whether the node has a constant value. This will allow us to
     // quickly emit parameters and genvars.
     let is_const = builder.cx.is_constant(expr_id).unwrap_or(false);
-    let ty = builder.cx.type_of(expr_id, env)?;
 
-    // Try to extract the expr HIR for this node. Handle a few special cases
-    // where the node is not technically an expression, but can be used as a
-    // rvalue.
-    let hir = match builder.cx.hir_of(expr_id)? {
-        HirNode::Expr(x) => x,
-        HirNode::VarDecl(decl) => {
-            let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id));
-            return Ok(lower_implicit_cast(builder, v, ty));
-        }
-        HirNode::IntPort(port) => {
-            let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id));
-            return Ok(lower_implicit_cast(builder, v, ty));
-        }
-        HirNode::EnumVariant(..) => {
-            let k = builder.cx.constant_value_of(expr_id, env)?;
-            let v = builder.build(k.ty, RvalueKind::Const(k));
-            return Ok(lower_implicit_cast(builder, v, ty));
-        }
-        _ if is_const => {
-            let k = builder.cx.constant_value_of(expr_id, env)?;
-            let v = builder.build(k.ty, RvalueKind::Const(k));
-            return Ok(lower_implicit_cast(builder, v, ty));
-        }
-        x => unreachable!("rvalue for {:#?}", x),
-    };
+    // // Try to extract the expr HIR for this node. Handle a few special cases
+    // // where the node is not technically an expression, but can be used as a
+    // // rvalue.
+    // let hir = match builder.cx.hir_of(expr_id)? {
+    //     HirNode::Expr(x) => x,
+    //     HirNode::VarDecl(decl) => {
+    //         let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id));
+    //         return Ok(lower_implicit_cast(builder, v, ty));
+    //     }
+    //     HirNode::IntPort(port) => {
+    //         let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id));
+    //         return Ok(lower_implicit_cast(builder, v, ty));
+    //     }
+    //     HirNode::EnumVariant(..) => {
+    //         let k = builder.cx.constant_value_of(expr_id, env)?;
+    //         let v = builder.build(k.ty, RvalueKind::Const(k));
+    //         return Ok(lower_implicit_cast(builder, v, ty));
+    //     }
+    //     _ if is_const => {
+    //         let k = builder.cx.constant_value_of(expr_id, env)?;
+    //         let v = builder.build(k.ty, RvalueKind::Const(k));
+    //         return Ok(lower_implicit_cast(builder, v, ty));
+    //     }
+    //     x => unreachable!("rvalue for {:#?}", x),
+    // };
 
     // Determine the expression type and match on the various forms.
     match hir.kind {
@@ -169,15 +186,16 @@ fn try_lower_expr<'gcx>(
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = builder.cx.resolve_node(expr_id, env)?;
             match builder.cx.hir_of(binding)? {
-                HirNode::VarDecl(..)
-                | HirNode::IntPort(..)
-                | HirNode::EnumVariant(..)
-                | HirNode::ValueParam(..)
-                | HirNode::GenvarDecl(..) => try_lower_expr(builder, binding),
+                HirNode::VarDecl(decl) => Ok(builder.build(ty, RvalueKind::Var(decl.id))),
+                HirNode::IntPort(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
+                HirNode::EnumVariant(..) | HirNode::ValueParam(..) | HirNode::GenvarDecl(..) => {
+                    let k = builder.cx.constant_value_of(expr_id, env)?;
+                    Ok(builder.build(ty, RvalueKind::Const(k)))
+                }
                 x => {
                     builder.cx.emit(
                         DiagBuilder2::error(format!(
-                            "{} cannot be used in expression",
+                            "{} cannot be used in an expression",
                             x.desc_full()
                         ))
                         .span(span),
@@ -501,14 +519,15 @@ fn lower_expr_and_cast<'gcx>(
     env: ParamEnv,
     target_ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner = cx.mir_rvalue(expr_id, env);
-    let builder = Builder {
-        cx,
-        span: inner.span,
-        expr: expr_id,
-        env,
-    };
-    lower_implicit_cast(&builder, inner, target_ty)
+    lower_expr(cx, expr_id, env)
+    // let inner = cx.mir_rvalue(expr_id, env);
+    // let builder = Builder {
+    //     cx,
+    //     span: inner.span,
+    //     expr: expr_id,
+    //     env,
+    // };
+    // lower_implicit_cast(&builder, inner, target_ty)
 }
 
 /// Lower an HIR expression and implicitly cast to a different sign.
@@ -517,20 +536,123 @@ fn lower_expr_and_cast_sign<'gcx>(
     expr_id: NodeId,
     sign: ty::Sign,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner = builder.cx.mir_rvalue(expr_id, builder.env);
-    if let Some(ty) = inner
-        .ty
-        .get_simple_bit_vector(builder.cx, builder.env, false)
-    {
-        let ty = ty.change_sign(builder.cx, sign);
-        lower_implicit_cast(builder, inner, ty)
-    } else {
-        let span = builder.cx.span(expr_id);
-        builder.cx.emit(
-            DiagBuilder2::error(format!("`{}` cannot be sign-cast", span.extract())).span(span),
-        );
-        builder.error()
+    lower_expr(builder.cx, expr_id, builder.env)
+    // let inner = builder.cx.mir_rvalue(expr_id, builder.env);
+    // if let Some(ty) = inner
+    //     .ty
+    //     .get_simple_bit_vector(builder.cx, builder.env, false)
+    // {
+    //     let ty = ty.change_sign(builder.cx, sign);
+    //     lower_implicit_cast(builder, inner, ty)
+    // } else {
+    //     let span = builder.cx.span(expr_id);
+    //     builder.cx.emit(
+    //         DiagBuilder2::error(format!("`{}` cannot be sign-cast", span.extract())).span(span),
+    //     );
+    //     builder.error()
+    // }
+}
+
+/// Generate the nodes necessary for a cast operation.
+fn lower_cast<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    mut value: &'gcx Rvalue<'gcx>,
+    to: CastType<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Don't bother with errors.
+    if value.is_error() {
+        return value;
     }
+    if to.is_error() {
+        return builder.error();
+    }
+
+    // Lower each cast individually.
+    for &(op, to) in &to.casts {
+        debug!("Lowering {:?} cast of `{}` to `{}`", op, value.ty, to);
+        match op {
+            CastOp::Bool => {
+                assert!(value.ty.is_simple_bit_vector());
+                value = builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value));
+            }
+            CastOp::SimpleBitVector => {
+                if value.ty.is_struct() {
+                    value = pack_struct(builder, value);
+                } else if value.ty.is_array() {
+                    value = pack_array(builder, value);
+                } else {
+                    error!("Cannot map `{}` to a simple bit vector", value.ty);
+                }
+            }
+            CastOp::Sign(sign) => {
+                assert!(value.ty.is_simple_bit_vector());
+                assert!(to.is_simple_bit_vector());
+                value = builder.build(to, RvalueKind::CastSign(sign, value));
+            }
+            CastOp::Range(range, signed) => {
+                assert!(value.ty.is_simple_bit_vector());
+                assert!(to.is_simple_bit_vector());
+                let kind = if value.ty.get_range().unwrap().size < range.size {
+                    match signed {
+                        true => RvalueKind::SignExtend(range.size, value),
+                        false => RvalueKind::ZeroExtend(range.size, value),
+                    }
+                } else {
+                    RvalueKind::Truncate(range.size, value)
+                };
+                value = builder.build(to, kind);
+            }
+            CastOp::Domain(domain) => {
+                value = builder.build(
+                    to,
+                    RvalueKind::CastValueDomain {
+                        from: value.ty.get_value_domain().unwrap(),
+                        to: domain,
+                        value,
+                    },
+                );
+            }
+            CastOp::Struct => {
+                assert!(value.ty.is_simple_bit_vector());
+                assert!(to.is_struct());
+                value = unpack_struct(builder, to, value);
+            }
+            CastOp::Array => {
+                assert!(value.ty.is_simple_bit_vector());
+                assert!(to.is_array());
+                value = unpack_array(builder, to, value);
+            }
+        }
+    }
+
+    // Check that the casts have actually produced the expected output type.
+    assert!(
+        ty::identical(value.ty, to.ty),
+        "rvalue type `{}` does not match final cast type `{}` after lower_cast",
+        value.ty,
+        to.ty
+    );
+    value
+}
+
+/// Generate the nodes necessary to pack a value to its corresponding simple bit
+/// vector type.
+fn pack_simple_bit_vector<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    value: &'gcx Rvalue<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    if value.is_error() {
+        return value;
+    }
+    let out = if value.ty.is_struct() {
+        pack_struct(builder, value)
+    } else if value.ty.is_array() {
+        pack_array(builder, value)
+    } else {
+        value
+    };
+    assert!(out.ty.is_simple_bit_vector());
+    out
 }
 
 /// Generate the nodes necessary to implicitly cast and rvalue to a type.
@@ -560,6 +682,7 @@ fn lower_implicit_cast<'gcx>(
     );
 
     // Try a truncation or extension cast.
+    // DONE
     let from_sbvt = from_raw.get_simple_bit_vector(builder.cx, builder.env, true);
     let to_sbvt = to_raw.get_simple_bit_vector(builder.cx, builder.env, true);
     let from_size = from_sbvt.map(|ty| ty.width());
@@ -607,6 +730,7 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Try a single-bit atom/vector conversion.
+    // NOT NEEDED
     let from_sbt = from_raw.get_simple_bit_vector(builder.cx, builder.env, false);
     let to_sbt = to_raw.get_simple_bit_vector(builder.cx, builder.env, false);
     match (from_sbt, to_sbt) {
@@ -667,6 +791,7 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Try a value domain cast.
+    // DONE
     let from_domain = from_raw.get_value_domain();
     let to_domain = to_raw.get_value_domain();
     if from_domain.is_some() && to_domain.is_some() && from_domain != to_domain {
@@ -713,6 +838,7 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Try a sign cast.
+    // DONE
     let from_sign = from_sbt.and_then(|ty| ty.get_sign());
     let to_sign = to_sbt.and_then(|ty| ty.get_sign());
     if from_sign.is_some() && to_sign.is_some() && from_sign != to_sign {
@@ -737,6 +863,7 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Try struct/array packing.
+    // DONE
     let packed = if from_raw.is_struct() {
         Some(pack_struct(builder, value))
     } else if from_raw.is_array() {
@@ -759,6 +886,7 @@ fn lower_implicit_cast<'gcx>(
     }
 
     // Try struct/array unpacking.
+    // DONE
     let unpacked = if to_raw.is_struct() {
         Some(unpack_struct(builder, to, value))
     } else if to_raw.is_array() {
@@ -832,7 +960,7 @@ fn pack_struct<'gcx>(
             }
         };
         let field_value = builder.build(field_ty, RvalueKind::Member { value, field: i });
-        let field_value = lower_implicit_cast(builder, field_value, sbvt);
+        let field_value = pack_simple_bit_vector(builder, field_value);
         packed_fields.push(field_value);
     }
 
@@ -891,7 +1019,7 @@ fn pack_array<'gcx>(
                 length: 0,
             },
         );
-        let elem = lower_implicit_cast(builder, elem, sbvt);
+        let elem = pack_simple_bit_vector(builder, elem);
         packed_elements.push(elem);
     }
 
@@ -960,7 +1088,7 @@ fn unpack_struct<'gcx>(
                 length: w,
             },
         );
-        let field_value = lower_implicit_cast(builder, field_value, field_ty);
+        let field_value = pack_simple_bit_vector(builder, field_value);
         unpacked_fields.push(field_value);
         offset += w;
     }
@@ -1018,7 +1146,7 @@ fn unpack_array<'gcx>(
                 length: w,
             },
         );
-        let elem = lower_implicit_cast(builder, elem, elem_ty);
+        let elem = pack_simple_bit_vector(builder, elem);
         unpacked_elements.insert(i, elem);
     }
 
@@ -1512,11 +1640,8 @@ fn make_int_comparison<'gcx>(
     lhs: &'gcx Rvalue<'gcx>,
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    // Cast the operands to the operator type.
-    let lhs = lower_implicit_cast(builder, lhs, ty);
-    let rhs = lower_implicit_cast(builder, rhs, ty);
-
-    // Assemble the node.
+    assert!(ty::identical(lhs.ty, ty));
+    assert!(ty::identical(rhs.ty, ty));
     builder.build(
         ty.get_value_domain().unwrap().bit_type(),
         RvalueKind::IntComp {
@@ -1680,14 +1805,14 @@ fn make_binary_bitwise<'gcx>(
     // type.
 
     // Cast the operands to the operator type.
-    let lhs = lower_implicit_cast(builder, lhs, result_ty);
-    let rhs = lower_implicit_cast(builder, rhs, result_ty);
+    assert!(ty::identical(lhs.ty, ty));
+    assert!(ty::identical(rhs.ty, ty));
 
     // Assemble the node.
-    let value = builder.build(result_ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
+    let value = builder.build(ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
     if negate {
         builder.build(
-            result_ty,
+            ty,
             RvalueKind::UnaryBitwise {
                 op: UnaryBitwiseOp::Not,
                 arg: value,
@@ -1787,7 +1912,7 @@ fn make_reduction<'gcx>(
     arg: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     // Cast the argument.
-    let arg = lower_implicit_cast(builder, arg, ty);
+    assert!(ty::identical(arg.ty, ty));
 
     // Assemble the node.
     let bit_ty = ty.get_value_domain().unwrap().bit_type();
@@ -1812,33 +1937,38 @@ fn implicit_cast_to_bool<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     value: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    // Map the value to a simple bit type.
-    let sbvt = match value
-        .ty
-        .get_simple_bit_vector(builder.cx, builder.env, false)
-    {
-        Some(sbvt) => sbvt,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!(
-                    "`{:?}` cannot be cast to a boolean",
-                    value.span.extract()
-                ))
-                .span(value.span),
-            );
-            return builder.error();
-        }
-    };
+    assert!(
+        ty::identical(value.ty, &ty::BIT_TYPE),
+        "casts should be inferred by the type system"
+    );
+    value
+    // // Map the value to a simple bit type.
+    // let sbvt = match value
+    //     .ty
+    //     .get_simple_bit_vector(builder.cx, builder.env, false)
+    // {
+    //     Some(sbvt) => sbvt,
+    //     None => {
+    //         builder.cx.emit(
+    //             DiagBuilder2::error(format!(
+    //                 "`{:?}` cannot be cast to a boolean",
+    //                 value.span.extract()
+    //             ))
+    //             .span(value.span),
+    //         );
+    //         return builder.error();
+    //     }
+    // };
 
-    // Cast to the simple bit type.
-    let value = lower_implicit_cast(builder, value, sbvt);
+    // // Cast to the simple bit type.
+    // let value = lower_implicit_cast(builder, value, sbvt);
 
-    // If the value already has the equivalent of a one bit value, use that.
-    if sbvt.width() == 1 {
-        value
-    } else {
-        builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value))
-    }
+    // // If the value already has the equivalent of a one bit value, use that.
+    // if sbvt.width() == 1 {
+    //     value
+    // } else {
+    //     builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value))
+    // }
 }
 
 /// Cast an rvalue to a boolean.
@@ -1865,16 +1995,21 @@ pub fn cast_to_type<'gcx>(
     env: ParamEnv,
     ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    lower_implicit_cast(
-        &Builder {
-            cx,
-            span: value.span,
-            expr: value.origin,
-            env,
-        },
-        value,
-        ty,
-    )
+    assert!(
+        ty::identical(value.ty, ty),
+        "casts should be inferred by the type system"
+    );
+    value
+    // lower_implicit_cast(
+    //     &Builder {
+    //         cx,
+    //         span: value.span,
+    //         expr: value.origin,
+    //         env,
+    //     },
+    //     value,
+    //     ty,
+    // )
 }
 
 /// Map an increment/decrement operator to MIR.
