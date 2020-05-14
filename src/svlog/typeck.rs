@@ -540,22 +540,52 @@ fn cast_expr_type<'gcx>(
     }
 
     // Change size.
-    let range = if context.is_simple_bit_vector() {
+    let context_sbvt = if context.is_simple_bit_vector() {
         Some(context)
     } else {
         context.get_simple_bit_vector(cx, env, false)
-    }
-    .and_then(|ty| ty.get_range());
+    };
+    let range = context_sbvt.and_then(|ty| ty.get_range());
     if cast.ty.get_range() != range && range.is_some() {
         let range = range.unwrap();
+        let mut ty = cast.ty.change_range(cx, range);
+        // Drop a [0:0] when the target is a scalar. This is pretty ugly and
+        // will need to be reworked once #146 lands.
+        if let (
+            Some(TypeKind::BitScalar { .. }),
+            &TypeKind::BitVector {
+                domain,
+                sign,
+                range: ty::Range { size: 1, .. },
+                dubbed: _,
+            },
+        ) = (context_sbvt, ty)
+        {
+            ty = cx.intern_type(TypeKind::BitScalar { domain, sign });
+        }
         trace!(
             "  Casting range from {} to {}",
             cast.ty.get_range().unwrap(),
             range
         );
+        cast.add_cast(CastOp::Range(range, cast.ty.is_signed()), ty);
+    }
+    if cast.is_error() {
+        return cast;
+    }
+
+    // Change value domain.
+    let domain = context_sbvt.and_then(|ty| ty.get_value_domain());
+    if cast.ty.get_value_domain() != domain && domain.is_some() {
+        let domain = domain.unwrap();
+        trace!(
+            "  Casting domain from {:?} to {:?}",
+            cast.ty.get_value_domain().unwrap(),
+            domain
+        );
         cast.add_cast(
-            CastOp::Range(range, cast.ty.is_signed()),
-            cast.ty.change_range(cx, range),
+            CastOp::Domain(domain),
+            cast.ty.change_value_domain(cx, domain),
         );
     }
     if cast.is_error() {
@@ -575,11 +605,11 @@ fn cast_expr_type<'gcx>(
     .span(expr.span);
     if !cast.casts.is_empty() {
         d = d.add_note(format!(
-            "`{}` can be cast to intermediate `{}`",
+            "`{}` can be cast to an intermediate `{}`, but",
             inferred, cast.ty
         ));
         d = d.add_note(format!(
-            "`{}` cannot be cast to final `{}`",
+            "`{}` cannot be cast to the final `{}`",
             cast.ty, context
         ));
     }
@@ -1310,13 +1340,15 @@ fn type_context_imposed_by_expr<'gcx>(
         hir::ExprKind::Unary(op, _) => match op {
             // The unary operators whose output type does not depend on the
             // operands also do not impose a type context on their operands.
-            hir::UnaryOp::LogicNot
-            | hir::UnaryOp::RedAnd
+            hir::UnaryOp::RedAnd
             | hir::UnaryOp::RedOr
             | hir::UnaryOp::RedXor
             | hir::UnaryOp::RedNand
             | hir::UnaryOp::RedNor
             | hir::UnaryOp::RedXnor => None,
+
+            // The logic operators require boolean arguments.
+            hir::UnaryOp::LogicNot => Some(TypeContext::Bool),
 
             // For all other cases we impose our self-determined type as
             // context.
@@ -1462,6 +1494,8 @@ pub enum CastOp {
     Sign(ty::Sign),
     /// Cast to a different range. Second argument indicates sign-extension.
     Range(ty::Range, bool),
+    /// Cast to a different domain.
+    Domain(ty::Domain),
 }
 
 impl<'a> CastType<'a> {
@@ -1491,7 +1525,7 @@ impl std::fmt::Display for CastType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.init)?;
         for (op, ty) in &self.casts {
-            write!(f, " -> ({:?}) {}", op, ty)?;
+            write!(f, " -> {:?} {}", op, ty)?;
         }
         Ok(())
     }

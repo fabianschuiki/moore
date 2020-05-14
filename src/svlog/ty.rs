@@ -63,7 +63,7 @@ pub enum Sign {
 }
 
 /// The `[a:b]` part in a vector/array type such as `logic [a:b]`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Range {
     /// The total number of bits, given as `|a-b|+1`.
     pub size: usize,
@@ -80,6 +80,12 @@ pub enum RangeDir {
     Up,
     /// `a > b`
     Down,
+}
+
+impl std::fmt::Debug for Range {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl<'t> TypeKind<'t> {
@@ -193,6 +199,7 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(_, d) => Some(d),
             TypeKind::BitScalar { domain, .. } => Some(domain),
             TypeKind::BitVector { domain, .. } => Some(domain),
+            // TypeKind::PackedArray(_, ty) => ty.get_value_domain(),
             _ => None,
         }
     }
@@ -204,6 +211,7 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(..) => Some(Sign::Unsigned),
             TypeKind::BitScalar { sign, .. } => Some(sign),
             TypeKind::BitVector { sign, .. } => Some(sign),
+            // TypeKind::PackedArray(_, ty) => ty.get_sign(),
             _ => None,
         }
     }
@@ -243,6 +251,45 @@ impl<'t> TypeKind<'t> {
     /// Returns false for types which have no sign.
     pub fn is_signed(&self) -> bool {
         self.get_sign() == Some(Sign::Signed)
+    }
+
+    /// Change the value domain of a type.
+    pub fn change_value_domain<'gcx>(
+        &'gcx self,
+        cx: &impl Context<'gcx>,
+        domain: Domain,
+    ) -> Type<'gcx> {
+        match *self {
+            TypeKind::Bit(_) => cx.intern_type(TypeKind::BitScalar {
+                domain,
+                sign: Sign::Unsigned,
+            }),
+            TypeKind::Int(size, _) => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign: Sign::Signed,
+                range: Range {
+                    size,
+                    dir: RangeDir::Down,
+                    offset: 0isize,
+                },
+                dubbed: true,
+            }),
+            TypeKind::BitScalar { sign, .. } => {
+                cx.intern_type(TypeKind::BitScalar { domain, sign })
+            }
+            TypeKind::BitVector {
+                sign,
+                range,
+                dubbed,
+                ..
+            } => cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed,
+            }),
+            _ => self,
+        }
     }
 
     /// Change the sign of a simple bit type.
