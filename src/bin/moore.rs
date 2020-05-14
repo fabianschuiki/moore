@@ -543,7 +543,7 @@ impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
         }
 
         // Report the cast type.
-        if let Some(cast) = svlog::typeck::cast_type(self.0, id, self.1) {
+        if let Some(cast) = self.0.cast_type(id, self.1) {
             println!("{}: cast_type({}) = {}", line, ext, cast.ty);
             println!("{}: cast_chain({}) = {}", line, ext, cast);
         }

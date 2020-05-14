@@ -419,7 +419,7 @@ fn map_type_kind<'gcx>(
 }
 
 /// Get the cast type of a node.
-pub fn cast_type<'gcx>(
+pub(crate) fn cast_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
@@ -1525,6 +1525,7 @@ fn type_context_imposed_by_stmt<'gcx>(
 }
 
 /// A type resulting from a sequence of casts.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CastType<'a> {
     /// The initial type before casting.
     pub init: Type<'a>,
@@ -1535,7 +1536,7 @@ pub struct CastType<'a> {
 }
 
 /// A cast operation.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CastOp {
     /// Cast to a simple bit vector type.
     SimpleBitVector,

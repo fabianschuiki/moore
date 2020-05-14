@@ -29,7 +29,7 @@ use crate::{
     hir::{self, AccessTable, HirNode},
     resolver::StructDef,
     ty::{Type, TypeKind},
-    typeck::TypeContext,
+    typeck::{CastType, TypeContext},
     value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
@@ -613,6 +613,12 @@ pub(super) mod queries {
                 use fn typeck::map_to_type;
             }
 
+            /// Get the cast type of a node.
+            fn cast_type(node_id: NodeId, env: ParamEnv) -> Option<CastType<'a>> {
+                type CastTypeQuery;
+                use fn typeck::cast_type;
+            }
+
             /// Get the self-determined type of a node.
             fn self_determined_type(node_id: NodeId, env: ParamEnv) -> Option<Type<'a>> {
                 type SelfDeterminedTypeQuery;
@@ -759,6 +765,7 @@ pub(super) mod queries {
                 fn param_env() for ParamEnvQuery<'gcx>;
                 fn type_of() for TypeOfQuery<'gcx>;
                 fn map_to_type() for MapToTypeQuery<'gcx>;
+                fn cast_type() for CastTypeQuery<'gcx>;
                 fn self_determined_type() for SelfDeterminedTypeQuery<'gcx>;
                 fn need_self_determined_type() for NeedSelfDeterminedTypeQuery<'gcx>;
                 fn operation_type() for OperationTypeQuery<'gcx>;
