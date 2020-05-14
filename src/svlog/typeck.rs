@@ -135,7 +135,7 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         // otherwise fall back to a self-determined mode.
         hir::ExprKind::UnsizedConst(..) => cx
             .type_context(expr.id, env)
-            .map(|x| x.ty())
+            .and_then(|x| x.ty().get_simple_bit_vector(cx, env, false))
             .unwrap_or_else(|| cx.need_self_determined_type(expr.id, env)),
 
         // Unary operators either return their internal operation type, or they
@@ -440,6 +440,47 @@ fn cast_expr_type<'gcx>(
     expr: &'gcx hir::Expr,
     env: ParamEnv,
 ) -> CastType<'gcx> {
+    let cast = cast_expr_type_inner(cx, expr, env);
+    if cx.sess().has_verbosity(Verbosity::CASTS) && !cast.is_error() && !cast.casts.is_empty() {
+        let mut d =
+            DiagBuilder2::note(format!("cast: `{}` to `{}`", cast.init, cast.ty)).span(expr.span);
+        for (op, ty) in &cast.casts {
+            let msg = match *op {
+                CastOp::SimpleBitVector => format!("cast to simple bit vector type `{}`", ty),
+                CastOp::Bool => format!("cast to boolean `{}`", ty),
+                CastOp::Sign(sign) => format!("sign cast to {} type `{}`", sign, ty),
+                CastOp::Range(_, signed) => format!(
+                    "{} size cast to `{}`",
+                    match signed {
+                        true => "sign-extended",
+                        false => "zero-extended",
+                    },
+                    ty
+                ),
+                CastOp::Domain(domain) => format!(
+                    "cast to {} `{}`",
+                    match domain {
+                        ty::Domain::TwoValued => "two-valued",
+                        ty::Domain::FourValued => "four-valued",
+                    },
+                    ty
+                ),
+                CastOp::Struct => format!("unpack as struct `{}`", ty),
+                CastOp::Array => format!("unpack as array `{}`", ty),
+            };
+            d = d.add_note(msg);
+        }
+        cx.emit(d);
+    }
+    cast
+}
+
+/// Get the cast type of an expression.
+fn cast_expr_type_inner<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx hir::Expr,
+    env: ParamEnv,
+) -> CastType<'gcx> {
     trace!(
         "Computing cast type of `{}` (line {})",
         expr.span().extract(),
@@ -525,20 +566,6 @@ fn cast_expr_type<'gcx>(
         TypeContext::Type(ty) => ty,
     };
 
-    // Change signs.
-    if cast.ty.get_sign() != context.get_sign() && context.get_sign().is_some() {
-        trace!(
-            "  Casting sign from {:?} to {:?}",
-            cast.ty.get_sign(),
-            context.get_sign()
-        );
-        let sign = context.get_sign().unwrap();
-        cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
-    }
-    if cast.is_error() {
-        return cast;
-    }
-
     // Change size.
     let context_sbvt = if context.is_simple_bit_vector() {
         Some(context)
@@ -569,6 +596,20 @@ fn cast_expr_type<'gcx>(
             range
         );
         cast.add_cast(CastOp::Range(range, cast.ty.is_signed()), ty);
+    }
+    if cast.is_error() {
+        return cast;
+    }
+
+    // Change signs.
+    if cast.ty.get_sign() != context.get_sign() && context.get_sign().is_some() {
+        trace!(
+            "  Casting sign from {:?} to {:?}",
+            cast.ty.get_sign(),
+            context.get_sign()
+        );
+        let sign = context.get_sign().unwrap();
+        cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
     }
     if cast.is_error() {
         return cast;
