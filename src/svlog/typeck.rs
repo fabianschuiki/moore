@@ -592,6 +592,16 @@ fn cast_expr_type<'gcx>(
         return cast;
     }
 
+    // Unpack the simple bit vector as struct or array.
+    if context.is_struct() {
+        cast.add_cast(CastOp::Struct, context);
+    } else if context.is_array() {
+        cast.add_cast(CastOp::Array, context);
+    }
+    if cast.is_error() {
+        return cast;
+    }
+
     // If types match now, we're good.
     if ty::identical(context, cast.ty) {
         return cast;
@@ -1496,6 +1506,10 @@ pub enum CastOp {
     Range(ty::Range, bool),
     /// Cast to a different domain.
     Domain(ty::Domain),
+    /// Cast to a struct,
+    Struct,
+    /// Cast to an array,
+    Array,
 }
 
 impl<'a> CastType<'a> {
