@@ -91,8 +91,7 @@ impl std::fmt::Debug for Range {
 impl<'t> TypeKind<'t> {
     /// Check if this is the error type.
     pub fn is_error(&self) -> bool {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.is_error(),
+        match *self.resolve_name() {
             TypeKind::Error => true,
             _ => false,
         }
@@ -100,8 +99,7 @@ impl<'t> TypeKind<'t> {
 
     /// Check if this is the void type.
     pub fn is_void(&self) -> bool {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.is_void(),
+        match *self.resolve_name() {
             TypeKind::Void => true,
             _ => false,
         }
@@ -109,8 +107,7 @@ impl<'t> TypeKind<'t> {
 
     /// Check if this is a struct type.
     pub fn is_struct(&self) -> bool {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.is_struct(),
+        match *self.resolve_name() {
             TypeKind::Struct(..) => true,
             _ => false,
         }
@@ -118,8 +115,7 @@ impl<'t> TypeKind<'t> {
 
     /// Check if this is an array type.
     pub fn is_array(&self) -> bool {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.is_array(),
+        match *self.resolve_name() {
             TypeKind::PackedArray(..) => true,
             _ => false,
         }
@@ -127,8 +123,7 @@ impl<'t> TypeKind<'t> {
 
     /// Get the definition of a struct.
     pub fn get_struct_def(&self) -> Option<NodeId> {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.get_struct_def(),
+        match *self.resolve_name() {
             TypeKind::Struct(id) => Some(id),
             _ => None,
         }
@@ -136,8 +131,7 @@ impl<'t> TypeKind<'t> {
 
     /// Get the element type of an array.
     pub fn get_array_element(&self) -> Option<Type<'t>> {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.get_array_element(),
+        match *self.resolve_name() {
             TypeKind::PackedArray(_, e) => Some(e),
             _ => None,
         }
@@ -145,8 +139,7 @@ impl<'t> TypeKind<'t> {
 
     /// Get the length of an array.
     pub fn get_array_length(&self) -> Option<usize> {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.get_array_length(),
+        match *self.resolve_name() {
             TypeKind::PackedArray(l, _) => Some(l),
             _ => None,
         }
@@ -156,10 +149,9 @@ impl<'t> TypeKind<'t> {
     ///
     /// Panics if the type is not an integer.
     pub fn width(&self) -> usize {
-        match *self {
+        match *self.resolve_name() {
             TypeKind::Bit(_) => 1,
             TypeKind::Int(w, _) => w,
-            TypeKind::Named(_, _, ty) => ty.width(),
             TypeKind::BitScalar { .. } => 1,
             TypeKind::BitVector { range, .. } => range.size,
             _ => panic!("{:?} has no width", self),
@@ -168,8 +160,7 @@ impl<'t> TypeKind<'t> {
 
     /// Check if this is a bit vector type.
     pub fn is_bit_vector(&self) -> bool {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.is_bit_vector(),
+        match *self.resolve_name() {
             TypeKind::BitVector { .. } => true,
             _ => false,
         }
@@ -177,8 +168,7 @@ impl<'t> TypeKind<'t> {
 
     /// Check if this is a bit scalar type.
     pub fn is_bit_scalar(&self) -> bool {
-        match *self {
-            TypeKind::Named(_, _, ty) => ty.is_bit_scalar(),
+        match *self.resolve_name() {
             TypeKind::BitScalar { .. } => true,
             _ => false,
         }
@@ -194,7 +184,7 @@ impl<'t> TypeKind<'t> {
 
     /// Return the domain of the type, if it has one.
     pub fn get_value_domain(&self) -> Option<Domain> {
-        match *self {
+        match *self.resolve_name() {
             TypeKind::Bit(d) => Some(d),
             TypeKind::Int(_, d) => Some(d),
             TypeKind::BitScalar { domain, .. } => Some(domain),
@@ -206,7 +196,7 @@ impl<'t> TypeKind<'t> {
 
     /// Return the sign of the type, if it has one.
     pub fn get_sign(&self) -> Option<Sign> {
-        match *self {
+        match *self.resolve_name() {
             TypeKind::Bit(..) => Some(Sign::Unsigned),
             TypeKind::Int(..) => Some(Sign::Unsigned),
             TypeKind::BitScalar { sign, .. } => Some(sign),
@@ -218,7 +208,7 @@ impl<'t> TypeKind<'t> {
 
     /// Return the range of the type, if it has one.
     pub fn get_range(&self) -> Option<Range> {
-        match self {
+        match self.resolve_name() {
             TypeKind::Bit(..) => Some(Range {
                 size: 1,
                 dir: RangeDir::Down,
@@ -259,7 +249,7 @@ impl<'t> TypeKind<'t> {
         cx: &impl Context<'gcx>,
         domain: Domain,
     ) -> Type<'gcx> {
-        match *self {
+        match *self.resolve_name() {
             TypeKind::Bit(_) => cx.intern_type(TypeKind::BitScalar {
                 domain,
                 sign: Sign::Unsigned,
@@ -294,7 +284,7 @@ impl<'t> TypeKind<'t> {
 
     /// Change the sign of a simple bit type.
     pub fn change_sign<'gcx>(&'gcx self, cx: &impl Context<'gcx>, sign: Sign) -> Type<'gcx> {
-        match *self {
+        match *self.resolve_name() {
             TypeKind::BitScalar { domain, .. } => {
                 cx.intern_type(TypeKind::BitScalar { domain, sign })
             }
@@ -315,7 +305,7 @@ impl<'t> TypeKind<'t> {
 
     /// Change the range of a simple bit type.
     pub fn change_range<'gcx>(&'gcx self, cx: &impl Context<'gcx>, range: Range) -> Type<'gcx> {
-        match *self {
+        match *self.resolve_name() {
             TypeKind::Bit(domain) => cx.intern_type(TypeKind::BitVector {
                 domain,
                 sign: Sign::Unsigned,
