@@ -181,7 +181,7 @@ fn lower_expr_inner<'gcx>(
             } else {
                 BigInt::from((arg_int - BigInt::one()).bits())
             };
-            Ok(builder.constant(value::make_int(arg_val.ty, value)))
+            Ok(builder.constant(value::make_int(ty, value)))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
             let ty = cx.type_of(arg, env)?;
@@ -403,6 +403,9 @@ fn lower_expr_inner<'gcx>(
             // Determine the intermediate type for the comparisons.
             let comp_ty = cx.need_operation_type(expr_id, env);
 
+            // Determine the result type for the comparison.
+            let out_ty = cx.cast_type(expr_id, env).unwrap().init;
+
             // Compare the LHS against all ranges.
             let lhs = cx.mir_rvalue(expr, env);
             for r in ranges {
@@ -413,6 +416,7 @@ fn lower_expr_inner<'gcx>(
                         make_int_comparison(
                             &builder.with(expr),
                             IntCompOp::Eq,
+                            out_ty,
                             comp_ty,
                             lhs,
                             expr_rv,
@@ -425,6 +429,7 @@ fn lower_expr_inner<'gcx>(
                         let lo_chk = make_int_comparison(
                             &builder.with(lo),
                             IntCompOp::Geq,
+                            out_ty,
                             comp_ty,
                             lhs,
                             lo_rv,
@@ -432,6 +437,7 @@ fn lower_expr_inner<'gcx>(
                         let hi_chk = make_int_comparison(
                             &builder.with(hi),
                             IntCompOp::Leq,
+                            out_ty,
                             comp_ty,
                             lhs,
                             hi_rv,
@@ -1517,7 +1523,7 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::Lt
         | hir::BinaryOp::Leq
         | hir::BinaryOp::Gt
-        | hir::BinaryOp::Geq => lower_int_comparison(builder, op, lhs, rhs),
+        | hir::BinaryOp::Geq => lower_int_comparison(builder, ty, op, lhs, rhs),
         hir::BinaryOp::LogicShL
         | hir::BinaryOp::LogicShR
         | hir::BinaryOp::ArithShL
@@ -1632,6 +1638,7 @@ fn lower_int_binary_arith<'gcx>(
 /// Map an integer comparison operator to MIR.
 fn lower_int_comparison<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
+    out_ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
@@ -1654,21 +1661,22 @@ fn lower_int_comparison<'gcx>(
     };
 
     // Assemble the node.
-    make_int_comparison(builder, op, ty, lhs, rhs)
+    make_int_comparison(builder, op, out_ty, ty, lhs, rhs)
 }
 
 /// Map an integer comparison operator to MIR.
 fn make_int_comparison<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     op: IntCompOp,
+    out_ty: Type<'gcx>,
     ty: Type<'gcx>,
     lhs: &'gcx Rvalue<'gcx>,
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    assert!(ty::identical(lhs.ty, ty));
-    assert!(ty::identical(rhs.ty, ty));
+    assert_span!(ty::identical(lhs.ty, ty), builder.span, builder.cx);
+    assert_span!(ty::identical(rhs.ty, ty), builder.span, builder.cx);
     builder.build(
-        ty.get_value_domain().unwrap().bit_type(),
+        out_ty,
         RvalueKind::IntComp {
             op,
             sign: ty.get_sign().unwrap(),
@@ -1962,9 +1970,12 @@ fn implicit_cast_to_bool<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     value: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    assert!(
-        ty::identical(value.ty, &ty::BIT_TYPE),
-        "casts should be inferred by the type system"
+    assert_span!(
+        ty::identical(value.ty, &ty::BIT_TYPE) || ty::identical(value.ty, &ty::LOGIC_TYPE),
+        builder.span,
+        builder.cx,
+        "casts should be inferred by the type system (got `{}` as bool)",
+        value.ty
     );
     value
     // // Map the value to a simple bit type.
