@@ -467,6 +467,7 @@ fn cast_expr_type<'gcx>(
                 ),
                 CastOp::Struct => format!("unpack as struct `{}`", ty),
                 CastOp::Array => format!("unpack as array `{}`", ty),
+                CastOp::Transmute => format!("transmute as `{}`", ty),
             };
             d = d.add_note(msg);
         }
@@ -575,21 +576,7 @@ fn cast_expr_type_inner<'gcx>(
     let range = context_sbvt.and_then(|ty| ty.get_range());
     if cast.ty.get_range() != range && range.is_some() {
         let range = range.unwrap();
-        let mut ty = cast.ty.change_range(cx, range);
-        // Drop a [0:0] when the target is a scalar. This is pretty ugly and
-        // will need to be reworked once #146 lands.
-        if let (
-            Some(TypeKind::BitScalar { .. }),
-            &TypeKind::BitVector {
-                domain,
-                sign,
-                range: ty::Range { size: 1, .. },
-                dubbed: _,
-            },
-        ) = (context_sbvt, ty)
-        {
-            ty = cx.intern_type(TypeKind::BitScalar { domain, sign });
-        }
+        let ty = cast.ty.change_range(cx, range);
         trace!(
             "  Casting range from {} to {}",
             cast.ty.get_range().unwrap(),
@@ -599,6 +586,41 @@ fn cast_expr_type_inner<'gcx>(
     }
     if cast.is_error() {
         return cast;
+    }
+
+    // Cast bit scalars from and to bit vectors.
+    match (cast.ty, context_sbvt) {
+        // Drop a [0:0] when the target is a scalar.
+        (
+            &TypeKind::BitVector {
+                domain,
+                sign,
+                range: ty::Range { size: 1, .. },
+                dubbed: _,
+            },
+            Some(&TypeKind::BitScalar { .. }),
+        ) => {
+            let ty = cx.intern_type(TypeKind::BitScalar { domain, sign });
+            cast.add_cast(CastOp::Transmute, ty);
+        }
+        // Add a [0:0] when the target is such a vector.
+        (
+            &TypeKind::BitScalar { domain, sign },
+            Some(&TypeKind::BitVector {
+                range: range @ ty::Range { size: 1, .. },
+                dubbed,
+                ..
+            }),
+        ) => {
+            let ty = cx.intern_type(TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed,
+            });
+            cast.add_cast(CastOp::Transmute, ty);
+        }
+        _ => (),
     }
 
     // Change signs.
@@ -1548,10 +1570,12 @@ pub enum CastOp {
     Range(ty::Range, bool),
     /// Cast to a different domain.
     Domain(ty::Domain),
-    /// Cast to a struct,
+    /// Cast to a struct.
     Struct,
-    /// Cast to an array,
+    /// Cast to an array.
     Array,
+    /// Cast a scalar from/to 1-element vector.
+    Transmute,
 }
 
 impl<'a> CastType<'a> {

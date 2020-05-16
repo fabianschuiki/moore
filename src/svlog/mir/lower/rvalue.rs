@@ -645,6 +645,25 @@ fn lower_cast<'gcx>(
                 assert_span!(to.is_array(), value.span, builder.cx);
                 value = unpack_array(builder, to, value);
             }
+            CastOp::Transmute => {
+                if let TypeKind::BitScalar { .. } = to {
+                    value = builder.build(
+                        to,
+                        RvalueKind::CastVectorToAtom {
+                            domain: value.ty.get_value_domain().unwrap(),
+                            value,
+                        },
+                    );
+                } else {
+                    value = builder.build(
+                        to,
+                        RvalueKind::CastAtomToVector {
+                            domain: value.ty.get_value_domain().unwrap(),
+                            value,
+                        },
+                    );
+                }
+            }
         }
         if !ty::identical(value.ty, to) {
             error!(
