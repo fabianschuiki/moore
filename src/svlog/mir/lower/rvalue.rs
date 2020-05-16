@@ -87,6 +87,14 @@ pub fn lower_expr<'gcx>(
 
     // Lower the expression.
     let rvalue = lower_expr_inner(&builder, hir, cast.init).unwrap_or_else(|_| builder.error());
+    assert_span!(
+        ty::identical(rvalue.ty, cast.init),
+        hir.span,
+        cx,
+        "rvalue lowering produced type `{}`, expected `{}`",
+        rvalue.ty,
+        cast.init
+    );
 
     // Lower the casts.
     lower_cast(&builder, rvalue, cast)
@@ -566,13 +574,22 @@ fn lower_cast<'gcx>(
     if to.is_error() {
         return builder.error();
     }
+    assert_span!(
+        ty::identical(value.ty, to.init),
+        value.span,
+        builder.cx,
+        "rvalue type `{}` does not match initial type of cast `{}`",
+        value.ty,
+        to
+    );
+    debug!("Lowering cast `{}`", to);
 
     // Lower each cast individually.
     for &(op, to) in &to.casts {
-        debug!("Lowering {:?} cast of `{}` to `{}`", op, value.ty, to);
+        debug!("- {:?} from `{}` to `{}`", op, value.ty, to);
         match op {
             CastOp::Bool => {
-                assert!(value.ty.is_simple_bit_vector());
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
                 value = builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value));
             }
             CastOp::SimpleBitVector => {
@@ -585,13 +602,13 @@ fn lower_cast<'gcx>(
                 }
             }
             CastOp::Sign(sign) => {
-                assert!(value.ty.is_simple_bit_vector());
-                assert!(to.is_simple_bit_vector());
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
                 value = builder.build(to, RvalueKind::CastSign(sign, value));
             }
             CastOp::Range(range, signed) => {
-                assert!(value.ty.is_simple_bit_vector());
-                assert!(to.is_simple_bit_vector());
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
                 let kind = if value.ty.get_range().unwrap().size < range.size {
                     match signed {
                         true => RvalueKind::SignExtend(range.size, value),
@@ -613,21 +630,29 @@ fn lower_cast<'gcx>(
                 );
             }
             CastOp::Struct => {
-                assert!(value.ty.is_simple_bit_vector());
-                assert!(to.is_struct());
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                assert_span!(to.is_struct(), value.span, builder.cx);
                 value = unpack_struct(builder, to, value);
             }
             CastOp::Array => {
-                assert!(value.ty.is_simple_bit_vector());
-                assert!(to.is_array());
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                assert_span!(to.is_array(), value.span, builder.cx);
                 value = unpack_array(builder, to, value);
             }
+        }
+        if !ty::identical(value.ty, to) {
+            error!(
+                "Cast {:?} should have produced `{}`, but value is `{}`",
+                op, to, value.ty
+            );
         }
     }
 
     // Check that the casts have actually produced the expected output type.
-    assert!(
+    assert_span!(
         ty::identical(value.ty, to.ty),
+        value.span,
+        builder.cx,
         "rvalue type `{}` does not match final cast type `{}` after lower_cast",
         value.ty,
         to.ty

@@ -16,6 +16,30 @@ pub(crate) use moore_common as common;
 #[macro_use]
 mod salsa;
 
+#[macro_export]
+macro_rules! assert_span {
+    ($cond:expr, $span:expr, $emitter:expr) => ({
+        $crate::assert_span!(@IMPL $cond, $span, $emitter, "assertion failed: {}", stringify!($cond))
+    });
+    ($cond:expr, $span:expr, $emitter:expr,) => ({
+        $crate::assert_span!(@IMPL $cond, $span, $emitter, "assertion failed: {}", stringify!($cond))
+    });
+    ($cond:expr, $span:expr, $emitter:expr, $($arg:tt)+) => ({
+        $crate::assert_span!(@IMPL $cond, $span, $emitter, $($arg)+)
+    });
+    (@IMPL $cond:expr, $span:expr, $emitter:expr, $($arg:tt)*) => ({
+        if !$cond {
+            let msg = format!($($arg)*);
+            $emitter.emit(
+                moore_common::errors::DiagBuilder2::bug(&msg)
+                .span($span)
+                .add_note(format!("Assertion failed: {}", stringify!($cond)))
+            );
+            panic!("{}", msg);
+        }
+    });
+}
+
 mod ast_map;
 mod codegen;
 mod context;
