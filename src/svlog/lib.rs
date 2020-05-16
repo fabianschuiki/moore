@@ -34,9 +34,23 @@ macro_rules! assert_span {
                 moore_common::errors::DiagBuilder2::bug(&msg)
                 .span($span)
                 .add_note(format!("Assertion failed: {}", stringify!($cond)))
+                .add_note(format!("Encountered at {}:{}", file!(), line!()))
             );
             panic!("{}", msg);
         }
+    });
+}
+
+#[macro_export]
+macro_rules! bug_span {
+    ($span:expr, $emitter:expr, $($arg:tt)+) => ({
+        let msg = format!($($arg)*);
+        $emitter.emit(
+            moore_common::errors::DiagBuilder2::bug(&msg)
+            .span($span)
+            .add_note(format!("Encountered at {}:{}", file!(), line!()))
+        );
+        panic!("{}", msg);
     });
 }
 
