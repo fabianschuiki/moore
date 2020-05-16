@@ -1632,7 +1632,7 @@ where
                     hir::LoopKind::While(_) => None,
                     hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool(cond, env)?),
                     hir::LoopKind::For(_, _, step) => {
-                        self.emit_rvalue_bool(step, env)?;
+                        self.emit_rvalue(step, env)?;
                         None
                     }
                 };
