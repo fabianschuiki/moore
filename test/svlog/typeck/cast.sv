@@ -23,7 +23,7 @@ module foo;
     assign b = v;
     // CHECK: 21: cast_chain(v) = bit [7:0] -> Bool bit
     // CHECK: 22: cast_chain(v) = bit [7:0] -> Bool bit
-    // CHECK: 23: cast_chain(v) = bit [7:0] -> Range([0:0], false) bit
+    // CHECK: 23: cast_chain(v) = bit [7:0] -> Range([0:0], false) bit [0:0] -> Transmute bit
 
     assign s = v;
     assign s = s2;
