@@ -994,7 +994,10 @@ fn self_determined_expr_type<'gcx>(
             | hir::UnaryOp::RedXor
             | hir::UnaryOp::RedNand
             | hir::UnaryOp::RedNor
-            | hir::UnaryOp::RedXnor => Some(&ty::LOGIC_TYPE),
+            | hir::UnaryOp::RedXnor => cx
+                .self_determined_type(arg, env)
+                .and_then(|ty| ty.get_value_domain())
+                .map(|dom| dom.bit_type()),
 
             // For all other cases we try to infer the argument's type.
             hir::UnaryOp::Neg

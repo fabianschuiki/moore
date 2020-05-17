@@ -1495,7 +1495,7 @@ fn lower_unary<'gcx>(
     match op {
         hir::UnaryOp::Pos | hir::UnaryOp::Neg => lower_int_unary_arith(builder, ty, op, arg),
         hir::UnaryOp::BitNot => lower_unary_bitwise(builder, ty, op, arg),
-        hir::UnaryOp::LogicNot => lower_unary_logic(builder, op, arg),
+        hir::UnaryOp::LogicNot => lower_unary_logic(builder, ty, op, arg),
         hir::UnaryOp::RedAnd
         | hir::UnaryOp::RedOr
         | hir::UnaryOp::RedXor
@@ -1535,7 +1535,7 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::ArithShL
         | hir::BinaryOp::ArithShR => lower_shift(builder, ty, op, lhs, rhs),
         hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => {
-            lower_binary_logic(builder, op, lhs, rhs)
+            lower_binary_logic(builder, ty, op, lhs, rhs)
         }
         hir::BinaryOp::BitAnd
         | hir::BinaryOp::BitOr
@@ -1865,6 +1865,7 @@ fn make_binary_bitwise<'gcx>(
 /// Map a unary logic operator to MIR.
 fn lower_unary_logic<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
@@ -1882,12 +1883,13 @@ fn lower_unary_logic<'gcx>(
     };
 
     // Assemble the node.
-    builder.build(&ty::LOGIC_TYPE, RvalueKind::UnaryBitwise { op, arg })
+    builder.build(ty, RvalueKind::UnaryBitwise { op, arg })
 }
 
 /// Map a binary logic operator to MIR.
 fn lower_binary_logic<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
+    ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
@@ -1912,7 +1914,7 @@ fn lower_binary_logic<'gcx>(
     };
 
     // Assemble the node.
-    builder.build(&ty::LOGIC_TYPE, RvalueKind::BinaryBitwise { op, lhs, rhs })
+    builder.build(ty, RvalueKind::BinaryBitwise { op, lhs, rhs })
 }
 
 /// Map a reduction operator to MIR.
