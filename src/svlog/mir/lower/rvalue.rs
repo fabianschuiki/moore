@@ -197,7 +197,7 @@ fn lower_expr_inner<'gcx>(
                 HirNode::VarDecl(decl) => Ok(builder.build(ty, RvalueKind::Var(decl.id))),
                 HirNode::IntPort(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
                 HirNode::EnumVariant(..) | HirNode::ValueParam(..) | HirNode::GenvarDecl(..) => {
-                    let k = builder.cx.constant_value_of(expr_id, env)?;
+                    let k = builder.cx.constant_value_of(binding, env)?;
                     Ok(builder.build(ty, RvalueKind::Const(k)))
                 }
                 x => {

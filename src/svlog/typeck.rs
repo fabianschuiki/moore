@@ -1493,6 +1493,12 @@ fn type_context_imposed_by_expr<'gcx>(
             type_context_of_sign_cast(cx, expr.id, arg, env, sign.value)
         }
 
+        // Size casts simply impose their final type as the type context onto
+        // the cast argument.
+        hir::ExprKind::CastSize(_, arg) if onto == arg => {
+            Some(cx.need_self_determined_type(expr.id, env).into())
+        }
+
         _ => None,
     }
 }
