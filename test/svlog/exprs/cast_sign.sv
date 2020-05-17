@@ -9,8 +9,8 @@ module foo;
         signed'(x);
         signed'(y);
     end
-    // CHECK: 7: type(unsigned'(x)) = int unsigned
-    // CHECK: 8: type(unsigned'(y)) = bit
-    // CHECK: 9: type(signed'(x)) = int
-    // CHECK: 10: type(signed'(y)) = bit signed
+    // CHECK: 7: cast_type(unsigned'(x)) = int unsigned
+    // CHECK: 8: cast_type(unsigned'(y)) = bit
+    // CHECK: 9: cast_type(signed'(x)) = int
+    // CHECK: 10: cast_type(signed'(y)) = bit signed
 endmodule

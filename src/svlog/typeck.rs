@@ -1481,14 +1481,39 @@ fn type_context_imposed_by_expr<'gcx>(
             cx.self_determined_type(expr.id, env).map(Into::into)
         }
 
-        // Sign casts forward their type context to the argument..
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(_))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(_)) => {
-            cx.self_determined_type(expr.id, env).map(Into::into)
+        // Sign casts either forward their type context with the sign tweaked,
+        // or the argument's self-determined type, with the sign tweaked.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) if onto == arg => {
+            type_context_of_sign_cast(cx, expr.id, arg, env, ty::Sign::Signed)
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) if onto == arg => {
+            type_context_of_sign_cast(cx, expr.id, arg, env, ty::Sign::Unsigned)
+        }
+        hir::ExprKind::CastSign(sign, arg) if onto == arg => {
+            type_context_of_sign_cast(cx, expr.id, arg, env, sign.value)
         }
 
         _ => None,
     }
+}
+
+/// Determine the type context of a sign cast.
+fn type_context_of_sign_cast<'gcx>(
+    cx: &impl Context<'gcx>,
+    cast: NodeId,
+    arg: NodeId,
+    env: ParamEnv,
+    sign: ty::Sign,
+) -> Option<TypeContext<'gcx>> {
+    cx.type_context(cast, env)
+        .map(|tycx| match tycx {
+            TypeContext::Type(ty) => TypeContext::Type(ty.change_sign(cx, sign)),
+            x => x,
+        })
+        .or_else(|| {
+            cx.self_determined_type(arg, env)
+                .map(|ty| ty.change_sign(cx, sign).into())
+        })
 }
 
 /// Get the type context imposed by a statement.

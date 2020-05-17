@@ -322,13 +322,6 @@ fn lower_expr_inner<'gcx>(
             Ok(repeat)
         }
 
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(id)) => {
-            Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Signed))
-        }
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(id)) => {
-            Ok(lower_expr_and_cast_sign(&builder, id, ty::Sign::Unsigned))
-        }
-
         hir::ExprKind::Index(target, mode) => {
             let (base, length) = compute_indexing(cx, builder.expr, env, mode)?;
 
@@ -379,19 +372,13 @@ fn lower_expr_inner<'gcx>(
             Ok(builder.build(ty, RvalueKind::Member { value, field }))
         }
 
-        hir::ExprKind::Cast(ty, expr) => {
-            let ty = cx.map_to_type(ty, env)?;
-            Ok(lower_expr_and_cast(cx, expr, env, ty))
-        }
-
-        hir::ExprKind::CastSign(sign, expr) => {
-            Ok(lower_expr_and_cast_sign(&builder, expr, sign.value))
-        }
-
-        hir::ExprKind::CastSize(_, expr) => {
-            let ty = cx.need_self_determined_type(expr_id, env);
-            Ok(lower_expr_and_cast(cx, expr, env, ty))
-        }
+        // Casts are handled by the `cast_type` query, and the cast handling
+        // that happens after the lowering to an MIR rvalue.
+        hir::ExprKind::Cast(_, expr)
+        | hir::ExprKind::CastSign(_, expr)
+        | hir::ExprKind::CastSize(_, expr)
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(expr))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(expr)) => Ok(lower_expr(cx, expr, env)),
 
         hir::ExprKind::Inside(expr, ref ranges) => {
             // By default nothing matches.
