@@ -1323,6 +1323,20 @@ pub(crate) fn type_context<'gcx>(
         {
             Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
         }
+        HirNode::Inst(_inst) => {
+            bug_span!(
+                cx.span(onto),
+                cx,
+                "instance ports do not impose their type as context on assigned expressions"
+            );
+        }
+        HirNode::InstTarget(_inst) => {
+            bug_span!(
+                cx.span(onto),
+                cx,
+                "instance parameters do not impose their type as context on assigned expressions"
+            );
+        }
         _ => None,
     }
 }
