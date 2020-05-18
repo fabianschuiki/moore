@@ -74,6 +74,11 @@ pub fn lower_expr<'gcx>(
         expr: expr_id,
         env,
     };
+    trace!(
+        "Lowering `{}` (line {})",
+        span.extract(),
+        span.begin().human_line()
+    );
 
     // Make sure we have an expression.
     let hir = match cx.hir_of(expr_id) {
@@ -575,7 +580,12 @@ fn lower_cast<'gcx>(
         value.ty,
         to
     );
-    debug!("Lowering cast `{}`", to);
+    trace!(
+        "Lowering cast `{}` of `{}` (line {})",
+        to,
+        value.span.extract(),
+        value.span.begin().human_line()
+    );
 
     // Lower each cast individually.
     for &(op, to) in &to.casts {
