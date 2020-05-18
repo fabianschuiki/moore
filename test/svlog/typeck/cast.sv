@@ -30,4 +30,16 @@ module foo;
     // CHECK: 28: cast_chain(v) = bit [7:0] -> Range([14:0], false) bit [14:0] -> Domain(FourValued) logic [14:0] -> Struct struct
     // CHECK: 29: cast_chain(s2) = struct -> SimpleBitVector logic [14:0] -> Struct struct
 
+    // Operation type casts
+
+    bit [5:0] a1;
+    bit [6:0] b1;
+
+    assign b = a1 == b1;
+    assign b = a1 != b1;
+    assign b = a1 > b1;
+    assign b = a1 >= b1;
+    assign b = a1 < b1;
+    assign b = a1 <= b1;
+
 endmodule

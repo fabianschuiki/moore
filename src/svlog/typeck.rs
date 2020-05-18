@@ -785,7 +785,7 @@ fn self_determined_expr_type<'gcx>(
         // Concatenation yields an unsigned logic vector whose bit width is the
         // sum of the simple bit vector types of each argument.
         //
-        // See "11.8.1 Rules for expression types".
+        // See §11.8.1 "Rules for expression types".
         hir::ExprKind::Concat(repeat, ref exprs) => {
             let mut failed = false;
 
@@ -838,6 +838,12 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::CastSign(sign, arg) => cx
             .self_determined_type(arg, env)
             .map(|x| x.change_sign(cx, sign.value)),
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx
+            .self_determined_type(arg, env)
+            .map(|x| x.change_sign(cx, Sign::Signed)),
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx
+            .self_determined_type(arg, env)
+            .map(|x| x.change_sign(cx, Sign::Unsigned)),
 
         // Sign casts trivially evaluate to the size-converted inner type.
         hir::ExprKind::CastSize(size, arg) => {
@@ -880,14 +886,6 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Some(&ty::INT_TYPE),
-
-        // Sign casts reflect their argument, but with the sign changed.
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx
-            .self_determined_type(arg, env)
-            .map(|x| x.change_sign(cx, Sign::Signed)),
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx
-            .self_determined_type(arg, env)
-            .map(|x| x.change_sign(cx, Sign::Unsigned)),
 
         // Member field accesses resolve to the type of the member.
         hir::ExprKind::Field(..) => Some(
@@ -988,16 +986,17 @@ fn self_determined_expr_type<'gcx>(
         // Some unary operators have a fully self-determined type.
         hir::ExprKind::Unary(op, arg) => match op {
             // Handle the self-determined cases.
-            hir::UnaryOp::LogicNot
-            | hir::UnaryOp::RedAnd
+            hir::UnaryOp::LogicNot => Some(&ty::LOGIC_TYPE),
+            hir::UnaryOp::RedAnd
             | hir::UnaryOp::RedOr
             | hir::UnaryOp::RedXor
             | hir::UnaryOp::RedNand
             | hir::UnaryOp::RedNor
-            | hir::UnaryOp::RedXnor => cx
-                .self_determined_type(arg, env)
-                .and_then(|ty| ty.get_value_domain())
-                .map(|dom| dom.bit_type()),
+            | hir::UnaryOp::RedXnor => cx.self_determined_type(arg, env).map(|ty| {
+                ty.get_value_domain()
+                    .map(|dom| dom.bit_type())
+                    .unwrap_or(ty)
+            }),
 
             // For all other cases we try to infer the argument's type.
             hir::UnaryOp::Neg
@@ -1453,19 +1452,10 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::UnaryOp::PreInc
             | hir::UnaryOp::PreDec
             | hir::UnaryOp::PostInc
-            | hir::UnaryOp::PostDec => cx.self_determined_type(expr.id, env).map(Into::into),
+            | hir::UnaryOp::PostDec => Some(cx.need_operation_type(expr.id, env).into()),
         },
 
         hir::ExprKind::Binary(op, lhs, _) => match op {
-            // The binary operators whose output type does not depend on the
-            // operands also do not impose a type context on their operands.
-            hir::BinaryOp::Eq
-            | hir::BinaryOp::Neq
-            | hir::BinaryOp::Lt
-            | hir::BinaryOp::Leq
-            | hir::BinaryOp::Gt
-            | hir::BinaryOp::Geq => None,
-
             // The logic operators require boolean arguments.
             hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(TypeContext::Bool),
 
@@ -1477,14 +1467,13 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::BinaryOp::ArithShL
             | hir::BinaryOp::ArithShR => {
                 if onto == lhs {
-                    cx.self_determined_type(expr.id, env).map(Into::into)
+                    Some(cx.need_operation_type(expr.id, env).into())
                 } else {
                     None
                 }
             }
 
-            // For all other cases we impose our self-determined type as
-            // context.
+            // For all other cases we impose the operator type.
             hir::BinaryOp::Add
             | hir::BinaryOp::Sub
             | hir::BinaryOp::Mul
@@ -1495,7 +1484,13 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::BinaryOp::BitOr
             | hir::BinaryOp::BitNor
             | hir::BinaryOp::BitXor
-            | hir::BinaryOp::BitXnor => cx.self_determined_type(expr.id, env).map(Into::into),
+            | hir::BinaryOp::BitXnor
+            | hir::BinaryOp::Eq
+            | hir::BinaryOp::Neq
+            | hir::BinaryOp::Lt
+            | hir::BinaryOp::Leq
+            | hir::BinaryOp::Gt
+            | hir::BinaryOp::Geq => Some(cx.need_operation_type(expr.id, env).into()),
         },
 
         // The ternary operator imposes its self-determined type as a context.
@@ -1503,45 +1498,22 @@ fn type_context_imposed_by_expr<'gcx>(
             cx.self_determined_type(expr.id, env).map(Into::into)
         }
 
-        // Sign casts either forward their type context with the sign tweaked,
-        // or the argument's self-determined type, with the sign tweaked.
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) if onto == arg => {
-            type_context_of_sign_cast(cx, expr.id, arg, env, ty::Sign::Signed)
-        }
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) if onto == arg => {
-            type_context_of_sign_cast(cx, expr.id, arg, env, ty::Sign::Unsigned)
-        }
-        hir::ExprKind::CastSign(sign, arg) if onto == arg => {
-            type_context_of_sign_cast(cx, expr.id, arg, env, sign.value)
-        }
-
-        // Size casts simply impose their final type as the type context onto
-        // the cast argument.
-        hir::ExprKind::CastSize(_, arg) if onto == arg => {
+        // Static casts are *not* assignment-like contexts. See §10.8
+        // "Assignment-like contexts". We use a trick here to get the implicit
+        // casting logic to do the cast for us: we determine the type of the
+        // argument after the cast, then impose that as its type context.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg))
+        | hir::ExprKind::Cast(_, arg)
+        | hir::ExprKind::CastSign(_, arg)
+        | hir::ExprKind::CastSize(_, arg)
+            if onto == arg =>
+        {
             Some(cx.need_self_determined_type(expr.id, env).into())
         }
 
         _ => None,
     }
-}
-
-/// Determine the type context of a sign cast.
-fn type_context_of_sign_cast<'gcx>(
-    cx: &impl Context<'gcx>,
-    cast: NodeId,
-    arg: NodeId,
-    env: ParamEnv,
-    sign: ty::Sign,
-) -> Option<TypeContext<'gcx>> {
-    cx.type_context(cast, env)
-        .map(|tycx| match tycx {
-            TypeContext::Type(ty) => TypeContext::Type(ty.change_sign(cx, sign)),
-            x => x,
-        })
-        .or_else(|| {
-            cx.self_determined_type(arg, env)
-                .map(|ty| ty.change_sign(cx, sign).into())
-        })
 }
 
 /// Get the type context imposed by a statement.
