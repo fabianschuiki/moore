@@ -1765,8 +1765,11 @@ fn lower_int_incdec<'gcx>(
         // Everything else we cannot do.
         // TODO(fschuiki): Technically `real` supports this operator as well...
         builder.cx.emit(
-            DiagBuilder2::error(format!("`{}` cannot be incremented/decremented", lv.ty))
-                .span(builder.span),
+            DiagBuilder2::error(format!(
+                "value of type `{}` cannot be incremented/decremented",
+                lv.ty
+            ))
+            .span(builder.span),
         );
         return builder.error();
     };
