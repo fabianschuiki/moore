@@ -118,36 +118,6 @@ fn lower_expr_inner<'gcx>(
     let span = cx.span(expr_id);
     let env = builder.env;
 
-    // Check whether the node has a constant value. This will allow us to
-    // quickly emit parameters and genvars.
-    let is_const = builder.cx.is_constant(expr_id).unwrap_or(false);
-
-    // // Try to extract the expr HIR for this node. Handle a few special cases
-    // // where the node is not technically an expression, but can be used as a
-    // // rvalue.
-    // let hir = match builder.cx.hir_of(expr_id)? {
-    //     HirNode::Expr(x) => x,
-    //     HirNode::VarDecl(decl) => {
-    //         let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Var(decl.id));
-    //         return Ok(lower_implicit_cast(builder, v, ty));
-    //     }
-    //     HirNode::IntPort(port) => {
-    //         let v = builder.build(builder.cx.type_of(expr_id, env)?, RvalueKind::Port(port.id));
-    //         return Ok(lower_implicit_cast(builder, v, ty));
-    //     }
-    //     HirNode::EnumVariant(..) => {
-    //         let k = builder.cx.constant_value_of(expr_id, env)?;
-    //         let v = builder.build(k.ty, RvalueKind::Const(k));
-    //         return Ok(lower_implicit_cast(builder, v, ty));
-    //     }
-    //     _ if is_const => {
-    //         let k = builder.cx.constant_value_of(expr_id, env)?;
-    //         let v = builder.build(k.ty, RvalueKind::Const(k));
-    //         return Ok(lower_implicit_cast(builder, v, ty));
-    //     }
-    //     x => unreachable!("rvalue for {:#?}", x),
-    // };
-
     // Determine the expression type and match on the various forms.
     match hir.kind {
         // Literals
@@ -523,7 +493,7 @@ fn lower_expr_and_cast<'gcx>(
     cx: &impl Context<'gcx>,
     expr_id: NodeId,
     env: ParamEnv,
-    target_ty: Type<'gcx>,
+    _target_ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     lower_expr(cx, expr_id, env)
     // let inner = cx.mir_rvalue(expr_id, env);
@@ -534,29 +504,6 @@ fn lower_expr_and_cast<'gcx>(
     //     env,
     // };
     // lower_implicit_cast(&builder, inner, target_ty)
-}
-
-/// Lower an HIR expression and implicitly cast to a different sign.
-fn lower_expr_and_cast_sign<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    expr_id: NodeId,
-    sign: ty::Sign,
-) -> &'gcx Rvalue<'gcx> {
-    lower_expr(builder.cx, expr_id, builder.env)
-    // let inner = builder.cx.mir_rvalue(expr_id, builder.env);
-    // if let Some(ty) = inner
-    //     .ty
-    //     .get_simple_bit_vector(builder.cx, builder.env, false)
-    // {
-    //     let ty = ty.change_sign(builder.cx, sign);
-    //     lower_implicit_cast(builder, inner, ty)
-    // } else {
-    //     let span = builder.cx.span(expr_id);
-    //     builder.cx.emit(
-    //         DiagBuilder2::error(format!("`{}` cannot be sign-cast", span.extract())).span(span),
-    //     );
-    //     builder.error()
-    // }
 }
 
 /// Generate the nodes necessary for a cast operation.
@@ -702,272 +649,6 @@ fn pack_simple_bit_vector<'gcx>(
     out
 }
 
-/// Generate the nodes necessary to implicitly cast and rvalue to a type.
-///
-/// If the cast is not possible, emit some helpful diagnostics.
-fn lower_implicit_cast<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    value: &'gcx Rvalue<'gcx>,
-    to: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    let from = value.ty;
-    let verbose = builder.cx.sess().has_verbosity(Verbosity::CASTS);
-
-    // Catch the easy case where the types already line up.
-    if ty::identical(from, to) || value.kind.is_error() || from.is_error() || to.is_error() {
-        return value;
-    }
-
-    // Strip away all named types.
-    let from_raw = from.resolve_name();
-    let to_raw = to.resolve_name();
-    trace!(
-        "implicitly casting `{}` from {} to {}",
-        value.span.extract(),
-        from_raw,
-        to_raw
-    );
-
-    // Try a truncation or extension cast.
-    // DONE
-    let from_sbvt = from_raw.get_simple_bit_vector(builder.cx, builder.env, true);
-    let to_sbvt = to_raw.get_simple_bit_vector(builder.cx, builder.env, true);
-    let from_size = from_sbvt.map(|ty| ty.width());
-    let to_size = to_sbvt.map(|ty| ty.width());
-
-    if from_size.is_some() && to_size.is_some() && from_size != to_size {
-        let from_sbvt = from_sbvt.unwrap();
-        let value = lower_implicit_cast(builder, value, from_sbvt);
-        let from_size = from_size.unwrap();
-        let to_size = to_size.unwrap();
-        let range = match *to_sbvt.unwrap() {
-            TypeKind::BitVector { range, .. } => range,
-            _ => unreachable!(),
-        };
-        let sign = from_sbvt.get_sign().unwrap();
-        let ty = builder.cx.intern_type(TypeKind::BitVector {
-            domain: from_sbvt.get_value_domain().unwrap(),
-            sign,
-            range,
-            dubbed: false,
-        });
-        let kind = if from_size < to_size {
-            match sign {
-                ty::Sign::Signed => RvalueKind::SignExtend(range.size, value),
-                ty::Sign::Unsigned => RvalueKind::ZeroExtend(range.size, value),
-            }
-        } else {
-            RvalueKind::Truncate(range.size, value)
-        };
-        let inner = builder.build(ty, kind);
-        if verbose {
-            builder.cx.emit(
-                DiagBuilder2::note(format!(
-                    "implicit cast: size from {:?} to {:?}, {:?}",
-                    from_size, to_size, sign
-                ))
-                .span(builder.span)
-                .add_note(format!(
-                    "from `{}` to `{}`; eventually `{}`",
-                    from_raw, inner.ty, to
-                )),
-            );
-        }
-        return lower_implicit_cast(builder, inner, to);
-    }
-
-    // Try a single-bit atom/vector conversion.
-    // NOT NEEDED
-    let from_sbt = from_raw.get_simple_bit_vector(builder.cx, builder.env, false);
-    let to_sbt = to_raw.get_simple_bit_vector(builder.cx, builder.env, false);
-    match (from_sbt, to_sbt) {
-        (
-            Some(&TypeKind::BitVector {
-                domain,
-                sign,
-                range: ty::Range { size: 1, .. },
-                ..
-            }),
-            Some(&TypeKind::BitScalar { .. }),
-        ) => {
-            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::BitScalar { domain, sign }),
-                RvalueKind::CastVectorToAtom { domain, value },
-            );
-            if verbose {
-                builder.cx.emit(
-                    DiagBuilder2::note("implicit cast: vector to atom")
-                        .span(builder.span)
-                        .add_note(format!(
-                            "from `{}` to `{}`; eventually `{}`",
-                            from_raw, inner.ty, to
-                        )),
-                );
-            }
-            return lower_implicit_cast(builder, inner, to);
-        }
-        (Some(&TypeKind::BitScalar { domain, sign }), Some(&TypeKind::BitVector { .. })) => {
-            let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-            let inner = builder.build(
-                builder.cx.intern_type(TypeKind::BitVector {
-                    domain,
-                    sign,
-                    range: ty::Range {
-                        size: 1,
-                        dir: ty::RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }),
-                RvalueKind::CastAtomToVector { domain, value },
-            );
-            if verbose {
-                builder.cx.emit(
-                    DiagBuilder2::note("implicit cast: atom to vector")
-                        .span(builder.span)
-                        .add_note(format!(
-                            "from `{}` to `{}`; eventually `{}`",
-                            from_raw, inner.ty, to
-                        )),
-                );
-            }
-            return lower_implicit_cast(builder, inner, to);
-        }
-        _ => (),
-    }
-
-    // Try a value domain cast.
-    // DONE
-    let from_domain = from_raw.get_value_domain();
-    let to_domain = to_raw.get_value_domain();
-    if from_domain.is_some() && to_domain.is_some() && from_domain != to_domain {
-        let fd = from_domain.unwrap();
-        let td = to_domain.unwrap();
-        let target_ty = match *from_raw {
-            TypeKind::Bit(_) => builder.cx.intern_type(TypeKind::Bit(td)),
-            TypeKind::Int(w, _) => builder.cx.intern_type(TypeKind::Int(w, td)),
-            TypeKind::BitScalar { sign, .. } => builder
-                .cx
-                .intern_type(TypeKind::BitScalar { domain: td, sign }),
-            TypeKind::BitVector {
-                sign,
-                range,
-                dubbed,
-                ..
-            } => builder.cx.intern_type(TypeKind::BitVector {
-                domain: td,
-                sign,
-                range,
-                dubbed,
-            }),
-            _ => unreachable!(),
-        };
-        let inner = builder.build(
-            target_ty,
-            RvalueKind::CastValueDomain {
-                from: fd,
-                to: td,
-                value,
-            },
-        );
-        if verbose {
-            builder.cx.emit(
-                DiagBuilder2::note(format!("implicit cast: from {:?} to {:?}", fd, td))
-                    .span(builder.span)
-                    .add_note(format!(
-                        "from `{}` to `{}`; eventually `{}`",
-                        from_raw, inner.ty, to
-                    )),
-            );
-        }
-        return lower_implicit_cast(builder, inner, to);
-    }
-
-    // Try a sign cast.
-    // DONE
-    let from_sign = from_sbt.and_then(|ty| ty.get_sign());
-    let to_sign = to_sbt.and_then(|ty| ty.get_sign());
-    if from_sign.is_some() && to_sign.is_some() && from_sign != to_sign {
-        let value = lower_implicit_cast(builder, value, from_sbt.unwrap());
-        let ty = from_sbt.unwrap().change_sign(builder.cx, to_sign.unwrap());
-        let inner = builder.build(ty, RvalueKind::CastSign(to_sign.unwrap(), value));
-        if verbose {
-            builder.cx.emit(
-                DiagBuilder2::note(format!(
-                    "implicit cast: sign from {:?} to {:?}",
-                    from_sign.unwrap(),
-                    to_sign.unwrap()
-                ))
-                .span(builder.span)
-                .add_note(format!(
-                    "from `{}` to `{}`; eventually `{}`",
-                    from_raw, inner.ty, to
-                )),
-            );
-        }
-        return lower_implicit_cast(builder, inner, to);
-    }
-
-    // Try struct/array packing.
-    // DONE
-    let packed = if from_raw.is_struct() {
-        Some(pack_struct(builder, value))
-    } else if from_raw.is_array() {
-        Some(pack_array(builder, value))
-    } else {
-        None
-    };
-    if let Some(packed) = packed {
-        if verbose {
-            builder.cx.emit(
-                DiagBuilder2::note("implicit cast: struct/array packing")
-                    .span(builder.span)
-                    .add_note(format!(
-                        "from `{}` to `{}`; eventually `{}`",
-                        from_raw, packed.ty, to
-                    )),
-            );
-        }
-        return lower_implicit_cast(builder, packed, to);
-    }
-
-    // Try struct/array unpacking.
-    // DONE
-    let unpacked = if to_raw.is_struct() {
-        Some(unpack_struct(builder, to, value))
-    } else if to_raw.is_array() {
-        Some(unpack_array(builder, to, value))
-    } else {
-        None
-    };
-    if let Some(unpacked) = unpacked {
-        if verbose {
-            builder.cx.emit(
-                DiagBuilder2::note("implicit cast: struct/array unpacking")
-                    .span(builder.span)
-                    .add_note(format!(
-                        "from `{}` to `{}`; eventually `{}`",
-                        from_raw, unpacked.ty, to
-                    )),
-            );
-        }
-        return lower_implicit_cast(builder, unpacked, to);
-    }
-
-    // Complain and abort.
-    error!("failed implicit cast from {:?} to {:?}", from, to);
-    info!("failed implicit cast from {:?}", value);
-    builder.cx.emit(
-        DiagBuilder2::error(format!(
-            "type `{}` required, but expression has type `{}`",
-            to, from
-        ))
-        .span(value.span),
-    );
-    builder.error()
-}
-
 /// Pack a struct as a simple bit vector.
 fn pack_struct<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
@@ -989,20 +670,6 @@ fn pack_struct<'gcx>(
             Ok(t) => t,
             Err(()) => {
                 failed = true;
-                continue;
-            }
-        };
-        let sbvt = field_ty.get_simple_bit_vector(builder.cx, builder.env, true);
-        let sbvt = match sbvt {
-            Some(x) => x,
-            None => {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "field `{}` cannot be cast to a simple bit vector",
-                        field.name
-                    ))
-                    .span(builder.span),
-                );
                 continue;
             }
         };
@@ -1033,19 +700,6 @@ fn pack_array<'gcx>(
 
     // Map the element type to its simple bit vector equivalent.
     let elem_ty = value.ty.get_array_element().expect("array element type");
-    let sbvt = match elem_ty.get_simple_bit_vector(builder.cx, builder.env, true) {
-        Some(x) => x,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!(
-                    "element type `{}` cannot be cast to a simple bit vector",
-                    elem_ty
-                ))
-                .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
 
     // Cast each element.
     let mut packed_elements = vec![];
@@ -2044,9 +1698,9 @@ pub fn cast_to_bool<'gcx>(
 
 /// Cast an rvalue to a type.
 pub fn cast_to_type<'gcx>(
-    cx: &impl Context<'gcx>,
+    _cx: &impl Context<'gcx>,
     value: &'gcx Rvalue<'gcx>,
-    env: ParamEnv,
+    _env: ParamEnv,
     ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     assert!(
