@@ -1236,20 +1236,25 @@ fn unify_operator_types<'gcx>(
     // Map the iterator to a sequence of sign, domain, and bit width tuples.
     let inner: Vec<_> = types
         .flat_map(|ty| {
-            bit_size_of_type(cx, ty, env).map(|w| ((ty.get_sign(), ty.get_value_domain(), w)))
+            bit_size_of_type(cx, ty, env)
+                .map(|w| ((ty.get_sign(), ty.get_value_domain(), ty.is_dubbed(), w)))
         })
         .collect();
 
     // Determine the maximum width, sign, and domain.
-    let width: Option<usize> = inner.iter().map(|&(_, _, w)| w).max();
-    let sign = match inner.iter().all(|&(s, _, _)| s == Some(Sign::Signed)) {
+    let width: Option<usize> = inner.iter().map(|&(_, _, _, w)| w).max();
+    let sign = match inner.iter().all(|&(s, _, _, _)| s == Some(Sign::Signed)) {
         true => Sign::Signed,
         false => Sign::Unsigned,
     };
-    let domain = match inner.iter().all(|&(_, d, _)| d == Some(Domain::TwoValued)) {
+    let domain = match inner
+        .iter()
+        .all(|&(_, d, _, _)| d == Some(Domain::TwoValued))
+    {
         true => Domain::TwoValued,
         false => Domain::FourValued,
     };
+    let dubbed = inner.iter().all(|&(_, _, d, _)| d);
 
     // Construct the type.
     width.map(|w| {
@@ -1261,7 +1266,7 @@ fn unify_operator_types<'gcx>(
                 dir: ty::RangeDir::Down,
                 offset: 0isize,
             },
-            dubbed: false,
+            dubbed,
         })
     })
 }

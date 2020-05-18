@@ -174,6 +174,15 @@ impl<'t> TypeKind<'t> {
         }
     }
 
+    /// Check if this type uses a predefined type alias as name.
+    pub fn is_dubbed(&self) -> bool {
+        match *self.resolve_name() {
+            TypeKind::BitScalar { .. } => true,
+            TypeKind::BitVector { dubbed, .. } => dubbed,
+            _ => false,
+        }
+    }
+
     /// Remove all typedefs and reveal the concrete fundamental type.
     pub fn resolve_name(&self) -> &Self {
         match self {
@@ -249,6 +258,9 @@ impl<'t> TypeKind<'t> {
         cx: &impl Context<'gcx>,
         domain: Domain,
     ) -> Type<'gcx> {
+        if self.get_value_domain() == Some(domain) {
+            return self;
+        }
         match *self.resolve_name() {
             TypeKind::Bit(_) => cx.intern_type(TypeKind::BitScalar {
                 domain,
@@ -284,6 +296,9 @@ impl<'t> TypeKind<'t> {
 
     /// Change the sign of a simple bit type.
     pub fn change_sign<'gcx>(&'gcx self, cx: &impl Context<'gcx>, sign: Sign) -> Type<'gcx> {
+        if self.get_sign() == Some(sign) {
+            return self;
+        }
         match *self.resolve_name() {
             TypeKind::BitScalar { domain, .. } => {
                 cx.intern_type(TypeKind::BitScalar { domain, sign })
@@ -305,6 +320,9 @@ impl<'t> TypeKind<'t> {
 
     /// Change the range of a simple bit type.
     pub fn change_range<'gcx>(&'gcx self, cx: &impl Context<'gcx>, range: Range) -> Type<'gcx> {
+        if self.get_range() == Some(range) {
+            return self;
+        }
         match *self.resolve_name() {
             TypeKind::Bit(domain) => cx.intern_type(TypeKind::BitVector {
                 domain,
