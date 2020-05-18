@@ -1430,31 +1430,25 @@ fn lower_unary_bitwise<'gcx>(
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
-                    .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
+    // Lower the operand.
+    let arg = builder.cx.mir_rvalue(arg, builder.env);
 
-    // Map the argument.
-    let arg = lower_expr_and_cast(builder.cx, arg, builder.env, result_ty);
+    // Check that the operand is of the right type.
+    assert_span!(ty::identical(arg.ty, ty), arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
         hir::UnaryOp::BitNot => UnaryBitwiseOp::Not,
-        _ => unreachable!("{:?} is not a unary bitwise operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not a unary bitwise operator",
+            op
+        ),
     };
 
     // Assemble the node.
-    builder.build(result_ty, RvalueKind::UnaryBitwise { op, arg })
+    builder.build(ty, RvalueKind::UnaryBitwise { op, arg })
 }
 
 /// Map a bitwise binary operator to MIR.
@@ -1477,7 +1471,12 @@ fn lower_binary_bitwise<'gcx>(
         hir::BinaryOp::BitNand => (BinaryBitwiseOp::And, true),
         hir::BinaryOp::BitNor => (BinaryBitwiseOp::Or, true),
         hir::BinaryOp::BitXnor => (BinaryBitwiseOp::Xor, true),
-        _ => unreachable!("{:?} is not a binary bitwise operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not a binary bitwise operator",
+            op
+        ),
     };
 
     // Assemble the node.
@@ -1493,23 +1492,9 @@ fn make_binary_bitwise<'gcx>(
     lhs: &'gcx Rvalue<'gcx>,
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
-                    .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
-
-    // Cast the operands to the operator type.
-    assert!(ty::identical(lhs.ty, ty));
-    assert!(ty::identical(rhs.ty, ty));
+    // Check that the operands are of the right type.
+    assert_span!(ty::identical(lhs.ty, ty), lhs.span, builder.cx);
+    assert_span!(ty::identical(rhs.ty, ty), rhs.span, builder.cx);
 
     // Assemble the node.
     let value = builder.build(ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
