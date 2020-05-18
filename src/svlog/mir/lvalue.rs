@@ -25,6 +25,13 @@ pub struct Lvalue<'a> {
     pub kind: LvalueKind<'a>,
 }
 
+impl<'a> Lvalue<'a> {
+    /// Check whether the lvalue represents a lowering error tombstone.
+    pub fn is_error(&self) -> bool {
+        self.ty.is_error() || self.kind.is_error()
+    }
+}
+
 /// The different forms an lvalue expression may take.
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
@@ -47,4 +54,14 @@ pub enum LvalueKind<'a> {
     Member { value: &'a Lvalue<'a>, field: usize },
     /// An error occurred during lowering.
     Error,
+}
+
+impl<'a> LvalueKind<'a> {
+    /// Check whether the lvalue represents a lowering error tombstone.
+    pub fn is_error(&self) -> bool {
+        match self {
+            LvalueKind::Error => true,
+            _ => false,
+        }
+    }
 }

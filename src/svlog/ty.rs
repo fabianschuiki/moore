@@ -183,6 +183,11 @@ impl<'t> TypeKind<'t> {
         }
     }
 
+    /// Check if this type is a valid boolean.
+    pub fn is_bool(&self) -> bool {
+        ty::identical(self, &ty::BIT_TYPE) || ty::identical(self, &ty::LOGIC_TYPE)
+    }
+
     /// Remove all typedefs and reveal the concrete fundamental type.
     pub fn resolve_name(&self) -> &Self {
         match self {

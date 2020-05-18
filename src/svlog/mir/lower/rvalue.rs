@@ -3,7 +3,6 @@
 //! Expression rvalue lowering to MIR.
 
 use crate::{
-    common::{SessionContext, Verbosity},
     crate_prelude::*,
     hir::HirNode,
     hir::PatternMapping,
@@ -190,17 +189,19 @@ fn lower_expr_inner<'gcx>(
         hir::ExprKind::Unary(op, arg) => Ok(lower_unary(&builder, ty, op, arg)),
         hir::ExprKind::Binary(op, lhs, rhs) => Ok(lower_binary(&builder, ty, op, lhs, rhs)),
         hir::ExprKind::Ternary(cond, true_value, false_value) => {
-            let cond = {
-                let subbuilder = Builder {
-                    cx,
-                    span: cx.span(cond),
-                    expr: cond,
-                    env,
-                };
-                implicit_cast_to_bool(&subbuilder, cx.mir_rvalue(cond, subbuilder.env))
-            };
-            let true_value = lower_expr_and_cast(cx, true_value, env, ty);
-            let false_value = lower_expr_and_cast(cx, false_value, env, ty);
+            let cond = cx.mir_rvalue(cond, env);
+            let true_value = cx.mir_rvalue(true_value, env);
+            let false_value = cx.mir_rvalue(false_value, env);
+            assert_span!(
+                ty::identical(true_value.ty, ty),
+                true_value.span,
+                builder.cx
+            );
+            assert_span!(
+                ty::identical(false_value.ty, ty),
+                false_value.span,
+                builder.cx
+            );
             Ok(builder.build(
                 ty,
                 RvalueKind::Ternary {
@@ -232,24 +233,9 @@ fn lower_expr_inner<'gcx>(
             let exprs = exprs
                 .iter()
                 .map(|&expr| {
-                    let ty = builder.cx.type_of(expr, env)?;
-                    let flat_ty = match ty.get_simple_bit_vector(builder.cx, env, false) {
-                        Some(ty) => ty,
-                        None => {
-                            builder.cx.emit(
-                                DiagBuilder2::error(format!(
-                                    "`{}` cannot be used in concatenation",
-                                    ty
-                                ))
-                                .span(builder.cx.span(expr)),
-                            );
-                            return Err(());
-                        }
-                    };
-                    Ok((
-                        ty::bit_size_of_type(builder.cx, ty, env)?,
-                        lower_expr_and_cast(builder.cx, expr, env, flat_ty),
-                    ))
+                    let value = builder.cx.mir_rvalue(expr, env);
+                    assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                    Ok((value.ty.try_bit_size(builder.cx, env)?, value))
                 })
                 .collect::<Result<Vec<_>>>()?;
 
@@ -302,33 +288,17 @@ fn lower_expr_inner<'gcx>(
 
             // Cast the target to a simple bit vector type if needed.
             let target_ty = cx.type_of(target, env)?;
-            let target = if target_ty.is_error() {
-                builder.error()
-            } else if target_ty.resolve_name().is_array() {
-                // No need to cast arrays.
-                cx.mir_rvalue(target, env)
-            } else {
-                let sbvt = match target_ty.get_simple_bit_vector(cx, env, true) {
-                    Some(ty) => ty,
-                    None => {
-                        let span = builder.cx.span(target);
-                        builder.cx.emit(
-                            DiagBuilder2::error(format!(
-                                "cannot index into a value of type `{}`",
-                                target_ty
-                            ))
-                            .span(span)
-                            .add_note(format!(
-                                "`{}` has no simple bit-vector type representation",
-                                target_ty
-                            )),
-                        );
-                        error!("Type is {:?}", target_ty);
-                        return Ok(builder.error());
-                    }
-                };
-                lower_expr_and_cast(cx, target, env, sbvt)
-            };
+            if target_ty.is_error() {
+                return Ok(builder.error());
+            }
+            let target = cx.mir_rvalue(target, env);
+
+            // Make sure we can actually index here.
+            assert_span!(
+                target.ty.is_array() || target.ty.is_simple_bit_vector(),
+                target.span,
+                cx,
+            );
 
             // Build the cast rvalue.
             Ok(builder.build(
@@ -353,7 +323,7 @@ fn lower_expr_inner<'gcx>(
         | hir::ExprKind::CastSign(_, expr)
         | hir::ExprKind::CastSize(_, expr)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Signed(expr))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(expr)) => Ok(lower_expr(cx, expr, env)),
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(expr)) => Ok(cx.mir_rvalue(expr, env)),
 
         hir::ExprKind::Inside(expr, ref ranges) => {
             // By default nothing matches.
@@ -455,7 +425,12 @@ pub(crate) fn compute_indexing<'gcx>(
         ),
         hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
             let base = cx.mir_rvalue(base, env);
-            let delta_rvalue = lower_expr_and_cast(cx, delta, env, base.ty);
+            let delta_rvalue = cx.mir_rvalue(delta, env);
+            assert_span!(
+                ty::identical(delta_rvalue.ty, base.ty),
+                delta_rvalue.span,
+                builder.cx
+            );
             let base = builder.build(
                 base.ty,
                 RvalueKind::IntBinaryArith {
@@ -486,24 +461,6 @@ pub(crate) fn compute_indexing<'gcx>(
             (base, length)
         }
     })
-}
-
-/// Lower an HIR expression and implicitly cast to a target type.
-fn lower_expr_and_cast<'gcx>(
-    cx: &impl Context<'gcx>,
-    expr_id: NodeId,
-    env: ParamEnv,
-    _target_ty: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    lower_expr(cx, expr_id, env)
-    // let inner = cx.mir_rvalue(expr_id, env);
-    // let builder = Builder {
-    //     cx,
-    //     span: inner.span,
-    //     expr: expr_id,
-    //     env,
-    // };
-    // lower_implicit_cast(&builder, inner, target_ty)
 }
 
 /// Generate the nodes necessary for a cast operation.
@@ -914,7 +871,8 @@ fn lower_array_pattern<'gcx>(
                 };
 
                 // Determine the value and insert into the mappings.
-                let value = lower_expr_and_cast(builder.cx, to, builder.env, elem_ty);
+                let value = builder.cx.mir_rvalue(to, builder.env);
+                assert_span!(ty::identical(value.ty, elem_ty), value.span, builder.cx);
                 let span = value.span;
                 if let Some(prev) = values.insert(index, value) {
                     builder.cx.emit(
@@ -942,7 +900,9 @@ fn lower_array_pattern<'gcx>(
                     continue;
                 }
                 None => {
-                    default = Some(lower_expr_and_cast(builder.cx, to, builder.env, elem_ty));
+                    let value = builder.cx.mir_rvalue(to, builder.env);
+                    assert_span!(ty::identical(value.ty, elem_ty), value.span, builder.cx);
+                    default = Some(value);
                 }
             },
         }
@@ -1022,7 +982,8 @@ fn lower_struct_pattern<'gcx>(
         match map {
             PatternMapping::Type(type_id) => match builder.cx.map_to_type(type_id, builder.env) {
                 Ok(ty) => {
-                    let value = lower_expr_and_cast(builder.cx, to, builder.env, ty);
+                    let value = builder.cx.mir_rvalue(to, builder.env);
+                    assert_span!(ty::identical(value.ty, ty), value.span, builder.cx);
                     type_defaults.insert(ty, value);
                 }
                 Err(()) => {
@@ -1051,7 +1012,12 @@ fn lower_struct_pattern<'gcx>(
                     };
 
                     // Determine the value and insert into the mappings.
-                    let value = lower_expr_and_cast(builder.cx, to, builder.env, fields[index].1);
+                    let value = builder.cx.mir_rvalue(to, builder.env);
+                    assert_span!(
+                        ty::identical(value.ty, fields[index].1),
+                        value.span,
+                        builder.cx
+                    );
                     let span = value.span;
                     if let Some(prev) = values.insert(index, value) {
                         builder.cx.emit(
@@ -1134,7 +1100,8 @@ fn lower_struct_pattern<'gcx>(
             failed = true;
             continue;
         };
-        let value = lower_expr_and_cast(builder.cx, default, builder.env, field_ty);
+        let value = builder.cx.mir_rvalue(default, builder.env);
+        assert_span!(ty::identical(value.ty, field_ty), value.span, builder.cx);
         values.insert(index, value);
     }
 
@@ -1213,33 +1180,29 @@ fn lower_binary<'gcx>(
 /// Map an integer unary arithmetic operator to MIR.
 fn lower_int_unary_arith<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+    result_ty: Type<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
-                    .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
+    // Lower the operand.
+    let arg = builder.cx.mir_rvalue(arg, builder.env);
+    if arg.is_error() {
+        return builder.error();
+    }
 
-    // Cast the operands to the operator type.
-    trace!("unary {:?} on {} maps to {}", op, ty, result_ty);
-    let arg = lower_expr_and_cast(builder.cx, arg, builder.env, result_ty);
+    // Check that the operand is of the right type.
+    assert_span!(ty::identical(arg.ty, result_ty), builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
         hir::UnaryOp::Pos => return arg,
         hir::UnaryOp::Neg => IntUnaryArithOp::Neg,
-        _ => unreachable!("{:?} is not an integer unary arithmetic operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not an integer unary arithmetic operator",
+            op
+        ),
     };
 
     // Assemble the node.
@@ -1257,29 +1220,21 @@ fn lower_int_unary_arith<'gcx>(
 /// Map an integer binary arithmetic operator to MIR.
 fn lower_int_binary_arith<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+    result_ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{:?}` cannot operate on `{}`", op, ty))
-                    .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
+    // Lower the operands.
+    let lhs = builder.cx.mir_rvalue(lhs, builder.env);
+    let rhs = builder.cx.mir_rvalue(rhs, builder.env);
+    if lhs.is_error() || rhs.is_error() {
+        return builder.error();
+    }
 
-    // Cast the operands to the operator type.
-    trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
-    let lhs = lower_expr_and_cast(builder.cx, lhs, builder.env, result_ty);
-    let rhs = lower_expr_and_cast(builder.cx, rhs, builder.env, result_ty);
+    // Check that the operands are of the right type.
+    assert_span!(ty::identical(lhs.ty, result_ty), builder.span, builder.cx);
+    assert_span!(ty::identical(rhs.ty, result_ty), builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1289,7 +1244,12 @@ fn lower_int_binary_arith<'gcx>(
         hir::BinaryOp::Div => IntBinaryArithOp::Div,
         hir::BinaryOp::Mod => IntBinaryArithOp::Mod,
         hir::BinaryOp::Pow => IntBinaryArithOp::Pow,
-        _ => unreachable!("{:?} is not an integer binary arithmetic operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not an integer binary arithmetic operator",
+            op
+        ),
     };
 
     // Assemble the node.
@@ -1308,16 +1268,20 @@ fn lower_int_binary_arith<'gcx>(
 /// Map an integer comparison operator to MIR.
 fn lower_int_comparison<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    out_ty: Type<'gcx>,
+    result_ty: Type<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
+    // Determine the operation type of the comparison.
     let ty = builder.cx.need_operation_type(builder.expr, builder.env);
 
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
+    if lhs.is_error() || rhs.is_error() || ty.is_error() {
+        return builder.error();
+    }
 
     // Determine the operation.
     let op = match op {
@@ -1327,30 +1291,38 @@ fn lower_int_comparison<'gcx>(
         hir::BinaryOp::Leq => IntCompOp::Leq,
         hir::BinaryOp::Gt => IntCompOp::Gt,
         hir::BinaryOp::Geq => IntCompOp::Geq,
-        _ => unreachable!("{:?} is not an integer binary comparison operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not an integer binary comparison operator",
+            op
+        ),
     };
 
     // Assemble the node.
-    make_int_comparison(builder, op, out_ty, ty, lhs, rhs)
+    make_int_comparison(builder, op, result_ty, ty, lhs, rhs)
 }
 
 /// Map an integer comparison operator to MIR.
 fn make_int_comparison<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     op: IntCompOp,
-    out_ty: Type<'gcx>,
-    ty: Type<'gcx>,
+    result_ty: Type<'gcx>,
+    op_ty: Type<'gcx>,
     lhs: &'gcx Rvalue<'gcx>,
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
-    assert_span!(ty::identical(lhs.ty, ty), builder.span, builder.cx);
-    assert_span!(ty::identical(rhs.ty, ty), builder.span, builder.cx);
+    // Check that the operands are of the right type.
+    assert_span!(ty::identical(lhs.ty, op_ty), builder.span, builder.cx);
+    assert_span!(ty::identical(rhs.ty, op_ty), builder.span, builder.cx);
+
+    // Assemble the node.
     builder.build(
-        out_ty,
+        result_ty,
         RvalueKind::IntComp {
             op,
-            sign: ty.get_sign().unwrap(),
-            domain: ty.get_value_domain().unwrap(),
+            sign: op_ty.get_sign().unwrap(),
+            domain: op_ty.get_value_domain().unwrap(),
             lhs,
             rhs,
         },
@@ -1360,47 +1332,21 @@ fn make_int_comparison<'gcx>(
 /// Map an integer shift operator to MIR.
 fn lower_shift<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+    result_ty: Type<'gcx>,
     op: hir::BinaryOp,
     value: NodeId,
     amount: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Determine the simple bit vector type for the operator.
-    let result_ty = match ty.get_simple_bit_vector(builder.cx, builder.env, false) {
-        Some(ty) => ty,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{}` cannot be shifted", ty)).span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    // TODO(fschuiki): Replace this with a query to the operator's internal
-    // type.
+    // Lower the operands.
+    let value = builder.cx.mir_rvalue(value, builder.env);
+    let amount = builder.cx.mir_rvalue(amount, builder.env);
+    if value.is_error() || amount.is_error() {
+        return builder.error();
+    }
 
-    // Determine the simple bit vector type for the shift amount.
-    let shift_ty = match builder.cx.type_of(amount, builder.env) {
-        Ok(t) => t,
-        Err(()) => return builder.error(),
-    };
-    let shift_ty = match shift_ty.get_simple_bit_vector(builder.cx, builder.env, true) {
-        Some(t) => t,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!(
-                    "`{}` is not a valid type for a shift amount",
-                    shift_ty
-                ))
-                .span(builder.cx.span(amount)),
-            );
-            return builder.error();
-        }
-    };
-
-    // Cast the operands to the operator type.
-    trace!("binary {:?} on {} maps to {}", op, ty, result_ty);
-    let value = lower_expr_and_cast(builder.cx, value, builder.env, result_ty);
-    let amount = lower_expr_and_cast(builder.cx, amount, builder.env, shift_ty);
+    // Check that the operands are of the right type.
+    assert_span!(ty::identical(value.ty, result_ty), value.span, builder.cx);
+    assert_span!(amount.ty.is_simple_bit_vector(), amount.span, builder.cx);
 
     // Determine the operation.
     let (op, arith) = match op {
@@ -1408,7 +1354,12 @@ fn lower_shift<'gcx>(
         hir::BinaryOp::LogicShR => (ShiftOp::Right, false),
         hir::BinaryOp::ArithShL => (ShiftOp::Left, result_ty.is_signed()),
         hir::BinaryOp::ArithShR => (ShiftOp::Right, result_ty.is_signed()),
-        _ => unreachable!("{:?} is not an integer shift operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not an integer shift operator",
+            op
+        ),
     };
 
     // Assemble the node.
@@ -1432,6 +1383,9 @@ fn lower_unary_bitwise<'gcx>(
 ) -> &'gcx Rvalue<'gcx> {
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);
+    if arg.is_error() {
+        return builder.error();
+    }
 
     // Check that the operand is of the right type.
     assert_span!(ty::identical(arg.ty, ty), arg.span, builder.cx);
@@ -1462,6 +1416,9 @@ fn lower_binary_bitwise<'gcx>(
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
+    if lhs.is_error() || rhs.is_error() {
+        return builder.error();
+    }
 
     // Determine the operation.
     let (op, negate) = match op {
@@ -1518,17 +1475,24 @@ fn lower_unary_logic<'gcx>(
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Cast the operand to a boolean.
-    let arg = {
-        let builder = &builder.with(arg);
-        let v = builder.cx.mir_rvalue(arg, builder.env);
-        implicit_cast_to_bool(builder, v)
-    };
+    // Lower the operand.
+    let arg = builder.cx.mir_rvalue(arg, builder.env);
+    if arg.is_error() {
+        return builder.error();
+    }
+
+    // Check that the operand is of the right type.
+    assert_span!(ty::identical(arg.ty, ty), arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
         hir::UnaryOp::LogicNot => UnaryBitwiseOp::Not,
-        _ => unreachable!("{:?} is not a unary logic operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not a unary logic operator",
+            op
+        ),
     };
 
     // Assemble the node.
@@ -1543,23 +1507,27 @@ fn lower_binary_logic<'gcx>(
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    // Cast the operands to a boolean.
-    let lhs = {
-        let builder = &builder.with(lhs);
-        let v = builder.cx.mir_rvalue(lhs, builder.env);
-        implicit_cast_to_bool(builder, v)
-    };
-    let rhs = {
-        let builder = &builder.with(rhs);
-        let v = builder.cx.mir_rvalue(rhs, builder.env);
-        implicit_cast_to_bool(builder, v)
-    };
+    // Lower the operands.
+    let lhs = builder.cx.mir_rvalue(lhs, builder.env);
+    let rhs = builder.cx.mir_rvalue(rhs, builder.env);
+    if lhs.is_error() || rhs.is_error() {
+        return builder.error();
+    }
+
+    // Check that the operands are of the right type.
+    assert_span!(ty::identical(lhs.ty, ty), lhs.span, builder.cx);
+    assert_span!(ty::identical(rhs.ty, ty), rhs.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
         hir::BinaryOp::LogicAnd => BinaryBitwiseOp::And,
         hir::BinaryOp::LogicOr => BinaryBitwiseOp::Or,
-        _ => unreachable!("{:?} is not a binary logic operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not a binary logic operator",
+            op
+        ),
     };
 
     // Assemble the node.
@@ -1569,14 +1537,28 @@ fn lower_binary_logic<'gcx>(
 /// Map a reduction operator to MIR.
 fn lower_reduction<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    _ty: Type<'gcx>,
+    result_ty: Type<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
-    let inner_ty = builder.cx.need_operation_type(builder.expr, builder.env);
+    // Determine the operation type.
+    let op_ty = builder.cx.need_operation_type(builder.expr, builder.env);
 
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);
+    if arg.is_error() || op_ty.is_error() {
+        return builder.error();
+    }
+
+    // Check the result type.
+    assert_span!(
+        ty::identical(result_ty, op_ty.get_value_domain().unwrap().bit_type()),
+        builder.span,
+        builder.cx
+    );
+
+    // Check that the operand is of the right type.
+    assert_span!(ty::identical(arg.ty, op_ty), builder.span, builder.cx);
 
     // Determine the operation.
     let (op, negate) = match op {
@@ -1586,30 +1568,19 @@ fn lower_reduction<'gcx>(
         hir::UnaryOp::RedNand => (BinaryBitwiseOp::And, true),
         hir::UnaryOp::RedNor => (BinaryBitwiseOp::Or, true),
         hir::UnaryOp::RedXnor => (BinaryBitwiseOp::Xor, true),
-        _ => unreachable!("{:?} is not a reduction operator", op),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not a reduction operator",
+            op
+        ),
     };
 
     // Assemble the node.
-    make_reduction(builder, inner_ty, op, negate, arg)
-}
-
-/// Map a reduction operator to MIR.
-fn make_reduction<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
-    op: BinaryBitwiseOp,
-    negate: bool,
-    arg: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    // Cast the argument.
-    assert!(ty::identical(arg.ty, ty));
-
-    // Assemble the node.
-    let bit_ty = ty.get_value_domain().unwrap().bit_type();
-    let value = builder.build(bit_ty, RvalueKind::Reduction { op, arg });
+    let value = builder.build(result_ty, RvalueKind::Reduction { op, arg });
     if negate {
         builder.build(
-            bit_ty,
+            result_ty,
             RvalueKind::UnaryBitwise {
                 op: UnaryBitwiseOp::Not,
                 arg: value,
@@ -1618,91 +1589,6 @@ fn make_reduction<'gcx>(
     } else {
         value
     }
-}
-
-/// Generate the nodes necessary to implicitly cast an rvalue to a boolean.
-///
-/// If the cast is not possible, emit some helpful diagnostics.
-fn implicit_cast_to_bool<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    value: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    assert_span!(
-        ty::identical(value.ty, &ty::BIT_TYPE) || ty::identical(value.ty, &ty::LOGIC_TYPE),
-        builder.span,
-        builder.cx,
-        "casts should be inferred by the type system (got `{}` as bool)",
-        value.ty
-    );
-    value
-    // // Map the value to a simple bit type.
-    // let sbvt = match value
-    //     .ty
-    //     .get_simple_bit_vector(builder.cx, builder.env, false)
-    // {
-    //     Some(sbvt) => sbvt,
-    //     None => {
-    //         builder.cx.emit(
-    //             DiagBuilder2::error(format!(
-    //                 "`{:?}` cannot be cast to a boolean",
-    //                 value.span.extract()
-    //             ))
-    //             .span(value.span),
-    //         );
-    //         return builder.error();
-    //     }
-    // };
-
-    // // Cast to the simple bit type.
-    // let value = lower_implicit_cast(builder, value, sbvt);
-
-    // // If the value already has the equivalent of a one bit value, use that.
-    // if sbvt.width() == 1 {
-    //     value
-    // } else {
-    //     builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value))
-    // }
-}
-
-/// Cast an rvalue to a boolean.
-pub fn cast_to_bool<'gcx>(
-    cx: &impl Context<'gcx>,
-    value: &'gcx Rvalue<'gcx>,
-    env: ParamEnv,
-) -> &'gcx Rvalue<'gcx> {
-    implicit_cast_to_bool(
-        &Builder {
-            cx,
-            span: value.span,
-            expr: value.origin,
-            env,
-        },
-        value,
-    )
-}
-
-/// Cast an rvalue to a type.
-pub fn cast_to_type<'gcx>(
-    _cx: &impl Context<'gcx>,
-    value: &'gcx Rvalue<'gcx>,
-    _env: ParamEnv,
-    ty: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    assert!(
-        ty::identical(value.ty, ty),
-        "casts should be inferred by the type system"
-    );
-    value
-    // lower_implicit_cast(
-    //     &Builder {
-    //         cx,
-    //         span: value.span,
-    //         expr: value.origin,
-    //         env,
-    //     },
-    //     value,
-    //     ty,
-    // )
 }
 
 /// Map an increment/decrement operator to MIR.
@@ -1714,6 +1600,9 @@ fn lower_int_incdec<'gcx>(
     // Map the argument to an lvalue and an rvalue.
     let lv = builder.cx.mir_lvalue(arg, builder.env);
     let rv = builder.cx.mir_rvalue(arg, builder.env);
+    if lv.is_error() || rv.is_error() {
+        return builder.error();
+    }
 
     // Compute the new value, depending on the operand type.
     let new = if lv.ty.is_bit_scalar() {

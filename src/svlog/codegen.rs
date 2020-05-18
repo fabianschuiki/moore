@@ -542,9 +542,7 @@ where
             };
             let lhs = self.mir_lvalue(hir.lhs, env);
             let rhs = self.mir_rvalue(hir.rhs, env);
-            // TODO(fschuiki): The following should happen in a lowering of the
-            // assignment to its own MIR.
-            let rhs = mir::lower::rvalue::cast_to_type(self.cx, rhs, env, lhs.ty);
+            assert_span!(ty::identical(rhs.ty, lhs.ty), rhs.span, self.cx);
             let lhs = self.emit_mir_lvalue(lhs)?.0;
             let rhs = self.emit_mir_rvalue(rhs)?;
             let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
@@ -1221,7 +1219,7 @@ where
     /// Emit the code for an rvalue converted to a boolean..
     fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         let mir = self.mir_rvalue(expr_id, env);
-        let mir = mir::lower::rvalue::cast_to_bool(self.cx, mir, env);
+        assert_span!(mir.ty.is_bool(), mir.span, self);
         self.emit_mir_rvalue(mir)
     }
 
@@ -1391,11 +1389,9 @@ where
                 }
             }
             hir::StmtKind::Assign { lhs, rhs, kind } => {
-                // TODO(fschuiki): The following should happen in a lowering of the
-                // assignment to its own MIR.
                 let lhs_mir = self.mir_lvalue(lhs, env);
                 let rhs_mir = self.mir_rvalue(rhs, env);
-                let rhs_mir = mir::lower::rvalue::cast_to_type(self.cx, rhs_mir, env, lhs_mir.ty);
+                assert_span!(ty::identical(rhs_mir.ty, lhs_mir.ty), rhs_mir.span, self.cx);
                 let lhs_lv = self.emit_mir_lvalue(lhs_mir)?;
                 let rhs_rv = self.emit_mir_rvalue(rhs_mir)?;
 
