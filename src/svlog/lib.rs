@@ -54,6 +54,30 @@ macro_rules! bug_span {
     });
 }
 
+#[macro_export]
+macro_rules! assert_type {
+    ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr) => ({
+        $crate::assert_type!($lhs, $rhs, $span, $emitter,)
+    });
+    ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr,) => ({
+        $crate::assert_type!($lhs, $rhs, $span, $emitter, "type assertion failed: `{}` != `{}`", $lhs, $rhs)
+    });
+    ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr, $($arg:tt)+) => ({
+        if !$crate::ty::identical($lhs, $rhs) {
+            let msg = format!($($arg)*);
+            $emitter.emit(
+                moore_common::errors::DiagBuilder2::bug(&msg)
+                .span($span)
+                .add_note("Type mismatch:")
+                .add_note(format!("    Left-hand side:  `{}`", $lhs))
+                .add_note(format!("    Right-hand side: `{}`", $rhs))
+                .add_note(format!("Encountered at {}:{}", file!(), line!()))
+            );
+            panic!("{}", msg);
+        }
+    });
+}
+
 mod ast_map;
 mod codegen;
 mod context;

@@ -872,7 +872,7 @@ fn lower_array_pattern<'gcx>(
 
                 // Determine the value and insert into the mappings.
                 let value = builder.cx.mir_rvalue(to, builder.env);
-                assert_span!(ty::identical(value.ty, elem_ty), value.span, builder.cx);
+                assert_type!(value.ty, elem_ty, value.span, builder.cx);
                 let span = value.span;
                 if let Some(prev) = values.insert(index, value) {
                     builder.cx.emit(
@@ -901,7 +901,7 @@ fn lower_array_pattern<'gcx>(
                 }
                 None => {
                     let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_span!(ty::identical(value.ty, elem_ty), value.span, builder.cx);
+                    assert_type!(value.ty, elem_ty, value.span, builder.cx);
                     default = Some(value);
                 }
             },
@@ -983,7 +983,7 @@ fn lower_struct_pattern<'gcx>(
             PatternMapping::Type(type_id) => match builder.cx.map_to_type(type_id, builder.env) {
                 Ok(ty) => {
                     let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_span!(ty::identical(value.ty, ty), value.span, builder.cx);
+                    assert_type!(value.ty, ty, value.span, builder.cx);
                     type_defaults.insert(ty, value);
                 }
                 Err(()) => {
@@ -1101,7 +1101,7 @@ fn lower_struct_pattern<'gcx>(
             continue;
         };
         let value = builder.cx.mir_rvalue(default, builder.env);
-        assert_span!(ty::identical(value.ty, field_ty), value.span, builder.cx);
+        assert_type!(value.ty, field_ty, value.span, builder.cx);
         values.insert(index, value);
     }
 
@@ -1191,7 +1191,7 @@ fn lower_int_unary_arith<'gcx>(
     }
 
     // Check that the operand is of the right type.
-    assert_span!(ty::identical(arg.ty, result_ty), builder.span, builder.cx);
+    assert_type!(arg.ty, result_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1233,8 +1233,8 @@ fn lower_int_binary_arith<'gcx>(
     }
 
     // Check that the operands are of the right type.
-    assert_span!(ty::identical(lhs.ty, result_ty), builder.span, builder.cx);
-    assert_span!(ty::identical(rhs.ty, result_ty), builder.span, builder.cx);
+    assert_type!(lhs.ty, result_ty, builder.span, builder.cx);
+    assert_type!(rhs.ty, result_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1313,8 +1313,8 @@ fn make_int_comparison<'gcx>(
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     // Check that the operands are of the right type.
-    assert_span!(ty::identical(lhs.ty, op_ty), builder.span, builder.cx);
-    assert_span!(ty::identical(rhs.ty, op_ty), builder.span, builder.cx);
+    assert_type!(lhs.ty, op_ty, builder.span, builder.cx);
+    assert_type!(rhs.ty, op_ty, builder.span, builder.cx);
 
     // Assemble the node.
     builder.build(
@@ -1345,7 +1345,7 @@ fn lower_shift<'gcx>(
     }
 
     // Check that the operands are of the right type.
-    assert_span!(ty::identical(value.ty, result_ty), value.span, builder.cx);
+    assert_type!(value.ty, result_ty, value.span, builder.cx);
     assert_span!(amount.ty.is_simple_bit_vector(), amount.span, builder.cx);
 
     // Determine the operation.
@@ -1388,7 +1388,7 @@ fn lower_unary_bitwise<'gcx>(
     }
 
     // Check that the operand is of the right type.
-    assert_span!(ty::identical(arg.ty, ty), arg.span, builder.cx);
+    assert_type!(arg.ty, ty, arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1450,8 +1450,8 @@ fn make_binary_bitwise<'gcx>(
     rhs: &'gcx Rvalue<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     // Check that the operands are of the right type.
-    assert_span!(ty::identical(lhs.ty, ty), lhs.span, builder.cx);
-    assert_span!(ty::identical(rhs.ty, ty), rhs.span, builder.cx);
+    assert_type!(lhs.ty, ty, lhs.span, builder.cx);
+    assert_type!(rhs.ty, ty, rhs.span, builder.cx);
 
     // Assemble the node.
     let value = builder.build(ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
@@ -1482,7 +1482,7 @@ fn lower_unary_logic<'gcx>(
     }
 
     // Check that the operand is of the right type.
-    assert_span!(ty::identical(arg.ty, ty), arg.span, builder.cx);
+    assert_type!(arg.ty, ty, arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1515,8 +1515,8 @@ fn lower_binary_logic<'gcx>(
     }
 
     // Check that the operands are of the right type.
-    assert_span!(ty::identical(lhs.ty, ty), lhs.span, builder.cx);
-    assert_span!(ty::identical(rhs.ty, ty), rhs.span, builder.cx);
+    assert_type!(lhs.ty, ty, lhs.span, builder.cx);
+    assert_type!(rhs.ty, ty, rhs.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1558,7 +1558,7 @@ fn lower_reduction<'gcx>(
     );
 
     // Check that the operand is of the right type.
-    assert_span!(ty::identical(arg.ty, op_ty), builder.span, builder.cx);
+    assert_type!(arg.ty, op_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let (op, negate) = match op {

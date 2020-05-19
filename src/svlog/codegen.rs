@@ -542,7 +542,7 @@ where
             };
             let lhs = self.mir_lvalue(hir.lhs, env);
             let rhs = self.mir_rvalue(hir.rhs, env);
-            assert_span!(ty::identical(rhs.ty, lhs.ty), rhs.span, self.cx);
+            assert_type!(rhs.ty, lhs.ty, rhs.span, self.cx);
             let lhs = self.emit_mir_lvalue(lhs)?.0;
             let rhs = self.emit_mir_rvalue(rhs)?;
             let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
@@ -1391,7 +1391,7 @@ where
             hir::StmtKind::Assign { lhs, rhs, kind } => {
                 let lhs_mir = self.mir_lvalue(lhs, env);
                 let rhs_mir = self.mir_rvalue(rhs, env);
-                assert_span!(ty::identical(rhs_mir.ty, lhs_mir.ty), rhs_mir.span, self.cx);
+                assert_type!(rhs_mir.ty, lhs_mir.ty, rhs_mir.span, self.cx);
                 let lhs_lv = self.emit_mir_lvalue(lhs_mir)?;
                 let rhs_rv = self.emit_mir_rvalue(rhs_mir)?;
 
