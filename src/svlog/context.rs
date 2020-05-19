@@ -396,9 +396,9 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
     fn mkty_named(&self, name: Spanned<Name>, binding: NodeEnvId) -> Type<'gcx> {
         self.intern_type(TypeKind::Named(
             name,
-            binding.0,
+            binding.id(),
             self.gcx()
-                .map_to_type(binding.0, binding.1)
+                .map_to_type(binding.id(), binding.env())
                 .unwrap_or(self.mkty_void()),
         ))
     }

@@ -68,7 +68,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Emit the code for a module and all its dependent modules.
     pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ir::UnitId> {
-        if let Some(x) = self.tables.module_defs.get(&(id, env)) {
+        if let Some(x) = self.tables.module_defs.get(&id.env(env)) {
             return x.clone();
         }
         let hir = match self.hir_of(id)? {
@@ -115,7 +115,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut ent =
             llhd::ir::UnitData::new(llhd::ir::UnitKind::Entity, name.clone(), sig.clone());
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut ent);
-        self.tables.module_signatures.insert((id, env), (name, sig));
+        self.tables
+            .module_signatures
+            .insert(id.env(env), (name, sig));
         let mut values = HashMap::<NodeId, llhd::ir::Value>::new();
         let mut gen = UnitGenerator {
             gen: self,
@@ -184,7 +186,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         trace!("{}", gen.builder.unit());
         let result = Ok(self.into.add_unit(ent));
-        self.tables.module_defs.insert((id, env), result.clone());
+        self.tables.module_defs.insert(id.env(env), result.clone());
         result
     }
 
@@ -641,10 +643,10 @@ where
                 // trace!("Attaching {:?} to {:?}", mapping, int);
                 let value = match int.dir {
                     ast::PortDir::Input | ast::PortDir::Ref => {
-                        self.emit_rvalue_mode(mapping.0, mapping.1, Mode::Signal)?
+                        self.emit_rvalue_mode(mapping.id(), mapping.env(), Mode::Signal)?
                     }
                     ast::PortDir::Output | ast::PortDir::Inout => {
-                        self.emit_lvalue(mapping.0, mapping.1)?
+                        self.emit_lvalue(mapping.id(), mapping.env())?
                     }
                 };
                 if port_mapping_int.insert(int.id, value).is_some() {
@@ -653,7 +655,7 @@ where
                             "port `{}` connected multiple times",
                             int.name
                         ))
-                        .span(self.span(mapping.0)),
+                        .span(self.span(mapping.id())),
                     );
                 }
             }

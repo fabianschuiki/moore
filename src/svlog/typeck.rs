@@ -35,7 +35,7 @@ pub(crate) fn type_of<'gcx>(
             let env_data = cx.param_env_data(env);
             match env_data.find_value(node_id) {
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
-                    return cx.type_of(assigned_id.0, assigned_id.1)
+                    return cx.type_of(assigned_id.id(), assigned_id.env())
                 }
                 Some(ParamEnvBinding::Direct(t)) => return Ok(t.ty),
                 _ => (),
@@ -247,7 +247,7 @@ pub(crate) fn map_to_type<'gcx>(
             let env_data = cx.param_env_data(env);
             match env_data.find_type(node_id) {
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
-                    return cx.map_to_type(assigned_id.0, assigned_id.1)
+                    return cx.map_to_type(assigned_id.id(), assigned_id.env())
                 }
                 Some(ParamEnvBinding::Direct(t)) => return Ok(t),
                 _ => (),
@@ -276,12 +276,12 @@ pub(crate) fn map_to_type<'gcx>(
         HirNode::Expr(hir) => match hir.kind {
             hir::ExprKind::Ident(name) => {
                 let binding = cx.resolve_upwards_or_error(name, node_id)?;
-                Ok(cx.mkty_named(name, (binding, env)))
+                Ok(cx.mkty_named(name, binding.env(env)))
             }
             hir::ExprKind::Scope(scope_id, name) => {
                 let within = cx.resolve_node(scope_id, env)?;
                 let binding = cx.resolve_downwards_or_error(name, within)?;
-                Ok(cx.mkty_named(name, (binding, env)))
+                Ok(cx.mkty_named(name, binding.env(env)))
             }
             _ => {
                 error!("{:#?}", hir);
@@ -330,12 +330,12 @@ fn map_type_kind<'gcx>(
         }
         hir::TypeKind::Named(name) => {
             let binding = cx.resolve_upwards_or_error(name, node_id)?;
-            Ok(cx.mkty_named(name, (binding, env)))
+            Ok(cx.mkty_named(name, binding.env(env)))
         }
         hir::TypeKind::Scope(scope_id, name) => {
             let within = cx.resolve_node(scope_id, env)?;
             let binding = cx.resolve_downwards_or_error(name, within)?;
-            Ok(cx.mkty_named(name, (binding, env)))
+            Ok(cx.mkty_named(name, binding.env(env)))
         }
         hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
         hir::TypeKind::PackedArray(ref inner, lhs, rhs) => {

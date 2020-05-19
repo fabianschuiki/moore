@@ -120,7 +120,9 @@ pub(crate) fn compute<'gcx>(
             let ports: Result<Vec<_>> = pos_iter
                 .chain(named_iter)
                 .filter_map(|err| match err {
-                    Ok((port_id, (Some(assign_id), env))) => Some(Ok((port_id, (assign_id, env)))),
+                    Ok((port_id, (Some(assign_id), env))) => {
+                        Some(Ok((port_id, assign_id.env(env))))
+                    }
                     Ok(_) => None,
                     Err(()) => Some(Err(())),
                 })

@@ -14,11 +14,65 @@ use crate::{
 ///
 /// This is merely an handle that is cheap to copy and pass around. Use the
 /// [`Context`] to resolve this to the actual [`ParamEnvData`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ParamEnv(pub(crate) u32);
 
+impl std::fmt::Display for ParamEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "p{}", self.0)
+    }
+}
+
+impl std::fmt::Debug for ParamEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 /// A node id with corresponding parameter environment.
-pub type NodeEnvId = (NodeId, ParamEnv);
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeEnvId(NodeId, ParamEnv);
+
+impl NodeEnvId {
+    /// Create a new combined node ID with associated parameter bindings.
+    pub fn new(id: NodeId, env: ParamEnv) -> Self {
+        NodeEnvId(id, env)
+    }
+
+    /// Obtain the underlying node.
+    pub fn id(self) -> NodeId {
+        self.0
+    }
+
+    /// Obtain the parameter bindings associated with the node.
+    pub fn env(self) -> ParamEnv {
+        self.1
+    }
+}
+
+/// A helper trait to allow for easy wrapping of node IDs.
+pub trait IntoNodeEnvId {
+    /// Associate parameter bindings with this node.
+    fn env(self, env: ParamEnv) -> NodeEnvId;
+}
+
+impl IntoNodeEnvId for NodeId {
+    fn env(self, env: ParamEnv) -> NodeEnvId {
+        NodeEnvId(self, env)
+    }
+}
+
+impl std::fmt::Display for NodeEnvId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}@{}", self.0, self.1)
+    }
+}
+
+impl std::fmt::Debug for NodeEnvId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
 
 /// A parameter environment.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -165,7 +219,7 @@ pub(crate) fn compute<'gcx>(
             let mut values = vec![];
             for (param_id, assign_id) in param_iter {
                 let assign_id = match assign_id {
-                    (Some(i), n) => (i, n),
+                    (Some(i), n) => i.env(n),
                     _ => continue,
                 };
                 match cx.ast_of(param_id)? {

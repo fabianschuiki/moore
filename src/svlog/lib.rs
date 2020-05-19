@@ -96,7 +96,9 @@ pub mod value;
 pub use crate::{
     codegen::CodeGenerator,
     context::*,
-    param_env::{NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource},
+    param_env::{
+        IntoNodeEnvId, NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource,
+    },
     port_mapping::{PortMapping, PortMappingSource},
     resolver::{Rib, RibKind},
     syntax::*,
@@ -118,6 +120,6 @@ mod crate_prelude {
         context::{BaseContext, Context, GlobalContext},
         hir, mir, param_env, port_mapping,
         resolver::{self, Rib, RibKind},
-        ty, typeck, value, NodeEnvId,
+        ty, typeck, value, IntoNodeEnvId, NodeEnvId,
     };
 }
