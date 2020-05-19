@@ -16,6 +16,7 @@ pub(crate) use moore_common as common;
 #[macro_use]
 mod salsa;
 
+/// Assert that a condition holds, or emit a bug diagnostic and panic.
 #[macro_export]
 macro_rules! assert_span {
     ($cond:expr, $span:expr, $emitter:expr) => ({
@@ -41,6 +42,7 @@ macro_rules! assert_span {
     });
 }
 
+/// Emit a bug diagnostic and panic.
 #[macro_export]
 macro_rules! bug_span {
     ($span:expr, $emitter:expr, $($arg:tt)+) => ({
@@ -54,6 +56,7 @@ macro_rules! bug_span {
     });
 }
 
+/// Assert that two types are identical, or emit a bug diagnostic and panic.
 #[macro_export]
 macro_rules! assert_type {
     ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr) => ({
