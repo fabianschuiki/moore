@@ -85,6 +85,7 @@ mod ast_map;
 mod codegen;
 mod context;
 pub mod hir;
+mod inst_details;
 pub mod mir;
 mod param_env;
 mod port_mapping;
@@ -96,6 +97,7 @@ pub mod value;
 pub use crate::{
     codegen::CodeGenerator,
     context::*,
+    inst_details::{InstDetails, InstVerbosityVisitor},
     param_env::{
         IntoNodeEnvId, NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource,
     },

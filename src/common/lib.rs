@@ -82,7 +82,7 @@ bitflags! {
     ///
     /// These flags control how much information the compiler emits.
     #[derive(Default)]
-    pub struct Verbosity: u8 {
+    pub struct Verbosity: u16 {
         const TYPES         = 1 << 0;
         const EXPR_TYPES    = 1 << 1;
         const TYPE_CONTEXTS = 1 << 2;
@@ -91,5 +91,6 @@ bitflags! {
         const CASTS         = 1 << 5;
         const PORTS         = 1 << 6;
         const CONSTS        = 1 << 7;
+        const INSTS         = 1 << 8;
     }
 }

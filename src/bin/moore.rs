@@ -12,6 +12,7 @@ use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
+use moore::svlog::hir::Visitor as _;
 use moore::*;
 use std::path::Path;
 
@@ -52,6 +53,7 @@ fn main() {
                     "casts",
                     "ports",
                     "consts",
+                    "insts",
                 ])
                 .global(true),
         )
@@ -146,6 +148,7 @@ fn main() {
             "casts" => Verbosity::CASTS,
             "ports" => Verbosity::PORTS,
             "consts" => Verbosity::CONSTS,
+            "insts" => Verbosity::INSTS,
             _ => unreachable!(),
         };
     }
@@ -421,9 +424,14 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Elaborate::Svlog(m) => {
             // Emit the detailed type analysis if requested.
             if ctx.sess.has_verbosity(Verbosity::TYPES) {
-                use svlog::{hir::Visitor, BaseContext};
+                use svlog::BaseContext;
                 TypeVerbosityVisitor(ctx.svlog, ctx.svlog.default_param_env())
                     .visit_node_with_id(m, false);
+            }
+
+            // Emit the instantiation details if requested.
+            if ctx.sess.has_verbosity(Verbosity::INSTS) {
+                svlog::InstVerbosityVisitor::new(ctx.svlog).visit_node_with_id(m, false);
             }
 
             let mut cg = svlog::CodeGenerator::new(ctx.svlog);

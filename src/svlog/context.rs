@@ -31,7 +31,7 @@ use crate::{
     ty::{Type, TypeKind},
     typeck::{CastType, TypeContext},
     value::{Value, ValueData, ValueKind},
-    ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
+    InstDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
 use std::{
     cell::RefCell,
@@ -754,6 +754,12 @@ pub(super) mod queries {
                 type MirRvalueQuery;
                 use fn mir::lower::rvalue::lower_expr;
             }
+
+            /// Determine the details of an instantiation.
+            fn inst_details(inst: NodeEnvId) -> Result<Arc<InstDetails<'a>>> {
+                type InstDetailsQuery;
+                use fn crate::inst_details::compute;
+            }
         }
     }
 
@@ -786,6 +792,7 @@ pub(super) mod queries {
                 fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;
                 fn mir_rvalue() for MirRvalueQuery<'gcx>;
+                fn inst_details() for InstDetailsQuery<'gcx>;
             }
         }
     }

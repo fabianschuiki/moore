@@ -38,6 +38,7 @@ pub trait Visitor<'a>: Sized {
             HirNode::Assign(x) => self.visit_assign(x),
             HirNode::IntPort(x) => self.visit_int_port(x),
             HirNode::ExtPort(x) => self.visit_ext_port(x),
+            HirNode::Inst(x) => self.visit_inst(x),
             _ => (),
         }
     }
@@ -93,6 +94,8 @@ pub trait Visitor<'a>: Sized {
     fn visit_ext_port(&mut self, ext_port: &'a ExtPort) {
         walk_ext_port(self, ext_port);
     }
+
+    fn visit_inst(&mut self, _hir: &'a Inst) {}
 }
 
 /// Walk the contents of a module.
