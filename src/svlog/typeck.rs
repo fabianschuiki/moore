@@ -1333,14 +1333,27 @@ pub(crate) fn type_context<'gcx>(
         {
             Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
         }
-        HirNode::Inst(_inst) => {
-            bug_span!(
-                cx.span(onto),
-                cx,
-                "instance ports do not impose their type as context on assigned expressions"
-            );
+        HirNode::Inst(inst) => {
+            let details = cx.inst_details(inst.id.env(env)).ok()?;
+            details
+                .ports
+                .reverse_find(onto)
+                .and_then(|id| cx.type_of(id, details.inner_env).ok())
+                .map(Into::into)
         }
         HirNode::InstTarget(_inst) => {
+            // TODO(fschuiki): The following doesn't quite work, since multiple
+            // instantiations share the same instantiation target. The
+            // parameters are only bound once however, so there is no way of
+            // accessing an InstDetails struct for just an InstTarget.
+            // let details = cx
+            //     .inst_details(cx.parent_node_id(inst.id).unwrap().env(env))
+            //     .ok()?;
+            // details
+            //     .params
+            //     .reverse_find_value(onto)
+            //     .and_then(|param_id| cx.type_of(param_id, details.inner_env).ok())
+            //     .map(Into::into)
             bug_span!(
                 cx.span(onto),
                 cx,

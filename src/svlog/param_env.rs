@@ -98,6 +98,17 @@ impl<'t> ParamEnvData<'t> {
             .map(|&(_, id)| id)
     }
 
+    /// Find the node assigned to a value parameter.
+    pub fn reverse_find_value(&self, node_id: NodeId) -> Option<NodeId> {
+        self.values
+            .iter()
+            .flat_map(|&(param_id, binding)| match binding {
+                ParamEnvBinding::Indirect(bound_id) if bound_id.id() == node_id => Some(param_id),
+                _ => None,
+            })
+            .next()
+    }
+
     /// Assign a value to a node.
     pub fn set_value(&mut self, node_id: NodeId, value: Value<'t>) {
         self.values.retain(|&(n, _)| n != node_id);

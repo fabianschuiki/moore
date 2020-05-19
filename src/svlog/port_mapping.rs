@@ -22,6 +22,14 @@ impl PortMapping {
             .find(|&&(id, _)| id == node_id)
             .map(|&(_, id)| id)
     }
+
+    /// Find the port a signal is assigned to.
+    pub fn reverse_find(&self, node_id: NodeId) -> Option<NodeId> {
+        self.0
+            .iter()
+            .find(|&&(_, id)| id.id() == node_id)
+            .map(|&(id, _)| id)
+    }
 }
 
 /// A location that implies a port mapping.
