@@ -497,7 +497,7 @@ fn lower_cast<'gcx>(
         match op {
             CastOp::Bool => {
                 assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
-                value = builder.build(&ty::BIT_TYPE, RvalueKind::CastToBool(value));
+                value = builder.build(to, RvalueKind::CastToBool(value));
             }
             CastOp::SimpleBitVector => {
                 if value.ty.is_struct() {

@@ -203,7 +203,7 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(_, d) => Some(d),
             TypeKind::BitScalar { domain, .. } => Some(domain),
             TypeKind::BitVector { domain, .. } => Some(domain),
-            // TypeKind::PackedArray(_, ty) => ty.get_value_domain(),
+            TypeKind::PackedArray(_, ty) => ty.get_value_domain(),
             _ => None,
         }
     }
@@ -215,7 +215,7 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(..) => Some(Sign::Unsigned),
             TypeKind::BitScalar { sign, .. } => Some(sign),
             TypeKind::BitVector { sign, .. } => Some(sign),
-            // TypeKind::PackedArray(_, ty) => ty.get_sign(),
+            TypeKind::PackedArray(_, ty) => ty.get_sign(),
             _ => None,
         }
     }

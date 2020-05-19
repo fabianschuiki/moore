@@ -513,7 +513,7 @@ fn cast_expr_type_inner<'gcx>(
 
     // If any of the inputs are tombstones, return.
     if inferred.is_error() || context.is_error() {
-        trace!("  Aborting due to errors");
+        trace!("  Aborting due to error");
         return inferred.into();
     }
 
@@ -554,14 +554,15 @@ fn cast_expr_type_inner<'gcx>(
         }
     }
     if cast.is_error() {
+        trace!("  Aborting due to error");
         return cast;
     }
 
     // Cast the SBVT to a boolean.
     let context = match context {
         TypeContext::Bool => {
-            trace!("  Casting to bool");
-            cast.add_cast(CastOp::Bool, &ty::BIT_TYPE);
+            trace!("  Casting to bool ({})", context.ty());
+            cast.add_cast(CastOp::Bool, context.ty());
             return cast;
         }
         TypeContext::Type(ty) => ty,
@@ -585,6 +586,7 @@ fn cast_expr_type_inner<'gcx>(
         cast.add_cast(CastOp::Range(range, cast.ty.is_signed()), ty);
     }
     if cast.is_error() {
+        trace!("  Aborting due to error");
         return cast;
     }
 
@@ -634,6 +636,7 @@ fn cast_expr_type_inner<'gcx>(
         cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
     }
     if cast.is_error() {
+        trace!("  Aborting due to error");
         return cast;
     }
 
@@ -652,6 +655,7 @@ fn cast_expr_type_inner<'gcx>(
         );
     }
     if cast.is_error() {
+        trace!("  Aborting due to error");
         return cast;
     }
 
@@ -662,11 +666,13 @@ fn cast_expr_type_inner<'gcx>(
         cast.add_cast(CastOp::Array, context);
     }
     if cast.is_error() {
+        trace!("  Aborting due to error");
         return cast;
     }
 
     // If types match now, we're good.
     if ty::identical(context, cast.ty) {
+        trace!("  Cast complete");
         return cast;
     }
 
@@ -995,7 +1001,7 @@ fn self_determined_expr_type<'gcx>(
             | hir::UnaryOp::RedXnor => cx.self_determined_type(arg, env).map(|ty| {
                 ty.get_value_domain()
                     .map(|dom| dom.bit_type())
-                    .unwrap_or(ty)
+                    .unwrap_or(&ty::LOGIC_TYPE)
             }),
 
             // For all other cases we try to infer the argument's type.
@@ -1389,11 +1395,11 @@ pub enum TypeContext<'a> {
 impl<'a> TypeContext<'a> {
     /// Convert the type context to an actual type.
     ///
-    /// This resolves implicit boolean casts to the `bit` type.
+    /// This resolves implicit boolean casts to the `logic` type.
     pub fn ty(&self) -> Type<'a> {
         match *self {
             TypeContext::Type(t) => t,
-            TypeContext::Bool => &ty::BIT_TYPE,
+            TypeContext::Bool => &ty::LOGIC_TYPE,
         }
     }
 

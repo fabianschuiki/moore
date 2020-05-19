@@ -13,16 +13,16 @@ module foo;
     assign b = !v;
     assign b = !m;
     assign b = !s;
-    // CHECK: 12: cast_chain(b) = bit
-    // CHECK: 13: cast_chain(v) = bit [7:0] -> Bool bit
-    // CHECK: 14: cast_chain(m) = bit [3:0] [7:0] -> SimpleBitVector logic [31:0] -> Bool bit
-    // CHECK: 15: cast_chain(s) = struct -> SimpleBitVector logic [14:0] -> Bool bit
+    // CHECK: 12: cast_chain(b) = bit -> Bool logic
+    // CHECK: 13: cast_chain(v) = bit [7:0] -> Bool logic
+    // CHECK: 14: cast_chain(m) = bit [3:0] [7:0] -> SimpleBitVector logic [31:0] -> Bool logic
+    // CHECK: 15: cast_chain(s) = struct -> SimpleBitVector logic [14:0] -> Bool logic
 
     assign b = v && b;
     assign b = v || b;
     assign b = v;
-    // CHECK: 21: cast_chain(v) = bit [7:0] -> Bool bit
-    // CHECK: 22: cast_chain(v) = bit [7:0] -> Bool bit
+    // CHECK: 21: cast_chain(v) = bit [7:0] -> Bool logic
+    // CHECK: 22: cast_chain(v) = bit [7:0] -> Bool logic
     // CHECK: 23: cast_chain(v) = bit [7:0] -> Range([0:0], false) bit [0:0] -> Transmute bit
 
     assign s = v;
