@@ -56,7 +56,7 @@ pub(crate) fn type_of<'gcx>(
                 );
             }
         }
-        HirNode::Expr(e) => Ok(type_of_expr(cx, e, env)),
+        HirNode::Expr(_) => Ok(cast_type(cx, node_id, env).unwrap().ty),
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
                 return cx.map_to_type(p.ty, env);
