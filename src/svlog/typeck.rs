@@ -625,7 +625,10 @@ fn cast_expr_type_inner<'gcx>(
     }
 
     // Cast bit scalars from and to bit vectors.
-    match (cast.ty, context_sbvt) {
+    match (
+        cast.ty.resolve_name(),
+        context_sbvt.map(|ty| ty.resolve_name()),
+    ) {
         // Drop a [0:0] when the target is a scalar.
         (
             &TypeKind::BitVector {
