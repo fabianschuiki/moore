@@ -91,6 +91,9 @@ pub fn lower_expr<'gcx>(
 
     // Lower the expression.
     let rvalue = lower_expr_inner(&builder, hir, cast.init).unwrap_or_else(|_| builder.error());
+    if rvalue.is_error() {
+        return rvalue;
+    }
     assert_span!(
         ty::identical(rvalue.ty, cast.init),
         hir.span,
