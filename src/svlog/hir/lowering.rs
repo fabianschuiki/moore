@@ -87,14 +87,20 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             for port in &inst.conns {
                 match port.kind {
                     ast::PortConnKind::Auto => has_wildcard_port = true,
-                    ast::PortConnKind::Named(name, ref mode) => {
-                        let name = Spanned::new(name.name, name.span);
+                    ast::PortConnKind::Named(ident, ref mode) => {
+                        let name = Spanned::new(ident.name, ident.span);
                         is_pos = false;
                         let value_id = match *mode {
-                            ast::PortConnMode::Auto => Some(cx.resolve_upwards_or_error(
-                                name,
-                                cx.parent_node_id(node_id).unwrap(),
-                            )?),
+                            ast::PortConnMode::Auto => {
+                                let expr = cx.arena().alloc_ast_expr(ast::Expr {
+                                    parent: Default::default(),
+                                    lex_pred: Default::default(),
+                                    lex_succ: Default::default(),
+                                    span: name.span,
+                                    data: ast::IdentExpr(ident),
+                                });
+                                Some(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
+                            }
                             ast::PortConnMode::Unconnected => None,
                             ast::PortConnMode::Connected(ref expr) => {
                                 Some(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
