@@ -195,16 +195,8 @@ fn lower_expr_inner<'gcx>(
             let cond = cx.mir_rvalue(cond, env);
             let true_value = cx.mir_rvalue(true_value, env);
             let false_value = cx.mir_rvalue(false_value, env);
-            assert_span!(
-                ty::identical(true_value.ty, ty),
-                true_value.span,
-                builder.cx
-            );
-            assert_span!(
-                ty::identical(false_value.ty, ty),
-                false_value.span,
-                builder.cx
-            );
+            assert_type!(true_value.ty, ty, true_value.span, builder.cx);
+            assert_type!(false_value.ty, ty, false_value.span, builder.cx);
             Ok(builder.build(
                 ty,
                 RvalueKind::Ternary {

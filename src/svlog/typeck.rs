@@ -1537,10 +1537,14 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::BinaryOp::Geq => Some(cx.need_operation_type(expr.id, env).into()),
         },
 
-        // The ternary operator imposes its self-determined type as a context.
+        // The ternary operator imposes its operation type onto the true and
+        // false expressions.
         hir::ExprKind::Ternary(_, lhs, rhs) if onto == lhs || onto == rhs => {
-            cx.self_determined_type(expr.id, env).map(Into::into)
+            Some(cx.need_operation_type(expr.id, env).into())
         }
+
+        // The ternary operator imposes a boolean context on its condition.
+        hir::ExprKind::Ternary(cond, _, _) if onto == cond => Some(TypeContext::Bool),
 
         // Static casts are *not* assignment-like contexts. See §10.8
         // "Assignment-like contexts". We use a trick here to get the implicit
