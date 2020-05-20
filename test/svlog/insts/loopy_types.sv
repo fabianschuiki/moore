@@ -4,13 +4,13 @@ module foo;
     bit [19:0] x;
 
     bar1 i1 (x);
-    bar2 i2 (x);
-    bar3 i3 (x);
-    bar4 i4 (x);
-    bar5 i5 (x,x);
-    bar6 i6 (x);
-    bar7 i7 (x);
-    bar8 i8 (x,x);
+    bar2 #(7) i2 (x);
+    bar3 #(7) i3 (x);
+    bar4 #(7, 10) i4 (x);
+    bar5 #(7, 10) i5 (x,x);
+    bar6 #(bit [16:0]) i6 (x);
+    bar7 #(bit [16:0], 10) i7 (x);
+    bar8 #(bit [16:0], 10) i8 (x,x);
 endmodule
 
 // Simple input type.
@@ -77,6 +77,6 @@ module bar8 #(
     parameter T N
 )(
     input T x,
-    input bit [N-1:0] x
+    input bit [N-1:0] y
 );
 endmodule
