@@ -16,7 +16,7 @@ endmodule
 // CHECK:     %1 = sig i32 %0
 // CHECK:     %2 = const time 0s 1e
 // CHECK:     drv i32$ %1, %a1, %2
-// CHECK:     inst @X (i32$ %1) -> (i32$ %b)
+// CHECK:     inst @X.param1 (i32$ %1) -> (i32$ %b)
 // CHECK: }
 
 // module B1 ({x,y});
@@ -45,7 +45,7 @@ endmodule
 // CHECK:     %3 = sig i32 %0
 // CHECK:     %4 = const time 0s 1e
 // CHECK:     drv i32$ %3, %2, %4
-// CHECK:     inst @X (i32$ %3) -> (i32$ %b)
+// CHECK:     inst @X.param1 (i32$ %3) -> (i32$ %b)
 // CHECK: }
 
 module N1;

@@ -77,6 +77,7 @@ impl std::fmt::Debug for NodeEnvId {
 /// A parameter environment.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct ParamEnvData<'t> {
+    module: Option<NodeId>,
     values: Vec<(NodeId, ParamEnvBinding<Value<'t>>)>,
     types: Vec<(NodeId, ParamEnvBinding<Type<'t>>)>,
 }
@@ -246,7 +247,11 @@ pub(crate) fn compute<'gcx>(
                 }
             }
 
-            let env = cx.intern_param_env(ParamEnvData { types, values });
+            let env = cx.intern_param_env(ParamEnvData {
+                module: Some(module.id),
+                types,
+                values,
+            });
             cx.add_param_env_context(env, inst);
             Ok(env)
         }

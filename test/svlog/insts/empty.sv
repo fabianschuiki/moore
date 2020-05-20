@@ -6,8 +6,8 @@ endmodule
 module B;
 endmodule
 
-// CHECK: entity @B () -> () {
+// CHECK: entity @B.param1 () -> () {
 // CHECK: }
 // CHECK: entity @A () -> () {
-// CHECK:     inst @B () -> ()
+// CHECK:     inst @B.param1 () -> ()
 // CHECK: }

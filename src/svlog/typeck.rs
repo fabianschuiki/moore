@@ -284,18 +284,22 @@ pub(crate) fn map_to_type<'gcx>(
             if let Some(default) = param.default {
                 return cx.map_to_type(default, env);
             }
-            let mut d = DiagBuilder2::error(format!(
+            let d = DiagBuilder2::error(format!(
                 "{} not assigned and has no default",
                 param.desc_full(),
             ));
             let contexts = cx.param_env_contexts(env);
             for &context in &contexts {
-                d = d.span(cx.span(context));
+                cx.emit(
+                    d.clone()
+                        .span(cx.span(context))
+                        .add_note("Parameter declared here:")
+                        .span(param.human_span()),
+                );
             }
             if contexts.is_empty() {
-                d = d.span(param.human_span());
+                cx.emit(d.span(param.human_span()));
             }
-            cx.emit(d);
             Err(())
         }
         HirNode::Typedef(def) => cx.map_to_type(def.ty, env),
