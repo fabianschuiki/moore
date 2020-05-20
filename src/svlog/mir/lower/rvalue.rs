@@ -82,8 +82,8 @@ pub fn lower_expr<'gcx>(
     // Make sure we have an expression.
     let hir = match cx.hir_of(expr_id) {
         Ok(HirNode::Expr(x)) => x,
+        Ok(x) => bug_span!(span, cx, "no rvalue for {:?}", x),
         Err(_) => return builder.error(),
-        x => bug_span!(span, cx, "no rvalue for {:?}", x),
     };
 
     // Determine the cast type.
