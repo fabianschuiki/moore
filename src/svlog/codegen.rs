@@ -544,6 +544,9 @@ where
             };
             let lhs = self.mir_lvalue(hir.lhs, env);
             let rhs = self.mir_rvalue(hir.rhs, env);
+            if lhs.is_error() || rhs.is_error() {
+                continue;
+            }
             assert_type!(rhs.ty, lhs.ty, rhs.span, self.cx);
             let lhs = self.emit_mir_lvalue(lhs)?.0;
             let rhs = self.emit_mir_rvalue(rhs)?;
