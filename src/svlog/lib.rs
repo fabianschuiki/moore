@@ -97,7 +97,7 @@ pub mod value;
 pub use crate::{
     codegen::CodeGenerator,
     context::*,
-    inst_details::{InstDetails, InstVerbosityVisitor},
+    inst_details::{InstDetails, InstTargetDetails, InstVerbosityVisitor},
     param_env::{
         IntoNodeEnvId, NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource,
     },

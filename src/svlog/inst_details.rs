@@ -8,16 +8,40 @@ use crate::{
     hir::{self, HirNode},
     Context, NodeEnvId, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping, PortMappingSource,
 };
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 /// Instantiation details
 ///
 /// This struct bundles all the information associated with an instantiation,
 /// most importantly the parameter bindings and port connections.
+///
+/// This corresponds to the `bar(y)` in `foo #(x) bar(y);`.
 #[derive(Debug, PartialEq, Eq)]
 pub struct InstDetails<'a> {
     /// The HIR instantiation.
     pub inst: &'a hir::Inst<'a>,
+    /// The target details.
+    pub target: Arc<InstTargetDetails<'a>>,
+    /// The port connections.
+    pub ports: Arc<PortMapping>,
+}
+
+impl<'a> Deref for InstDetails<'a> {
+    type Target = InstTargetDetails<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        self.target.as_ref()
+    }
+}
+
+/// Instantiation target details
+///
+/// This struct bundles all the information associated with an instantiation
+/// target, most importantly the parameter bindings.
+///
+/// This corresponds to the `foo #(x)` in `foo #(x) bar(y);`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct InstTargetDetails<'a> {
     /// The HIR instantiation target.
     pub inst_target: &'a hir::InstTarget,
     /// The instantiated HIR module.
@@ -28,20 +52,46 @@ pub struct InstDetails<'a> {
     pub inner_env: ParamEnv,
     /// The parameter bindings.
     pub params: &'a ParamEnvData<'a>,
-    /// The port connections.
-    pub ports: Arc<PortMapping>,
 }
 
-pub(crate) fn compute<'gcx>(
+pub(crate) fn compute_inst<'gcx>(
     cx: &impl Context<'gcx>,
     node: NodeEnvId,
 ) -> Result<Arc<InstDetails<'gcx>>> {
-    // Look up the HIR of the instantiation and its target.
+    // Look up the HIR of the instantiation.
     let inst = match cx.hir_of(node.id())? {
         HirNode::Inst(x) => x,
         x => bug_span!(cx.span(node.id()), cx, "inst_details called on a {:?}", x),
     };
-    let inst_target = match cx.hir_of(inst.target)? {
+
+    // Determine the details of the instantiation target.
+    let target = cx.inst_target_details(inst.target.env(node.env()))?;
+
+    // Determine the port connections of the instantiations. Connections
+    // are made to the module's external ports, and must later be mapped
+    // to the actual internal ports in a second step.
+    let port_mapping = cx.port_mapping(PortMappingSource::ModuleInst {
+        module: target.module.id,
+        inst: node.id(),
+        env: target.inner_env,
+        pos: &inst.pos_ports,
+        named: &inst.named_ports,
+    })?;
+
+    // Wrap everything up.
+    Ok(Arc::new(InstDetails {
+        inst,
+        target: target,
+        ports: port_mapping,
+    }))
+}
+
+pub(crate) fn compute_inst_target<'gcx>(
+    cx: &impl Context<'gcx>,
+    node: NodeEnvId,
+) -> Result<Arc<InstTargetDetails<'gcx>>> {
+    // Look up the HIR of the instantiation target.
+    let inst_target = match cx.hir_of(node.id())? {
         HirNode::InstTarget(x) => x,
         x => bug_span!(cx.span(node.id()), cx, "inst target is a {:?}", x),
     };
@@ -78,26 +128,13 @@ pub(crate) fn compute<'gcx>(
     })?;
     let inst_env_data = cx.param_env_data(inst_env);
 
-    // Determine the port connections of the instantiations. Connections
-    // are made to the module's external ports, and must later be mapped
-    // to the actual internal ports in a second step.
-    let port_mapping = cx.port_mapping(PortMappingSource::ModuleInst {
-        module: module,
-        inst: node.id(),
-        env: inst_env,
-        pos: &inst.pos_ports,
-        named: &inst.named_ports,
-    })?;
-
     // Wrap everything up.
-    Ok(Arc::new(InstDetails {
-        inst,
+    Ok(Arc::new(InstTargetDetails {
         inst_target,
         module: module_hir,
         outer_env: node.env(),
         inner_env: inst_env,
         params: inst_env_data,
-        ports: port_mapping,
     }))
 }
 
