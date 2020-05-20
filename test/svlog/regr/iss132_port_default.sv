@@ -1,5 +1,4 @@
-// RUN: moore %s -e foo
-// IGNORE  see issue #132
+// RUN: moore %s -e foo -O0 -Vtypes
 
 module foo (
     output bit x = 0,
