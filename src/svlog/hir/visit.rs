@@ -39,6 +39,7 @@ pub trait Visitor<'a>: Sized {
             HirNode::IntPort(x) => self.visit_int_port(x),
             HirNode::ExtPort(x) => self.visit_ext_port(x),
             HirNode::Inst(x) => self.visit_inst(x),
+            HirNode::InstTarget(x) => self.visit_inst_target(x),
             _ => (),
         }
     }
@@ -95,7 +96,13 @@ pub trait Visitor<'a>: Sized {
         walk_ext_port(self, ext_port);
     }
 
-    fn visit_inst(&mut self, _hir: &'a Inst) {}
+    fn visit_inst(&mut self, hir: &'a Inst) {
+        walk_inst(self, hir);
+    }
+
+    fn visit_inst_target(&mut self, hir: &'a InstTarget) {
+        walk_inst_target(self, hir);
+    }
 }
 
 /// Walk the contents of a module.
@@ -373,3 +380,22 @@ pub fn walk_int_port<'a>(visitor: &mut impl Visitor<'a>, int_port: &'a IntPort) 
 
 /// Walk the contents of an external port.
 pub fn walk_ext_port<'a>(_visitor: &mut impl Visitor<'a>, _ext_port: &'a ExtPort) {}
+
+/// Walk the contents of an instantiation.
+pub fn walk_inst<'a>(visitor: &mut impl Visitor<'a>, hir: &'a Inst) {
+    visitor.visit_node_with_id(hir.target, false);
+    let pos_ports = hir.pos_ports.iter().flat_map(|&(_, p)| p);
+    let named_ports = hir.named_ports.iter().flat_map(|&(_, _, p)| p);
+    for p in pos_ports.chain(named_ports) {
+        visitor.visit_node_with_id(p, false);
+    }
+}
+
+/// Walk the contents of an instantiation target.
+pub fn walk_inst_target<'a>(visitor: &mut impl Visitor<'a>, hir: &'a InstTarget) {
+    let pos_params = hir.pos_params.iter().flat_map(|&(_, p)| p);
+    let named_params = hir.named_params.iter().flat_map(|&(_, _, p)| p);
+    for p in pos_params.chain(named_params) {
+        visitor.visit_node_with_id(p, false);
+    }
+}
