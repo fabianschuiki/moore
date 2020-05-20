@@ -293,7 +293,7 @@ pub(crate) fn map_to_type<'gcx>(
                 cx.emit(
                     d.clone()
                         .span(cx.span(context))
-                        .add_note("Parameter declared here:")
+                        .add_note("parameter declared here:")
                         .span(param.human_span()),
                 );
             }
@@ -375,6 +375,7 @@ fn map_type_kind<'gcx>(
             let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
                 match cx.constant_value_of(bound, env)?.kind {
                     ValueKind::Int(ref int, ..) => Ok(int),
+                    ValueKind::Error => Err(()),
                     _ => {
                         let span = cx.span(bound);
                         cx.emit(
@@ -726,6 +727,8 @@ fn cast_expr_type_inner<'gcx>(
         ));
     }
     cx.emit(d);
+    error!("Inferred type: {:?}", inferred);
+    error!("Context type: {:?}", context);
     error!("Cast chain thus far: {}", cast);
     (&ty::ERROR_TYPE).into()
 }

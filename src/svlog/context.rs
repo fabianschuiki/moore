@@ -400,7 +400,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
             binding.id(),
             self.gcx()
                 .map_to_type(binding.id(), binding.env())
-                .unwrap_or(self.mkty_void()),
+                .unwrap_or(&ty::ERROR_TYPE),
         ))
     }
 
