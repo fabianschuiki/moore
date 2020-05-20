@@ -1,5 +1,4 @@
-// RUN: moore %s -e foo
-// IGNORE  see issue #141
+// RUN: moore %s -e foo -O0 -Vtypes
 
 module foo;
     localparam bit [7:0] X = 42'd123;
