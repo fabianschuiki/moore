@@ -1560,6 +1560,29 @@ fn type_context_imposed_by_expr<'gcx>(
             Some(cx.need_self_determined_type(expr.id, env).into())
         }
 
+        // Concatenations require their arguments (including repetition counts)
+        // to map to a corresponding SBVT.
+        hir::ExprKind::Concat(..) => {
+            let ty = cx.need_self_determined_type(onto, env);
+            let sbvt = match ty.get_simple_bit_vector(cx, env, false) {
+                Some(ty) => ty,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(
+                            format!("cannot concatenate a value of type `{}`", ty,),
+                        )
+                        .span(expr.span)
+                        .add_note(format!(
+                            "`{}` has no simple bit-vector type representation",
+                            ty
+                        )),
+                    );
+                    &ty::ERROR_TYPE
+                }
+            };
+            Some(sbvt.into())
+        }
+
         _ => None,
     }
 }
