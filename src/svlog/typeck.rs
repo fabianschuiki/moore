@@ -27,6 +27,35 @@ pub(crate) fn type_of<'gcx>(
                 cx.type_of(decl_id, env)
             }
         },
+        HirNode::ExtPort(p) => {
+            if p.exprs.len() == 1 {
+                let expr = &p.exprs[0];
+                if !expr.selects.is_empty() {
+                    bug_span!(
+                        p.span,
+                        cx,
+                        "port{} contains a `[...]` selection; not yet supported in typeck",
+                        p.name
+                            .map(|n| format!(" `{}`", n))
+                            .unwrap_or_else(String::new)
+                    );
+                }
+                let module = match cx.hir_of(p.module)? {
+                    HirNode::Module(m) => m,
+                    _ => unreachable!(),
+                };
+                cx.type_of(module.ports_new.int[expr.port].id, env)
+            } else {
+                bug_span!(
+                    p.span,
+                    cx,
+                    "port{} is a concatenation; not yet supported in typeck",
+                    p.name
+                        .map(|n| format!(" `{}`", n))
+                        .unwrap_or_else(String::new)
+                );
+            }
+        }
         HirNode::Expr(e) => Ok(type_of_expr(cx, e, env)),
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
