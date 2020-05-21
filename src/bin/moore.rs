@@ -228,12 +228,13 @@ fn score(sess: &Session, matches: &ArgMatches) {
                                 Ok((_token, span)) => span.extract(),
                                 Err(diag) => {
                                     sess.emit(diag);
-                                    return;
+                                    failed = true;
+                                    continue;
                                 }
                             }
                         );
                     }
-                    return;
+                    continue;
                 }
 
                 let lexer = svlog::lexer::Lexer::new(preproc);
@@ -250,6 +251,9 @@ fn score(sess: &Session, matches: &ArgMatches) {
     }
     if failed || sess.failed() {
         std::process::exit(1);
+    }
+    if matches.is_present("preproc") {
+        return;
     }
 
     // Dump the AST if so requested.
