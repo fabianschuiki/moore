@@ -1635,10 +1635,12 @@ fn type_context_imposed_by_stmt<'gcx>(
 
         // Case statements impose the switch expression's self-determined type
         // on  the case arms.
-        hir::StmtKind::Case { expr, ref ways, .. }
-            if ways.iter().flat_map(|(x, _)| x.iter()).any(|&x| x == onto) =>
-        {
-            cx.self_determined_type(expr, env).map(Into::into)
+        hir::StmtKind::Case { expr, ref ways, .. } => {
+            if ways.iter().flat_map(|(x, _)| x.iter()).any(|&x| x == onto) {
+                cx.self_determined_type(expr, env).map(Into::into)
+            } else {
+                None
+            }
         }
 
         _ => None,
