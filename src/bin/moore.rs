@@ -222,7 +222,16 @@ fn score(sess: &Session, matches: &ArgMatches) {
                 let preproc = svlog::preproc::Preprocessor::new(source, &include_paths, &defines);
                 if matches.is_present("preproc") {
                     for token in preproc {
-                        print!("{}", token.unwrap().1.extract());
+                        print!(
+                            "{}",
+                            match token {
+                                Ok((_token, span)) => span.extract(),
+                                Err(diag) => {
+                                    sess.emit(diag);
+                                    return;
+                                }
+                            }
+                        );
                     }
                     return;
                 }
