@@ -435,6 +435,10 @@ fn map_type_kind<'gcx>(
             Some(repr) => cx.map_to_type(repr, env),
             None => Ok(cx.mkty_int(variants.len().next_power_of_two().trailing_zeros() as usize)),
         },
+
+        hir::TypeKind::RefExpr(expr) => cx.type_of(expr, env),
+        hir::TypeKind::RefType(ty) => cx.map_to_type(ty, env),
+
         // We should never request mapping of an implicit type. Rather, the
         // actual type should be mapped. Arriving here is a bug in the
         // calling function.

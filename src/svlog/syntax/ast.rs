@@ -399,6 +399,9 @@ pub enum TypeData<'a> {
 
     // Specialization
     SpecializedType(Box<Type<'a>>, Vec<ParamAssignment<'a>>),
+
+    /// Type reference, such as `type(x)` or `type(int)`.
+    TypeRef(Box<TypeOrExpr<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]

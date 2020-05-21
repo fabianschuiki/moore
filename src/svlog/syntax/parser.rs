@@ -1628,6 +1628,14 @@ fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeDat
             Ok(ast::VirtIntfType(name))
         }
 
+        // type_reference ::= `type` `(` expression `)`
+        // type_reference ::= `type` `(` data_type `)`
+        Keyword(Kw::Type) => {
+            p.bump();
+            let arg = flanked(p, Paren, |p| parse_type_or_expr(p, &[CloseDelim(Paren)]))?;
+            Ok(ast::TypeRef(Box::new(arg)))
+        }
+
         _ => {
             let q = p.peek(0).1;
             p.add_diag(DiagBuilder2::error("expected type").span(q));

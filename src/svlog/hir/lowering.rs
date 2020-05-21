@@ -1628,7 +1628,53 @@ fn lower_type<'gcx>(
             }
             hir::TypeKind::Enum(variants, ty)
         }
-        _ => {
+        ast::TypeRef(ref arg) => {
+            // Special care is needed here for types that were mistakenly parsed
+            // as an expression.
+            match arg.as_ref() {
+                ast::TypeOrExpr::Expr(expr) => match &expr.data {
+                    ast::IdentExpr(n) => {
+                        let binding = cx.resolve_upwards_or_error(
+                            Spanned::new(n.name, n.span),
+                            cx.parent_node_id(node_id).unwrap(),
+                        )?;
+                        match cx.hir_of(binding)? {
+                            HirNode::TypeParam(..) | HirNode::Typedef(..) => {
+                                let ty = cx.arena().alloc_ast_type(ast::Type {
+                                    span: expr.span,
+                                    data: ast::NamedType(*n),
+                                    sign: ast::TypeSign::None,
+                                    dims: vec![],
+                                });
+                                hir::TypeKind::RefType(
+                                    cx.map_ast_with_parent(AstNode::Type(ty), node_id),
+                                )
+                            }
+                            _ => hir::TypeKind::RefExpr(
+                                cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
+                            ),
+                        }
+                    }
+                    _ => {
+                        hir::TypeKind::RefExpr(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
+                    }
+                },
+                ast::TypeOrExpr::Type(ty) => {
+                    hir::TypeKind::RefType(cx.map_ast_with_parent(AstNode::Type(ty), node_id))
+                }
+            }
+        }
+        ast::ChandleType
+        | ast::VirtIntfType(..)
+        | ast::EventType
+        | ast::MailboxType
+        | ast::ImplicitSignedType
+        | ast::ImplicitUnsignedType
+        | ast::ShortRealType
+        | ast::RealType
+        | ast::RealtimeType
+        | ast::SpecializedType(..)
+        | ast::ScopedType { .. } => {
             error!("{:#?}", ty);
             return cx.unimp_msg("lowering of", ty);
         }

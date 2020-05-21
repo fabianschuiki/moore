@@ -641,6 +641,10 @@ pub enum TypeKind {
     /// Each element in the vector refers to a `EnumVariant`. The optional field
     /// indicates the representation type.
     Enum(Vec<(Spanned<Name>, NodeId)>, Option<NodeId>),
+    /// A type reference on an expression, such as `type(x)`.
+    RefExpr(NodeId),
+    /// A type reference on a type, such as `type(int)`.
+    RefType(NodeId),
 }
 
 impl HasDesc for TypeKind {
