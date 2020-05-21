@@ -1346,7 +1346,7 @@ mod tests {
     fn macro_args() {
         check_str(
             "`define foo(x,y) {x + y _bar}\n`foo(12, foo)\n",
-            "{12 +  foo _bar}\n",
+            "{12 + foo _bar}\n",
         );
     }
 
