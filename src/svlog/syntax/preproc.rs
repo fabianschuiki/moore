@@ -844,13 +844,17 @@ impl<'a> Preprocessor<'a> {
                                 }
                                 break;
                             }
-                            Some(x @ (Symbol('('), _)) => {
+                            Some(x @ (Symbol('('), _))
+                            | Some(x @ (Symbol('{'), _))
+                            | Some(x @ (Symbol('['), _)) => {
                                 nesting += 1;
                                 all_span.expand(x.1);
                                 tokens.push(x);
                                 self.bump();
                             }
-                            Some(x @ (Symbol(')'), _)) => {
+                            Some(x @ (Symbol(')'), _))
+                            | Some(x @ (Symbol('}'), _))
+                            | Some(x @ (Symbol(']'), _)) => {
                                 nesting -= 1;
                                 all_span.expand(x.1);
                                 tokens.push(x);
@@ -956,13 +960,17 @@ impl<'a> Preprocessor<'a> {
                         self.bump();
                         break 'outer;
                     }
-                    Some(x @ (Symbol('('), _)) => {
+                    Some(x @ (Symbol('('), _))
+                    | Some(x @ (Symbol('{'), _))
+                    | Some(x @ (Symbol('['), _)) => {
                         arg_tokens.push(x);
                         nesting += 1;
                         self.bump();
                         all_span.expand(x.1);
                     }
-                    Some(x @ (Symbol(')'), _)) if nesting > 0 => {
+                    Some(x @ (Symbol(')'), _))
+                    | Some(x @ (Symbol('}'), _))
+                    | Some(x @ (Symbol(']'), _)) => {
                         arg_tokens.push(x);
                         nesting -= 1;
                         self.bump();
