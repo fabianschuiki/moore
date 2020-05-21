@@ -207,97 +207,9 @@ impl<'a> Preprocessor<'a> {
                     _ => (),
                 }
 
-                // Consume the macro name.
-                let (name, name_span) = match self.try_eat_name() {
-                    Some(x) => x,
-                    None => {
-                        return Err(
-                            DiagBuilder2::fatal("expected macro name after \"`define\"").span(span)
-                        );
-                    }
-                };
-                let mut makro = Macro::new(name.clone(), name_span);
+                let makro = self.handle_macro_definition(span)?;
 
-                // NOTE: No whitespace is allowed after the macro name such that
-                // the preprocessor does not mistake the a in "`define FOO (a)"
-                // for a macro argument.
-
-                // Consume the macro arguments and parameters.
-                match self.token {
-                    Some((Symbol('('), _)) => {
-                        self.bump();
-                        loop {
-                            // Skip whitespace.
-                            match self.token {
-                                Some((Whitespace, _)) => self.bump(),
-                                Some((Symbol(')'), _)) => break,
-                                _ => (),
-                            }
-
-                            // Consume the argument name.
-                            let (name, name_span) = match self.try_eat_name() {
-                                Some(x) => x,
-                                _ => {
-                                    return Err(DiagBuilder2::fatal(
-                                        "expected macro argument name",
-                                    )
-                                    .span(span));
-                                }
-                            };
-                            makro.args.push(MacroArg::new(name, name_span));
-                            // TODO: Support default parameters.
-
-                            // Skip whitespace and either consume the comma that
-                            // follows or break out of the loop if a closing
-                            // parenthesis is encountered.
-                            match self.token {
-                                Some((Whitespace, _)) => self.bump(),
-                                _ => (),
-                            }
-                            match self.token {
-                                Some((Symbol(','), _)) => self.bump(),
-                                Some((Symbol(')'), _)) => break,
-                                Some((_, sp)) => return Err(DiagBuilder2::fatal("expected , or ) after macro argument name").span(sp)),
-                                None => return Err(DiagBuilder2::fatal("expected closing parenthesis at the end of the macro definition").span(span)),
-                            }
-                        }
-                        self.bump();
-                    }
-                    _ => (),
-                }
-
-                // Skip whitespace between the macro parameters and definition.
-                match self.token {
-                    Some((Whitespace, _)) => self.bump(),
-                    _ => (),
-                }
-
-                // Consume the macro definition up to the next newline not preceded
-                // by a backslash, ignoring comments, whitespace and newlines.
-                loop {
-                    match self.token {
-                        Some((Newline, _)) => {
-                            self.bump();
-                            break;
-                        }
-                        // Some((Whitespace, _)) => self.bump(),
-                        // Some((Comment, _)) => self.bump(),
-                        Some((Symbol('\\'), _)) => {
-                            self.bump();
-                            match self.token {
-                                Some((Newline, _)) => self.bump(),
-                                _ => (),
-                            };
-                        }
-                        Some(x) => {
-                            makro.body.push(x);
-                            self.bump();
-                        }
-                        None => break,
-                    }
-                }
-
-                self.macro_defs.insert(name, makro);
+                self.macro_defs.insert(makro.name.clone(), makro);
                 return Ok(());
             }
 
@@ -421,104 +333,13 @@ impl<'a> Preprocessor<'a> {
                 if self.is_inactive() {
                     return Ok(());
                 }
+                // TODO(fschuiki): This unsafe here is ugly. Why is this needed
+                // again?
                 if let Some(ref makro) = unsafe { &*(self as *const Preprocessor) }
                     .macro_defs
                     .get(dir_name)
                 {
-                    // Consume the macro parameters if the macro definition
-                    // contains them.
-                    let mut params = HashMap::<String, Vec<TokenAndSpan>>::new();
-                    let mut args = makro.args.iter();
-                    if !makro.args.is_empty() {
-                        // // Skip whitespace.
-                        // match self.token {
-                        //  Some((Whitespace, _)) => self.bump(),
-                        //  _ => ()
-                        // }
-
-                        // Consume the opening paranthesis.
-                        match self.token {
-                            Some((Symbol('('), _)) => self.bump(),
-                            _ => {
-                                return Err(DiagBuilder2::fatal(
-                                    "expected macro parameters in parentheses '(...)'",
-                                )
-                                .span(span));
-                            }
-                        }
-
-                        // Consume the macro parameters.
-                        'outer: loop {
-                            // // Skip whitespace and break out of the loop if the
-                            // // closing parenthesis was encountered.
-                            // match self.token {
-                            //  Some((Whitespace, _)) => self.bump(),
-                            //  _ => ()
-                            // }
-                            match self.token {
-                                Some((Symbol(')'), _)) => break,
-                                _ => (),
-                            }
-
-                            // Fetch the next argument.
-                            let arg = match args.next() {
-                                Some(arg) => arg,
-                                None => {
-                                    return Err(DiagBuilder2::fatal(
-                                        "superfluous macro parameters",
-                                    ));
-                                }
-                            };
-
-                            // Consume the tokens that make up this argument.
-                            // Take care that it is allowed to have parentheses
-                            // as macro parameters, which requires bookkeeping
-                            // of the parentheses nesting level. If a comma is
-                            // encountered, we break out of the inner loop such
-                            // that the next parameter will be read. If a
-                            // closing parenthesis is encountered, we break out
-                            // of the outer loop to finish parameter parsing.
-                            let mut param_tokens = Vec::<TokenAndSpan>::new();
-                            let mut nesting = 0;
-                            loop {
-                                match self.token {
-                                    // Some((Whitespace, _)) => self.bump(),
-                                    // Some((Newline, _)) => self.bump(),
-                                    // Some((Comment, _)) => self.bump(),
-                                    Some((Symbol(','), _)) if nesting == 0 => {
-                                        self.bump();
-                                        params.insert(arg.name.clone(), param_tokens);
-                                        break;
-                                    }
-                                    Some((Symbol(')'), _)) if nesting == 0 => {
-                                        params.insert(arg.name.clone(), param_tokens);
-                                        break 'outer;
-                                    }
-                                    Some(x @ (Symbol('('), _)) => {
-                                        param_tokens.push(x);
-                                        self.bump();
-                                        nesting += 1;
-                                    }
-                                    Some(x @ (Symbol(')'), _)) if nesting > 0 => {
-                                        param_tokens.push(x);
-                                        self.bump();
-                                        nesting -= 1;
-                                    }
-                                    Some(x) => {
-                                        param_tokens.push(x);
-                                        self.bump();
-                                    }
-                                    None => {
-                                        return Err(DiagBuilder2::fatal(
-                                            "expected closing parenthesis after macro parameters",
-                                        )
-                                        .span(span));
-                                    }
-                                }
-                            }
-                        }
-                        self.bump();
-                    }
+                    let args = self.handle_macro_expansion_args(makro, span)?;
 
                     // Now we have a problem. All the tokens of the macro name
                     // have been parsed and we would like to continue by
@@ -537,7 +358,7 @@ impl<'a> Preprocessor<'a> {
 
                     // Push the tokens of the macro onto the stack, potentially
                     // substituting any macro parameters as necessary.
-                    if params.is_empty() {
+                    if args.is_empty() {
                         self.macro_stack
                             .extend(makro.body.iter().rev().map(|&(tkn, sp)| (tkn, sp)));
                     } else {
@@ -546,7 +367,7 @@ impl<'a> Preprocessor<'a> {
                         // underscores.
                         for tkn in &makro.body {
                             match *tkn {
-                                (Text, sp) => match params.get(&sp.extract()) {
+                                (Text, sp) => match args.get(&sp.extract()) {
                                     Some(substitute) => {
                                         replacement.extend(substitute);
                                     }
@@ -901,7 +722,329 @@ impl<'a> Preprocessor<'a> {
 
         Some((name, span))
     }
+
+    // Skip over any white space characters.
+    fn skip_whitespace(&mut self) -> bool {
+        match self.token {
+            Some((Whitespace, _)) => {
+                self.bump();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    // Parse the macro definition following a '`define' directive.
+    fn handle_macro_definition(&mut self, define_span: Span) -> Result<Macro, DiagBuilder2> {
+        let mut all_span = define_span;
+
+        // Consume the macro name.
+        let (name, name_span) = match self.try_eat_name() {
+            Some(x) => x,
+            None => {
+                return Err(
+                    DiagBuilder2::fatal("expected macro name after \"`define\"").span(define_span)
+                );
+            }
+        };
+        all_span.expand(define_span);
+        let mut makro = Macro::new(name, name_span);
+
+        // NOTE: No whitespace is allowed after the macro name such that
+        // the preprocessor does not mistake the a in "`define FOO (a)"
+        // for a macro argument.
+
+        makro.args = self.handle_macro_definition_args()?;
+
+        // Skip whitespace between the macro parameters and definition.
+        self.skip_whitespace();
+
+        // Consume the macro definition up to the next newline not preceded
+        // by a backslash, ignoring comments, whitespace and newlines.
+        loop {
+            match self.token {
+                Some((Newline, _)) => {
+                    self.bump();
+                    break;
+                }
+                // Some((Whitespace, _)) => self.bump(),
+                // Some((Comment, _)) => self.bump(),
+                Some((Symbol('\\'), _)) => {
+                    self.bump();
+                    match self.token {
+                        Some((Newline, _)) => self.bump(),
+                        _ => (),
+                    };
+                }
+                Some(x) => {
+                    makro.body.push(x);
+                    self.bump();
+                }
+                None => break,
+            }
+        }
+        Ok(makro)
+    }
+
+    fn handle_macro_definition_args(&mut self) -> Result<Vec<MacroArg>, DiagBuilder2> {
+        // Consume the opening parenthesis.
+        let mut all_span = match self.token {
+            Some((Symbol('('), sp)) => {
+                self.bump();
+                sp
+            }
+            _ => return Ok(vec![]),
+        };
+
+        // Consume the arguments.
+        let mut args = vec![];
+        loop {
+            // Check if we ran out of arguments.
+            self.skip_whitespace();
+            match self.token {
+                Some((Symbol(')'), _)) => {
+                    self.bump();
+                    break;
+                }
+                None => {
+                    return Err(
+                        DiagBuilder2::fatal("expected `)` after macro arguments").span(all_span)
+                    )
+                }
+                _ => (),
+            }
+
+            // Consume the argument name.
+            let (name, name_span) = match self.try_eat_name() {
+                Some(x) => x,
+                _ => {
+                    return Err(
+                        DiagBuilder2::fatal("expected macro argument name").span(all_span.end())
+                    );
+                }
+            };
+            self.skip_whitespace();
+
+            // Consume the optional default parameter.
+            let default = match self.token {
+                Some((Symbol('='), sp)) => {
+                    all_span.expand(sp);
+                    self.bump();
+                    self.skip_whitespace();
+                    let mut tokens = vec![];
+                    let mut nesting = 0;
+                    loop {
+                        match self.token {
+                            Some((Symbol(','), _)) | Some((Symbol(')'), _)) if nesting == 0 => {
+                                match tokens.last() {
+                                    Some((Whitespace, _)) => {
+                                        tokens.pop();
+                                    }
+                                    _ => (),
+                                }
+                                break;
+                            }
+                            Some(x @ (Symbol('('), _)) => {
+                                nesting += 1;
+                                all_span.expand(x.1);
+                                tokens.push(x);
+                                self.bump();
+                            }
+                            Some(x @ (Symbol(')'), _)) => {
+                                nesting -= 1;
+                                all_span.expand(x.1);
+                                tokens.push(x);
+                                self.bump();
+                            }
+                            Some(x) => {
+                                all_span.expand(x.1);
+                                tokens.push(x);
+                                self.bump();
+                            }
+                            _ => break,
+                        }
+                    }
+                    Some(tokens)
+                }
+                _ => None,
+            };
+
+            args.push(MacroArg {
+                name,
+                span: name_span,
+                default,
+            });
+
+            // Consume the trailing comma.
+            self.skip_whitespace();
+            match self.token {
+                Some((Symbol(','), _)) => self.bump(),
+                Some((Symbol(')'), _)) => (),
+                Some((_, sp)) => {
+                    return Err(
+                        DiagBuilder2::fatal("expected `,` or `)` after macro argument").span(sp),
+                    )
+                }
+                None => (),
+            }
+        }
+        Ok(args)
+    }
+
+    fn handle_macro_expansion_args(
+        &mut self,
+        makro: &Macro,
+        span: Span,
+    ) -> Result<MacroExpansionParams, DiagBuilder2> {
+        // If the macro does not define any arguments, we're done.
+        if makro.args.is_empty() {
+            return Ok(Default::default());
+        }
+        let mut all_span = span;
+
+        // Skip whitespace between '`foo' and `(`.
+        self.skip_whitespace();
+
+        // Consume the opening paranthesis.
+        match self.token {
+            Some((Symbol('('), sp)) => {
+                self.bump();
+                all_span.expand(sp);
+            }
+            _ => {
+                return Err(DiagBuilder2::fatal(format!(
+                    "expected macro arguments for `{}`",
+                    makro.name
+                ))
+                .span(all_span)
+                .add_note(format!(
+                    "At least parenthesis are needed: `{}()`",
+                    makro.name
+                ))
+                .add_note(format!(
+                    "Macro `{}` defines {} arguments:",
+                    makro.name,
+                    makro.args.len()
+                ))
+                .span(makro.span));
+            }
+        }
+        self.skip_whitespace();
+
+        // Consume the macro arguments. Be careful about the fact that it is
+        // allowed to have parentheses as macro arguments, which requires
+        // bookkeeping of the parentheses nesting level. If a comma is
+        // encountered, we break out of the inner loop such that the next
+        // parameter will be read. If a  closing parenthesis is encountered, we
+        // break out of the outer loop to finish parameter parsing.
+        let mut args = vec![];
+        'outer: loop {
+            let mut arg_tokens = Vec::<TokenAndSpan>::new();
+            let mut nesting = 0;
+            loop {
+                match self.token {
+                    Some((Symbol(','), sp)) if nesting == 0 => {
+                        args.push(arg_tokens);
+                        all_span.expand(sp);
+                        self.bump();
+                        self.skip_whitespace();
+                        break;
+                    }
+                    Some((Symbol(')'), sp)) if nesting == 0 => {
+                        args.push(arg_tokens);
+                        all_span.expand(sp);
+                        self.bump();
+                        break 'outer;
+                    }
+                    Some(x @ (Symbol('('), _)) => {
+                        arg_tokens.push(x);
+                        nesting += 1;
+                        self.bump();
+                        all_span.expand(x.1);
+                    }
+                    Some(x @ (Symbol(')'), _)) if nesting > 0 => {
+                        arg_tokens.push(x);
+                        nesting -= 1;
+                        self.bump();
+                        all_span.expand(x.1);
+                    }
+                    Some(x) => {
+                        arg_tokens.push(x);
+                        self.bump();
+                        all_span.expand(x.1);
+                    }
+                    None => {
+                        return Err(DiagBuilder2::fatal("expected `)` after macro arguments")
+                            .span(all_span));
+                    }
+                }
+            }
+        }
+
+        // Remove trailing whitespace from macro arguments.
+        for arg in &mut args {
+            match arg.last() {
+                Some((Whitespace, _)) => {
+                    arg.pop();
+                }
+                _ => (),
+            }
+        }
+
+        // Align the expansion arguments with those in the macro definition.
+        if makro.args.len() < args.len() {
+            let d = DiagBuilder2::fatal(format!(
+                "macro expansion with {} arguments, but `{}` expects {} arguments",
+                args.len(),
+                makro.name,
+                makro.args.len()
+            ))
+            .span(all_span)
+            .add_note(format!("Definition of `{}` was here:", makro.name))
+            .span(makro.span);
+            return Err(d);
+        }
+        let args = makro
+            .args
+            .iter()
+            .zip(args.into_iter().map(Some).chain(std::iter::repeat(None)))
+            .map(|(def, exp)| {
+                let is_empty = !exp.iter().flatten().any(|(t, _)| match t {
+                    Whitespace => false,
+                    _ => true,
+                });
+                let value = match (exp, def.default.as_ref()) {
+                    // Expansion arguments include this argument, but may be
+                    // empty.
+                    (Some(_exp), Some(default)) if is_empty => default.clone(),
+                    (Some(_exp), None) if is_empty => vec![],
+                    (Some(exp), _) => exp,
+
+                    // Expansion arguments ended before this argument.
+                    (None, Some(default)) => default.clone(),
+                    (None, None) => {
+                        let d = DiagBuilder2::fatal(format!(
+                            "macro expansion missing value for `{}`",
+                            def.name
+                        ))
+                        .span(all_span)
+                        .add_note(format!(
+                            "Macro argument `{}` needs a value because it has no default:",
+                            def.name
+                        ))
+                        .span(def.span);
+                        return Err(d);
+                    }
+                };
+                Ok((def.name.clone(), value))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+
+        Ok(args)
+    }
 }
+
+type MacroExpansionParams = HashMap<String, Vec<TokenAndSpan>>;
 
 impl<'a> Iterator for Preprocessor<'a> {
     type Item = DiagResult2<TokenAndSpan>;
@@ -1080,15 +1223,7 @@ impl Macro {
 struct MacroArg {
     name: String,
     span: Span,
-}
-
-impl MacroArg {
-    fn new(name: String, span: Span) -> MacroArg {
-        MacroArg {
-            name: name,
-            span: span,
-        }
-    }
+    default: Option<Vec<TokenAndSpan>>,
 }
 
 enum Defcond {

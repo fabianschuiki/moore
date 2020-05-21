@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 - Update `llhd` to 0.13 (#135)
 - Change default optimization level to `-O1` (#163)
+- Improve handling of macro argument defaults
 
 ### Fixed
 - Fix sign casts (#138)
