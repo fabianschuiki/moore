@@ -2334,7 +2334,8 @@ fn parse_primary_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr
 
         tkn => {
             p.add_diag(
-                DiagBuilder2::error(format!("expected expression, found {} instead", tkn)).span(sp),
+                DiagBuilder2::error(format!("expected expression, found `{}` instead", tkn))
+                    .span(sp),
             );
             return Err(());
         }
@@ -4754,7 +4755,12 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
                         results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
                     }
                 }
-                Err(_) => matched.push((name, bp.consumed() - bp.skipped(), bp.diagnostics)),
+                Err(_) => matched.push((
+                    name,
+                    bp.consumed() - bp.skipped(),
+                    bp.consumed(),
+                    bp.diagnostics,
+                )),
             }
         }
 
@@ -4790,6 +4796,7 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
             // ones.
             matched.sort_by(|a, b| (b.1).cmp(&a.1));
             let highest_score = matched[0].1;
+            let highest_consumed = matched[0].2;
             let errors = matched
                 .into_iter()
                 .take_while(|e| e.1 == highest_score)
@@ -4802,18 +4809,18 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
                     DiagBuilder2::error(format!("expected {}, found `{}` instead", msg, tkn))
                         .span(q),
                 );
-                for (name, _, ds) in errors {
+                for (name, _, _, ds) in errors {
                     p.add_diag(DiagBuilder2::note(format!("parsing as {}:", name)));
                     for d in ds {
                         p.add_diag(d);
                     }
                 }
             } else {
-                for d in errors.into_iter().next().unwrap().2 {
+                for d in errors.into_iter().next().unwrap().3 {
                     p.add_diag(d);
                 }
             }
-            for _ in 0..highest_score {
+            for _ in 0..highest_consumed {
                 p.bump();
             }
             Err(())
