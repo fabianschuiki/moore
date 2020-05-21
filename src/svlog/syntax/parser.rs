@@ -394,7 +394,7 @@ where
         } else if p.try_eat(Comma) {
             if term.matches(p) {
                 let q = p.last_span();
-                p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(q));
+                p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(q));
                 break;
             }
         } else {
@@ -1140,7 +1140,7 @@ fn parse_localparam_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<(
                 // gracefully.
                 if p.peek(0).0 == Semicolon {
                     // TODO: This should be an error in pedantic mode.
-                    p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+                    p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
                     break;
                 }
             }
@@ -1229,7 +1229,7 @@ fn parse_modport_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
     //      (Comma, sp) => {
     //          p.bump();
     //          if let (Semicolon, _) = p.peek(0) {
-    //              p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+    //              p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
     //              break;
     //          } else {
     //              continue;
@@ -1299,7 +1299,7 @@ fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
     //      (Comma, sp) => {
     //          p.bump();
     //          if let (CloseDelim(Paren), _) = p.peek(0) {
-    //              p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+    //              p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
     //              break;
     //          } else {
     //              continue;
@@ -2500,7 +2500,7 @@ fn parse_concat_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ExprD
     while p.try_eat(Comma) {
         if p.peek(0).0 == CloseDelim(Brace) {
             let q = p.peek(0).1;
-            p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(q));
+            p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(q));
             break;
         }
         exprs.push(parse_expr_prec(p, Precedence::Min)?);
@@ -2521,7 +2521,7 @@ fn parse_expr_list<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Vec<Exp
             (Comma, sp) => {
                 p.bump();
                 if p.peek(0).0 == CloseDelim(Brace) {
-                    p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+                    p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
                     break;
                 }
             }
@@ -2703,7 +2703,7 @@ fn parse_port_list<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Vec<Por
             (Comma, sp) => {
                 p.bump();
                 if p.peek(0).0 == CloseDelim(Paren) {
-                    p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+                    p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
                     break;
                 }
             }
@@ -3838,7 +3838,7 @@ fn parse_case<'n>(
                         p.bump();
                         if p.try_eat(Colon) {
                             p.add_diag(
-                                DiagBuilder2::warning("Superfluous trailing comma").span(sp),
+                                DiagBuilder2::warning("superfluous trailing comma").span(sp),
                             );
                             break;
                         }
@@ -4191,7 +4191,7 @@ fn parse_call_args<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Vec<Cal
             (Comma, sp) => {
                 p.bump();
                 if p.try_eat(CloseDelim(Paren)) {
-                    p.add_diag(DiagBuilder2::warning("Superfluous trailing comma").span(sp));
+                    p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
                     break;
                 }
             }
