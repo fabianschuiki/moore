@@ -4813,6 +4813,9 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
                     p.add_diag(d);
                 }
             }
+            for _ in 0..highest_score {
+                p.bump();
+            }
             Err(())
 
             // if errors.is_empty() {
