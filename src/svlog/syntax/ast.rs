@@ -412,9 +412,9 @@ pub enum TypeSign {
 pub enum TypeDim<'a> {
     Expr(Expr<'a>),
     Range(Expr<'a>, Expr<'a>),
-    Queue,
+    Queue(Option<Expr<'a>>),
     Unsized,
-    Associative,
+    Associative(Option<Type<'a>>),
 }
 
 impl HasDesc for TypeDim<'_> {
@@ -428,9 +428,11 @@ impl HasDesc for TypeDim<'_> {
             TypeDim::Range(ref lhs, ref rhs) => {
                 format!("`[{}:{}]`", lhs.span().extract(), rhs.span().extract())
             }
-            TypeDim::Queue => format!("`[$]`"),
+            TypeDim::Queue(None) => format!("`[$]`"),
+            TypeDim::Queue(Some(ref expr)) => format!("`[$:{}]`", expr.span().extract()),
             TypeDim::Unsized => format!("`[]`"),
-            TypeDim::Associative => format!("associative type dimension"),
+            TypeDim::Associative(None) => format!("[*]"),
+            TypeDim::Associative(Some(ref ty)) => format!("[{}]", ty.span.extract()),
         }
     }
 }

@@ -1798,77 +1798,45 @@ fn parse_optional_dimensions<'n>(
 fn try_dimension<'n>(
     p: &mut dyn AbstractParser<'n>,
 ) -> ReportedResult<Option<(TypeDim<'n>, Span)>> {
-    // Eat the leading opening brackets.
-    if !p.try_eat(OpenDelim(Brack)) {
-        return Ok(None);
-    }
-    let mut span = p.last_span();
-
-    let dim = match p.peek(0).0 {
-        CloseDelim(Brack) => {
-            p.bump();
-            TypeDim::Unsized
-        }
-        Operator(Op::Mul) => {
-            p.bump();
-            TypeDim::Associative
-        }
-        Dollar => {
-            p.bump();
-            if p.try_eat(Colon) {
-                Some(parse_expr(p)?)
-            } else {
-                None
-            };
-            TypeDim::Queue
-        }
-        _ => {
-            // What's left must either be a single constant expression, or a range
-            // consisting of two constant expressions.
-            let expr = match parse_expr(p) {
-                Ok(x) => x,
-                Err(_) => {
-                    p.recover_balanced(&[CloseDelim(Brack)], true);
-                    return Err(());
-                }
-            };
-
-            // If the expression is followed by a colon `:`, this is a constant range
-            // rather than a constant expression.
-            if p.try_eat(Colon) {
-                let other = match parse_expr(p) {
-                    Ok(x) => x,
-                    Err(_) => {
-                        p.recover_balanced(&[CloseDelim(Brack)], true);
-                        return Err(());
-                    }
-                };
-                TypeDim::Range(expr, other)
-            } else {
-                TypeDim::Expr(expr)
+    let mut span = Span::from(p.peek(0).1.begin());
+    let dim = try_flanked(p, Brack, |p| {
+        Ok(match p.peek(0).0 {
+            // unsized_dimension ::= `[` `]`
+            CloseDelim(Brack) => TypeDim::Unsized,
+            // associative_dimension ::= `[` `*` `]`
+            Operator(Op::Mul) => {
+                p.bump();
+                TypeDim::Associative(None)
             }
-        }
-    };
-
-    // Eat the closing brackets.
-    match p.peek(0) {
-        (CloseDelim(Brack), sp) => {
-            span.expand(sp);
-            p.bump();
-            return Ok(Some((dim, span)));
-        }
-        (tkn, sp) => {
-            p.add_diag(
-                DiagBuilder2::error(format!(
-                    "expected closing brackets `]` after dimension, got {}",
-                    tkn
-                ))
-                .span(sp),
-            );
-            p.recover_balanced(&[CloseDelim(Brack)], true);
-            return Err(());
-        }
-    }
+            // queue_dimension ::= `[` `$` `]`
+            // queue_dimension ::= `[` `$` `:` constant_expression `]`
+            Dollar => {
+                p.bump();
+                let expr = if p.try_eat(Colon) {
+                    Some(parse_expr(p)?)
+                } else {
+                    None
+                };
+                TypeDim::Queue(expr)
+            }
+            _ => match parse_type_or_expr(p, &[Colon, CloseDelim(Brack)])? {
+                // associative_dimension ::= '[' data_type ']'
+                TypeOrExpr::Type(ty) => TypeDim::Associative(Some(ty)),
+                // unpacked_dimension ::= '[' constant_expression ']'
+                // unpacked_dimension ::= '[' constant_range ']'
+                TypeOrExpr::Expr(expr) => {
+                    if p.try_eat(Colon) {
+                        let other = parse_expr(p)?;
+                        TypeDim::Range(expr, other)
+                    } else {
+                        TypeDim::Expr(expr)
+                    }
+                }
+            },
+        })
+    })?;
+    span.expand(p.last_span());
+    Ok(dim.map(|dim| (dim, span)))
 }
 
 fn parse_list_of_port_connections<'n>(

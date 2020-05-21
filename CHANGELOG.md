@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add `moore-derive` crate
 - Add `-Vconsts` and `-Vinsts` verbosity option
 - Executable honors the `MOORE_LOG` verbosity environment variable
+- Accept types in associative arrays.
 
 ### Changed
 - Update `llhd` to 0.13 (#135)
