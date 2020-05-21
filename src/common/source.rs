@@ -445,9 +445,9 @@ impl fmt::Debug for Location {
     }
 }
 
-impl Into<Span> for Location {
-    fn into(self) -> Span {
-        Span::new(self.source, self.offset, self.offset)
+impl From<Location> for Span {
+    fn from(l: Location) -> Span {
+        Span::new(l.source, l.offset, l.offset)
     }
 }
 
