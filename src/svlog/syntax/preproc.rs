@@ -1024,8 +1024,8 @@ impl<'a> Preprocessor<'a> {
                 let value = match (exp, def.default.as_ref()) {
                     // Expansion arguments include this argument, but may be
                     // empty.
-                    (Some(_exp), Some(default)) if is_empty => default.clone(),
-                    (Some(_exp), None) if is_empty => vec![],
+                    (Some(ref _exp), Some(default)) if is_empty => default.clone(),
+                    (Some(ref _exp), None) if is_empty => vec![],
                     (Some(exp), _) => exp,
 
                     // Expansion arguments ended before this argument.
