@@ -1954,16 +1954,29 @@ fn parse_expr_prec<'n>(
         }
     }
 
-    // Try to parse a cast expression, which starts with an explicit type.
+    // Try to parse a cast or pattern expression, which starts with an explicit
+    // type, followed by an apostrophe.
+    // pattern_expr ::= type? pattern
+    // cast ::= type `'` `(` expr `)`
     {
         let mut bp = BranchParser::new(p);
         let mut span = bp.peek(0).1;
         let ty = parse_explicit_type(&mut bp);
-        let tick = bp.require_reported(Apostrophe);
-        match (ty, tick) {
-            (Ok(ty), Ok(())) => {
+        match (ty, bp.peek(0).0, bp.peek(1).0) {
+            // type `'` `(` ...
+            (Ok(ty), Apostrophe, OpenDelim(Paren)) => {
                 bp.commit();
+                p.require_reported(Apostrophe)?;
                 let expr = flanked(p, Paren, parse_expr)?;
+                span.expand(p.last_span());
+                let cast = Expr::new(span, CastExpr(ty, Box::new(expr)));
+                return parse_expr_suffix(p, cast, precedence);
+            }
+            // type `'` `{` ...
+            (Ok(ty), Apostrophe, OpenDelim(Brace)) => {
+                bp.commit();
+                // Don't consume the apostrophe -- it's part of the pattern.
+                let expr = parse_expr(p)?;
                 span.expand(p.last_span());
                 let cast = Expr::new(span, CastExpr(ty, Box::new(expr)));
                 return parse_expr_suffix(p, cast, precedence);
