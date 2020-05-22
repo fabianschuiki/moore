@@ -137,6 +137,11 @@ fn lower_expr_inner<'gcx>(
         ))),
         hir::ExprKind::UnsizedConst('0') => Ok(builder.constant(value::make_int(ty, num::zero()))),
         hir::ExprKind::UnsizedConst('1') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::UnsizedConst('x') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::UnsizedConst('z') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::UnsizedConst(c) => {
+            bug_span!(span, cx, "unsized const with weird '{}' char", c)
+        }
         hir::ExprKind::TimeConst(ref k) => Ok(builder.constant(value::make_time(k.clone()))),
         hir::ExprKind::StringConst(_) => Ok(builder.constant(value::make_array(
             // TODO(fschuiki): Actually assemble a real string here!
@@ -388,9 +393,16 @@ fn lower_expr_inner<'gcx>(
             Ok(check)
         }
 
-        _ => {
-            error!("{:#?}", hir);
-            cx.unimp_msg("lowering to mir rvalue of", hir)
+        hir::ExprKind::PositionalPattern(..)
+        | hir::ExprKind::RepeatPattern(..)
+        | hir::ExprKind::EmptyPattern
+        | hir::ExprKind::FunctionCall(..) => {
+            bug_span!(
+                span,
+                cx,
+                "lowering of {} to mir not yet supported",
+                hir.desc_full()
+            );
         }
     }
 }
