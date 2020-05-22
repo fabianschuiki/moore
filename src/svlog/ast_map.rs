@@ -102,6 +102,8 @@ pub enum AstNode<'ast> {
     Import(&'ast ast::ImportItem),
     /// A subroutine declaration.
     SubroutineDecl(&'ast ast::SubroutineDecl<'ast>),
+    /// An interface.
+    Interface(&'ast ast::IntfDecl<'ast>),
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {
@@ -132,6 +134,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::EnumVariant(x, _, _) => x.span(),
             AstNode::Import(x) => x.span(),
             AstNode::SubroutineDecl(x) => x.span(),
+            AstNode::Interface(x) => x.span(),
         }
     }
 
@@ -162,6 +165,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::EnumVariant(x, _, _) => x.human_span(),
             AstNode::Import(x) => x.human_span(),
             AstNode::SubroutineDecl(x) => x.human_span(),
+            AstNode::Interface(x) => x.human_span(),
         }
     }
 }
@@ -194,6 +198,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::EnumVariant(x, _, _) => x.desc(),
             AstNode::Import(x) => x.desc(),
             AstNode::SubroutineDecl(x) => x.desc(),
+            AstNode::Interface(x) => x.desc(),
         }
     }
 
@@ -224,6 +229,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::EnumVariant(x, _, _) => x.desc_full(),
             AstNode::Import(x) => x.desc_full(),
             AstNode::SubroutineDecl(x) => x.desc_full(),
+            AstNode::Interface(x) => x.desc_full(),
         }
     }
 }

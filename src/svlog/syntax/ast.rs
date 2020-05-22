@@ -184,6 +184,26 @@ pub struct IntfDecl<'a> {
     pub items: Vec<Item<'a>>,
 }
 
+impl HasSpan for IntfDecl<'_> {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.name_span
+    }
+}
+
+impl HasDesc for IntfDecl<'_> {
+    fn desc(&self) -> &'static str {
+        "interface declaration"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("interface `{}`", self.name)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PackageDecl<'a> {
     pub span: Span,
