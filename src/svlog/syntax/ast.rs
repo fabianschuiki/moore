@@ -1402,17 +1402,14 @@ pub struct ImportDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportItem {
-    pub pkg: Identifier,
-    pub name: Option<Identifier>, // None means `import pkg::*`
+    pub span: Span,
+    pub pkg: Spanned<Name>,
+    pub name: Option<Spanned<Name>>, // None means `import pkg::*`
 }
 
 impl HasSpan for ImportItem {
     fn span(&self) -> Span {
-        let mut sp = self.pkg.span;
-        if let Some(name) = self.name {
-            sp.expand(name.span);
-        }
-        sp
+        self.span
     }
 }
 

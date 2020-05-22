@@ -521,6 +521,13 @@ fn lower_module<'gcx>(
 ) -> Result<HirNode<'gcx>> {
     let mut next_rib = node_id;
 
+    // Allocate the imports in the module header.
+    for import in &ast.imports {
+        for item in &import.items {
+            next_rib = cx.map_ast_with_parent(AstNode::Import(item), next_rib);
+        }
+    }
+
     // Allocate parameters.
     let mut params = Vec::new();
     for param in &ast.params {

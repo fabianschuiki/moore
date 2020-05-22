@@ -49,12 +49,22 @@ pub enum RibKind {
     Module(HashMap<Name, NodeId>),
     /// An enum type declaration.
     Enum(HashMap<Name, NodeId>),
+    /// An imported rib.
+    Import(Box<Rib>),
 }
 
 impl Rib {
     /// Look up a name.
     pub fn get(&self, name: Name) -> Option<NodeId> {
         self.kind.get(name)
+    }
+
+    /// Resolve import ribs to the imported rib.
+    pub fn resolve_imports(&self) -> &Self {
+        match &self.kind {
+            RibKind::Import(rib) => rib.as_ref(),
+            _ => self,
+        }
     }
 }
 
@@ -116,8 +126,32 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             };
             local_rib_kind_for_type(cx, &hir.kind)
         }
-        AstNode::Import(_import) => {
-            unimplemented!("import statement local rib");
+        AstNode::Import(import) => {
+            let pkg_id = match cx.gcx().find_package(import.pkg.value) {
+                Some(id) => id,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("`{}` not found", import.pkg.value))
+                            .span(import.pkg.span),
+                    );
+                    return Err(());
+                }
+            };
+            if let Some(name) = import.name {
+                trace!(
+                    "Importing single `{}` from `{}`: {}",
+                    name,
+                    import.pkg,
+                    cx.ast_of(pkg_id)?.desc_full()
+                );
+                let resolved = cx.resolve_downwards_or_error(name, pkg_id)?;
+                let rib = cx.local_rib(resolved)?;
+                Some(RibKind::Import(Box::new(rib.clone())))
+            } else {
+                let rib = cx.hierarchical_rib(pkg_id)?;
+                trace!("Importing entire `{}`: {:#?}", import.pkg, rib);
+                Some(RibKind::Import(Box::new(rib.clone())))
+            }
         }
         AstNode::SubroutineDecl(decl) => Some(RibKind::Normal(
             Spanned::new(decl.prototype.name.name, decl.prototype.name.span),
@@ -209,6 +243,7 @@ pub(crate) fn hierarchical_rib<'gcx>(
             }
             RibKind::Module(ref defs) => names.extend(defs),
             RibKind::Enum(ref defs) => names.extend(defs),
+            RibKind::Import(_) => (), // imports are never visible
         }
         rib_id = rib.parent;
         if rib_id == Some(node_id) {
@@ -240,22 +275,35 @@ pub(crate) fn resolve_upwards<'gcx>(
             cx.emit(DiagBuilder2::note(format!("resolving `{}` here", name)).span(cx.span(rib_id)));
         }
         let rib = cx.local_rib(rib_id)?;
-        if let Some(id) = rib.get(name) {
-            return Ok(Some(id));
-        }
-        if let RibKind::Module(..) = rib.kind {
-            let rib = cx.hierarchical_rib(rib_id)?;
-            if let Some(id) = rib.get(name) {
-                return Ok(Some(id));
-            }
+        if let Some(resolved) = resolve_in_rib(cx, name, rib)? {
+            return Ok(Some(resolved));
         }
         next_id = rib.parent;
+    }
+    for import in cx.gcx().imports() {
+        if let n @ Some(_) = resolve_in_rib(cx, name, cx.local_rib(import)?)? {
+            return Ok(n);
+        }
     }
     if let m @ Some(_) = cx.gcx().find_module(name) {
         return Ok(m);
     }
     if let p @ Some(_) = cx.gcx().find_package(name) {
         return Ok(p);
+    }
+    Ok(None)
+}
+
+fn resolve_in_rib<'gcx>(cx: &impl Context<'gcx>, name: Name, rib: &Rib) -> Result<Option<NodeId>> {
+    let rib_resolved = rib.resolve_imports();
+    if let Some(id) = rib_resolved.get(name) {
+        return Ok(Some(id));
+    }
+    if let RibKind::Module(..) = rib_resolved.kind {
+        let rib = cx.hierarchical_rib(rib_resolved.node)?;
+        if let Some(id) = rib.get(name) {
+            return Ok(Some(id));
+        }
     }
     Ok(None)
 }

@@ -487,24 +487,31 @@ where
     }
 }
 
-/// Consumes a Ident or EscIdent token, wrapping it in a ast::Identifier with a
-/// dumy ID assigned.
+/// Consumes a `Ident` or `EscIdent` token, wrapping it in a `ast::Identifier`.
 fn parse_identifier<'n, M: std::fmt::Display>(
     p: &mut dyn AbstractParser<'n>,
     msg: M,
 ) -> ReportedResult<ast::Identifier> {
+    parse_identifier_name(p, msg).map(|n| ast::Identifier {
+        span: n.span,
+        name: n.value,
+    })
+}
+
+/// Consumes a `Ident` or `EscIdent` token, wrapping it in a `Spanned<Name>`.
+fn parse_identifier_name<'n, M: std::fmt::Display>(
+    p: &mut dyn AbstractParser<'n>,
+    msg: M,
+) -> ReportedResult<Spanned<Name>> {
     let (tkn, span) = p.peek(0);
     match tkn {
         Ident(n) | EscIdent(n) => {
             p.bump();
-            Ok(ast::Identifier {
-                span: span,
-                name: n,
-            })
+            Ok(Spanned::new(n, span))
         }
         x => {
             p.add_diag(
-                DiagBuilder2::error(format!("expected {}, but found {} instead", msg, x))
+                DiagBuilder2::error(format!("expected {}, but found `{}` instead", msg, x))
                     .span(span),
             );
             Err(())
@@ -5169,15 +5176,18 @@ fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Impor
     let items = comma_list_nonempty(p, Semicolon, "import item", |p| {
         // package_ident "::" ident
         // package_ident "::" "*"
-        let pkg = parse_identifier(p, "package name")?;
+        let mut span = p.peek(0).1;
+        let pkg = parse_identifier_name(p, "package name")?;
         p.require_reported(Namespace)?;
         let (tkn, sp) = p.peek(0);
         match tkn {
             // package_ident "::" "*"
             Operator(Op::Mul) => {
                 p.bump();
+                span.expand(p.last_span());
                 Ok(ImportItem {
-                    pkg: pkg,
+                    span,
+                    pkg,
                     name: None,
                 })
             }
@@ -5185,16 +5195,20 @@ fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Impor
             // package_ident "::" ident
             Ident(n) | EscIdent(n) => {
                 p.bump();
+                span.expand(p.last_span());
                 Ok(ImportItem {
-                    pkg: pkg,
-                    name: Some(ast::Identifier { span: sp, name: n }),
+                    span,
+                    pkg,
+                    name: Some(Spanned::new(n, sp)),
                 })
             }
 
             _ => {
                 p.add_diag(
-                    DiagBuilder2::error("expected identifier or * after :: in import declaration")
-                        .span(sp),
+                    DiagBuilder2::error(
+                        "expected identifier or `*` after `::` in import declaration",
+                    )
+                    .span(sp),
                 );
                 Err(())
             }

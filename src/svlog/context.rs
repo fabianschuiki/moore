@@ -58,6 +58,8 @@ pub struct GlobalContext<'gcx> {
     packages: RefCell<HashMap<Name, NodeId>>,
     /// The interfaces in the AST.
     interfaces: RefCell<HashMap<Name, NodeId>>,
+    /// The global imports in the AST.
+    imports: RefCell<Vec<NodeId>>,
     /// A mapping from node ids to spans for diagnostics.
     node_id_to_span: RefCell<HashMap<NodeId, Span>>,
     /// The tables.
@@ -75,6 +77,7 @@ impl<'gcx> GlobalContext<'gcx> {
             modules: Default::default(),
             packages: Default::default(),
             interfaces: Default::default(),
+            imports: Default::default(),
             node_id_to_span: Default::default(),
             tables: Default::default(),
         }
@@ -88,17 +91,23 @@ impl<'gcx> GlobalContext<'gcx> {
         for root in ast {
             for item in &root.items {
                 match *item {
-                    ast::Item::ModuleDecl(ref m) => {
-                        let id = self.map_ast(AstNode::Module(m));
-                        self.modules.borrow_mut().insert(m.name, id);
+                    ast::Item::ModuleDecl(ref n) => {
+                        let id = self.map_ast(AstNode::Module(n));
+                        self.modules.borrow_mut().insert(n.name, id);
                     }
-                    ast::Item::PackageDecl(ref p) => {
-                        let id = self.map_ast(AstNode::Package(p));
-                        self.packages.borrow_mut().insert(p.name, id);
+                    ast::Item::PackageDecl(ref n) => {
+                        let id = self.map_ast(AstNode::Package(n));
+                        self.packages.borrow_mut().insert(n.name, id);
                     }
                     ast::Item::InterfaceDecl(ref n) => {
                         let id = self.map_ast(AstNode::Interface(n));
                         self.interfaces.borrow_mut().insert(n.name, id);
+                    }
+                    ast::Item::ImportDecl(ref n) => {
+                        for item in &n.items {
+                            let id = self.map_ast(AstNode::Import(item));
+                            self.imports.borrow_mut().push(id);
+                        }
                     }
                     _ => (),
                 }
@@ -119,6 +128,11 @@ impl<'gcx> GlobalContext<'gcx> {
     /// Find a package in the AST.
     pub fn find_package(&self, name: Name) -> Option<NodeId> {
         self.packages.borrow().get(&name).cloned()
+    }
+
+    /// Get an iterator over all root imports in the AST.
+    pub fn imports(&self) -> impl Iterator<Item = NodeId> {
+        self.imports.borrow().clone().into_iter()
     }
 }
 
