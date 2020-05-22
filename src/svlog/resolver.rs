@@ -372,17 +372,22 @@ pub(crate) fn resolve_field_access<'gcx>(
     };
     let ty = cx.type_of(target_id, env)?;
     let struct_def = match ty.resolve_name() {
+        TypeKind::Error => return Err(()),
         &TypeKind::Struct(id) => id,
         _ => {
             let target_hir = cx.hir_of(target_id)?;
-            cx.emit(
-                DiagBuilder2::error(format!(
-                    "{} has no fields; type `{}` is not a struct",
-                    target_hir.desc_full(),
-                    ty
-                ))
-                .span(hir.human_span()),
-            );
+            let mut d = DiagBuilder2::error(format!(
+                "{} has no fields; type `{}` is not a struct",
+                target_hir.desc_full(),
+                ty
+            ))
+            .span(hir.human_span());
+            if let TypeKind::Named(_, def_id, inner_ty) = *ty {
+                d = d
+                    .add_note(format!("Type `{}` is defined as `{}` here:", ty, inner_ty))
+                    .span(cx.span(def_id));
+            }
+            cx.emit(d);
             error!("Cannot resolve field access {:?}", hir);
             error!("Target is {:?}", target_hir);
             error!("Type is {:?}", ty);

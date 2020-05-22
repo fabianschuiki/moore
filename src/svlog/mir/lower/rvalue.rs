@@ -207,7 +207,9 @@ fn lower_expr_inner<'gcx>(
             ))
         }
         hir::ExprKind::NamedPattern(ref mapping) => {
-            if ty.is_array() || ty.is_bit_vector() {
+            if ty.is_error() {
+                Err(())
+            } else if ty.is_array() || ty.is_bit_vector() {
                 Ok(lower_array_pattern(&builder, mapping, ty))
             } else if ty.is_struct() {
                 Ok(lower_struct_pattern(&builder, mapping, ty))
