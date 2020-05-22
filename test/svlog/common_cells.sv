@@ -31,7 +31,7 @@ module foo;
     lfsr_16bit i0();
     lfsr_8bit i0();
     // lfsr i0();
-    // lzc i0();
+    lzc i0();
     max_counter i0();
     mv_filter i0();
     onehot_to_bin i0();

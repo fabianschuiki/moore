@@ -42,6 +42,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
             env: self.env,
             span: self.span,
             ty,
+            konst: kind.is_const(),
             kind: kind,
         })
     }

@@ -28,12 +28,19 @@ pub struct Rvalue<'a> {
     pub ty: Type<'a>,
     /// The expression data.
     pub kind: RvalueKind<'a>,
+    /// Whether this expression has a constant value.
+    pub konst: bool,
 }
 
 impl<'a> Rvalue<'a> {
     /// Check whether the rvalue represents a lowering error tombstone.
     pub fn is_error(&self) -> bool {
         self.ty.is_error() || self.kind.is_error()
+    }
+
+    /// Check whether the rvalue is a constant.
+    pub fn is_const(&self) -> bool {
+        self.konst
     }
 }
 
@@ -186,6 +193,44 @@ impl<'a> RvalueKind<'a> {
         match self {
             RvalueKind::Error => true,
             _ => false,
+        }
+    }
+
+    /// Check whether this rvalue is a constant.
+    pub fn is_const(&self) -> bool {
+        match self {
+            RvalueKind::CastValueDomain { value, .. }
+            | RvalueKind::CastVectorToAtom { value, .. }
+            | RvalueKind::CastAtomToVector { value, .. }
+            | RvalueKind::CastSign(_, value)
+            | RvalueKind::CastToBool(value)
+            | RvalueKind::Truncate(_, value)
+            | RvalueKind::ZeroExtend(_, value)
+            | RvalueKind::SignExtend(_, value)
+            | RvalueKind::Repeat(_, value)
+            | RvalueKind::Member { value, .. } => value.is_const(),
+            RvalueKind::ConstructArray(values) => values.values().all(|v| v.is_const()),
+            RvalueKind::ConstructStruct(values) => values.iter().all(|v| v.is_const()),
+            RvalueKind::Const(_) => true,
+            RvalueKind::UnaryBitwise { arg, .. }
+            | RvalueKind::IntUnaryArith { arg, .. }
+            | RvalueKind::Reduction { arg, .. } => arg.is_const(),
+            RvalueKind::BinaryBitwise { lhs, rhs, .. }
+            | RvalueKind::IntBinaryArith { lhs, rhs, .. }
+            | RvalueKind::IntComp { lhs, rhs, .. } => lhs.is_const() && rhs.is_const(),
+            RvalueKind::Concat(values) => values.iter().all(|v| v.is_const()),
+            RvalueKind::Var(_) => false,
+            RvalueKind::Port(_) => false,
+            RvalueKind::Index { .. } => false, // TODO(fschuiki): reactivate once impl
+            // RvalueKind::Index { value, base, .. } => value.is_const() && base.is_const(),
+            RvalueKind::Ternary {
+                cond,
+                true_value,
+                false_value,
+            } => cond.is_const() && true_value.is_const() && false_value.is_const(),
+            RvalueKind::Shift { value, amount, .. } => value.is_const() && amount.is_const(),
+            RvalueKind::Assignment { .. } => false,
+            RvalueKind::Error => true,
         }
     }
 }

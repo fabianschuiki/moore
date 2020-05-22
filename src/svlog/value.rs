@@ -210,7 +210,7 @@ fn const_node<'gcx>(
     match hir {
         HirNode::Expr(expr) => {
             let mir = cx.mir_rvalue(expr.id, env);
-            Ok(const_mir_rvalue(cx, mir))
+            Ok(cx.const_mir_rvalue(mir.into()))
         }
         HirNode::ValueParam(param) => {
             let env_data = cx.param_env_data(env);
@@ -275,6 +275,13 @@ fn const_node<'gcx>(
     }
 }
 
+pub(crate) fn const_mir_rvalue_query<'gcx>(
+    cx: &impl Context<'gcx>,
+    mir: mir::Ref<'gcx, mir::Rvalue<'gcx>>,
+) -> Value<'gcx> {
+    const_mir_rvalue(cx, *mir)
+}
+
 fn const_mir_rvalue<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
     let v = const_mir_rvalue_inner(cx, mir);
     if cx.sess().has_verbosity(Verbosity::CONSTS) {
@@ -314,7 +321,7 @@ fn const_mir_rvalue_inner<'gcx>(
                     ))
                     .span(value.span),
             );
-            let v = const_mir_rvalue(cx, value);
+            let v = cx.const_mir_rvalue(value.into());
             // TODO: This is an incredibly ugly hack.
             cx.intern_value(ValueData {
                 ty: mir.ty,
@@ -323,7 +330,7 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::CastToBool(value) => {
-            let value = const_mir_rvalue(cx, value);
+            let value = cx.const_mir_rvalue(value.into());
             if value.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -333,7 +340,7 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::ConstructArray(ref values) => cx.intern_value(make_array(
             mir.ty,
             (0..values.len())
-                .map(|index| const_mir_rvalue(cx, values[&index]))
+                .map(|index| cx.const_mir_rvalue(values[&index].into()))
                 .collect(),
         )),
 
@@ -341,14 +348,14 @@ fn const_mir_rvalue_inner<'gcx>(
             mir.ty,
             values
                 .iter()
-                .map(|value| const_mir_rvalue(cx, value))
+                .map(|&value| cx.const_mir_rvalue(value.into()))
                 .collect(),
         )),
 
         mir::RvalueKind::Const(value) => value,
 
         mir::RvalueKind::UnaryBitwise { op, arg } => {
-            let arg_val = const_mir_rvalue(cx, arg);
+            let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -362,8 +369,8 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::BinaryBitwise { op, lhs, rhs } => {
-            let lhs_val = const_mir_rvalue(cx, lhs);
-            let rhs_val = const_mir_rvalue(cx, rhs);
+            let lhs_val = cx.const_mir_rvalue(lhs.into());
+            let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -379,7 +386,7 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
-            let arg_val = const_mir_rvalue(cx, arg);
+            let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -393,8 +400,8 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::IntBinaryArith { op, lhs, rhs, .. } => {
-            let lhs_val = const_mir_rvalue(cx, lhs);
-            let rhs_val = const_mir_rvalue(cx, rhs);
+            let lhs_val = cx.const_mir_rvalue(lhs.into());
+            let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -410,8 +417,8 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::IntComp { op, lhs, rhs, .. } => {
-            let lhs_val = const_mir_rvalue(cx, lhs);
-            let rhs_val = const_mir_rvalue(cx, rhs);
+            let lhs_val = cx.const_mir_rvalue(lhs.into());
+            let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -425,9 +432,10 @@ fn const_mir_rvalue_inner<'gcx>(
 
         mir::RvalueKind::Concat(ref values) => {
             let mut result = BigInt::zero();
-            for value in values {
+            for &value in values {
                 result <<= value.ty.width();
-                result |= const_mir_rvalue(cx, value)
+                result |= cx
+                    .const_mir_rvalue(value.into())
                     .get_int()
                     .expect("concat non-integer");
             }
@@ -435,7 +443,7 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::Repeat(count, value) => {
-            let value_const = const_mir_rvalue(cx, value);
+            let value_const = cx.const_mir_rvalue(value.into());
             if value_const.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -447,18 +455,13 @@ fn const_mir_rvalue_inner<'gcx>(
             cx.intern_value(make_int(mir.ty, result))
         }
 
-        mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
-            match cx.constant_value_of(id, mir.env) {
-                Ok(k) => k,
-                Err(_) => {
-                    cx.emit(DiagBuilder2::note("constant value needed here").span(mir.span));
-                    cx.intern_value(make_error(mir.ty))
-                }
-            }
+        mir::RvalueKind::Assignment { .. } | mir::RvalueKind::Var(_) | mir::RvalueKind::Port(_) => {
+            cx.emit(DiagBuilder2::error("value is not constant").span(mir.span));
+            cx.intern_value(make_error(mir.ty))
         }
 
         mir::RvalueKind::Member { value, field } => {
-            let value_const = const_mir_rvalue(cx, value);
+            let value_const = cx.const_mir_rvalue(value.into());
             if value_const.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -473,9 +476,9 @@ fn const_mir_rvalue_inner<'gcx>(
             true_value,
             false_value,
         } => {
-            let cond_val = const_mir_rvalue(cx, cond);
-            let true_val = const_mir_rvalue(cx, true_value);
-            let false_val = const_mir_rvalue(cx, false_value);
+            let cond_val = cx.const_mir_rvalue(cond.into());
+            let true_val = cx.const_mir_rvalue(true_value.into());
+            let false_val = cx.const_mir_rvalue(false_value.into());
             match cond_val.is_true() {
                 true => true_val,
                 false => false_val,
@@ -489,8 +492,8 @@ fn const_mir_rvalue_inner<'gcx>(
             amount,
             ..
         } => {
-            let value_val = const_mir_rvalue(cx, value);
-            let amount_val = const_mir_rvalue(cx, amount);
+            let value_val = cx.const_mir_rvalue(value.into());
+            let amount_val = cx.const_mir_rvalue(amount.into());
             if value_val.is_error() || amount_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -506,7 +509,7 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         mir::RvalueKind::Reduction { op, arg } => {
-            let arg_val = const_mir_rvalue(cx, arg);
+            let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
                 return cx.intern_value(make_error(mir.ty));
             }
@@ -519,16 +522,17 @@ fn const_mir_rvalue_inner<'gcx>(
             }
         }
 
+        mir::RvalueKind::Index {
+            // value,
+            // base,
+            // length,
+            ..
+        } => {
+            bug_span!(mir.span, cx, "constant folding of slices not implemented");
+        }
+
         // Propagate tombstones.
         mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
-
-        // TODO: This should eventually not be necessary, because each MIR is
-        // either handled or throws an error.
-        _ => {
-            cx.emit(DiagBuilder2::bug("constant value of rvalue not implemented").span(mir.span));
-            error!("Offending MIR is: {:#?}", mir);
-            cx.intern_value(make_error(mir.ty))
-        }
     }
 }
 

@@ -340,6 +340,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
                         ))
                         .span(span),
                     );
+                    error!("Offending node: {:?}", node_id);
                 } else {
                     self.emit(DiagBuilder2::bug(format!(
                         "no ast node for {:?} in the map",
@@ -775,6 +776,14 @@ pub(super) mod queries {
                 use fn mir::lower::rvalue::lower_expr;
             }
 
+            /// Determine the constant value of an MIR rvalue.
+            fn const_mir_rvalue(
+                mir: mir::Ref<'a, mir::Rvalue<'a>>
+            ) -> Value<'a> {
+                type ConstMirRvalueQuery;
+                use fn value::const_mir_rvalue_query;
+            }
+
             /// Determine the details of an instantiation.
             fn inst_details(inst: NodeEnvId) -> Result<Arc<InstDetails<'a>>> {
                 type InstDetailsQuery;
@@ -818,6 +827,7 @@ pub(super) mod queries {
                 fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;
                 fn mir_rvalue() for MirRvalueQuery<'gcx>;
+                fn const_mir_rvalue() for ConstMirRvalueQuery<'gcx>;
                 fn inst_details() for InstDetailsQuery<'gcx>;
                 fn inst_target_details() for InstTargetDetailsQuery<'gcx>;
             }

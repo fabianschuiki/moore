@@ -905,7 +905,7 @@ where
     }
 
     /// Emit the code for an MIR rvalue.
-    fn emit_mir_rvalue(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+    fn emit_mir_rvalue(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         if let Some(x) = self.interned_rvalues.get(&mir.id) {
             x.clone()
         } else {
@@ -916,7 +916,16 @@ where
     }
 
     /// Emit the code for an MIR rvalue.
-    fn emit_mir_rvalue_uninterned(&mut self, mir: &mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+    fn emit_mir_rvalue_uninterned(
+        &mut self,
+        mir: &'gcx mir::Rvalue<'gcx>,
+    ) -> Result<llhd::ir::Value> {
+        // If the value is a constant, emit the fully folded constant value.
+        if mir.is_const() {
+            let value = self.const_mir_rvalue(mir.into());
+            return self.emit_const(value, mir.env);
+        }
+
         match mir.kind {
             mir::RvalueKind::Var(id) => {
                 let value = self
@@ -1808,8 +1817,8 @@ where
     /// Emit a blocking assignment on MIR nodes.
     fn emit_mir_blocking_assign(
         &mut self,
-        lvalue: &mir::Lvalue<'gcx>,
-        rvalue: &mir::Rvalue<'gcx>,
+        lvalue: &'gcx mir::Lvalue<'gcx>,
+        rvalue: &'gcx mir::Rvalue<'gcx>,
     ) -> Result<()> {
         let lv = self.emit_mir_lvalue(lvalue)?;
         let rv = self.emit_mir_rvalue(rvalue)?;
