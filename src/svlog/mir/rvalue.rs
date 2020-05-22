@@ -37,6 +37,14 @@ impl<'a> Rvalue<'a> {
     }
 }
 
+impl<'a> std::ops::Deref for Rvalue<'a> {
+    type Target = RvalueKind<'a>;
+
+    fn deref(&self) -> &RvalueKind<'a> {
+        &self.kind
+    }
+}
+
 /// The different forms an rvalue expression may take.
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
