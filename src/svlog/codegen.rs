@@ -1405,6 +1405,9 @@ where
             hir::StmtKind::Assign { lhs, rhs, kind } => {
                 let lhs_mir = self.mir_lvalue(lhs, env);
                 let rhs_mir = self.mir_rvalue(rhs, env);
+                if lhs_mir.is_error() || rhs_mir.is_error() {
+                    return Err(());
+                }
                 assert_type!(rhs_mir.ty, lhs_mir.ty, rhs_mir.span, self.cx);
                 let lhs_lv = self.emit_mir_lvalue(lhs_mir)?;
                 let rhs_rv = self.emit_mir_rvalue(rhs_mir)?;
