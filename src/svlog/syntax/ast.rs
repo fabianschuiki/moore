@@ -85,6 +85,20 @@ where
     }
 }
 
+impl<'a, T> std::ops::Deref for Node<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.data
+    }
+}
+
+impl<'a, T> std::ops::DerefMut for Node<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.data
+    }
+}
+
 /// A visitor for the AST.
 pub trait Visitor {
     fn visit_stmt_data(&mut self, node: &StmtData) {
