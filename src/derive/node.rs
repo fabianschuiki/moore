@@ -9,7 +9,7 @@ use syn::{
 
 pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the input.
-    let args = syn::parse_macro_input!(args as NodeConfig);
+    let _args = syn::parse_macro_input!(args as NodeConfig);
     let mut input = syn::parse_macro_input!(input as DeriveInput);
 
     // Extract the name of the node.
@@ -45,7 +45,7 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
 struct NodeConfig {}
 
 impl Parse for NodeConfig {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(_input: ParseStream) -> syn::Result<Self> {
         Ok(NodeConfig {})
     }
 }
