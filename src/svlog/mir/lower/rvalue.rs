@@ -212,24 +212,45 @@ fn lower_expr_inner<'gcx>(
                 },
             ))
         }
+
+        hir::ExprKind::PositionalPattern(ref mapping) => {
+            if ty.is_error() {
+                Err(())
+            } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() || ty.is_struct() {
+                Ok(lower_positional_pattern(&builder, mapping, ty))
+            } else {
+                builder.cx.emit(
+                    DiagBuilder2::error(format!(
+                        "cannot construct a value of type `{}` with `'{{...}}`",
+                        ty
+                    ))
+                    .span(span)
+                    .add_note("Positional patterns can only construct arrays or structs."),
+                );
+                Err(())
+            }
+        }
+
         hir::ExprKind::NamedPattern(ref mapping) => {
             if ty.is_error() {
                 Err(())
-            } else if ty.is_array() || ty.is_bit_vector() {
+            } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() {
                 Ok(lower_array_pattern(&builder, mapping, ty))
             } else if ty.is_struct() {
                 Ok(lower_struct_pattern(&builder, mapping, ty))
             } else {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
-                        "`'{{...}}` cannot construct a value of type {}",
+                        "cannot construct a value of type `{}` with `'{{...}}`",
                         ty
                     ))
-                    .span(span),
+                    .span(span)
+                    .add_note("Named patterns can only construct arrays or structs."),
                 );
                 Err(())
             }
         }
+
         hir::ExprKind::Concat(repeat, ref exprs) => {
             // Compute the SBVT for each expression and lower it to MIR,
             // implicitly casting to the SBVT.
@@ -393,8 +414,7 @@ fn lower_expr_inner<'gcx>(
             Ok(check)
         }
 
-        hir::ExprKind::PositionalPattern(..)
-        | hir::ExprKind::RepeatPattern(..)
+        hir::ExprKind::RepeatPattern(..)
         | hir::ExprKind::EmptyPattern
         | hir::ExprKind::FunctionCall(..) => {
             bug_span!(
@@ -1122,6 +1142,88 @@ fn lower_struct_pattern<'gcx>(
             ty,
             RvalueKind::ConstructStruct((0..values.len()).map(|i| values[&i]).collect()),
         )
+    }
+}
+
+/// Lower a positional `'{...}` array or struct pattern.
+fn lower_positional_pattern<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    mapping: &[NodeId],
+    ty: Type<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    // Lower each of the values to MIR, and abort on errors.
+    let values: Vec<_> = mapping
+        .iter()
+        .map(|&id| builder.cx.mir_rvalue(id, builder.env))
+        .collect();
+    if values.iter().any(|mir| mir.is_error()) {
+        return builder.error();
+    }
+
+    // Ensure that the number of values matches the array/struct definition.
+    let exp_len = match *ty {
+        TypeKind::PackedArray(len, _) => len,
+        TypeKind::BitScalar { .. } => 1,
+        TypeKind::BitVector { range, .. } => range.size,
+        TypeKind::Struct(def_id) => match builder.cx.struct_def(def_id) {
+            Ok(d) => d.fields.len(),
+            Err(()) => return builder.error(),
+        },
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "positional pattern with invalid type `{}`",
+            ty
+        ),
+    };
+    if exp_len != values.len() {
+        builder.cx.emit(
+            DiagBuilder2::error(format!(
+                "pattern has {} fields, but type `{}` requires {}",
+                values.len(),
+                ty,
+                exp_len
+            ))
+            .span(builder.span),
+        );
+        return builder.error();
+    }
+
+    // Construct the required output type.
+    match *ty {
+        TypeKind::PackedArray(_, elty) => {
+            for v in &values {
+                assert_type!(v.ty, elty, v.span, builder.cx);
+            }
+            builder.build(
+                ty,
+                RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
+            )
+        }
+        TypeKind::BitScalar { .. } => {
+            let v = values[0];
+            assert_type!(v.ty, ty, v.span, builder.cx);
+            v
+        }
+        TypeKind::BitVector { sign, domain, .. } => {
+            for v in &values {
+                assert_type!(
+                    v.ty,
+                    &TypeKind::BitScalar { sign, domain },
+                    v.span,
+                    builder.cx
+                );
+            }
+            let mut values = values;
+            values.reverse();
+            builder.build(ty, RvalueKind::Concat(values))
+        }
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "positional pattern with invalid type `{}`",
+            ty
+        ),
     }
 }
 
