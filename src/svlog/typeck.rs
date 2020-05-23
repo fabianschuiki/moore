@@ -1592,57 +1592,97 @@ fn type_context_imposed_by_expr<'gcx>(
 
         // Patterns impose the field types onto their arguments.
         hir::ExprKind::PositionalPattern(ref args) => {
-            let index = args.iter().position(|&n| n == onto)?;
-            let ty = cx.need_type_context(expr.id, env).ty();
-            if ty.is_error() {
-                return Some((&ty::ERROR_TYPE).into());
-            }
-            match *ty.resolve_name() {
-                TypeKind::PackedArray(_, elty) => Some(elty.into()),
-                TypeKind::BitScalar { .. } => Some(ty.into()),
-                TypeKind::BitVector { sign, domain, .. } => {
-                    Some(cx.intern_type(TypeKind::BitScalar { sign, domain }).into())
-                }
-                TypeKind::Struct(def_id) => {
-                    // TODO: This code shares quite some similarity with the one
-                    // in HIR lowering. It would be much smarter to create an
-                    // intermediate struct that distills patterns into proper
-                    // array/struct mappings, such that misalignments are
-                    // handled early on, and these type checks become easier.
-                    let def = match cx.struct_def(def_id) {
-                        Ok(d) => d,
-                        Err(()) => return Some((&ty::ERROR_TYPE).into()),
-                    };
-                    if args.len() > def.fields.len() {
-                        cx.emit(
-                            DiagBuilder2::error(format!(
-                                "pattern has {} fields, but type `{}` requires {}",
-                                args.len(),
-                                ty,
-                                def.fields.len()
-                            ))
-                            .span(expr.span),
-                        );
-                    }
-                    Some(
-                        cx.map_to_type(def.fields[index].ty, env)
-                            .unwrap_or(&ty::ERROR_TYPE)
-                            .into(),
-                    )
-                }
-                _ => {
-                    bug_span!(
-                        expr.span,
-                        cx,
-                        "type context for field {} of positional pattern with invalid type `{}`",
-                        ty,
-                        index
+            type_context_imposed_by_positional_pattern(cx, onto, expr, args, 1, env)
+        }
+        hir::ExprKind::RepeatPattern(count, ref args) if onto != count => {
+            // TODO(fschuiki): This is a verbatim copy of code in MIR lowering.
+            // This should really go into a pattern analysis struct.
+            let const_count = match cx.constant_int_value_of(count, env) {
+                Ok(c) => c,
+                Err(()) => return Some((&ty::ERROR_TYPE).into()),
+            };
+            let const_count = match const_count.to_usize() {
+                Some(c) => c,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "repetition count {} is outside copable range",
+                            const_count,
+                        ))
+                        .span(cx.span(count)),
                     );
+                    return Some((&ty::ERROR_TYPE).into());
                 }
-            }
+            };
+            type_context_imposed_by_positional_pattern(cx, onto, expr, args, const_count, env)
         }
 
         _ => None,
+    }
+}
+
+fn type_context_imposed_by_positional_pattern<'gcx>(
+    cx: &impl Context<'gcx>,
+    onto: NodeId,
+    expr: &'gcx hir::Expr,
+    args: &[NodeId],
+    repeat: usize,
+    env: ParamEnv,
+) -> Option<TypeContext<'gcx>> {
+    let index = args.iter().position(|&n| n == onto)?;
+    let ty = cx.need_type_context(expr.id, env).ty();
+    if ty.is_error() {
+        return Some((&ty::ERROR_TYPE).into());
+    }
+    match *ty.resolve_name() {
+        TypeKind::PackedArray(_, elty) => Some(elty.into()),
+        TypeKind::BitScalar { .. } => Some(ty.into()),
+        TypeKind::BitVector { sign, domain, .. } => {
+            Some(cx.intern_type(TypeKind::BitScalar { sign, domain }).into())
+        }
+        TypeKind::Struct(_) if repeat != 1 => {
+            bug_span!(
+                expr.span,
+                cx,
+                "struct patterns with repeat count other than 1 not supported",
+            );
+        }
+        TypeKind::Struct(def_id) => {
+            // TODO: This code shares quite some similarity with the one
+            // in HIR lowering. It would be much smarter to create an
+            // intermediate struct that distills patterns into proper
+            // array/struct mappings, such that misalignments are
+            // handled early on, and these type checks become easier.
+            let def = match cx.struct_def(def_id) {
+                Ok(d) => d,
+                Err(()) => return Some((&ty::ERROR_TYPE).into()),
+            };
+            if args.len() > def.fields.len() {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "pattern has {} fields, but type `{}` requires {}",
+                        args.len(),
+                        ty,
+                        def.fields.len()
+                    ))
+                    .span(expr.span),
+                );
+            }
+            Some(
+                cx.map_to_type(def.fields[index].ty, env)
+                    .unwrap_or(&ty::ERROR_TYPE)
+                    .into(),
+            )
+        }
+        _ => {
+            bug_span!(
+                expr.span,
+                cx,
+                "type context for field {} of positional pattern with invalid type `{}`",
+                ty,
+                index
+            );
+        }
     }
 }
 

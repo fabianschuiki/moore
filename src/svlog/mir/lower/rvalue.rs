@@ -1194,7 +1194,7 @@ fn lower_positional_pattern<'gcx>(
     let values: Vec<_> = values.into_iter().cycle().take(len).collect();
 
     // Ensure that the number of values matches the array/struct definition.
-    let exp_len = match *ty {
+    let exp_len = match *ty.resolve_name() {
         TypeKind::PackedArray(len, _) => len,
         TypeKind::BitScalar { .. } => 1,
         TypeKind::BitVector { range, .. } => range.size,
@@ -1223,7 +1223,7 @@ fn lower_positional_pattern<'gcx>(
     }
 
     // Construct the required output type.
-    match *ty {
+    match *ty.resolve_name() {
         TypeKind::PackedArray(_, elty) => {
             for v in &values {
                 assert_type!(v.ty, elty, v.span, builder.cx);
