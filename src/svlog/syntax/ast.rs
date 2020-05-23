@@ -76,18 +76,18 @@ where
     }
 }
 
-impl<'a, T> AcceptVisitor for Node<'a, T>
-where
-    T: AcceptVisitor,
-{
-    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
-        self.data.accept(visitor)
-    }
+// impl<'a, T> AcceptVisitor for Node<'a, T>
+// where
+//     T: AcceptVisitor,
+// {
+//     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+//         self.data.accept(visitor)
+//     }
 
-    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
-        self.data.visit(visitor)
-    }
-}
+//     fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+//         self.data.visit(visitor)
+//     }
+// }
 
 impl<'a, T> std::ops::Deref for Node<'a, T> {
     type Target = T;
@@ -105,22 +105,25 @@ impl<'a, T> std::ops::DerefMut for Node<'a, T> {
 
 /// A visitor for the AST.
 pub trait Visitor {
-    fn visit_root_data(&mut self, node: &RootData) {
+    fn visit_root(&mut self, node: &Root) {
         node.accept(self);
     }
-    fn visit_stmt_data(&mut self, node: &StmtData) {
+    fn visit_root_data(&mut self, node: &RootData) {
         node.accept(self);
     }
     fn visit_stmt(&mut self, node: &Stmt) {
         node.accept(self);
     }
+    fn visit_stmt_data(&mut self, node: &StmtData) {
+        node.accept(self);
+    }
     fn visit_item(&mut self, node: &Item) {
         node.accept(self);
     }
-    fn visit_expr_data(&mut self, node: &ExprData) {
+    fn visit_expr(&mut self, node: &Expr) {
         node.accept(self);
     }
-    fn visit_expr(&mut self, node: &Expr) {
+    fn visit_expr_data(&mut self, node: &ExprData) {
         node.accept(self);
     }
     fn visit_generate_block(&mut self, node: &GenerateBlock) {
