@@ -83,6 +83,10 @@ where
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
         self.data.accept(visitor)
     }
+
+    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        self.data.visit(visitor)
+    }
 }
 
 impl<'a, T> std::ops::Deref for Node<'a, T> {
@@ -101,16 +105,28 @@ impl<'a, T> std::ops::DerefMut for Node<'a, T> {
 
 /// A visitor for the AST.
 pub trait Visitor {
+    fn visit_root_data(&mut self, node: &RootData) {
+        node.accept(self);
+    }
     fn visit_stmt_data(&mut self, node: &StmtData) {
         node.accept(self);
     }
     fn visit_stmt(&mut self, node: &Stmt) {
         node.accept(self);
     }
+    fn visit_item(&mut self, node: &Item) {
+        node.accept(self);
+    }
+    fn visit_expr_data(&mut self, node: &ExprData) {
+        node.accept(self);
+    }
     fn visit_expr(&mut self, node: &Expr) {
         node.accept(self);
     }
     fn visit_generate_block(&mut self, node: &GenerateBlock) {
+        node.accept(self);
+    }
+    fn visit_generate_for(&mut self, node: &GenerateFor) {
         node.accept(self);
     }
     fn visit_timeunit(&mut self, node: &Timeunit) {
@@ -122,6 +138,9 @@ pub trait Visitor {
 pub trait AcceptVisitor {
     /// Walk a visitor over the contents of `self`.
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V);
+
+    /// Call a visitor's appropriate `visit` function for `self`.
+    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V);
 }
 
 impl<T> AcceptVisitor for Vec<T>
@@ -131,6 +150,12 @@ where
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
         for c in self {
             c.accept(visitor);
+        }
+    }
+
+    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        for c in self {
+            c.visit(visitor);
         }
     }
 }
@@ -144,6 +169,12 @@ where
             c.accept(visitor);
         }
     }
+
+    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        if let Some(c) = self {
+            c.visit(visitor);
+        }
+    }
 }
 
 pub use self::ExprData::*;
@@ -155,23 +186,6 @@ pub use self::TypeData::*;
 pub struct Root<'a> {
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
-}
-
-#[derive(moore_derive::AcceptVisitor)]
-pub struct DummyA;
-
-#[derive(moore_derive::AcceptVisitor)]
-pub struct DummyB();
-
-#[derive(moore_derive::AcceptVisitor)]
-pub struct DummyC<'a>(Vec<Item<'a>>);
-
-#[derive(moore_derive::AcceptVisitor)]
-pub enum DummyD<'a> {
-    Nothing,
-    NothingTuply(),
-    Tuple(Vec<Item<'a>>),
-    Struct { a: Vec<Item<'a>>, b: Vec<Item<'a>> },
 }
 
 #[allow(dead_code)]
@@ -1806,9 +1820,6 @@ impl HasDesc for GenerateFor<'_> {
         "for-generate statement"
     }
 }
-
-#[derive(CommonNode)]
-pub struct TupleDummy<'a>(usize, usize, Expr<'a>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateIf<'a> {

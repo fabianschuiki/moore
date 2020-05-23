@@ -92,6 +92,11 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
     // Emit the trait implementation.
     let name = &input.ident;
     let generics = &input.generics;
+    let visit_call = format_ident!(
+        "visit_{}",
+        name.to_string().to_snake_case(),
+        span = name.span()
+    );
     let output = quote! {
         impl #generics CommonNode for #name #generics {
             fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
@@ -102,6 +107,10 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         impl #generics AcceptVisitor for #name #generics {
             fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
                 #(#visit_fields)*
+            }
+
+            fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+                visitor.#visit_call(self);
             }
         }
     };
