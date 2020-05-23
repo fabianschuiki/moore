@@ -1,10 +1,10 @@
 [package]
 name = "moore-derive"
-version = "0.8.0-dev"
+version = "0.8.0"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
-description = "Procedural macros for moore compiler framework."
+description = "Procedural macros for the moore compiler framework."
 repository = "https://github.com/fabianschuiki/moore"
 license = "Apache-2.0 OR MIT"
 
