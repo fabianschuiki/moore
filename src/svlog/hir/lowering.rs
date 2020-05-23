@@ -2043,7 +2043,10 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
             Spanned::new(name.name, name.span),
         ),
-        ast::PatternExpr(ref fields) if fields.is_empty() => hir::ExprKind::EmptyPattern,
+        ast::PatternExpr(ref fields) if fields.is_empty() => {
+            cx.emit(DiagBuilder2::error("pattern must have at least one field").span(expr.span()));
+            return Err(());
+        }
         ast::PatternExpr(ref fields) => {
             let deciding_span = fields[0].span;
             match fields[0].data {

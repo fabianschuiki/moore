@@ -723,7 +723,6 @@ impl HasDesc for Expr {
             ExprKind::PositionalPattern(..) => format!("positional pattern"),
             ExprKind::NamedPattern(..) => format!("named pattern"),
             ExprKind::RepeatPattern(..) => format!("repeat pattern"),
-            ExprKind::EmptyPattern => format!("empty pattern"),
             _ => format!("{} `{}`", self.desc(), self.span().extract()),
         }
     }
@@ -771,8 +770,6 @@ pub enum ExprKind {
     NamedPattern(Vec<(PatternMapping, NodeId)>),
     /// A repeat pattern such as `'{32{a, b, c}}`.
     RepeatPattern(NodeId, Vec<NodeId>),
-    /// The empty pattern `'{}`.
-    EmptyPattern,
     /// A concatenation such as `{a,b}` or `{4{a,b}}`.
     Concat(Option<NodeId>, Vec<NodeId>),
     /// A cast `(ty, expr)` such as `foo'(bar)`.

@@ -242,8 +242,7 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         // Pattern expressions require a type context.
         hir::ExprKind::PositionalPattern(..)
         | hir::ExprKind::NamedPattern(..)
-        | hir::ExprKind::RepeatPattern(..)
-        | hir::ExprKind::EmptyPattern => cx.need_type_context(expr.id, env).ty(),
+        | hir::ExprKind::RepeatPattern(..) => cx.need_type_context(expr.id, env).ty(),
 
         // Function calls resolve to the function's return type.
         hir::ExprKind::FunctionCall(target, _) => cx

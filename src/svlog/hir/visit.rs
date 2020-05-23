@@ -283,7 +283,6 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
                 visitor.visit_node_with_id(expr, lvalue);
             }
         }
-        ExprKind::EmptyPattern => (),
         ExprKind::Concat(repeat, ref exprs) => {
             if let Some(repeat) = repeat {
                 visitor.visit_node_with_id(repeat, false);

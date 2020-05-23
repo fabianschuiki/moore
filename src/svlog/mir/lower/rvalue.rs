@@ -446,7 +446,7 @@ fn lower_expr_inner<'gcx>(
             Ok(check)
         }
 
-        hir::ExprKind::EmptyPattern | hir::ExprKind::FunctionCall(..) => {
+        hir::ExprKind::FunctionCall(..) => {
             bug_span!(
                 span,
                 cx,
