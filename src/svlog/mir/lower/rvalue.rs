@@ -217,7 +217,7 @@ fn lower_expr_inner<'gcx>(
             if ty.is_error() {
                 Err(())
             } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() || ty.is_struct() {
-                Ok(lower_positional_pattern(&builder, mapping, ty))
+                Ok(lower_positional_pattern(&builder, mapping, 1, ty))
             } else {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
@@ -226,6 +226,38 @@ fn lower_expr_inner<'gcx>(
                     ))
                     .span(span)
                     .add_note("Positional patterns can only construct arrays or structs."),
+                );
+                Err(())
+            }
+        }
+
+        hir::ExprKind::RepeatPattern(count, ref mapping) => {
+            let const_count = cx.constant_int_value_of(count, env)?;
+            let const_count = match const_count.to_usize() {
+                Some(c) => c,
+                None => {
+                    builder.cx.emit(
+                        DiagBuilder2::error(format!(
+                            "repetition count {} is outside copable range",
+                            const_count,
+                        ))
+                        .span(cx.span(count)),
+                    );
+                    return Err(());
+                }
+            };
+            if ty.is_error() {
+                Err(())
+            } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() || ty.is_struct() {
+                Ok(lower_positional_pattern(&builder, mapping, const_count, ty))
+            } else {
+                builder.cx.emit(
+                    DiagBuilder2::error(format!(
+                        "cannot construct a value of type `{}` with `'{{...}}`",
+                        ty
+                    ))
+                    .span(span)
+                    .add_note("Repeat patterns can only construct arrays or structs."),
                 );
                 Err(())
             }
@@ -414,9 +446,7 @@ fn lower_expr_inner<'gcx>(
             Ok(check)
         }
 
-        hir::ExprKind::RepeatPattern(..)
-        | hir::ExprKind::EmptyPattern
-        | hir::ExprKind::FunctionCall(..) => {
+        hir::ExprKind::EmptyPattern | hir::ExprKind::FunctionCall(..) => {
             bug_span!(
                 span,
                 cx,
@@ -1149,6 +1179,7 @@ fn lower_struct_pattern<'gcx>(
 fn lower_positional_pattern<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     mapping: &[NodeId],
+    repeat: usize,
     ty: Type<'gcx>,
 ) -> &'gcx Rvalue<'gcx> {
     // Lower each of the values to MIR, and abort on errors.
@@ -1159,6 +1190,8 @@ fn lower_positional_pattern<'gcx>(
     if values.iter().any(|mir| mir.is_error()) {
         return builder.error();
     }
+    let len = values.len() * repeat;
+    let values: Vec<_> = values.into_iter().cycle().take(len).collect();
 
     // Ensure that the number of values matches the array/struct definition.
     let exp_len = match *ty {
