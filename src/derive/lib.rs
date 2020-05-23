@@ -8,6 +8,9 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 
+mod accept_visitor;
+mod node;
+
 fn is_child_field(field: &syn::Field) -> bool {
     let tystr = field.ty.to_token_stream().to_string();
     if tystr.chars().nth(0).unwrap().is_lowercase() {
@@ -103,4 +106,14 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         }
     };
     output.into()
+}
+
+#[proc_macro_derive(AcceptVisitor, attributes(dont_visit))]
+pub fn derive_accept_visitor(input: TokenStream) -> TokenStream {
+    accept_visitor::accept_visitor(input)
+}
+
+#[proc_macro_attribute]
+pub fn node(args: TokenStream, input: TokenStream) -> TokenStream {
+    node::node(args, input)
 }

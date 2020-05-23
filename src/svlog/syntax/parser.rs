@@ -591,7 +591,8 @@ pub fn parse(input: Lexer) -> Result<Root, ()> {
 }
 
 fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
-    let mut root = Root {
+    let mut span = p.peek(0).1;
+    let mut root = RootData {
         timeunits: Timeunit {
             unit: None,
             prec: None,
@@ -613,7 +614,8 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
         }
     }
 
-    root
+    span.expand(p.last_span());
+    Root::new(span, root)
 }
 
 fn parse_time_units<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Timeunit> {

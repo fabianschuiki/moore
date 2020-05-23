@@ -106,6 +106,7 @@ pub trait Visitor {
 
 /// A node that accepts `Visitor`s.
 pub trait AcceptVisitor {
+    /// Walk a visitor over the contents of `self`.
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V);
 }
 
@@ -135,10 +136,33 @@ pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
 
-#[derive(CommonNode, Debug, PartialEq, Eq)]
+#[moore_derive::node]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Root<'a> {
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
+}
+
+#[derive(moore_derive::AcceptVisitor)]
+pub struct DummyA;
+
+#[derive(moore_derive::AcceptVisitor)]
+pub struct DummyB();
+
+#[derive(moore_derive::AcceptVisitor)]
+pub struct DummyC<'a>(Vec<Item<'a>>);
+
+#[derive(moore_derive::AcceptVisitor)]
+pub enum DummyD<'a> {
+    Nothing,
+    NothingTuply(),
+    Tuple(Vec<Item<'a>>),
+    Struct { a: Vec<Item<'a>>, b: Vec<Item<'a>> },
+}
+
+#[allow(dead_code)]
+fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor) {
+    ast.accept(v);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
