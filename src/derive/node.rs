@@ -24,6 +24,7 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     // Generate the wrapper node.
     let mut output = proc_macro2::TokenStream::new();
     output.extend(quote! {
+        #[moore_derive::call_visitor]
         #vis type #node_name #generics = Node<'a, #data_name #generics>;
     });
 

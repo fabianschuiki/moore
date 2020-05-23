@@ -9,6 +9,7 @@ use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 
 mod accept_visitor;
+mod call_visitor;
 mod node;
 
 fn is_child_field(field: &syn::Field) -> bool {
@@ -108,7 +109,9 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
             fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
                 #(#visit_fields)*
             }
+        }
 
+        impl #generics CallVisitor for #name #generics {
             fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
                 visitor.#visit_call(self);
             }
@@ -120,6 +123,11 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(AcceptVisitor, attributes(dont_visit))]
 pub fn derive_accept_visitor(input: TokenStream) -> TokenStream {
     accept_visitor::accept_visitor(input)
+}
+
+#[proc_macro_attribute]
+pub fn call_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
+    call_visitor::call_visitor(args, input)
 }
 
 #[proc_macro_attribute]

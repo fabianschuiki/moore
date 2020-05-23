@@ -141,9 +141,6 @@ pub trait Visitor {
 pub trait AcceptVisitor {
     /// Walk a visitor over the contents of `self`.
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V);
-
-    /// Call a visitor's appropriate `visit` function for `self`.
-    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V);
 }
 
 impl<T> AcceptVisitor for Vec<T>
@@ -153,12 +150,6 @@ where
     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
         for c in self {
             c.accept(visitor);
-        }
-    }
-
-    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
-        for c in self {
-            c.visit(visitor);
         }
     }
 }
@@ -172,7 +163,29 @@ where
             c.accept(visitor);
         }
     }
+}
 
+/// A node that calls a `Visitor`'s appropriate `visit_*` function.
+pub trait CallVisitor {
+    /// Call a visitor's appropriate `visit` function for `self`.
+    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V);
+}
+
+impl<T> CallVisitor for Vec<T>
+where
+    T: CallVisitor,
+{
+    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        for c in self {
+            c.visit(visitor);
+        }
+    }
+}
+
+impl<T> CallVisitor for Option<T>
+where
+    T: CallVisitor,
+{
     fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
         if let Some(c) = self {
             c.visit(visitor);

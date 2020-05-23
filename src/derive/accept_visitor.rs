@@ -1,6 +1,5 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
-use heck::SnakeCase;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::DeriveInput;
@@ -34,13 +33,6 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
         _ => panic!("unsupported item for AcceptVisitor"),
     };
 
-    // Determine the name of the `visit_*` function corresponding to us.
-    let visit_call = format_ident!(
-        "visit_{}",
-        name.to_string().to_snake_case(),
-        span = name.span()
-    );
-
     // Generate the implementation of the `AcceptVisitor` trait.
     output.extend(quote! {
         impl #generics AcceptVisitor for #name #generics {
@@ -48,10 +40,6 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
                 match self {
                     #(#visits,)*
                 }
-            }
-
-            fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
-                visitor.#visit_call(self);
             }
         }
     });
