@@ -37,6 +37,8 @@ You can use [llhd-sim] to simulate the compiled module:
 Moore is developed in this repository, but is separated into the following crates:
 
 - `moore`: Top-level umbrella crate tying everything together
+- `moore-common`: Common infrastructure used by SystemVerilog and VHDL
+- `moore-derive`: Procedural macros
 - `moore-svlog`: SystemVerilog implementation
 - `moore-svlog-syntax`: SystemVerilog parser and AST implementation
 - `moore-vhdl`: VHDL implementation
@@ -47,6 +49,22 @@ Some useful commands when working on moore:
     cargo check
     cargo test --all
     cargo run -- foo.sv -e foo
+    scripts/test.py --debug -v
+    scripts/test.py --debug -v <path-to-test-case>
+
+## Making a new Release
+
+To create a new release, the individual sub-crates of the project have to be released in the reverse order outlined above. Follow this checklist:
+
+1. Use `scripts/release_status.sh` to see an overview of moore/llhd crate versions used throughout the project
+2. Update the version in all `Cargo.toml` files
+3. Use `scripts/release_check.sh` to ensure that all crates have the same version as the root
+5. Ensure cargo is happy: `cargo check`
+4. Update the `CHANGELOG.md` file
+5. Commit: `git commit -am "Bump version to X.Y.Z`
+6. Tag: `git tag vX.Y.Z`
+7. Publish all crates using `cargo publish` in reverse order
+
 
 [llhd]: https://github.com/fabianschuiki/llhd
 [llhd-sim]: https://github.com/fabianschuiki/llhd-sim
