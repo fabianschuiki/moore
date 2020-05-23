@@ -1218,6 +1218,7 @@ fn lower_positional_pattern<'gcx>(
             values.reverse();
             builder.build(ty, RvalueKind::Concat(values))
         }
+        TypeKind::Struct(..) => builder.build(ty, RvalueKind::ConstructStruct(values)),
         _ => bug_span!(
             builder.span,
             builder.cx,
