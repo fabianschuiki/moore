@@ -108,9 +108,6 @@ pub trait Visitor {
     fn visit_root(&mut self, node: &Root) {
         node.accept(self);
     }
-    fn visit_root_data(&mut self, node: &RootData) {
-        node.accept(self);
-    }
     fn visit_stmt(&mut self, node: &Stmt) {
         node.accept(self);
     }

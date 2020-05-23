@@ -632,11 +632,6 @@ impl ast::Visitor for AstVisitor {
         node.accept(self);
     }
 
-    fn visit_root_data(&mut self, node: &ast::RootData) {
-        debug!("Visiting RootData");
-        node.accept(self);
-    }
-
     fn visit_item(&mut self, node: &ast::Item) {
         debug!("Visiting Item");
     }
