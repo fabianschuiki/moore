@@ -286,7 +286,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
     let svlog_sb = svlog::GlobalContext::new(&sess, &svlog_arenas);
 
     // Elaborate the requested entities or modules.
-    if let Some(names) = matches.values_of("elaborate") {
+    {
         let vhdl_phases = vhdl::lazy::LazyPhaseTable::new(&vhdl_sb);
         let ctx = ScoreContext {
             sess: sess,
@@ -296,16 +296,18 @@ fn score(sess: &Session, matches: &ArgMatches) {
             svlog: &svlog_sb,
         };
         let lib_id = ctx.add_library(lib, &asts);
-        debug!("lib_id = {:?}", lib_id);
-        debug!("{:?}", sb);
-        for name in names {
-            match elaborate_name(&ctx, lib_id, name) {
-                Ok(_) => (),
-                Err(_) => failed = true,
-            };
-        }
-        if sess.failed() {
-            failed = true;
+        if let Some(names) = matches.values_of("elaborate") {
+            debug!("lib_id = {:?}", lib_id);
+            debug!("{:?}", sb);
+            for name in names {
+                match elaborate_name(&ctx, lib_id, name) {
+                    Ok(_) => (),
+                    Err(_) => failed = true,
+                };
+            }
+            if sess.failed() {
+                failed = true;
+            }
         }
     }
     if failed || sess.failed() {
