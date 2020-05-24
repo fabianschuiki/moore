@@ -1,7 +1,7 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::DeriveInput;
 
 pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
@@ -51,6 +51,13 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Check if a field has the `#[dont_visit]` attribute.
+fn has_dont_visit(attrs: &[syn::Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.to_token_stream().to_string() == "# [dont_visit]")
+}
+
 /// Generate the code to visit fields in a struct-like item.
 fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
     // Generate a destructuring pattern that assigns predictable names to all
@@ -62,7 +69,9 @@ fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
             for (i, field) in fields.named.iter().enumerate() {
                 let field_name = &field.ident;
                 let name = format_ident!("arg{}", i);
-                names.push(name.clone());
+                if !has_dont_visit(&field.attrs) {
+                    names.push(name.clone());
+                }
                 mapping.push(quote! {
                     #field_name: #name
                 });
@@ -71,9 +80,11 @@ fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
         }
         syn::Fields::Unnamed(ref fields) => {
             let mut mapping = vec![];
-            for (i, _) in fields.unnamed.iter().enumerate() {
+            for (i, field) in fields.unnamed.iter().enumerate() {
                 let name = format_ident!("arg{}", i);
-                names.push(name.clone());
+                if !has_dont_visit(&field.attrs) {
+                    names.push(name.clone());
+                }
                 mapping.push(name);
             }
             quote! { (#(#mapping),*) }
