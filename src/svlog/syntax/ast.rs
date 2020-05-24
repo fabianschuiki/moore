@@ -13,6 +13,9 @@ use moore_common::{
 use moore_derive::{AcceptVisitor, CommonNode};
 use std::cell::Cell;
 
+/// An AST node.
+pub trait AnyNode<'a> {}
+
 /// Common interface to all AST nodes.
 pub trait CommonNode {
     /// Apply a function to each child node.
@@ -68,6 +71,8 @@ impl<'a, T> Node<'a, T> {
         }
     }
 }
+
+impl<'a, T> AnyNode<'a> for Node<'a, T> {}
 
 impl<'a, T> CommonNode for Node<'a, T>
 where
@@ -211,6 +216,10 @@ impl<'a> WalkVisitor<'a> for Span {
 }
 
 impl<'a> WalkVisitor<'a> for Name {
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+}
+
+impl<'a> WalkVisitor<'a> for bool {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
 }
 
@@ -390,9 +399,7 @@ pub enum Item<'a> {
     GenerateCase(GenerateCase),
     #[dont_visit]
     Assertion(Assertion<'a>),
-    #[dont_visit]
     NetDecl(NetDecl<'a>),
-    #[dont_visit]
     VarDecl(VarDecl<'a>),
     #[dont_visit]
     Inst(Inst<'a>),
@@ -958,12 +965,14 @@ pub enum AssignOp {
     ArithShR,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDecl<'a> {
     pub span: Span,
     pub konst: bool,
     pub var: bool,
     pub lifetime: Option<Lifetime>,
+    #[dont_visit]
     pub ty: Type<'a>,
     pub names: Vec<VarDeclName<'a>>,
 }
@@ -980,11 +989,13 @@ impl HasDesc for VarDecl<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDeclName<'a> {
     pub span: Span,
     pub name: Name,
     pub name_span: Span,
+    #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
     pub init: Option<Expr<'a>>,
 }
@@ -1441,13 +1452,19 @@ pub enum SubroutinePortDir {
     ConstRef,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetDecl<'a> {
     pub span: Span,
+    #[dont_visit]
     pub net_type: NetType,
+    #[dont_visit]
     pub strength: Option<NetStrength>,
+    #[dont_visit]
     pub kind: NetKind,
+    #[dont_visit]
     pub ty: Type<'a>,
+    #[dont_visit]
     pub delay: Option<DelayControl<'a>>,
     pub names: Vec<VarDeclName<'a>>,
 }

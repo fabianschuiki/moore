@@ -741,3 +741,34 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator {
         true
     }
 }
+
+/// Determine the location of a node within its enclosing scope.
+pub fn scope_location<'a>(_cx: &impl Context<'a>, node: Ref<'a, impl ast::AnyNode<'a>>) {
+    debug!("Scope location for a node");
+}
+
+/// A visitor that emits diagnostics for every resolved named.
+pub struct ResolutionVisitor<'cx, C> {
+    pub cx: &'cx C,
+}
+
+impl<'a, 'cx, C> ast::Visitor<'a> for ResolutionVisitor<'cx, C>
+where
+    C: Context<'a>,
+    'a: 'cx,
+{
+    fn pre_visit_expr<'b: 'a>(&mut self, node: &'a ast::Expr<'b>) -> bool {
+        match node.data {
+            ast::IdentExpr(ident) => {
+                debug!("Resolve `{}`", ident.name);
+                // 1. Determine the scope location of the identifier.
+                // scope_location(self.cx, node.into());
+                // 1.1. Find the closest parent node which is a ScopedNode
+                // 1.2. Combine with this node's lex_order
+                // 2. Lookup the name at this scope location.
+            }
+            _ => (),
+        }
+        true
+    }
+}
