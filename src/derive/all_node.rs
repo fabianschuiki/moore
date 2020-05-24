@@ -31,7 +31,7 @@ pub(crate) fn add_node(name: &Ident, generics: &Generics) {
 
 pub(crate) fn all_node(_input: TokenStream) -> TokenStream {
     // Flush the accumulated nodes.
-    let nodes = NODES.with(|c| std::mem::take(&mut *c.borrow_mut()));
+    let nodes = NODES.with(|c| std::mem::replace(&mut *c.borrow_mut(), Default::default()));
 
     // Catch the trivial case of an empty node list.
     if nodes.is_empty() {
