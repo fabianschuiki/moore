@@ -31,7 +31,7 @@ pub(crate) fn add_call(name: &Ident, generics: &Generics) {
 
 pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
     // Flush the accumulated calls.
-    let calls = CALLS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+    let calls = CALLS.with(|c| std::mem::replace(&mut *c.borrow_mut(), Default::default()));
 
     // Determine a lifetime for the visitor.
     let lt: syn::Lifetime = syn::parse_str("'a").unwrap();
