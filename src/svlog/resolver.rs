@@ -709,12 +709,12 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator {
     // We return `false` in the pre-visit functions when the visited node
     // generates a subscope, to avoid gobbling up its local definitions.
 
-    fn pre_visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) -> bool {
+    fn pre_visit_root(&mut self, node: &'a ast::Root<'a>) -> bool {
         self.add_subscope(node);
         false
     }
 
-    fn pre_visit_module<'b: 'a>(&mut self, node: &'a ast::Module<'b>) -> bool {
+    fn pre_visit_module(&mut self, node: &'a ast::Module<'a>) -> bool {
         debug!("- Adding module {}", node.name);
         self.add_subscope(node);
         self.add_def(Def {
@@ -725,7 +725,7 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator {
         false
     }
 
-    fn pre_visit_package<'b: 'a>(&mut self, node: &'a ast::Package<'b>) -> bool {
+    fn pre_visit_package(&mut self, node: &'a ast::Package<'a>) -> bool {
         debug!("- Adding package {}", node.name);
         self.add_subscope(node);
         self.add_def(Def {
@@ -757,12 +757,12 @@ where
     C: Context<'a>,
     'a: 'cx,
 {
-    fn pre_visit_expr<'b: 'a>(&mut self, node: &'a ast::Expr<'b>) -> bool {
+    fn pre_visit_expr(&mut self, node: &'a ast::Expr<'a>) -> bool {
         match node.data {
             ast::IdentExpr(ident) => {
                 debug!("Resolve `{}`", ident.name);
                 // 1. Determine the scope location of the identifier.
-                // scope_location(self.cx, node.into());
+                scope_location(self.cx, node.into());
                 // 1.1. Find the closest parent node which is a ScopedNode
                 // 1.2. Combine with this node's lex_order
                 // 2. Lookup the name at this scope location.

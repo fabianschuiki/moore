@@ -97,16 +97,16 @@ impl<'gcx> GlobalContext<'gcx> {
             struct AstVisitor;
 
             impl<'a> ast::Visitor<'a> for AstVisitor {
-                fn pre_visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) -> bool {
+                fn pre_visit_root(&mut self, node: &'a ast::Root<'a>) -> bool {
                     debug!("Visiting Root with {} items", node.items.len());
                     true
                 }
 
-                fn post_visit_root<'b: 'a>(&mut self, _node: &'a ast::Root<'b>) {
+                fn post_visit_root(&mut self, _node: &'a ast::Root<'a>) {
                     debug!("Done with Root");
                 }
 
-                fn pre_visit_item<'b: 'a>(&mut self, _node: &'a ast::Item<'b>) -> bool {
+                fn pre_visit_item(&mut self, _node: &'a ast::Item<'a>) -> bool {
                     debug!("Visiting Item");
                     false
                 }

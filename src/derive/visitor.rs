@@ -33,14 +33,8 @@ pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
     // Flush the accumulated calls.
     let calls = CALLS.with(|c| std::mem::take(&mut *c.borrow_mut()));
 
-    // Determine a lifetime for the visitor which does not collide.
-    let mut existing = HashSet::new();
-    for call in &calls {
-        let generics: syn::Generics = syn::parse_str(&call.generics).unwrap();
-        existing.extend(generics.lifetimes().map(|l| l.lifetime.to_string()));
-    }
-    let lt = crate::pick_lifetime(&existing);
-    let lt: syn::Lifetime = syn::parse_str(&lt).unwrap();
+    // Determine a lifetime for the visitor.
+    let lt: syn::Lifetime = syn::parse_str("'a").unwrap();
 
     // Generate some documentation.
     let mut doc = format!(
@@ -95,13 +89,13 @@ pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
         // Render the corresponding call.
         pre_calls.push(quote! {
             #[doc = #pre_doc]
-            fn #pre_visit_fn #impl_generics (&mut self, node: &#lt #name #generics) -> bool {
+            fn #pre_visit_fn (&mut self, node: &#lt #name #generics) -> bool {
                 true
             }
         });
         post_calls.push(quote! {
             #[doc = #post_doc]
-            fn #post_visit_fn #impl_generics (&mut self, node: &#lt #name #generics) {
+            fn #post_visit_fn (&mut self, node: &#lt #name #generics) {
             }
         });
     }

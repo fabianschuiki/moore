@@ -37,7 +37,7 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
 
     // Determine the impl generics, which may add another lifetime.
     let mut impl_generics = generics.clone();
-    let lt = crate::determine_lifetime(&mut impl_generics);
+    let lt = crate::first_lifetime(&mut impl_generics);
 
     // Generate the implementation of the `AcceptVisitor` trait.
     output.extend(quote! {

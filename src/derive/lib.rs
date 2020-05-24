@@ -6,7 +6,6 @@ extern crate proc_macro;
 use heck::SnakeCase;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use std::collections::HashSet;
 use syn::{parse_macro_input, DeriveInput};
 
 mod accept_visitor;
@@ -14,42 +13,19 @@ mod node;
 mod visitor;
 mod walk_visitor;
 
-/// Pick a lifetime that does not collide with a set of existing ones.
-fn pick_lifetime(colliders: &HashSet<String>) -> String {
-    for mut i in 0.. {
-        let mut name = String::new();
-        loop {
-            name.push(('a' as u8 + (i % 26) as u8) as char);
-            i /= 26;
-            if i == 0 {
-                break;
-            }
-        }
-        name.push('\'');
-        let name: String = name.chars().rev().collect();
-        if !colliders.contains(&name) {
-            return name;
-        }
-    }
-    unreachable!()
-}
-
-/// Infer a lifetime from a `syn::Generics`.
+/// Pick the first lifetime from a `syn::Generics`, or create one.
 ///
-/// This adds a new lifetime to the generics that does not collide with any
-/// pre-existing ones, and adds a bound to all other lifetimes to ensure they
-/// outlive the new one.
-fn determine_lifetime(gen: &mut syn::Generics) -> syn::Lifetime {
-    // Gather a set of existing lifetimes.
-    let existing: HashSet<_> = gen.lifetimes().map(|l| l.lifetime.to_string()).collect();
-    let lt = pick_lifetime(&existing);
-
-    // Otherwise pick one.
-    let ltdef: syn::LifetimeDef = syn::parse_str(&lt).unwrap();
-    let lt = ltdef.lifetime.clone();
-    for other_ltdef in gen.lifetimes_mut() {
-        other_ltdef.bounds.push(lt.clone());
+/// This either returns the first lifetime in the generics, or adds a new
+/// lifetime.
+fn first_lifetime(gen: &mut syn::Generics) -> syn::Lifetime {
+    // Check if there already is a lifetime that we can use.
+    if let Some(ltdef) = gen.lifetimes().next() {
+        return ltdef.lifetime.clone();
     }
+
+    // Otherwise generate one.
+    let ltdef: syn::LifetimeDef = syn::parse_str("'a").unwrap();
+    let lt = ltdef.lifetime.clone();
     gen.params.insert(0, syn::GenericParam::Lifetime(ltdef));
     lt
 }
@@ -124,7 +100,7 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let generics = &input.generics;
     let mut impl_generics = generics.clone();
-    let lt = determine_lifetime(&mut impl_generics);
+    let lt = first_lifetime(&mut impl_generics);
     let pre_visit_fn = format_ident!(
         "pre_visit_{}",
         name.to_string().to_snake_case(),

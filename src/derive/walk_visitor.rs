@@ -30,7 +30,8 @@ pub(crate) fn walk_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenS
 
     // Determine the impl generics, which may add another lifetime.
     let mut impl_generics = generics.clone();
-    let lt = crate::determine_lifetime(&mut impl_generics);
+    let lt = crate::first_lifetime(&mut impl_generics);
+    // let lt: syn::Lifetime = syn::parse_str("'a").unwrap();
 
     // Generate some documentation.
     let doc = format!(
