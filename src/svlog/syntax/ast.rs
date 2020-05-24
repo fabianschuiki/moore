@@ -10,7 +10,7 @@ use moore_common::{
     source::{Span, Spanned, INVALID_SPAN},
     util::{HasDesc, HasSpan},
 };
-use moore_derive::CommonNode;
+use moore_derive::{AcceptVisitor, CommonNode};
 use std::cell::Cell;
 
 /// Common interface to all AST nodes.
@@ -78,18 +78,14 @@ where
     }
 }
 
-// impl<'a, T> AcceptVisitor for Node<'a, T>
-// where
-//     T: AcceptVisitor,
-// {
-//     fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
-//         self.data.accept(visitor)
-//     }
-
-//     fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
-//         self.data.visit(visitor)
-//     }
-// }
+impl<'a, 'b: 'a, T> AcceptVisitor<'a> for Node<'b, T>
+where
+    T: AcceptVisitor<'a>,
+{
+    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+        self.data.accept(visitor)
+    }
+}
 
 impl<'a, T> std::ops::Deref for Node<'a, T> {
     type Target = T;
@@ -192,6 +188,18 @@ where
     }
 }
 
+impl<'a> WalkVisitor<'a> for Span {
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+}
+
+impl<'a> WalkVisitor<'a> for Name {
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+}
+
+impl<'a> WalkVisitor<'a> for Lifetime {
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+}
+
 pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
@@ -208,19 +216,26 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
     ast.accept(v);
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ModDecl<'a> {
+pub type ModDecl<'a> = Module<'a>;
+
+#[moore_derive::walk_visitor]
+#[derive(AcceptVisitor, Clone, Debug, PartialEq, Eq)]
+pub struct Module<'a> {
     pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
+    #[dont_visit]
     pub imports: Vec<ImportDecl>,
+    #[dont_visit]
     pub params: Vec<ParamDecl<'a>>,
+    #[dont_visit]
     pub ports: Vec<Port<'a>>,
+    #[dont_visit]
     pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for ModDecl<'_> {
+impl HasSpan for Module<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -230,7 +245,7 @@ impl HasSpan for ModDecl<'_> {
     }
 }
 
-impl HasDesc for ModDecl<'_> {
+impl HasDesc for Module<'_> {
     fn desc(&self) -> &'static str {
         "module declaration"
     }
@@ -323,7 +338,7 @@ pub struct Timeunit {
 #[derive(CommonNode, Debug, PartialEq, Eq, Clone)]
 pub enum Item<'a> {
     Dummy,
-    ModuleDecl(ModDecl<'a>),
+    ModuleDecl(Module<'a>),
     InterfaceDecl(IntfDecl<'a>),
     PackageDecl(PackageDecl<'a>),
     ClassDecl(ClassDecl<'a>),
