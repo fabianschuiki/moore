@@ -9,8 +9,8 @@ module foo
     import pkgC::*;
 
     int a = A;
-    // int b = B;
-    // int c = C;
+    int b = B;
+    int c = C;
 endmodule
 
 package pkgA; localparam int A = 1; endpackage

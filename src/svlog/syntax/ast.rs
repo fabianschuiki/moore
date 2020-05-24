@@ -160,6 +160,15 @@ where
     }
 }
 
+impl<'a, T> AcceptVisitor<'a> for Spanned<T>
+where
+    T: AcceptVisitor<'a>,
+{
+    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+        self.value.accept(visitor);
+    }
+}
+
 /// A node that walks a `Visitor` over itself.
 pub trait WalkVisitor<'a> {
     /// Walk a visitor over `self`.
@@ -188,15 +197,20 @@ where
     }
 }
 
+impl<'a, T> WalkVisitor<'a> for Spanned<T>
+where
+    T: WalkVisitor<'a>,
+{
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+        self.value.walk(visitor);
+    }
+}
+
 impl<'a> WalkVisitor<'a> for Span {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
 }
 
 impl<'a> WalkVisitor<'a> for Name {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
-}
-
-impl<'a> WalkVisitor<'a> for Lifetime {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
 }
 
@@ -218,20 +232,18 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
 
 pub type ModDecl<'a> = Module<'a>;
 
-#[moore_derive::walk_visitor]
-#[derive(AcceptVisitor, Clone, Debug, PartialEq, Eq)]
+#[moore_derive::visit]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
     pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
-    #[dont_visit]
     pub imports: Vec<ImportDecl>,
     #[dont_visit]
     pub params: Vec<ParamDecl<'a>>,
     #[dont_visit]
     pub ports: Vec<Port<'a>>,
-    #[dont_visit]
     pub items: Vec<Item<'a>>,
 }
 
@@ -286,8 +298,11 @@ impl HasDesc for IntfDecl<'_> {
     }
 }
 
+pub type PackageDecl<'a> = Package<'a>;
+
+#[moore_derive::visit]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PackageDecl<'a> {
+pub struct Package<'a> {
     pub span: Span,
     pub lifetime: Lifetime,
     pub name: Name,
@@ -296,7 +311,7 @@ pub struct PackageDecl<'a> {
     pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for PackageDecl<'_> {
+impl HasSpan for Package<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -306,7 +321,7 @@ impl HasSpan for PackageDecl<'_> {
     }
 }
 
-impl HasDesc for PackageDecl<'_> {
+impl HasDesc for Package<'_> {
     fn desc(&self) -> &'static str {
         "package declaration"
     }
@@ -317,6 +332,7 @@ impl HasDesc for PackageDecl<'_> {
 }
 
 /// Lifetime specifier for variables, tasks, and functions. Defaults to static.
+#[moore_derive::visit]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Lifetime {
     Static,
@@ -335,30 +351,50 @@ pub struct Timeunit {
     pub prec: Option<Spanned<Lit>>,
 }
 
-#[derive(CommonNode, Debug, PartialEq, Eq, Clone)]
+#[moore_derive::visit]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Item<'a> {
     Dummy,
     ModuleDecl(Module<'a>),
+    #[dont_visit]
     InterfaceDecl(IntfDecl<'a>),
-    PackageDecl(PackageDecl<'a>),
+    PackageDecl(Package<'a>),
+    #[dont_visit]
     ClassDecl(ClassDecl<'a>),
+    #[dont_visit]
     ProgramDecl(()),
     ImportDecl(ImportDecl),
+    #[dont_visit]
     ParamDecl(ParamDecl<'a>),
+    #[dont_visit]
     ModportDecl(ModportDecl),
+    #[dont_visit]
     Typedef(Typedef<'a>),
+    #[dont_visit]
     PortDecl(PortDecl<'a>),
+    #[dont_visit]
     Procedure(Procedure<'a>),
+    #[dont_visit]
     SubroutineDecl(SubroutineDecl<'a>),
+    #[dont_visit]
     ContAssign(ContAssign<'a>),
+    #[dont_visit]
     GenvarDecl(Vec<GenvarDecl<'a>>),
+    #[dont_visit]
     GenerateRegion(Span, Vec<Item<'a>>),
+    #[dont_visit]
     GenerateFor(GenerateFor<'a>),
+    #[dont_visit]
     GenerateIf(GenerateIf<'a>),
+    #[dont_visit]
     GenerateCase(GenerateCase),
+    #[dont_visit]
     Assertion(Assertion<'a>),
+    #[dont_visit]
     NetDecl(NetDecl<'a>),
+    #[dont_visit]
     VarDecl(VarDecl<'a>),
+    #[dont_visit]
     Inst(Inst<'a>),
 }
 
@@ -1477,12 +1513,14 @@ pub enum PatternFieldData<'a> {
     Repeat(Box<Expr<'a>>, Vec<Expr<'a>>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportDecl {
     pub span: Span,
     pub items: Vec<ImportItem>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportItem {
     pub span: Span,

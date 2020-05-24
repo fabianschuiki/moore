@@ -182,3 +182,14 @@ pub fn visitor(input: TokenStream) -> TokenStream {
 pub fn walk_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
     walk_visitor::walk_visitor(args, input)
 }
+
+/// Convenience macro to derive `AcceptVisitor` and `walk_visitor`.
+#[proc_macro_attribute]
+pub fn visit(_args: TokenStream, input: TokenStream) -> TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+    TokenStream::from(quote! {
+        #[moore_derive::walk_visitor]
+        #[derive(AcceptVisitor)]
+        #input
+    })
+}

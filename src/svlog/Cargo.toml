@@ -24,6 +24,7 @@ num = "0.2"
 bit-vec = "0.6.2"
 itertools = "0.9"
 backtrace = "0.3"
+bitflags = "1.2"
 
 # salsa inlined dependencies
 # TODO(fschuiki): Remove this once salsa is a regular dependency again.
