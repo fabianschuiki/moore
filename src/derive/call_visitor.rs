@@ -21,13 +21,18 @@ pub(crate) fn call_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenS
         name.to_string().to_snake_case(),
         span = name.span()
     );
+    crate::visitor::add_call(&visit_call, &name, &generics);
+
+    // Determine the impl generics, which may add another lifetime.
+    let mut impl_generics = generics.clone();
+    let lt = crate::determine_lifetime(&mut impl_generics);
 
     // Generate the implementation of the `CallVisitor` trait.
     let output = quote! {
         #input
 
-        impl #generics CallVisitor for #name #generics {
-            fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        impl #impl_generics CallVisitor<#lt> for #name #generics {
+            fn visit<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
                 visitor.#visit_call(self);
             }
         }

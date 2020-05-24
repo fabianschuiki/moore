@@ -626,14 +626,15 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
 
 struct AstVisitor;
 
-impl ast::Visitor for AstVisitor {
-    fn visit_root(&mut self, node: &ast::Root) {
+impl<'a> ast::Visitor<'a> for AstVisitor {
+    fn visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) {
         debug!("Visiting Root");
         node.accept(self);
     }
 
-    fn visit_item(&mut self, node: &ast::Item) {
+    fn visit_item<'b: 'a>(&mut self, node: &'a ast::Item<'b>) {
         debug!("Visiting Item");
+        node.accept(self);
     }
 }
 

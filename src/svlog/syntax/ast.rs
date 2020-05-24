@@ -1,5 +1,7 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
+//! An abstract syntax tree for SystemVerilog.
+
 #![allow(unused_variables)]
 
 use crate::token::{Lit, Op};
@@ -103,59 +105,59 @@ impl<'a, T> std::ops::DerefMut for Node<'a, T> {
     }
 }
 
-/// A visitor for the AST.
-pub trait Visitor {
-    fn visit_root(&mut self, node: &Root) {
-        node.accept(self);
-    }
-    fn visit_stmt(&mut self, node: &Stmt) {
-        node.accept(self);
-    }
-    fn visit_stmt_data(&mut self, node: &StmtData) {
-        node.accept(self);
-    }
-    fn visit_item(&mut self, node: &Item) {
-        node.accept(self);
-    }
-    fn visit_expr(&mut self, node: &Expr) {
-        node.accept(self);
-    }
-    fn visit_expr_data(&mut self, node: &ExprData) {
-        node.accept(self);
-    }
-    fn visit_generate_block(&mut self, node: &GenerateBlock) {
-        node.accept(self);
-    }
-    fn visit_generate_for(&mut self, node: &GenerateFor) {
-        node.accept(self);
-    }
-    fn visit_timeunit(&mut self, node: &Timeunit) {
-        node.accept(self);
-    }
-}
+// /// A visitor for the AST.
+// pub trait Visitor {
+//     fn visit_root(&mut self, node: &Root) {
+//         node.accept(self);
+//     }
+//     fn visit_stmt(&mut self, node: &Stmt) {
+//         node.accept(self);
+//     }
+//     fn visit_stmt_data(&mut self, node: &StmtData) {
+//         node.accept(self);
+//     }
+//     fn visit_item(&mut self, node: &Item) {
+//         node.accept(self);
+//     }
+//     fn visit_expr(&mut self, node: &Expr) {
+//         node.accept(self);
+//     }
+//     fn visit_expr_data(&mut self, node: &ExprData) {
+//         node.accept(self);
+//     }
+//     fn visit_generate_block(&mut self, node: &GenerateBlock) {
+//         node.accept(self);
+//     }
+//     fn visit_generate_for(&mut self, node: &GenerateFor) {
+//         node.accept(self);
+//     }
+//     fn visit_timeunit(&mut self, node: &Timeunit) {
+//         node.accept(self);
+//     }
+// }
 
 /// A node that accepts `Visitor`s.
-pub trait AcceptVisitor {
+pub trait AcceptVisitor<'a> {
     /// Walk a visitor over the contents of `self`.
-    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V);
+    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
 }
 
-impl<T> AcceptVisitor for Vec<T>
+impl<'a, T> AcceptVisitor<'a> for Vec<T>
 where
-    T: AcceptVisitor,
+    T: AcceptVisitor<'a>,
 {
-    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
         for c in self {
             c.accept(visitor);
         }
     }
 }
 
-impl<T> AcceptVisitor for Option<T>
+impl<'a, T> AcceptVisitor<'a> for Option<T>
 where
-    T: AcceptVisitor,
+    T: AcceptVisitor<'a>,
 {
-    fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
         if let Some(c) = self {
             c.accept(visitor);
         }
@@ -163,27 +165,27 @@ where
 }
 
 /// A node that calls a `Visitor`'s appropriate `visit_*` function.
-pub trait CallVisitor {
+pub trait CallVisitor<'a> {
     /// Call a visitor's appropriate `visit` function for `self`.
-    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V);
+    fn visit<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
 }
 
-impl<T> CallVisitor for Vec<T>
+impl<'a, T> CallVisitor<'a> for Vec<T>
 where
-    T: CallVisitor,
+    T: CallVisitor<'a>,
 {
-    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+    fn visit<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
         for c in self {
             c.visit(visitor);
         }
     }
 }
 
-impl<T> CallVisitor for Option<T>
+impl<'a, T> CallVisitor<'a> for Option<T>
 where
-    T: CallVisitor,
+    T: CallVisitor<'a>,
 {
-    fn visit<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+    fn visit<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
         if let Some(c) = self {
             c.visit(visitor);
         }
@@ -202,7 +204,7 @@ pub struct Root<'a> {
 }
 
 #[allow(dead_code)]
-fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor) {
+fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
     ast.accept(v);
 }
 
@@ -985,6 +987,7 @@ impl HasDesc for GenvarDecl<'_> {
 }
 
 /// An expression.
+#[moore_derive::call_visitor]
 pub type Expr<'a> = Node<'a, ExprData<'a>>;
 
 impl HasSpan for Expr<'_> {
@@ -1923,3 +1926,5 @@ pub enum PortConnMode<'a> {
     Unconnected,         // `.name()` case
     Connected(Expr<'a>), // `.name(expr)` case
 }
+
+moore_derive::visitor!();

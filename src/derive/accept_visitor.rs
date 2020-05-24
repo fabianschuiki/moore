@@ -33,10 +33,14 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
         _ => panic!("unsupported item for AcceptVisitor"),
     };
 
+    // Determine the impl generics, which may add another lifetime.
+    let mut impl_generics = generics.clone();
+    let lt = crate::determine_lifetime(&mut impl_generics);
+
     // Generate the implementation of the `AcceptVisitor` trait.
     output.extend(quote! {
-        impl #generics AcceptVisitor for #name #generics {
-            fn accept<V: Visitor + ?Sized>(&self, visitor: &mut V) {
+        impl #impl_generics AcceptVisitor<#lt> for #name #generics {
+            fn accept<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
                 match self {
                     #(#visits,)*
                 }
