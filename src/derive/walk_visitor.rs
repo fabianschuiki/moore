@@ -5,14 +5,14 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::Item;
 
-pub(crate) fn call_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenStream {
+pub(crate) fn walk_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenStream {
     // Parse the input.
     let input = syn::parse_macro_input!(raw_input as Item);
     let (name, generics) = match &input {
         Item::Enum(item) => (&item.ident, &item.generics),
         Item::Struct(item) => (&item.ident, &item.generics),
         Item::Type(item) => (&item.ident, &item.generics),
-        _ => panic!("unsupported item to derive CallVisitor for"),
+        _ => panic!("unsupported item to derive WalkVisitor for"),
     };
 
     // Determine the name of the visit functions corresponding to us.
@@ -45,11 +45,11 @@ pub(crate) fn call_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenS
         pre_visit_fn, post_visit_fn,
     );
 
-    // Generate the implementation of the `CallVisitor` trait.
+    // Generate the implementation of the `WalkVisitor` trait.
     let output = quote! {
         #input
 
-        impl #impl_generics CallVisitor<#lt> for #name #generics {
+        impl #impl_generics WalkVisitor<#lt> for #name #generics {
             #[doc = #doc]
             fn walk<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
                 if visitor.#pre_visit_fn(self) {

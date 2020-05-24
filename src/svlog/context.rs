@@ -89,6 +89,29 @@ impl<'gcx> GlobalContext<'gcx> {
     /// modules that were added.
     pub fn add_root_nodes(&self, ast: impl Iterator<Item = &'gcx ast::Root<'gcx>>) {
         for root in ast {
+            // For debugging purposes, do a "quick" visit over the root.
+            debug!("Doing a visit");
+            use ast::WalkVisitor;
+            root.walk(&mut AstVisitor);
+
+            struct AstVisitor;
+
+            impl<'a> ast::Visitor<'a> for AstVisitor {
+                fn pre_visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) -> bool {
+                    debug!("Visiting Root with {} items", node.items.len());
+                    true
+                }
+
+                fn post_visit_root<'b: 'a>(&mut self, _node: &'a ast::Root<'b>) {
+                    debug!("Done with Root");
+                }
+
+                fn pre_visit_item<'b: 'a>(&mut self, _node: &'a ast::Item<'b>) -> bool {
+                    debug!("Visiting Item");
+                    false
+                }
+            }
+
             for item in &root.items {
                 match *item {
                     ast::Item::ModuleDecl(ref n) => {

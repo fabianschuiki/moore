@@ -615,27 +615,7 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
     }
 
     span.expand(p.last_span());
-    let root = Root::new(span, root);
-
-    // For debugging purposes, do a "quick" visit over the root.
-    debug!("Doing a visit");
-    root.walk(&mut AstVisitor);
-
-    root
-}
-
-struct AstVisitor;
-
-impl<'a> ast::Visitor<'a> for AstVisitor {
-    fn pre_visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) -> bool {
-        debug!("Visiting Root");
-        true
-    }
-
-    fn pre_visit_item<'b: 'a>(&mut self, node: &'a ast::Item<'b>) -> bool {
-        debug!("Visiting Item");
-        false
-    }
+    Root::new(span, root)
 }
 
 fn parse_time_units<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Timeunit> {

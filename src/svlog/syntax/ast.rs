@@ -165,14 +165,14 @@ where
 }
 
 /// A node that walks a `Visitor` over itself.
-pub trait CallVisitor<'a> {
+pub trait WalkVisitor<'a> {
     /// Walk a visitor over `self`.
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
 }
 
-impl<'a, T> CallVisitor<'a> for Vec<T>
+impl<'a, T> WalkVisitor<'a> for Vec<T>
 where
-    T: CallVisitor<'a>,
+    T: WalkVisitor<'a>,
 {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
         for c in self {
@@ -181,9 +181,9 @@ where
     }
 }
 
-impl<'a, T> CallVisitor<'a> for Option<T>
+impl<'a, T> WalkVisitor<'a> for Option<T>
 where
-    T: CallVisitor<'a>,
+    T: WalkVisitor<'a>,
 {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
         if let Some(c) = self {
@@ -987,7 +987,7 @@ impl HasDesc for GenvarDecl<'_> {
 }
 
 /// An expression.
-#[moore_derive::call_visitor]
+#[moore_derive::walk_visitor]
 pub type Expr<'a> = Node<'a, ExprData<'a>>;
 
 impl HasSpan for Expr<'_> {

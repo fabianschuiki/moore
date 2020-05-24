@@ -10,9 +10,9 @@ use std::collections::HashSet;
 use syn::{parse_macro_input, DeriveInput};
 
 mod accept_visitor;
-mod call_visitor;
 mod node;
 mod visitor;
+mod walk_visitor;
 
 /// Pick a lifetime that does not collide with a set of existing ones.
 fn pick_lifetime(colliders: &HashSet<String>) -> String {
@@ -149,7 +149,7 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl #impl_generics CallVisitor<#lt> for #name #generics {
+        impl #impl_generics WalkVisitor<#lt> for #name #generics {
             fn walk<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
                 if visitor.#pre_visit_fn(self) {
                     self.accept(visitor);
@@ -167,12 +167,6 @@ pub fn accept_visitor(input: TokenStream) -> TokenStream {
     accept_visitor::accept_visitor(input)
 }
 
-/// Generate corresponding `*_visit_*` functions in a visitor.
-#[proc_macro_attribute]
-pub fn call_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
-    call_visitor::call_visitor(args, input)
-}
-
 #[proc_macro_attribute]
 pub fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     node::node(args, input)
@@ -181,4 +175,10 @@ pub fn node(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn visitor(input: TokenStream) -> TokenStream {
     visitor::visitor(input)
+}
+
+/// Generate corresponding `*_visit_*` functions in a visitor.
+#[proc_macro_attribute]
+pub fn walk_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
+    walk_visitor::walk_visitor(args, input)
 }
