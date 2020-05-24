@@ -117,20 +117,7 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         if !is_child_field(field) {
             return None;
         }
-        match &field.ty {
-            syn::Type::Path(path) => {
-                let ident = &path.path.segments.last().unwrap().ident.to_string();
-                if ident == "Vec" || ident == "Option" {
-                    Some(quote! { self.#name.accept(visitor); })
-                } else {
-                    Some(quote! { self.#name.accept(visitor); })
-                    // let method_name =
-                    //     format_ident!("visit_{}", ident.to_snake_case(), span = field.ty.span());
-                    // Some(quote! { visitor.#method_name(&self.#name); })
-                }
-            }
-            _ => None,
-        }
+        Some(quote! { self.#name.walk(visitor); })
     });
 
     // Emit the trait implementation.

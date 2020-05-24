@@ -1,6 +1,5 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
-use heck::SnakeCase;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::DeriveInput;

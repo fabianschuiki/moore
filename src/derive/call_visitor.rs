@@ -32,11 +32,25 @@ pub(crate) fn call_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenS
     let mut impl_generics = generics.clone();
     let lt = crate::determine_lifetime(&mut impl_generics);
 
+    // Generate some documentation.
+    let doc = format!(
+        r#"
+        Walk a visitor over `self`.
+
+        Calling this function is equivalent to calling:
+        - `visitor.{}(self)`
+        - `self.accept(visitor)`
+        - `visitor.{}(self);`
+        "#,
+        pre_visit_fn, post_visit_fn,
+    );
+
     // Generate the implementation of the `CallVisitor` trait.
     let output = quote! {
         #input
 
         impl #impl_generics CallVisitor<#lt> for #name #generics {
+            #[doc = #doc]
             fn walk<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
                 if visitor.#pre_visit_fn(self) {
                     self.accept(visitor);
