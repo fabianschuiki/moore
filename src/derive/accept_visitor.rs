@@ -14,17 +14,19 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
 
     // Generate the match that visits the relevant fields of the input.
     let mut visits = vec![];
+    let dont_visit = has_dont_visit(&input.attrs);
     match &input.data {
         syn::Data::Struct(input) => {
-            let visit = visit_fields(&input.fields);
+            let visit = visit_fields(&input.fields, dont_visit);
             visits.push(quote! {
                 #name #visit
             });
         }
         syn::Data::Enum(input) => {
             for variant in &input.variants {
+                let dont_visit = dont_visit || has_dont_visit(&variant.attrs);
                 let variant_name = &variant.ident;
-                let visit = visit_fields(&variant.fields);
+                let visit = visit_fields(&variant.fields, dont_visit);
                 visits.push(quote! {
                     #name::#variant_name #visit
                 });
@@ -59,7 +61,7 @@ fn has_dont_visit(attrs: &[syn::Attribute]) -> bool {
 }
 
 /// Generate the code to visit fields in a struct-like item.
-fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
+fn visit_fields(fields: &syn::Fields, dont_visit: bool) -> proc_macro2::TokenStream {
     // Generate a destructuring pattern that assigns predictable names to all
     // fields.
     let mut names = vec![];
@@ -69,7 +71,7 @@ fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
             for (i, field) in fields.named.iter().enumerate() {
                 let field_name = &field.ident;
                 let name = format_ident!("arg{}", i);
-                if !has_dont_visit(&field.attrs) {
+                if !dont_visit && !has_dont_visit(&field.attrs) {
                     names.push(name.clone());
                 }
                 mapping.push(quote! {
@@ -82,7 +84,7 @@ fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
             let mut mapping = vec![];
             for (i, field) in fields.unnamed.iter().enumerate() {
                 let name = format_ident!("arg{}", i);
-                if !has_dont_visit(&field.attrs) {
+                if !dont_visit && !has_dont_visit(&field.attrs) {
                     names.push(name.clone());
                 }
                 mapping.push(name);
