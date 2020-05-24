@@ -277,7 +277,7 @@ fn const_node<'gcx>(
 
 pub(crate) fn const_mir_rvalue_query<'gcx>(
     cx: &impl Context<'gcx>,
-    mir: mir::Ref<'gcx, mir::Rvalue<'gcx>>,
+    mir: Ref<'gcx, mir::Rvalue<'gcx>>,
 ) -> Value<'gcx> {
     const_mir_rvalue(cx, *mir)
 }

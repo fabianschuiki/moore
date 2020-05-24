@@ -801,7 +801,7 @@ pub(super) mod queries {
 
             /// Determine the constant value of an MIR rvalue.
             fn const_mir_rvalue(
-                mir: mir::Ref<'a, mir::Rvalue<'a>>
+                mir: Ref<'a, mir::Rvalue<'a>>
             ) -> Value<'a> {
                 type ConstMirRvalueQuery;
                 use fn value::const_mir_rvalue_query;
