@@ -96,6 +96,12 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
         }
         Some(quote! { self.#name.walk(visitor); })
     });
+    let each_children = all_fields.iter().flat_map(|(name, field)| {
+        if !is_child_field(field) {
+            return None;
+        }
+        Some(quote! { self.#name.for_each_node(each); })
+    });
 
     // Emit the trait implementation.
     let name = &input.ident;
@@ -132,6 +138,12 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
                     self.accept(visitor);
                 }
                 visitor.#post_visit_fn(self);
+            }
+        }
+
+        impl #impl_generics ForEachChild<#lt> for #name #generics {
+            fn for_each_child(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
+                #(#each_children)*
             }
         }
     };

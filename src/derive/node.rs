@@ -43,6 +43,10 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
             fn as_all(&'a self) -> AllNode<'a> {
                 AllNode::from(self)
             }
+
+            fn as_any(&'a self) -> &'a AnyNode<'a> {
+                self
+            }
         }
     });
 

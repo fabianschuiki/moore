@@ -92,13 +92,10 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         is_pos = false;
                         let value_id = match *mode {
                             ast::PortConnMode::Auto => {
-                                let expr = cx.arena().alloc_ast_expr(ast::Expr {
-                                    parent: Default::default(),
-                                    lex_pred: Default::default(),
-                                    lex_succ: Default::default(),
-                                    span: name.span,
-                                    data: ast::IdentExpr(ident),
-                                });
+                                let expr = cx.arena().alloc_ast_expr(ast::Expr::new(
+                                    name.span,
+                                    ast::IdentExpr(ident),
+                                ));
                                 Some(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
                             }
                             ast::PortConnMode::Unconnected => None,

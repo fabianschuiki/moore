@@ -14,21 +14,28 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
 
     // Generate the match that visits the relevant fields of the input.
     let mut visits = vec![];
+    let mut eachs = vec![];
     let dont_visit = has_dont_visit(&input.attrs);
     match &input.data {
         syn::Data::Struct(input) => {
-            let visit = visit_fields(&input.fields, dont_visit);
+            let (visit, each) = visit_fields(&input.fields, dont_visit);
             visits.push(quote! {
                 #name #visit
+            });
+            eachs.push(quote! {
+                #name #each
             });
         }
         syn::Data::Enum(input) => {
             for variant in &input.variants {
                 let dont_visit = dont_visit || has_dont_visit(&variant.attrs);
                 let variant_name = &variant.ident;
-                let visit = visit_fields(&variant.fields, dont_visit);
+                let (visit, each) = visit_fields(&variant.fields, dont_visit);
                 visits.push(quote! {
                     #name::#variant_name #visit
+                });
+                eachs.push(quote! {
+                    #name::#variant_name #each
                 });
             }
         }
@@ -48,6 +55,14 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
                 }
             }
         }
+
+        impl #impl_generics ForEachChild<#lt> for #name #generics {
+            fn for_each_child(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
+                match self {
+                    #(#eachs,)*
+                }
+            }
+        }
     });
 
     output.into()
@@ -61,7 +76,10 @@ fn has_dont_visit(attrs: &[syn::Attribute]) -> bool {
 }
 
 /// Generate the code to visit fields in a struct-like item.
-fn visit_fields(fields: &syn::Fields, dont_visit: bool) -> proc_macro2::TokenStream {
+fn visit_fields(
+    fields: &syn::Fields,
+    dont_visit: bool,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     // Generate a destructuring pattern that assigns predictable names to all
     // fields.
     let mut names = vec![];
@@ -97,9 +115,16 @@ fn visit_fields(fields: &syn::Fields, dont_visit: bool) -> proc_macro2::TokenStr
     };
 
     // Generate the visit calls for the names that we do not skip or ignore.
-    quote! {
-        #pat => {
-            #(#names.walk(visitor);)*
-        }
-    }
+    (
+        quote! {
+            #pat => {
+                #(#names.walk(visitor);)*
+            }
+        },
+        quote! {
+            #pat => {
+                #(#names.for_each_node(each);)*
+            }
+        },
+    )
 }

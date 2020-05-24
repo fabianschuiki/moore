@@ -14,10 +14,108 @@ use moore_derive::{AcceptVisitor, CommonNode};
 use std::cell::Cell;
 
 /// An AST node.
-pub trait AnyNode<'a> {
+pub trait AnyNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
     /// Convert this node to the exhaustive `AllNode` enum.
     fn as_all(&'a self) -> AllNode<'a>;
+
+    /// Convert this node to an `AnyNode` trait object.
+    fn as_any(&'a self) -> &'a dyn AnyNode<'a>;
+
+    /// Link up this node.
+    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
+        trace!("Linking {:?}", self);
+        self.for_each_child(&mut |node| {
+            // trace!("Would now link up child node {:?}", node);
+            node.link(Some(self.as_any()), order);
+        });
+    }
+
+    /// Get this node's parent.
+    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
+        None
+    }
 }
+
+// /// Something that can be converted to a `AnyNode`.
+// pub trait TryAnyNode<'a> {
+//     fn try_node(&'a self) -> Option<&'a dyn AnyNode<'a>> {
+//         None
+//     }
+// }
+
+// impl<'a, T> TryAnyNode<'a> for Option<T>
+// where
+//     T: TryAnyNode<'a>,
+// {
+//     fn try_node(&'a self) -> Option<&'a dyn AnyNode<'a>> {
+//         self.and_then(|node| node.try)
+//     }
+// }
+
+/// A node which allows iterating over each child node.
+pub trait ForEachChild<'a> {
+    /// Apply a function to each child node.
+    fn for_each_child(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>));
+}
+
+/// A node which can pass itself as `AnyNode` to a callback.
+pub trait ForEachNode<'a> {
+    /// Apply a function to this node.
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {}
+}
+
+impl<'a, T> ForEachNode<'a> for Option<T>
+where
+    T: ForEachNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        if let Some(node) = self {
+            node.for_each_node(each);
+        }
+    }
+}
+
+impl<'a, T> ForEachNode<'a> for Vec<T>
+where
+    T: ForEachNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        for node in self {
+            node.for_each_node(each);
+        }
+    }
+}
+
+impl<'a, T> ForEachNode<'a> for Spanned<T>
+where
+    T: ForEachNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        self.value.for_each_node(each);
+    }
+}
+
+impl<'a> ForEachNode<'a> for Span {}
+impl<'a> ForEachNode<'a> for Name {}
+impl<'a> ForEachNode<'a> for Lit {}
+impl<'a> ForEachNode<'a> for bool {}
+impl<'a> ForEachNode<'a> for Item<'a> {
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        trace!("Forwarding through item");
+        self.for_each_child(each);
+    }
+}
+impl<'a> ForEachNode<'a> for Package<'a> {}
+impl<'a> ForEachNode<'a> for Lifetime {}
+impl<'a> ForEachNode<'a> for Timeunit {}
+impl<'a> ForEachNode<'a> for NetDecl<'a> {}
+impl<'a> ForEachNode<'a> for VarDecl<'a> {}
+impl<'a> ForEachNode<'a> for VarDeclName<'a> {}
+impl<'a> ForEachNode<'a> for ImportItem {}
+impl<'a> ForEachNode<'a> for ImportDecl {}
+impl<'a> ForEachNode<'a> for Stmt<'a> {}
+impl<'a> ForEachNode<'a> for StmtData<'a> {}
+impl<'a> ForEachNode<'a> for GenerateBlock<'a> {}
 
 /// Common interface to all AST nodes.
 pub trait CommonNode {
@@ -48,12 +146,14 @@ where
 }
 
 /// Common denominator across all AST nodes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Node<'a, T> {
     /// Full span the node covers in the input.
     pub span: Span,
     /// Parent node.
-    pub parent: Cell<Option<&'a ()>>,
+    pub parent: Cell<Option<&'a dyn AnyNode<'a>>>,
+    /// Lexical order of the node.
+    pub order: Cell<usize>,
     /// Lexical predecessor node.
     pub lex_pred: Cell<Option<&'a ()>>,
     /// Lexical successor node.
@@ -69,10 +169,26 @@ impl<'a, T> Node<'a, T> {
             span,
             data,
             parent: Default::default(),
+            order: Default::default(),
             lex_pred: Default::default(),
             lex_succ: Default::default(),
         }
     }
+
+    // /// Link up this node.
+    // pub fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize)
+    // where
+    //     Self: AnyNode<'a>,
+    //     T: ForEachChild<'a>,
+    // {
+    //     self.parent.set(parent);
+    //     self.order.set(*order);
+    //     *order += 1;
+    //     self.data.for_each_child(&mut |node| {
+    //         trace!("Would now link up child node {:?}", node);
+    //         node.link(Some(self), order);
+    //     });
+    // }
 }
 
 impl<'a, T> CommonNode for Node<'a, T>
@@ -81,6 +197,24 @@ where
 {
     fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
         self.data.for_each_child(f)
+    }
+}
+
+impl<'a, T> ForEachChild<'a> for Node<'a, T>
+where
+    T: ForEachChild<'a>,
+{
+    fn for_each_child(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        self.data.for_each_child(each)
+    }
+}
+
+impl<'a, T> ForEachNode<'a> for Node<'a, T>
+where
+    Node<'a, T>: AnyNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        each(self);
     }
 }
 
@@ -106,6 +240,17 @@ impl<'a, T> std::ops::DerefMut for Node<'a, T> {
         &mut self.data
     }
 }
+
+impl<'a, T> PartialEq for Node<'a, T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.span == other.span && self.data == other.data
+    }
+}
+
+impl<'a, T> Eq for Node<'a, T> where T: Eq {}
 
 // /// A visitor for the AST.
 // pub trait Visitor {
@@ -220,6 +365,10 @@ impl<'a> WalkVisitor<'a> for Name {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
 }
 
+impl<'a> WalkVisitor<'a> for Lit {
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+}
+
 impl<'a> WalkVisitor<'a> for bool {
     fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
 }
@@ -281,6 +430,16 @@ impl HasDesc for Module<'_> {
 impl<'a> AnyNode<'a> for Module<'a> {
     fn as_all(&'a self) -> AllNode<'a> {
         AllNode::from(self)
+    }
+
+    fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
+        self
+    }
+}
+
+impl<'a> ForEachNode<'a> for Module<'a> {
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        each(self)
     }
 }
 
@@ -362,7 +521,8 @@ pub enum Lifetime {
 /// "timeunit" time_literal ["/" time_literal] ";"
 /// "timeprecision" time_literal ";"
 /// ```
-#[derive(CommonNode, Debug, PartialEq, Eq, Clone)]
+#[moore_derive::visit]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Timeunit {
     pub unit: Option<Spanned<Lit>>,
     pub prec: Option<Spanned<Lit>>,
@@ -1077,6 +1237,10 @@ impl<'a> AnyNode<'a> for Expr<'a> {
     fn as_all(&'a self) -> AllNode<'a> {
         AllNode::from(self)
     }
+
+    fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
+        self
+    }
 }
 
 #[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
@@ -1144,6 +1308,13 @@ pub enum ExprData<'a> {
     CastSizeExpr(Box<Expr<'a>>, Box<Expr<'a>>),
     CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
 }
+
+// // TODO: This will disappear as soon as we derive ExprData properly.
+// impl<'a> ForEachChild<'a> for ExprData<'a> {
+//     fn for_each_child(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+//         self.for_each_node(each)
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeOrExpr<'a> {

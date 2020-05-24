@@ -744,7 +744,13 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator {
 
 /// Determine the location of a node within its enclosing scope.
 pub fn scope_location<'a>(_cx: &impl Context<'a>, node: Ref<'a, impl ast::AnyNode<'a>>) {
-    debug!("Scope location for {:#?}", node.as_all());
+    debug!("Scope location");
+    let mut next: Option<&dyn ast::AnyNode> = Some(*node);
+    while let Some(node) = next {
+        debug!("Visiting {:#?}", node.as_all());
+        next = node.get_parent();
+    }
+    error!("No parent scope found!");
     // 1. Check if the node is a ScopedNode, and return if it is
     // 2. Jump up to the parent and try again
 }
