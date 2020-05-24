@@ -619,7 +619,7 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
 
     // For debugging purposes, do a "quick" visit over the root.
     debug!("Doing a visit");
-    root.accept(&mut AstVisitor);
+    root.walk(&mut AstVisitor);
 
     root
 }

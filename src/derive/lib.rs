@@ -158,8 +158,14 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
 
         impl #impl_generics AcceptVisitor<#lt> for #name #generics {
             fn accept<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
+                #(#visit_fields)*
+            }
+        }
+
+        impl #impl_generics CallVisitor<#lt> for #name #generics {
+            fn walk<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
                 if visitor.#pre_visit_fn(self) {
-                    #(#visit_fields)*
+                    self.accept(visitor);
                 }
                 visitor.#post_visit_fn(self);
             }

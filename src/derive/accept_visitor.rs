@@ -38,29 +38,13 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
     let mut impl_generics = generics.clone();
     let lt = crate::determine_lifetime(&mut impl_generics);
 
-    // Determine the name of the visit functions corresponding to us.
-    let pre_visit_fn = format_ident!(
-        "pre_visit_{}",
-        name.to_string().to_snake_case(),
-        span = name.span()
-    );
-    let post_visit_fn = format_ident!(
-        "post_visit_{}",
-        name.to_string().to_snake_case(),
-        span = name.span()
-    );
-    crate::visitor::add_call(&name, &generics);
-
     // Generate the implementation of the `AcceptVisitor` trait.
     output.extend(quote! {
         impl #impl_generics AcceptVisitor<#lt> for #name #generics {
             fn accept<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
-                if visitor.#pre_visit_fn(self) {
-                    match self {
-                        #(#visits,)*
-                    }
+                match self {
+                    #(#visits,)*
                 }
-                visitor.#post_visit_fn(self);
             }
         }
     });
@@ -103,7 +87,7 @@ fn visit_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
     // Generate the visit calls for the names that we do not skip or ignore.
     quote! {
         #pat => {
-            #(#names.accept(visitor);)*
+            #(#names.walk(visitor);)*
         }
     }
 }

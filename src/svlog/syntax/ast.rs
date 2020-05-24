@@ -164,6 +164,34 @@ where
     }
 }
 
+/// A node that walks a `Visitor` over itself.
+pub trait CallVisitor<'a> {
+    /// Walk a visitor over `self`.
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
+}
+
+impl<'a, T> CallVisitor<'a> for Vec<T>
+where
+    T: CallVisitor<'a>,
+{
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+        for c in self {
+            c.walk(visitor);
+        }
+    }
+}
+
+impl<'a, T> CallVisitor<'a> for Option<T>
+where
+    T: CallVisitor<'a>,
+{
+    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+        if let Some(c) = self {
+            c.walk(visitor);
+        }
+    }
+}
+
 pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
