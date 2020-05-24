@@ -14,7 +14,10 @@ use moore_derive::{AcceptVisitor, CommonNode};
 use std::cell::Cell;
 
 /// An AST node.
-pub trait AnyNode<'a> {}
+pub trait AnyNode<'a> {
+    /// Convert this node to the exhaustive `AllNode` enum.
+    fn as_all(&'a self) -> AllNode<'a>;
+}
 
 /// Common interface to all AST nodes.
 pub trait CommonNode {
@@ -71,8 +74,6 @@ impl<'a, T> Node<'a, T> {
         }
     }
 }
-
-impl<'a, T> AnyNode<'a> for Node<'a, T> {}
 
 impl<'a, T> CommonNode for Node<'a, T>
 where
@@ -241,6 +242,7 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
 
 pub type ModDecl<'a> = Module<'a>;
 
+#[moore_derive::all_node]
 #[moore_derive::visit]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
@@ -273,6 +275,12 @@ impl HasDesc for Module<'_> {
 
     fn desc_full(&self) -> String {
         format!("module `{}`", self.name)
+    }
+}
+
+impl<'a> AnyNode<'a> for Module<'a> {
+    fn as_all(&'a self) -> AllNode<'a> {
+        AllNode::from(self)
     }
 }
 
@@ -1050,6 +1058,7 @@ impl HasDesc for GenvarDecl<'_> {
 
 /// An expression.
 #[moore_derive::walk_visitor]
+#[moore_derive::all_node]
 pub type Expr<'a> = Node<'a, ExprData<'a>>;
 
 impl HasSpan for Expr<'_> {
@@ -1061,6 +1070,12 @@ impl HasSpan for Expr<'_> {
 impl HasDesc for Expr<'_> {
     fn desc(&self) -> &'static str {
         "expression"
+    }
+}
+
+impl<'a> AnyNode<'a> for Expr<'a> {
+    fn as_all(&'a self) -> AllNode<'a> {
+        AllNode::from(self)
     }
 }
 
@@ -1997,4 +2012,5 @@ pub enum PortConnMode<'a> {
     Connected(Expr<'a>), // `.name(expr)` case
 }
 
-moore_derive::visitor!();
+moore_derive::derive_visitor!();
+moore_derive::derive_all_node!();

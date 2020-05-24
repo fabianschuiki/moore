@@ -9,6 +9,7 @@ use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, DeriveInput};
 
 mod accept_visitor;
+mod all_node;
 mod node;
 mod visitor;
 mod walk_visitor;
@@ -148,11 +149,6 @@ pub fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     node::node(args, input)
 }
 
-#[proc_macro]
-pub fn visitor(input: TokenStream) -> TokenStream {
-    visitor::visitor(input)
-}
-
 /// Generate corresponding `*_visit_*` functions in a visitor.
 #[proc_macro_attribute]
 pub fn walk_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -168,4 +164,22 @@ pub fn visit(_args: TokenStream, input: TokenStream) -> TokenStream {
         #[derive(AcceptVisitor)]
         #input
     })
+}
+
+/// Generate a `AllNode` enum.
+#[proc_macro]
+pub fn derive_all_node(input: TokenStream) -> TokenStream {
+    all_node::all_node(input)
+}
+
+/// Mark a node to be included in the `AllNode` enum.
+#[proc_macro_attribute]
+pub fn all_node(args: TokenStream, input: TokenStream) -> TokenStream {
+    all_node::mark_all_node(args, input)
+}
+
+/// Generate a `Visitor` trait.
+#[proc_macro]
+pub fn derive_visitor(input: TokenStream) -> TokenStream {
+    visitor::visitor(input)
 }

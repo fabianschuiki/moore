@@ -744,7 +744,9 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator {
 
 /// Determine the location of a node within its enclosing scope.
 pub fn scope_location<'a>(_cx: &impl Context<'a>, node: Ref<'a, impl ast::AnyNode<'a>>) {
-    debug!("Scope location for a node");
+    debug!("Scope location for {:#?}", node.as_all());
+    // 1. Check if the node is a ScopedNode, and return if it is
+    // 2. Jump up to the parent and try again
 }
 
 /// A visitor that emits diagnostics for every resolved named.

@@ -34,6 +34,18 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
         #input
     });
 
+    // Schedule the node for inclusion in `AllNode`.
+    crate::all_node::add_node(&node_name, &generics);
+
+    // Implement the `AnyNode` trait for this node.
+    output.extend(quote! {
+        impl<'a> AnyNode<'a> for #node_name #generics {
+            fn as_all(&'a self) -> AllNode<'a> {
+                AllNode::from(self)
+            }
+        }
+    });
+
     // match &input.data {
     //     syn::Data::Struct(input) => println!("found struct {:?}", input),
     //     syn::Data::Enum(input) => println!("found enum {:?}", input),
