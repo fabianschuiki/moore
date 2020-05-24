@@ -7,7 +7,7 @@ use heck::SnakeCase;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use std::collections::HashSet;
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
+use syn::{parse_macro_input, DeriveInput};
 
 mod accept_visitor;
 mod call_visitor;
@@ -123,9 +123,10 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
                 if ident == "Vec" || ident == "Option" {
                     Some(quote! { self.#name.accept(visitor); })
                 } else {
-                    let method_name =
-                        format_ident!("visit_{}", ident.to_snake_case(), span = field.ty.span());
-                    Some(quote! { visitor.#method_name(&self.#name); })
+                    Some(quote! { self.#name.accept(visitor); })
+                    // let method_name =
+                    //     format_ident!("visit_{}", ident.to_snake_case(), span = field.ty.span());
+                    // Some(quote! { visitor.#method_name(&self.#name); })
                 }
             }
             _ => None,
@@ -137,12 +138,17 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
     let generics = &input.generics;
     let mut impl_generics = generics.clone();
     let lt = determine_lifetime(&mut impl_generics);
-    let visit_call = format_ident!(
-        "visit_{}",
+    let pre_visit_fn = format_ident!(
+        "pre_visit_{}",
         name.to_string().to_snake_case(),
         span = name.span()
     );
-    crate::visitor::add_call(&visit_call, &name, &generics);
+    let post_visit_fn = format_ident!(
+        "post_visit_{}",
+        name.to_string().to_snake_case(),
+        span = name.span()
+    );
+    crate::visitor::add_call(&name, &generics);
     let output = quote! {
         impl #generics CommonNode for #name #generics {
             fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
@@ -152,24 +158,23 @@ pub fn derive_common_node(input: TokenStream) -> TokenStream {
 
         impl #impl_generics AcceptVisitor<#lt> for #name #generics {
             fn accept<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
-                #(#visit_fields)*
-            }
-        }
-
-        impl #impl_generics CallVisitor<#lt> for #name #generics {
-            fn visit<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
-                visitor.#visit_call(self);
+                if visitor.#pre_visit_fn(self) {
+                    #(#visit_fields)*
+                }
+                visitor.#post_visit_fn(self);
             }
         }
     };
     output.into()
 }
 
+/// Generate an `AcceptVisitor` implementation.
 #[proc_macro_derive(AcceptVisitor, attributes(dont_visit))]
 pub fn accept_visitor(input: TokenStream) -> TokenStream {
     accept_visitor::accept_visitor(input)
 }
 
+/// Generate corresponding `*_visit_*` functions in a visitor.
 #[proc_macro_attribute]
 pub fn call_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
     call_visitor::call_visitor(args, input)

@@ -619,7 +619,7 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
 
     // For debugging purposes, do a "quick" visit over the root.
     debug!("Doing a visit");
-    root.visit(&mut AstVisitor);
+    root.accept(&mut AstVisitor);
 
     root
 }
@@ -627,14 +627,14 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
 struct AstVisitor;
 
 impl<'a> ast::Visitor<'a> for AstVisitor {
-    fn visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) {
+    fn pre_visit_root<'b: 'a>(&mut self, node: &'a ast::Root<'b>) -> bool {
         debug!("Visiting Root");
-        node.accept(self);
+        true
     }
 
-    fn visit_item<'b: 'a>(&mut self, node: &'a ast::Item<'b>) {
+    fn pre_visit_item<'b: 'a>(&mut self, node: &'a ast::Item<'b>) -> bool {
         debug!("Visiting Item");
-        node.accept(self);
+        false
     }
 }
 

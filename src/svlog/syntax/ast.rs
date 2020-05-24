@@ -164,34 +164,6 @@ where
     }
 }
 
-/// A node that calls a `Visitor`'s appropriate `visit_*` function.
-pub trait CallVisitor<'a> {
-    /// Call a visitor's appropriate `visit` function for `self`.
-    fn visit<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
-}
-
-impl<'a, T> CallVisitor<'a> for Vec<T>
-where
-    T: CallVisitor<'a>,
-{
-    fn visit<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
-        for c in self {
-            c.visit(visitor);
-        }
-    }
-}
-
-impl<'a, T> CallVisitor<'a> for Option<T>
-where
-    T: CallVisitor<'a>,
-{
-    fn visit<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
-        if let Some(c) = self {
-            c.visit(visitor);
-        }
-    }
-}
-
 pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
