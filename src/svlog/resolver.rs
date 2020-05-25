@@ -750,10 +750,13 @@ impl<'a> ScopeGenerator<'a> {
 
     pub fn add_subscope(&mut self, node: &'a dyn ScopedNode<'a>) {
         debug!("- Adding subscope for {:?}", node);
+        self.scope.subscopes.push(node);
     }
 
     pub fn add_def(&mut self, def: Def<'a>) {
         debug!("- Adding definition {:?}", def);
+        // TODO: Add code to check that we have no double definitions.
+        self.scope.defs.push(def);
     }
 }
 
@@ -852,8 +855,11 @@ where
                 // 1. Determine the scope location of the identifier.
                 let loc = scope_location(self.cx, node);
                 let gen = generated_scope(self.cx, loc.scope);
-                // 2. Lookup the name at this scope location.
-                debug!("Generated scope {:#?}", gen);
+                let mut next = Some(gen);
+                while let Some(scope) = next {
+                    debug!("Looking in scope {:#?}", scope);
+                    next = scope.parent.map(|p| generated_scope(self.cx, p));
+                }
             }
             _ => (),
         }
