@@ -38,9 +38,9 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     // Schedule the node for inclusion in `AllNode`.
     crate::all_node::add_node(&node_name, &generics);
 
-    // Implement the `AnyNode` trait for this node.
+    // Implement the `BasicNode` trait for this node.
     output.extend(quote! {
-        impl<'a> AnyNode<'a> for #node_name #generics {
+        impl<'a> BasicNode<'a> for #node_name #generics {
             fn type_name(&self) -> &'static str {
                 #node_name_str
             }

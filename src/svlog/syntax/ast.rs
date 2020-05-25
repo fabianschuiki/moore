@@ -14,7 +14,21 @@ use moore_derive::{AcceptVisitor, CommonNode};
 use std::cell::Cell;
 
 /// An AST node.
-pub trait AnyNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
+pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Binary {
+    /// Link up this node.
+    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
+
+    /// Get this node's parent.
+    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
+        None
+    }
+}
+
+/// Basic attribute of an AST node.
+///
+/// If this trait is present on `Node<T>`, then `Node<T>` will automatically
+/// implement the full `AnyNode` trait.
+pub trait BasicNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
     /// Get the type name of the node.
     fn type_name(&self) -> &'static str;
 
@@ -23,23 +37,6 @@ pub trait AnyNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
 
     /// Convert this node to an `AnyNode` trait object.
     fn as_any(&'a self) -> &'a dyn AnyNode<'a>;
-
-    /// Link up this node and all its children.
-    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
-        trace!("Linking {}", self.type_name());
-        self.link_self(parent, order);
-        self.for_each_child(&mut |node| {
-            node.link(Some(self.as_any()), order);
-        });
-    }
-
-    /// Link up this node.
-    fn link_self(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
-
-    /// Get this node's parent.
-    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
-        None
-    }
 }
 
 // /// Something that can be converted to a `AnyNode`.
@@ -163,7 +160,7 @@ where
 }
 
 /// Common denominator across all AST nodes.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Node<'a, T> {
     /// Full span the node covers in the input.
     pub span: Span,
@@ -191,21 +188,62 @@ impl<'a, T> Node<'a, T> {
             lex_succ: Default::default(),
         }
     }
+}
 
-    // /// Link up this node.
-    // pub fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize)
-    // where
-    //     Self: AnyNode<'a>,
-    //     T: ForEachChild<'a>,
-    // {
-    //     self.parent.set(parent);
-    //     self.order.set(*order);
-    //     *order += 1;
-    //     self.data.for_each_child(&mut |node| {
-    //         trace!("Would now link up child node {:?}", node);
-    //         node.link(Some(self), order);
-    //     });
-    // }
+/// Automatically implement `AnyNode` for `Node<T>` if enough information is
+/// present.
+impl<'a, T> AnyNode<'a> for Node<'a, T>
+where
+    Self: BasicNode<'a> + std::fmt::Binary,
+    T: std::fmt::Debug + ForEachChild<'a>,
+{
+    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
+        trace!("Linking {:b}", self);
+        self.parent.set(parent);
+        self.order.set(*order);
+        *order += 1;
+        self.for_each_child(&mut |node| {
+            node.link(Some(self.as_any()), order);
+        });
+    }
+
+    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
+        self.parent.get()
+    }
+}
+
+impl<'a, T> std::fmt::Debug for Node<'a, T>
+where
+    Self: BasicNode<'a> + std::fmt::Binary,
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct(self.type_name())
+            .field("handle", &format_args!("{:b}", self))
+            .field("span", &self.span)
+            .field(
+                "parent",
+                &format_args!(
+                    "{}",
+                    match self.parent.get() {
+                        Some(parent) => format!("{:b}", parent),
+                        None => format!("<none>"),
+                    }
+                ),
+            )
+            .field("order", &format_args!("{}", self.order.get()))
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
+impl<'a, T> std::fmt::Binary for Node<'a, T>
+where
+    Self: BasicNode<'a>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} #{:p}", self.type_name(), self as *const _)
+    }
 }
 
 impl<'a, T> CommonNode for Node<'a, T>
@@ -444,7 +482,7 @@ impl HasDesc for Module<'_> {
     }
 }
 
-impl<'a> AnyNode<'a> for Module<'a> {
+impl<'a> BasicNode<'a> for Module<'a> {
     fn type_name(&self) -> &'static str {
         "Module"
     }
@@ -455,6 +493,24 @@ impl<'a> AnyNode<'a> for Module<'a> {
 
     fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
         self
+    }
+}
+
+impl<'a> std::fmt::Binary for Module<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} #{:p}", self.type_name(), self as *const _)
+    }
+}
+
+impl<'a> AnyNode<'a> for Module<'a> {
+    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
+        trace!("Linking {}", self.type_name());
+        // self.parent.set(parent);
+        // self.order.set(*order);
+        *order += 1;
+        self.for_each_child(&mut |node| {
+            node.link(Some(self.as_any()), order);
+        });
     }
 }
 
@@ -1254,7 +1310,7 @@ impl HasDesc for Expr<'_> {
     }
 }
 
-impl<'a> AnyNode<'a> for Expr<'a> {
+impl<'a> BasicNode<'a> for Expr<'a> {
     fn type_name(&self) -> &'static str {
         "Expr"
     }
@@ -1265,16 +1321,6 @@ impl<'a> AnyNode<'a> for Expr<'a> {
 
     fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
         self
-    }
-
-    fn link_self(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
-        self.parent.set(parent);
-        self.order.set(*order);
-        *order += 1;
-    }
-
-    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
-        self.parent.get()
     }
 }
 
