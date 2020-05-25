@@ -687,7 +687,7 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
 
 /// TODO(fschuiki): Make this a query.
 pub fn generated_scope<'a>(cx: &impl Context<'a>, node: &'a dyn ScopedNode<'a>) -> Scope<'a> {
-    debug!("Generating scope {:b}", node);
+    debug!("Generating scope {:?}", node);
     let mut gen = ScopeGenerator::new(Scope {
         node,
         parent: node
@@ -749,7 +749,7 @@ impl<'a> ScopeGenerator<'a> {
     }
 
     pub fn add_subscope(&mut self, node: &'a dyn ScopedNode<'a>) {
-        debug!("- Adding subscope for {:b}", node);
+        debug!("- Adding subscope for {:?}", node);
     }
 
     pub fn add_def(&mut self, def: Def<'a>) {
@@ -800,19 +800,19 @@ pub fn scope_location<'a>(
     cx: &impl Context<'a>,
     node: &'a dyn ast::AnyNode<'a>,
 ) -> ScopeLocation<'a> {
-    trace!("Finding scope location of {:b}", node);
+    trace!("Finding scope location of {:?}", node);
     // Starting at the current node, check if it generates a scope, and if not,
     // advance to its parent.
     let mut next: Option<&dyn ast::AnyNode> = node.get_parent();
     while let Some(node) = next {
         if let Some(scoped) = node.as_all().get_scoped_node() {
-            trace!(" - Found {:b}", node);
+            trace!(" - Found {:?}", node);
             return ScopeLocation {
                 scope: scoped,
                 order: node.order(),
             };
         } else {
-            trace!(" - Upwards to {:b}", node);
+            trace!(" - Upwards to {:?}", node);
             next = node.get_parent();
         }
     }
@@ -848,7 +848,7 @@ where
     fn pre_visit_expr(&mut self, node: &'a ast::Expr<'a>) -> bool {
         match node.data {
             ast::IdentExpr(ident) => {
-                debug!("Resolve `{}` in {:b}", ident.name, node);
+                debug!("Resolve `{}` in {:?}", ident.name, node);
                 // 1. Determine the scope location of the identifier.
                 let loc = scope_location(self.cx, node);
                 let gen = generated_scope(self.cx, loc.scope);

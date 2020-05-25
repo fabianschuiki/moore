@@ -14,7 +14,7 @@ use moore_derive::{AcceptVisitor, CommonNode};
 use std::cell::Cell;
 
 /// An AST node.
-pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Binary {
+pub trait AnyNode<'a>: BasicNode<'a> {
     /// Get this node's span in the input.
     fn span(&self) -> Span;
 
@@ -162,7 +162,7 @@ impl<'a, T> Node<'a, T> {
 /// present.
 impl<'a, T> AnyNode<'a> for Node<'a, T>
 where
-    Self: BasicNode<'a> + std::fmt::Binary,
+    Self: BasicNode<'a>,
     T: std::fmt::Debug + ForEachChild<'a>,
 {
     fn span(&self) -> Span {
@@ -178,7 +178,7 @@ where
     }
 
     fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
-        trace!("Linking {:b}", self);
+        trace!("Linking {:?}", self);
         self.parent.set(parent);
         self.order.set(*order);
         *order += 1;
@@ -190,35 +190,24 @@ where
 
 impl<'a, T> std::fmt::Debug for Node<'a, T>
 where
-    Self: BasicNode<'a> + std::fmt::Binary,
+    Self: BasicNode<'a>,
     T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct(self.type_name())
-            .field("handle", &format_args!("{:b}", self))
-            .field("span", &self.span)
-            .field(
-                "parent",
-                &format_args!(
-                    "{}",
-                    match self.parent.get() {
-                        Some(parent) => format!("{:b}", parent),
-                        None => format!("<none>"),
-                    }
-                ),
-            )
-            .field("order", &format_args!("{}", self.order.get()))
-            .field("data", &self.data)
-            .finish()
-    }
-}
-
-impl<'a, T> std::fmt::Binary for Node<'a, T>
-where
-    Self: BasicNode<'a>,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{} #{:p}", self.type_name(), self as *const _)
+        let w = f.width().unwrap_or(0);
+        if w > 0 {
+            write!(f, "{:?}", self)?;
+            if let Some(parent) = self.parent.get() {
+                write!(f, " (#{} in {:?})", self.order.get(), parent)?;
+            }
+            if f.alternate() {
+                write!(f, " {:#w$?}", self.data, w = (w - 1))
+            } else {
+                write!(f, " {:w$?}", self.data, w = (w - 1))
+            }
+        } else {
+            write!(f, "{} #{:p}", self.type_name(), self)
+        }
     }
 }
 
