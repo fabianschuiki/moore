@@ -409,11 +409,6 @@ impl HasDesc for Module<'_> {
     }
 }
 
-
-
-
-
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntfDecl<'a> {
     pub span: Span,
@@ -1188,9 +1183,97 @@ impl HasDesc for GenvarDecl<'_> {
 }
 
 /// An expression.
-#[moore_derive::walk_visitor]
-#[moore_derive::all_node]
-pub type Expr<'a> = Node<'a, ExprData<'a>>;
+#[moore_derive::node]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr<'a> {
+    DummyExpr,
+    LiteralExpr(Lit),
+    #[dont_visit]
+    IdentExpr(Identifier),
+    #[dont_visit]
+    SysIdentExpr(Identifier),
+    #[dont_visit]
+    ScopeExpr(Box<Expr<'a>>, Identifier),
+    #[dont_visit]
+    IndexExpr {
+        indexee: Box<Expr<'a>>,
+        index: Box<Expr<'a>>,
+    },
+    #[dont_visit]
+    UnaryExpr {
+        op: Op,
+        expr: Box<Expr<'a>>,
+        postfix: bool,
+    },
+    #[dont_visit]
+    BinaryExpr {
+        op: Op,
+        lhs: Box<Expr<'a>>,
+        rhs: Box<Expr<'a>>,
+    },
+    #[dont_visit]
+    TernaryExpr {
+        cond: Box<Expr<'a>>,
+        true_expr: Box<Expr<'a>>,
+        false_expr: Box<Expr<'a>>,
+    },
+    #[dont_visit]
+    AssignExpr {
+        op: AssignOp,
+        lhs: Box<Expr<'a>>,
+        rhs: Box<Expr<'a>>,
+    },
+    #[dont_visit]
+    #[dont_visit]
+    CallExpr(Box<Expr<'a>>, Vec<CallArg<'a>>),
+    #[dont_visit]
+    TypeExpr(Box<Type<'a>>), // TODO: Check if this is still needed, otherwise remove
+    #[dont_visit]
+    ConstructorCallExpr(Vec<CallArg<'a>>),
+    #[dont_visit]
+    ClassNewExpr(Option<Box<Expr<'a>>>),
+    #[dont_visit]
+    ArrayNewExpr(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
+    #[dont_visit]
+    EmptyQueueExpr,
+    #[dont_visit]
+    StreamConcatExpr {
+        slice: Option<StreamConcatSlice<'a>>,
+        exprs: Vec<StreamExpr<'a>>,
+    },
+    #[dont_visit]
+    ConcatExpr {
+        repeat: Option<Box<Expr<'a>>>,
+        exprs: Vec<Expr<'a>>,
+    },
+    #[dont_visit]
+    MinTypMaxExpr {
+        min: Box<Expr<'a>>,
+        typ: Box<Expr<'a>>,
+        max: Box<Expr<'a>>,
+    },
+    #[dont_visit]
+    RangeExpr {
+        mode: RangeMode,
+        lhs: Box<Expr<'a>>,
+        rhs: Box<Expr<'a>>,
+    },
+    #[dont_visit]
+    MemberExpr {
+        expr: Box<Expr<'a>>,
+        name: Identifier,
+    },
+    #[dont_visit]
+    PatternExpr(Vec<PatternField<'a>>),
+    #[dont_visit]
+    InsideExpr(Box<Expr<'a>>, Vec<ValueRange<'a>>),
+    #[dont_visit]
+    CastExpr(Type<'a>, Box<Expr<'a>>),
+    #[dont_visit]
+    CastSizeExpr(Box<Expr<'a>>, Box<Expr<'a>>),
+    #[dont_visit]
+    CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
+}
 
 impl HasSpan for Expr<'_> {
     fn span(&self) -> Span {
@@ -1203,93 +1286,6 @@ impl HasDesc for Expr<'_> {
         "expression"
     }
 }
-
-impl<'a> BasicNode<'a> for Expr<'a> {
-    fn type_name(&self) -> &'static str {
-        "Expr"
-    }
-
-    fn as_all(&'a self) -> AllNode<'a> {
-        AllNode::from(self)
-    }
-
-    fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
-        self
-    }
-}
-
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
-pub enum ExprData<'a> {
-    DummyExpr,
-    LiteralExpr(Lit),
-    IdentExpr(Identifier),
-    SysIdentExpr(Identifier),
-    ScopeExpr(Box<Expr<'a>>, Identifier),
-    IndexExpr {
-        indexee: Box<Expr<'a>>,
-        index: Box<Expr<'a>>,
-    },
-    UnaryExpr {
-        op: Op,
-        expr: Box<Expr<'a>>,
-        postfix: bool,
-    },
-    BinaryExpr {
-        op: Op,
-        lhs: Box<Expr<'a>>,
-        rhs: Box<Expr<'a>>,
-    },
-    TernaryExpr {
-        cond: Box<Expr<'a>>,
-        true_expr: Box<Expr<'a>>,
-        false_expr: Box<Expr<'a>>,
-    },
-    AssignExpr {
-        op: AssignOp,
-        lhs: Box<Expr<'a>>,
-        rhs: Box<Expr<'a>>,
-    },
-    CallExpr(Box<Expr<'a>>, Vec<CallArg<'a>>),
-    TypeExpr(Box<Type<'a>>), // TODO: Check if this is still needed, otherwise remove
-    ConstructorCallExpr(Vec<CallArg<'a>>),
-    ClassNewExpr(Option<Box<Expr<'a>>>),
-    ArrayNewExpr(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
-    EmptyQueueExpr,
-    StreamConcatExpr {
-        slice: Option<StreamConcatSlice<'a>>,
-        exprs: Vec<StreamExpr<'a>>,
-    },
-    ConcatExpr {
-        repeat: Option<Box<Expr<'a>>>,
-        exprs: Vec<Expr<'a>>,
-    },
-    MinTypMaxExpr {
-        min: Box<Expr<'a>>,
-        typ: Box<Expr<'a>>,
-        max: Box<Expr<'a>>,
-    },
-    RangeExpr {
-        mode: RangeMode,
-        lhs: Box<Expr<'a>>,
-        rhs: Box<Expr<'a>>,
-    },
-    MemberExpr {
-        expr: Box<Expr<'a>>,
-        name: Identifier,
-    },
-    PatternExpr(Vec<PatternField<'a>>),
-    InsideExpr(Box<Expr<'a>>, Vec<ValueRange<'a>>),
-    CastExpr(Type<'a>, Box<Expr<'a>>),
-    CastSizeExpr(Box<Expr<'a>>, Box<Expr<'a>>),
-    CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
-}
-
-// // TODO: This will disappear as soon as we derive ExprData properly.
-// impl<'a> ForEachChild<'a> for ExprData<'a> {
-//     fn for_each_child(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-//         self.for_each_node(each)
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeOrExpr<'a> {
@@ -2051,7 +2047,9 @@ impl HasDesc for ContAssign<'_> {
 pub struct GenerateFor<'a> {
     pub span: Span,
     pub init: Stmt<'a>,
+    #[ignore_child]
     pub cond: Expr<'a>,
+    #[ignore_child]
     pub step: Expr<'a>,
     pub block: GenerateBlock<'a>,
 }
