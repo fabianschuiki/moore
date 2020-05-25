@@ -132,15 +132,15 @@ mod crate_prelude {
 /// about a node. It compares the reference *by pointer address*, thus allowing
 /// for pessimistic compiler queries.
 #[derive(Copy, Clone)]
-pub struct Ref<'a, T>(&'a T);
+pub struct Ref<'a, T: 'a + ?Sized>(&'a T);
 
-impl<'a, T> From<&'a T> for Ref<'a, T> {
+impl<'a, T: ?Sized> From<&'a T> for Ref<'a, T> {
     fn from(r: &'a T) -> Ref<'a, T> {
         Ref(r)
     }
 }
 
-impl<'a, T> std::ops::Deref for Ref<'a, T> {
+impl<'a, T: ?Sized> std::ops::Deref for Ref<'a, T> {
     type Target = &'a T;
 
     fn deref(&self) -> &&'a T {
@@ -148,21 +148,21 @@ impl<'a, T> std::ops::Deref for Ref<'a, T> {
     }
 }
 
-impl<T> Eq for Ref<'_, T> {}
+impl<T: ?Sized> Eq for Ref<'_, T> {}
 
-impl<T> PartialEq for Ref<'_, T> {
+impl<T: ?Sized> PartialEq for Ref<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self.0, other.0)
     }
 }
 
-impl<T> std::hash::Hash for Ref<'_, T> {
+impl<T: ?Sized> std::hash::Hash for Ref<'_, T> {
     fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
         std::ptr::hash(self.0, h)
     }
 }
 
-impl<T> std::fmt::Debug for Ref<'_, T>
+impl<T: ?Sized> std::fmt::Debug for Ref<'_, T>
 where
     T: std::fmt::Debug,
 {
@@ -171,7 +171,7 @@ where
     }
 }
 
-impl<T> std::fmt::Display for Ref<'_, T>
+impl<T: ?Sized> std::fmt::Display for Ref<'_, T>
 where
     T: std::fmt::Display,
 {
@@ -180,11 +180,38 @@ where
     }
 }
 
-impl<T> std::fmt::Binary for Ref<'_, T>
+impl<T: ?Sized> std::fmt::Binary for Ref<'_, T>
 where
     T: std::fmt::Binary,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         std::fmt::Binary::fmt(self.0, f)
+    }
+}
+
+/// A few checks to ensure that `Ref` can be passed around properly.
+#[allow(dead_code, unused_variables)]
+mod checks {
+    use super::*;
+
+    trait Dummy {}
+    struct Foo;
+    impl Dummy for Foo {}
+
+    fn checks1<'a>(x: Ref<'a, impl Dummy>) {}
+    fn checks2<'a>(x: Ref<'a, dyn Dummy>) {}
+
+    fn checks3() {
+        let foo = Foo;
+        checks1(Ref(&foo));
+        checks2(Ref(&foo));
+    }
+
+    fn checks4<'a>(x: Ref<'a, impl Dummy>) {
+        checks2(Ref(*x));
+    }
+
+    fn checks5<'a>(x: Ref<'a, dyn Dummy>) {
+        checks2(Ref(*x));
     }
 }
