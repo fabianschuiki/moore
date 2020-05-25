@@ -179,3 +179,12 @@ where
         std::fmt::Display::fmt(self.0, f)
     }
 }
+
+impl<T> std::fmt::Binary for Ref<'_, T>
+where
+    T: std::fmt::Binary,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Binary::fmt(self.0, f)
+    }
+}

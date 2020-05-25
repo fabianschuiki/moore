@@ -15,13 +15,16 @@ use std::cell::Cell;
 
 /// An AST node.
 pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Binary {
-    /// Link up this node.
-    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
+    /// Get this node's span in the input.
+    fn span(&self) -> Span;
 
     /// Get this node's parent.
     fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
         None
     }
+
+    /// Link up this node.
+    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
 }
 
 /// Basic attribute of an AST node.
@@ -157,6 +160,14 @@ where
     Self: BasicNode<'a> + std::fmt::Binary,
     T: std::fmt::Debug + ForEachChild<'a>,
 {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
+        self.parent.get()
+    }
+
     fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
         trace!("Linking {:b}", self);
         self.parent.set(parent);
@@ -165,10 +176,6 @@ where
         self.for_each_child(&mut |node| {
             node.link(Some(self.as_any()), order);
         });
-    }
-
-    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
-        self.parent.get()
     }
 }
 
@@ -440,7 +447,7 @@ impl HasSpan for Item<'_> {
     fn human_span(&self) -> Span {
         match &self.data {
             ItemData::ModuleDecl(x) => x.human_span(),
-            _ => self.span(),
+            _ => self.span,
         }
     }
 }
@@ -703,12 +710,12 @@ impl HasDesc for TypeDim<'_> {
 
     fn desc_full(&self) -> String {
         match *self {
-            TypeDim::Expr(ref expr) => format!("`[{}]`", expr.span().extract()),
+            TypeDim::Expr(ref expr) => format!("`[{}]`", expr.span.extract()),
             TypeDim::Range(ref lhs, ref rhs) => {
-                format!("`[{}:{}]`", lhs.span().extract(), rhs.span().extract())
+                format!("`[{}:{}]`", lhs.span.extract(), rhs.span.extract())
             }
             TypeDim::Queue(None) => format!("`[$]`"),
-            TypeDim::Queue(Some(ref expr)) => format!("`[$:{}]`", expr.span().extract()),
+            TypeDim::Queue(Some(ref expr)) => format!("`[$:{}]`", expr.span.extract()),
             TypeDim::Unsized => format!("`[]`"),
             TypeDim::Associative(None) => format!("[*]"),
             TypeDim::Associative(Some(ref ty)) => format!("[{}]", ty.span.extract()),
@@ -1294,7 +1301,7 @@ impl HasSpan for TypeOrExpr<'_> {
     fn span(&self) -> Span {
         match *self {
             TypeOrExpr::Type(ref x) => x.span(),
-            TypeOrExpr::Expr(ref x) => x.span(),
+            TypeOrExpr::Expr(ref x) => x.span,
         }
     }
 
