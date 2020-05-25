@@ -17,3 +17,4 @@
   - [IEEE 1800-2005](http://dx.doi.org/10.1109/IEEESTD.2005.97972)
   - [IEEE 1800-2009](http://dx.doi.org/10.1109/IEEESTD.2009.5354441)
   - [IEEE 1800-2012](http://dx.doi.org/10.1109/IEEESTD.2013.6469140)
+  - [IEEE 1800-2017](http://dx.doi.org/10.1109/IEEESTD.2018.8299595)
