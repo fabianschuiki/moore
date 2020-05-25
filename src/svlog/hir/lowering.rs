@@ -726,8 +726,8 @@ fn lower_module_ports_ansi<'gcx>(
 ) -> PartialPortList<'gcx> {
     // Emit errors for any port declarations inside the module.
     for item in ast_items {
-        let ast = match item {
-            ast::Item::PortDecl(pd) => pd,
+        let ast = match &item.data {
+            ast::ItemData::PortDecl(pd) => pd,
             _ => continue,
         };
         cx.emit(
@@ -943,8 +943,8 @@ fn lower_module_ports_nonansi<'gcx>(
     let mut decl_order: Vec<PartialPort> = vec![];
     let mut decl_names = HashMap::new();
     for item in ast_items {
-        let ast = match item {
-            ast::Item::PortDecl(pd) => pd,
+        let ast = match &item.data {
+            ast::ItemData::PortDecl(pd) => pd,
             _ => continue,
         };
         // trace!("Found {:#?}", ast);
@@ -984,8 +984,8 @@ fn lower_module_ports_nonansi<'gcx>(
     // As a second step, collect the variable and net declarations inside the
     // module body which further specify a port.
     for item in ast_items {
-        match item {
-            ast::Item::VarDecl(vd) => {
+        match &item.data {
+            ast::ItemData::VarDecl(vd) => {
                 for name in &vd.names {
                     let index = match decl_names.get(&name.name) {
                         Some(&e) => e,
@@ -1005,7 +1005,7 @@ fn lower_module_ports_nonansi<'gcx>(
                     }
                 }
             }
-            ast::Item::NetDecl(nd) => {
+            ast::ItemData::NetDecl(nd) => {
                 for name in &nd.names {
                     let index = match decl_names.get(&name.name) {
                         Some(&e) => e,
@@ -1441,19 +1441,19 @@ fn lower_module_block<'gcx>(
     let mut params = Vec::new();
     let mut assigns = Vec::new();
     for item in items {
-        match *item {
-            ast::Item::Dummy => (),
-            ast::Item::ModuleDecl(ref decl) => {
+        match item.data {
+            ast::ItemData::Dummy => (),
+            ast::ItemData::ModuleDecl(ref decl) => {
                 let id = cx.map_ast_with_parent(AstNode::Module(decl), next_rib);
                 next_rib = id;
                 procs.push(id);
             }
-            ast::Item::PackageDecl(ref decl) => {
+            ast::ItemData::PackageDecl(ref decl) => {
                 let id = cx.map_ast_with_parent(AstNode::Package(decl), next_rib);
                 next_rib = id;
                 procs.push(id);
             }
-            ast::Item::InterfaceDecl(ref decl) => {
+            ast::ItemData::InterfaceDecl(ref decl) => {
                 // let id = cx.map_ast_with_parent(AstNode::Interface(decl), next_rib);
                 // next_rib = id;
                 // procs.push(id);
@@ -1462,7 +1462,7 @@ fn lower_module_block<'gcx>(
                         .span(decl.span),
                 );
             }
-            ast::Item::ProgramDecl(ref _decl) => {
+            ast::ItemData::ProgramDecl(ref _decl) => {
                 // let id = cx.map_ast_with_parent(AstNode::Program(decl), next_rib);
                 // next_rib = id;
                 // procs.push(id);
@@ -1470,7 +1470,7 @@ fn lower_module_block<'gcx>(
                     "unsupported: program declaration; ignored",
                 ));
             }
-            ast::Item::Inst(ref inst) => {
+            ast::ItemData::Inst(ref inst) => {
                 let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
                 next_rib = target_id;
                 trace!(
@@ -1485,40 +1485,40 @@ fn lower_module_block<'gcx>(
                     insts.push(inst_id);
                 }
             }
-            ast::Item::VarDecl(ref decl) => {
+            ast::ItemData::VarDecl(ref decl) => {
                 next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
             }
-            ast::Item::NetDecl(ref decl) => {
+            ast::ItemData::NetDecl(ref decl) => {
                 next_rib = alloc_net_decl(cx, decl, next_rib, &mut decls);
             }
-            ast::Item::Procedure(ref prok) => {
+            ast::ItemData::Procedure(ref prok) => {
                 let id = cx.map_ast_with_parent(AstNode::Proc(prok), next_rib);
                 next_rib = id;
                 procs.push(id);
             }
-            ast::Item::GenerateIf(ref gen) => {
+            ast::ItemData::GenerateIf(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenIf(gen), next_rib);
                 next_rib = id;
                 gens.push(id);
             }
-            ast::Item::GenerateFor(ref gen) => {
+            ast::ItemData::GenerateFor(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenFor(gen), next_rib);
                 next_rib = id;
                 gens.push(id);
             }
-            ast::Item::GenerateCase(ref gen) => {
+            ast::ItemData::GenerateCase(ref gen) => {
                 let id = cx.map_ast_with_parent(AstNode::GenCase(gen), next_rib);
                 next_rib = id;
                 gens.push(id);
             }
-            ast::Item::ParamDecl(ref param) => {
+            ast::ItemData::ParamDecl(ref param) => {
                 next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
             }
-            ast::Item::Typedef(ref def) => {
+            ast::ItemData::Typedef(ref def) => {
                 let id = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
                 next_rib = id;
             }
-            ast::Item::ContAssign(ref assign) => {
+            ast::ItemData::ContAssign(ref assign) => {
                 for &(ref lhs, ref rhs) in &assign.assignments {
                     let id =
                         cx.map_ast_with_parent(AstNode::ContAssign(assign, lhs, rhs), next_rib);
@@ -1526,13 +1526,13 @@ fn lower_module_block<'gcx>(
                     assigns.push(id);
                 }
             }
-            ast::Item::ImportDecl(ref decl) => {
+            ast::ItemData::ImportDecl(ref decl) => {
                 for item in &decl.items {
                     let id = cx.map_ast_with_parent(AstNode::Import(item), next_rib);
                     next_rib = id;
                 }
             }
-            ast::Item::PortDecl(ref decl) => {
+            ast::ItemData::PortDecl(ref decl) => {
                 if !allow_ports {
                     cx.emit(
                         DiagBuilder2::error("misplaced port declaration")
@@ -1543,30 +1543,30 @@ fn lower_module_block<'gcx>(
                     );
                 }
             }
-            ast::Item::ModportDecl(ref decl) => {
+            ast::ItemData::ModportDecl(ref decl) => {
                 cx.emit(
                     DiagBuilder2::error("modport declaration in module")
                         .span(decl.span)
                         .add_note("Modport declarations can only appear in an interface"),
                 );
             }
-            ast::Item::ClassDecl(ref decl) => {
+            ast::ItemData::ClassDecl(ref decl) => {
                 cx.emit(
                     DiagBuilder2::warning("unsupported: class declaration; ignored")
                         .span(decl.span),
                 );
             }
-            ast::Item::SubroutineDecl(ref decl) => {
+            ast::ItemData::SubroutineDecl(ref decl) => {
                 let id = cx.map_ast_with_parent(AstNode::SubroutineDecl(decl), next_rib);
                 next_rib = id;
             }
-            ast::Item::Assertion(ref assert) => {
+            ast::ItemData::Assertion(ref assert) => {
                 cx.emit(
                     DiagBuilder2::warning("unsupported: concurrent assertion; ignored")
                         .span(assert.span),
                 );
             }
-            ast::Item::GenvarDecl(..) | ast::Item::GenerateRegion(..) => (),
+            ast::ItemData::GenvarDecl(..) | ast::ItemData::GenerateRegion(..) => (),
         }
     }
     Ok(hir::ModuleBlock {
@@ -2419,18 +2419,18 @@ fn lower_package<'gcx>(
     let mut decls = Vec::new();
     let mut params = Vec::new();
     for item in &ast.items {
-        match *item {
-            ast::Item::VarDecl(ref decl) => {
+        match item.data {
+            ast::ItemData::VarDecl(ref decl) => {
                 next_rib = alloc_var_decl(cx, decl, next_rib, &mut decls);
             }
-            ast::Item::ParamDecl(ref param) => {
+            ast::ItemData::ParamDecl(ref param) => {
                 next_rib = alloc_param_decl(cx, param, next_rib, &mut params);
             }
-            ast::Item::Typedef(ref def) => {
+            ast::ItemData::Typedef(ref def) => {
                 next_rib = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
                 names.push((Spanned::new(def.name.name, def.name.span), next_rib));
             }
-            ast::Item::SubroutineDecl(ref decl) => warn!(
+            ast::ItemData::SubroutineDecl(ref decl) => warn!(
                 "ignoring unsupported subroutine `{}`",
                 decl.prototype.name.name
             ),

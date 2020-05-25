@@ -126,20 +126,20 @@ impl<'gcx> GlobalContext<'gcx> {
             root.walk(&mut crate::resolver::ResolutionVisitor { cx: self });
 
             for item in &root.items {
-                match *item {
-                    ast::Item::ModuleDecl(ref n) => {
+                match &item.data {
+                    ast::ItemData::ModuleDecl(ref n) => {
                         let id = self.map_ast(AstNode::Module(n));
                         self.modules.borrow_mut().insert(n.name, id);
                     }
-                    ast::Item::PackageDecl(ref n) => {
+                    ast::ItemData::PackageDecl(ref n) => {
                         let id = self.map_ast(AstNode::Package(n));
                         self.packages.borrow_mut().insert(n.name, id);
                     }
-                    ast::Item::InterfaceDecl(ref n) => {
+                    ast::ItemData::InterfaceDecl(ref n) => {
                         let id = self.map_ast(AstNode::Interface(n));
                         self.interfaces.borrow_mut().insert(n.name, id);
                     }
-                    ast::Item::ImportDecl(ref n) => {
+                    ast::ItemData::ImportDecl(ref n) => {
                         for item in &n.items {
                             let id = self.map_ast(AstNode::Import(item));
                             self.imports.borrow_mut().push(id);

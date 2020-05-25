@@ -608,7 +608,7 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
 
     // Parse the descriptions in the source text.
     while !p.is_fatal() && p.peek(0).0 != Eof {
-        match parse_hierarchy_item(p) {
+        match parse_item(p) {
             Ok(item) => root.items.push(item),
             Err(()) => (), // parse_item handles recovery, so no need to do anything here
         }
@@ -718,7 +718,7 @@ fn parse_interface_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<In
             if p.try_eat(Semicolon) {
                 continue;
             }
-            items.push(parse_hierarchy_item(p)?);
+            items.push(parse_item(p)?);
         }
 
         span.expand(p.last_span());
@@ -884,7 +884,7 @@ fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ModDe
             if p.try_eat(Semicolon) {
                 continue;
             }
-            items.push(parse_hierarchy_item(p)?);
+            items.push(parse_item(p)?);
         }
 
         span.expand(p.last_span());
@@ -938,7 +938,7 @@ fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pack
             if p.try_eat(Semicolon) {
                 continue;
             }
-            items.push(parse_hierarchy_item(p)?);
+            items.push(parse_item(p)?);
         }
 
         span.expand(p.last_span());
@@ -971,7 +971,14 @@ fn parse_program_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<()> 
     result
 }
 
-fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Item<'n>> {
+fn parse_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Item<'n>> {
+    let mut span = p.peek(0).1;
+    let item = parse_item_data(p)?;
+    span.expand(p.last_span());
+    Ok(Item::new(span, item))
+}
+
+fn parse_item_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ItemData<'n>> {
     // Consume optional leading label.
     if p.is_ident() && p.peek(1).0 == Colon {
         p.bump();
@@ -982,55 +989,55 @@ fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<It
     // following item.
     let class_follows = p.peek(1).0 == Keyword(Kw::Class);
     match p.peek(0).0 {
-        Keyword(Kw::Module) => return parse_module_decl(p).map(Item::ModuleDecl),
+        Keyword(Kw::Module) => return parse_module_decl(p).map(ItemData::ModuleDecl),
         Keyword(Kw::Interface) | Keyword(Kw::Virtual) if class_follows => {
-            return parse_class_decl(p).map(Item::ClassDecl)
+            return parse_class_decl(p).map(ItemData::ClassDecl)
         }
-        Keyword(Kw::Class) => return parse_class_decl(p).map(Item::ClassDecl),
-        Keyword(Kw::Interface) => return parse_interface_decl(p).map(Item::InterfaceDecl),
-        Keyword(Kw::Package) => return parse_package_decl(p).map(Item::PackageDecl),
-        Keyword(Kw::Program) => return parse_program_decl(p).map(Item::ProgramDecl),
+        Keyword(Kw::Class) => return parse_class_decl(p).map(ItemData::ClassDecl),
+        Keyword(Kw::Interface) => return parse_interface_decl(p).map(ItemData::InterfaceDecl),
+        Keyword(Kw::Package) => return parse_package_decl(p).map(ItemData::PackageDecl),
+        Keyword(Kw::Program) => return parse_program_decl(p).map(ItemData::ProgramDecl),
 
         Keyword(Kw::Localparam) | Keyword(Kw::Parameter) => {
             let decl = parse_param_decl(p, false)?;
             p.require_reported(Semicolon)?;
-            return Ok(Item::ParamDecl(decl));
+            return Ok(ItemData::ParamDecl(decl));
         }
-        Keyword(Kw::Modport) => return parse_modport_decl(p).map(|x| Item::ModportDecl(x)),
-        Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| Item::Typedef(x)),
-        Keyword(Kw::Import) => return parse_import_decl(p).map(|x| Item::ImportDecl(x)),
+        Keyword(Kw::Modport) => return parse_modport_decl(p).map(|x| ItemData::ModportDecl(x)),
+        Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| ItemData::Typedef(x)),
+        Keyword(Kw::Import) => return parse_import_decl(p).map(|x| ItemData::ImportDecl(x)),
 
         // Structured procedures as per IEEE 1800-2009 section 9.2
         Keyword(Kw::Initial) => {
-            return parse_procedure(p, ProcedureKind::Initial).map(|x| Item::Procedure(x));
+            return parse_procedure(p, ProcedureKind::Initial).map(|x| ItemData::Procedure(x));
         }
         Keyword(Kw::Always) => {
-            return parse_procedure(p, ProcedureKind::Always).map(|x| Item::Procedure(x));
+            return parse_procedure(p, ProcedureKind::Always).map(|x| ItemData::Procedure(x));
         }
         Keyword(Kw::AlwaysComb) => {
-            return parse_procedure(p, ProcedureKind::AlwaysComb).map(|x| Item::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysComb).map(|x| ItemData::Procedure(x));
         }
         Keyword(Kw::AlwaysLatch) => {
-            return parse_procedure(p, ProcedureKind::AlwaysLatch).map(|x| Item::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysLatch).map(|x| ItemData::Procedure(x));
         }
         Keyword(Kw::AlwaysFf) => {
-            return parse_procedure(p, ProcedureKind::AlwaysFf).map(|x| Item::Procedure(x));
+            return parse_procedure(p, ProcedureKind::AlwaysFf).map(|x| ItemData::Procedure(x));
         }
         Keyword(Kw::Final) => {
-            return parse_procedure(p, ProcedureKind::Final).map(|x| Item::Procedure(x));
+            return parse_procedure(p, ProcedureKind::Final).map(|x| ItemData::Procedure(x));
         }
         Keyword(Kw::Function) | Keyword(Kw::Task) => {
-            return parse_subroutine_decl(p).map(|x| Item::SubroutineDecl(x));
+            return parse_subroutine_decl(p).map(|x| ItemData::SubroutineDecl(x));
         }
 
         // Port declarations
         Keyword(Kw::Inout) | Keyword(Kw::Input) | Keyword(Kw::Output) | Keyword(Kw::Ref) => {
-            return parse_port_decl(p).map(|x| Item::PortDecl(x));
+            return parse_port_decl(p).map(|x| ItemData::PortDecl(x));
         }
 
         // Continuous assign
         Keyword(Kw::Assign) => {
-            return parse_continuous_assign(p).map(|x| Item::ContAssign(x));
+            return parse_continuous_assign(p).map(|x| ItemData::ContAssign(x));
         }
 
         // Genvar declaration
@@ -1038,7 +1045,7 @@ fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<It
             p.bump();
             let decl = comma_list_nonempty(p, Semicolon, "genvar declaration", parse_genvar_decl)?;
             p.require_reported(Semicolon)?;
-            return Ok(Item::GenvarDecl(decl));
+            return Ok(ItemData::GenvarDecl(decl));
         }
 
         // Generate region and constructs
@@ -1048,21 +1055,21 @@ fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<It
             let items = repeat_until(p, Keyword(Kw::Endgenerate), parse_generate_item)?;
             p.require_reported(Keyword(Kw::Endgenerate))?;
             span.expand(p.last_span());
-            return Ok(Item::GenerateRegion(span, items));
+            return Ok(ItemData::GenerateRegion(span, items));
         }
-        Keyword(Kw::For) => return parse_generate_for(p).map(|x| Item::GenerateFor(x)),
-        Keyword(Kw::If) => return parse_generate_if(p).map(|x| Item::GenerateIf(x)),
-        Keyword(Kw::Case) => return parse_generate_case(p).map(|x| Item::GenerateCase(x)),
+        Keyword(Kw::For) => return parse_generate_for(p).map(|x| ItemData::GenerateFor(x)),
+        Keyword(Kw::If) => return parse_generate_if(p).map(|x| ItemData::GenerateIf(x)),
+        Keyword(Kw::Case) => return parse_generate_case(p).map(|x| ItemData::GenerateCase(x)),
 
         // Assertions
         Keyword(Kw::Assert)
         | Keyword(Kw::Assume)
         | Keyword(Kw::Cover)
         | Keyword(Kw::Expect)
-        | Keyword(Kw::Restrict) => return parse_assertion(p).map(|x| Item::Assertion(x)),
+        | Keyword(Kw::Restrict) => return parse_assertion(p).map(|x| ItemData::Assertion(x)),
         Semicolon => {
             p.bump();
-            return Ok(Item::Dummy);
+            return Ok(ItemData::Dummy);
         }
 
         // Default clocking and disable declarations.
@@ -1073,14 +1080,14 @@ fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<It
                 let name = p.eat_ident("clocking identifier")?;
                 p.require_reported(Semicolon)?;
                 span.expand(p.last_span());
-                return Ok(Item::Dummy);
+                return Ok(ItemData::Dummy);
             }
             if p.try_eat(Keyword(Kw::Disable)) {
                 p.require_reported(Keyword(Kw::Iff))?;
                 let expr = parse_expr(p)?;
                 p.require_reported(Semicolon)?;
                 span.expand(p.last_span());
-                return Ok(Item::Dummy);
+                return Ok(ItemData::Dummy);
             }
             p.add_diag(
                 DiagBuilder2::error("expected `clocking` or `disable` after `default`").span(span),
@@ -1090,7 +1097,7 @@ fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<It
         }
 
         // Unsupported constructs as of now.
-        SysIdent(..) => return parse_elab_system_task(p).map(|_| Item::Dummy),
+        SysIdent(..) => return parse_elab_system_task(p).map(|_| ItemData::Dummy),
 
         _ => (),
     }
@@ -1098,11 +1105,13 @@ fn parse_hierarchy_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<It
     // Handle the possibly ambiguous cases.
     let mut pp = ParallelParser::new();
     pp.add_greedy("net declaration", |p| {
-        parse_net_decl(p).map(|d| Item::NetDecl(d))
+        parse_net_decl(p).map(|d| ItemData::NetDecl(d))
     });
-    pp.add("instantiation", |p| parse_inst(p).map(|i| Item::Inst(i)));
+    pp.add("instantiation", |p| {
+        parse_inst(p).map(|i| ItemData::Inst(i))
+    });
     pp.add("variable declaration", |p| {
-        parse_var_decl(p).map(|d| Item::VarDecl(d))
+        parse_var_decl(p).map(|d| ItemData::VarDecl(d))
     });
     let res = pp.finish(p, "hierarchy item");
     if res.is_err() {
@@ -4264,12 +4273,15 @@ fn parse_genvar_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Genva
 }
 
 fn parse_generate_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Item<'n>> {
-    match p.peek(0).0 {
-        Keyword(Kw::For) => parse_generate_for(p).map(|x| Item::GenerateFor(x)),
-        Keyword(Kw::If) => parse_generate_if(p).map(|x| Item::GenerateIf(x)),
-        Keyword(Kw::Case) => parse_generate_case(p).map(|x| Item::GenerateCase(x)),
-        _ => parse_hierarchy_item(p),
-    }
+    let mut span = p.peek(0).1;
+    let data = match p.peek(0).0 {
+        Keyword(Kw::For) => ItemData::GenerateFor(parse_generate_for(p)?),
+        Keyword(Kw::If) => ItemData::GenerateIf(parse_generate_if(p)?),
+        Keyword(Kw::Case) => ItemData::GenerateCase(parse_generate_case(p)?),
+        _ => return parse_item(p),
+    };
+    span.expand(p.last_span());
+    Ok(Item::new(span, data))
 }
 
 /// Parse a generate-for construct.

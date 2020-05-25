@@ -379,6 +379,102 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
     ast.accept(v);
 }
 
+/// An item that may appear in a hierarchical scope.
+///
+/// This includes the following:
+/// - root scope
+/// - modules
+/// - interfaces
+/// - packages
+/// - classes
+/// - generates
+#[moore_derive::node]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Item<'a> {
+    Dummy,
+    ModuleDecl(Module<'a>),
+    InterfaceDecl(Interface<'a>),
+    PackageDecl(Package<'a>),
+    #[dont_visit]
+    ClassDecl(ClassDecl<'a>),
+    #[dont_visit]
+    ProgramDecl(()),
+    ImportDecl(ImportDecl),
+    #[dont_visit]
+    ParamDecl(ParamDecl<'a>),
+    #[dont_visit]
+    ModportDecl(ModportDecl),
+    #[dont_visit]
+    Typedef(Typedef<'a>),
+    #[dont_visit]
+    PortDecl(PortDecl<'a>),
+    #[dont_visit]
+    Procedure(Procedure<'a>),
+    #[dont_visit]
+    SubroutineDecl(SubroutineDecl<'a>),
+    #[dont_visit]
+    ContAssign(ContAssign<'a>),
+    #[dont_visit]
+    GenvarDecl(Vec<GenvarDecl<'a>>),
+    #[dont_visit]
+    GenerateRegion(Span, Vec<Item<'a>>),
+    #[dont_visit]
+    GenerateFor(GenerateFor<'a>),
+    #[dont_visit]
+    GenerateIf(GenerateIf<'a>),
+    #[dont_visit]
+    GenerateCase(GenerateCase),
+    #[dont_visit]
+    Assertion(Assertion<'a>),
+    NetDecl(NetDecl<'a>),
+    VarDecl(VarDecl<'a>),
+    #[dont_visit]
+    Inst(Inst<'a>),
+}
+
+impl HasSpan for Item<'_> {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn human_span(&self) -> Span {
+        match &self.data {
+            ItemData::ModuleDecl(x) => x.human_span(),
+            _ => self.span(),
+        }
+    }
+}
+
+impl HasDesc for Item<'_> {
+    fn desc(&self) -> &'static str {
+        match &self.data {
+            ItemData::ModuleDecl(x) => x.desc(),
+            ItemData::InterfaceDecl(_) => "interface declaration",
+            ItemData::PackageDecl(_) => "package declaration",
+            ItemData::ImportDecl(_) => "import declaration",
+            ItemData::ParamDecl(_) => "parameter declaration",
+            ItemData::ProgramDecl(_) => "program declaration",
+            ItemData::ModportDecl(_) => "modport declaration",
+            ItemData::ClassDecl(_) => "class declaration",
+            ItemData::PortDecl(_) => "port declaration",
+            ItemData::Procedure(_) => "procedure declaration",
+            ItemData::SubroutineDecl(_) => "subroutine declaration",
+            ItemData::Assertion(_) => "assertion",
+            ItemData::NetDecl(_) => "net declaration",
+            ItemData::VarDecl(_) => "variable declaration",
+            ItemData::Inst(_) => "instantiation",
+            _ => "<invalid item>",
+        }
+    }
+
+    fn desc_full(&self) -> String {
+        match &self.data {
+            ItemData::ModuleDecl(x) => x.desc_full(),
+            _ => self.desc().into(),
+        }
+    }
+}
+
 /// A module.
 #[moore_derive::node]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -498,120 +594,6 @@ pub enum Lifetime {
 pub struct Timeunit {
     pub unit: Option<Spanned<Lit>>,
     pub prec: Option<Spanned<Lit>>,
-}
-
-/// An item that may appear in a hierarchical scope.
-///
-/// This includes the following:
-/// - root scope
-/// - modules
-/// - interfaces
-/// - packages
-/// - classes
-/// - generates
-#[moore_derive::visit]
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Item<'a> {
-    Dummy,
-    ModuleDecl(Module<'a>),
-    #[dont_visit]
-    InterfaceDecl(Interface<'a>),
-    PackageDecl(Package<'a>),
-    #[dont_visit]
-    ClassDecl(ClassDecl<'a>),
-    #[dont_visit]
-    ProgramDecl(()),
-    ImportDecl(ImportDecl),
-    #[dont_visit]
-    ParamDecl(ParamDecl<'a>),
-    #[dont_visit]
-    ModportDecl(ModportDecl),
-    #[dont_visit]
-    Typedef(Typedef<'a>),
-    #[dont_visit]
-    PortDecl(PortDecl<'a>),
-    #[dont_visit]
-    Procedure(Procedure<'a>),
-    #[dont_visit]
-    SubroutineDecl(SubroutineDecl<'a>),
-    #[dont_visit]
-    ContAssign(ContAssign<'a>),
-    #[dont_visit]
-    GenvarDecl(Vec<GenvarDecl<'a>>),
-    #[dont_visit]
-    GenerateRegion(Span, Vec<Item<'a>>),
-    #[dont_visit]
-    GenerateFor(GenerateFor<'a>),
-    #[dont_visit]
-    GenerateIf(GenerateIf<'a>),
-    #[dont_visit]
-    GenerateCase(GenerateCase),
-    #[dont_visit]
-    Assertion(Assertion<'a>),
-    NetDecl(NetDecl<'a>),
-    VarDecl(VarDecl<'a>),
-    #[dont_visit]
-    Inst(Inst<'a>),
-}
-
-impl HasSpan for Item<'_> {
-    fn span(&self) -> Span {
-        match *self {
-            Item::ModuleDecl(ref decl) => decl.span(),
-            Item::InterfaceDecl(ref decl) => decl.span,
-            Item::PackageDecl(ref decl) => decl.span,
-            Item::ImportDecl(ref decl) => decl.span,
-            Item::ParamDecl(ref decl) => decl.span,
-            Item::ProgramDecl(ref decl) => INVALID_SPAN,
-            Item::ModportDecl(ref decl) => decl.span,
-            Item::ClassDecl(ref decl) => decl.span,
-            Item::PortDecl(ref decl) => decl.span,
-            Item::Procedure(ref prc) => prc.span,
-            Item::SubroutineDecl(ref decl) => decl.span,
-            Item::Assertion(ref assertion) => assertion.span,
-            Item::NetDecl(ref decl) => decl.span,
-            Item::VarDecl(ref decl) => decl.span,
-            Item::Inst(ref inst) => inst.span,
-            _ => INVALID_SPAN,
-        }
-    }
-
-    fn human_span(&self) -> Span {
-        match *self {
-            Item::ModuleDecl(ref decl) => decl.human_span(),
-            _ => self.span(),
-        }
-    }
-}
-
-impl HasDesc for Item<'_> {
-    fn desc(&self) -> &'static str {
-        match *self {
-            Item::ModuleDecl(ref decl) => decl.desc(),
-            Item::InterfaceDecl(ref decl) => "interface declaration",
-            Item::PackageDecl(ref decl) => "package declaration",
-            Item::ImportDecl(ref decl) => "import declaration",
-            Item::ParamDecl(ref decl) => "parameter declaration",
-            Item::ProgramDecl(ref decl) => "program declaration",
-            Item::ModportDecl(ref decl) => "modport declaration",
-            Item::ClassDecl(ref decl) => "class declaration",
-            Item::PortDecl(ref decl) => "port declaration",
-            Item::Procedure(ref prc) => "procedure declaration",
-            Item::SubroutineDecl(ref decl) => "subroutine declaration",
-            Item::Assertion(ref assertion) => "assertion",
-            Item::NetDecl(ref decl) => "net declaration",
-            Item::VarDecl(ref decl) => "variable declaration",
-            Item::Inst(ref inst) => "instantiation",
-            _ => "<invalid item>",
-        }
-    }
-
-    fn desc_full(&self) -> String {
-        match *self {
-            Item::ModuleDecl(ref decl) => decl.desc_full(),
-            _ => self.desc().into(),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
