@@ -63,6 +63,12 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
                 }
             }
         }
+
+        impl #impl_generics ForEachNode<#lt> for #name #generics {
+            fn for_each_node(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
+                self.for_each_child(each);
+            }
+        }
     });
 
     output.into()
