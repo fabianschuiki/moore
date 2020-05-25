@@ -49,7 +49,7 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
     // Generate the implementation of the `AcceptVisitor` trait.
     output.extend(quote! {
         impl #impl_generics AcceptVisitor<#lt> for #name #generics {
-            fn accept<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
+            fn accept(&#lt self, visitor: &mut dyn Visitor<#lt>) {
                 match self {
                     #(#visits,)*
                 }

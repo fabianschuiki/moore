@@ -52,7 +52,7 @@ pub(crate) fn walk_visitor(_args: TokenStream, raw_input: TokenStream) -> TokenS
 
         impl #impl_generics WalkVisitor<#lt> for #name #generics {
             #[doc = #doc]
-            fn walk<V: Visitor<#lt> + ?Sized>(&#lt self, visitor: &mut V) {
+            fn walk(&#lt self, visitor: &mut dyn Visitor<#lt>) {
                 if visitor.#pre_visit_fn(self) {
                     self.accept(visitor);
                 }

@@ -31,7 +31,9 @@ pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Binary {
 ///
 /// If this trait is present on `Node<T>`, then `Node<T>` will automatically
 /// implement the full `AnyNode` trait.
-pub trait BasicNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
+pub trait BasicNode<'a>:
+    std::fmt::Debug + AcceptVisitor<'a> + ForEachChild<'a> + ForEachNode<'a>
+{
     /// Get the type name of the node.
     fn type_name(&self) -> &'static str;
 
@@ -244,7 +246,7 @@ impl<'a, 'b: 'a, T> AcceptVisitor<'a> for Node<'b, T>
 where
     T: AcceptVisitor<'a>,
 {
-    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn accept(&'a self, visitor: &mut dyn Visitor<'a>) {
         self.data.accept(visitor)
     }
 }
@@ -277,14 +279,14 @@ impl<'a, T> Eq for Node<'a, T> where T: Eq {}
 /// A node that accepts `Visitor`s.
 pub trait AcceptVisitor<'a> {
     /// Walk a visitor over the contents of `self`.
-    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
+    fn accept(&'a self, visitor: &mut dyn Visitor<'a>);
 }
 
 impl<'a, T> AcceptVisitor<'a> for Vec<T>
 where
     T: AcceptVisitor<'a>,
 {
-    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn accept(&'a self, visitor: &mut dyn Visitor<'a>) {
         for c in self {
             c.accept(visitor);
         }
@@ -295,7 +297,7 @@ impl<'a, T> AcceptVisitor<'a> for Option<T>
 where
     T: AcceptVisitor<'a>,
 {
-    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn accept(&'a self, visitor: &mut dyn Visitor<'a>) {
         if let Some(c) = self {
             c.accept(visitor);
         }
@@ -306,7 +308,7 @@ impl<'a, T> AcceptVisitor<'a> for Spanned<T>
 where
     T: AcceptVisitor<'a>,
 {
-    fn accept<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn accept(&'a self, visitor: &mut dyn Visitor<'a>) {
         self.value.accept(visitor);
     }
 }
@@ -314,14 +316,14 @@ where
 /// A node that walks a `Visitor` over itself.
 pub trait WalkVisitor<'a> {
     /// Walk a visitor over `self`.
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V);
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>);
 }
 
 impl<'a, T> WalkVisitor<'a> for Vec<T>
 where
     T: WalkVisitor<'a>,
 {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
         for c in self {
             c.walk(visitor);
         }
@@ -332,7 +334,7 @@ impl<'a, T> WalkVisitor<'a> for Option<T>
 where
     T: WalkVisitor<'a>,
 {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
         if let Some(c) = self {
             c.walk(visitor);
         }
@@ -343,25 +345,25 @@ impl<'a, T> WalkVisitor<'a> for Spanned<T>
 where
     T: WalkVisitor<'a>,
 {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
         self.value.walk(visitor);
     }
 }
 
 impl<'a> WalkVisitor<'a> for Span {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
 impl<'a> WalkVisitor<'a> for Name {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
 impl<'a> WalkVisitor<'a> for Lit {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
 impl<'a> WalkVisitor<'a> for bool {
-    fn walk<V: Visitor<'a> + ?Sized>(&'a self, visitor: &mut V) {}
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
 pub use self::ExprData::*;
@@ -382,7 +384,7 @@ pub struct Root<'a> {
 }
 
 #[allow(dead_code)]
-fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
+fn checks1<'a>(ast: &'a Root<'a>, v: &mut dyn Visitor<'a>) {
     ast.accept(v);
 }
 
