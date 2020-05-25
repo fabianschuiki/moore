@@ -883,16 +883,18 @@ fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ModDe
         }
 
         span.expand(p.last_span());
-        Ok(ModDecl {
+        Ok(Module::new(
             span,
-            lifetime,
-            name,
-            name_span: name_sp,
-            imports,
-            params,
-            ports,
-            items,
-        })
+            ModuleData {
+                lifetime,
+                name,
+                name_span: name_sp,
+                imports,
+                params,
+                ports,
+                items,
+            },
+        ))
     });
     let sp = p.peek(0).1;
     p.require_reported(Keyword(Kw::Endmodule))?;

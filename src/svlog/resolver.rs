@@ -747,7 +747,7 @@ pub fn scope_location<'a>(_cx: &impl Context<'a>, node: Ref<'a, impl ast::AnyNod
     debug!("Scope location");
     let mut next: Option<&dyn ast::AnyNode> = Some(*node);
     while let Some(node) = next {
-        debug!("Visiting {:#?}", node);
+        debug!("Visiting {:b}", node);
         next = node.get_parent();
     }
     error!("No parent scope found!");

@@ -39,22 +39,6 @@ pub trait BasicNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
     fn as_any(&'a self) -> &'a dyn AnyNode<'a>;
 }
 
-// /// Something that can be converted to a `AnyNode`.
-// pub trait TryAnyNode<'a> {
-//     fn try_node(&'a self) -> Option<&'a dyn AnyNode<'a>> {
-//         None
-//     }
-// }
-
-// impl<'a, T> TryAnyNode<'a> for Option<T>
-// where
-//     T: TryAnyNode<'a>,
-// {
-//     fn try_node(&'a self) -> Option<&'a dyn AnyNode<'a>> {
-//         self.and_then(|node| node.try)
-//     }
-// }
-
 /// A node which allows iterating over each child node.
 pub trait ForEachChild<'a> {
     /// Apply a function to each child node.
@@ -102,31 +86,7 @@ impl<'a> ForEachNode<'a> for Span {}
 impl<'a> ForEachNode<'a> for Name {}
 impl<'a> ForEachNode<'a> for Lit {}
 impl<'a> ForEachNode<'a> for bool {}
-impl<'a> ForEachNode<'a> for Item<'a> {
-    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-        self.for_each_child(each);
-    }
-}
-impl<'a> ForEachNode<'a> for Package<'a> {}
-impl<'a> ForEachNode<'a> for Lifetime {}
-impl<'a> ForEachNode<'a> for Timeunit {}
-impl<'a> ForEachNode<'a> for NetDecl<'a> {
-    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-        self.for_each_child(each);
-    }
-}
-impl<'a> ForEachNode<'a> for VarDecl<'a> {
-    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-        self.for_each_child(each);
-    }
-}
-impl<'a> ForEachNode<'a> for VarDeclName<'a> {
-    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-        self.for_each_child(each);
-    }
-}
-impl<'a> ForEachNode<'a> for ImportItem {}
-impl<'a> ForEachNode<'a> for ImportDecl {}
+
 impl<'a> ForEachNode<'a> for Stmt<'a> {}
 impl<'a> ForEachNode<'a> for StmtData<'a> {}
 impl<'a> ForEachNode<'a> for GenerateBlock<'a> {}
@@ -307,37 +267,6 @@ where
 
 impl<'a, T> Eq for Node<'a, T> where T: Eq {}
 
-// /// A visitor for the AST.
-// pub trait Visitor {
-//     fn visit_root(&mut self, node: &Root) {
-//         node.accept(self);
-//     }
-//     fn visit_stmt(&mut self, node: &Stmt) {
-//         node.accept(self);
-//     }
-//     fn visit_stmt_data(&mut self, node: &StmtData) {
-//         node.accept(self);
-//     }
-//     fn visit_item(&mut self, node: &Item) {
-//         node.accept(self);
-//     }
-//     fn visit_expr(&mut self, node: &Expr) {
-//         node.accept(self);
-//     }
-//     fn visit_expr_data(&mut self, node: &ExprData) {
-//         node.accept(self);
-//     }
-//     fn visit_generate_block(&mut self, node: &GenerateBlock) {
-//         node.accept(self);
-//     }
-//     fn visit_generate_for(&mut self, node: &GenerateFor) {
-//         node.accept(self);
-//     }
-//     fn visit_timeunit(&mut self, node: &Timeunit) {
-//         node.accept(self);
-//     }
-// }
-
 /// A node that accepts `Visitor`s.
 pub trait AcceptVisitor<'a> {
     /// Walk a visitor over the contents of `self`.
@@ -446,11 +375,9 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
 
 pub type ModDecl<'a> = Module<'a>;
 
-#[moore_derive::all_node]
-#[moore_derive::visit]
+#[moore_derive::node]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
-    pub span: Span,
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
@@ -482,43 +409,10 @@ impl HasDesc for Module<'_> {
     }
 }
 
-impl<'a> BasicNode<'a> for Module<'a> {
-    fn type_name(&self) -> &'static str {
-        "Module"
-    }
 
-    fn as_all(&'a self) -> AllNode<'a> {
-        AllNode::from(self)
-    }
 
-    fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
-        self
-    }
-}
 
-impl<'a> std::fmt::Binary for Module<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{} #{:p}", self.type_name(), self as *const _)
-    }
-}
 
-impl<'a> AnyNode<'a> for Module<'a> {
-    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
-        trace!("Linking {}", self.type_name());
-        // self.parent.set(parent);
-        // self.order.set(*order);
-        *order += 1;
-        self.for_each_child(&mut |node| {
-            node.link(Some(self.as_any()), order);
-        });
-    }
-}
-
-impl<'a> ForEachNode<'a> for Module<'a> {
-    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-        each(self)
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntfDecl<'a> {
