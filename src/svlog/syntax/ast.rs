@@ -15,20 +15,26 @@ use std::cell::Cell;
 
 /// An AST node.
 pub trait AnyNode<'a>: std::fmt::Debug + ForEachChild<'a> + ForEachNode<'a> {
+    /// Get the type name of the node.
+    fn type_name(&self) -> &'static str;
+
     /// Convert this node to the exhaustive `AllNode` enum.
     fn as_all(&'a self) -> AllNode<'a>;
 
     /// Convert this node to an `AnyNode` trait object.
     fn as_any(&'a self) -> &'a dyn AnyNode<'a>;
 
-    /// Link up this node.
+    /// Link up this node and all its children.
     fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
-        trace!("Linking {:?}", self);
+        trace!("Linking {}", self.type_name());
+        self.link_self(parent, order);
         self.for_each_child(&mut |node| {
-            // trace!("Would now link up child node {:?}", node);
             node.link(Some(self.as_any()), order);
         });
     }
+
+    /// Link up this node.
+    fn link_self(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
 
     /// Get this node's parent.
     fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
@@ -101,16 +107,27 @@ impl<'a> ForEachNode<'a> for Lit {}
 impl<'a> ForEachNode<'a> for bool {}
 impl<'a> ForEachNode<'a> for Item<'a> {
     fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
-        trace!("Forwarding through item");
         self.for_each_child(each);
     }
 }
 impl<'a> ForEachNode<'a> for Package<'a> {}
 impl<'a> ForEachNode<'a> for Lifetime {}
 impl<'a> ForEachNode<'a> for Timeunit {}
-impl<'a> ForEachNode<'a> for NetDecl<'a> {}
-impl<'a> ForEachNode<'a> for VarDecl<'a> {}
-impl<'a> ForEachNode<'a> for VarDeclName<'a> {}
+impl<'a> ForEachNode<'a> for NetDecl<'a> {
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        self.for_each_child(each);
+    }
+}
+impl<'a> ForEachNode<'a> for VarDecl<'a> {
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        self.for_each_child(each);
+    }
+}
+impl<'a> ForEachNode<'a> for VarDeclName<'a> {
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        self.for_each_child(each);
+    }
+}
 impl<'a> ForEachNode<'a> for ImportItem {}
 impl<'a> ForEachNode<'a> for ImportDecl {}
 impl<'a> ForEachNode<'a> for Stmt<'a> {}
@@ -428,6 +445,10 @@ impl HasDesc for Module<'_> {
 }
 
 impl<'a> AnyNode<'a> for Module<'a> {
+    fn type_name(&self) -> &'static str {
+        "Module"
+    }
+
     fn as_all(&'a self) -> AllNode<'a> {
         AllNode::from(self)
     }
@@ -1234,12 +1255,26 @@ impl HasDesc for Expr<'_> {
 }
 
 impl<'a> AnyNode<'a> for Expr<'a> {
+    fn type_name(&self) -> &'static str {
+        "Expr"
+    }
+
     fn as_all(&'a self) -> AllNode<'a> {
         AllNode::from(self)
     }
 
     fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
         self
+    }
+
+    fn link_self(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
+        self.parent.set(parent);
+        self.order.set(*order);
+        *order += 1;
+    }
+
+    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
+        self.parent.get()
     }
 }
 

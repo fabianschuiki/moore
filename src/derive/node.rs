@@ -16,6 +16,7 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     let vis = input.vis.clone();
     let generics = input.generics.clone();
     let node_name = input.ident.clone();
+    let node_name_str = node_name.to_string();
 
     // Rename the node.
     let data_name = format_ident!("{}{}", node_name, "Data");
@@ -40,6 +41,10 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     // Implement the `AnyNode` trait for this node.
     output.extend(quote! {
         impl<'a> AnyNode<'a> for #node_name #generics {
+            fn type_name(&self) -> &'static str {
+                #node_name_str
+            }
+
             fn as_all(&'a self) -> AllNode<'a> {
                 AllNode::from(self)
             }
