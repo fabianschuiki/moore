@@ -18,6 +18,9 @@ pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Binary {
     /// Get this node's span in the input.
     fn span(&self) -> Span;
 
+    /// Get this node's lexical order.
+    fn order(&self) -> usize;
+
     /// Get this node's parent.
     fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
         None
@@ -164,6 +167,10 @@ where
 {
     fn span(&self) -> Span {
         self.span
+    }
+
+    fn order(&self) -> usize {
+        self.order.get()
     }
 
     fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
