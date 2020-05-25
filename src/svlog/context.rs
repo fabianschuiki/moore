@@ -27,12 +27,12 @@ use crate::{
     common::{arenas::Alloc, arenas::TypedArena, Session},
     crate_prelude::*,
     hir::{self, AccessTable, HirNode},
-    resolver::StructDef,
+    resolver::{Scope, ScopedNode, StructDef},
     ty::{Type, TypeKind},
     typeck::{CastType, TypeContext},
     value::{Value, ValueData, ValueKind},
     InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping,
-    PortMappingSource,
+    PortMappingSource, QueryDatabase,
 };
 use std::{
     cell::RefCell,
@@ -200,6 +200,8 @@ impl<'gcx> BaseContext<'gcx> for GlobalContext<'gcx> {
     }
 }
 
+impl<'gcx> QueryDatabase for GlobalContext<'gcx> {}
+
 /// The arenas that allocate things in the global context.
 ///
 /// Use this struct whenever you want to allocate or internalize
@@ -210,6 +212,7 @@ pub struct GlobalArenas<'t> {
     hir: hir::Arena<'t>,
     param_envs: TypedArena<ParamEnvData<'t>>,
     ribs: TypedArena<Rib>,
+    scopes: TypedArena<Scope<'t>>,
     types: TypedArena<TypeKind<'t>>,
     values: TypedArena<ValueData<'t>>,
     mir_lvalue: TypedArena<mir::Lvalue<'t>>,
@@ -238,6 +241,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate a rib.
     pub fn alloc_rib(&'t self, rib: Rib) -> &'t Rib {
         self.ribs.alloc(rib)
+    }
+
+    /// Allocate a scope.
+    pub fn alloc_scope(&'t self, scope: Scope<'t>) -> &'t Scope<'t> {
+        self.scopes.alloc(scope)
     }
 
     /// Allocate an MIR lvalue.
@@ -281,7 +289,7 @@ pub struct GlobalTables<'t> {
 /// This trait represents the context within which most compiler operations take
 /// place. It is implemented by [`GlobalContext`] and also provides access to
 /// the global context via the `gcx()` method.
-pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter {
+pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase {
     /// Get the global context.
     fn gcx(&self) -> &GlobalContext<'gcx>;
 

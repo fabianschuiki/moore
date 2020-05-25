@@ -386,8 +386,8 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut dyn Visitor<'a>) {
 
 /// An item that may appear in a hierarchical scope.
 ///
-/// This includes the following:
-/// - root scope
+/// This includes the following scopes:
+/// - file root
 /// - modules
 /// - interfaces
 /// - packages

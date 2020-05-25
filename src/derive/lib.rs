@@ -11,6 +11,7 @@ use syn::{parse_macro_input, DeriveInput};
 mod accept_visitor;
 mod all_node;
 mod node;
+mod query;
 mod visitor;
 mod walk_visitor;
 
@@ -194,4 +195,16 @@ pub fn all_node(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn derive_visitor(input: TokenStream) -> TokenStream {
     visitor::visitor(input)
+}
+
+/// Mark a function as a compiler query.
+#[proc_macro_attribute]
+pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
+    query::mark_query(args, input)
+}
+
+/// Generate a compiler query database.
+#[proc_macro]
+pub fn derive_query_db(input: TokenStream) -> TokenStream {
+    query::derive_query_db(input)
 }

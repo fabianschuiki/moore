@@ -102,7 +102,7 @@ pub use crate::{
         IntoNodeEnvId, NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource,
     },
     port_mapping::{PortMapping, PortMappingSource},
-    resolver::{Rib, RibKind},
+    resolver::*,
     syntax::*,
 };
 
@@ -215,3 +215,5 @@ mod checks {
         checks2(Ref(*x));
     }
 }
+
+moore_derive::derive_query_db!();

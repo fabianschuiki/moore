@@ -464,6 +464,7 @@ dependencies = [
  "lock_api 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "moore-common 0.9.0-dev",
+ "moore-derive 0.9.0-dev",
  "moore-svlog-syntax 0.9.0-dev",
  "num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
