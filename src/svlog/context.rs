@@ -120,7 +120,7 @@ impl<'gcx> GlobalContext<'gcx> {
             }
 
             // Get the root scope.
-            let _scope = crate::resolver::generated_scope(self, root.into());
+            let _scope = crate::resolver::generated_scope(self, root);
 
             // Resolve names for debugging purposes.
             root.walk(&mut crate::resolver::ResolutionVisitor { cx: self });
