@@ -361,8 +361,14 @@ pub use self::ExprData::*;
 pub use self::StmtData::*;
 pub use self::TypeData::*;
 
+// Deprecated names.
+pub type ModDecl<'a> = Module<'a>;
+pub type IntfDecl<'a> = Interface<'a>;
+pub type PackageDecl<'a> = Package<'a>;
+
+/// An entire design file.
 #[moore_derive::node]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Root<'a> {
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
@@ -373,8 +379,7 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut impl Visitor<'a>) {
     ast.accept(v);
 }
 
-pub type ModDecl<'a> = Module<'a>;
-
+/// A module.
 #[moore_derive::node]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
@@ -409,18 +414,21 @@ impl HasDesc for Module<'_> {
     }
 }
 
+/// An interface.
+#[moore_derive::node]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IntfDecl<'a> {
-    pub span: Span,
+pub struct Interface<'a> {
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
+    #[dont_visit]
     pub params: Vec<ParamDecl<'a>>,
+    #[dont_visit]
     pub ports: Vec<Port<'a>>,
     pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for IntfDecl<'_> {
+impl HasSpan for Interface<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -430,7 +438,7 @@ impl HasSpan for IntfDecl<'_> {
     }
 }
 
-impl HasDesc for IntfDecl<'_> {
+impl HasDesc for Interface<'_> {
     fn desc(&self) -> &'static str {
         "interface declaration"
     }
@@ -440,12 +448,10 @@ impl HasDesc for IntfDecl<'_> {
     }
 }
 
-pub type PackageDecl<'a> = Package<'a>;
-
-#[moore_derive::visit]
+/// A package.
+#[moore_derive::node]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package<'a> {
-    pub span: Span,
     pub lifetime: Lifetime,
     pub name: Name,
     pub name_span: Span,
@@ -494,13 +500,22 @@ pub struct Timeunit {
     pub prec: Option<Spanned<Lit>>,
 }
 
+/// An item that may appear in a hierarchical scope.
+///
+/// This includes the following:
+/// - root scope
+/// - modules
+/// - interfaces
+/// - packages
+/// - classes
+/// - generates
 #[moore_derive::visit]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Item<'a> {
     Dummy,
     ModuleDecl(Module<'a>),
     #[dont_visit]
-    InterfaceDecl(IntfDecl<'a>),
+    InterfaceDecl(Interface<'a>),
     PackageDecl(Package<'a>),
     #[dont_visit]
     ClassDecl(ClassDecl<'a>),

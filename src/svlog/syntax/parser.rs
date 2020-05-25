@@ -722,17 +722,22 @@ fn parse_interface_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<In
         }
 
         span.expand(p.last_span());
-        Ok(IntfDecl {
-            span: span,
-            lifetime: lifetime,
-            name: name,
-            name_span: name_sp,
-            params: param_ports,
-            ports: ports,
-            items: items,
-        })
+        Ok(Interface::new(
+            span,
+            InterfaceData {
+                lifetime: lifetime,
+                name: name,
+                name_span: name_sp,
+                params: param_ports,
+                ports: ports,
+                items: items,
+            },
+        ))
     });
     p.require_reported(Keyword(Kw::Endinterface))?;
+    if p.try_eat(Colon) {
+        p.eat_ident("interface name")?;
+    }
     result
 }
 
@@ -937,14 +942,16 @@ fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pack
         }
 
         span.expand(p.last_span());
-        Ok(PackageDecl {
-            span: span,
-            lifetime: lifetime,
-            name: name,
-            name_span: name_span,
-            timeunits: timeunits,
-            items: items,
-        })
+        Ok(Package::new(
+            span,
+            PackageData {
+                lifetime: lifetime,
+                name: name,
+                name_span: name_span,
+                timeunits: timeunits,
+                items: items,
+            },
+        ))
     });
     p.require_reported(Keyword(Kw::Endpackage))?;
     if p.try_eat(Colon) {
