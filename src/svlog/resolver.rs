@@ -6,6 +6,7 @@
 //! names in them.
 
 use crate::{
+    ast::AnyNode,
     ast_map::AstNode,
     common::{SessionContext, Verbosity},
     crate_prelude::*,
@@ -699,16 +700,29 @@ pub(crate) fn generated_scope<'a>(
     cx: &impl Context<'a>,
     node: &'a dyn ScopedNode<'a>,
 ) -> &'a Scope<'a> {
+    // Find the parent scope.
+    let parent = node
+        .get_parent()
+        .map(|_| cx.scope_location(node.as_any()).scope);
+
+    // Create a new scope generator which will traverse the AST.
+    let mut gen = ScopeGenerator::new(
+        cx,
+        Scope {
+            node,
+            parent,
+            defs: Default::default(),
+            wildcard_imports: Default::default(),
+            subscopes: Default::default(),
+        },
+    );
+
+    // Gather the definitions.
     debug!("Generating scope {:?}", node);
-    let mut gen = ScopeGenerator::new(Scope {
-        node,
-        parent: node
-            .get_parent()
-            .map(|_| scope_location(cx, node.as_any()).scope),
-        defs: Default::default(),
-        subscopes: Default::default(),
-    });
     node.accept(&mut gen);
+    debug!("Generated scope {:#?}", gen.scope);
+
+    // Allocate the scope into the arena and return it.
     cx.gcx().arena.alloc_scope(gen.scope)
 }
 
@@ -720,13 +734,15 @@ pub struct Scope<'a> {
     /// The node which generates the parent scope, if any.
     pub parent: Option<&'a dyn ScopedNode<'a>>,
     /// The definitions in this scope.
-    pub defs: Vec<Def<'a>>,
+    pub defs: HashMap<Name, Def<'a>>,
+    /// The wildcard imports in this scope.
+    pub wildcard_imports: Vec<&'a ast::ImportItem<'a>>,
     /// The subscopes.
     pub subscopes: Vec<&'a dyn ScopedNode<'a>>,
 }
 
 /// A definition in a scope.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Def<'a> {
     /// The node which defines the name.
     pub node: &'a dyn ast::AnyNode<'a>,
@@ -755,28 +771,53 @@ bitflags::bitflags! {
 }
 
 /// A visitor that gathers the contents of a scope from the AST.
-struct ScopeGenerator<'a> {
+struct ScopeGenerator<'a, 'c, C> {
+    /// The context.
+    cx: &'c C,
+    /// The scope being assembled.
     scope: Scope<'a>,
 }
 
-impl<'a> ScopeGenerator<'a> {
-    pub fn new(scope: Scope<'a>) -> Self {
-        ScopeGenerator { scope }
+impl<'a, 'c, C: Context<'a>> ScopeGenerator<'a, 'c, C> {
+    /// Create a new scope generator.
+    pub fn new(cx: &'c C, scope: Scope<'a>) -> Self {
+        ScopeGenerator { cx, scope }
     }
 
+    /// Register a subscope.
     pub fn add_subscope(&mut self, node: &'a dyn ScopedNode<'a>) {
-        debug!("- Adding subscope for {:?}", node);
+        trace!(" - Adding subscope for {:?}", node);
         self.scope.subscopes.push(node);
     }
 
+    /// Register a wildcard import.
+    pub fn add_wildcard_import(&mut self, node: &'a ast::ImportItem<'a>) {
+        trace!(" - Adding wildcard import {:?}", node);
+        self.scope.wildcard_imports.push(node);
+    }
+
+    /// Register a definition.
     pub fn add_def(&mut self, def: Def<'a>) {
-        debug!("- Adding definition {:?}", def);
-        // TODO: Add code to check that we have no double definitions.
-        self.scope.defs.push(def);
+        trace!(" - Adding definition {:?}", def);
+
+        // Check that the definition does not collide with a previous one.
+        if let Some(existing) = self.scope.defs.get(&def.name.value) {
+            if !def.may_override {
+                let d = DiagBuilder2::error(format!("`{}` is defined multiple times", def.name))
+                    .span(def.name.span)
+                    .add_note(format!("Previous definition of `{}` was here:", def.name))
+                    .span(existing.name.span);
+                self.cx.emit(d);
+                return;
+            }
+        }
+
+        // Store the definition.
+        self.scope.defs.insert(def.name.value, def);
     }
 }
 
-impl<'a> ast::Visitor<'a> for ScopeGenerator<'a> {
+impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     // We return `false` in the pre-visit functions when the visited node
     // generates a subscope, to avoid gobbling up its local definitions.
 
@@ -786,10 +827,9 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator<'a> {
     }
 
     fn pre_visit_module(&mut self, node: &'a ast::Module<'a>) -> bool {
-        debug!("- Adding module {}", node.name);
         self.add_subscope(node);
         self.add_def(Def {
-            node: node,
+            node,
             name: Spanned::new(node.name, node.name_span),
             vis: DefVis::LOCAL,
             may_override: true,
@@ -799,10 +839,9 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator<'a> {
     }
 
     fn pre_visit_package(&mut self, node: &'a ast::Package<'a>) -> bool {
-        debug!("- Adding package {}", node.name);
         self.add_subscope(node);
         self.add_def(Def {
-            node: node,
+            node,
             name: Spanned::new(node.name, node.name_span),
             vis: DefVis::LOCAL | DefVis::NAMESPACE,
             may_override: false,
@@ -811,8 +850,51 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator<'a> {
         false
     }
 
-    fn pre_visit_import_item(&mut self, node: &'a ast::ImportItem) -> bool {
-        debug!("- Adding import {}", node.span.extract());
+    fn pre_visit_import_item(&mut self, node: &'a ast::ImportItem<'a>) -> bool {
+        if let Some(name) = node.name {
+            self.add_def(Def {
+                node,
+                name,
+                vis: DefVis::LOCAL,
+                may_override: false,
+                ordered: true,
+            });
+        } else {
+            self.add_wildcard_import(node);
+        }
+        true
+    }
+
+    fn pre_visit_var_decl_name(&mut self, node: &'a ast::VarDeclName<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: Spanned::new(node.name, node.name_span),
+            vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
+
+    fn pre_visit_param_type_decl(&mut self, node: &'a ast::ParamTypeDecl<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
+
+    fn pre_visit_param_value_decl(&mut self, node: &'a ast::ParamValueDecl<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
         true
     }
 }
@@ -871,13 +953,61 @@ pub(crate) fn resolve_local<'a>(
     cx: &impl Context<'a>,
     name: Name,
     at: ScopeLocation<'a>,
-) -> Option<()> {
-    debug!("Resolving `{}` at {:?}", name, at);
+    skip_imports: bool,
+) -> Option<&'a dyn ast::AnyNode<'a>> {
+    debug!("Resolving `{}` locally at {:?}", name, at);
     let scope = cx.generated_scope(at.scope);
     let mut next = Some(scope);
     while let Some(scope) = next {
-        debug!(" - Looking in scope {:?}", scope.node);
         next = scope.parent.map(|p| cx.generated_scope(p));
+        debug!(" - Looking in scope {:?}", scope.node);
+
+        // Try to find a matching definition in this scope.
+        if let Some(def) = scope.defs.get(&name) {
+            // Check if it is visible to local name resolution.
+            let vis_ok = def.vis.contains(DefVis::LOCAL);
+
+            // If the definition requires def-before-use, check that it was defined
+            // before the location we are trying to use it.
+            let order_ok = !def.ordered || def.node.order() < at.order;
+
+            // Return this definition if it matches.
+            if vis_ok && order_ok {
+                // In case what we've found is an import like `import foo::A`,
+                // resolve `A` in `foo` now.
+                let node = if let Some(import) = def.node.as_all().get_import_item() {
+                    debug!(" - Following {:?}", import);
+                    let inside = cx.resolve_imported_scope(import).ok()?;
+                    let binding = cx
+                        .resolve_namespace_or_error(import.name.unwrap(), inside)
+                        .ok()?;
+                    binding
+                } else {
+                    def.node
+                };
+
+                debug!(" - Found {:?}", node);
+                return Some(node);
+            }
+        }
+
+        // Check the wildcard imports for any luck.
+        if skip_imports {
+            continue;
+        }
+        for &import in scope.wildcard_imports.iter().rev() {
+            if import.order() > at.order {
+                continue;
+            }
+            let inside = match cx.resolve_imported_scope(import) {
+                Ok(x) => x,
+                Err(()) => continue,
+            };
+            let binding = cx.resolve_namespace(name, inside);
+            if binding.is_some() {
+                return binding;
+            }
+        }
     }
     None
 }
@@ -891,13 +1021,112 @@ pub(crate) fn resolve_local_or_error<'a>(
     cx: &impl Context<'a>,
     name: Spanned<Name>,
     at: ScopeLocation<'a>,
-) -> Result<()> {
-    match cx.resolve_local(name.value, at) {
-        Some(binding) => Ok(binding),
+    skip_imports: bool,
+) -> Result<&'a dyn ast::AnyNode<'a>> {
+    match cx.resolve_local(name.value, at, skip_imports) {
+        Some(binding) => {
+            if cx.sess().has_verbosity(Verbosity::NAMES) {
+                let d = DiagBuilder2::note("name resolution")
+                    .span(name.span)
+                    .add_note(format!("Resolved `{}` to this {:?}:", name, binding))
+                    .span(binding.span());
+                cx.emit(d);
+            }
+            Ok(binding)
+        }
         None => {
             cx.emit(DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span));
             Err(())
         }
+    }
+}
+
+/// Resolve a name in a scope as a namespace lookup.
+///
+/// This checks if the scope contains a definition with visibility
+/// `NAMESPACE`. Returns `None` if no such name exists.
+#[moore_derive::query]
+pub(crate) fn resolve_namespace<'a>(
+    cx: &impl Context<'a>,
+    name: Name,
+    inside: &'a dyn ScopedNode<'a>,
+) -> Option<&'a dyn ast::AnyNode<'a>> {
+    debug!("Resolving `{}` in namespace {:?}", name, inside);
+    let scope = cx.generated_scope(inside);
+    match scope.defs.get(&name) {
+        Some(def) if def.vis.contains(DefVis::NAMESPACE) => {
+            debug!(" - Found {:?}", def);
+            Some(def.node)
+        }
+        _ => None,
+    }
+}
+
+/// Resolve a name in a scope as a namespace lookup or emit an error.
+///
+/// Calls `resolve_namespace`. Either returns `Ok` if a node was found, or `Err`
+/// after emitting a diagnostic error message.
+#[moore_derive::query]
+pub(crate) fn resolve_namespace_or_error<'a>(
+    cx: &impl Context<'a>,
+    name: Spanned<Name>,
+    inside: &'a dyn ScopedNode<'a>,
+) -> Result<&'a dyn ast::AnyNode<'a>> {
+    match cx.resolve_namespace(name.value, inside) {
+        Some(binding) => {
+            if cx.sess().has_verbosity(Verbosity::NAMES) {
+                let d = DiagBuilder2::note("name resolution")
+                    .span(name.span)
+                    .add_note(format!("Resolved `{}` to this {:?}:", name, binding))
+                    .span(binding.span());
+                cx.emit(d);
+            }
+            Ok(binding)
+        }
+        None => {
+            cx.emit(DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span));
+            Err(())
+        }
+    }
+}
+
+/// Resolve an import to the scope it imports.
+///
+/// This function emits a diagnostic if the target of the import has no scope.
+/// Being a query, this ensures that the error is only produced once.
+#[moore_derive::query]
+pub(crate) fn resolve_imported_scope<'a>(
+    cx: &impl Context<'a>,
+    node: &'a ast::ImportItem<'a>,
+) -> Result<&'a dyn ScopedNode<'a>> {
+    // Resolve the imported name, e.g. the `foo` in `import foo::*`.
+    let at = cx.scope_location(node);
+    let inside = cx.resolve_local_or_error(node.pkg, at, true)?;
+
+    // Ensure that what we have found is something we can actually perform a
+    // namespace lookup into.
+    match inside.as_all().get_scoped_node() {
+        Some(x) => Ok(x),
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("name `{}` does not refer to a package", node.pkg))
+                    .span(node.pkg.span),
+            );
+            Err(())
+        }
+    }
+}
+
+/// Recursively ensures that all scopes have been constructed and potential
+/// diagnostics emitted.
+///
+/// This function helps in triggering naming conflicts at a defined point in the
+/// compilation.
+pub(crate) fn materialize_scope<'a>(cx: &impl Context<'a>, node: &'a dyn ScopedNode<'a>) {
+    debug!("Materializing scope {:?}", node);
+    let scope = cx.generated_scope(node);
+    for &subscope in &scope.subscopes {
+        materialize_scope(cx, subscope);
     }
 }
 
@@ -917,6 +1146,7 @@ where
                 let _ = self.cx.resolve_local_or_error(
                     Spanned::new(ident.name, ident.span),
                     self.cx.scope_location(node),
+                    false,
                 );
             }
             _ => (),

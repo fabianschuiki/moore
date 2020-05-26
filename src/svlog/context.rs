@@ -99,8 +99,12 @@ impl<'gcx> GlobalContext<'gcx> {
             root.link(None, &mut index);
             debug!("Done linking {} nodes", index);
 
+            // Ensure there are no naming conflicts in the scopes.
+            crate::resolver::materialize_scope(self, root);
+
             // Resolve names for debugging purposes.
             use ast::WalkVisitor;
+            info!("Now resolving all names:");
             root.walk(&mut crate::resolver::ResolutionVisitor { cx: self });
 
             for item in &root.items {
