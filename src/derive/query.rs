@@ -36,7 +36,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
     let queries = QUERIES.with(|c| std::mem::replace(&mut *c.borrow_mut(), Default::default()));
 
     // Make a set of conflicting argument names.
-    let reserved: HashSet<_> = ["query_key", "query_storage", "query_tag"]
+    let reserved: HashSet<_> = ["query_key", "query_storage", "query_tag", "query_result"]
         .iter()
         .copied()
         .collect();
@@ -47,7 +47,9 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
     // Process the queries.
     let mut funcs = vec![];
     let mut caches = vec![];
-    let mut query_tags = vec![];
+    let mut tags = vec![];
+    let mut tag_debugs = vec![];
+    let mut keys = vec![];
 
     for raw_query in &queries {
         // Parse the fn.
@@ -87,6 +89,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
             .collect();
 
         // Collect lifetimes and strip them from the generics.
+        let original_generics = generics.clone();
         for param in std::mem::replace(&mut generics.params, Default::default()) {
             match param {
                 syn::GenericParam::Lifetime(ltdef) => {
@@ -97,12 +100,20 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         }
 
         // Render the key type that we use to look up things in the database.
-        let key_type = quote! {
-            ( #(#arg_types),* )
-        };
-        let key = quote! {
-            ( #(#arg_names),* )
-        };
+        let key_name = format_ident!("{}QueryKey", name.to_string().to_camel_case());
+        let key_indices = (0..arg_types.len()).map(syn::Index::from);
+        let doc = format!("The arguments passed to the `{}` query.", name);
+        keys.push(quote! {
+            #[doc = #doc]
+            #[derive(Clone, PartialEq, Eq, Hash)]
+            pub struct #key_name #original_generics (#(#arg_types),*);
+
+            impl #original_generics std::fmt::Debug for #key_name #original_generics {
+                fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.debug_tuple("")#(.field(&self.#key_indices))*.finish()
+                }
+            }
+        });
 
         // Determine the cache field name.
         let cache_name = format_ident!("cached_{}", name);
@@ -111,9 +122,12 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         // cycles.
         let tag_name = format_ident!("{}", name.to_string().to_camel_case());
         let doc = format!("The `{}` query.", name);
-        query_tags.push(quote! {
+        tags.push(quote! {
             #[doc = #doc]
-            #tag_name (#key_type),
+            #tag_name (#key_name #original_generics),
+        });
+        tag_debugs.push(quote! {
+            QueryTag::#tag_name (x) => write!(f, "{}{:?}", stringify!(#name), x),
         });
 
         // Render the query for the database trait.
@@ -121,15 +135,15 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
             #(#doc_attrs)*
             fn #name #generics (&self, #(#arg_names: #arg_types),*) -> #result {
                 let query_storage = self.storage();
-                let query_key = #key;
+                let query_key = #key_name(#(#arg_names),*);
                 let query_tag = QueryTag::#tag_name(query_key.clone());
 
                 // Check if we already have a result for this query.
                 if let Some(result) = query_storage.#cache_name.borrow().get(&query_key) {
-                    trace!("Serving {} {:?} from cache", stringify!(#name), query_key);
+                    trace!("Serving {}{:?} from cache", stringify!(#name), query_key);
                     return result.clone();
                 }
-                trace!("Executing {} {:?}", stringify!(#name), query_key);
+                trace!("Executing {}{:?}", stringify!(#name), query_key);
 
                 // Push the query onto the stack, checking if it is already in
                 // flight.
@@ -140,13 +154,13 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 }
 
                 // Execute the query.
-                let result: #result = #name(self.context(), #(#arg_names),*);
-                query_storage.#cache_name.borrow_mut().insert(query_key, result.clone());
+                let query_result = #name(self.context(), #(#arg_names),*);
+                query_storage.#cache_name.borrow_mut().insert(query_key, query_result.clone());
 
                 // Pop the query from the stack.
                 query_storage.inflight.borrow_mut().remove(&query_tag);
                 query_storage.stack.borrow_mut().pop();
-                result
+                query_result
             }
         });
 
@@ -154,7 +168,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         let doc = format!("Cached results of the `{}` query.", name);
         caches.push(quote! {
             #[doc = #doc]
-            pub #cache_name: RefCell<HashMap<#key_type, #result>>,
+            pub #cache_name: RefCell<HashMap<#key_name #original_generics, #result>>,
         });
     }
 
@@ -183,6 +197,10 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
 
             /// Called when a query cycle is detected.
             fn handle_cycle(&self) -> ! {
+                error!("Query cycle detected:");
+                for x in self.storage().stack.borrow().iter() {
+                    error!(" - {:?}", x);
+                }
                 panic!("query cycle detected");
             }
 
@@ -207,10 +225,23 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
     // Generate the query tag enum.
     output.extend(quote! {
         /// A tag identifying any of the queries in `QueryDatabase`.
-        #[derive(Clone, Hash, Eq, PartialEq, Debug)]
+        #[derive(Clone, Hash, Eq, PartialEq)]
         pub enum QueryTag #lts {
-            #(#query_tags)*
+            #(#tags)*
         }
+
+        impl #lts std::fmt::Debug for QueryTag #lts {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                match self {
+                    #(#tag_debugs)*
+                }
+            }
+        }
+    });
+
+    // Generate the query keys.
+    output.extend(quote! {
+        #(#keys)*
     });
 
     // Produce some output.
