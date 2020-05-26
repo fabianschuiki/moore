@@ -4241,13 +4241,15 @@ fn parse_variable_decl_assignment<'n>(
     };
     span.expand(p.last_span());
 
-    Ok(VarDeclName {
-        span: span,
-        name: name,
-        name_span: name_span,
-        dims: dims,
-        init: init,
-    })
+    Ok(VarDeclName::new(
+        span,
+        VarDeclNameData {
+            name: name,
+            name_span: name_span,
+            dims: dims,
+            init: init,
+        },
+    ))
 }
 
 fn parse_genvar_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<GenvarDecl<'n>> {
@@ -5795,14 +5797,16 @@ fn parse_var_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::Var
     }
 
     span.expand(p.last_span());
-    Ok(ast::VarDecl {
-        span: span,
-        konst: konst,
-        var: var,
-        lifetime: lifetime,
-        ty: ty,
-        names: names,
-    })
+    Ok(ast::VarDecl::new(
+        span,
+        ast::VarDeclData {
+            konst: konst,
+            var: var,
+            lifetime: lifetime,
+            ty: ty,
+            names: names,
+        },
+    ))
 }
 
 fn parse_param_decl<'n>(

@@ -1117,10 +1117,12 @@ pub enum AssignOp {
     ArithShR,
 }
 
-#[moore_derive::visit]
+/// A variable declaration.
+///
+/// For example `logic x, y, z`.
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDecl<'a> {
-    pub span: Span,
     pub konst: bool,
     pub var: bool,
     pub lifetime: Option<Lifetime>,
@@ -1141,10 +1143,12 @@ impl HasDesc for VarDecl<'_> {
     }
 }
 
-#[moore_derive::visit]
+/// A variable or net declaration name.
+///
+/// For example the `x` in `logic x, y, z`.
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDeclName<'a> {
-    pub span: Span,
     pub name: Name,
     pub name_span: Span,
     #[dont_visit]
