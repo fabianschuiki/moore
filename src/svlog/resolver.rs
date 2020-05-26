@@ -89,14 +89,8 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
     trace!("local_rib for {} ({:?})", ast.desc_full(), node_id);
     let mut parent = None;
     let mut kind = match ast {
-        AstNode::TypeParam(_, decl) => Some(RibKind::Normal(
-            Spanned::new(decl.name.name, decl.name.span),
-            node_id,
-        )),
-        AstNode::ValueParam(_, decl) => Some(RibKind::Normal(
-            Spanned::new(decl.name.name, decl.name.span),
-            node_id,
-        )),
+        AstNode::TypeParam(_, decl) => Some(RibKind::Normal(decl.name, node_id)),
+        AstNode::ValueParam(_, decl) => Some(RibKind::Normal(decl.name, node_id)),
         AstNode::Module(_) => Some(RibKind::Module(HashMap::new())),
         AstNode::VarDecl(decl, _, _) | AstNode::NetDecl(decl, _, _) => Some(RibKind::Normal(
             Spanned::new(decl.name, decl.name_span),

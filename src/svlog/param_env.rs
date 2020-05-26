@@ -188,8 +188,8 @@ pub(crate) fn compute<'gcx>(
                     let names: Vec<_> = module_params
                         .iter()
                         .flat_map(|&id| match cx.ast_of(id) {
-                            Ok(AstNode::TypeParam(_, p)) => Some((p.name.name, id)),
-                            Ok(AstNode::ValueParam(_, p)) => Some((p.name.name, id)),
+                            Ok(AstNode::TypeParam(_, p)) => Some((p.name.value, id)),
+                            Ok(AstNode::ValueParam(_, p)) => Some((p.name.value, id)),
                             Ok(_) => unreachable!(),
                             Err(()) => None,
                         })

@@ -99,7 +99,7 @@ pub enum AstNode<'ast> {
     /// An enum variant, given as `(variant, enum_def, index)`.
     EnumVariant(&'ast ast::EnumName<'ast>, NodeId, usize),
     /// An import.
-    Import(&'ast ast::ImportItem),
+    Import(&'ast ast::ImportItem<'ast>),
     /// A subroutine declaration.
     SubroutineDecl(&'ast ast::SubroutineDecl<'ast>),
     /// An interface.

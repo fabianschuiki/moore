@@ -136,7 +136,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::TypeParam(param, decl) => {
             let hir = hir::TypeParam {
                 id: node_id,
-                name: Spanned::new(decl.name.name, decl.name.span),
+                name: decl.name,
                 span: Span::union(param.span, decl.span),
                 local: param.local,
                 default: decl
@@ -149,7 +149,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::ValueParam(param, decl) => {
             let hir = hir::ValueParam {
                 id: node_id,
-                name: Spanned::new(decl.name.name, decl.name.span),
+                name: decl.name,
                 span: Span::union(param.span, decl.span),
                 local: param.local,
                 ty: cx.map_ast_with_parent(AstNode::Type(&decl.ty), node_id),
