@@ -27,12 +27,12 @@ use crate::{
     common::{arenas::Alloc, arenas::TypedArena, Session},
     crate_prelude::*,
     hir::{self, AccessTable, HirNode},
-    resolver::{Scope, ScopedNode, StructDef},
+    resolver::{Scope, StructDef},
     ty::{Type, TypeKind},
     typeck::{CastType, TypeContext},
     value::{Value, ValueData, ValueKind},
     InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping,
-    PortMappingSource, QueryDatabase,
+    PortMappingSource, QueryDatabase, QueryStorage,
 };
 use std::{
     cell::RefCell,
@@ -50,6 +50,8 @@ pub struct GlobalContext<'gcx> {
     pub arena: &'gcx GlobalArenas<'gcx>,
     /// The underlying runtime for the query system.
     runtime: salsa::Runtime<GlobalContext<'gcx>>,
+    /// The underlying storage for the new query system.
+    storage: QueryStorage<'gcx>,
     /// The mapping of node IDs to abstract syntax tree nodes.
     ast_map: AstMap<'gcx>,
     /// The modules in the AST.
@@ -73,6 +75,7 @@ impl<'gcx> GlobalContext<'gcx> {
             sess,
             arena,
             runtime: Default::default(),
+            storage: Default::default(),
             ast_map: Default::default(),
             modules: Default::default(),
             packages: Default::default(),
@@ -200,7 +203,17 @@ impl<'gcx> BaseContext<'gcx> for GlobalContext<'gcx> {
     }
 }
 
-impl<'gcx> QueryDatabase for GlobalContext<'gcx> {}
+impl<'gcx> QueryDatabase<'gcx> for GlobalContext<'gcx> {
+    type Context = Self;
+
+    fn context(&self) -> &Self {
+        self
+    }
+
+    fn storage(&self) -> &QueryStorage<'gcx> {
+        &self.storage
+    }
+}
 
 /// The arenas that allocate things in the global context.
 ///
@@ -289,7 +302,7 @@ pub struct GlobalTables<'t> {
 /// This trait represents the context within which most compiler operations take
 /// place. It is implemented by [`GlobalContext`] and also provides access to
 /// the global context via the `gcx()` method.
-pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase {
+pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx> {
     /// Get the global context.
     fn gcx(&self) -> &GlobalContext<'gcx>;
 

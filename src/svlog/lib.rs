@@ -94,6 +94,11 @@ pub mod ty;
 pub mod typeck;
 pub mod value;
 
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
+
 pub use crate::{
     codegen::CodeGenerator,
     context::*,
@@ -216,4 +221,13 @@ mod checks {
     }
 }
 
-moore_derive::derive_query_db!();
+// Derive the database queries. We group this into a module such that we can
+// selectively enable/disable trace messages using `moore_svlog::queries` in the
+// `MOORE_LOG` env var.
+mod queries {
+    use super::*;
+    moore_derive::derive_query_db! {
+        /// A collection of compiler queries.
+    }
+}
+pub use crate::queries::*;

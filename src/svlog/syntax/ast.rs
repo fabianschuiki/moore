@@ -11,7 +11,10 @@ use moore_common::{
     util::{HasDesc, HasSpan},
 };
 use moore_derive::{AcceptVisitor, CommonNode};
-use std::cell::Cell;
+use std::{
+    cell::Cell,
+    hash::{Hash, Hasher},
+};
 
 /// An AST node.
 pub trait AnyNode<'a>: BasicNode<'a> {
@@ -28,6 +31,19 @@ pub trait AnyNode<'a>: BasicNode<'a> {
 
     /// Link up this node.
     fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
+}
+
+// Compare and hash nodes by reference for use in the query system.
+impl<'a> Eq for &'a dyn AnyNode<'a> {}
+impl<'a> PartialEq for &'a dyn AnyNode<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(*self, *other)
+    }
+}
+impl<'a> Hash for &'a dyn AnyNode<'a> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        std::ptr::hash(*self, h)
+    }
 }
 
 /// Basic attribute of an AST node.
