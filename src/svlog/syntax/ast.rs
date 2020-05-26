@@ -1950,9 +1950,9 @@ pub enum ModportPort {
 /// "parameter" data_type_or_implicit list_of_param_assignments
 /// "parameter" "type" list_of_type_assignments
 /// ```
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamDecl<'a> {
-    pub span: Span,
     pub local: bool,
     pub kind: ParamKind<'a>,
 }
@@ -1969,6 +1969,7 @@ impl HasDesc for ParamDecl<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParamKind<'a> {
     Type(Vec<ParamTypeDecl<'a>>),
@@ -1980,10 +1981,11 @@ pub enum ParamKind<'a> {
 /// ```text
 /// ident ["=" type]
 /// ```
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamTypeDecl<'a> {
-    pub span: Span,
-    pub name: Identifier,
+    pub name: Spanned<Name>,
+    #[dont_visit]
     pub ty: Option<Type<'a>>,
 }
 
@@ -2003,7 +2005,7 @@ impl HasDesc for ParamTypeDecl<'_> {
     }
 
     fn desc_full(&self) -> String {
-        format!("parameter `{}`", self.name.name)
+        format!("parameter `{}`", self.name)
     }
 }
 
@@ -2012,11 +2014,13 @@ impl HasDesc for ParamTypeDecl<'_> {
 /// ```text
 /// [type_or_implicit] ident {dimension} ["=" expr]
 /// ```
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamValueDecl<'a> {
-    pub span: Span,
+    #[dont_visit]
     pub ty: Type<'a>,
-    pub name: Identifier,
+    pub name: Spanned<Name>,
+    #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
     pub expr: Option<Expr<'a>>,
 }
@@ -2037,7 +2041,7 @@ impl HasDesc for ParamValueDecl<'_> {
     }
 
     fn desc_full(&self) -> String {
-        format!("parameter `{}`", self.name.name)
+        format!("parameter `{}`", self.name)
     }
 }
 

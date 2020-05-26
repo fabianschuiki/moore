@@ -767,7 +767,7 @@ fn parse_parameter_port_list<'n>(
             // Otherwise this is a value parameter.
             let kind = if p.try_eat(Keyword(Kw::Type)) {
                 let mut span = p.peek(0).1;
-                let name = parse_identifier(p, "parameter name")?;
+                let name = parse_identifier_name(p, "parameter name")?;
                 let ty = if p.try_eat(Operator(Op::Assign)) {
                     Some(parse_explicit_type(p)?)
                 } else {
@@ -775,11 +775,10 @@ fn parse_parameter_port_list<'n>(
                 };
                 p.anticipate(&[Comma, CloseDelim(Paren)])?;
                 span.expand(p.last_span());
-                ast::ParamKind::Type(vec![ast::ParamTypeDecl {
-                    span: span,
-                    name: name,
-                    ty: ty,
-                }])
+                ast::ParamKind::Type(vec![ast::ParamTypeDecl::new(
+                    span,
+                    ParamTypeDeclData { name, ty },
+                )])
             } else {
                 // Use a parallel parser to distinguish between the explicit and
                 // implicit type versions of the declaration.
@@ -798,7 +797,7 @@ fn parse_parameter_port_list<'n>(
                     ty: Type<'n>,
                 ) -> ReportedResult<ast::ParamValueDecl<'n>> {
                     let mut span = p.peek(0).1;
-                    let name = parse_identifier(p, "parameter name")?;
+                    let name = parse_identifier_name(p, "parameter name")?;
                     let (dims, _) = parse_optional_dimensions(p)?;
                     let expr = if p.try_eat(Operator(Op::Assign)) {
                         Some(parse_expr(p)?)
@@ -807,24 +806,25 @@ fn parse_parameter_port_list<'n>(
                     };
                     p.anticipate(&[Comma, CloseDelim(Paren)])?;
                     span.expand(p.last_span());
-                    Ok(ast::ParamValueDecl {
-                        span: span,
-                        ty: ty,
-                        name: name,
-                        dims: dims,
-                        expr: expr,
-                    })
+                    Ok(ParamValueDecl::new(
+                        span,
+                        ParamValueDeclData {
+                            ty,
+                            name,
+                            dims,
+                            expr,
+                        },
+                    ))
                 }
 
                 ast::ParamKind::Value(vec![pp.finish(p, "explicit or implicit type")?])
             };
 
             outer_span.expand(p.last_span());
-            Ok(ast::ParamDecl {
-                span: outer_span,
-                local: local,
-                kind: kind,
-            })
+            Ok(ast::ParamDecl::new(
+                outer_span,
+                ast::ParamDeclData { local, kind },
+            ))
         })
     })
 }
@@ -5859,7 +5859,7 @@ fn parse_param_decl<'n>(
     let kind = if p.try_eat(Keyword(Kw::Type)) {
         let decls = comma_list_nonempty(p, predicate, "parameter name", |p| {
             let mut span = p.peek(0).1;
-            let name = parse_identifier(p, "parameter name")?;
+            let name = parse_identifier_name(p, "parameter name")?;
             let ty = if p.try_eat(Operator(Op::Assign)) {
                 Some(parse_explicit_type(p)?)
             } else {
@@ -5867,11 +5867,10 @@ fn parse_param_decl<'n>(
             };
             p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
             span.expand(p.last_span());
-            Ok(ast::ParamTypeDecl {
-                span: span,
-                name: name,
-                ty: ty,
-            })
+            Ok(ast::ParamTypeDecl::new(
+                span,
+                ast::ParamTypeDeclData { name, ty },
+            ))
         })?;
         p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
         ast::ParamKind::Type(decls)
@@ -5894,7 +5893,7 @@ fn parse_param_decl<'n>(
                 ty: Type<'n>,
             ) -> ReportedResult<ast::ParamValueDecl<'n>> {
                 let mut span = p.peek(0).1;
-                let name = parse_identifier(p, "parameter name")?;
+                let name = parse_identifier_name(p, "parameter name")?;
                 let (dims, _) = parse_optional_dimensions(p)?;
                 let expr = if p.try_eat(Operator(Op::Assign)) {
                     Some(parse_expr(p)?)
@@ -5903,13 +5902,15 @@ fn parse_param_decl<'n>(
                 };
                 p.anticipate(&[Semicolon, Comma, CloseDelim(Paren)])?;
                 span.expand(p.last_span());
-                Ok(ast::ParamValueDecl {
-                    span: span,
-                    ty: ty,
-                    name: name,
-                    dims: dims,
-                    expr: expr,
-                })
+                Ok(ast::ParamValueDecl::new(
+                    span,
+                    ast::ParamValueDeclData {
+                        ty,
+                        name,
+                        dims,
+                        expr,
+                    },
+                ))
             }
 
             pp.finish(p, "explicit or implicit type")
@@ -5919,11 +5920,10 @@ fn parse_param_decl<'n>(
     };
 
     span.expand(p.last_span());
-    Ok(ParamDecl {
-        span: span,
-        local: local,
-        kind: kind,
-    })
+    Ok(ast::ParamDecl::new(
+        span,
+        ast::ParamDeclData { local, kind },
+    ))
 }
 
 fn parse_hname<'n>(p: &mut dyn AbstractParser<'n>, msg: &str) -> ReportedResult<ast::Identifier> {
