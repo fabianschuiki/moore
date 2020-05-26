@@ -227,6 +227,19 @@ where
     }
 }
 
+// Compare and hash nodes by reference for use in the query system.
+impl<'a, T> Eq for Node<'a, T> {}
+impl<'a, T> PartialEq for Node<'a, T> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+impl<'a, T> Hash for Node<'a, T> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        std::ptr::hash(self, h)
+    }
+}
+
 impl<'a, T> CommonNode for Node<'a, T>
 where
     T: CommonNode,
@@ -276,17 +289,6 @@ impl<'a, T> std::ops::DerefMut for Node<'a, T> {
         &mut self.data
     }
 }
-
-impl<'a, T> PartialEq for Node<'a, T>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.span == other.span && self.data == other.data
-    }
-}
-
-impl<'a, T> Eq for Node<'a, T> where T: Eq {}
 
 /// A node that accepts `Visitor`s.
 pub trait AcceptVisitor<'a> {
