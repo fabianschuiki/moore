@@ -94,10 +94,13 @@ pub mod ty;
 pub mod typeck;
 pub mod value;
 
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
+pub use moore_common::{
+    name::Name,
+    source::{Span, Spanned},
 };
+
+/// A general result returned by the queries.
+pub type Result<T> = std::result::Result<T, ()>;
 
 pub use crate::{
     codegen::CodeGenerator,
@@ -226,6 +229,11 @@ mod checks {
 // `MOORE_LOG` env var.
 mod queries {
     use super::*;
+    use std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+    };
+
     moore_derive::derive_query_db! {
         /// A collection of compiler queries.
     }

@@ -740,6 +740,10 @@ pub struct Def<'a> {
     pub name: Spanned<Name>,
     /// Where the definition is visible.
     pub vis: DefVis,
+    /// Whether the definition may override a previous one.
+    pub may_override: bool,
+    /// Whether the definitions is only visible to things that come after it.
+    pub ordered: bool,
 }
 
 bitflags::bitflags! {
@@ -794,6 +798,8 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator<'a> {
             node: node,
             name: Spanned::new(node.name, node.name_span),
             vis: DefVis::LOCAL,
+            may_override: true,
+            ordered: false,
         });
         false
     }
@@ -805,6 +811,8 @@ impl<'a> ast::Visitor<'a> for ScopeGenerator<'a> {
             node: node,
             name: Spanned::new(node.name, node.name_span),
             vis: DefVis::LOCAL | DefVis::NAMESPACE,
+            may_override: false,
+            ordered: false,
         });
         false
     }
@@ -822,6 +830,10 @@ pub(crate) fn scope_location<'a>(
     node: &'a dyn ast::AnyNode<'a>,
 ) -> ScopeLocation<'a> {
     trace!("Finding scope location of {:?}", node);
+
+    // Keep the lexical order of the initiating node around.
+    let order = node.order();
+
     // Starting at the current node, check if it generates a scope, and if not,
     // advance to its parent.
     let mut next: Option<&dyn ast::AnyNode> = node.get_parent();
@@ -830,7 +842,7 @@ pub(crate) fn scope_location<'a>(
             trace!(" - Found {:?}", node);
             return ScopeLocation {
                 scope: scoped,
-                order: node.order(),
+                order,
             };
         } else {
             trace!(" - Upwards to {:?}", node);
@@ -848,12 +860,51 @@ pub(crate) fn scope_location<'a>(
 }
 
 /// A location of a node within its enclosing scope.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ScopeLocation<'a> {
     /// The node which generates the enclosing scope.
     pub scope: &'a dyn ScopedNode<'a>,
     /// The lexical order within that scope.
     pub order: usize,
+}
+
+/// Resolve a local name in a scope.
+///
+/// This traverses up the scope tree until a definition with visibility `LOCAL`
+/// is found. Returns `None` if no such name exists.
+#[moore_derive::query]
+pub(crate) fn resolve_local<'a>(
+    cx: &impl Context<'a>,
+    name: Name,
+    at: ScopeLocation<'a>,
+) -> Option<()> {
+    debug!("Resolving `{}` at {:?}", name, at);
+    let scope = cx.generated_scope(at.scope);
+    let mut next = Some(scope);
+    while let Some(scope) = next {
+        debug!(" - Looking in scope {:?}", scope.node);
+        next = scope.parent.map(|p| cx.generated_scope(p));
+    }
+    None
+}
+
+/// Resolve a local name in a scope or emit an error.
+///
+/// Calls `resolve_local`. Either returns `Ok` if a node was found, or `Err`
+/// after emitting a diagnostic error message.
+#[moore_derive::query]
+pub(crate) fn resolve_local_or_error<'a>(
+    cx: &impl Context<'a>,
+    name: Spanned<Name>,
+    at: ScopeLocation<'a>,
+) -> Result<()> {
+    match cx.resolve_local(name.value, at) {
+        Some(binding) => Ok(binding),
+        None => {
+            cx.emit(DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span));
+            Err(())
+        }
+    }
 }
 
 /// A visitor that emits diagnostics for every resolved named.
@@ -869,15 +920,10 @@ where
     fn pre_visit_expr(&mut self, node: &'a ast::Expr<'a>) -> bool {
         match node.data {
             ast::IdentExpr(ident) => {
-                debug!("Resolve `{}` in {:?}", ident.name, node);
-                // 1. Determine the scope location of the identifier.
-                let loc = self.cx.scope_location(node);
-                let gen = self.cx.generated_scope(loc.scope);
-                let mut next = Some(gen);
-                while let Some(scope) = next {
-                    debug!("Looking in scope {:#?}", scope);
-                    next = scope.parent.map(|p| self.cx.generated_scope(p));
-                }
+                let _ = self.cx.resolve_local_or_error(
+                    Spanned::new(ident.name, ident.span),
+                    self.cx.scope_location(node),
+                );
             }
             _ => (),
         }
