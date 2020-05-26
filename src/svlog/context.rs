@@ -99,33 +99,8 @@ impl<'gcx> GlobalContext<'gcx> {
             root.link(None, &mut index);
             debug!("Done linking {} nodes", index);
 
-            // For debugging purposes, do a "quick" visit over the root.
-            debug!("Doing a visit");
-            use ast::WalkVisitor;
-            root.walk(&mut AstVisitor);
-
-            struct AstVisitor;
-
-            impl<'a> ast::Visitor<'a> for AstVisitor {
-                fn pre_visit_root(&mut self, node: &'a ast::Root<'a>) -> bool {
-                    debug!("Visiting Root with {} items", node.items.len());
-                    true
-                }
-
-                fn post_visit_root(&mut self, _node: &'a ast::Root<'a>) {
-                    debug!("Done with Root");
-                }
-
-                fn pre_visit_item(&mut self, _node: &'a ast::Item<'a>) -> bool {
-                    debug!("Visiting Item");
-                    false
-                }
-            }
-
-            // Get the root scope.
-            let _scope = crate::resolver::generated_scope(self, root);
-
             // Resolve names for debugging purposes.
+            use ast::WalkVisitor;
             root.walk(&mut crate::resolver::ResolutionVisitor { cx: self });
 
             for item in &root.items {
