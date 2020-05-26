@@ -420,8 +420,7 @@ pub enum Item<'a> {
     ClassDecl(ClassDecl<'a>),
     #[dont_visit]
     ProgramDecl(()),
-    ImportDecl(ImportDecl),
-    #[dont_visit]
+    ImportDecl(ImportDecl<'a>),
     ParamDecl(ParamDecl<'a>),
     #[dont_visit]
     ModportDecl(ModportDecl),
@@ -503,7 +502,7 @@ pub struct Module<'a> {
     pub lifetime: Lifetime, // default static
     pub name: Name,
     pub name_span: Span,
-    pub imports: Vec<ImportDecl>,
+    pub imports: Vec<ImportDecl<'a>>,
     #[dont_visit]
     pub params: Vec<ParamDecl<'a>>,
     #[dont_visit]
@@ -1020,7 +1019,7 @@ pub enum StmtData<'a> {
     ContinueStmt,
     BreakStmt,
     ReturnStmt(Option<Expr<'a>>),
-    ImportStmt(ImportDecl),
+    ImportStmt(ImportDecl<'a>),
     AssertionStmt(Box<Assertion<'a>>),
     WaitExprStmt(Expr<'a>, Box<Stmt<'a>>),
     WaitForkStmt,
@@ -1709,28 +1708,32 @@ pub enum PatternFieldData<'a> {
     Repeat(Box<Expr<'a>>, Vec<Expr<'a>>),
 }
 
-#[moore_derive::visit]
+/// An import declaration.
+///
+/// For example `import a::b, c::*`.
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportDecl {
-    pub span: Span,
-    pub items: Vec<ImportItem>,
+pub struct ImportDecl<'a> {
+    pub items: Vec<ImportItem<'a>>,
 }
 
-#[moore_derive::visit]
+/// A single import.
+///
+/// For example the `a::b` in `import a::b, c::*`.
+#[moore_derive::node]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportItem {
-    pub span: Span,
     pub pkg: Spanned<Name>,
     pub name: Option<Spanned<Name>>, // None means `import pkg::*`
 }
 
-impl HasSpan for ImportItem {
+impl HasSpan for ImportItem<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for ImportItem {
+impl HasDesc for ImportItem<'_> {
     fn desc(&self) -> &'static str {
         "import"
     }

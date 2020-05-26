@@ -5166,7 +5166,7 @@ fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
 /// "import" package_ident "::" ident ";"
 /// "import" string ["context"|"pure"] [ident "="] subroutine_prototype ";"
 /// ```
-fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ImportDecl> {
+fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ImportDecl<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Import))?;
 
@@ -5192,10 +5192,7 @@ fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Impor
         // TODO: Don't just discard the imported DPI magic!
         span.expand(p.last_span());
         p.add_diag(DiagBuilder2::warning("unsupported DPI import").span(span));
-        return Ok(ImportDecl {
-            span: span,
-            items: vec![],
-        });
+        return Ok(ImportDecl::new(span, ImportDeclData { items: vec![] }));
     }
 
     let items = comma_list_nonempty(p, Semicolon, "import item", |p| {
@@ -5210,22 +5207,20 @@ fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Impor
             Operator(Op::Mul) => {
                 p.bump();
                 span.expand(p.last_span());
-                Ok(ImportItem {
-                    span,
-                    pkg,
-                    name: None,
-                })
+                Ok(ImportItem::new(span, ImportItemData { pkg, name: None }))
             }
 
             // package_ident "::" ident
             Ident(n) | EscIdent(n) => {
                 p.bump();
                 span.expand(p.last_span());
-                Ok(ImportItem {
+                Ok(ImportItem::new(
                     span,
-                    pkg,
-                    name: Some(Spanned::new(n, sp)),
-                })
+                    ImportItemData {
+                        pkg,
+                        name: Some(Spanned::new(n, sp)),
+                    },
+                ))
             }
 
             _ => {
@@ -5241,10 +5236,7 @@ fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Impor
     })?;
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
-    Ok(ImportDecl {
-        span: span,
-        items: items,
-    })
+    Ok(ImportDecl::new(span, ImportDeclData { items }))
 }
 
 fn parse_assertion<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Assertion<'n>> {
