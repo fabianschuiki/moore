@@ -22,11 +22,15 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     let data_name = format_ident!("{}{}", node_name, "Data");
     input.ident = data_name.clone();
 
+    // Ensure the new type alias has at least one lifetime.
+    let mut impl_generics = generics.clone();
+    let lt = crate::first_lifetime(&mut impl_generics);
+
     // Generate the wrapper node.
     let mut output = proc_macro2::TokenStream::new();
     output.extend(quote! {
         #[moore_derive::walk_visitor]
-        #vis type #node_name #generics = Node<'a, #data_name #generics>;
+        #vis type #node_name #impl_generics = Node<#lt, #data_name #generics>;
     });
 
     // Emit the modified data.
@@ -36,20 +40,20 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     });
 
     // Schedule the node for inclusion in `AllNode`.
-    crate::all_node::add_node(&node_name, &generics);
+    crate::all_node::add_node(&node_name, &impl_generics);
 
     // Implement the `BasicNode` trait for this node.
     output.extend(quote! {
-        impl<'a> BasicNode<'a> for #node_name #generics {
+        impl #impl_generics BasicNode<#lt> for #node_name #impl_generics {
             fn type_name(&self) -> &'static str {
                 #node_name_str
             }
 
-            fn as_all(&'a self) -> AllNode<'a> {
+            fn as_all(&#lt self) -> AllNode<#lt> {
                 AllNode::from(self)
             }
 
-            fn as_any(&'a self) -> &'a AnyNode<'a> {
+            fn as_any(&#lt self) -> &#lt AnyNode<#lt> {
                 self
             }
         }
