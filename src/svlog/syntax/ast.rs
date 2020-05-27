@@ -509,7 +509,7 @@ impl<'a> WalkVisitor<'a> for bool {
 
 pub use self::ExprData::*;
 pub use self::StmtData::*;
-pub use self::TypeData::*;
+pub use self::TypeKind::*;
 
 // Deprecated names.
 pub type ModDecl<'a> = Module<'a>;
@@ -649,43 +649,21 @@ pub struct Timeunit {
     pub prec: Option<Spanned<Lit>>,
 }
 
-#[moore_derive::visit]
-#[derive(AnyNodeData, Debug, PartialEq, Eq, Clone)]
+/// A type.
+#[moore_derive::node]
 #[indefinite("type")]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Type<'a> {
-    pub span: Span,
     #[dont_visit]
-    pub data: TypeData<'a>,
+    pub kind: TypeKind<'a>,
     #[dont_visit]
     pub sign: TypeSign,
     #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
 }
 
-impl HasSpan for Type<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-// impl HasDesc for Type<'_> {
-//     fn desc(&self) -> &'static str {
-//         match self.data {
-//             ImplicitType => "implicit type",
-//             _ => "type",
-//         }
-//     }
-
-//     fn desc_full(&self) -> String {
-//         match self.data {
-//             ImplicitType => self.desc().into(),
-//             _ => format!("type `{}`", self.span().extract()),
-//         }
-//     }
-// }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeData<'a> {
+pub enum TypeKind<'a> {
     ImplicitType,
     VoidType,
     NamedType(Identifier),
@@ -1164,7 +1142,6 @@ pub struct VarDecl<'a> {
     pub konst: bool,
     pub var: bool,
     pub lifetime: Option<Lifetime>,
-    #[dont_visit]
     pub ty: Type<'a>,
     pub names: Vec<VarDeclName<'a>>,
 }
@@ -1305,7 +1282,7 @@ impl<'a> AnyNode<'a> for TypeOrExpr<'a> {
 
     fn order(&self) -> usize {
         match self {
-            TypeOrExpr::Type(x) => unimplemented!(),
+            TypeOrExpr::Type(x) => x.order(),
             TypeOrExpr::Expr(x) => x.order(),
         }
     }
@@ -1314,21 +1291,21 @@ impl<'a> AnyNode<'a> for TypeOrExpr<'a> {
 impl<'a> BasicNode<'a> for TypeOrExpr<'a> {
     fn type_name(&self) -> &'static str {
         match self {
-            TypeOrExpr::Type(x) => "Type",
+            TypeOrExpr::Type(x) => x.type_name(),
             TypeOrExpr::Expr(x) => x.type_name(),
         }
     }
 
     fn as_all(&'a self) -> AllNode<'a> {
         match self {
-            TypeOrExpr::Type(x) => unimplemented!(),
+            TypeOrExpr::Type(x) => x.as_all(),
             TypeOrExpr::Expr(x) => x.as_all(),
         }
     }
 
     fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
         match self {
-            TypeOrExpr::Type(x) => unimplemented!(),
+            TypeOrExpr::Type(x) => x.as_any(),
             TypeOrExpr::Expr(x) => x.as_any(),
         }
     }
@@ -1337,7 +1314,7 @@ impl<'a> BasicNode<'a> for TypeOrExpr<'a> {
 impl<'a> std::fmt::Display for TypeOrExpr<'a> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            TypeOrExpr::Type(x) => write!(fmt, "type"),
+            TypeOrExpr::Type(x) => std::fmt::Display::fmt(x, fmt),
             TypeOrExpr::Expr(x) => std::fmt::Display::fmt(x, fmt),
         }
     }

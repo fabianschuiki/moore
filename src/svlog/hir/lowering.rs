@@ -592,7 +592,7 @@ fn lower_module_ports<'gcx>(
             } if dir.is_none()
                 && kind.is_none()
                 && expr.is_none()
-                && ty.data == ast::ImplicitType
+                && ty.kind == ast::ImplicitType
                 && ty.sign == ast::TypeSign::None
                 && ty.dims.is_empty() =>
             {
@@ -671,12 +671,14 @@ fn lower_module_ports<'gcx>(
             } else {
                 port.ty
             };
-            let ty_ast = cx.arena().alloc_ast_type(ast::Type {
-                span: port.span,
-                data: ty.clone(),
-                sign: port.sign,
-                dims: port.packed_dims.to_vec(),
-            });
+            let ty_ast = cx.arena().alloc_ast_type(ast::Type::new(
+                port.span,
+                ast::TypeData {
+                    kind: ty.clone(),
+                    sign: port.sign,
+                    dims: port.packed_dims.to_vec(),
+                },
+            ));
             let ty = cx.map_ast_with_parent(AstNode::Type(ty_ast), *next_rib);
             let _ = lower_type(cx, ty, ty_ast);
 
@@ -778,13 +780,13 @@ fn lower_module_ports_ansi<'gcx>(
 
                 // If no port type has been provided, use the one carried over
                 //  from the previous port.
-                let (ty, sign, packed_dims) = if ty.data == ast::ImplicitType
+                let (ty, sign, packed_dims) = if ty.kind == ast::ImplicitType
                     && ty.sign == ast::TypeSign::None
                     && ty.dims.is_empty()
                 {
                     (carry_ty, carry_sign, carry_packed_dims)
                 } else {
-                    (&ty.data, ty.sign, ty.dims.as_slice())
+                    (&ty.kind, ty.sign, ty.dims.as_slice())
                 };
 
                 // Keep the direction, kind, and type around for the next port
@@ -955,7 +957,7 @@ fn lower_module_ports_nonansi<'gcx>(
                 kind: ast.kind,
                 dir: ast.dir,
                 sign: ast.ty.sign,
-                ty: &ast.ty.data,
+                ty: &ast.ty.kind,
                 packed_dims: &ast.ty.dims,
                 unpacked_dims: &name.dims,
                 default: name.init.as_ref(),
@@ -1084,7 +1086,7 @@ fn lower_module_ports_nonansi<'gcx>(
                     port.kind = Some(ast::PortKind::Var);
                     (
                         vd.1.name_span,
-                        &vd.0.ty.data,
+                        &vd.0.ty.kind,
                         vd.0.ty.sign,
                         &vd.0.ty.dims,
                         &vd.1.dims,
@@ -1109,7 +1111,7 @@ fn lower_module_ports_nonansi<'gcx>(
                     port.kind = Some(ast::PortKind::Net(nd.0.net_type));
                     (
                         nd.1.name_span,
-                        &nd.0.ty.data,
+                        &nd.0.ty.kind,
                         nd.0.ty.sign,
                         &nd.0.ty.dims,
                         &nd.1.dims,
@@ -1199,9 +1201,13 @@ fn lower_module_ports_nonansi<'gcx>(
                 kind: None,
                 ty:
                     ast::Type {
-                        data: ast::ImplicitType,
-                        sign: ast::TypeSign::None,
-                        dims: packed_dims,
+                        data:
+                            ast::TypeData {
+                                kind: ast::ImplicitType,
+                                sign: ast::TypeSign::None,
+                                dims: packed_dims,
+                                ..
+                            },
                         ..
                     },
                 name,
@@ -1388,7 +1394,7 @@ struct PartialPort<'a> {
     dir: ast::PortDir,
     kind: Option<ast::PortKind>,
     sign: ast::TypeSign,
-    ty: &'a ast::TypeData<'a>,
+    ty: &'a ast::TypeKind<'a>,
     packed_dims: &'a [ast::TypeDim<'a>],
     unpacked_dims: &'a [ast::TypeDim<'a>],
     /// The default value assigned to this port if left unconnected.
@@ -1403,7 +1409,7 @@ struct PartialPort<'a> {
     /// Redundant type information which must be checked against the non-ANSI
     /// port later.
     match_ty: Option<(
-        Option<&'a ast::TypeData<'a>>,
+        Option<&'a ast::TypeKind<'a>>,
         &'a [ast::TypeDim<'a>],
         &'a [ast::TypeDim<'a>],
     )>,
@@ -1585,7 +1591,7 @@ fn lower_type<'gcx>(
     node_id: NodeId,
     ty: &'gcx ast::Type<'gcx>,
 ) -> Result<HirNode<'gcx>> {
-    let mut kind = match ty.data {
+    let mut kind = match ty.kind {
         ast::ImplicitType => hir::TypeKind::Implicit,
         ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
         ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
@@ -1644,12 +1650,14 @@ fn lower_type<'gcx>(
                         )?;
                         match cx.hir_of(binding)? {
                             HirNode::TypeParam(..) | HirNode::Typedef(..) => {
-                                let ty = cx.arena().alloc_ast_type(ast::Type {
-                                    span: expr.span,
-                                    data: ast::NamedType(*n),
-                                    sign: ast::TypeSign::None,
-                                    dims: vec![],
-                                });
+                                let ty = cx.arena().alloc_ast_type(ast::Type::new(
+                                    expr.span,
+                                    ast::TypeData {
+                                        kind: ast::NamedType(*n),
+                                        sign: ast::TypeSign::None,
+                                        dims: vec![],
+                                    },
+                                ));
                                 hir::TypeKind::RefType(
                                     cx.map_ast_with_parent(AstNode::Type(ty), node_id),
                                 )
@@ -2154,7 +2162,7 @@ fn lower_expr<'gcx>(
         ),
         ast::CastExpr(ref ty, ref expr) => {
             // Catch the corner case where a size cast looks like a type cast.
-            if let ast::NamedType(n) = ty.data {
+            if let ast::NamedType(n) = ty.kind {
                 let binding = cx.resolve_upwards_or_error(
                     Spanned::new(n.name, n.span),
                     cx.parent_node_id(node_id).unwrap(),

@@ -1494,12 +1494,14 @@ fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type<'n>) -> Report
             let span = Span::union(sp, p.last_span());
             parse_type_suffix(
                 p,
-                ast::Type {
-                    span: span,
-                    data: ast::SpecializedType(Box::new(ty), params),
-                    sign: ast::TypeSign::None,
-                    dims: Vec::new(),
-                },
+                ast::Type::new(
+                    span,
+                    ast::TypeData {
+                        kind: ast::SpecializedType(Box::new(ty), params),
+                        sign: ast::TypeSign::None,
+                        dims: Vec::new(),
+                    },
+                ),
             )
         }
 
@@ -1514,11 +1516,11 @@ fn parse_implicit_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typ
 }
 
 /// Parse the optional signing keyword and packed dimensions that may follow a
-/// data type. Wraps a previously parsed TypeData in a Type struct.
+/// data type. Wraps a previously parsed TypeKind in a Type struct.
 fn parse_type_signing_and_dimensions<'n>(
     p: &mut dyn AbstractParser<'n>,
     mut span: Span,
-    data: TypeData<'n>,
+    kind: TypeKind<'n>,
 ) -> ReportedResult<Type<'n>> {
     // Parse the optional sign information.
     let sign = match p.peek(0).0 {
@@ -1537,16 +1539,11 @@ fn parse_type_signing_and_dimensions<'n>(
     let (dims, _) = parse_optional_dimensions(p)?;
     span.expand(p.last_span());
 
-    Ok(Type {
-        span: span,
-        data: data,
-        sign: sign,
-        dims: dims,
-    })
+    Ok(Type::new(span, TypeData { kind, sign, dims }))
 }
 
 /// Parse the core type data of a type.
-fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeData<'n>> {
+fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         Keyword(Kw::Void) => {
@@ -1668,7 +1665,7 @@ fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeDat
     }
 }
 
-fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeData<'n>> {
+fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {
     // Consume the enum keyword.
     p.bump();
 
@@ -1711,7 +1708,7 @@ fn parse_enum_name<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<EnumNam
     })
 }
 
-fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeData<'n>> {
+fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {
     let q = p.peek(0).1;
 
     // Consume the "struct", "union", or "union tagged" keywords.
