@@ -474,8 +474,8 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::EnumVariant(var, decl, index) => {
             let hir = hir::EnumVariant {
                 id: node_id,
-                name: Spanned::new(var.name.name, var.name.span),
-                span: var.name.span,
+                name: var.name,
+                span: var.span,
                 enum_id: decl,
                 index,
                 value: var
@@ -1634,7 +1634,7 @@ fn lower_type<'gcx>(
             for (index, name) in names.iter().enumerate() {
                 next_rib =
                     cx.map_ast_with_parent(AstNode::EnumVariant(name, node_id, index), next_rib);
-                variants.push((Spanned::new(name.name.name, name.name.span), next_rib));
+                variants.push((name.name, next_rib));
             }
             hir::TypeKind::Enum(variants, ty)
         }

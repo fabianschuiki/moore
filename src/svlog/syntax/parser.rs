@@ -1685,9 +1685,10 @@ fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKin
 }
 
 fn parse_enum_name<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<EnumName<'n>> {
+    let mut span = p.peek(0).1;
+
     // Eat the name.
-    let name = parse_identifier(p, "enum name")?;
-    let mut span = name.span;
+    let name = parse_identifier_name(p, "enum name")?;
 
     // Parse the optional range.
     let range = try_flanked(p, Brack, parse_expr)?;
@@ -1700,12 +1701,7 @@ fn parse_enum_name<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<EnumNam
     };
     span.expand(p.last_span());
 
-    Ok(EnumName {
-        span: span,
-        name: name,
-        range: range,
-        value: value,
-    })
+    Ok(EnumName::new(span, EnumNameData { name, range, value }))
 }
 
 fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {

@@ -199,8 +199,18 @@ where
     }
 }
 
+impl<'a, T> ForEachNode<'a> for Box<T>
+where
+    T: ForEachNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        self.as_ref().for_each_node(each);
+    }
+}
+
 impl<'a> ForEachNode<'a> for Span {}
 impl<'a> ForEachNode<'a> for Name {}
+impl<'a> ForEachNode<'a> for Identifier {}
 impl<'a> ForEachNode<'a> for Lit {}
 impl<'a> ForEachNode<'a> for bool {}
 
@@ -491,11 +501,24 @@ where
     }
 }
 
+impl<'a, T> WalkVisitor<'a> for Box<T>
+where
+    T: WalkVisitor<'a>,
+{
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
+        self.as_ref().walk(visitor);
+    }
+}
+
 impl<'a> WalkVisitor<'a> for Span {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
 impl<'a> WalkVisitor<'a> for Name {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
+}
+
+impl<'a> WalkVisitor<'a> for Identifier {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
@@ -662,6 +685,7 @@ pub struct Type<'a> {
     pub dims: Vec<TypeDim<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeKind<'a> {
     ImplicitType,
@@ -703,14 +727,17 @@ pub enum TypeKind<'a> {
     // Enumerations
     EnumType(Option<Box<Type<'a>>>, Vec<EnumName<'a>>),
     StructType {
+        #[dont_visit]
         kind: StructKind,
         packed: bool,
+        #[dont_visit]
         signing: TypeSign,
+        #[dont_visit]
         members: Vec<StructMember<'a>>,
     },
 
     // Specialization
-    SpecializedType(Box<Type<'a>>, Vec<ParamAssignment<'a>>),
+    SpecializedType(Box<Type<'a>>, #[dont_visit] Vec<ParamAssignment<'a>>),
 
     /// Type reference, such as `type(x)` or `type(int)`.
     TypeRef(Box<TypeOrExpr<'a>>),
@@ -752,24 +779,17 @@ impl HasDesc for TypeDim<'_> {
     }
 }
 
+/// A single entry in an enum.
+///
+/// For example the `FOO = 42` in `enum { FOO = 42 }`.
+#[moore_derive::node]
+#[indefinite("enum variant")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumName<'a> {
-    pub span: Span,
-    pub name: Identifier,
+    #[name]
+    pub name: Spanned<Name>,
     pub range: Option<Expr<'a>>,
     pub value: Option<Expr<'a>>,
-}
-
-impl HasSpan for EnumName<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for EnumName<'_> {
-    fn desc(&self) -> &'static str {
-        "enum variant"
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
