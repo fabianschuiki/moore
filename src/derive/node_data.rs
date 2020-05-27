@@ -39,18 +39,6 @@ pub(crate) fn node_data(input: TokenStream) -> TokenStream {
         _ => panic!("unsupported item for AnyNodeData"),
     };
 
-    // Apply default match arms for attributes defined on the entire struct or
-    // enum.
-    if let Some(fmt) = get_indefinite(&input.attrs) {
-        arms.indefinite.push(quote! {
-            _ => write!(fmt, #fmt),
-        });
-    }
-    if let Some(fmt) = get_definite(&input.attrs) {
-        arms.definite.push(quote! {
-            _ => write!(fmt, #fmt),
-        });
-    }
     arms.definite.push(quote! {
         _ => {
             self.fmt_indefinite(fmt)?;
@@ -263,14 +251,36 @@ fn visit_fields(
     // Apply any `indefinite` or `definite` attribute on the entire struct.
     if let Some(fmt) = get_indefinite(attrs).or(get_indefinite(global_attrs)) {
         had_indefinite = true;
+        let fmt = interpolate_fields(fmt, &mapped_fields);
         arms.indefinite.push(quote! {
             #pat_prefix #pat => write!(fmt, #fmt),
         });
     }
     if let Some(fmt) = get_definite(attrs).or(get_definite(global_attrs)) {
         had_definite = true;
+        let fmt = interpolate_fields(fmt, &mapped_fields);
         arms.definite.push(quote! {
             #pat_prefix #pat => write!(fmt, #fmt),
         });
     }
+}
+
+fn interpolate_fields(
+    tokens: proc_macro2::TokenStream,
+    fields: &[(syn::Ident, &syn::Field)],
+) -> proc_macro2::TokenStream {
+    tokens
+        .into_iter()
+        .map(|tkn| match tkn {
+            proc_macro2::TokenTree::Ident(id) => {
+                for (name, field) in fields {
+                    if field.ident == Some(id.clone()) {
+                        return name.clone().into();
+                    }
+                }
+                panic!("no field `{}` found", id);
+            }
+            _ => tkn,
+        })
+        .collect()
 }

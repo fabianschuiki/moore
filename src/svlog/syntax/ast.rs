@@ -587,7 +587,7 @@ pub enum Item<'a> {
 /// A module.
 #[moore_derive::node]
 #[indefinite("module declaration")]
-// #[definite("module `{}`", name)]
+#[definite("module `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
     pub lifetime: Lifetime, // default static
@@ -603,7 +603,7 @@ pub struct Module<'a> {
 /// An interface.
 #[moore_derive::node]
 #[indefinite("interface declaration")]
-// #[definite("interface `{}`", name)]
+#[definite("interface `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interface<'a> {
     pub lifetime: Lifetime, // default static
@@ -618,7 +618,7 @@ pub struct Interface<'a> {
 /// A package.
 #[moore_derive::node]
 #[indefinite("package declaration")]
-// #[definite("package `{}`", name)]
+#[definite("package `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package<'a> {
     pub lifetime: Lifetime,
