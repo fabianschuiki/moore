@@ -107,7 +107,7 @@ pub enum AstNode<'ast> {
 
 impl<'a> AstNode<'a> {
     /// Convert this `AstNode` to a `AnyNode`.
-    pub fn get_any(&self) -> Option<&dyn AnyNode<'a>> {
+    pub fn get_any(&self) -> Option<&'a dyn AnyNode<'a>> {
         match *self {
             AstNode::Module(x) => Some(x),
             AstNode::Port(_) => None,
