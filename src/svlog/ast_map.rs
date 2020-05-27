@@ -107,6 +107,41 @@ pub enum AstNode<'ast> {
     Interface(&'ast ast::IntfDecl<'ast>),
 }
 
+impl<'a> AstNode<'a> {
+    /// Convert this `AstNode` to a `AnyNode`.
+    pub fn get_any(&self) -> Option<&dyn AnyNode<'a>> {
+        match *self {
+            AstNode::Module(x) => Some(x),
+            AstNode::Port(_) => None,
+            AstNode::Type(x) => Some(x),
+            AstNode::Expr(x) => Some(x),
+            // AstNode::InstTarget(x) => Some(x),
+            // AstNode::Inst(x, _) => Some(x),
+            AstNode::TypeParam(x, _) => Some(x),
+            AstNode::ValueParam(x, _) => Some(x),
+            AstNode::TypeOrExpr(x) => Some(x),
+            AstNode::VarDecl(_, x, _) => Some(x),
+            // AstNode::NetDecl(_, x, _) => Some(x),
+            // AstNode::Proc(x) => Some(x),
+            // AstNode::Stmt(x) => Some(x),
+            // AstNode::EventExpr(x) => Some(x),
+            // AstNode::GenIf(x) => Some(x),
+            // AstNode::GenFor(x) => Some(x),
+            // AstNode::GenCase(x) => Some(x),
+            AstNode::GenvarDecl(x) => Some(x),
+            AstNode::Typedef(x) => Some(x),
+            // AstNode::ContAssign(x, _, _) => Some(x),
+            // AstNode::StructMember(_, x, _) => Some(x),
+            AstNode::Package(x) => Some(x),
+            AstNode::EnumVariant(x, _, _) => Some(x),
+            AstNode::Import(x) => Some(x),
+            AstNode::SubroutineDecl(x) => Some(x),
+            AstNode::Interface(x) => Some(x),
+            _ => None,
+        }
+    }
+}
+
 impl<'ast> HasSpan for AstNode<'ast> {
     fn span(&self) -> Span {
         match *self {
