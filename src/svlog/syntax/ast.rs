@@ -216,11 +216,11 @@ impl<'a> ForEachNode<'a> for Span {}
 impl<'a> ForEachNode<'a> for Name {}
 impl<'a> ForEachNode<'a> for Identifier {}
 impl<'a> ForEachNode<'a> for Lit {}
+impl<'a> ForEachNode<'a> for Op {}
 impl<'a> ForEachNode<'a> for bool {}
 
 impl<'a> ForEachNode<'a> for Stmt<'a> {}
 impl<'a> ForEachNode<'a> for StmtData<'a> {}
-impl<'a> ForEachNode<'a> for GenerateBlock<'a> {}
 
 /// Common interface to all AST nodes.
 pub trait CommonNode {
@@ -537,9 +537,40 @@ impl<'a> WalkVisitor<'a> for Lit {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
+impl<'a> WalkVisitor<'a> for Op {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
+}
+
 impl<'a> WalkVisitor<'a> for bool {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
+
+macro_rules! tuple_impls {
+    ($($idx:tt => $args:ident),*) => {
+        impl<'a $(, $args: AcceptVisitor<'a>)*> AcceptVisitor<'a> for ($($args),*) {
+            fn accept(&'a self, visitor: &mut dyn Visitor<'a>) {
+                $(self.$idx.accept(visitor);)*
+            }
+        }
+
+        impl<'a $(, $args: WalkVisitor<'a>)*> WalkVisitor<'a> for ($($args),*) {
+            fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
+                $(self.$idx.walk(visitor);)*
+            }
+        }
+
+        impl<'a $(, $args: ForEachNode<'a>)*> ForEachNode<'a> for ($($args),*) {
+            fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+                $(self.$idx.for_each_node(each);)*
+            }
+        }
+    };
+}
+
+tuple_impls!();
+tuple_impls!(0 => T0, 1 => T1);
+tuple_impls!(0 => T0, 1 => T1, 2 => T2);
+tuple_impls!(0 => T0, 1 => T1, 2 => T2, 3 => T3);
 
 pub use self::ExprData::*;
 pub use self::StmtData::*;
@@ -582,36 +613,24 @@ pub enum Item<'a> {
     ModuleDecl(#[forward] Module<'a>),
     InterfaceDecl(#[forward] Interface<'a>),
     PackageDecl(#[forward] Package<'a>),
-    #[dont_visit]
     ClassDecl(ClassDecl<'a>),
-    #[dont_visit]
     ProgramDecl(()),
     ImportDecl(#[forward] ImportDecl<'a>),
     ParamDecl(#[forward] ParamDecl<'a>),
-    #[dont_visit]
     ModportDecl(ModportDecl),
     Typedef(#[forward] Typedef<'a>),
-    #[dont_visit]
     PortDecl(PortDecl<'a>),
-    #[dont_visit]
     Procedure(Procedure<'a>),
     SubroutineDecl(#[forward] SubroutineDecl<'a>),
-    #[dont_visit]
     ContAssign(ContAssign<'a>),
     GenvarDecl(Vec<GenvarDecl<'a>>),
-    #[dont_visit]
     GenerateRegion(Span, Vec<Item<'a>>),
-    #[dont_visit]
     GenerateFor(GenerateFor<'a>),
-    #[dont_visit]
     GenerateIf(GenerateIf<'a>),
-    #[dont_visit]
     GenerateCase(GenerateCase),
-    #[dont_visit]
     Assertion(Assertion<'a>),
     NetDecl(NetDecl<'a>),
     VarDecl(#[forward] VarDecl<'a>),
-    #[dont_visit]
     Inst(Inst<'a>),
 }
 
@@ -626,7 +645,6 @@ pub struct Module<'a> {
     pub name: Spanned<Name>,
     pub imports: Vec<ImportDecl<'a>>,
     pub params: Vec<ParamDecl<'a>>,
-    #[dont_visit]
     pub ports: Vec<Port<'a>>,
     pub items: Vec<Item<'a>>,
 }
@@ -641,7 +659,6 @@ pub struct Interface<'a> {
     #[name]
     pub name: Spanned<Name>,
     pub params: Vec<ParamDecl<'a>>,
-    #[dont_visit]
     pub ports: Vec<Port<'a>>,
     pub items: Vec<Item<'a>>,
 }
@@ -686,9 +703,7 @@ pub struct Timeunit {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Type<'a> {
     pub kind: TypeKind<'a>,
-    #[dont_visit]
     pub sign: TypeSign,
-    #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
 }
 
@@ -750,6 +765,7 @@ pub enum TypeKind<'a> {
     TypeRef(Box<TypeOrExpr<'a>>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum TypeSign {
     None,
@@ -800,6 +816,7 @@ pub struct EnumName<'a> {
     pub value: Option<Expr<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum StructKind {
     Struct,
@@ -807,6 +824,7 @@ pub enum StructKind {
     TaggedUnion,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructMember<'a> {
     pub span: Span,
@@ -827,6 +845,7 @@ impl HasDesc for StructMember<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Port<'a> {
     Intf {
@@ -894,6 +913,7 @@ impl HasDesc for Port<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortDecl<'a> {
     pub span: Span,
@@ -903,6 +923,7 @@ pub struct PortDecl<'a> {
     pub names: Vec<VarDeclName<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum PortKind {
     Net(NetType),
@@ -918,6 +939,7 @@ impl std::fmt::Display for PortKind {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum PortDir {
     Input,
@@ -937,6 +959,7 @@ impl std::fmt::Display for PortDir {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum NetType {
     Supply0,
@@ -972,6 +995,7 @@ impl std::fmt::Display for NetType {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Procedure<'a> {
     pub span: Span,
@@ -991,6 +1015,7 @@ impl HasDesc for Procedure<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ProcedureKind {
     Initial,
@@ -1081,6 +1106,7 @@ impl<'a> Stmt<'a> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum JoinKind {
     All,
@@ -1088,6 +1114,7 @@ pub enum JoinKind {
     None,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum UniquePriority {
     Unique,
@@ -1095,6 +1122,7 @@ pub enum UniquePriority {
     Priority,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum CaseKind {
     Normal,
@@ -1102,6 +1130,7 @@ pub enum CaseKind {
     DontCareXZ,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum CaseMode {
     Normal,
@@ -1109,33 +1138,39 @@ pub enum CaseMode {
     Pattern,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaseItem<'a> {
     Default(Box<Stmt<'a>>),
     Expr(Vec<Expr<'a>>, Box<Stmt<'a>>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DelayControl<'a> {
     pub span: Span,
     pub expr: Expr<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventControl<'a> {
     pub span: Span,
     pub data: EventControlData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventControlData<'a> {
     Implicit,
     Expr(EventExpr<'a>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CycleDelay {}
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TimingControl<'a> {
     Delay(DelayControl<'a>),
@@ -1143,6 +1178,7 @@ pub enum TimingControl<'a> {
     Cycle(CycleDelay),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssignOp {
     Identity,
@@ -1183,7 +1219,6 @@ pub struct VarDecl<'a> {
 pub struct VarDeclName<'a> {
     pub name: Name,
     pub name_span: Span,
-    #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
     pub init: Option<Expr<'a>>,
 }
@@ -1205,90 +1240,65 @@ pub struct GenvarDecl<'a> {
 pub enum Expr<'a> {
     DummyExpr,
     LiteralExpr(Lit),
-    #[dont_visit]
     IdentExpr(Identifier),
-    #[dont_visit]
     SysIdentExpr(Identifier),
-    #[dont_visit]
     ScopeExpr(Box<Expr<'a>>, Identifier),
-    #[dont_visit]
     IndexExpr {
         indexee: Box<Expr<'a>>,
         index: Box<Expr<'a>>,
     },
-    #[dont_visit]
     UnaryExpr {
         op: Op,
         expr: Box<Expr<'a>>,
         postfix: bool,
     },
-    #[dont_visit]
     BinaryExpr {
         op: Op,
         lhs: Box<Expr<'a>>,
         rhs: Box<Expr<'a>>,
     },
-    #[dont_visit]
     TernaryExpr {
         cond: Box<Expr<'a>>,
         true_expr: Box<Expr<'a>>,
         false_expr: Box<Expr<'a>>,
     },
-    #[dont_visit]
     AssignExpr {
         op: AssignOp,
         lhs: Box<Expr<'a>>,
         rhs: Box<Expr<'a>>,
     },
-    #[dont_visit]
-    #[dont_visit]
     CallExpr(Box<Expr<'a>>, Vec<CallArg<'a>>),
-    #[dont_visit]
     TypeExpr(Box<Type<'a>>), // TODO: Check if this is still needed, otherwise remove
-    #[dont_visit]
     ConstructorCallExpr(Vec<CallArg<'a>>),
-    #[dont_visit]
     ClassNewExpr(Option<Box<Expr<'a>>>),
-    #[dont_visit]
     ArrayNewExpr(Box<Expr<'a>>, Option<Box<Expr<'a>>>),
-    #[dont_visit]
     EmptyQueueExpr,
-    #[dont_visit]
     StreamConcatExpr {
         slice: Option<StreamConcatSlice<'a>>,
         exprs: Vec<StreamExpr<'a>>,
     },
-    #[dont_visit]
     ConcatExpr {
         repeat: Option<Box<Expr<'a>>>,
         exprs: Vec<Expr<'a>>,
     },
-    #[dont_visit]
     MinTypMaxExpr {
         min: Box<Expr<'a>>,
         typ: Box<Expr<'a>>,
         max: Box<Expr<'a>>,
     },
-    #[dont_visit]
     RangeExpr {
         mode: RangeMode,
         lhs: Box<Expr<'a>>,
         rhs: Box<Expr<'a>>,
     },
-    #[dont_visit]
     MemberExpr {
         expr: Box<Expr<'a>>,
         name: Identifier,
     },
-    #[dont_visit]
     PatternExpr(Vec<PatternField<'a>>),
-    #[dont_visit]
     InsideExpr(Box<Expr<'a>>, Vec<ValueRange<'a>>),
-    #[dont_visit]
     CastExpr(Type<'a>, Box<Expr<'a>>),
-    #[dont_visit]
     CastSizeExpr(Box<Expr<'a>>, Box<Expr<'a>>),
-    #[dont_visit]
     CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
 }
 
@@ -1355,6 +1365,7 @@ impl<'a> std::fmt::Display for TypeOrExpr<'a> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueRange<'a> {
     Single(Expr<'a>),
@@ -1365,6 +1376,7 @@ pub enum ValueRange<'a> {
     },
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RangeMode {
     Absolute,
@@ -1378,6 +1390,7 @@ pub struct Identifier {
     pub name: Name,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg<'a> {
     pub span: Span,
@@ -1386,18 +1399,21 @@ pub struct CallArg<'a> {
     pub expr: Option<Expr<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamConcatSlice<'a> {
     Expr(Box<Expr<'a>>),
     Type(Type<'a>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamExpr<'a> {
     pub expr: Box<Expr<'a>>,
     pub range: Option<Box<Expr<'a>>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventExpr<'a> {
     Edge {
@@ -1417,6 +1433,7 @@ pub enum EventExpr<'a> {
     },
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeIdent {
     Implicit,
@@ -1441,6 +1458,7 @@ impl HasDesc for EventExpr<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDecl<'a> {
     pub span: Span,
@@ -1453,6 +1471,7 @@ pub struct ClassDecl<'a> {
     pub items: Vec<ClassItem<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassItem<'a> {
     pub span: Span,
@@ -1460,6 +1479,7 @@ pub struct ClassItem<'a> {
     pub data: ClassItemData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassItemQualifier {
     Static,
@@ -1472,6 +1492,7 @@ pub enum ClassItemQualifier {
     Const,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassItemData<'a> {
     Property,
@@ -1485,6 +1506,7 @@ pub enum ClassItemData<'a> {
     Null,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RandomQualifier {
     Rand,
@@ -1504,6 +1526,7 @@ pub struct Typedef<'a> {
     pub dims: Vec<TypeDim<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Constraint<'a> {
     pub span: Span,
@@ -1514,6 +1537,7 @@ pub struct Constraint<'a> {
     pub items: Vec<ConstraintItem<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstraintKind {
     Decl,
@@ -1522,12 +1546,14 @@ pub enum ConstraintKind {
     PureProto,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstraintItem<'a> {
     pub span: Span,
     pub data: ConstraintItemData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConstraintItemData<'a> {
     If,
@@ -1541,7 +1567,6 @@ pub enum ConstraintItemData<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutineDecl<'a> {
     pub prototype: SubroutinePrototype<'a>,
-    #[dont_visit]
     pub items: Vec<SubroutineItem<'a>>,
 }
 
@@ -1554,7 +1579,6 @@ pub struct SubroutinePrototype<'a> {
     pub lifetime: Option<Lifetime>,
     #[name]
     pub name: Spanned<Name>,
-    #[dont_visit]
     pub args: Vec<SubroutinePort<'a>>,
     pub retty: Option<Type<'a>>,
 }
@@ -1566,6 +1590,7 @@ pub enum SubroutineKind {
     Task,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePort<'a> {
     pub span: Span,
@@ -1575,6 +1600,7 @@ pub struct SubroutinePort<'a> {
     pub name: Option<SubroutinePortName<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortName<'a> {
     pub name: Identifier,
@@ -1582,12 +1608,14 @@ pub struct SubroutinePortName<'a> {
     pub expr: Option<Expr<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubroutineItem<'a> {
     PortDecl(SubroutinePortDecl<'a>),
     Stmt(Stmt<'a>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortDecl<'a> {
     pub span: Span,
@@ -1597,6 +1625,7 @@ pub struct SubroutinePortDecl<'a> {
     pub names: Vec<VarDeclName<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubroutinePortDir {
     Input,
@@ -1610,15 +1639,10 @@ pub enum SubroutinePortDir {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetDecl<'a> {
     pub span: Span,
-    #[dont_visit]
     pub net_type: NetType,
-    #[dont_visit]
     pub strength: Option<NetStrength>,
-    #[dont_visit]
     pub kind: NetKind,
-    #[dont_visit]
     pub ty: Type<'a>,
-    #[dont_visit]
     pub delay: Option<DelayControl<'a>>,
     pub names: Vec<VarDeclName<'a>>,
 }
@@ -1635,6 +1659,7 @@ impl HasDesc for NetDecl<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetKind {
     Vectored,
@@ -1642,12 +1667,14 @@ pub enum NetKind {
     None,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetStrength {
     Drive(DriveStrength, DriveStrength),
     Charge(ChargeStrength),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DriveStrength {
     Supply0,
@@ -1662,6 +1689,7 @@ pub enum DriveStrength {
     HighZ1,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChargeStrength {
     Small,
@@ -1669,12 +1697,14 @@ pub enum ChargeStrength {
     Large,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PatternField<'a> {
     pub span: Span,
     pub data: PatternFieldData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatternFieldData<'a> {
     Default(Box<Expr<'a>>),
@@ -1705,6 +1735,7 @@ pub struct ImportItem {
     pub name: Option<Spanned<Name>>, // None means `import pkg::*`
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assertion<'a> {
     pub span: Span,
@@ -1712,6 +1743,7 @@ pub struct Assertion<'a> {
     pub data: AssertionData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionData<'a> {
     Immediate(BlockingAssertion<'a>),
@@ -1719,6 +1751,7 @@ pub enum AssertionData<'a> {
     Concurrent(ConcurrentAssertion<'a>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionDeferred {
     /// `assert #0`
@@ -1727,6 +1760,7 @@ pub enum AssertionDeferred {
     Final,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockingAssertion<'a> {
     Assert(Expr<'a>, AssertionActionBlock<'a>),
@@ -1734,6 +1768,7 @@ pub enum BlockingAssertion<'a> {
     Cover(Expr<'a>, Stmt<'a>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConcurrentAssertion<'a> {
     AssertProperty(PropSpec, AssertionActionBlock<'a>),
@@ -1744,6 +1779,7 @@ pub enum ConcurrentAssertion<'a> {
     RestrictProperty(PropSpec),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionActionBlock<'a> {
     Positive(Stmt<'a>),
@@ -1751,12 +1787,14 @@ pub enum AssertionActionBlock<'a> {
     Both(Stmt<'a>, Stmt<'a>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeqExpr<'a> {
     pub span: Span,
     pub data: SeqExprData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeqExprData<'a> {
     Expr(Expr<'a>, Option<SeqRep<'a>>),
@@ -1765,6 +1803,7 @@ pub enum SeqExprData<'a> {
     Clocked(EventExpr<'a>, Box<SeqExpr<'a>>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeqRep<'a> {
     Consec(Expr<'a>),    // [* expr]
@@ -1774,6 +1813,7 @@ pub enum SeqRep<'a> {
     Goto(Expr<'a>),      // [-> expr]
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeqBinOp {
     Or,
@@ -1782,15 +1822,18 @@ pub enum SeqBinOp {
     Within,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropSpec;
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropExpr<'a> {
     pub span: Span,
     pub data: PropExprData<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PropExprData<'a> {
     SeqOp(PropSeqOp, SeqExpr<'a>),
@@ -1800,6 +1843,7 @@ pub enum PropExprData<'a> {
     Clocked(EventExpr<'a>, Box<PropExpr<'a>>),
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropSeqOp {
     None,
@@ -1807,6 +1851,7 @@ pub enum PropSeqOp {
     Strong,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropSeqBinOp {
     ImplOverlap,
@@ -1815,6 +1860,7 @@ pub enum PropSeqBinOp {
     FollowNonoverlap,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropBinOp {
     Or,
@@ -1831,6 +1877,7 @@ pub enum PropBinOp {
     SeqFollowNol,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inst<'a> {
     pub span: Span,
@@ -1862,6 +1909,7 @@ impl HasDesc for Inst<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstName<'a> {
     pub span: Span,
@@ -1890,12 +1938,14 @@ impl HasDesc for InstName<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModportDecl {
     pub span: Span,
     pub items: Vec<ModportItem>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModportItem {
     pub span: Span,
@@ -1903,6 +1953,7 @@ pub struct ModportItem {
     pub ports: Vec<ModportPort>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModportPort {
     Port,
@@ -1942,7 +1993,6 @@ pub enum ParamKind<'a> {
 pub struct ParamTypeDecl<'a> {
     #[name]
     pub name: Spanned<Name>,
-    #[dont_visit]
     pub ty: Option<Type<'a>>,
 }
 
@@ -1955,11 +2005,9 @@ pub struct ParamTypeDecl<'a> {
 #[indefinite("value parameter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamValueDecl<'a> {
-    #[dont_visit]
     pub ty: Type<'a>,
     #[name]
     pub name: Spanned<Name>,
-    #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
     pub expr: Option<Expr<'a>>,
 }
@@ -1970,6 +2018,7 @@ pub struct ParamValueDecl<'a> {
 /// "assign" [drive_strength] [delay3] list_of_assignments ";"
 /// "assign" [delay_control] list_of_assignments ";"
 /// ```
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContAssign<'a> {
     pub span: Span,
@@ -1991,13 +2040,12 @@ impl HasDesc for ContAssign<'_> {
     }
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateFor<'a> {
     pub span: Span,
     pub init: Stmt<'a>,
-    #[ignore_child]
     pub cond: Expr<'a>,
-    #[ignore_child]
     pub step: Expr<'a>,
     pub block: GenerateBlock<'a>,
 }
@@ -2014,6 +2062,7 @@ impl HasDesc for GenerateFor<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateIf<'a> {
     pub span: Span,
@@ -2034,6 +2083,7 @@ impl HasDesc for GenerateIf<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateCase {
     // TODO
@@ -2054,12 +2104,11 @@ impl HasDesc for GenerateCase {
 
 /// A body of a generate construct. May contains hierarchy items or more
 /// generate constructs.
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateBlock<'a> {
     pub span: Span,
-    #[ignore_child]
     pub label: Option<Name>,
-    #[ignore_child]
     pub items: Vec<Item<'a>>,
 }
 
@@ -2075,6 +2124,7 @@ impl HasDesc for GenerateBlock<'_> {
     }
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamAssignment<'a> {
     pub span: Span,
@@ -2083,12 +2133,14 @@ pub struct ParamAssignment<'a> {
 }
 
 /// A port connection as given in an instantiation.
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortConn<'a> {
     pub span: Span,
     pub kind: PortConnKind<'a>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortConnKind<'a> {
     Auto,                                // `.*` case
@@ -2097,6 +2149,7 @@ pub enum PortConnKind<'a> {
 }
 
 /// Represents how a named port connection is made.
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortConnMode<'a> {
     Auto,                // `.name` case
