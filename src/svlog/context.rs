@@ -328,7 +328,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx>
     /// supposed to easily identify the node to the user in case of an error.
     fn alloc_id(&self, span: Span) -> NodeId {
         let id = NodeId::alloc();
-        self.gcx().node_id_to_span.borrow_mut().insert(id, span);
+        self.set_span(id, span);
         id
     }
 
@@ -342,6 +342,14 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx>
             .unwrap_or(crate::common::source::INVALID_SPAN)
     }
 
+    /// Associate a span with a node id.
+    fn set_span(&self, node_id: NodeId, span: Span) {
+        self.gcx()
+            .node_id_to_span
+            .borrow_mut()
+            .insert(node_id, span);
+    }
+
     /// Associate an AST node with a node id.
     fn set_ast(&self, node_id: NodeId, ast: AstNode<'gcx>) {
         self.gcx().ast_map.set(node_id, ast)
@@ -349,7 +357,13 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx>
 
     /// Allocate a node id for an AST node and associate that id with the node.
     fn map_ast(&self, ast: AstNode<'gcx>) -> NodeId {
-        let id = self.alloc_id(ast.human_span());
+        let id = match ast.get_any() {
+            Some(node) => {
+                self.set_span(node.id(), node.human_span());
+                node.id()
+            }
+            None => self.alloc_id(ast.human_span()),
+        };
         self.set_ast(id, ast);
         id
     }
@@ -540,17 +554,10 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx>
     ///
     /// Panics if `node_id` already has a parent assigned.
     fn set_parent(&self, node_id: NodeId, parent_id: NodeId) {
-        if let Some(old_id) = self
-            .tables()
+        self.tables()
             .node_id_to_parent_node_id
             .borrow_mut()
-            .insert(node_id, parent_id)
-        {
-            panic!(
-                "node {:?} already had parent {:?} (overwritten with {:?} now)",
-                node_id, old_id, parent_id
-            );
-        }
+            .insert(node_id, parent_id);
     }
 
     /// Find the parent node of a node.

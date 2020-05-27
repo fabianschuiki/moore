@@ -19,9 +19,7 @@ impl<'ast> AstMap<'ast> {
     /// Insert an AST node into the map.
     pub fn set(&self, id: NodeId, node: impl Into<AstNode<'ast>>) {
         let node = node.into();
-        if self.map.borrow_mut().insert(id, node).is_some() {
-            panic!("node {:?} already exists in the map", id);
-        }
+        self.map.borrow_mut().insert(id, node);
     }
 
     /// Retrieve an AST node from the map.
@@ -35,7 +33,7 @@ impl<'ast> AstMap<'ast> {
 /// This enum essentially provides a wrapper around typed references to AST
 /// nodes. It allows code to obtain a generic reference to an AST node and then
 /// match on the actual type that was provided.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AstNode<'ast> {
     /// A module.
     Module(&'ast ast::ModDecl<'ast>),
@@ -117,11 +115,11 @@ impl<'a> AstNode<'a> {
             AstNode::Expr(x) => Some(x),
             // AstNode::InstTarget(x) => Some(x),
             // AstNode::Inst(x, _) => Some(x),
-            AstNode::TypeParam(x, _) => Some(x),
-            AstNode::ValueParam(x, _) => Some(x),
+            AstNode::TypeParam(_, x) => Some(x),
+            AstNode::ValueParam(_, x) => Some(x),
             AstNode::TypeOrExpr(x) => Some(x),
-            AstNode::VarDecl(_, x, _) => Some(x),
-            // AstNode::NetDecl(_, x, _) => Some(x),
+            AstNode::VarDecl(x, _, _) => Some(x),
+            // AstNode::NetDecl(x, _, _) => Some(x),
             // AstNode::Proc(x) => Some(x),
             // AstNode::Stmt(x) => Some(x),
             // AstNode::EventExpr(x) => Some(x),
@@ -131,7 +129,7 @@ impl<'a> AstNode<'a> {
             AstNode::GenvarDecl(x) => Some(x),
             AstNode::Typedef(x) => Some(x),
             // AstNode::ContAssign(x, _, _) => Some(x),
-            // AstNode::StructMember(_, x, _) => Some(x),
+            // AstNode::StructMember(x, _, _) => Some(x),
             AstNode::Package(x) => Some(x),
             AstNode::EnumVariant(x, _, _) => Some(x),
             AstNode::Import(x) => Some(x),
