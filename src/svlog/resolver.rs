@@ -1075,7 +1075,7 @@ pub(crate) fn resolve_local_or_error<'a>(
             if cx.sess().has_verbosity(Verbosity::NAMES) {
                 let d = DiagBuilder2::note("name resolution")
                     .span(name.span)
-                    .add_note(format!("Resolved `{}` to this {:?}:", name, binding))
+                    .add_note(format!("Resolved `{}` to this {}:", name, binding))
                     .span(binding.span());
                 cx.emit(d);
             }
@@ -1124,14 +1124,17 @@ pub(crate) fn resolve_namespace_or_error<'a>(
             if cx.sess().has_verbosity(Verbosity::NAMES) {
                 let d = DiagBuilder2::note("name resolution")
                     .span(name.span)
-                    .add_note(format!("Resolved `{}` to this {:?}:", name, binding))
+                    .add_note(format!("Resolved `{}` to this {}:", name, binding))
                     .span(binding.span());
                 cx.emit(d);
             }
             Ok(binding)
         }
         None => {
-            cx.emit(DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span));
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` not found in {}", name.value, inside))
+                    .span(name.span),
+            );
             Err(())
         }
     }
