@@ -591,10 +591,9 @@ pub enum Item<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
     pub lifetime: Lifetime, // default static
-    pub name: Name,
-    pub name_span: Span,
+    #[name]
+    pub name: Spanned<Name>,
     pub imports: Vec<ImportDecl<'a>>,
-    #[dont_visit]
     pub params: Vec<ParamDecl<'a>>,
     #[dont_visit]
     pub ports: Vec<Port<'a>>,
@@ -608,9 +607,8 @@ pub struct Module<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interface<'a> {
     pub lifetime: Lifetime, // default static
-    pub name: Name,
-    pub name_span: Span,
-    #[dont_visit]
+    #[name]
+    pub name: Spanned<Name>,
     pub params: Vec<ParamDecl<'a>>,
     #[dont_visit]
     pub ports: Vec<Port<'a>>,
@@ -624,8 +622,8 @@ pub struct Interface<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package<'a> {
     pub lifetime: Lifetime,
-    pub name: Name,
-    pub name_span: Span,
+    #[name]
+    pub name: Spanned<Name>,
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
 }

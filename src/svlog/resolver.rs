@@ -656,6 +656,7 @@ pub fn generated_scope_id<'gcx>(
 pub trait ScopedNode<'a>: ast::AnyNode<'a> {}
 impl<'a> ScopedNode<'a> for ast::Root<'a> {}
 impl<'a> ScopedNode<'a> for ast::Module<'a> {}
+impl<'a> ScopedNode<'a> for ast::Interface<'a> {}
 impl<'a> ScopedNode<'a> for ast::Package<'a> {}
 
 // Compare and hash scoped nodes by reference for use in the query system.
@@ -688,6 +689,7 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
             // This should reflect the impl trait list above!
             ast::AllNode::Root(x) => Some(x),
             ast::AllNode::Module(x) => Some(x),
+            ast::AllNode::Interface(x) => Some(x),
             ast::AllNode::Package(x) => Some(x),
             _ => None,
         }
@@ -830,7 +832,19 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         self.add_subscope(node);
         self.add_def(Def {
             node,
-            name: Spanned::new(node.name, node.name_span),
+            name: node.name,
+            vis: DefVis::LOCAL,
+            may_override: true,
+            ordered: false,
+        });
+        false
+    }
+
+    fn pre_visit_interface(&mut self, node: &'a ast::Interface<'a>) -> bool {
+        self.add_subscope(node);
+        self.add_def(Def {
+            node,
+            name: node.name,
             vis: DefVis::LOCAL,
             may_override: true,
             ordered: false,
@@ -842,7 +856,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         self.add_subscope(node);
         self.add_def(Def {
             node,
-            name: Spanned::new(node.name, node.name_span),
+            name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE,
             may_override: false,
             ordered: false,

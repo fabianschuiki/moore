@@ -109,15 +109,15 @@ impl<'gcx> GlobalContext<'gcx> {
                 match &item.data {
                     ast::ItemData::ModuleDecl(ref n) => {
                         let id = self.map_ast(AstNode::Module(n));
-                        self.modules.borrow_mut().insert(n.name, id);
+                        self.modules.borrow_mut().insert(n.name.value, id);
                     }
                     ast::ItemData::PackageDecl(ref n) => {
                         let id = self.map_ast(AstNode::Package(n));
-                        self.packages.borrow_mut().insert(n.name, id);
+                        self.packages.borrow_mut().insert(n.name.value, id);
                     }
                     ast::ItemData::InterfaceDecl(ref n) => {
                         let id = self.map_ast(AstNode::Interface(n));
-                        self.interfaces.borrow_mut().insert(n.name, id);
+                        self.interfaces.borrow_mut().insert(n.name.value, id);
                     }
                     ast::ItemData::ImportDecl(ref n) => {
                         for item in &n.items {

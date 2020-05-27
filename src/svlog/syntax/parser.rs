@@ -726,8 +726,7 @@ fn parse_interface_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<In
             span,
             InterfaceData {
                 lifetime: lifetime,
-                name: name,
-                name_span: name_sp,
+                name: Spanned::new(name, name_sp),
                 params: param_ports,
                 ports: ports,
                 items: items,
@@ -892,8 +891,7 @@ fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ModDe
             span,
             ModuleData {
                 lifetime,
-                name,
-                name_span: name_sp,
+                name: Spanned::new(name, name_sp),
                 imports,
                 params,
                 ports,
@@ -946,8 +944,7 @@ fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pack
             span,
             PackageData {
                 lifetime: lifetime,
-                name: name,
-                name_span: name_span,
+                name: Spanned::new(name, name_span),
                 timeunits: timeunits,
                 items: items,
             },

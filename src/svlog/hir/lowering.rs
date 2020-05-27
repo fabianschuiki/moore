@@ -541,7 +541,7 @@ fn lower_module<'gcx>(
     // Create the HIR module.
     let hir = hir::Module {
         id: node_id,
-        name: Spanned::new(ast.name, ast.name_span),
+        name: ast.name,
         span: ast.span,
         ports_new,
         params: cx.arena().alloc_ids(params),
@@ -2456,7 +2456,7 @@ fn lower_package<'gcx>(
 
     let hir = hir::Package {
         id: node_id,
-        name: Spanned::new(ast.name, ast.name_span),
+        name: ast.name,
         span: ast.span,
         names,
         decls,
