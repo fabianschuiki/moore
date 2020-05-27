@@ -6,6 +6,7 @@
 
 use crate::token::{Lit, Op};
 use moore_common::{
+    id::NodeId,
     name::Name,
     source::{Span, Spanned, INVALID_SPAN},
     util::{HasDesc, HasSpan},
@@ -18,6 +19,9 @@ use std::{
 
 /// An AST node.
 pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display {
+    /// Get this node's unique ID.
+    fn id(&self) -> NodeId;
+
     /// Get this node's span in the input.
     fn span(&self) -> Span;
 
@@ -249,6 +253,8 @@ where
 /// Common denominator across all AST nodes.
 #[derive(Clone)]
 pub struct Node<'a, T> {
+    /// Unique ID assigned to the node.
+    pub id: NodeId,
     /// Full span the node covers in the input.
     pub span: Span,
     /// Parent node.
@@ -267,6 +273,7 @@ impl<'a, T> Node<'a, T> {
     /// Create a new AST node.
     pub fn new(span: Span, data: T) -> Self {
         Node {
+            id: NodeId::alloc(),
             span,
             data,
             parent: Default::default(),
@@ -284,6 +291,10 @@ where
     Self: BasicNode<'a> + std::fmt::Display + AnyNodeData,
     T: std::fmt::Debug + ForEachChild<'a>,
 {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
     fn span(&self) -> Span {
         self.span
     }
@@ -359,7 +370,7 @@ where
                 write!(f, " {:w$?}", self.data, w = (w - 1))
             }
         } else {
-            write!(f, "{} #{:p}", self.type_name(), self)
+            write!(f, "{} #{}", self.type_name(), self.id.as_usize())
         }
     }
 }
@@ -1290,6 +1301,13 @@ pub enum TypeOrExpr<'a> {
 }
 
 impl<'a> AnyNode<'a> for TypeOrExpr<'a> {
+    fn id(&self) -> NodeId {
+        match self {
+            TypeOrExpr::Type(x) => x.id(),
+            TypeOrExpr::Expr(x) => x.id(),
+        }
+    }
+
     fn span(&self) -> Span {
         match self {
             TypeOrExpr::Type(x) => x.span(),
