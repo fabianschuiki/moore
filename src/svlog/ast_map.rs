@@ -199,7 +199,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Package(x) => "package",
             AstNode::EnumVariant(x, _, _) => "enum variant",
             AstNode::Import(x) => "import",
-            AstNode::SubroutineDecl(x) => x.desc(),
+            AstNode::SubroutineDecl(x) => "subroutine declaration",
             AstNode::Interface(x) => "interface",
         }
     }
@@ -230,7 +230,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Package(x) => x.to_definite_string(),
             AstNode::EnumVariant(x, _, _) => x.to_definite_string(),
             AstNode::Import(x) => x.to_definite_string(),
-            AstNode::SubroutineDecl(x) => x.desc_full(),
+            AstNode::SubroutineDecl(x) => x.to_definite_string(),
             AstNode::Interface(x) => x.to_definite_string(),
         }
     }

@@ -146,10 +146,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
                 Some(RibKind::Import(Box::new(rib.clone())))
             }
         }
-        AstNode::SubroutineDecl(decl) => Some(RibKind::Normal(
-            Spanned::new(decl.prototype.name.name, decl.prototype.name.span),
-            node_id,
-        )),
+        AstNode::SubroutineDecl(decl) => Some(RibKind::Normal(decl.prototype.name, node_id)),
         _ => None,
     };
     if kind.is_none() {
@@ -935,6 +932,17 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         self.add_def(Def {
             node,
             name: node.name,
+            vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
+
+    fn pre_visit_subroutine_decl(&mut self, node: &'a ast::SubroutineDecl<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: node.prototype.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
             ordered: true,

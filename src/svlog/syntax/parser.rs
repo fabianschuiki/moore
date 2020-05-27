@@ -3103,11 +3103,10 @@ fn parse_subroutine_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<S
         p.eat_ident("function/task name")?;
     }
     span.expand(p.last_span());
-    Ok(SubroutineDecl {
-        span: span,
-        prototype: prototype,
-        items: items,
-    })
+    Ok(SubroutineDecl::new(
+        span,
+        SubroutineDeclData { prototype, items },
+    ))
 }
 
 fn parse_subroutine_prototype<'n>(
@@ -3160,28 +3159,27 @@ fn parse_subroutine_prototype<'n>(
     };
 
     span.expand(p.last_span());
-    Ok(SubroutinePrototype {
+    Ok(SubroutinePrototype::new(
         span,
-        kind,
-        lifetime,
-        name,
-        args,
-        retty,
-    })
+        SubroutinePrototypeData {
+            kind,
+            lifetime,
+            name,
+            args,
+            retty,
+        },
+    ))
 }
 
 fn parse_subroutine_prototype_tail<'n>(
     p: &mut dyn AbstractParser<'n>,
-) -> ReportedResult<(ast::Identifier, Vec<SubroutinePort<'n>>)> {
+) -> ReportedResult<(Spanned<Name>, Vec<SubroutinePort<'n>>)> {
     // Consume the subroutine name, or "new".
     // TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
     let name = if p.try_eat(Keyword(Kw::New)) {
-        ast::Identifier {
-            span: p.last_span(),
-            name: get_name_table().intern("new", true),
-        }
+        Spanned::new(get_name_table().intern("new", true), p.last_span())
     } else {
-        parse_identifier(p, "function or task name")?
+        parse_identifier_name(p, "function or task name")?
     };
 
     // Consume the port list.

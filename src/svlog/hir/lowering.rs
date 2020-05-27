@@ -489,7 +489,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::SubroutineDecl(decl) => {
             let hir = hir::Subroutine {
                 id: node_id,
-                name: Spanned::new(decl.prototype.name.name, decl.prototype.name.span),
+                name: decl.prototype.name,
                 span: decl.span,
                 kind: decl.prototype.kind,
                 retty: decl
@@ -2448,10 +2448,9 @@ fn lower_package<'gcx>(
                 next_rib = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
                 names.push((def.name, next_rib));
             }
-            ast::ItemData::SubroutineDecl(ref decl) => warn!(
-                "ignoring unsupported subroutine `{}`",
-                decl.prototype.name.name
-            ),
+            ast::ItemData::SubroutineDecl(ref decl) => {
+                warn!("ignoring unsupported subroutine `{}`", decl.prototype.name)
+            }
             _ => {
                 cx.emit(
                     DiagBuilder2::error(format!("{:#} cannot appear in a package", item))

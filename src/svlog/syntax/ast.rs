@@ -584,8 +584,7 @@ pub enum Item<'a> {
     PortDecl(PortDecl<'a>),
     #[dont_visit]
     Procedure(Procedure<'a>),
-    #[dont_visit]
-    SubroutineDecl(SubroutineDecl<'a>),
+    SubroutineDecl(#[forward] SubroutineDecl<'a>),
     #[dont_visit]
     ContAssign(ContAssign<'a>),
     GenvarDecl(Vec<GenvarDecl<'a>>),
@@ -1487,26 +1486,6 @@ pub struct Typedef<'a> {
     pub dims: Vec<TypeDim<'a>>,
 }
 
-// impl HasSpan for Typedef<'_> {
-//     fn span(&self) -> Span {
-//         self.span
-//     }
-
-//     fn human_span(&self) -> Span {
-//         self.name.span
-//     }
-// }
-
-// impl HasDesc for Typedef<'_> {
-//     fn desc(&self) -> &'static str {
-//         "typedef"
-//     }
-
-//     fn desc_full(&self) -> String {
-//         format!("typedef `{}`", self.name.name)
-//     }
-// }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Constraint<'a> {
     pub span: Span,
@@ -1538,49 +1517,31 @@ pub enum ConstraintItemData<'a> {
     Expr(Expr<'a>),
 }
 
+/// A function or task declaration.
+#[moore_derive::node]
+#[indefinite("subroutine declaration")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutineDecl<'a> {
-    pub span: Span,
     pub prototype: SubroutinePrototype<'a>,
+    #[dont_visit]
     pub items: Vec<SubroutineItem<'a>>,
 }
 
-impl HasSpan for SubroutineDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.prototype.name.span
-    }
-}
-
-impl HasDesc for SubroutineDecl<'_> {
-    fn desc(&self) -> &'static str {
-        match self.prototype.kind {
-            SubroutineKind::Func => "function declaration",
-            SubroutineKind::Task => "task declaration",
-        }
-    }
-
-    fn desc_full(&self) -> String {
-        match self.prototype.kind {
-            SubroutineKind::Func => format!("function `{}`", self.prototype.name.name),
-            SubroutineKind::Task => format!("task `{}`", self.prototype.name.name),
-        }
-    }
-}
-
+/// A function or task prototype.
+#[moore_derive::node]
+#[indefinite("subroutine prototype")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePrototype<'a> {
-    pub span: Span,
     pub kind: SubroutineKind,
     pub lifetime: Option<Lifetime>,
-    pub name: Identifier,
+    #[name]
+    pub name: Spanned<Name>,
+    #[dont_visit]
     pub args: Vec<SubroutinePort<'a>>,
     pub retty: Option<Type<'a>>,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SubroutineKind {
     Func,
