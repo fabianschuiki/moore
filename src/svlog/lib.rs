@@ -118,7 +118,7 @@ pub use crate::{
 mod crate_prelude {
     #[allow(unused_imports)]
     pub(crate) use crate::{
-        ast,
+        ast::{self, AnyNode, AnyNodeData},
         common::{
             errors::*,
             name::Name,

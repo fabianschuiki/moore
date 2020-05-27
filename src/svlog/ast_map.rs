@@ -6,6 +6,7 @@ use crate::ast;
 use crate::common::source::Span;
 use crate::common::util::{HasDesc, HasSpan};
 use crate::common::NodeId;
+use crate::crate_prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -172,18 +173,19 @@ impl<'ast> HasSpan for AstNode<'ast> {
 
 impl<'ast> HasDesc for AstNode<'ast> {
     fn desc(&self) -> &'static str {
+        #[allow(unused_variables)]
         match *self {
-            AstNode::Module(x) => x.desc(),
+            AstNode::Module(x) => "module",
             AstNode::Port(_) => "port",
-            AstNode::Type(x) => x.desc(),
-            AstNode::Expr(x) => x.desc(),
+            AstNode::Type(x) => "type",
+            AstNode::Expr(x) => "expression",
             AstNode::InstTarget(x) => x.desc(),
             AstNode::Inst(x, _) => x.desc(),
-            AstNode::TypeParam(_, x) => x.desc(),
-            AstNode::ValueParam(_, x) => x.desc(),
-            AstNode::TypeOrExpr(x) => x.desc(),
-            AstNode::VarDecl(x, _, _) => x.desc(),
-            AstNode::NetDecl(x, _, _) => x.desc(),
+            AstNode::TypeParam(_, x) => "type parameter",
+            AstNode::ValueParam(_, x) => "value parameter",
+            AstNode::TypeOrExpr(x) => "type or expression",
+            AstNode::VarDecl(x, _, _) => "variable declaration",
+            AstNode::NetDecl(x, _, _) => "net declaration",
             AstNode::Proc(x) => x.desc(),
             AstNode::Stmt(x) => x.desc(),
             AstNode::EventExpr(x) => x.desc(),
@@ -193,28 +195,28 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::GenvarDecl(x) => x.desc(),
             AstNode::Typedef(x) => x.desc(),
             AstNode::ContAssign(x, _, _) => x.desc(),
-            AstNode::StructMember(x, _, _) => x.desc(),
-            AstNode::Package(x) => x.desc(),
+            AstNode::StructMember(x, _, _) => "struct member",
+            AstNode::Package(x) => "package",
             AstNode::EnumVariant(x, _, _) => x.desc(),
-            AstNode::Import(x) => x.desc(),
+            AstNode::Import(x) => "import",
             AstNode::SubroutineDecl(x) => x.desc(),
-            AstNode::Interface(x) => x.desc(),
+            AstNode::Interface(x) => "interface",
         }
     }
 
     fn desc_full(&self) -> String {
         match *self {
-            AstNode::Module(x) => x.desc_full(),
+            AstNode::Module(x) => x.to_definite_string(),
             AstNode::Port(_) => "port".to_string(),
-            AstNode::Type(x) => x.desc_full(),
-            AstNode::Expr(x) => x.desc_full(),
+            AstNode::Type(x) => x.to_definite_string(),
+            AstNode::Expr(x) => x.to_definite_string(),
             AstNode::InstTarget(x) => x.desc_full(),
             AstNode::Inst(x, _) => x.desc_full(),
-            AstNode::TypeParam(_, x) => x.desc_full(),
-            AstNode::ValueParam(_, x) => x.desc_full(),
-            AstNode::TypeOrExpr(x) => x.desc_full(),
-            AstNode::VarDecl(x, _, _) => x.desc_full(),
-            AstNode::NetDecl(x, _, _) => x.desc_full(),
+            AstNode::TypeParam(_, x) => x.to_definite_string(),
+            AstNode::ValueParam(_, x) => x.to_definite_string(),
+            AstNode::TypeOrExpr(x) => x.to_definite_string(),
+            AstNode::VarDecl(x, _, _) => x.to_definite_string(),
+            AstNode::NetDecl(x, _, _) => x.to_definite_string(),
             AstNode::Proc(x) => x.desc_full(),
             AstNode::Stmt(x) => x.desc_full(),
             AstNode::EventExpr(x) => x.desc_full(),
@@ -224,12 +226,12 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::GenvarDecl(x) => x.desc_full(),
             AstNode::Typedef(x) => x.desc_full(),
             AstNode::ContAssign(x, _, _) => x.desc_full(),
-            AstNode::StructMember(x, _, _) => x.desc_full(),
-            AstNode::Package(x) => x.desc_full(),
+            AstNode::StructMember(x, _, _) => x.to_definite_string(),
+            AstNode::Package(x) => x.to_definite_string(),
             AstNode::EnumVariant(x, _, _) => x.desc_full(),
-            AstNode::Import(x) => x.desc_full(),
+            AstNode::Import(x) => x.to_definite_string(),
             AstNode::SubroutineDecl(x) => x.desc_full(),
-            AstNode::Interface(x) => x.desc_full(),
+            AstNode::Interface(x) => x.to_definite_string(),
         }
     }
 }

@@ -92,8 +92,6 @@ impl<'gcx> GlobalContext<'gcx> {
     /// modules that were added.
     pub fn add_root_nodes(&self, ast: impl Iterator<Item = &'gcx ast::Root<'gcx>>) {
         for root in ast {
-            use ast::AnyNode;
-
             debug!("Linking nodes");
             let mut index = 0;
             root.link(None, &mut index);

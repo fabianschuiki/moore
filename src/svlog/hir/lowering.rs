@@ -1680,7 +1680,12 @@ fn lower_type<'gcx>(
         | ast::SpecializedType(..)
         | ast::ScopedType { .. } => {
             error!("{:#?}", ty);
-            return cx.unimp_msg("lowering of", ty);
+            bug_span!(
+                ty.span(),
+                cx,
+                "lowering of {} to hir not implemented",
+                ty.format_indefinite()
+            );
         }
     };
     for dim in ty.dims.iter().rev() {
@@ -2214,7 +2219,12 @@ fn lower_expr<'gcx>(
         ),
         _ => {
             error!("{:#?}", expr);
-            return cx.unimp_msg("lowering of", expr);
+            bug_span!(
+                expr.span,
+                cx,
+                "lowering of {:#} to hir not implemented",
+                expr
+            );
         }
     };
     let hir = hir::Expr {
@@ -2436,7 +2446,7 @@ fn lower_package<'gcx>(
             ),
             _ => {
                 cx.emit(
-                    DiagBuilder2::error(format!("{} cannot appear in a package", item.desc_full()))
+                    DiagBuilder2::error(format!("{:#} cannot appear in a package", item))
                         .span(item.human_span()),
                 );
                 return Err(());

@@ -10,14 +10,14 @@ use moore_common::{
     source::{Span, Spanned, INVALID_SPAN},
     util::{HasDesc, HasSpan},
 };
-use moore_derive::{AcceptVisitor, CommonNode};
+use moore_derive::{AcceptVisitor, AnyNodeData, CommonNode};
 use std::{
     cell::Cell,
     hash::{Hash, Hasher},
 };
 
 /// An AST node.
-pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Display {
+pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display {
     /// Get this node's span in the input.
     fn span(&self) -> Span;
 
@@ -70,6 +70,13 @@ pub trait BasicNode<'a>:
 
 /// Common details of an AST node.
 pub trait AnyNodeData {
+    fn as_data(&self) -> &dyn AnyNodeData
+    where
+        Self: Sized,
+    {
+        self
+    }
+
     /// Get this node's name, or `None` if it does not have one.
     fn get_name(&self) -> Option<Spanned<Name>> {
         None
@@ -97,41 +104,53 @@ pub trait AnyNodeData {
     }
 
     /// Describe this node for diagnostics in indefinite form, e.g. *"entity"*.
-    fn format_indefinite(&self) -> FormatNodeIndefinite<Self> {
-        FormatNodeIndefinite(self)
+    fn format_indefinite(&self) -> FormatNodeIndefinite
+    where
+        Self: Sized,
+    {
+        FormatNodeIndefinite(self.as_data())
     }
 
     /// Describe this node for diagnostics in definite form, e.g. *"entity
     /// 'top'"*.
-    fn format_definite(&self) -> FormatNodeDefinite<Self> {
-        FormatNodeDefinite(self)
+    fn format_definite(&self) -> FormatNodeDefinite
+    where
+        Self: Sized,
+    {
+        FormatNodeDefinite(self.as_data())
     }
 
     /// Describe this node for diagnostics in indefinite form, e.g. *"entity"*.
-    fn to_indefinite_string(&self) -> String {
+    fn to_indefinite_string(&self) -> String
+    where
+        Self: Sized,
+    {
         self.format_indefinite().to_string()
     }
 
     /// Describe this node for diagnostics in definite form, e.g. *"entity
     /// 'top'"*.
-    fn to_definite_string(&self) -> String {
+    fn to_definite_string(&self) -> String
+    where
+        Self: Sized,
+    {
         self.format_definite().to_string()
     }
 }
 
 /// Format a node in indefinite form.
-pub struct FormatNodeIndefinite<'a, T: ?Sized>(&'a T);
+pub struct FormatNodeIndefinite<'a>(&'a dyn AnyNodeData);
 
 /// Format a node in definite form.
-pub struct FormatNodeDefinite<'a, T: ?Sized>(&'a T);
+pub struct FormatNodeDefinite<'a>(&'a dyn AnyNodeData);
 
-impl<'a, T: AnyNodeData + ?Sized> std::fmt::Display for FormatNodeIndefinite<'a, T> {
+impl<'a> std::fmt::Display for FormatNodeIndefinite<'a> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.0.fmt_indefinite(fmt)
     }
 }
 
-impl<'a, T: AnyNodeData + ?Sized> std::fmt::Display for FormatNodeDefinite<'a, T> {
+impl<'a> std::fmt::Display for FormatNodeDefinite<'a> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.0.fmt_definite(fmt)
     }
@@ -252,7 +271,7 @@ impl<'a, T> Node<'a, T> {
 /// present.
 impl<'a, T> AnyNode<'a> for Node<'a, T>
 where
-    Self: BasicNode<'a> + std::fmt::Display,
+    Self: BasicNode<'a> + std::fmt::Display + AnyNodeData,
     T: std::fmt::Debug + ForEachChild<'a>,
 {
     fn span(&self) -> Span {
@@ -275,6 +294,25 @@ where
         self.for_each_child(&mut |node| {
             node.link(Some(self.as_any()), order);
         });
+    }
+}
+
+/// Automatically implement `AnyNodeData` for `Node<T>` if the inner node
+/// implements it.
+impl<'a, T> AnyNodeData for Node<'a, T>
+where
+    T: AnyNodeData,
+{
+    fn get_name(&self) -> Option<Spanned<Name>> {
+        self.data.get_name()
+    }
+
+    fn fmt_indefinite(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.data.fmt_indefinite(fmt)
+    }
+
+    fn fmt_definite(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.data.fmt_definite(fmt)
     }
 }
 
@@ -546,52 +584,10 @@ pub enum Item<'a> {
     Inst(Inst<'a>),
 }
 
-impl HasSpan for Item<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        match &self.data {
-            ItemData::ModuleDecl(x) => HasSpan::human_span(x),
-            _ => self.span,
-        }
-    }
-}
-
-impl HasDesc for Item<'_> {
-    fn desc(&self) -> &'static str {
-        match &self.data {
-            ItemData::ModuleDecl(x) => x.desc(),
-            ItemData::InterfaceDecl(_) => "interface declaration",
-            ItemData::PackageDecl(_) => "package declaration",
-            ItemData::ImportDecl(_) => "import declaration",
-            ItemData::ParamDecl(_) => "parameter declaration",
-            ItemData::ProgramDecl(_) => "program declaration",
-            ItemData::ModportDecl(_) => "modport declaration",
-            ItemData::ClassDecl(_) => "class declaration",
-            ItemData::PortDecl(_) => "port declaration",
-            ItemData::Procedure(_) => "procedure declaration",
-            ItemData::SubroutineDecl(_) => "subroutine declaration",
-            ItemData::Assertion(_) => "assertion",
-            ItemData::NetDecl(_) => "net declaration",
-            ItemData::VarDecl(_) => "variable declaration",
-            ItemData::Inst(_) => "instantiation",
-            _ => "<invalid item>",
-        }
-    }
-
-    fn desc_full(&self) -> String {
-        match &self.data {
-            ItemData::ModuleDecl(x) => x.desc_full(),
-            _ => self.desc().into(),
-        }
-    }
-}
-
 /// A module.
 #[moore_derive::node]
-#[indefinite("module")]
+#[indefinite("module declaration")]
+// #[definite("module `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
     pub lifetime: Lifetime, // default static
@@ -605,29 +601,10 @@ pub struct Module<'a> {
     pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for Module<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name_span
-    }
-}
-
-impl HasDesc for Module<'_> {
-    fn desc(&self) -> &'static str {
-        "module declaration"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("module `{}`", self.name)
-    }
-}
-
 /// An interface.
 #[moore_derive::node]
-#[indefinite("interface")]
+#[indefinite("interface declaration")]
+// #[definite("interface `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interface<'a> {
     pub lifetime: Lifetime, // default static
@@ -640,29 +617,10 @@ pub struct Interface<'a> {
     pub items: Vec<Item<'a>>,
 }
 
-impl HasSpan for Interface<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name_span
-    }
-}
-
-impl HasDesc for Interface<'_> {
-    fn desc(&self) -> &'static str {
-        "interface declaration"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("interface `{}`", self.name)
-    }
-}
-
 /// A package.
 #[moore_derive::node]
-#[indefinite("package")]
+#[indefinite("package declaration")]
+// #[definite("package `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package<'a> {
     pub lifetime: Lifetime,
@@ -670,26 +628,6 @@ pub struct Package<'a> {
     pub name_span: Span,
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
-}
-
-impl HasSpan for Package<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name_span
-    }
-}
-
-impl HasDesc for Package<'_> {
-    fn desc(&self) -> &'static str {
-        "package declaration"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("package `{}`", self.name)
-    }
 }
 
 /// Lifetime specifier for variables, tasks, and functions. Defaults to static.
@@ -713,11 +651,16 @@ pub struct Timeunit {
     pub prec: Option<Spanned<Lit>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[moore_derive::visit]
+#[derive(AnyNodeData, Debug, PartialEq, Eq, Clone)]
+#[indefinite("type")]
 pub struct Type<'a> {
     pub span: Span,
+    #[dont_visit]
     pub data: TypeData<'a>,
+    #[dont_visit]
     pub sign: TypeSign,
+    #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
 }
 
@@ -727,21 +670,21 @@ impl HasSpan for Type<'_> {
     }
 }
 
-impl HasDesc for Type<'_> {
-    fn desc(&self) -> &'static str {
-        match self.data {
-            ImplicitType => "implicit type",
-            _ => "type",
-        }
-    }
+// impl HasDesc for Type<'_> {
+//     fn desc(&self) -> &'static str {
+//         match self.data {
+//             ImplicitType => "implicit type",
+//             _ => "type",
+//         }
+//     }
 
-    fn desc_full(&self) -> String {
-        match self.data {
-            ImplicitType => self.desc().into(),
-            _ => format!("type `{}`", self.span().extract()),
-        }
-    }
-}
+//     fn desc_full(&self) -> String {
+//         match self.data {
+//             ImplicitType => self.desc().into(),
+//             _ => format!("type `{}`", self.span().extract()),
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeData<'a> {
@@ -1228,18 +1171,6 @@ pub struct VarDecl<'a> {
     pub names: Vec<VarDeclName<'a>>,
 }
 
-impl HasSpan for VarDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for VarDecl<'_> {
-    fn desc(&self) -> &'static str {
-        "variable declaration"
-    }
-}
-
 /// A variable or net declaration name.
 ///
 /// For example the `x` in `logic x, y, z`.
@@ -1252,26 +1183,6 @@ pub struct VarDeclName<'a> {
     #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
     pub init: Option<Expr<'a>>,
-}
-
-impl HasSpan for VarDeclName<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name_span
-    }
-}
-
-impl HasDesc for VarDeclName<'_> {
-    fn desc(&self) -> &'static str {
-        "variable"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("variable `{}`", self.name)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1396,52 +1307,58 @@ pub enum Expr<'a> {
     CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
 }
 
-impl HasSpan for Expr<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for Expr<'_> {
-    fn desc(&self) -> &'static str {
-        "expression"
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[moore_derive::visit]
+#[derive(AnyNodeData, Debug, Clone, PartialEq, Eq)]
+#[forward]
 pub enum TypeOrExpr<'a> {
     Type(Type<'a>),
     Expr(Expr<'a>),
 }
 
-impl HasSpan for TypeOrExpr<'_> {
+impl<'a> AnyNode<'a> for TypeOrExpr<'a> {
     fn span(&self) -> Span {
-        match *self {
-            TypeOrExpr::Type(ref x) => x.span(),
-            TypeOrExpr::Expr(ref x) => x.span,
+        match self {
+            TypeOrExpr::Type(x) => x.span(),
+            TypeOrExpr::Expr(x) => x.span(),
         }
     }
 
-    fn human_span(&self) -> Span {
-        match *self {
-            TypeOrExpr::Type(ref x) => x.human_span(),
-            TypeOrExpr::Expr(ref x) => HasSpan::human_span(x),
+    fn order(&self) -> usize {
+        match self {
+            TypeOrExpr::Type(x) => unimplemented!(),
+            TypeOrExpr::Expr(x) => x.order(),
         }
     }
 }
 
-impl HasDesc for TypeOrExpr<'_> {
-    fn desc(&self) -> &'static str {
-        match *self {
-            TypeOrExpr::Type(ref x) => x.desc(),
-            TypeOrExpr::Expr(ref x) => x.desc(),
+impl<'a> BasicNode<'a> for TypeOrExpr<'a> {
+    fn type_name(&self) -> &'static str {
+        match self {
+            TypeOrExpr::Type(x) => "Type",
+            TypeOrExpr::Expr(x) => x.type_name(),
         }
     }
 
-    fn desc_full(&self) -> String {
-        match *self {
-            TypeOrExpr::Type(ref x) => x.desc_full(),
-            TypeOrExpr::Expr(ref x) => x.desc_full(),
+    fn as_all(&'a self) -> AllNode<'a> {
+        match self {
+            TypeOrExpr::Type(x) => unimplemented!(),
+            TypeOrExpr::Expr(x) => x.as_all(),
+        }
+    }
+
+    fn as_any(&'a self) -> &'a dyn AnyNode<'a> {
+        match self {
+            TypeOrExpr::Type(x) => unimplemented!(),
+            TypeOrExpr::Expr(x) => x.as_any(),
+        }
+    }
+}
+
+impl<'a> std::fmt::Display for TypeOrExpr<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TypeOrExpr::Type(x) => write!(fmt, "type"),
+            TypeOrExpr::Expr(x) => std::fmt::Display::fmt(x, fmt),
         }
     }
 }
@@ -1829,18 +1746,6 @@ pub struct ImportItem {
     pub name: Option<Spanned<Name>>, // None means `import pkg::*`
 }
 
-impl HasSpan for ImportItem<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for ImportItem<'_> {
-    fn desc(&self) -> &'static str {
-        "import"
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assertion<'a> {
     pub span: Span,
@@ -2060,18 +1965,6 @@ pub struct ParamDecl<'a> {
     pub kind: ParamKind<'a>,
 }
 
-impl HasSpan for ParamDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for ParamDecl<'_> {
-    fn desc(&self) -> &'static str {
-        "parameter"
-    }
-}
-
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParamKind<'a> {
@@ -2094,26 +1987,6 @@ pub struct ParamTypeDecl<'a> {
     pub ty: Option<Type<'a>>,
 }
 
-impl HasSpan for ParamTypeDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name.span
-    }
-}
-
-impl HasDesc for ParamTypeDecl<'_> {
-    fn desc(&self) -> &'static str {
-        "parameter"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("parameter `{}`", self.name)
-    }
-}
-
 /// A single value assignment within a parameter or loclparam declaration.
 ///
 /// ```text
@@ -2130,26 +2003,6 @@ pub struct ParamValueDecl<'a> {
     #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,
     pub expr: Option<Expr<'a>>,
-}
-
-impl HasSpan for ParamValueDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name.span
-    }
-}
-
-impl HasDesc for ParamValueDecl<'_> {
-    fn desc(&self) -> &'static str {
-        "parameter"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("parameter `{}`", self.name)
-    }
 }
 
 /// A continuous assignment statement.
