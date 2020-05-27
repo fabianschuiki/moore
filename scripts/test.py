@@ -228,7 +228,7 @@ class TestCase(object):
         try:
             self.stdout, self.stderr = self.proc.communicate(timeout=10)
         except subprocess.TimeoutExpired as e:
-            proc.kill()
+            self.proc.kill()
             self.stdout, self.stderr = self.proc.communicate()
             self.timeout = True
             self.failed = True
