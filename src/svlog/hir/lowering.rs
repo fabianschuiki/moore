@@ -438,8 +438,8 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::Typedef(def) => {
             let hir = hir::Typedef {
                 id: node_id,
-                span: def.span(),
-                name: Spanned::new(def.name.name, def.name.span),
+                span: def.span,
+                name: def.name,
                 ty: cx.map_ast_with_parent(
                     AstNode::Type(&def.ty),
                     cx.parent_node_id(node_id).unwrap(),
@@ -2446,7 +2446,7 @@ fn lower_package<'gcx>(
             }
             ast::ItemData::Typedef(ref def) => {
                 next_rib = cx.map_ast_with_parent(AstNode::Typedef(def), next_rib);
-                names.push((Spanned::new(def.name.name, def.name.span), next_rib));
+                names.push((def.name, next_rib));
             }
             ast::ItemData::SubroutineDecl(ref decl) => warn!(
                 "ignoring unsupported subroutine `{}`",

@@ -1,3 +1,4 @@
+// RUN: moore %s -e A
 module A;
     enum {
         Foo, Bar, Gax, Bux, Bla
@@ -13,7 +14,4 @@ module A;
     	c1 = Baz;
     	c1 = Buz;
     end
-
 endmodule
-
-//@ elab A

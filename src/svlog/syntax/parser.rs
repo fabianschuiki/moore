@@ -4923,16 +4923,11 @@ fn parse_typedef<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typedef<'
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Typedef))?;
     let ty = parse_explicit_type(p)?;
-    let name = parse_identifier(p, "type name")?;
+    let name = parse_identifier_name(p, "type name")?;
     let (dims, _) = parse_optional_dimensions(p)?;
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
-    Ok(Typedef {
-        span: span,
-        name: name,
-        ty: ty,
-        dims: dims,
-    })
+    Ok(Typedef::new(span, TypedefData { name, ty, dims }))
 }
 
 fn parse_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<PortDecl<'n>> {

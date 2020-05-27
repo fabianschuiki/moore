@@ -579,8 +579,7 @@ pub enum Item<'a> {
     ParamDecl(#[forward] ParamDecl<'a>),
     #[dont_visit]
     ModportDecl(ModportDecl),
-    #[dont_visit]
-    Typedef(Typedef<'a>),
+    Typedef(#[forward] Typedef<'a>),
     #[dont_visit]
     PortDecl(PortDecl<'a>),
     #[dont_visit]
@@ -589,7 +588,6 @@ pub enum Item<'a> {
     SubroutineDecl(SubroutineDecl<'a>),
     #[dont_visit]
     ContAssign(ContAssign<'a>),
-    #[dont_visit]
     GenvarDecl(Vec<GenvarDecl<'a>>),
     #[dont_visit]
     GenerateRegion(Span, Vec<Item<'a>>),
@@ -677,7 +675,6 @@ pub struct Timeunit {
 #[indefinite("type")]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Type<'a> {
-    #[dont_visit]
     pub kind: TypeKind<'a>,
     #[dont_visit]
     pub sign: TypeSign,
@@ -750,6 +747,7 @@ pub enum TypeSign {
     Unsigned,
 }
 
+#[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeDim<'a> {
     Expr(Expr<'a>),
@@ -1476,33 +1474,38 @@ pub enum RandomQualifier {
     Randc,
 }
 
+/// A type definition.
+///
+/// For example `typedef int my_type_t`.
+#[moore_derive::node]
+#[indefinite("typedef")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Typedef<'a> {
-    pub span: Span,
-    pub name: Identifier,
+    #[name]
+    pub name: Spanned<Name>,
     pub ty: Type<'a>,
     pub dims: Vec<TypeDim<'a>>,
 }
 
-impl HasSpan for Typedef<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
+// impl HasSpan for Typedef<'_> {
+//     fn span(&self) -> Span {
+//         self.span
+//     }
 
-    fn human_span(&self) -> Span {
-        self.name.span
-    }
-}
+//     fn human_span(&self) -> Span {
+//         self.name.span
+//     }
+// }
 
-impl HasDesc for Typedef<'_> {
-    fn desc(&self) -> &'static str {
-        "typedef"
-    }
+// impl HasDesc for Typedef<'_> {
+//     fn desc(&self) -> &'static str {
+//         "typedef"
+//     }
 
-    fn desc_full(&self) -> String {
-        format!("typedef `{}`", self.name.name)
-    }
-}
+//     fn desc_full(&self) -> String {
+//         format!("typedef `{}`", self.name.name)
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Constraint<'a> {

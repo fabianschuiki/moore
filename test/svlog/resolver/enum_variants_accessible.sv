@@ -1,3 +1,5 @@
+// RUN: moore %s -e barrier
+
 module barrier #(
   parameter int NrPorts = 4,
   parameter type req_t = logic [31:0]

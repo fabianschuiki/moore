@@ -919,6 +919,28 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         });
         true
     }
+
+    fn pre_visit_enum_name(&mut self, node: &'a ast::EnumName<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
+
+    fn pre_visit_typedef(&mut self, node: &'a ast::Typedef<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
 }
 
 /// Determine the location of a node within its enclosing scope.
