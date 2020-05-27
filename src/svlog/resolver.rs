@@ -1006,7 +1006,7 @@ pub(crate) fn resolve_local<'a>(
     name: Name,
     at: ScopeLocation<'a>,
     skip_imports: bool,
-) -> Option<&'a dyn ast::AnyNode<'a>> {
+) -> Result<Option<&'a dyn ast::AnyNode<'a>>> {
     debug!("Resolving `{}` locally at {:?}", name, at);
     let scope = cx.generated_scope(at.scope);
     let mut next = Some(scope);
@@ -1029,17 +1029,15 @@ pub(crate) fn resolve_local<'a>(
                 // resolve `A` in `foo` now.
                 let node = if let Some(import) = def.node.as_all().get_import_item() {
                     debug!(" - Following {:?}", import);
-                    let inside = cx.resolve_imported_scope(import).ok()?;
-                    let binding = cx
-                        .resolve_namespace_or_error(import.name.unwrap(), inside)
-                        .ok()?;
+                    let inside = cx.resolve_imported_scope(import)?;
+                    let binding = cx.resolve_namespace_or_error(import.name.unwrap(), inside)?;
                     binding
                 } else {
                     def.node
                 };
 
                 debug!(" - Found {:?}", node);
-                return Some(node);
+                return Ok(Some(node));
             }
         }
 
@@ -1051,17 +1049,14 @@ pub(crate) fn resolve_local<'a>(
             if import.order() > at.order {
                 continue;
             }
-            let inside = match cx.resolve_imported_scope(import) {
-                Ok(x) => x,
-                Err(()) => continue,
-            };
+            let inside = cx.resolve_imported_scope(import)?;
             let binding = cx.resolve_namespace(name, inside);
             if binding.is_some() {
-                return binding;
+                return Ok(binding);
             }
         }
     }
-    None
+    Ok(None)
 }
 
 /// Resolve a local name in a scope or emit an error.
@@ -1075,7 +1070,7 @@ pub(crate) fn resolve_local_or_error<'a>(
     at: ScopeLocation<'a>,
     skip_imports: bool,
 ) -> Result<&'a dyn ast::AnyNode<'a>> {
-    match cx.resolve_local(name.value, at, skip_imports) {
+    match cx.resolve_local(name.value, at, skip_imports)? {
         Some(binding) => {
             if cx.sess().has_verbosity(Verbosity::NAMES) {
                 let d = DiagBuilder2::note("name resolution")
