@@ -97,10 +97,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             Spanned::new(decl.name, decl.name_span),
             node_id,
         )),
-        AstNode::GenvarDecl(decl) => Some(RibKind::Normal(
-            Spanned::new(decl.name, decl.name_span),
-            node_id,
-        )),
+        AstNode::GenvarDecl(decl) => Some(RibKind::Normal(decl.name, node_id)),
         AstNode::Stmt(stmt) => match stmt.data {
             ast::VarDeclStmt(_) => {
                 let hir = match cx.hir_of(node_id)? {
@@ -906,6 +903,17 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             node,
             name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
+
+    fn pre_visit_genvar_decl(&mut self, node: &'a ast::GenvarDecl<'a>) -> bool {
+        self.add_def(Def {
+            node,
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
             may_override: false,
             ordered: true,
         });

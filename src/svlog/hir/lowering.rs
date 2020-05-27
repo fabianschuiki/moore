@@ -426,8 +426,8 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::GenvarDecl(decl) => {
             let hir = hir::GenvarDecl {
                 id: node_id,
-                span: decl.span(),
-                name: Spanned::new(decl.name, decl.name_span),
+                span: decl.span,
+                name: decl.name,
                 init: decl
                     .init
                     .as_ref()

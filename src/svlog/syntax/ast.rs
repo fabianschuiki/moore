@@ -1183,32 +1183,14 @@ pub struct VarDeclName<'a> {
     pub init: Option<Expr<'a>>,
 }
 
+/// A generate variable declaration.
+#[moore_derive::node]
+#[indefinite("genvar")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenvarDecl<'a> {
-    pub span: Span,
-    pub name: Name,
-    pub name_span: Span,
+    #[name]
+    pub name: Spanned<Name>,
     pub init: Option<Expr<'a>>,
-}
-
-impl HasSpan for GenvarDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name_span
-    }
-}
-
-impl HasDesc for GenvarDecl<'_> {
-    fn desc(&self) -> &'static str {
-        "genvar"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("genvar `{}`", self.name)
-    }
 }
 
 /// An expression.

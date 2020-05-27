@@ -4253,7 +4253,7 @@ fn parse_genvar_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Genva
     let mut span = p.peek(0).1;
 
     // Parse the genvar name.
-    let (name, name_span) = p.eat_ident("genvar name")?;
+    let name = parse_identifier_name(p, "genvar name")?;
 
     // Parse the optional initial expression.
     let init = if p.try_eat(Operator(Op::Assign)) {
@@ -4263,12 +4263,7 @@ fn parse_genvar_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Genva
     };
     span.expand(p.last_span());
 
-    Ok(GenvarDecl {
-        span: span,
-        name: name,
-        name_span: name_span,
-        init: init,
-    })
+    Ok(GenvarDecl::new(span, GenvarDeclData { name, init }))
 }
 
 fn parse_generate_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Item<'n>> {
