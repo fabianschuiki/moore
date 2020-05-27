@@ -17,9 +17,14 @@ use std::{
 };
 
 /// An AST node.
-pub trait AnyNode<'a>: BasicNode<'a> {
+pub trait AnyNode<'a>: BasicNode<'a> + std::fmt::Display {
     /// Get this node's span in the input.
     fn span(&self) -> Span;
+
+    /// Get a span that is terse and suitable to pinpoint the node for a human.
+    fn human_span(&self) -> Span {
+        self.span()
+    }
 
     /// Get this node's lexical order.
     fn order(&self) -> usize;
@@ -46,7 +51,7 @@ impl<'a> Hash for &'a dyn AnyNode<'a> {
     }
 }
 
-/// Basic attribute of an AST node.
+/// Basic attributes of an AST node.
 ///
 /// If this trait is present on `Node<T>`, then `Node<T>` will automatically
 /// implement the full `AnyNode` trait.
@@ -61,6 +66,75 @@ pub trait BasicNode<'a>:
 
     /// Convert this node to an `AnyNode` trait object.
     fn as_any(&'a self) -> &'a dyn AnyNode<'a>;
+}
+
+/// Common details of an AST node.
+pub trait AnyNodeData {
+    /// Get this node's name, or `None` if it does not have one.
+    fn get_name(&self) -> Option<Spanned<Name>> {
+        None
+    }
+
+    /// Describe this node for diagnostics in indefinite form, e.g. *"entity"*.
+    ///
+    /// This should not include any node name. Generally, we want to describe
+    /// the *kind* of node to the user, for example as in *"cannot use <XYZ> at
+    /// this point in the code"*.
+    fn fmt_indefinite(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result;
+
+    /// Describe this node for diagnostics in definite form, e.g. *"entity
+    /// 'top'"*.
+    ///
+    /// If the node has a name, this should include it. Generally, we want to
+    /// provide enough information for the user to pinpoint an exact node in
+    /// their design.
+    fn fmt_definite(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.fmt_indefinite(fmt)?;
+        if let Some(name) = self.get_name() {
+            write!(fmt, " `{}`", name)?
+        }
+        Ok(())
+    }
+
+    /// Describe this node for diagnostics in indefinite form, e.g. *"entity"*.
+    fn format_indefinite(&self) -> FormatNodeIndefinite<Self> {
+        FormatNodeIndefinite(self)
+    }
+
+    /// Describe this node for diagnostics in definite form, e.g. *"entity
+    /// 'top'"*.
+    fn format_definite(&self) -> FormatNodeDefinite<Self> {
+        FormatNodeDefinite(self)
+    }
+
+    /// Describe this node for diagnostics in indefinite form, e.g. *"entity"*.
+    fn to_indefinite_string(&self) -> String {
+        self.format_indefinite().to_string()
+    }
+
+    /// Describe this node for diagnostics in definite form, e.g. *"entity
+    /// 'top'"*.
+    fn to_definite_string(&self) -> String {
+        self.format_definite().to_string()
+    }
+}
+
+/// Format a node in indefinite form.
+pub struct FormatNodeIndefinite<'a, T: ?Sized>(&'a T);
+
+/// Format a node in definite form.
+pub struct FormatNodeDefinite<'a, T: ?Sized>(&'a T);
+
+impl<'a, T: AnyNodeData + ?Sized> std::fmt::Display for FormatNodeIndefinite<'a, T> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt_indefinite(fmt)
+    }
+}
+
+impl<'a, T: AnyNodeData + ?Sized> std::fmt::Display for FormatNodeDefinite<'a, T> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt_definite(fmt)
+    }
 }
 
 /// A node which allows iterating over each child node.
@@ -178,7 +252,7 @@ impl<'a, T> Node<'a, T> {
 /// present.
 impl<'a, T> AnyNode<'a> for Node<'a, T>
 where
-    Self: BasicNode<'a>,
+    Self: BasicNode<'a> + std::fmt::Display,
     T: std::fmt::Debug + ForEachChild<'a>,
 {
     fn span(&self) -> Span {
@@ -204,6 +278,21 @@ where
     }
 }
 
+/// Allow any node to be printed in diagnostics in a human-friendly form.
+impl<'a, T> std::fmt::Display for Node<'a, T>
+where
+    T: AnyNodeData,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if f.alternate() {
+            self.data.fmt_indefinite(f)
+        } else {
+            self.data.fmt_definite(f)
+        }
+    }
+}
+
+/// Allow any node to be debug-formatted.
 impl<'a, T> std::fmt::Debug for Node<'a, T>
 where
     Self: BasicNode<'a>,
@@ -391,6 +480,7 @@ pub type PackageDecl<'a> = Package<'a>;
 
 /// An entire design file.
 #[moore_derive::node]
+#[indefinite("source file")]
 #[derive(Debug)]
 pub struct Root<'a> {
     pub timeunits: Timeunit,
@@ -412,18 +502,20 @@ fn checks1<'a>(ast: &'a Root<'a>, v: &mut dyn Visitor<'a>) {
 /// - classes
 /// - generates
 #[moore_derive::node]
+#[indefinite("item")]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Item<'a> {
+    #[indefinite("dummy item")]
     Dummy,
-    ModuleDecl(Module<'a>),
-    InterfaceDecl(Interface<'a>),
-    PackageDecl(Package<'a>),
+    ModuleDecl(#[forward] Module<'a>),
+    InterfaceDecl(#[forward] Interface<'a>),
+    PackageDecl(#[forward] Package<'a>),
     #[dont_visit]
     ClassDecl(ClassDecl<'a>),
     #[dont_visit]
     ProgramDecl(()),
-    ImportDecl(ImportDecl<'a>),
-    ParamDecl(ParamDecl<'a>),
+    ImportDecl(#[forward] ImportDecl<'a>),
+    ParamDecl(#[forward] ParamDecl<'a>),
     #[dont_visit]
     ModportDecl(ModportDecl),
     #[dont_visit]
@@ -449,7 +541,7 @@ pub enum Item<'a> {
     #[dont_visit]
     Assertion(Assertion<'a>),
     NetDecl(NetDecl<'a>),
-    VarDecl(VarDecl<'a>),
+    VarDecl(#[forward] VarDecl<'a>),
     #[dont_visit]
     Inst(Inst<'a>),
 }
@@ -461,7 +553,7 @@ impl HasSpan for Item<'_> {
 
     fn human_span(&self) -> Span {
         match &self.data {
-            ItemData::ModuleDecl(x) => x.human_span(),
+            ItemData::ModuleDecl(x) => HasSpan::human_span(x),
             _ => self.span,
         }
     }
@@ -499,6 +591,7 @@ impl HasDesc for Item<'_> {
 
 /// A module.
 #[moore_derive::node]
+#[indefinite("module")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
     pub lifetime: Lifetime, // default static
@@ -534,6 +627,7 @@ impl HasDesc for Module<'_> {
 
 /// An interface.
 #[moore_derive::node]
+#[indefinite("interface")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interface<'a> {
     pub lifetime: Lifetime, // default static
@@ -568,6 +662,7 @@ impl HasDesc for Interface<'_> {
 
 /// A package.
 #[moore_derive::node]
+#[indefinite("package")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package<'a> {
     pub lifetime: Lifetime,
@@ -1122,6 +1217,7 @@ pub enum AssignOp {
 ///
 /// For example `logic x, y, z`.
 #[moore_derive::node]
+#[indefinite("variable declaration")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDecl<'a> {
     pub konst: bool,
@@ -1148,6 +1244,7 @@ impl HasDesc for VarDecl<'_> {
 ///
 /// For example the `x` in `logic x, y, z`.
 #[moore_derive::node]
+#[indefinite("variable")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarDeclName<'a> {
     pub name: Name,
@@ -1207,6 +1304,7 @@ impl HasDesc for GenvarDecl<'_> {
 
 /// An expression.
 #[moore_derive::node]
+#[indefinite("expression")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr<'a> {
     DummyExpr,
@@ -1327,7 +1425,7 @@ impl HasSpan for TypeOrExpr<'_> {
     fn human_span(&self) -> Span {
         match *self {
             TypeOrExpr::Type(ref x) => x.human_span(),
-            TypeOrExpr::Expr(ref x) => x.human_span(),
+            TypeOrExpr::Expr(ref x) => HasSpan::human_span(x),
         }
     }
 }
@@ -1714,6 +1812,7 @@ pub enum PatternFieldData<'a> {
 ///
 /// For example `import a::b, c::*`.
 #[moore_derive::node]
+#[indefinite("import declaration")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportDecl<'a> {
     pub items: Vec<ImportItem<'a>>,
@@ -1723,6 +1822,7 @@ pub struct ImportDecl<'a> {
 ///
 /// For example the `a::b` in `import a::b, c::*`.
 #[moore_derive::node]
+#[indefinite("import")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportItem {
     pub pkg: Spanned<Name>,
@@ -1953,6 +2053,7 @@ pub enum ModportPort {
 /// "parameter" "type" list_of_type_assignments
 /// ```
 #[moore_derive::node]
+#[indefinite("parameter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamDecl<'a> {
     pub local: bool,
@@ -1984,8 +2085,10 @@ pub enum ParamKind<'a> {
 /// ident ["=" type]
 /// ```
 #[moore_derive::node]
+#[indefinite("type parameter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamTypeDecl<'a> {
+    #[name]
     pub name: Spanned<Name>,
     #[dont_visit]
     pub ty: Option<Type<'a>>,
@@ -2017,10 +2120,12 @@ impl HasDesc for ParamTypeDecl<'_> {
 /// [type_or_implicit] ident {dimension} ["=" expr]
 /// ```
 #[moore_derive::node]
+#[indefinite("value parameter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamValueDecl<'a> {
     #[dont_visit]
     pub ty: Type<'a>,
+    #[name]
     pub name: Spanned<Name>,
     #[dont_visit]
     pub dims: Vec<TypeDim<'a>>,

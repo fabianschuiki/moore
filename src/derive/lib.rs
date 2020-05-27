@@ -11,6 +11,7 @@ use syn::{parse_macro_input, DeriveInput};
 mod accept_visitor;
 mod all_node;
 mod node;
+mod node_data;
 mod query;
 mod visitor;
 mod walk_visitor;
@@ -157,9 +158,16 @@ pub fn accept_visitor(input: TokenStream) -> TokenStream {
     accept_visitor::accept_visitor(input)
 }
 
+/// Wrap a struct or enum in a `Node`.
 #[proc_macro_attribute]
 pub fn node(args: TokenStream, input: TokenStream) -> TokenStream {
     node::node(args, input)
+}
+
+/// Generate an `AnyNodeData` implementation.
+#[proc_macro_derive(AnyNodeData, attributes(name, forward, indefinite, definite))]
+pub fn node_data(input: TokenStream) -> TokenStream {
+    node_data::node_data(input)
 }
 
 /// Generate corresponding `*_visit_*` functions in a visitor.
