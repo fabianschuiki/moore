@@ -203,7 +203,7 @@ pub struct GlobalArenas<'t> {
     hir: hir::Arena<'t>,
     param_envs: TypedArena<ParamEnvData<'t>>,
     ribs: TypedArena<Rib>,
-    port_lists: TypedArena<PortList>,
+    port_lists: TypedArena<PortList<'t>>,
     scopes: TypedArena<Scope<'t>>,
     types: TypedArena<TypeKind<'t>>,
     values: TypedArena<ValueData<'t>>,
@@ -236,7 +236,7 @@ impl<'t> GlobalArenas<'t> {
     }
 
     /// Allocate a port list.
-    pub fn alloc_port_list(&'t self, port_list: PortList) -> &'t PortList {
+    pub fn alloc_port_list(&'t self, port_list: PortList<'t>) -> &'t PortList<'t> {
         self.port_lists.alloc(port_list)
     }
 

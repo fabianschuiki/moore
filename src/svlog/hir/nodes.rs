@@ -13,7 +13,7 @@ pub use crate::port_list::{ExtPort, ExtPortExpr, ExtPortSelect, IntPort, IntPort
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
-    IntPort(&'hir IntPort),
+    IntPort(&'hir IntPort<'hir>),
     ExtPort(&'hir ExtPort),
     Type(&'hir Type),
     Expr(&'hir Expr),
@@ -145,7 +145,7 @@ pub struct Module<'hir> {
     pub name: Spanned<Name>,
     pub span: Span,
     /// The ports of the module.
-    pub ports_new: &'hir PortList,
+    pub ports_new: &'hir PortList<'hir>,
     /// The parameters of the module.
     pub params: &'hir [NodeId],
     /// The contents of the module.
