@@ -3727,13 +3727,15 @@ fn parse_continuous_assign<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult
     p.require_reported(Semicolon)?;
 
     span.expand(p.last_span());
-    Ok(ContAssign {
-        span: span,
-        strength: strength,
-        delay: None,
-        delay_control: delay_control,
-        assignments: assignments,
-    })
+    Ok(ast::ContAssign::new(
+        span,
+        ast::ContAssignData {
+            strength,
+            delay: None,
+            delay_control,
+            assignments,
+        },
+    ))
 }
 
 fn parse_if_or_case<'n>(

@@ -1964,26 +1964,14 @@ pub struct ParamValueDecl<'a> {
 /// "assign" [drive_strength] [delay3] list_of_assignments ";"
 /// "assign" [delay_control] list_of_assignments ";"
 /// ```
-#[moore_derive::visit]
+#[moore_derive::node]
+#[indefinite("continuous assignment")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContAssign<'a> {
-    pub span: Span,
     pub strength: Option<(DriveStrength, DriveStrength)>,
     pub delay: Option<Expr<'a>>,
     pub delay_control: Option<DelayControl<'a>>,
     pub assignments: Vec<(Expr<'a>, Expr<'a>)>,
-}
-
-impl HasSpan for ContAssign<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for ContAssign<'_> {
-    fn desc(&self) -> &'static str {
-        "continuous assignment"
-    }
 }
 
 #[moore_derive::visit]
