@@ -653,8 +653,8 @@ pub fn generated_scope_id<'gcx>(
 ) -> Result<&'gcx Scope<'gcx>> {
     let ast = cx.ast_of(node_id)?;
     Ok(match ast {
-        AstNode::Module(node) => generated_scope(cx, node),
-        AstNode::Package(node) => generated_scope(cx, node),
+        AstNode::Module(node) => cx.generated_scope(node),
+        AstNode::Package(node) => cx.generated_scope(node),
         _ => bug_span!(ast.span(), cx, "node does not generate a scope"),
     })
 }

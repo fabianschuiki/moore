@@ -24,7 +24,11 @@ pub(crate) fn mark_query(_args: TokenStream, input: TokenStream) -> TokenStream 
     QUERIES.with(|c| c.borrow_mut().push(input.to_token_stream().to_string()));
 
     // Produce some output.
-    let output = quote! { #input };
+    let note = format!("call query via database: cx.{}(...)", input.sig.ident);
+    let output = quote! {
+        #[deprecated(note = #note)]
+        #input
+    };
     output.into()
 }
 
@@ -154,6 +158,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 }
 
                 // Execute the query.
+                #[allow(deprecated)]
                 let query_result = #name(self.context(), #(#arg_names),*);
                 query_storage.#cache_name.borrow_mut().insert(query_key, query_result.clone());
 
