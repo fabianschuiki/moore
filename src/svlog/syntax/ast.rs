@@ -806,78 +806,62 @@ impl HasDesc for StructMember<'_> {
     }
 }
 
-#[moore_derive::visit]
+/// A module or interface port as declared in the port list.
+#[moore_derive::node]
+#[indefinite("port")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Port<'a> {
     Intf {
-        span: Span,
-        modport: Option<Identifier>,
-        name: Identifier,
+        modport: Option<Spanned<Name>>,
+        #[name]
+        name: Spanned<Name>,
         dims: Vec<TypeDim<'a>>,
         expr: Option<Expr<'a>>,
     },
     Explicit {
-        span: Span,
         dir: Option<PortDir>,
-        name: Identifier,
+        #[name]
+        name: Spanned<Name>,
         expr: Option<Expr<'a>>,
     },
     Named {
-        span: Span,
         dir: Option<PortDir>,
         kind: Option<PortKind>,
         ty: Type<'a>,
-        name: Identifier,
+        #[name]
+        name: Spanned<Name>,
         dims: Vec<TypeDim<'a>>,
         expr: Option<Expr<'a>>,
     },
+    #[indefinite("implicit port")]
     Implicit(Expr<'a>),
-}
-
-impl HasSpan for Port<'_> {
-    fn span(&self) -> Span {
-        match *self {
-            Port::Intf { span, .. } => span,
-            Port::Explicit { span, .. } => span,
-            Port::Named { span, .. } => span,
-            Port::Implicit(ref expr) => expr.span,
-        }
-    }
-
-    fn human_span(&self) -> Span {
-        match *self {
-            Port::Intf { name, .. } => name.span,
-            Port::Explicit { name, .. } => name.span,
-            Port::Named { name, .. } => name.span,
-            Port::Implicit(ref expr) => expr.span,
-        }
-    }
 }
 
 impl HasDesc for Port<'_> {
     fn desc(&self) -> &'static str {
-        match *self {
-            Port::Intf { name, .. } => "interface port",
-            Port::Explicit { name, .. } => "explicit port",
-            Port::Named { name, .. } => "port",
-            Port::Implicit(ref expr) => "implicit port",
+        match self.data {
+            PortData::Intf { name, .. } => "interface port",
+            PortData::Explicit { name, .. } => "explicit port",
+            PortData::Named { name, .. } => "port",
+            PortData::Implicit(ref expr) => "implicit port",
         }
     }
 
     fn desc_full(&self) -> String {
-        match *self {
-            Port::Intf { name, .. } | Port::Explicit { name, .. } | Port::Named { name, .. } => {
-                format!("{} `{}`", self.desc(), name.name)
-            }
-            Port::Implicit(ref expr) => format!("{} `{}`", self.desc(), expr.span.extract()),
+        match self.data {
+            PortData::Intf { name, .. }
+            | PortData::Explicit { name, .. }
+            | PortData::Named { name, .. } => format!("{} `{}`", self.desc(), name),
+            PortData::Implicit(ref expr) => format!("{} `{}`", self.desc(), expr.span.extract()),
         }
     }
 }
 
-#[moore_derive::visit]
+/// A port declaration in an item body.
+#[moore_derive::node]
+#[indefinite("port declaration")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortDecl<'a> {
-    pub span: Span,
     pub dir: PortDir,
     pub kind: Option<PortKind>,
     pub ty: Type<'a>,

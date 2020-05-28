@@ -2884,13 +2884,13 @@ fn parse_interface_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<as
 
     // Consume the optional modport name.
     let modport = if p.try_eat(Period) {
-        Some(parse_identifier(p, "modport name")?)
+        Some(parse_identifier_name(p, "modport name")?)
     } else {
         None
     };
 
     // Consume the port name.
-    let name = parse_identifier(p, "port name")?;
+    let name = parse_identifier_name(p, "port name")?;
 
     // Consume the optional dimensions.
     let (dims, _) = parse_optional_dimensions(p)?;
@@ -2904,13 +2904,15 @@ fn parse_interface_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<as
 
     p.anticipate(&[CloseDelim(Paren), Comma])?;
     span.expand(p.last_span());
-    Ok(ast::Port::Intf {
-        span: span,
-        modport: modport,
-        name: name,
-        dims: dims,
-        expr: expr,
-    })
+    Ok(ast::Port::new(
+        span,
+        ast::PortData::Intf {
+            modport,
+            name,
+            dims,
+            expr,
+        },
+    ))
 }
 
 /// Parse an explicit port declaration.
@@ -2928,7 +2930,7 @@ fn parse_explicit_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast
 
     // Consume the period and port name.
     p.require_reported(Period)?;
-    let name = parse_identifier(p, "port name")?;
+    let name = parse_identifier_name(p, "port name")?;
 
     // Consume the port expression in parenthesis.
     let expr = flanked(p, Paren, |p| {
@@ -2941,12 +2943,10 @@ fn parse_explicit_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast
 
     p.anticipate(&[CloseDelim(Paren), Comma])?;
     span.expand(p.last_span());
-    Ok(ast::Port::Explicit {
-        span: span,
-        dir: dir,
-        name: name,
-        expr: expr,
-    })
+    Ok(ast::Port::new(
+        span,
+        ast::PortData::Explicit { dir, name, expr },
+    ))
 }
 
 /// Parse a named port declaration.
@@ -2991,13 +2991,9 @@ fn parse_named_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::P
 
     fn tail<'n>(
         p: &mut dyn AbstractParser<'n>,
-    ) -> ReportedResult<(
-        ast::Identifier,
-        Vec<ast::TypeDim<'n>>,
-        Option<ast::Expr<'n>>,
-    )> {
+    ) -> ReportedResult<(Spanned<Name>, Vec<ast::TypeDim<'n>>, Option<ast::Expr<'n>>)> {
         // Consume the port name.
-        let name = parse_identifier(p, "port name")?;
+        let name = parse_identifier_name(p, "port name")?;
 
         // Consume the optional dimensions.
         let (dims, _) = parse_optional_dimensions(p)?;
@@ -3014,15 +3010,17 @@ fn parse_named_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::P
     }
 
     span.expand(p.last_span());
-    Ok(ast::Port::Named {
-        span: span,
-        dir: dir,
-        kind: kind,
-        ty: ty,
-        name: name,
-        dims: dims,
-        expr: expr,
-    })
+    Ok(ast::Port::new(
+        span,
+        ast::PortData::Named {
+            dir,
+            kind,
+            ty,
+            name,
+            dims,
+            expr,
+        },
+    ))
 }
 
 /// Parse an implicit port declaration.
@@ -3030,7 +3028,10 @@ fn parse_named_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::P
 /// expr
 /// ```
 fn parse_implicit_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::Port<'n>> {
-    parse_expr(p).map(|e| ast::Port::Implicit(e))
+    let mut span = p.peek(0).1;
+    let expr = parse_expr(p)?;
+    span.expand(p.last_span());
+    Ok(ast::Port::new(span, ast::PortData::Implicit(expr)))
 }
 
 fn parse_parameter_assignments<'n>(
@@ -4981,13 +4982,15 @@ fn parse_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<PortDec
 
     // Wrap things up.
     span.expand(p.last_span());
-    Ok(PortDecl {
+    Ok(ast::PortDecl::new(
         span,
-        dir,
-        kind,
-        ty,
-        names,
-    })
+        ast::PortDeclData {
+            dir,
+            kind,
+            ty,
+            names,
+        },
+    ))
 }
 
 fn as_net_type(tkn: Token) -> Option<NetType> {

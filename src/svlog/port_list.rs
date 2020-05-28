@@ -185,9 +185,9 @@ pub(crate) fn module_ports<'a>(
                 })
             }
         };
-        let nonansi = match *first {
-            ast::Port::Explicit { ref dir, .. } if dir.is_none() => true,
-            ast::Port::Named {
+        let nonansi = match first.data {
+            ast::PortData::Explicit { ref dir, .. } if dir.is_none() => true,
+            ast::PortData::Named {
                 ref dir,
                 ref kind,
                 ref ty,
@@ -202,7 +202,7 @@ pub(crate) fn module_ports<'a>(
             {
                 true
             }
-            ast::Port::Implicit(_) => true,
+            ast::PortData::Implicit(_) => true,
             _ => false,
         };
         (nonansi, first.span())
@@ -368,10 +368,9 @@ fn lower_module_ports_ansi<'gcx>(
     let mut explicit_named: HashMap<(ast::PortDir, Name), usize> = HashMap::new();
 
     for port in ast_ports {
-        let port = match port {
+        let port = match &port.data {
             // [direction] [net_type|"var"] type_or_implicit ident {dimension} ["=" expr]
-            ast::Port::Named {
-                span,
+            ast::PortData::Named {
                 dir,
                 kind,
                 ty,
@@ -407,8 +406,8 @@ fn lower_module_ports_ansi<'gcx>(
                 carry_packed_dims = packed_dims;
 
                 let data = PartialPort {
-                    name: Spanned::new(name.name, name.span),
-                    span: *span,
+                    name: *name,
+                    span: port.span,
                     kind,
                     dir,
                     sign,
@@ -422,9 +421,9 @@ fn lower_module_ports_ansi<'gcx>(
                     match_ty: None,
                 };
                 let ext_port = ExtPort {
-                    id: cx.alloc_id(*span),
+                    id: cx.alloc_id(port.span()),
                     module,
-                    span: *span,
+                    span: port.span(),
                     name: Some(data.name),
                     exprs: vec![ExtPortExpr {
                         port: int_ports.len(),
@@ -436,12 +435,7 @@ fn lower_module_ports_ansi<'gcx>(
             }
 
             // [direction] "." ident "(" [expr] ")"
-            ast::Port::Explicit {
-                span,
-                dir,
-                name,
-                expr,
-            } => {
+            ast::PortData::Explicit { dir, name, expr } => {
                 // If no direction has been provided, use the one carried
                 // over from the previous port.
                 let dir = dir.unwrap_or(carry_dir);
@@ -474,7 +468,7 @@ fn lower_module_ports_ansi<'gcx>(
                                     trace!("Adding inferred port {}", pr.name);
                                     int_ports.push(PartialPort {
                                         name: pr.name,
-                                        span: *span,
+                                        span: port.span,
                                         kind: None,
                                         dir,
                                         sign: ast::TypeSign::None,
@@ -497,10 +491,10 @@ fn lower_module_ports_ansi<'gcx>(
                     .collect();
 
                 ExtPort {
-                    id: cx.alloc_id(*span),
+                    id: cx.alloc_id(port.span()),
                     module,
-                    span: *span,
-                    name: Some(Spanned::new(name.name, name.span)),
+                    span: port.span(),
+                    name: Some(*name),
                     exprs: pe,
                 }
             }
@@ -786,26 +780,23 @@ fn lower_module_ports_nonansi<'gcx>(
     let mut ext_named: HashMap<Name, usize> = HashMap::new();
     let mut any_unnamed = false;
     for port in ast_ports {
-        let (span, name, exprs) = match port {
+        let (name, exprs) = match port.data {
             // [direction] "." ident "(" [expr] ")"
-            ast::Port::Explicit {
-                span,
+            ast::PortData::Explicit {
                 dir: None,
                 name,
-                expr,
+                ref expr,
             } => {
-                let name = Spanned::new(name.name, name.span);
                 if let Some(expr) = expr {
                     let pe = lower_port_expr(cx, expr, module);
-                    (*span, Some(name), pe)
+                    (Some(name), pe)
                 } else {
-                    (*span, Some(name), vec![])
+                    (Some(name), vec![])
                 }
             }
 
             // [direction] [net_type|"var"] type_or_implicit ident {dimension} ["=" expr]
-            ast::Port::Named {
-                span,
+            ast::PortData::Named {
                 dir: None,
                 kind: None,
                 ty:
@@ -814,16 +805,15 @@ fn lower_module_ports_nonansi<'gcx>(
                             ast::TypeData {
                                 kind: ast::ImplicitType,
                                 sign: ast::TypeSign::None,
-                                dims: packed_dims,
+                                dims: ref packed_dims,
                                 ..
                             },
                         ..
                     },
                 name,
-                dims,
+                ref dims,
                 expr: None,
             } if packed_dims.is_empty() => {
-                let name = Spanned::new(name.name, name.span);
                 // Now we have to deal with the problem that a port like
                 // `foo[7:0]` is interpreted as a named type by the parser, but
                 // is actually an implicit port. This is indicated by the dims
@@ -849,7 +839,7 @@ fn lower_module_ports_nonansi<'gcx>(
                                     dim.desc_full(),
                                     name
                                 ))
-                                .span(*span),
+                                .span(port.span()),
                             );
                             ExtPortSelect::Error
                         }
@@ -860,17 +850,14 @@ fn lower_module_ports_nonansi<'gcx>(
                 // If dims are empty, then this is a named port. Otherwise it's
                 // actually an implicit port with no name.
                 if dims.is_empty() {
-                    (*span, Some(name), pe)
+                    (Some(name), pe)
                 } else {
-                    (*span, None, pe)
+                    (None, pe)
                 }
             }
 
             // expr
-            ast::Port::Implicit(expr) => {
-                let pe = lower_port_expr(cx, expr, module);
-                (expr.span, None, pe)
-            }
+            ast::PortData::Implicit(ref expr) => (None, lower_port_expr(cx, expr, module)),
 
             // Everything else is just an error.
             _ => {
@@ -911,9 +898,9 @@ fn lower_module_ports_nonansi<'gcx>(
 
         // Wrap things up in an external port.
         let port = ExtPort {
-            id: cx.alloc_id(span),
+            id: cx.alloc_id(port.span()),
             module,
-            span,
+            span: port.span(),
             name,
             exprs,
         };
