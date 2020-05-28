@@ -258,17 +258,19 @@ pub(crate) fn resolve_upwards<'gcx>(
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
     // // Get the AST associated with the node ID and map it to an AnyNode.
-    // let node = match cx.ast_of(start_at)?.get_any() {
+    // let ast = cx.ast_of(start_at)?;
+    // let node = match ast.get_any() {
     //     Some(x) => x,
     //     None => bug_span!(
     //         cx.span(start_at),
     //         cx,
-    //         "resolve_upwards called on node which doesn't implement AnyNode yet"
+    //         "resolve_upwards called on node which doesn't implement AnyNode yet: {:?}",
+    //         ast
     //     ),
     // };
     // return cx
     //     .resolve_local(name, cx.scope_location(node), false)
-    //     .map(|node| node.map(AnyNode::id));
+    //     .map(|def| def.map(|def| def.node.id()));
 
     if cx.sess().has_verbosity(Verbosity::NAMES) {
         cx.emit(DiagBuilder2::note(format!("resolving `{}`", name)).span(cx.span(start_at)));
