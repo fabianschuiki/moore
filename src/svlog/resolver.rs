@@ -754,7 +754,7 @@ pub struct Scope<'a> {
 #[derive(Debug, Clone, Copy)]
 pub struct Def<'a> {
     /// The node which defines the name.
-    pub node: &'a dyn ast::AnyNode<'a>,
+    pub node: DefNode<'a>,
     /// The name of the definition.
     pub name: Spanned<Name>,
     /// Where the definition is visible.
@@ -776,6 +776,77 @@ bitflags::bitflags! {
         /// Whether the definition is accessible during namespace resolution,
         /// e.g. `parent::foo`.
         const NAMESPACE = 1 << 2;
+    }
+}
+
+/// A node that generates a definition.
+#[derive(Debug, Clone, Copy)]
+pub enum DefNode<'a> {
+    /// Any AST node.
+    Ast(&'a dyn ast::AnyNode<'a>),
+}
+
+impl<'a> std::fmt::Display for DefNode<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DefNode::Ast(node) => std::fmt::Display::fmt(node, f),
+        }
+    }
+}
+
+impl<'a> ast::AnyNode<'a> for DefNode<'a> {
+    fn id(&self) -> moore_common::NodeId {
+        match *self {
+            DefNode::Ast(node) => node.id(),
+        }
+    }
+
+    fn span(&self) -> moore_common::source::Span {
+        match *self {
+            DefNode::Ast(node) => node.span(),
+        }
+    }
+
+    fn order(&self) -> usize {
+        match *self {
+            DefNode::Ast(node) => node.order(),
+        }
+    }
+}
+
+impl<'a> ast::AnyNodeData for DefNode<'a> {
+    fn fmt_indefinite(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DefNode::Ast(node) => node.fmt_indefinite(f),
+        }
+    }
+}
+
+impl<'a> ast::BasicNode<'a> for DefNode<'a> {
+    fn type_name(&self) -> &'static str {
+        "DefNode"
+    }
+
+    fn as_all(&'a self) -> syntax::ast::AllNode<'a> {
+        panic!("as_all() called on non-AST node {:?}", self);
+    }
+
+    fn as_any(&'a self) -> &'a (dyn syntax::ast::AnyNode<'a> + 'a) {
+        panic!("as_any() called on non-AST node {:?}", self);
+    }
+}
+
+// TODO: The following visitor business should not be necessary just to get some
+// struct to act like a fundamental node.
+impl<'a> ast::AcceptVisitor<'a> for DefNode<'a> {
+    fn accept(&'a self, _: &mut dyn syntax::ast::Visitor<'a>) {
+        panic!("accept() called on non-AST node {:?}", self);
+    }
+}
+impl<'a> ast::ForEachNode<'a> for DefNode<'a> {}
+impl<'a> ast::ForEachChild<'a> for DefNode<'a> {
+    fn for_each_child(&'a self, _: &mut dyn std::ops::FnMut(&'a dyn ast::AnyNode<'a>)) {
+        panic!("for_each_child() called on non-AST node {:?}", self);
     }
 }
 
@@ -838,7 +909,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     fn pre_visit_module(&mut self, node: &'a ast::Module<'a>) -> bool {
         self.add_subscope(node);
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL,
             may_override: true,
@@ -850,7 +921,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     fn pre_visit_interface(&mut self, node: &'a ast::Interface<'a>) -> bool {
         self.add_subscope(node);
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL,
             may_override: true,
@@ -862,7 +933,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     fn pre_visit_package(&mut self, node: &'a ast::Package<'a>) -> bool {
         self.add_subscope(node);
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE,
             may_override: false,
@@ -874,7 +945,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     fn pre_visit_import_item(&mut self, node: &'a ast::ImportItem<'a>) -> bool {
         if let Some(name) = node.name {
             self.add_def(Def {
-                node,
+                node: DefNode::Ast(node),
                 name,
                 vis: DefVis::LOCAL,
                 may_override: false,
@@ -888,7 +959,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_var_decl_name(&mut self, node: &'a ast::VarDeclName<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: Spanned::new(node.name, node.name_span),
             vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
             may_override: false,
@@ -899,7 +970,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_param_type_decl(&mut self, node: &'a ast::ParamTypeDecl<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
@@ -910,7 +981,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_param_value_decl(&mut self, node: &'a ast::ParamValueDecl<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
@@ -921,7 +992,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_genvar_decl(&mut self, node: &'a ast::GenvarDecl<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
             may_override: false,
@@ -932,7 +1003,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_enum_name(&mut self, node: &'a ast::EnumName<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
@@ -943,7 +1014,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_typedef(&mut self, node: &'a ast::Typedef<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
@@ -954,7 +1025,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_subroutine_decl(&mut self, node: &'a ast::SubroutineDecl<'a>) -> bool {
         self.add_def(Def {
-            node,
+            node: DefNode::Ast(node),
             name: node.prototype.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
@@ -1019,7 +1090,7 @@ pub(crate) fn resolve_local<'a>(
     name: Name,
     at: ScopeLocation<'a>,
     skip_imports: bool,
-) -> Result<Option<&'a dyn ast::AnyNode<'a>>> {
+) -> Result<Option<&'a Def<'a>>> {
     debug!("Resolving `{}` locally at {:?}", name, at);
     let scope = cx.generated_scope(at.scope);
     let mut next = Some(scope);
@@ -1040,17 +1111,22 @@ pub(crate) fn resolve_local<'a>(
             if vis_ok && order_ok {
                 // In case what we've found is an import like `import foo::A`,
                 // resolve `A` in `foo` now.
-                let node = if let Some(import) = def.node.as_all().get_import_item() {
-                    debug!(" - Following {:?}", import);
-                    let inside = cx.resolve_imported_scope(import)?;
-                    let binding = cx.resolve_namespace_or_error(import.name.unwrap(), inside)?;
-                    binding
+                let def = if let DefNode::Ast(node) = def.node {
+                    if let Some(import) = node.as_all().get_import_item() {
+                        debug!(" - Following {:?}", import);
+                        let inside = cx.resolve_imported_scope(import)?;
+                        let binding =
+                            cx.resolve_namespace_or_error(import.name.unwrap(), inside)?;
+                        binding
+                    } else {
+                        def
+                    }
                 } else {
-                    def.node
+                    def
                 };
 
-                debug!(" - Found {:?}", node);
-                return Ok(Some(node));
+                debug!(" - Found {:?}", def);
+                return Ok(Some(def));
             }
         }
 
@@ -1063,9 +1139,9 @@ pub(crate) fn resolve_local<'a>(
                 continue;
             }
             let inside = cx.resolve_imported_scope(import)?;
-            let binding = cx.resolve_namespace(name, inside);
-            if binding.is_some() {
-                return Ok(binding);
+            let def = cx.resolve_namespace(name, inside);
+            if def.is_some() {
+                return Ok(def);
             }
         }
     }
@@ -1082,17 +1158,17 @@ pub(crate) fn resolve_local_or_error<'a>(
     name: Spanned<Name>,
     at: ScopeLocation<'a>,
     skip_imports: bool,
-) -> Result<&'a dyn ast::AnyNode<'a>> {
+) -> Result<&'a Def<'a>> {
     match cx.resolve_local(name.value, at, skip_imports)? {
-        Some(binding) => {
+        Some(def) => {
             if cx.sess().has_verbosity(Verbosity::NAMES) {
                 let d = DiagBuilder2::note("name resolution")
                     .span(name.span)
-                    .add_note(format!("Resolved `{}` to this {}:", name, binding))
-                    .span(binding.span());
+                    .add_note(format!("Resolved `{}` to this {}:", name, def.node))
+                    .span(def.node.span());
                 cx.emit(d);
             }
-            Ok(binding)
+            Ok(def)
         }
         None => {
             cx.emit(DiagBuilder2::error(format!("`{}` not found", name.value)).span(name.span));
@@ -1110,13 +1186,13 @@ pub(crate) fn resolve_namespace<'a>(
     cx: &impl Context<'a>,
     name: Name,
     inside: &'a dyn ScopedNode<'a>,
-) -> Option<&'a dyn ast::AnyNode<'a>> {
+) -> Option<&'a Def<'a>> {
     debug!("Resolving `{}` in namespace {:?}", name, inside);
     let scope = cx.generated_scope(inside);
     match scope.defs.get(&name) {
         Some(def) if def.vis.contains(DefVis::NAMESPACE) => {
             debug!(" - Found {:?}", def);
-            Some(def.node)
+            Some(def)
         }
         _ => None,
     }
@@ -1131,17 +1207,17 @@ pub(crate) fn resolve_namespace_or_error<'a>(
     cx: &impl Context<'a>,
     name: Spanned<Name>,
     inside: &'a dyn ScopedNode<'a>,
-) -> Result<&'a dyn ast::AnyNode<'a>> {
+) -> Result<&'a Def<'a>> {
     match cx.resolve_namespace(name.value, inside) {
-        Some(binding) => {
+        Some(def) => {
             if cx.sess().has_verbosity(Verbosity::NAMES) {
                 let d = DiagBuilder2::note("name resolution")
                     .span(name.span)
-                    .add_note(format!("Resolved `{}` to this {}:", name, binding))
-                    .span(binding.span());
+                    .add_note(format!("Resolved `{}` to this {}:", name, def.node))
+                    .span(def.node.span());
                 cx.emit(d);
             }
-            Ok(binding)
+            Ok(def)
         }
         None => {
             cx.emit(
@@ -1168,7 +1244,12 @@ pub(crate) fn resolve_imported_scope<'a>(
 
     // Ensure that what we have found is something we can actually perform a
     // namespace lookup into.
-    match inside.as_all().get_scoped_node() {
+    let inside = match inside.node {
+        DefNode::Ast(node) => Some(node),
+        _ => None,
+    };
+    let inside = inside.and_then(|x| x.as_all().get_scoped_node());
+    match inside {
         Some(x) => Ok(x),
         None => {
             cx.emit(
