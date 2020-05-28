@@ -145,7 +145,7 @@ pub struct Module<'hir> {
     pub name: Spanned<Name>,
     pub span: Span,
     /// The ports of the module.
-    pub ports_new: PortList,
+    pub ports_new: &'hir PortList,
     /// The parameters of the module.
     pub params: &'hir [NodeId],
     /// The contents of the module.

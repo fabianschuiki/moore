@@ -153,11 +153,22 @@ impl HasDesc for ExtPort {
 }
 
 /// Lower the ports of a module to HIR.
+#[moore_derive::query]
+pub(crate) fn port_list<'a>(cx: &impl Context<'a>, module: &'a ast::Module<'a>) -> &'a PortList {
+    debug!("Analyzing port list of {:?}", module);
+    let mut next_rib = module.id();
+    let pl = lower_module_ports(cx, &module.ports, &module.items, module.id(), &mut next_rib);
+    trace!("Next rib is {:?}", next_rib);
+    trace!("Port list of {:?} is: {:#?}", module, pl);
+    cx.gcx().arena.alloc_port_list(pl)
+}
+
+/// Lower the ports of a module to HIR.
 ///
 /// This is a fairly complex process due to the many degrees of freedom in SV.
 /// Mainly we identify if the module uses an ANSI or non-ANSI style and then go
 /// ahead and create the external and internal views of the ports.
-pub(crate) fn lower_module_ports<'gcx>(
+fn lower_module_ports<'gcx>(
     cx: &impl Context<'gcx>,
     ast_ports: &'gcx [ast::Port<'gcx>],
     ast_items: &'gcx [ast::Item<'gcx>],

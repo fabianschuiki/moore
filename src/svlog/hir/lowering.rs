@@ -510,8 +510,9 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
 fn lower_module<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    ast: &'gcx ast::ModDecl<'gcx>,
+    ast: &'gcx ast::Module<'gcx>,
 ) -> Result<HirNode<'gcx>> {
+    assert_eq!(node_id, ast.id());
     let mut next_rib = node_id;
 
     // Allocate the imports in the module header.
@@ -528,9 +529,7 @@ fn lower_module<'gcx>(
     }
 
     // Lower the module's ports.
-    let ports_new =
-        crate::port_list::lower_module_ports(cx, &ast.ports, &ast.items, node_id, &mut next_rib);
-    trace!("Lowered port list: {:#?}", ports_new);
+    let ports_new = cx.port_list(ast);
 
     // Lower the module body.
     let block = lower_module_block(cx, next_rib, &ast.items, true)?;

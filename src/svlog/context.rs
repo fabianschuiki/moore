@@ -20,13 +20,14 @@
 //! let gcx = GlobalContext::new(&sess, &arena);
 //! ```
 
+use crate::crate_prelude::*;
 use crate::salsa; // TODO(fschuiki): Remove this once salsa is regular dep again
 use crate::{
     ast,
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
-    crate_prelude::*,
     hir::{self, AccessTable, HirNode},
+    port_list::PortList,
     resolver::{Scope, StructDef},
     ty::{Type, TypeKind},
     typeck::{CastType, TypeContext},
@@ -202,6 +203,7 @@ pub struct GlobalArenas<'t> {
     hir: hir::Arena<'t>,
     param_envs: TypedArena<ParamEnvData<'t>>,
     ribs: TypedArena<Rib>,
+    port_lists: TypedArena<PortList>,
     scopes: TypedArena<Scope<'t>>,
     types: TypedArena<TypeKind<'t>>,
     values: TypedArena<ValueData<'t>>,
@@ -231,6 +233,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate a rib.
     pub fn alloc_rib(&'t self, rib: Rib) -> &'t Rib {
         self.ribs.alloc(rib)
+    }
+
+    /// Allocate a port list.
+    pub fn alloc_port_list(&'t self, port_list: PortList) -> &'t PortList {
+        self.port_lists.alloc(port_list)
     }
 
     /// Allocate a scope.

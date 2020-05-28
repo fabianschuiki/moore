@@ -229,7 +229,8 @@ mod checks {
 // selectively enable/disable trace messages using `moore_svlog::queries` in the
 // `MOORE_LOG` env var.
 mod queries {
-    use super::*;
+    use crate::crate_prelude::*;
+    use crate::{port_list::*, resolver::*};
     use std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
