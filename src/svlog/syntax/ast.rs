@@ -2068,29 +2068,40 @@ pub struct ParamAssignment<'a> {
     pub expr: TypeOrExpr<'a>,
 }
 
-/// A port connection as given in an instantiation.
-#[moore_derive::visit]
+/// A port connection in an instantiation.
+///
+/// For example:
+/// ```verilog
+/// foo bar (
+///     .*,
+///     .name,
+///     .name(),
+///     .name(expr),
+///     expr,
+/// );
+/// ```
+#[moore_derive::node]
+#[indefinite("port connection")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortConn<'a> {
-    pub span: Span,
-    pub kind: PortConnKind<'a>,
+pub enum PortConn<'a> {
+    /// The `.*` case,
+    Auto,
+    /// The `.name`, `.name()`, or `.name(expr)` cases,
+    Named(#[name] Spanned<Name>, PortConnMode<'a>),
+    /// The `expr` case,
+    Positional(Expr<'a>),
 }
 
-#[moore_derive::visit]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PortConnKind<'a> {
-    Auto,                                // `.*` case
-    Named(Identifier, PortConnMode<'a>), // `.name`, `.name()`, `.name(expr)` cases
-    Positional(Expr<'a>),                // `expr` case
-}
-
-/// Represents how a named port connection is made.
+/// How a named port connection is made.
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortConnMode<'a> {
-    Auto,                // `.name` case
-    Unconnected,         // `.name()` case
-    Connected(Expr<'a>), // `.name(expr)` case
+    /// The `.name` case.
+    Auto,
+    /// The `.name()` case.
+    Unconnected,
+    /// The `.name(expr)` case.
+    Connected(Expr<'a>),
 }
 
 moore_derive::derive_visitor!();

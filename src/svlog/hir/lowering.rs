@@ -81,17 +81,20 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             let mut has_wildcard_port = false;
             let mut is_pos = true;
             for port in &inst.conns {
-                match port.kind {
-                    ast::PortConnKind::Auto => has_wildcard_port = true,
-                    ast::PortConnKind::Named(ident, ref mode) => {
-                        let name = Spanned::new(ident.name, ident.span);
+                match port.data {
+                    ast::PortConnData::Auto => has_wildcard_port = true,
+                    ast::PortConnData::Named(name, ref mode) => {
                         is_pos = false;
                         let value_id = match *mode {
                             ast::PortConnMode::Auto => {
                                 let expr = cx.arena().alloc_ast_expr(ast::Expr::new(
                                     name.span,
-                                    ast::IdentExpr(ident),
+                                    ast::IdentExpr(ast::Identifier {
+                                        name: name.value,
+                                        span: name.span,
+                                    }),
                                 ));
+                                expr.link_attach(port);
                                 Some(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
                             }
                             ast::PortConnMode::Unconnected => None,
@@ -101,7 +104,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         };
                         named_ports.push((port.span, name, value_id));
                     }
-                    ast::PortConnKind::Positional(ref expr) => {
+                    ast::PortConnData::Positional(ref expr) => {
                         if !is_pos {
                             cx.emit(
                                 DiagBuilder2::warning("positional port must appear before named")

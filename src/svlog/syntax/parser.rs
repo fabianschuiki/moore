@@ -1878,9 +1878,9 @@ fn parse_list_of_port_connections<'n>(
         let kind = if p.try_eat(Period) {
             if p.try_eat(Operator(Op::Mul)) {
                 // handle .* case
-                ast::PortConnKind::Auto
+                ast::PortConnData::Auto
             } else {
-                let name = parse_identifier(p, "port name")?;
+                let name = parse_identifier_name(p, "port name")?;
                 // handle .name, .name(), and .name(expr) cases
                 let mode = try_flanked(p, Paren, |p| {
                     Ok(if p.peek(0).0 != CloseDelim(Paren) {
@@ -1890,17 +1890,14 @@ fn parse_list_of_port_connections<'n>(
                     })
                 })?
                 .unwrap_or(ast::PortConnMode::Auto);
-                ast::PortConnKind::Named(name, mode)
+                ast::PortConnData::Named(name, mode)
             }
         } else {
-            ast::PortConnKind::Positional(parse_expr(p)?)
+            ast::PortConnData::Positional(parse_expr(p)?)
         };
 
         span.expand(p.last_span());
-        Ok(ast::PortConn {
-            span: span,
-            kind: kind,
-        })
+        Ok(ast::PortConn::new(span, kind))
     })
 }
 
