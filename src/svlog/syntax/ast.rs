@@ -550,7 +550,7 @@ tuple_impls!(0 => T0, 1 => T1, 2 => T2);
 tuple_impls!(0 => T0, 1 => T1, 2 => T2, 3 => T3);
 
 pub use self::ExprData::*;
-pub use self::StmtData::*;
+pub use self::StmtKind::*;
 pub use self::TypeKindData::*;
 
 // Deprecated names.
@@ -989,29 +989,19 @@ pub enum ProcedureKind {
     Final,
 }
 
-#[moore_derive::visit]
+/// A statement.
+#[moore_derive::node]
+#[indefinite("statement")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stmt<'a> {
-    pub span: Span,
     pub label: Option<Name>,
-    pub data: StmtData<'a>,
+    pub kind: StmtKind<'a>,
 }
 
-impl HasSpan for Stmt<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for Stmt<'_> {
-    fn desc(&self) -> &'static str {
-        "statement"
-    }
-}
-
+/// The different kinds of statement.
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StmtData<'a> {
+pub enum StmtKind<'a> {
     NullStmt,
     SequentialBlock(Vec<Stmt<'a>>),
     ParallelBlock(Vec<Stmt<'a>>, JoinKind),
@@ -1062,11 +1052,13 @@ pub enum StmtData<'a> {
 
 impl<'a> Stmt<'a> {
     pub fn new_null(span: Span) -> Stmt<'a> {
-        Stmt {
-            span: span,
-            label: None,
-            data: NullStmt,
-        }
+        Stmt::new(
+            span,
+            StmtData {
+                label: None,
+                kind: NullStmt,
+            },
+        )
     }
 }
 

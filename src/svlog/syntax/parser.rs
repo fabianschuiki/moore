@@ -3358,20 +3358,16 @@ fn parse_stmt<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Stmt<'n>> {
     };
 
     // Parse the actual statement item.
-    let data = parse_stmt_data(p, &mut label)?;
+    let kind = parse_stmt_kind(p, &mut label)?;
     span.expand(p.last_span());
 
-    Ok(Stmt {
-        span: span,
-        label: label,
-        data: data,
-    })
+    Ok(Stmt::new(span, StmtData { label, kind }))
 }
 
-fn parse_stmt_data<'n>(
+fn parse_stmt_kind<'n>(
     p: &mut dyn AbstractParser<'n>,
     label: &mut Option<Name>,
-) -> ReportedResult<StmtData<'n>> {
+) -> ReportedResult<StmtKind<'n>> {
     let (tkn, sp) = p.peek(0);
 
     // See if this is a timing-controlled statement as per IEEE 1800-2009
@@ -3741,7 +3737,7 @@ fn parse_continuous_assign<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult
 fn parse_if_or_case<'n>(
     p: &mut dyn AbstractParser<'n>,
     up: Option<UniquePriority>,
-) -> ReportedResult<StmtData<'n>> {
+) -> ReportedResult<StmtKind<'n>> {
     let (tkn, span) = p.peek(0);
     match tkn {
         // Case statements
@@ -3779,7 +3775,7 @@ fn parse_case<'n>(
     p: &mut dyn AbstractParser<'n>,
     up: Option<UniquePriority>,
     kind: CaseKind,
-) -> ReportedResult<StmtData<'n>> {
+) -> ReportedResult<StmtKind<'n>> {
     let q = p.last_span();
 
     // Parse the case expression.
@@ -3882,7 +3878,7 @@ fn parse_case<'n>(
 fn parse_if<'n>(
     p: &mut dyn AbstractParser<'n>,
     up: Option<UniquePriority>,
-) -> ReportedResult<StmtData<'n>> {
+) -> ReportedResult<StmtKind<'n>> {
     // Parse the condition expression surrounded by parenthesis.
     p.require_reported(OpenDelim(Paren))?;
     let cond = match parse_expr(p) {
@@ -4013,7 +4009,7 @@ fn parse_assignment<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<(Expr<
     Ok((lhs, rhs))
 }
 
-fn parse_assign_stmt<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StmtData<'n>> {
+fn parse_assign_stmt<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StmtKind<'n>> {
     // Parse the leading expression.
     let expr = parse_expr_prec(p, Precedence::Postfix)?;
     let (tkn, sp) = p.peek(0);
@@ -4055,7 +4051,7 @@ fn parse_assign_stmt<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StmtD
     Err(())
 }
 
-fn parse_expr_stmt<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StmtData<'n>> {
+fn parse_expr_stmt<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StmtKind<'n>> {
     let expr = parse_expr_prec(p, Precedence::Unary)?;
     p.require_reported(Semicolon)?;
     Ok(ExprStmt(expr))

@@ -99,7 +99,7 @@ pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resul
             node_id,
         )),
         AstNode::GenvarDecl(decl) => Some(RibKind::Normal(decl.name, node_id)),
-        AstNode::Stmt(stmt) => match stmt.data {
+        AstNode::Stmt(stmt) => match stmt.kind {
             ast::VarDeclStmt(_) => {
                 let hir = match cx.hir_of(node_id)? {
                     HirNode::Stmt(x) => x,
@@ -666,6 +666,7 @@ impl<'a> ScopedNode<'a> for ast::Root<'a> {}
 impl<'a> ScopedNode<'a> for ast::Module<'a> {}
 impl<'a> ScopedNode<'a> for ast::Interface<'a> {}
 impl<'a> ScopedNode<'a> for ast::Package<'a> {}
+impl<'a> ScopedNode<'a> for ast::Stmt<'a> {}
 
 // Compare and hash scoped nodes by reference for use in the query system.
 impl<'a> Eq for &'a dyn ScopedNode<'a> {}
@@ -699,6 +700,19 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
             ast::AllNode::Module(x) => Some(x),
             ast::AllNode::Interface(x) => Some(x),
             ast::AllNode::Package(x) => Some(x),
+            ast::AllNode::Stmt(x) => match x.kind {
+                ast::SequentialBlock(..)
+                | ast::ParallelBlock(..)
+                | ast::IfStmt { .. }
+                | ast::CaseStmt { .. }
+                | ast::ForeverStmt(..)
+                | ast::RepeatStmt(..)
+                | ast::WhileStmt(..)
+                | ast::DoStmt(..)
+                | ast::ForStmt(..)
+                | ast::ForeachStmt(..) => Some(x),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -1057,6 +1071,23 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             ordered: true,
         });
         true
+    }
+
+    fn pre_visit_stmt(&mut self, node: &'a ast::Stmt<'a>) -> bool {
+        // Do not traverse into statements that generate their own scope.
+        match node.kind {
+            ast::SequentialBlock(..)
+            | ast::ParallelBlock(..)
+            | ast::IfStmt { .. }
+            | ast::CaseStmt { .. }
+            | ast::ForeverStmt(..)
+            | ast::RepeatStmt(..)
+            | ast::WhileStmt(..)
+            | ast::DoStmt(..)
+            | ast::ForStmt(..)
+            | ast::ForeachStmt(..) => false,
+            _ => true,
+        }
     }
 }
 

@@ -201,7 +201,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             Ok(HirNode::Proc(cx.arena().alloc_hir(hir)))
         }
         AstNode::Stmt(stmt) => {
-            let kind = match stmt.data {
+            let kind = match stmt.kind {
                 ast::NullStmt => hir::StmtKind::Null,
                 ast::SequentialBlock(ref stmts) => {
                     let mut next_rib = node_id;
@@ -240,7 +240,12 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                         },
                         _ => {
                             debug!("{:#?}", stmt);
-                            return cx.unimp_msg("lowering of timing control", stmt);
+                            bug_span!(
+                                stmt.span(),
+                                cx,
+                                "lowering of timing control {} to hir not implemented",
+                                stmt
+                            );
                         }
                     };
                     hir::StmtKind::Timed {
@@ -363,7 +368,12 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 }
                 _ => {
                     error!("{:#?}", stmt);
-                    return cx.unimp_msg("lowering of", stmt);
+                    bug_span!(
+                        stmt.span(),
+                        cx,
+                        "lowering of {:?} to hir not implemented",
+                        stmt
+                    );
                 }
             };
             let hir = hir::Stmt {
@@ -1451,7 +1461,7 @@ fn alloc_genvar_init<'gcx>(
     mut parent_id: NodeId,
 ) -> Result<Vec<NodeId>> {
     let mut ids = vec![];
-    match stmt.data {
+    match stmt.kind {
         ast::GenvarDeclStmt(ref decls) => {
             for decl in decls {
                 let id = cx.map_ast_with_parent(AstNode::GenvarDecl(decl), parent_id);
@@ -1461,11 +1471,8 @@ fn alloc_genvar_init<'gcx>(
         }
         _ => {
             cx.emit(
-                DiagBuilder2::error(format!(
-                    "{} is not a valid genvar initialization",
-                    stmt.desc_full()
-                ))
-                .span(stmt.human_span()),
+                DiagBuilder2::error(format!("{:#} is not a valid genvar initialization", stmt))
+                    .span(stmt.human_span()),
             );
             return Err(());
         }
