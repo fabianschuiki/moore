@@ -786,6 +786,7 @@ fn lower_type<'gcx>(
                                         dims: vec![],
                                     },
                                 ));
+                                ty.link_attach(expr);
                                 hir::TypeKind::RefType(
                                     cx.map_ast_with_parent(AstNode::Type(ty), node_id),
                                 )
@@ -1304,6 +1305,7 @@ fn lower_expr<'gcx>(
                         let size_expr = cx
                             .arena()
                             .alloc_ast_expr(ast::Expr::new(ty.span, ast::IdentExpr(n)));
+                        size_expr.link_attach(ty);
                         hir::ExprKind::CastSize(
                             cx.map_ast_with_parent(AstNode::Expr(size_expr), node_id),
                             cx.map_ast_with_parent(AstNode::Expr(expr), node_id),

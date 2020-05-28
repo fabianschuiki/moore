@@ -40,6 +40,13 @@ pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display + Send + 
 
     /// Link up this node.
     fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {}
+
+    /// Link up this node as an expansion of another node.
+    ///
+    /// All subnodes inherit the order from their parent. Useful if a node is
+    /// generated as part of a later expansion/analysis pass, but needs to hook
+    /// into the AST somewhere.
+    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {}
 }
 
 // Compare and hash nodes by reference for use in the query system.
@@ -284,6 +291,15 @@ where
         *order += 1;
         self.for_each_child(&mut |node| {
             node.link(Some(self.as_any()), order);
+        });
+    }
+
+    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {
+        trace!("Linking {:?} as attachment to {:?}", self, parent);
+        self.parent.set(Some(parent));
+        self.order.set(parent.order());
+        self.for_each_child(&mut |node| {
+            node.link_attach(self.as_any());
         });
     }
 }
