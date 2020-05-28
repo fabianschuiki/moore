@@ -5,12 +5,13 @@
 //! This module implements the infrastructure to describe scopes and resolve
 //! names in them.
 
+use crate::crate_prelude::*;
 use crate::{
     ast::AnyNode,
     ast_map::AstNode,
     common::{SessionContext, Verbosity},
-    crate_prelude::*,
     hir::HirNode,
+    port_list,
     ty::TypeKind,
     ParamEnv,
 };
@@ -728,6 +729,18 @@ pub(crate) fn generated_scope<'a>(
 
     // Gather the definitions.
     debug!("Generating scope {:?}", node);
+    if let Some(module) = node.as_all().get_module() {
+        debug!("Also collect ports");
+        for node in &cx.module_ports(module).int {
+            gen.add_def(Def {
+                node: DefNode::IntPort(node),
+                name: node.name,
+                vis: DefVis::LOCAL,
+                may_override: true,
+                ordered: false,
+            });
+        }
+    }
     node.accept(&mut gen);
     debug!("Generated scope {:#?}", gen.scope);
 
@@ -784,12 +797,15 @@ bitflags::bitflags! {
 pub enum DefNode<'a> {
     /// Any AST node.
     Ast(&'a dyn ast::AnyNode<'a>),
+    /// An internal port of a module.
+    IntPort(&'a port_list::IntPort<'a>),
 }
 
 impl<'a> std::fmt::Display for DefNode<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             DefNode::Ast(node) => std::fmt::Display::fmt(node, f),
+            DefNode::IntPort(node) => std::fmt::Display::fmt(node.ast, f),
         }
     }
 }
@@ -798,18 +814,21 @@ impl<'a> ast::AnyNode<'a> for DefNode<'a> {
     fn id(&self) -> moore_common::NodeId {
         match *self {
             DefNode::Ast(node) => node.id(),
+            DefNode::IntPort(node) => node.id,
         }
     }
 
     fn span(&self) -> moore_common::source::Span {
         match *self {
             DefNode::Ast(node) => node.span(),
+            DefNode::IntPort(node) => node.span,
         }
     }
 
     fn order(&self) -> usize {
         match *self {
             DefNode::Ast(node) => node.order(),
+            DefNode::IntPort(node) => node.ast.order(),
         }
     }
 }
@@ -818,6 +837,7 @@ impl<'a> ast::AnyNodeData for DefNode<'a> {
     fn fmt_indefinite(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             DefNode::Ast(node) => node.fmt_indefinite(f),
+            DefNode::IntPort(node) => node.ast.fmt_indefinite(f),
         }
     }
 }
