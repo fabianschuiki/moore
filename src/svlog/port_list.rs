@@ -153,35 +153,25 @@ impl HasDesc for ExtPort {
 }
 
 /// Lower the ports of a module to HIR.
-#[moore_derive::query]
-pub(crate) fn port_list<'a>(cx: &impl Context<'a>, module: &'a ast::Module<'a>) -> &'a PortList {
-    debug!("Analyzing port list of {:?}", module);
-    let mut next_rib = module.id();
-    let pl = lower_module_ports(cx, &module.ports, &module.items, module.id(), &mut next_rib);
-    trace!("Next rib is {:?}", next_rib);
-    trace!("Port list of {:?} is: {:#?}", module, pl);
-    cx.gcx().arena.alloc_port_list(pl)
-}
-
-/// Lower the ports of a module to HIR.
 ///
 /// This is a fairly complex process due to the many degrees of freedom in SV.
 /// Mainly we identify if the module uses an ANSI or non-ANSI style and then go
 /// ahead and create the external and internal views of the ports.
-fn lower_module_ports<'gcx>(
-    cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port<'gcx>],
-    ast_items: &'gcx [ast::Item<'gcx>],
-    module: NodeId,
-    next_rib: &mut NodeId,
-) -> PortList {
+#[moore_derive::query]
+pub(crate) fn module_ports<'a>(cx: &impl Context<'a>, module: &'a ast::Module<'a>) -> &'a PortList {
+    debug!("Building port list of {:?}", module);
+    let mut next_rib = module.id();
+    let next_rib = &mut next_rib;
+    let ast_ports = &module.ports;
+    let ast_items = &module.items;
+
     // First determined if the module uses ANSI or non-ANSI style. We do this by
     // Determining whether the first port has type, sign, and direction omitted.
     // If it has, the ports are declared in non-ANSI style.
     let (nonansi, first_span) = {
         let first = match ast_ports.first() {
             Some(p) => p,
-            None => return PortList::default(),
+            None => return cx.gcx().arena.alloc_port_list(PortList::default()),
         };
         let nonansi = match *first {
             ast::Port::Explicit { ref dir, .. } if dir.is_none() => true,
@@ -212,8 +202,8 @@ fn lower_module_ports<'gcx>(
 
     // Create the external and internal port views.
     let partial_ports = match nonansi {
-        true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span, module),
-        false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span, module),
+        true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span, module.id()),
+        false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span, module.id()),
     };
     trace!("Lowered ports: {:#?}", partial_ports);
 
@@ -305,7 +295,7 @@ fn lower_module_ports<'gcx>(
         // Package everything up in an internal port.
         ports.push(IntPort {
             id: port_id,
-            module,
+            module: module.id(),
             span: port.span,
             name: port.name,
             dir: port.dir,
@@ -315,11 +305,13 @@ fn lower_module_ports<'gcx>(
     }
 
     // Package the port list up.
-    PortList {
+    let list = PortList {
         int: ports,
         ext_pos: partial_ports.ext_pos,
         ext_named: partial_ports.ext_named,
-    }
+    };
+    trace!("Port list of {:?} is: {:#?}", module, list);
+    cx.gcx().arena.alloc_port_list(list)
 }
 
 /// Lower the ANSI ports of a module.

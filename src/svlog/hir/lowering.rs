@@ -529,7 +529,7 @@ fn lower_module<'gcx>(
     }
 
     // Lower the module's ports.
-    let ports_new = cx.port_list(ast);
+    let ports_new = cx.module_ports(ast);
 
     // Lower the module body.
     let block = lower_module_block(cx, next_rib, &ast.items, true)?;
