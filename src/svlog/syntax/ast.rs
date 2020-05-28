@@ -11,7 +11,7 @@ use moore_common::{
     source::{Span, Spanned, INVALID_SPAN},
     util::{HasDesc, HasSpan},
 };
-use moore_derive::{AcceptVisitor, AnyNodeData, CommonNode};
+use moore_derive::{AcceptVisitor, AnyNodeData};
 use std::{
     cell::Cell,
     hash::{Hash, Hasher},
@@ -219,37 +219,6 @@ impl<'a> ForEachNode<'a> for Lit {}
 impl<'a> ForEachNode<'a> for Op {}
 impl<'a> ForEachNode<'a> for bool {}
 
-impl<'a> ForEachNode<'a> for Stmt<'a> {}
-impl<'a> ForEachNode<'a> for StmtData<'a> {}
-
-/// Common interface to all AST nodes.
-pub trait CommonNode {
-    /// Apply a function to each child node.
-    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode));
-}
-
-impl<T> CommonNode for Vec<T>
-where
-    T: CommonNode,
-{
-    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
-        for c in self {
-            f(c)
-        }
-    }
-}
-
-impl<T> CommonNode for Option<T>
-where
-    T: CommonNode,
-{
-    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
-        if let Some(c) = self {
-            f(c)
-        }
-    }
-}
-
 /// Common denominator across all AST nodes.
 #[derive(Clone)]
 pub struct Node<'a, T> {
@@ -385,15 +354,6 @@ impl<'a, T> PartialEq for Node<'a, T> {
 impl<'a, T> Hash for Node<'a, T> {
     fn hash<H: Hasher>(&self, h: &mut H) {
         std::ptr::hash(self, h)
-    }
-}
-
-impl<'a, T> CommonNode for Node<'a, T>
-where
-    T: CommonNode,
-{
-    fn for_each_child(&self, f: &mut dyn FnMut(&dyn CommonNode)) {
-        self.data.for_each_child(f)
     }
 }
 
@@ -1026,10 +986,10 @@ pub enum ProcedureKind {
     Final,
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stmt<'a> {
     pub span: Span,
-    #[ignore_child]
     pub label: Option<Name>,
     pub data: StmtData<'a>,
 }
@@ -1046,7 +1006,8 @@ impl HasDesc for Stmt<'_> {
     }
 }
 
-#[derive(CommonNode, Debug, Clone, PartialEq, Eq)]
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StmtData<'a> {
     NullStmt,
     SequentialBlock(Vec<Stmt<'a>>),
