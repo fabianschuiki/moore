@@ -8,7 +8,7 @@
 use crate::crate_prelude::*;
 use std::{collections::BTreeSet, sync::Arc};
 
-mod lowering;
+pub(crate) mod lowering;
 mod nodes;
 mod visit;
 

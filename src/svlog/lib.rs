@@ -88,6 +88,7 @@ pub mod hir;
 mod inst_details;
 pub mod mir;
 mod param_env;
+pub mod port_list;
 mod port_mapping;
 mod resolver;
 pub mod ty;
