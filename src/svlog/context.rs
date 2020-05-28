@@ -101,6 +101,10 @@ impl<'gcx> GlobalContext<'gcx> {
             // Ensure there are no naming conflicts in the scopes.
             crate::resolver::materialize_scope(self, root);
 
+            // Register nodes with the AST map. This is a necessary hack until
+            // we have moved away from querying nodes merely by ID.
+            root.walk(&mut AstMapRegistrator { cx: self });
+
             // Resolve names for debugging purposes.
             use ast::WalkVisitor;
             info!("Now resolving all names:");
@@ -884,3 +888,23 @@ pub(super) mod queries {
 }
 
 pub use self::queries::Context;
+
+/// An ugly hack to get the new AST nodes to hook into the ID-based AST lookup
+/// during the transition phase.
+struct AstMapRegistrator<'a, 'b> {
+    cx: &'b GlobalContext<'a>,
+}
+
+impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
+    fn post_visit_param_value_decl(&mut self, node: &'a ast::ParamValueDecl<'a>) {
+        let parent = node.get_parent().unwrap().as_all().unwrap_param_decl();
+        self.cx
+            .map_ast_with_parent(AstNode::ValueParam(parent, node), parent.id());
+    }
+
+    fn post_visit_param_type_decl(&mut self, node: &'a ast::ParamTypeDecl<'a>) {
+        let parent = node.get_parent().unwrap().as_all().unwrap_param_decl();
+        self.cx
+            .map_ast_with_parent(AstNode::TypeParam(parent, node), parent.id());
+    }
+}
