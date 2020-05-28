@@ -1,0 +1,35 @@
+digraph Queries {
+    // Representations
+    {
+        node [shape=box, fontname="Roboto Bold"];
+        AST;
+        RST;
+        HIR;
+        MIR;
+        LLHD;
+    };
+
+    // Queries
+    {
+        node [shape=plaintext, fontname="Roboto Mono"];
+
+        // Port List
+        AST -> module_ports;
+        HIR -> module_ports [style=dashed, color=gray, constraint=false];
+
+        // Resolver
+        {AST -> scope_location module_ports} -> generated_scope;
+        generated_scope -> resolve_local -> resolve_local_or_error;
+        generated_scope -> resolve_namespace -> resolve_namespace_or_error;
+        {scope_location resolve_local_or_error} -> resolve_imported_scope -> resolve_local;
+
+        // HIR
+        {AST module_ports} -> hir_of -> HIR;
+
+        // MIR
+        HIR -> {mir_rvalue mir_lvalue} -> MIR;
+
+        // Codegen
+        {HIR MIR} -> codegen -> LLHD;
+    }
+}
