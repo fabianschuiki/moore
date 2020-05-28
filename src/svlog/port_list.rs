@@ -49,6 +49,8 @@ pub struct PortList<'a> {
 pub struct IntPort<'a> {
     /// Node ID of the port.
     pub id: NodeId,
+    /// The AST node that spawned this port.
+    pub ast: &'a dyn ast::AnyNode<'a>,
     /// The module containing the port.
     pub module: &'a ast::Module<'a>,
     /// Location of the port declaration in the source file.
@@ -307,6 +309,7 @@ pub(crate) fn module_ports<'a>(
         // Package everything up in an internal port.
         ports.push(IntPort {
             id: port_id,
+            ast: port.ast,
             module,
             span: port.span,
             name: port.name,
@@ -408,6 +411,7 @@ fn lower_module_ports_ansi<'gcx>(
                 let data = PartialPort {
                     name: *name,
                     span: port.span,
+                    ast: port,
                     kind,
                     dir,
                     sign,
@@ -469,6 +473,7 @@ fn lower_module_ports_ansi<'gcx>(
                                     int_ports.push(PartialPort {
                                         name: pr.name,
                                         span: port.span,
+                                        ast: port,
                                         kind: None,
                                         dir,
                                         sign: ast::TypeSign::None,
@@ -557,6 +562,7 @@ fn lower_module_ports_nonansi<'gcx>(
             let data = PartialPort {
                 span: ast.span,
                 name: Spanned::new(name.name, name.name_span),
+                ast: name,
                 kind: ast.kind,
                 dir: ast.dir,
                 sign: ast.ty.sign,
@@ -989,6 +995,8 @@ fn lower_port_ref<'gcx>(
 struct PartialPort<'a> {
     span: Span,
     name: Spanned<Name>,
+    /// The AST node from which we derived this port.
+    ast: &'a dyn ast::AnyNode<'a>,
     dir: ast::PortDir,
     kind: Option<ast::PortKind>,
     sign: ast::TypeSign,
