@@ -247,6 +247,13 @@ impl<'a, T> Node<'a, T> {
     }
 }
 
+// The following are needed due to the `Cell`s in `Node`. It is safe to share
+// nodes between threads if we never change `parent` and `order` afterwards.
+// We only set these cells once immediately after constructing an AST, and never
+// again after.
+unsafe impl<'a, T> Send for Node<'a, T> where T: Send {}
+unsafe impl<'a, T> Sync for Node<'a, T> where T: Sync {}
+
 /// Automatically implement `AnyNode` for `Node<T>` if enough information is
 /// present.
 impl<'a, T> AnyNode<'a> for Node<'a, T>
