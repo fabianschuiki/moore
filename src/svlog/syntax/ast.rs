@@ -1944,7 +1944,7 @@ pub struct ParamTypeDecl<'a> {
     pub ty: Option<Type<'a>>,
 }
 
-/// A single value assignment within a parameter or loclparam declaration.
+/// A single value assignment within a parameter or localparam declaration.
 ///
 /// ```text
 /// [type_or_implicit] ident {dimension} ["=" expr]
