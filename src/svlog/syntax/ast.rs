@@ -18,7 +18,7 @@ use std::{
 };
 
 /// An AST node.
-pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display {
+pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display + Send + Sync {
     /// Get this node's unique ID.
     fn id(&self) -> NodeId;
 
@@ -259,7 +259,7 @@ unsafe impl<'a, T> Sync for Node<'a, T> where T: Sync {}
 impl<'a, T> AnyNode<'a> for Node<'a, T>
 where
     Self: BasicNode<'a> + std::fmt::Display + AnyNodeData,
-    T: std::fmt::Debug + ForEachChild<'a>,
+    T: std::fmt::Debug + ForEachChild<'a> + Send + Sync,
 {
     fn id(&self) -> NodeId {
         self.id
