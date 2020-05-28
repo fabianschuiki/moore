@@ -230,10 +230,6 @@ pub struct Node<'a, T> {
     pub parent: Cell<Option<&'a dyn AnyNode<'a>>>,
     /// Lexical order of the node.
     pub order: Cell<usize>,
-    /// Lexical predecessor node.
-    pub lex_pred: Cell<Option<&'a ()>>,
-    /// Lexical successor node.
-    pub lex_succ: Cell<Option<&'a ()>>,
     /// Per-node data.
     pub data: T,
 }
@@ -247,8 +243,6 @@ impl<'a, T> Node<'a, T> {
             data,
             parent: Default::default(),
             order: Default::default(),
-            lex_pred: Default::default(),
-            lex_succ: Default::default(),
         }
     }
 }
