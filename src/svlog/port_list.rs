@@ -285,6 +285,7 @@ pub(crate) fn module_ports<'a>(
                     dims: port.packed_dims.to_vec(),
                 },
             ));
+            ty_ast.link_attach(port.ast);
             let ty = cx.map_ast_with_parent(AstNode::Type(ty_ast), next_rib);
             // NOTE: This was here for some reason. Not sure what this was
             // accomplishing. Maybe some side effects?
