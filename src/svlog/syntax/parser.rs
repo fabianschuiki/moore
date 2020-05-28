@@ -1497,7 +1497,7 @@ fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type<'n>) -> Report
                 ast::Type::new(
                     span,
                     ast::TypeData {
-                        kind: ast::SpecializedType(Box::new(ty), params),
+                        kind: ast::TypeKind::new(span, ast::SpecializedType(Box::new(ty), params)),
                         sign: ast::TypeSign::None,
                         dims: Vec::new(),
                     },
@@ -1520,8 +1520,11 @@ fn parse_implicit_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typ
 fn parse_type_signing_and_dimensions<'n>(
     p: &mut dyn AbstractParser<'n>,
     mut span: Span,
-    kind: TypeKind<'n>,
+    kind: TypeKindData<'n>,
 ) -> ReportedResult<Type<'n>> {
+    // Package up the type kind.
+    let kind = TypeKind::new(span, kind);
+
     // Parse the optional sign information.
     let sign = match p.peek(0).0 {
         Keyword(Kw::Signed) => {
@@ -1543,7 +1546,7 @@ fn parse_type_signing_and_dimensions<'n>(
 }
 
 /// Parse the core type data of a type.
-fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {
+fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKindData<'n>> {
     let (tkn, sp) = p.peek(0);
     match tkn {
         Keyword(Kw::Void) => {
@@ -1665,7 +1668,7 @@ fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKin
     }
 }
 
-fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {
+fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKindData<'n>> {
     // Consume the enum keyword.
     p.bump();
 
@@ -1704,7 +1707,7 @@ fn parse_enum_name<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<EnumNam
     Ok(EnumName::new(span, EnumNameData { name, range, value }))
 }
 
-fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKind<'n>> {
+fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKindData<'n>> {
     let q = p.peek(0).1;
 
     // Consume the "struct", "union", or "union tagged" keywords.

@@ -22,7 +22,7 @@
 
 use crate::ast_map::AstNode;
 use crate::crate_prelude::*;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 /// List of internal and external ports of a module.
 ///
@@ -198,7 +198,7 @@ pub(crate) fn module_ports<'a>(
             } if dir.is_none()
                 && kind.is_none()
                 && expr.is_none()
-                && ty.kind == ast::ImplicitType
+                && ty.kind.data == ast::ImplicitType
                 && ty.sign == ast::TypeSign::None
                 && ty.dims.is_empty() =>
             {
@@ -233,7 +233,7 @@ pub(crate) fn module_ports<'a>(
         let kind = port.kind.unwrap_or_else(|| match port.dir {
             ast::PortDir::Input | ast::PortDir::Inout => ast::PortKind::Net(default_net_type),
             ast::PortDir::Output => {
-                if port.ty == &ast::ImplicitType {
+                if port.ty.data == ast::ImplicitType {
                     ast::PortKind::Net(default_net_type)
                 } else {
                     ast::PortKind::Var
@@ -272,15 +272,15 @@ pub(crate) fn module_ports<'a>(
             None
         } else {
             // Determine the data type.
-            let ty = if port.ty == &ast::ImplicitType {
-                &ast::LogicType
+            let ty = if port.ty.data == ast::ImplicitType {
+                Cow::Owned(ast::TypeKind::new(port.ty.span(), ast::LogicType))
             } else {
                 port.ty
             };
             let ty_ast = cx.arena().alloc_ast_type(ast::Type::new(
                 port.span,
                 ast::TypeData {
-                    kind: ty.clone(),
+                    kind: ty.into_owned(),
                     sign: port.sign,
                     dims: port.packed_dims.to_vec(),
                 },
@@ -360,7 +360,10 @@ fn lower_module_ports_ansi<'gcx>(
     // the standard.
     let mut carry_dir = ast::PortDir::Inout;
     let mut carry_kind: Option<ast::PortKind> = None;
-    let mut carry_ty = &ast::LogicType;
+    let mut carry_ty = Cow::Owned(ast::TypeKind::new(
+        first_span.begin().into(),
+        ast::LogicType,
+    ));
     let mut carry_sign = ast::TypeSign::None;
     let mut carry_packed_dims: &[ast::TypeDim] = &[];
 
@@ -391,20 +394,20 @@ fn lower_module_ports_ansi<'gcx>(
 
                 // If no port type has been provided, use the one carried over
                 //  from the previous port.
-                let (ty, sign, packed_dims) = if ty.kind == ast::ImplicitType
+                let (ty, sign, packed_dims) = if ty.kind.data == ast::ImplicitType
                     && ty.sign == ast::TypeSign::None
                     && ty.dims.is_empty()
                 {
                     (carry_ty, carry_sign, carry_packed_dims)
                 } else {
-                    (&ty.kind, ty.sign, ty.dims.as_slice())
+                    (Cow::Borrowed(&ty.kind), ty.sign, ty.dims.as_slice())
                 };
 
                 // Keep the direction, kind, and type around for the next port
                 // in the list, which might want to inherit them.
                 carry_dir = dir;
                 carry_kind = kind;
-                carry_ty = ty;
+                carry_ty = ty.clone();
                 carry_sign = sign;
                 carry_packed_dims = packed_dims;
 
@@ -449,7 +452,10 @@ fn lower_module_ports_ansi<'gcx>(
                 // standard. What a joke.
                 carry_dir = dir;
                 carry_kind = None;
-                carry_ty = &ast::LogicType;
+                carry_ty = Cow::Owned(ast::TypeKind::new(
+                    port.span().begin().into(),
+                    ast::LogicType,
+                ));
                 carry_sign = ast::TypeSign::None;
                 carry_packed_dims = &[];
 
@@ -477,8 +483,11 @@ fn lower_module_ports_ansi<'gcx>(
                                         kind: None,
                                         dir,
                                         sign: ast::TypeSign::None,
-                                        ty: &ast::ImplicitType, // inferred from expression
-                                        packed_dims: &[],       // inferred from expression
+                                        ty: Cow::Owned(ast::TypeKind::new(
+                                            port.span().begin().into(),
+                                            ast::ImplicitType,
+                                        )), // inferred from expression
+                                        packed_dims: &[], // inferred from expression
                                         unpacked_dims: &[],
                                         default: None,
                                         inferred: true,
@@ -566,7 +575,7 @@ fn lower_module_ports_nonansi<'gcx>(
                 kind: ast.kind,
                 dir: ast.dir,
                 sign: ast.ty.sign,
-                ty: &ast.ty.kind,
+                ty: Cow::Borrowed(&ast.ty.kind),
                 packed_dims: &ast.ty.dims,
                 unpacked_dims: &name.dims,
                 default: name.init.as_ref(),
@@ -646,7 +655,7 @@ fn lower_module_ports_nonansi<'gcx>(
         // Check if the port is already complete, that is, already has a net or
         // variable type. In that case it's an error to provide an additional
         // variable or net declaration that goes with it.
-        if port.kind.is_some() || *port.ty != ast::ImplicitType {
+        if port.kind.is_some() || port.ty.data != ast::ImplicitType {
             for span in port
                 .var_decl
                 .iter()
@@ -760,19 +769,13 @@ fn lower_module_ports_nonansi<'gcx>(
 
         // Merge the type.
         port.match_ty = Some((
-            match (port.ty, add_ty) {
-                (a, ast::ImplicitType) => {
-                    port.ty = a;
+            match (&port.ty.data, &add_ty.data) {
+                (_, ast::ImplicitType) => None,
+                (ast::ImplicitType, _) => {
+                    port.ty = Cow::Borrowed(add_ty);
                     None
                 }
-                (ast::ImplicitType, b) => {
-                    port.ty = b;
-                    None
-                }
-                (a, b) => {
-                    port.ty = a;
-                    Some(b)
-                }
+                (_, _) => Some(add_ty),
             },
             add_packed,
             add_unpacked,
@@ -809,7 +812,11 @@ fn lower_module_ports_nonansi<'gcx>(
                     ast::Type {
                         data:
                             ast::TypeData {
-                                kind: ast::ImplicitType,
+                                kind:
+                                    ast::TypeKind {
+                                        data: ast::ImplicitType,
+                                        ..
+                                    },
                                 sign: ast::TypeSign::None,
                                 dims: ref packed_dims,
                                 ..
@@ -1000,7 +1007,7 @@ struct PartialPort<'a> {
     dir: ast::PortDir,
     kind: Option<ast::PortKind>,
     sign: ast::TypeSign,
-    ty: &'a ast::TypeKind<'a>,
+    ty: Cow<'a, ast::TypeKind<'a>>,
     packed_dims: &'a [ast::TypeDim<'a>],
     unpacked_dims: &'a [ast::TypeDim<'a>],
     /// The default value assigned to this port if left unconnected.

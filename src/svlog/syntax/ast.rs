@@ -535,7 +535,7 @@ tuple_impls!(0 => T0, 1 => T1, 2 => T2, 3 => T3);
 
 pub use self::ExprData::*;
 pub use self::StmtData::*;
-pub use self::TypeKind::*;
+pub use self::TypeKindData::*;
 
 // Deprecated names.
 pub type ModDecl<'a> = Module<'a>;
@@ -668,7 +668,9 @@ pub struct Type<'a> {
     pub dims: Vec<TypeDim<'a>>,
 }
 
-#[moore_derive::visit]
+/// A type without sign and packed dimensions.
+#[moore_derive::node]
+#[indefinite("type")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeKind<'a> {
     ImplicitType,

@@ -716,7 +716,7 @@ fn lower_type<'gcx>(
     node_id: NodeId,
     ty: &'gcx ast::Type<'gcx>,
 ) -> Result<HirNode<'gcx>> {
-    let mut kind = match ty.kind {
+    let mut kind = match ty.kind.data {
         ast::ImplicitType => hir::TypeKind::Implicit,
         ast::VoidType => hir::TypeKind::Builtin(hir::BuiltinType::Void),
         ast::BitType => hir::TypeKind::Builtin(hir::BuiltinType::Bit),
@@ -778,7 +778,7 @@ fn lower_type<'gcx>(
                                 let ty = cx.arena().alloc_ast_type(ast::Type::new(
                                     expr.span,
                                     ast::TypeData {
-                                        kind: ast::NamedType(*n),
+                                        kind: ast::TypeKind::new(expr.span, ast::NamedType(*n)),
                                         sign: ast::TypeSign::None,
                                         dims: vec![],
                                     },
@@ -1287,7 +1287,7 @@ fn lower_expr<'gcx>(
         ),
         ast::CastExpr(ref ty, ref expr) => {
             // Catch the corner case where a size cast looks like a type cast.
-            if let ast::NamedType(n) = ty.kind {
+            if let ast::NamedType(n) = ty.kind.data {
                 let binding = cx.resolve_upwards_or_error(
                     Spanned::new(n.name, n.span),
                     cx.parent_node_id(node_id).unwrap(),
