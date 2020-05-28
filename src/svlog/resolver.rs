@@ -1087,7 +1087,8 @@ pub(crate) fn scope_location<'a>(
     bug_span!(
         node.span(),
         cx,
-        "arrived at root node, which must generate a scope"
+        "arrived at root node {:?}, which must generate a scope",
+        node
     );
 }
 
