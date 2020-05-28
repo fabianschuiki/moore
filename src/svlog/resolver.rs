@@ -902,6 +902,11 @@ impl<'a, 'c, C: Context<'a>> ScopeGenerator<'a, 'c, C> {
 
         // Check that the definition does not collide with a previous one.
         if let Some(existing) = self.scope.defs.get(&def.name.value) {
+            // Do not redefine ports.
+            match existing.node {
+                DefNode::IntPort(_) => return,
+                _ => (),
+            };
             if !def.may_override {
                 let d = DiagBuilder2::error(format!("`{}` is defined multiple times", def.name))
                     .span(def.name.span)
