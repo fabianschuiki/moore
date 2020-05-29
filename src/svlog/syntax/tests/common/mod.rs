@@ -5,7 +5,7 @@ use moore_svlog_syntax::{lexer::Lexer, parser, preproc::Preprocessor};
 
 pub(crate) use moore_svlog_syntax::ast;
 
-pub(crate) fn parse(input: &str) -> ast::Root {
+pub(crate) fn parse(input: &str) -> ast::SourceFile {
     use std::cell::Cell;
     thread_local!(static INDEX: Cell<usize> = Cell::new(0));
     let sm = get_source_manager();
