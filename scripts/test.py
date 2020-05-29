@@ -119,23 +119,20 @@ try:
             cmd = ["cargo", "build", "--bins"]
             if args.release:
                 cmd += ["--release"]
-            subprocess.run(
+            subprocess.check_call(
                 cmd,
                 stdin=subprocess.DEVNULL,
                 cwd=crate_dir.__str__(),
-                check=True,
             )
 
         # Extract build directory
         # cargo metadata --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'
-        metadata = subprocess.run(
+        metadata = subprocess.check_output(
             ["cargo", "metadata", "--format-version", "1"],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
             cwd=crate_dir.__str__(),
-            check=True,
             universal_newlines=True,
-        ).stdout
+        )
         prefix = re.search(r'"target_directory":"([^"]*)"', metadata).group(1)
         if args.debug:
             prefix += "/debug"
