@@ -319,7 +319,9 @@ pub(crate) fn resolve_node<'gcx>(
             _ => (),
         },
         HirNode::IntPort(port) if port.data.is_none() => {
-            return cx.resolve_downwards_or_error(port.name, port.module.id());
+            return cx
+                .resolve_hierarchical_or_error(port.name, port.module)
+                .map(|def| def.node.id());
         }
         _ => (),
     }
