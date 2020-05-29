@@ -21,14 +21,14 @@ class B #(size = 1);
 	logic [size-1:0] v;
 endclass
 
-interface C #(AWIDTH = 64, type T = word) (input logic clk);
+interface C #(AWIDTH = 64, type T = int) (input logic clk);
 endinterface
 
 module D #(int N = 5, M = N*16, type T = int, T x = 0)();
 endmodule
 
-class E #(type T, int size);
-	T words[size];
-endclass
+// class E #(type T, int size);
+// 	T words[size];
+// endclass
 
-typedef E#(byte, 1024) F;
+// typedef E#(byte, 1024) F;
