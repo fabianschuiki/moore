@@ -1346,6 +1346,58 @@ pub(crate) fn resolve_namespace_or_error<'a>(
     }
 }
 
+/// Resolve a name in a scope as a hierarchical lookup.
+///
+/// This checks if the scope contains a definition with visibility
+/// `HIERARCHICAL`. Returns `None` if no such name exists.
+#[moore_derive::query]
+pub(crate) fn resolve_hierarchical<'a>(
+    cx: &impl Context<'a>,
+    name: Name,
+    inside: &'a dyn ScopedNode<'a>,
+) -> Option<&'a Def<'a>> {
+    debug!("Resolving `{}` hierarchically in {:?}", name, inside);
+    let scope = cx.generated_scope(inside);
+    match scope.defs.get(&name) {
+        Some(def) if def.vis.contains(DefVis::HIERARCHICAL) => {
+            debug!(" - Found {:?}", def);
+            Some(def)
+        }
+        _ => None,
+    }
+}
+
+/// Resolve a name in a scope as a hierarchical lookup or emit an error.
+///
+/// Calls `resolve_hierarchical`. Either returns `Ok` if a node was found, or
+/// `Err` after emitting a diagnostic error message.
+#[moore_derive::query]
+pub(crate) fn resolve_hierarchical_or_error<'a>(
+    cx: &impl Context<'a>,
+    name: Spanned<Name>,
+    inside: &'a dyn ScopedNode<'a>,
+) -> Result<&'a Def<'a>> {
+    match cx.resolve_hierarchical(name.value, inside) {
+        Some(def) => {
+            if cx.sess().has_verbosity(Verbosity::NAMES) {
+                let d = DiagBuilder2::note("name resolution")
+                    .span(name.span)
+                    .add_note(format!("Resolved `{}` to this {}:", name, def.node))
+                    .span(def.node.span());
+                cx.emit(d);
+            }
+            Ok(def)
+        }
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` not found in {}", name.value, inside))
+                    .span(name.span),
+            );
+            Err(())
+        }
+    }
+}
+
 /// Resolve an import to the scope it imports.
 ///
 /// This function emits a diagnostic if the target of the import has no scope.
