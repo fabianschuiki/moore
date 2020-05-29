@@ -758,17 +758,14 @@ pub enum TypeKind<'a> {
     // Enumerations
     EnumType(Option<Box<Type<'a>>>, Vec<EnumName<'a>>),
     StructType {
-        #[dont_visit]
         kind: StructKind,
         packed: bool,
-        #[dont_visit]
         signing: TypeSign,
-        #[dont_visit]
         members: Vec<StructMember<'a>>,
     },
 
     // Specialization
-    SpecializedType(Box<Type<'a>>, #[dont_visit] Vec<ParamAssignment<'a>>),
+    SpecializedType(Box<Type<'a>>, Vec<ParamAssignment<'a>>),
 
     /// Type reference, such as `type(x)` or `type(int)`.
     TypeRef(Box<TypeOrExpr<'a>>),
