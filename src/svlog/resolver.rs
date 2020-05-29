@@ -257,61 +257,19 @@ pub(crate) fn resolve_upwards<'gcx>(
     name: Name,
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
-    // // Get the AST associated with the node ID and map it to an AnyNode.
-    // let ast = cx.ast_of(start_at)?;
-    // let node = match ast.get_any() {
-    //     Some(x) => x,
-    //     None => bug_span!(
-    //         cx.span(start_at),
-    //         cx,
-    //         "resolve_upwards called on node which doesn't implement AnyNode yet: {:?}",
-    //         ast
-    //     ),
-    // };
-    // return cx
-    //     .resolve_local(name, cx.scope_location(node), false)
-    //     .map(|def| def.map(|def| def.node.id()));
-
-    if cx.sess().has_verbosity(Verbosity::NAMES) {
-        cx.emit(DiagBuilder2::note(format!("resolving `{}`", name)).span(cx.span(start_at)));
-    }
-    let mut next_id = Some(start_at);
-    while let Some(rib_id) = next_id {
-        if cx.sess().has_verbosity(Verbosity::NAMES) {
-            cx.emit(DiagBuilder2::note(format!("resolving `{}` here", name)).span(cx.span(rib_id)));
-        }
-        let rib = cx.local_rib(rib_id)?;
-        if let Some(resolved) = resolve_in_rib(cx, name, rib)? {
-            return Ok(Some(resolved));
-        }
-        next_id = rib.parent;
-    }
-    for import in cx.gcx().imports() {
-        if let n @ Some(_) = resolve_in_rib(cx, name, cx.local_rib(import)?)? {
-            return Ok(n);
-        }
-    }
-    if let m @ Some(_) = cx.gcx().find_module(name) {
-        return Ok(m);
-    }
-    if let p @ Some(_) = cx.gcx().find_package(name) {
-        return Ok(p);
-    }
-    Ok(None)
-}
-
-fn resolve_in_rib<'gcx>(cx: &impl Context<'gcx>, name: Name, rib: &Rib) -> Result<Option<NodeId>> {
-    let rib_resolved = rib.resolve_imports();
-    if let Some(id) = rib_resolved.get(name) {
-        return Ok(Some(id));
-    }
-    if let RibKind::Module(..) = rib_resolved.kind {
-        let rib = cx.hierarchical_rib(rib_resolved.node)?;
-        if let Some(id) = rib.get(name) {
-            return Ok(Some(id));
-        }
-    }
-    Ok(None)
+    // Get the AST associated with the node ID and map it to an AnyNode.
+    let ast = cx.ast_of(start_at)?;
+    let node = match ast.get_any() {
+        Some(x) => x,
+        None => bug_span!(
+            cx.span(start_at),
+            cx,
+            "resolve_upwards called on node which doesn't implement AnyNode yet: {:?}",
+            ast
+        ),
+    };
+    cx.resolve_local(name, cx.scope_location(node), false)
+        .map(|def| def.map(|def| def.node.id()))
 }
 
 /// Resolve a name downwards.
