@@ -1296,10 +1296,38 @@ impl<'a> AnyNode<'a> for TypeOrExpr<'a> {
         }
     }
 
+    fn human_span(&self) -> Span {
+        match self {
+            TypeOrExpr::Type(x) => x.human_span(),
+            TypeOrExpr::Expr(x) => x.human_span(),
+        }
+    }
+
     fn order(&self) -> usize {
         match self {
             TypeOrExpr::Type(x) => x.order(),
             TypeOrExpr::Expr(x) => x.order(),
+        }
+    }
+
+    fn get_parent(&self) -> Option<&'a dyn AnyNode<'a>> {
+        match self {
+            TypeOrExpr::Type(x) => x.get_parent(),
+            TypeOrExpr::Expr(x) => x.get_parent(),
+        }
+    }
+
+    fn link(&'a self, parent: Option<&'a dyn AnyNode<'a>>, order: &mut usize) {
+        match self {
+            TypeOrExpr::Type(x) => x.link(parent, order),
+            TypeOrExpr::Expr(x) => x.link(parent, order),
+        }
+    }
+
+    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {
+        match self {
+            TypeOrExpr::Type(x) => x.link_attach(parent),
+            TypeOrExpr::Expr(x) => x.link_attach(parent),
         }
     }
 }
