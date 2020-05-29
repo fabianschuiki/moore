@@ -1616,6 +1616,9 @@ fn type_context_imposed_by_expr<'gcx>(
             type_context_imposed_by_positional_pattern(cx, onto, expr, args, const_count, env)
         }
 
+        // The `inside` expression imposes its operation type as type context.
+        hir::ExprKind::Inside(..) => Some(cx.need_operation_type(expr.id, env).into()),
+
         _ => None,
     }
 }
