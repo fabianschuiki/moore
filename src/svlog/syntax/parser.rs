@@ -4285,13 +4285,15 @@ fn parse_generate_for<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Gene
     })?;
     let block = parse_generate_block(p)?;
     span.expand(p.last_span());
-    Ok(GenerateFor {
-        span: span,
-        init: init,
-        cond: cond,
-        step: step,
-        block: block,
-    })
+    Ok(GenerateFor::new(
+        span,
+        GenerateForData {
+            init,
+            cond,
+            step,
+            block,
+        },
+    ))
 }
 
 fn parse_generate_if<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<GenerateIf<'n>> {
@@ -4305,20 +4307,26 @@ fn parse_generate_if<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Gener
         None
     };
     span.expand(p.last_span());
-    Ok(GenerateIf {
-        span: span,
-        cond: cond,
-        main_block: main_block,
-        else_block: else_block,
-    })
+    Ok(GenerateIf::new(
+        span,
+        GenerateIfData {
+            cond,
+            main_block,
+            else_block,
+        },
+    ))
 }
 
-fn parse_generate_case<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<GenerateCase> {
+fn parse_generate_case<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<GenerateCase<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Case))?;
-    let q = p.last_span();
-    p.add_diag(DiagBuilder2::error("Don't know how to parse case-generate statements").span(q));
-    Err(())
+    p.recover_balanced(&[Keyword(Kw::Endcase)], true);
+    if p.try_eat(Colon) {
+        parse_identifier_name(p, "generate block label")?;
+    }
+    span.expand(p.last_span());
+    p.add_diag(DiagBuilder2::error("case-generate statements not supported").span(span));
+    Ok(GenerateCase::new(span, GenerateCaseData {}))
 }
 
 fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<GenerateBlock<'n>> {
@@ -4349,11 +4357,13 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
         }
         let item = parse_generate_item(p)?;
         span.expand(p.last_span());
-        return Ok(GenerateBlock {
-            span: span,
-            label: label,
-            items: vec![item],
-        });
+        return Ok(GenerateBlock::new(
+            span,
+            GenerateBlockData {
+                label: label,
+                items: vec![item],
+            },
+        ));
     }
 
     // Consume the optional label after the "begin" keyword.
@@ -4402,11 +4412,13 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
     }
 
     span.expand(p.last_span());
-    Ok(GenerateBlock {
-        span: span,
-        label: label,
-        items: items,
-    })
+    Ok(GenerateBlock::new(
+        span,
+        GenerateBlockData {
+            label: label,
+            items: items,
+        },
+    ))
 }
 
 fn parse_class_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ClassDecl<'n>> {

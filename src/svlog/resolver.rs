@@ -672,6 +672,9 @@ impl<'a> ScopedNode<'a> for ast::Stmt<'a> {}
 impl<'a> ScopedNode<'a> for ast::Procedure<'a> {}
 impl<'a> ScopedNode<'a> for ast::ClassDecl<'a> {}
 impl<'a> ScopedNode<'a> for ast::SubroutineDecl<'a> {}
+impl<'a> ScopedNode<'a> for ast::GenerateFor<'a> {}
+impl<'a> ScopedNode<'a> for ast::GenerateIf<'a> {}
+impl<'a> ScopedNode<'a> for ast::GenerateCase<'a> {}
 
 // Compare and hash scoped nodes by reference for use in the query system.
 impl<'a> Eq for &'a dyn ScopedNode<'a> {}
@@ -721,6 +724,9 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
             ast::AllNode::Procedure(x) => Some(x),
             ast::AllNode::ClassDecl(x) => Some(x),
             ast::AllNode::SubroutineDecl(x) => Some(x),
+            ast::AllNode::GenerateFor(x) => Some(x),
+            ast::AllNode::GenerateIf(x) => Some(x),
+            ast::AllNode::GenerateCase(x) => Some(x),
             _ => None,
         }
     }
@@ -1107,6 +1113,18 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             });
         }
         true
+    }
+
+    fn pre_visit_generate_for(&mut self, _node: &'a ast::GenerateFor<'a>) -> bool {
+        false
+    }
+
+    fn pre_visit_generate_if(&mut self, _node: &'a ast::GenerateIf<'a>) -> bool {
+        false
+    }
+
+    fn pre_visit_generate_case(&mut self, _node: &'a ast::GenerateCase<'a>) -> bool {
+        false
     }
 
     fn pre_visit_stmt(&mut self, node: &'a ast::Stmt<'a>) -> bool {

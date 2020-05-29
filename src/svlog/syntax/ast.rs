@@ -8,7 +8,7 @@ use crate::token::{Lit, Op};
 use moore_common::{
     id::NodeId,
     name::Name,
-    source::{Span, Spanned, INVALID_SPAN},
+    source::{Span, Spanned},
     util::{HasDesc, HasSpan},
 };
 use moore_derive::{AcceptVisitor, AnyNodeData};
@@ -590,21 +590,21 @@ pub enum Item<'a> {
     ModuleDecl(#[forward] Module<'a>),
     InterfaceDecl(#[forward] Interface<'a>),
     PackageDecl(#[forward] Package<'a>),
-    ClassDecl(ClassDecl<'a>),
+    ClassDecl(#[forward] ClassDecl<'a>),
     ProgramDecl(()),
     ImportDecl(#[forward] ImportDecl<'a>),
     ParamDecl(#[forward] ParamDecl<'a>),
     ModportDecl(ModportDecl),
     Typedef(#[forward] Typedef<'a>),
-    PortDecl(PortDecl<'a>),
-    Procedure(Procedure<'a>),
+    PortDecl(#[forward] PortDecl<'a>),
+    Procedure(#[forward] Procedure<'a>),
     SubroutineDecl(#[forward] SubroutineDecl<'a>),
-    ContAssign(ContAssign<'a>),
+    ContAssign(#[forward] ContAssign<'a>),
     GenvarDecl(Vec<GenvarDecl<'a>>),
     GenerateRegion(Span, Vec<Item<'a>>),
-    GenerateFor(GenerateFor<'a>),
-    GenerateIf(GenerateIf<'a>),
-    GenerateCase(GenerateCase),
+    GenerateFor(#[forward] GenerateFor<'a>),
+    GenerateIf(#[forward] GenerateIf<'a>),
+    GenerateCase(#[forward] GenerateCase<'a>),
     Assertion(Assertion<'a>),
     NetDecl(NetDecl<'a>),
     VarDecl(#[forward] VarDecl<'a>),
@@ -1971,88 +1971,44 @@ pub struct ContAssign<'a> {
     pub assignments: Vec<(Expr<'a>, Expr<'a>)>,
 }
 
-#[moore_derive::visit]
+/// A `for` generate statement.
+#[moore_derive::node]
+#[indefinite("for-generate statement")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateFor<'a> {
-    pub span: Span,
     pub init: Stmt<'a>,
     pub cond: Expr<'a>,
     pub step: Expr<'a>,
     pub block: GenerateBlock<'a>,
 }
 
-impl HasSpan for GenerateFor<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for GenerateFor<'_> {
-    fn desc(&self) -> &'static str {
-        "for-generate statement"
-    }
-}
-
-#[moore_derive::visit]
+/// An `if` generate statement.
+#[moore_derive::node]
+#[indefinite("if-generate statement")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateIf<'a> {
-    pub span: Span,
     pub cond: Expr<'a>,
     pub main_block: GenerateBlock<'a>,
     pub else_block: Option<GenerateBlock<'a>>,
 }
 
-impl HasSpan for GenerateIf<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for GenerateIf<'_> {
-    fn desc(&self) -> &'static str {
-        "if-generate statement"
-    }
-}
-
-#[moore_derive::visit]
+/// A `case` generate statement.
+#[moore_derive::node]
+#[indefinite("case-generate statement")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateCase {
     // TODO
 }
 
-impl HasSpan for GenerateCase {
-    fn span(&self) -> Span {
-        // TODO: Fix this once we have a proper case statement.
-        INVALID_SPAN
-    }
-}
-
-impl HasDesc for GenerateCase {
-    fn desc(&self) -> &'static str {
-        "case-generate statement"
-    }
-}
-
-/// A body of a generate construct. May contains hierarchy items or more
-/// generate constructs.
-#[moore_derive::visit]
+/// A body of a generate construct.
+///
+/// May contains hierarchy items or more generate constructs.
+#[moore_derive::node]
+#[indefinite("generate block")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateBlock<'a> {
-    pub span: Span,
     pub label: Option<Name>,
     pub items: Vec<Item<'a>>,
-}
-
-impl HasSpan for GenerateBlock<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for GenerateBlock<'_> {
-    fn desc(&self) -> &'static str {
-        "generate statement"
-    }
 }
 
 #[moore_derive::visit]
