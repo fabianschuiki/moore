@@ -1123,7 +1123,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             name: node.prototype.name,
             vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::HIERARCHICAL,
             may_override: false,
-            ordered: true,
+            ordered: false,
         });
         false
     }
