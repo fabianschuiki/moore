@@ -23,7 +23,7 @@
 use crate::crate_prelude::*;
 use crate::salsa; // TODO(fschuiki): Remove this once salsa is regular dep again
 use crate::{
-    ast,
+    ast::{self, WalkVisitor},
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
     hir::{self, AccessTable, HirNode},
@@ -106,9 +106,7 @@ impl<'gcx> GlobalContext<'gcx> {
             root.walk(&mut AstMapRegistrator { cx: self });
 
             // Resolve names for debugging purposes.
-            use ast::WalkVisitor;
-            info!("Now resolving all names:");
-            root.walk(&mut crate::resolver::ResolutionVisitor { cx: self });
+            self.nameck(root);
 
             for item in &root.items {
                 match &item.data {

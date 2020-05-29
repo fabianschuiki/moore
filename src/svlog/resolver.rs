@@ -1333,9 +1333,30 @@ pub(crate) fn materialize_scope<'a>(cx: &impl Context<'a>, node: &'a dyn ScopedN
     }
 }
 
+/// Recursively resolves names throughout the AST.
+///
+/// Returns `true` if all names resolved successfully, `false` otherwise. This
+/// function helps in triggering name resolution errors at a defined point in
+/// the compilation.
+#[moore_derive::query]
+pub(crate) fn nameck<'a>(cx: &impl Context<'a>, node: &'a dyn ast::AnyNode<'a>) -> bool {
+    debug!("Checking name resolution on {:?}", node);
+    let mut rv = ResolutionVisitor::new(cx);
+    node.accept(&mut rv);
+    !rv.failed
+}
+
 /// A visitor that emits diagnostics for every resolved named.
 pub(crate) struct ResolutionVisitor<'cx, C> {
     pub cx: &'cx C,
+    pub failed: bool,
+}
+
+impl<'cx, C> ResolutionVisitor<'cx, C> {
+    /// Create a new name resolution visitor.
+    pub fn new(cx: &'cx C) -> Self {
+        ResolutionVisitor { cx, failed: false }
+    }
 }
 
 impl<'a, 'cx, C> ast::Visitor<'a> for ResolutionVisitor<'cx, C>
@@ -1346,14 +1367,34 @@ where
     fn pre_visit_expr(&mut self, node: &'a ast::Expr<'a>) -> bool {
         match node.data {
             ast::IdentExpr(ident) => {
-                let _ = self.cx.resolve_local_or_error(
-                    Spanned::new(ident.name, ident.span),
-                    self.cx.scope_location(node),
-                    false,
-                );
+                self.failed |= self
+                    .cx
+                    .resolve_local_or_error(
+                        Spanned::new(ident.name, ident.span),
+                        self.cx.scope_location(node),
+                        false,
+                    )
+                    .is_err();
+                false
             }
-            _ => (),
+            _ => true,
         }
-        true
+    }
+
+    fn pre_visit_type(&mut self, node: &'a ast::Type<'a>) -> bool {
+        match node.kind.data {
+            ast::NamedType(ident) => {
+                self.failed |= self
+                    .cx
+                    .resolve_local_or_error(
+                        Spanned::new(ident.name, ident.span),
+                        self.cx.scope_location(node),
+                        false,
+                    )
+                    .is_err();
+                false
+            }
+            _ => true,
+        }
     }
 }
