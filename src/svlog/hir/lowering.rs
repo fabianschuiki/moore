@@ -782,10 +782,8 @@ fn lower_type<'gcx>(
             match arg.as_ref() {
                 ast::TypeOrExpr::Expr(expr) => match &expr.data {
                     ast::IdentExpr(n) => {
-                        let binding = cx.resolve_upwards_or_error(
-                            Spanned::new(n.name, n.span),
-                            cx.parent_node_id(node_id).unwrap(),
-                        )?;
+                        let binding =
+                            cx.resolve_upwards_or_error(Spanned::new(n.name, n.span), node_id)?;
                         match cx.hir_of(binding)? {
                             HirNode::TypeParam(..) | HirNode::Typedef(..) => {
                                 let ty = cx.arena().alloc_ast_type(ast::Type::new(
