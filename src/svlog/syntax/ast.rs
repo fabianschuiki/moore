@@ -1537,10 +1537,11 @@ pub enum SubroutineKind {
     Task,
 }
 
-#[moore_derive::visit]
+/// A function or task port.
+#[moore_derive::node]
+#[indefinite("subroutine port")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePort<'a> {
-    pub span: Span,
     pub dir: Option<SubroutinePortDir>,
     pub var: bool,
     pub ty: Type<'a>,
@@ -1550,7 +1551,7 @@ pub struct SubroutinePort<'a> {
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortName<'a> {
-    pub name: Identifier,
+    pub name: Spanned<Name>,
     pub dims: Vec<TypeDim<'a>>,
     pub expr: Option<Expr<'a>>,
 }

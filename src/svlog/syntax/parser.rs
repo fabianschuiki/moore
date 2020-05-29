@@ -520,14 +520,22 @@ fn parse_identifier_name<'n, M: std::fmt::Display>(
 }
 
 fn try_identifier<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Option<ast::Identifier>> {
+    try_identifier_name(p).map(|n| {
+        n.map(|n| ast::Identifier {
+            span: n.span,
+            name: n.value,
+        })
+    })
+}
+
+fn try_identifier_name<'n>(
+    p: &mut dyn AbstractParser<'n>,
+) -> ReportedResult<Option<Spanned<Name>>> {
     let (tkn, span) = p.peek(0);
     match tkn {
         Ident(n) | EscIdent(n) => {
             p.bump();
-            Ok(Some(ast::Identifier {
-                span: span,
-                name: n,
-            }))
+            Ok(Some(Spanned::new(n, span)))
         }
         _ => Ok(None),
     }
@@ -3210,7 +3218,7 @@ fn parse_subroutine_prototype_tail<'n>(
                 p: &mut dyn AbstractParser<'n>,
             ) -> ReportedResult<Option<SubroutinePortName<'n>>> {
                 // Parse the optional port identifier.
-                let data = if let Some(name) = try_identifier(p)? {
+                let data = if let Some(name) = try_identifier_name(p)? {
                     // Parse the optional dimensions.
                     let (dims, _) = parse_optional_dimensions(p)?;
 
@@ -3243,13 +3251,10 @@ fn parse_subroutine_prototype_tail<'n>(
             }
 
             span.expand(p.last_span());
-            Ok(SubroutinePort {
-                span: span,
-                dir: dir,
-                var: var,
-                ty: ty,
-                name: name,
-            })
+            Ok(SubroutinePort::new(
+                span,
+                SubroutinePortData { dir, var, ty, name },
+            ))
         })
     })?
     .unwrap_or(Vec::new());
