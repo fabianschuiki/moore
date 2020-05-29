@@ -1653,16 +1653,11 @@ pub enum ChargeStrength {
     Large,
 }
 
-#[moore_derive::visit]
+/// A field in a `'{...}` pattern.
+#[moore_derive::node]
+#[indefinite("pattern field")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PatternField<'a> {
-    pub span: Span,
-    pub data: PatternFieldData<'a>,
-}
-
-#[moore_derive::visit]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PatternFieldData<'a> {
+pub enum PatternField<'a> {
     Default(Box<Expr<'a>>),
     Member(Box<Expr<'a>>, Box<Expr<'a>>),
     Type(Type<'a>, Box<Expr<'a>>),

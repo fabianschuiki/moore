@@ -2356,10 +2356,7 @@ fn parse_pattern_field<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pat
         p.require_reported(Colon)?;
         let value = Box::new(parse_expr(p)?);
         span.expand(p.last_span());
-        return Ok(PatternField {
-            span: span,
-            data: PatternFieldData::Default(value),
-        });
+        return Ok(PatternField::new(span, PatternFieldData::Default(value)));
     }
 
     // Otherwise handle the non-trivial cases.
@@ -2411,10 +2408,7 @@ fn parse_pattern_field<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pat
 
     let data = pp.finish(p, "expression pattern")?;
     span.expand(p.last_span());
-    Ok(PatternField {
-        span: span,
-        data: data,
-    })
+    Ok(PatternField::new(span, data))
 }
 
 pub enum StreamDir {

@@ -1367,6 +1367,22 @@ where
     fn pre_visit_expr(&mut self, node: &'a ast::Expr<'a>) -> bool {
         match node.data {
             ast::IdentExpr(ident) => {
+                // Don't resolve the left-hand side of named pattern fields,
+                // since these refer to field names.
+                if let Some(parent) = node
+                    .get_parent()
+                    .and_then(|p| p.as_all().get_pattern_field())
+                {
+                    match parent.data {
+                        ast::PatternFieldData::Member(ref name_expr, ..)
+                            if name_expr.as_ref() == node =>
+                        {
+                            return false
+                        }
+                        _ => (),
+                    }
+                }
+
                 self.failed |= self
                     .cx
                     .resolve_local_or_error(
