@@ -87,28 +87,29 @@ impl<'gcx> GlobalContext<'gcx> {
         }
     }
 
-    /// Add root AST nodes to the context for processing.
+    /// Add an AST root to the context for processing.
     ///
     /// Use the `find_global_item` function afterwards to look up the id of
     /// modules that were added.
-    pub fn add_root_nodes(&self, ast: impl Iterator<Item = &'gcx ast::Root<'gcx>>) {
-        for root in ast {
-            debug!("Linking nodes");
-            let mut index = 0;
-            root.link(None, &mut index);
-            debug!("Done linking {} nodes", index);
+    pub fn add_root(&self, root: &'gcx ast::Root<'gcx>) {
+        debug!("Linking nodes");
+        let mut index = 0;
+        root.link(None, &mut index);
+        debug!("Linked {} nodes", index);
 
-            // Ensure there are no naming conflicts in the scopes.
-            crate::resolver::materialize_scope(self, root);
+        // Ensure there are no naming conflicts in the scopes.
+        crate::resolver::materialize_scope(self, root);
 
-            // Register nodes with the AST map. This is a necessary hack until
-            // we have moved away from querying nodes merely by ID.
-            root.walk(&mut AstMapRegistrator { cx: self });
+        // Register nodes with the AST map. This is a necessary hack until
+        // we have moved away from querying nodes merely by ID.
+        root.walk(&mut AstMapRegistrator { cx: self });
 
-            // Resolve names for debugging purposes.
-            self.nameck(root);
+        // Resolve names for debugging purposes.
+        self.nameck(root);
 
-            for item in &root.items {
+        // Keep track of some names for now.
+        for file in &root.files {
+            for item in &file.items {
                 match &item.data {
                     ast::ItemData::ModuleDecl(ref n) => {
                         let id = self.map_ast(AstNode::Module(n));
@@ -132,6 +133,19 @@ impl<'gcx> GlobalContext<'gcx> {
                 }
             }
         }
+    }
+
+    /// Add an AST root with a series of source files to the context for
+    /// processing.
+    pub fn add_files(&self, files: impl Iterator<Item = &'gcx ast::SourceFile<'gcx>>) {
+        let root = ast::Root::new(
+            moore_common::source::INVALID_SPAN,
+            ast::RootData {
+                files: files.collect(),
+            },
+        );
+        let root = self.arena.alloc_ast_root(root);
+        self.add_root(root);
     }
 
     /// Find a module in the AST.
@@ -211,6 +225,7 @@ pub struct GlobalArenas<'t> {
     values: TypedArena<ValueData<'t>>,
     mir_lvalue: TypedArena<mir::Lvalue<'t>>,
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
+    ast_roots: TypedArena<ast::Root<'t>>,
     /// Additional AST types generated during HIR lowering.
     ast_types: TypedArena<ast::Type<'t>>,
     /// Additional AST expressions generated during HIR lowering.
@@ -255,6 +270,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate an MIR rvalue.
     pub fn alloc_mir_rvalue(&'t self, mir: mir::Rvalue<'t>) -> &'t mir::Rvalue<'t> {
         self.mir_rvalue.alloc(mir)
+    }
+
+    /// Allocate an AST root.
+    pub fn alloc_ast_root(&'t self, ast: ast::Root<'t>) -> &'t ast::Root {
+        self.ast_roots.alloc(ast)
     }
 
     /// Allocate an AST type.

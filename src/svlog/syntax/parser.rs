@@ -588,7 +588,7 @@ impl<
     }
 }
 
-pub fn parse(input: Lexer) -> Result<Root, ()> {
+pub fn parse(input: Lexer) -> Result<ast::SourceFile, ()> {
     let mut p = Parser::new(input);
     let root = parse_source_text(&mut p);
     if p.is_error() {
@@ -598,9 +598,9 @@ pub fn parse(input: Lexer) -> Result<Root, ()> {
     }
 }
 
-fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
+fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> ast::SourceFile<'n> {
     let mut span = p.peek(0).1;
-    let mut root = RootData {
+    let mut root = ast::SourceFileData {
         timeunits: Timeunit {
             unit: None,
             prec: None,
@@ -623,7 +623,7 @@ fn parse_source_text<'n>(p: &mut dyn AbstractParser<'n>) -> Root<'n> {
     }
 
     span.expand(p.last_span());
-    Root::new(span, root)
+    ast::SourceFile::new(span, root)
 }
 
 fn parse_time_units<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Timeunit> {

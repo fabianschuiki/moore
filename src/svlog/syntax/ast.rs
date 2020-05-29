@@ -179,6 +179,15 @@ pub trait ForEachNode<'a> {
     fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {}
 }
 
+impl<'a, T> ForEachNode<'a> for &'_ T
+where
+    T: ForEachNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        (*self).for_each_node(each);
+    }
+}
+
 impl<'a, T> ForEachNode<'a> for Option<T>
 where
     T: ForEachNode<'a>,
@@ -421,6 +430,15 @@ pub trait AcceptVisitor<'a> {
     fn accept(&'a self, visitor: &mut dyn Visitor<'a>);
 }
 
+impl<'a, T> AcceptVisitor<'a> for &'_ T
+where
+    T: AcceptVisitor<'a>,
+{
+    fn accept(&'a self, visitor: &mut dyn Visitor<'a>) {
+        (*self).accept(visitor);
+    }
+}
+
 impl<'a, T> AcceptVisitor<'a> for Vec<T>
 where
     T: AcceptVisitor<'a>,
@@ -456,6 +474,15 @@ where
 pub trait WalkVisitor<'a> {
     /// Walk a visitor over `self`.
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>);
+}
+
+impl<'a, T> WalkVisitor<'a> for &'_ T
+where
+    T: WalkVisitor<'a>,
+{
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
+        (*self).walk(visitor);
+    }
 }
 
 impl<'a, T> WalkVisitor<'a> for Vec<T>
@@ -558,18 +585,21 @@ pub type ModDecl<'a> = Module<'a>;
 pub type IntfDecl<'a> = Interface<'a>;
 pub type PackageDecl<'a> = Package<'a>;
 
-/// An entire design file.
+/// All things being compiled.
+#[moore_derive::node]
+#[indefinite("root")]
+#[derive(Debug)]
+pub struct Root<'a> {
+    pub files: Vec<&'a SourceFile<'a>>,
+}
+
+/// An entire source file.
 #[moore_derive::node]
 #[indefinite("source file")]
 #[derive(Debug)]
-pub struct Root<'a> {
+pub struct SourceFile<'a> {
     pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
-}
-
-#[allow(dead_code)]
-fn checks1<'a>(ast: &'a Root<'a>, v: &mut dyn Visitor<'a>) {
-    ast.accept(v);
 }
 
 /// An item that may appear in a hierarchical scope.

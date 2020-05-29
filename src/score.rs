@@ -113,7 +113,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
             Ast::Svlog(ref a) => Some(a),
             _ => None,
         });
-        self.svlog.add_root_nodes(svlog_ast);
+        self.svlog.add_files(svlog_ast);
 
         id
     }
@@ -250,7 +250,7 @@ impl Arenas {
 #[derive(Debug)]
 pub enum Ast<'a> {
     Vhdl(Vec<vhdl_ast::DesignUnit>),
-    Svlog(svlog_ast::Root<'a>),
+    Svlog(svlog_ast::SourceFile<'a>),
 }
 
 /// The definitions in a scope.

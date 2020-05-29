@@ -665,6 +665,7 @@ pub fn generated_scope_id<'gcx>(
 /// Marker trait for AST nodes that generate a scope.
 pub trait ScopedNode<'a>: ast::AnyNode<'a> {}
 impl<'a> ScopedNode<'a> for ast::Root<'a> {}
+impl<'a> ScopedNode<'a> for ast::SourceFile<'a> {}
 impl<'a> ScopedNode<'a> for ast::Module<'a> {}
 impl<'a> ScopedNode<'a> for ast::Interface<'a> {}
 impl<'a> ScopedNode<'a> for ast::Package<'a> {}
@@ -705,6 +706,7 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
         match *self {
             // This should reflect the impl trait list above!
             ast::AllNode::Root(x) => Some(x),
+            ast::AllNode::SourceFile(x) => Some(x),
             ast::AllNode::Module(x) => Some(x),
             ast::AllNode::Interface(x) => Some(x),
             ast::AllNode::Package(x) => Some(x),
@@ -754,11 +756,10 @@ pub(crate) fn generated_scope<'a>(
             subscopes: Default::default(),
         },
     );
-
-    // Gather the definitions.
     debug!("Generating scope {:?}", node);
+
+    // Add definitions for the analyzed module ports.
     if let Some(module) = node.as_all().get_module() {
-        debug!("Also collect ports");
         for node in &cx.module_ports(module).int {
             gen.add_def(Def {
                 node: DefNode::IntPort(node),
@@ -769,10 +770,23 @@ pub(crate) fn generated_scope<'a>(
             });
         }
     }
+
+    // Gather the definitions.
     node.accept(&mut gen);
-    debug!("Generated scope {:#?}", gen.scope);
+
+    // If this is the AST root, pull up `GLOBAL` definitions from the subscopes.
+    if let Some(root) = node.as_all().get_root() {
+        debug!("Pulling up global defs from subscopes");
+        for node in gen.scope.subscopes.clone() {
+            let scope = cx.generated_scope(node);
+            for &def in scope.defs.values() {
+                gen.add_def(def);
+            }
+        }
+    }
 
     // Allocate the scope into the arena and return it.
+    debug!("Generated scope {:#?}", gen.scope);
     cx.gcx().arena.alloc_scope(gen.scope)
 }
 
@@ -817,6 +831,10 @@ bitflags::bitflags! {
         /// Whether the definition is accessible during namespace resolution,
         /// e.g. `parent::foo`.
         const NAMESPACE = 1 << 2;
+        /// Whether the definitions is visible in the global scope. Definitions
+        /// in a `SourceFile` will be re-exported into `Root` if they are marked
+        /// as global.
+        const GLOBAL = 1 << 3;
     }
 }
 
@@ -959,12 +977,17 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         false
     }
 
+    fn pre_visit_source_file(&mut self, node: &'a ast::SourceFile<'a>) -> bool {
+        self.add_subscope(node);
+        false
+    }
+
     fn pre_visit_module(&mut self, node: &'a ast::Module<'a>) -> bool {
         self.add_subscope(node);
         self.add_def(Def {
             node: DefNode::Ast(node),
             name: node.name,
-            vis: DefVis::LOCAL,
+            vis: DefVis::LOCAL | DefVis::GLOBAL,
             may_override: true,
             ordered: false,
         });
@@ -976,7 +999,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         self.add_def(Def {
             node: DefNode::Ast(node),
             name: node.name,
-            vis: DefVis::LOCAL,
+            vis: DefVis::LOCAL | DefVis::GLOBAL,
             may_override: true,
             ordered: false,
         });
@@ -988,7 +1011,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         self.add_def(Def {
             node: DefNode::Ast(node),
             name: node.name,
-            vis: DefVis::LOCAL | DefVis::NAMESPACE,
+            vis: DefVis::LOCAL | DefVis::NAMESPACE | DefVis::GLOBAL,
             may_override: false,
             ordered: false,
         });
@@ -1076,11 +1099,13 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         true
     }
 
-    fn pre_visit_procedure(&mut self, _node: &'a ast::Procedure<'a>) -> bool {
+    fn pre_visit_procedure(&mut self, node: &'a ast::Procedure<'a>) -> bool {
+        self.add_subscope(node);
         false
     }
 
-    fn pre_visit_class_decl(&mut self, _node: &'a ast::ClassDecl<'a>) -> bool {
+    fn pre_visit_class_decl(&mut self, node: &'a ast::ClassDecl<'a>) -> bool {
+        self.add_subscope(node);
         // self.add_def(Def {
         //     node: DefNode::Ast(node),
         //     name: node.name,
@@ -1092,6 +1117,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     }
 
     fn pre_visit_subroutine_decl(&mut self, node: &'a ast::SubroutineDecl<'a>) -> bool {
+        self.add_subscope(node);
         self.add_def(Def {
             node: DefNode::Ast(node),
             name: node.prototype.name,
@@ -1115,15 +1141,18 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         true
     }
 
-    fn pre_visit_generate_for(&mut self, _node: &'a ast::GenerateFor<'a>) -> bool {
+    fn pre_visit_generate_for(&mut self, node: &'a ast::GenerateFor<'a>) -> bool {
+        self.add_subscope(node);
         false
     }
 
-    fn pre_visit_generate_if(&mut self, _node: &'a ast::GenerateIf<'a>) -> bool {
+    fn pre_visit_generate_if(&mut self, node: &'a ast::GenerateIf<'a>) -> bool {
+        self.add_subscope(node);
         false
     }
 
-    fn pre_visit_generate_case(&mut self, _node: &'a ast::GenerateCase<'a>) -> bool {
+    fn pre_visit_generate_case(&mut self, node: &'a ast::GenerateCase<'a>) -> bool {
+        self.add_subscope(node);
         false
     }
 
@@ -1139,7 +1168,10 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             | ast::WhileStmt(..)
             | ast::DoStmt(..)
             | ast::ForStmt(..)
-            | ast::ForeachStmt(..) => false,
+            | ast::ForeachStmt(..) => {
+                self.add_subscope(node);
+                false
+            }
             _ => true,
         }
     }
