@@ -1,3 +1,4 @@
+// RUN: moore %s -e A -e B
 module A;
     parameter int K = 12;
     localparam int N = K+1;

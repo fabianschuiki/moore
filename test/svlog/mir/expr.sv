@@ -1,3 +1,5 @@
+// RUN: moore %s
+
 // 11.6 Expression bit lengths
 // Expressions inherit bit length from arguments and assignment context.
 module a0;

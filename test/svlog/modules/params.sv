@@ -1,3 +1,5 @@
+// RUN: moore %s -e A2 -e B2 -e C2
+
 // Parameter dependence
 // 23.10.3 of std-2009
 
@@ -44,8 +46,7 @@ endmodule
 // `T p = 4` is not evaluated if C2 is overridden in the instantiation. It will
 // be evaluated and fail if not overridden. `T2 p2 = 4` will only be evaluated
 // with the type override provided in the instantiation.
-// class C1;
-// endclass
+typedef int C1;
 
 // @elab C2
 module C2 #(

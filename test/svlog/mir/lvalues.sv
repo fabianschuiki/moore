@@ -1,3 +1,5 @@
+// RUN: moore %s
+
 module a0;
 	logic [15:0] a;
 	struct {
