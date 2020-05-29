@@ -3071,11 +3071,13 @@ fn parse_procedure<'n>(
     let mut span = p.last_span();
     let stmt = parse_stmt(p)?;
     span.expand(p.last_span());
-    Ok(Procedure {
-        span: span,
-        kind: kind,
-        stmt: stmt,
-    })
+    Ok(Procedure::new(
+        span,
+        ProcedureData {
+            kind: kind,
+            stmt: stmt,
+        },
+    ))
 }
 
 fn parse_subroutine_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<SubroutineDecl<'n>> {
@@ -4422,7 +4424,7 @@ fn parse_class_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ClassD
         };
 
         // Parse the class name.
-        let name = parse_identifier(p, "class name")?;
+        let name = parse_identifier_name(p, "class name")?;
 
         // Parse the optional parameter port list.
         let params = if p.try_eat(Hashtag) {
@@ -4443,7 +4445,7 @@ fn parse_class_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ClassD
         // Parse the optional implementation clause.
         let impls = if p.try_eat(Keyword(Kw::Implements)) {
             comma_list_nonempty(p, Semicolon, "interface class", |p| {
-                parse_identifier(p, "class name")
+                parse_identifier_name(p, "class name")
             })?
         } else {
             vec![]
@@ -4461,30 +4463,32 @@ fn parse_class_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ClassD
 
     // Parse the optional class name after "endclass".
     if p.try_eat(Colon) {
-        let (n, sp) = p.eat_ident("class name")?;
-        if n != name.name {
+        let n = parse_identifier_name(p, "class name")?;
+        if n.value != name.value {
             p.add_diag(
                 DiagBuilder2::error(format!(
                     "Class name {} disagrees with name {} given before",
-                    n, name.name
+                    n, name
                 ))
-                .span(sp),
+                .span(n.span),
             );
             return Err(());
         }
     }
 
     span.expand(p.last_span());
-    Ok(ClassDecl {
+    Ok(ClassDecl::new(
         span,
-        virt,
-        lifetime,
-        name,
-        params,
-        extends,
-        impls,
-        items,
-    })
+        ClassDeclData {
+            virt,
+            lifetime,
+            name,
+            params,
+            extends,
+            impls,
+            items,
+        },
+    ))
 }
 
 fn parse_class_item<'n>(

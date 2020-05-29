@@ -669,6 +669,9 @@ impl<'a> ScopedNode<'a> for ast::Module<'a> {}
 impl<'a> ScopedNode<'a> for ast::Interface<'a> {}
 impl<'a> ScopedNode<'a> for ast::Package<'a> {}
 impl<'a> ScopedNode<'a> for ast::Stmt<'a> {}
+impl<'a> ScopedNode<'a> for ast::Procedure<'a> {}
+impl<'a> ScopedNode<'a> for ast::ClassDecl<'a> {}
+impl<'a> ScopedNode<'a> for ast::SubroutineDecl<'a> {}
 
 // Compare and hash scoped nodes by reference for use in the query system.
 impl<'a> Eq for &'a dyn ScopedNode<'a> {}
@@ -715,6 +718,9 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
                 | ast::ForeachStmt(..) => Some(x),
                 _ => None,
             },
+            ast::AllNode::Procedure(x) => Some(x),
+            ast::AllNode::ClassDecl(x) => Some(x),
+            ast::AllNode::SubroutineDecl(x) => Some(x),
             _ => None,
         }
     }
@@ -1064,6 +1070,21 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         true
     }
 
+    fn pre_visit_procedure(&mut self, _node: &'a ast::Procedure<'a>) -> bool {
+        false
+    }
+
+    fn pre_visit_class_decl(&mut self, _node: &'a ast::ClassDecl<'a>) -> bool {
+        // self.add_def(Def {
+        //     node: DefNode::Ast(node),
+        //     name: node.name,
+        //     vis: DefVis::LOCAL | DefVis::NAMESPACE,
+        //     may_override: false,
+        //     ordered: true,
+        // });
+        false
+    }
+
     fn pre_visit_subroutine_decl(&mut self, node: &'a ast::SubroutineDecl<'a>) -> bool {
         self.add_def(Def {
             node: DefNode::Ast(node),
@@ -1072,7 +1093,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             may_override: false,
             ordered: true,
         });
-        true
+        false
     }
 
     fn pre_visit_stmt(&mut self, node: &'a ast::Stmt<'a>) -> bool {

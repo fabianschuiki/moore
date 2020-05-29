@@ -958,24 +958,13 @@ impl std::fmt::Display for NetType {
     }
 }
 
-#[moore_derive::visit]
+/// A procedure such as `always*`, `initial`, or `final`.
+#[moore_derive::node]
+#[indefinite("procedure")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Procedure<'a> {
-    pub span: Span,
     pub kind: ProcedureKind,
     pub stmt: Stmt<'a>,
-}
-
-impl HasSpan for Procedure<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for Procedure<'_> {
-    fn desc(&self) -> &'static str {
-        "procedure"
-    }
 }
 
 #[moore_derive::visit]
@@ -1414,16 +1403,18 @@ impl HasDesc for EventExpr<'_> {
     }
 }
 
-#[moore_derive::visit]
+/// A class declaration.
+#[moore_derive::node]
+#[indefinite("class declaration")]
+#[definite("class `{}`", name)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDecl<'a> {
-    pub span: Span,
     pub virt: bool,
     pub lifetime: Lifetime, // default static
-    pub name: Identifier,
+    pub name: Spanned<Name>,
     pub params: Vec<ParamDecl<'a>>,
     pub extends: Option<(Type<'a>, Vec<CallArg<'a>>)>,
-    pub impls: Vec<Identifier>,
+    pub impls: Vec<Spanned<Name>>,
     pub items: Vec<ClassItem<'a>>,
 }
 
