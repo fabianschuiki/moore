@@ -1716,7 +1716,7 @@ fn parse_enum_name<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<EnumNam
 }
 
 fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKindData<'n>> {
-    let q = p.peek(0).1;
+    let mut span = p.peek(0).1;
 
     // Consume the "struct", "union", or "union tagged" keywords.
     let kind = match (p.peek(0).0, p.peek(1).0) {
@@ -1735,7 +1735,7 @@ fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeK
         }
         _ => {
             p.add_diag(
-                DiagBuilder2::error("expected `struct`, `union`, or `union tagged`").span(q),
+                DiagBuilder2::error("expected `struct`, `union`, or `union tagged`").span(span),
             );
             return Err(());
         }
@@ -1754,12 +1754,16 @@ fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeK
         repeat_until(p, CloseDelim(Brace), parse_struct_member)
     })?;
 
-    Ok(StructType {
-        kind: kind,
-        packed: packed,
-        signing: signing,
-        members: members,
-    })
+    span.expand(p.last_span());
+    Ok(ast::StructType(ast::Struct::new(
+        span,
+        ast::StructData {
+            kind: kind,
+            packed: packed,
+            signing: signing,
+            members: members,
+        },
+    )))
 }
 
 fn parse_struct_member<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StructMember<'n>> {
@@ -1787,12 +1791,14 @@ fn parse_struct_member<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Str
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
 
-    Ok(StructMember {
-        span: span,
-        rand_qualifier: rand_qualifier,
-        ty: Box::new(ty),
-        names: names,
-    })
+    Ok(ast::StructMember::new(
+        span,
+        ast::StructMemberData {
+            rand_qualifier,
+            ty: Box::new(ty),
+            names,
+        },
+    ))
 }
 
 fn try_signing<'n>(p: &mut dyn AbstractParser<'n>) -> Option<TypeSign> {

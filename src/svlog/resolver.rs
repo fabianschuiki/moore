@@ -775,7 +775,7 @@ pub(crate) fn generated_scope<'a>(
     node.accept(&mut gen);
 
     // If this is the AST root, pull up `GLOBAL` definitions from the subscopes.
-    if let Some(root) = node.as_all().get_root() {
+    if node.as_all().is_root() {
         debug!("Pulling up global defs from subscopes");
         for node in gen.scope.subscopes.clone() {
             let scope = cx.generated_scope(node);
@@ -1034,6 +1034,14 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     }
 
     fn pre_visit_var_decl_name(&mut self, node: &'a ast::VarDeclName<'a>) -> bool {
+        // Don't register definitions for struct members.
+        if node
+            .get_parent()
+            .and_then(|p| p.as_all().get_struct_member())
+            .is_some()
+        {
+            return true;
+        }
         self.add_def(Def {
             node: DefNode::Ast(node),
             name: Spanned::new(node.name, node.name_span),

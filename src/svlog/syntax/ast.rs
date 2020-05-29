@@ -757,12 +757,7 @@ pub enum TypeKind<'a> {
 
     // Enumerations
     EnumType(Option<Box<Type<'a>>>, Vec<EnumName<'a>>),
-    StructType {
-        kind: StructKind,
-        packed: bool,
-        signing: TypeSign,
-        members: Vec<StructMember<'a>>,
-    },
+    StructType(Struct<'a>),
 
     // Specialization
     SpecializedType(Box<Type<'a>>, Vec<ParamAssignment<'a>>),
@@ -822,6 +817,19 @@ pub struct EnumName<'a> {
     pub value: Option<Expr<'a>>,
 }
 
+/// A struct definition.
+///
+/// For example `struct packed { byte foo; }`.
+#[moore_derive::node]
+#[indefinite("struct definition")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Struct<'a> {
+    pub kind: StructKind,
+    pub packed: bool,
+    pub signing: TypeSign,
+    pub members: Vec<StructMember<'a>>,
+}
+
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum StructKind {
@@ -830,25 +838,16 @@ pub enum StructKind {
     TaggedUnion,
 }
 
-#[moore_derive::visit]
+/// A struct field.
+///
+/// For example the `byte foo;` in `struct packed { byte foo; }`.
+#[moore_derive::node]
+#[indefinite("struct member")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructMember<'a> {
-    pub span: Span,
     pub rand_qualifier: Option<RandomQualifier>,
     pub ty: Box<Type<'a>>,
     pub names: Vec<VarDeclName<'a>>,
-}
-
-impl HasSpan for StructMember<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for StructMember<'_> {
-    fn desc(&self) -> &'static str {
-        "struct member"
-    }
 }
 
 /// A module or interface port as declared in the port list.

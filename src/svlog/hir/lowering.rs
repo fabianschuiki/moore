@@ -743,10 +743,10 @@ fn lower_type<'gcx>(
         ast::StringType => hir::TypeKind::Builtin(hir::BuiltinType::String),
         ast::TimeType => hir::TypeKind::Builtin(hir::BuiltinType::Time),
         ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
-        ast::StructType { ref members, .. } => {
+        ast::StructType(ref def) => {
             let mut fields = vec![];
             let mut next_rib = node_id;
-            for member in members {
+            for member in &def.members {
                 next_rib = alloc_struct_member(cx, member, next_rib, &mut fields);
             }
             hir::TypeKind::Struct(fields)
