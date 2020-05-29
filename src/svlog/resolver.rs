@@ -280,14 +280,18 @@ pub(crate) fn resolve_downwards<'gcx>(
     name: Name,
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
-    let rib = cx.hierarchical_rib(start_at)?;
-    Ok(match rib.get(name) {
-        Some(x) => Some(x),
-        None => {
-            debug!("name `{}` not found in {:#?}", name, rib);
-            None
-        }
-    })
+    // Get the AST associated with the node ID and map it to a ScopedNode.
+    let ast = cx.ast_of(start_at)?;
+    let node = match ast.get_any().and_then(|n| n.as_all().get_scoped_node()) {
+        Some(x) => x,
+        None => bug_span!(
+            cx.span(start_at),
+            cx,
+            "resolve_downwards called on node which doesn't implement ScopedNode yet: {:?}",
+            ast
+        ),
+    };
+    Ok(cx.resolve_namespace(name, node).map(|def| def.node.id()))
 }
 
 /// Resolve a node to its target.
@@ -719,13 +723,17 @@ pub(crate) fn generated_scope<'a>(
     // Add definitions for the analyzed module ports.
     if let Some(module) = node.as_all().get_module() {
         for node in &cx.module_ports(module).int {
-            gen.add_def(Def {
-                node: DefNode::IntPort(node),
-                name: node.name,
-                vis: DefVis::LOCAL,
-                may_override: true,
-                ordered: false,
-            });
+            // Skip ports which are not definitions themselves, but reference
+            // another definition in the body.
+            if node.data.is_some() {
+                gen.add_def(Def {
+                    node: DefNode::IntPort(node),
+                    name: node.name,
+                    vis: DefVis::LOCAL,
+                    may_override: true,
+                    ordered: false,
+                });
+            }
         }
     }
 
@@ -1415,24 +1423,33 @@ where
     'a: 'cx,
 {
     fn pre_visit_expr(&mut self, node: &'a ast::Expr<'a>) -> bool {
+        // Don't resolve the left-hand side of named pattern fields,
+        // since these refer to field names.
+        if let Some(patfield) = node
+            .get_parent()
+            .and_then(|p| p.as_all().get_pattern_field())
+        {
+            match patfield.data {
+                ast::PatternFieldData::Member(ref name_expr, ..) if name_expr.as_ref() == node => {
+                    return false
+                }
+                _ => (),
+            }
+        }
+
+        // Don't resolve the expression in implicit and explicit ports.
+        // These are meant to be analyzed in more detail by the port
+        // list ananlysis query.
+        if let Some(port) = node.get_parent().and_then(|p| p.as_all().get_port()) {
+            debug!("Checking {:?} in port {:?}", node, port);
+            match port.data {
+                ast::PortData::Explicit { .. } | ast::PortData::Implicit(..) => return false,
+                _ => (),
+            }
+        }
+
         match node.data {
             ast::IdentExpr(ident) => {
-                // Don't resolve the left-hand side of named pattern fields,
-                // since these refer to field names.
-                if let Some(parent) = node
-                    .get_parent()
-                    .and_then(|p| p.as_all().get_pattern_field())
-                {
-                    match parent.data {
-                        ast::PatternFieldData::Member(ref name_expr, ..)
-                            if name_expr.as_ref() == node =>
-                        {
-                            return false
-                        }
-                        _ => (),
-                    }
-                }
-
                 self.failed |= self
                     .cx
                     .resolve_local_or_error(
