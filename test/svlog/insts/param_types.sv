@@ -15,12 +15,12 @@ endmodule
 // CHECK: entity @A1.param1 (i32$ %t) -> () {
 // CHECK: }
 // CHECK:
-// CHECK: entity @A1.param3 (i1$ %t) -> () {
+// CHECK: entity @A1.param2 (i1$ %t) -> () {
 // CHECK: }
 // CHECK:
 // CHECK: entity @A0 () -> () {
 // CHECK:     inst @A1.param1 (i32$ %3) -> ()
-// CHECK:     inst @A1.param3 (i1$ %6) -> ()
+// CHECK:     inst @A1.param2 (i1$ %6) -> ()
 // CHECK: }
 
 
@@ -46,13 +46,13 @@ endmodule
 module C1 #(type T, type R = T) (input T t, input R r);
 endmodule
 
-// CHECK: entity @C1.param5 (i1$ %t, i1$ %r) -> () {
+// CHECK: entity @C1.param3 (i1$ %t, i1$ %r) -> () {
 // CHECK: }
 // CHECK:
-// CHECK: entity @C1.param7 (i32$ %t, i32$ %r) -> () {
+// CHECK: entity @C1.param4 (i32$ %t, i32$ %r) -> () {
 // CHECK: }
 // CHECK:
-// CHECK: entity @C1.param9 (i32$ %t, i1$ %r) -> () {
+// CHECK: entity @C1.param5 (i32$ %t, i1$ %r) -> () {
 // CHECK: }
 // CHECK:
 // CHECK: entity @C0 () -> () {
