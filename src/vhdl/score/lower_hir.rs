@@ -466,8 +466,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                     ast::ObjKind::SharedVar => {
                         self.emit(
                             DiagBuilder2::error(
-                                "not a variable; shared variables \
-                                may not appear in a package body",
+                                "not a variable; shared variables may not appear in a package body",
                             )
                             .span(decl.human_span()),
                         );
@@ -596,8 +595,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                         ))
                         .span(stmt.human_span())
                         .add_note(format!(
-                            "Only concurrent statements are allowed \
-                            in {}. See IEEE 1076-2008 section 11.1.",
+                            "Only concurrent statements are allowed in {}. See IEEE 1076-2008 \
+                             section 11.1.",
                             container_name
                         )),
                     );
@@ -890,9 +889,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                 DiagBuilder2::error(format!("Function `{}` has no return type", name.value))
                     .span(name.span)
                     .add_note(
-                        "Functions require a return type. Use a \
-                        procedure if you want no return type. See \
-                        IEEE 1076-2008 section 4.2.1.",
+                        "Functions require a return type. Use a procedure if you want no return \
+                         type. See IEEE 1076-2008 section 4.2.1.",
                     ),
             );
             return Err(());
@@ -919,8 +917,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                 DiagBuilder2::error(format!("`{}` is not a valid subprogram name", name.value))
                     .span(name.span)
                     .add_note(
-                        "Bit literals cannot be used as subprogram \
-                        names. See IEEE 1076-2008 section 4.2.1.",
+                        "Bit literals cannot be used as subprogram names. See IEEE 1076-2008 \
+                         section 4.2.1.",
                     ),
             );
             return Err(());
@@ -930,8 +928,8 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                 DiagBuilder2::error(format!("`{}` overload must be a function", name.value))
                     .span(name.span)
                     .add_note(
-                        "Procedures cannot overload operators. Use \
-                        a function. See IEEE 1076-2008 section 4.2.1.",
+                        "Procedures cannot overload operators. Use a function. See IEEE 1076-2008 \
+                         section 4.2.1.",
                     ),
             );
             return Err(());

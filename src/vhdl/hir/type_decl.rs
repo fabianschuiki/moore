@@ -305,8 +305,8 @@ fn unpack_units<'t>(
                 ))
                 .span(type_name.span)
                 .add_note(
-                    "A physical type must have a primary unit of the form `<name>;`. \
-                         See IEEE 1076-2008 section 5.2.4.",
+                    "A physical type must have a primary unit of the form `<name>;`. See IEEE \
+                     1076-2008 section 5.2.4.",
                 ),
             );
             return Err(());
@@ -321,8 +321,8 @@ fn unpack_units<'t>(
             ))
             .span(n.span)
             .add_note(
-                "A physical type cannot have multiple primary units. \
-                     See IEEE 1076-2008 section 5.2.4.",
+                "A physical type cannot have multiple primary units. See IEEE 1076-2008 section \
+                 5.2.4.",
             ),
         );
         had_fails = true;

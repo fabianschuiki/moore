@@ -138,11 +138,24 @@ impl<'a> Preprocessor<'a> {
                 // Match the opening double quotes or angular bracket.
                 let name_p;
                 let name_q;
-                let closing = match self.token {
-                    Some((Symbol('"'), sp)) => { name_p = sp.end(); self.bump(); '"' },
-                    Some((Symbol('<'), sp)) => { name_p = sp.end(); self.bump(); '>' },
-                    _ => { return Err(DiagBuilder2::fatal("expected filename inside double quotes (\"...\") or angular brackets (<...>) after `include").span(span))}
-                };
+                let closing =
+                    match self.token {
+                        Some((Symbol('"'), sp)) => {
+                            name_p = sp.end();
+                            self.bump();
+                            '"'
+                        }
+                        Some((Symbol('<'), sp)) => {
+                            name_p = sp.end();
+                            self.bump();
+                            '>'
+                        }
+                        _ => return Err(DiagBuilder2::fatal(
+                            "expected filename inside double quotes (\"...\") or angular brackets \
+                             (<...>) after `include",
+                        )
+                        .span(span)),
+                    };
 
                 // Accumulate the include path until the closing symbol.
                 let mut filename = String::new();
@@ -163,7 +176,11 @@ impl<'a> Preprocessor<'a> {
                             self.bump();
                         }
                         None => {
-                            return Err(DiagBuilder2::fatal("expected filename after `include directive before the end of the input").span(span));
+                            return Err(DiagBuilder2::fatal(
+                                "expected filename after `include directive before the end of the \
+                                 input",
+                            )
+                            .span(span));
                         }
                     }
                 }
@@ -285,18 +302,25 @@ impl<'a> Preprocessor<'a> {
                     }),
                     Directive::Elsif => {
                         match self.defcond_stack.pop() {
-                            Some(Defcond::Done) |
-                            Some(Defcond::Enabled) => self.defcond_stack.push(Defcond::Done),
-                            Some(Defcond::Disabled) => self.defcond_stack.push(
-                                if self.is_inactive() {
+                            Some(Defcond::Done) | Some(Defcond::Enabled) => {
+                                self.defcond_stack.push(Defcond::Done)
+                            }
+                            Some(Defcond::Disabled) => {
+                                self.defcond_stack.push(if self.is_inactive() {
                                     Defcond::Done
                                 } else if exists {
                                     Defcond::Enabled
                                 } else {
                                     Defcond::Disabled
-                                }
-                            ),
-                            None => return Err(DiagBuilder2::fatal("found `elsif without any preceeding `ifdef, `ifndef, or `elsif directive").span(span))
+                                })
+                            }
+                            None => {
+                                return Err(DiagBuilder2::fatal(
+                                    "found `elsif without any preceeding `ifdef, `ifndef, or \
+                                     `elsif directive",
+                                )
+                                .span(span))
+                            }
                         };
                     }
                     _ => unreachable!(),
@@ -311,17 +335,24 @@ impl<'a> Preprocessor<'a> {
                     Some(Defcond::Enabled) | Some(Defcond::Done) => {
                         self.defcond_stack.push(Defcond::Done)
                     }
-                    None => return Err(DiagBuilder2::fatal(
-                        "found `else without any preceeding `ifdef, `ifndef, or `elsif directive",
-                    )
-                    .span(span)),
+                    None => {
+                        return Err(DiagBuilder2::fatal(
+                            "found `else without any preceeding `ifdef, `ifndef, or `elsif \
+                             directive",
+                        )
+                        .span(span))
+                    }
                 }
                 return Ok(());
             }
 
             Directive::Endif => {
                 if self.defcond_stack.pop().is_none() {
-                    return Err(DiagBuilder2::fatal("found `endif without any preceeding `ifdef, `ifndef, `else, or `elsif directive").span(span));
+                    return Err(DiagBuilder2::fatal(
+                        "found `endif without any preceeding `ifdef, `ifndef, `else, or `elsif \
+                         directive",
+                    )
+                    .span(span));
                 }
                 return Ok(());
             }

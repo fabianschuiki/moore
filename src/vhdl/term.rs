@@ -1197,8 +1197,12 @@ where
                     DiagBuilder2::error(format!(
                         "`{}` is not a valid constraint",
                         term.span.extract()
-                    )).span(term.span)
-                        .add_note("Did you mean a range constraint (`range ...`) or an array or record constraint (`(...)`)? See IEEE 1076-2008 section 6.3."),
+                    ))
+                    .span(term.span)
+                    .add_note(
+                        "Did you mean a range constraint (`range ...`) or an array or record \
+                         constraint (`(...)`)? See IEEE 1076-2008 section 6.3.",
+                    ),
                 );
                 debugln!("It is a {:#?}", term);
                 return Err(());
@@ -1261,8 +1265,12 @@ where
                         DiagBuilder2::error(format!(
                             "`{}` is not a valid constraint for a record element",
                             term.span.extract()
-                        )).span(term.span)
-                            .add_note("Element constraints must be of the form `name (constraint)`. See IEEE 1076-2008 section 5.3.3."),
+                        ))
+                        .span(term.span)
+                        .add_note(
+                            "Element constraints must be of the form `name (constraint)`. See \
+                             IEEE 1076-2008 section 5.3.3.",
+                        ),
                     );
                     debugln!("It is a {:#?}", term.value);
                     has_fails = true;
@@ -1332,8 +1340,12 @@ where
                         DiagBuilder2::error(format!(
                             "`{}` is not a valid element constraint",
                             con.span.extract()
-                        )).span(con.span)
-                            .add_note("Did you mean an array or record constraint (`(...)`)? See IEEE 1076-2008 section 6.3."),
+                        ))
+                        .span(con.span)
+                        .add_note(
+                            "Did you mean an array or record constraint (`(...)`)? See IEEE \
+                             1076-2008 section 6.3.",
+                        ),
                     );
                     debugln!("It is a {:#?}", con);
                     return Err(());
@@ -1597,8 +1609,12 @@ where
                     DiagBuilder2::error(format!(
                         "aggregate element `{}` appears after `others`",
                         field.span.extract()
-                    )).span(field.span)
-                        .add_note("The `others` element must be the last in an aggregate. See IEEE 1076-2008 section 9.3.3.1."),
+                    ))
+                    .span(field.span)
+                    .add_note(
+                        "The `others` element must be the last in an aggregate. See IEEE \
+                         1076-2008 section 9.3.3.1.",
+                    ),
                 );
                 return Err(());
             }
@@ -1608,10 +1624,12 @@ where
                 if mode > Mode::Positional {
                     self.emit(
                         DiagBuilder2::error(format!(
-                            "positional element `{}` must appear before all named elements in aggregate",
+                            "positional element `{}` must appear before all named elements in \
+                             aggregate",
                             field.value.1.span.extract()
-                        )).span(field.value.1.span)
-                            .add_note("See IEEE 1076-2008 section 9.3.3.1."),
+                        ))
+                        .span(field.value.1.span)
+                        .add_note("See IEEE 1076-2008 section 9.3.3.1."),
                     );
                     return Err(());
                 }
@@ -1646,86 +1664,104 @@ where
             .iter()
             .any(|n| n.value.0.iter().any(|c| c.value.is_element()))
         {
-            hir::AggregateKind::Record(named
-                .into_iter()
-                .map(
-                    |Spanned {
-                         value: (choices, expr),
-                         span,
-                     }| {
-                        let choices = choices
-                            .into_iter()
-                            .map(
-                                |Spanned {
-                                     value: choice,
-                                     span,
-                                 }| {
-                                    let choice = match choice {
-                                        hir::Choice::Element(n) => n,
-                                        _ => {
-                                            self.emit(
-                                                DiagBuilder2::error(format!(
-                                                    "choice `{}` is not a record element",
-                                                    span.extract()
-                                                )).span(span)
-                                                    .add_note("An aggregate must either be a record or array aggregate. It cannot contain both record elements and array elements. See IEEE 1076-2008 section 9.3.3.1."),
-                                            );
-                                            return Err(());
-                                        }
-                                    };
-                                    Ok(Spanned::new(choice, span))
-                                },
-                            )
-                            .collect::<Vec<Result<_>>>()
-                            .into_iter()
-                            .collect::<Result<Vec<_>>>()?;
-                        Ok(Spanned::new((choices, expr), span))
-                    },
-                )
-                .collect::<Vec<Result<_>>>()
-                .into_iter()
-                .collect::<Result<Vec<_>>>()?)
+            hir::AggregateKind::Record(
+                named
+                    .into_iter()
+                    .map(
+                        |Spanned {
+                             value: (choices, expr),
+                             span,
+                         }| {
+                            let choices = choices
+                                .into_iter()
+                                .map(
+                                    |Spanned {
+                                         value: choice,
+                                         span,
+                                     }| {
+                                        let choice = match choice {
+                                            hir::Choice::Element(n) => n,
+                                            _ => {
+                                                self.emit(
+                                                    DiagBuilder2::error(format!(
+                                                        "choice `{}` is not a record element",
+                                                        span.extract()
+                                                    ))
+                                                    .span(span)
+                                                    .add_note(
+                                                        "An aggregate must either be a record or \
+                                                         array aggregate. It cannot contain both \
+                                                         record elements and array elements. See \
+                                                         IEEE 1076-2008 section 9.3.3.1.",
+                                                    ),
+                                                );
+                                                return Err(());
+                                            }
+                                        };
+                                        Ok(Spanned::new(choice, span))
+                                    },
+                                )
+                                .collect::<Vec<Result<_>>>()
+                                .into_iter()
+                                .collect::<Result<Vec<_>>>()?;
+                            Ok(Spanned::new((choices, expr), span))
+                        },
+                    )
+                    .collect::<Vec<Result<_>>>()
+                    .into_iter()
+                    .collect::<Result<Vec<_>>>()?,
+            )
         } else {
-            hir::AggregateKind::Array(named
-                .into_iter()
-                .map(
-                    |Spanned {
-                         value: (choices, expr),
-                         span,
-                     }| {
-                        let choices = choices
-                            .into_iter()
-                            .map(
-                                |Spanned {
-                                     value: choice,
-                                     span,
-                                 }| {
-                                    let choice = match choice {
-                                        hir::Choice::Expr(e) => hir::ArrayChoice::Expr(e),
-                                        hir::Choice::DiscreteRange(e) => hir::ArrayChoice::DiscreteRange(e),
-                                        _ => {
-                                            self.emit(
-                                                DiagBuilder2::error(format!(
-                                                    "choice `{}` is not an array element",
-                                                    span.extract()
-                                                )).span(span)
-                                                    .add_note("An aggregate must either be a record or array aggregate. It cannot contain both record elements and array elements. See IEEE 1076-2008 section 9.3.3.1."),
-                                            );
-                                            return Err(());
-                                        }
-                                    };
-                                    Ok(Spanned::new(choice, span))
-                                },
-                            )
-                            .collect::<Vec<Result<_>>>()
-                            .into_iter()
-                            .collect::<Result<Vec<_>>>()?;
-                        Ok(Spanned::new((choices, expr), span))
-                    },
-                )
-                .collect::<Vec<Result<_>>>()
-                .into_iter()
-                .collect::<Result<Vec<_>>>()?)
+            hir::AggregateKind::Array(
+                named
+                    .into_iter()
+                    .map(
+                        |Spanned {
+                             value: (choices, expr),
+                             span,
+                         }| {
+                            let choices = choices
+                                .into_iter()
+                                .map(
+                                    |Spanned {
+                                         value: choice,
+                                         span,
+                                     }| {
+                                        let choice = match choice {
+                                            hir::Choice::Expr(e) => hir::ArrayChoice::Expr(e),
+                                            hir::Choice::DiscreteRange(e) => {
+                                                hir::ArrayChoice::DiscreteRange(e)
+                                            }
+                                            _ => {
+                                                self.emit(
+                                                    DiagBuilder2::error(format!(
+                                                        "choice `{}` is not an array element",
+                                                        span.extract()
+                                                    ))
+                                                    .span(span)
+                                                    .add_note(
+                                                        "An aggregate must either be a record or \
+                                                         array aggregate. It cannot contain both \
+                                                         record elements and array elements. See \
+                                                         IEEE 1076-2008 section 9.3.3.1.",
+                                                    ),
+                                                );
+                                                return Err(());
+                                            }
+                                        };
+                                        Ok(Spanned::new(choice, span))
+                                    },
+                                )
+                                .collect::<Vec<Result<_>>>()
+                                .into_iter()
+                                .collect::<Result<Vec<_>>>()?;
+                            Ok(Spanned::new((choices, expr), span))
+                        },
+                    )
+                    .collect::<Vec<Result<_>>>()
+                    .into_iter()
+                    .collect::<Result<Vec<_>>>()?,
+            )
         };
 
         let hir = hir::Aggregate {
@@ -1763,7 +1799,13 @@ where
                     .into_iter()
                     .map(|(formal, actual)| {
                         if formal.len() != 1 {
-                            self.emit(DiagBuilder2::error("formal part of association element must be exactly one expression").span(term_span));
+                            self.emit(
+                                DiagBuilder2::error(
+                                    "formal part of association element must be exactly one \
+                                     expression",
+                                )
+                                .span(term_span),
+                            );
                             return Err(());
                         }
                         let formal = formal.into_iter().next().unwrap();
@@ -1785,8 +1827,9 @@ where
                         DiagBuilder2::error(format!(
                             "`{}` is not a valid association list",
                             term.span.extract()
-                        )).span(term.span)
-                            .add_note("See IEEE 1076-2008 section 6.5.7."),
+                        ))
+                        .span(term.span)
+                        .add_note("See IEEE 1076-2008 section 6.5.7."),
                     );
                     debugln!("It is a {:#?}", term);
                     return Err(());
