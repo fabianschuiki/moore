@@ -1236,6 +1236,9 @@ pub enum Expr<'a> {
     LiteralExpr(Lit),
     IdentExpr(Spanned<Name>),
     SysIdentExpr(Spanned<Name>),
+    ThisExpr,
+    DollarExpr,
+    NullExpr,
     ScopeExpr(Box<Expr<'a>>, Spanned<Name>),
     IndexExpr {
         indexee: Box<Expr<'a>>,

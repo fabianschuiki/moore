@@ -2330,6 +2330,24 @@ fn parse_primary_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr
             return Ok(Expr::new(sp, SysIdentExpr(Spanned::new(n, sp))));
         }
 
+        // `this`
+        Keyword(Kw::This) => {
+            p.bump();
+            return Ok(Expr::new(sp, ThisExpr));
+        }
+
+        // `$`
+        Dollar => {
+            p.bump();
+            return Ok(Expr::new(sp, DollarExpr));
+        }
+
+        // `null`
+        Keyword(Kw::Null) => {
+            p.bump();
+            return Ok(Expr::new(sp, NullExpr));
+        }
+
         // Concatenation and empty queue
         OpenDelim(Brace) => {
             p.bump();
