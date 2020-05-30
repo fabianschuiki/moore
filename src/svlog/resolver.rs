@@ -499,7 +499,7 @@ pub(crate) fn resolve_pattern<'gcx>(
                                     AstNode::Expr(&ast::Expr {
                                         data: ast::IdentExpr(ident),
                                         ..
-                                    }) => Spanned::new(ident.name, ident.span),
+                                    }) => ident,
                                     _ => {
                                         cx.emit(
                                             DiagBuilder2::error(format!(
@@ -1560,11 +1560,7 @@ where
             ast::IdentExpr(ident) => {
                 self.failed |= self
                     .cx
-                    .resolve_local_or_error(
-                        Spanned::new(ident.name, ident.span),
-                        self.cx.scope_location(node),
-                        false,
-                    )
+                    .resolve_local_or_error(ident, self.cx.scope_location(node), false)
                     .is_err();
                 false
             }
@@ -1577,11 +1573,7 @@ where
             ast::NamedType(ident) => {
                 self.failed |= self
                     .cx
-                    .resolve_local_or_error(
-                        Spanned::new(ident.name, ident.span),
-                        self.cx.scope_location(node),
-                        false,
-                    )
+                    .resolve_local_or_error(ident, self.cx.scope_location(node), false)
                     .is_err();
                 false
             }

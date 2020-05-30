@@ -1493,7 +1493,7 @@ fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type<'n>) -> Report
         // via the `.` operator.
         Period => {
             p.bump();
-            let name = parse_identifier(p, "member type name")?;
+            let name = parse_identifier_name(p, "member type name")?;
             let subty = parse_type_signing_and_dimensions(
                 p,
                 sp,
@@ -1509,7 +1509,7 @@ fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type<'n>) -> Report
         // The `::` operator.
         Namespace => {
             p.bump();
-            let name = parse_identifier(p, "type name")?;
+            let name = parse_identifier_name(p, "type name")?;
             let subty = parse_type_signing_and_dimensions(
                 p,
                 sp,
@@ -1676,7 +1676,7 @@ fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKin
         // Named types
         Ident(n) | EscIdent(n) => {
             p.bump();
-            Ok(ast::NamedType(ast::Identifier { span: sp, name: n }))
+            Ok(ast::NamedType(Spanned::new(n, sp)))
         }
 
         // Virtual Interface Type
@@ -2106,15 +2106,12 @@ fn parse_expr_suffix<'n>(
         // expr "." ident
         Period if precedence <= Precedence::Scope => {
             p.bump();
-            let (name, name_span) = p.eat_ident("member name")?;
+            let name = parse_identifier_name(p, "member name")?;
             let expr = Expr::new(
                 Span::union(prefix.span, p.last_span()),
                 MemberExpr {
                     expr: Box::new(prefix),
-                    name: Identifier {
-                        span: name_span,
-                        name: name,
-                    },
+                    name,
                 },
             );
             return parse_expr_suffix(p, expr, precedence);
@@ -2123,7 +2120,7 @@ fn parse_expr_suffix<'n>(
         // expr "::" ident
         Namespace if precedence <= Precedence::Scope => {
             p.bump();
-            let ident = parse_identifier(p, "scope name")?;
+            let ident = parse_identifier_name(p, "scope name")?;
             let expr = Expr::new(
                 Span::union(prefix.span, p.last_span()),
                 ScopeExpr(Box::new(prefix), ident),
@@ -2326,14 +2323,11 @@ fn parse_primary_expr<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Expr
         // Identifiers
         Ident(n) | EscIdent(n) => {
             p.bump();
-            return Ok(Expr::new(sp, IdentExpr(Identifier { span: sp, name: n })));
+            return Ok(Expr::new(sp, IdentExpr(Spanned::new(n, sp))));
         }
         SysIdent(n) => {
             p.bump();
-            return Ok(Expr::new(
-                sp,
-                SysIdentExpr(Identifier { span: sp, name: n }),
-            ));
+            return Ok(Expr::new(sp, SysIdentExpr(Spanned::new(n, sp))));
         }
 
         // Concatenation and empty queue

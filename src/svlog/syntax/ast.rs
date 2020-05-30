@@ -732,7 +732,7 @@ pub struct Type<'a> {
 pub enum TypeKind<'a> {
     ImplicitType,
     VoidType,
-    NamedType(Identifier),
+    NamedType(Spanned<Name>),
     StringType,
     ChandleType,
     VirtIntfType(Name),
@@ -745,7 +745,7 @@ pub enum TypeKind<'a> {
     ScopedType {
         ty: Box<Type<'a>>,
         member: bool,
-        name: Identifier,
+        name: Spanned<Name>,
     },
 
     // Integer Vector Types
@@ -1234,9 +1234,9 @@ pub struct ForeachIndex {
 pub enum Expr<'a> {
     DummyExpr,
     LiteralExpr(Lit),
-    IdentExpr(Identifier),
-    SysIdentExpr(Identifier),
-    ScopeExpr(Box<Expr<'a>>, Identifier),
+    IdentExpr(Spanned<Name>),
+    SysIdentExpr(Spanned<Name>),
+    ScopeExpr(Box<Expr<'a>>, Spanned<Name>),
     IndexExpr {
         indexee: Box<Expr<'a>>,
         index: Box<Expr<'a>>,
@@ -1287,7 +1287,7 @@ pub enum Expr<'a> {
     },
     MemberExpr {
         expr: Box<Expr<'a>>,
-        name: Identifier,
+        name: Spanned<Name>,
     },
     PatternExpr(Vec<PatternField<'a>>),
     InsideExpr(Box<Expr<'a>>, Vec<ValueRange<'a>>),

@@ -974,7 +974,7 @@ fn lower_port_ref<'gcx>(
 ) -> Option<PartialPortExpr> {
     match &expr.data {
         ast::IdentExpr(ident) => Some(PartialPortExpr {
-            name: Spanned::new(ident.name, ident.span),
+            name: *ident,
             selects: vec![],
         }),
         ast::IndexExpr { indexee, index } => {

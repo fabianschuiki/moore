@@ -89,10 +89,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                             ast::PortConnMode::Auto => {
                                 let expr = cx.arena().alloc_ast_expr(ast::Expr::new(
                                     name.span,
-                                    ast::IdentExpr(ast::Identifier {
-                                        name: name.value,
-                                        span: name.span,
-                                    }),
+                                    ast::IdentExpr(name),
                                 ));
                                 expr.link_attach(port);
                                 Some(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
@@ -742,7 +739,7 @@ fn lower_type<'gcx>(
         ast::LongIntType => hir::TypeKind::Builtin(hir::BuiltinType::LongInt),
         ast::StringType => hir::TypeKind::Builtin(hir::BuiltinType::String),
         ast::TimeType => hir::TypeKind::Builtin(hir::BuiltinType::Time),
-        ast::NamedType(name) => hir::TypeKind::Named(Spanned::new(name.name, name.span)),
+        ast::NamedType(name) => hir::TypeKind::Named(name),
         ast::StructType(ref def) => {
             let mut fields = vec![];
             let mut next_rib = node_id;
@@ -757,7 +754,7 @@ fn lower_type<'gcx>(
             name,
         } => hir::TypeKind::Scope(
             cx.map_ast_with_parent(AstNode::Type(ty.as_ref()), node_id),
-            Spanned::new(name.name, name.span),
+            name,
         ),
         ast::EnumType(ref repr_ty, ref names) => {
             let mut next_rib = node_id;
@@ -780,16 +777,15 @@ fn lower_type<'gcx>(
             // Special care is needed here for types that were mistakenly parsed
             // as an expression.
             match arg.as_ref() {
-                ast::TypeOrExpr::Expr(expr) => match &expr.data {
+                ast::TypeOrExpr::Expr(expr) => match expr.data {
                     ast::IdentExpr(n) => {
-                        let binding =
-                            cx.resolve_upwards_or_error(Spanned::new(n.name, n.span), node_id)?;
+                        let binding = cx.resolve_upwards_or_error(n, node_id)?;
                         match cx.hir_of(binding)? {
                             HirNode::TypeParam(..) | HirNode::Typedef(..) => {
                                 let ty = cx.arena().alloc_ast_type(ast::Type::new(
                                     expr.span,
                                     ast::TypeData {
-                                        kind: ast::TypeKind::new(expr.span, ast::NamedType(*n)),
+                                        kind: ast::TypeKind::new(expr.span, ast::NamedType(n)),
                                         sign: ast::TypeSign::None,
                                         dims: vec![],
                                     },
@@ -1007,7 +1003,7 @@ fn lower_expr<'gcx>(
             hir::ExprKind::StringConst(Spanned::new(value, expr.span))
         }
 
-        ast::IdentExpr(ident) => hir::ExprKind::Ident(Spanned::new(ident.name, ident.span)),
+        ast::IdentExpr(ident) => hir::ExprKind::Ident(ident),
         ast::UnaryExpr {
             op,
             expr: ref arg,
@@ -1095,10 +1091,9 @@ fn lower_expr<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
             cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
         ),
-        ast::MemberExpr { ref expr, name } => hir::ExprKind::Field(
-            cx.map_ast_with_parent(AstNode::Expr(expr), node_id),
-            Spanned::new(name.name, name.span),
-        ),
+        ast::MemberExpr { ref expr, name } => {
+            hir::ExprKind::Field(cx.map_ast_with_parent(AstNode::Expr(expr), node_id), name)
+        }
         ast::IndexExpr {
             ref indexee,
             ref index,
@@ -1129,35 +1124,30 @@ fn lower_expr<'gcx>(
                         }] => cx.map_ast_with_parent(AstNode::Expr(arg), node_id),
                         _ => {
                             cx.emit(
-                                DiagBuilder2::error(format!("`{}` takes one argument", ident.name))
+                                DiagBuilder2::error(format!("`{}` takes one argument", ident))
                                     .span(expr.human_span()),
                             );
                             return Err(());
                         }
                     })
                 };
-                hir::ExprKind::Builtin(match &*ident.name.as_str() {
+                hir::ExprKind::Builtin(match &*ident.value.as_str() {
                     "clog2" => hir::BuiltinCall::Clog2(map_unary()?),
                     "bits" => hir::BuiltinCall::Bits(map_unary()?),
                     "signed" => hir::BuiltinCall::Signed(map_unary()?),
                     "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
                     _ => {
                         cx.emit(
-                            DiagBuilder2::warning(format!(
-                                "`${}` not supported; ignored",
-                                ident.name
-                            ))
-                            .span(expr.human_span()),
+                            DiagBuilder2::warning(format!("`${}` not supported; ignored", ident))
+                                .span(expr.human_span()),
                         );
                         hir::BuiltinCall::Unsupported
                     }
                 })
             }
             ast::IdentExpr(name) => {
-                let target = cx.resolve_upwards_or_error(
-                    Spanned::new(name.name, name.span),
-                    cx.parent_node_id(node_id).unwrap(),
-                )?;
+                let target =
+                    cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
                 hir::ExprKind::FunctionCall(
                     target,
                     args.iter()
@@ -1188,7 +1178,7 @@ fn lower_expr<'gcx>(
         ),
         ast::ScopeExpr(ref expr, name) => hir::ExprKind::Scope(
             cx.map_ast_with_parent(AstNode::Expr(expr.as_ref()), node_id),
-            Spanned::new(name.name, name.span),
+            name,
         ),
         ast::PatternExpr(ref fields) if fields.is_empty() => {
             cx.emit(DiagBuilder2::error("pattern must have at least one field").span(expr.span()));
@@ -1300,10 +1290,8 @@ fn lower_expr<'gcx>(
         ast::CastExpr(ref ty, ref expr) => {
             // Catch the corner case where a size cast looks like a type cast.
             if let ast::NamedType(n) = ty.kind.data {
-                let binding = cx.resolve_upwards_or_error(
-                    Spanned::new(n.name, n.span),
-                    cx.parent_node_id(node_id).unwrap(),
-                )?;
+                let binding =
+                    cx.resolve_upwards_or_error(n, cx.parent_node_id(node_id).unwrap())?;
                 match cx.hir_of(binding)? {
                     HirNode::TypeParam(..) | HirNode::Typedef(..) => hir::ExprKind::Cast(
                         cx.map_ast_with_parent(AstNode::Type(ty), node_id),
