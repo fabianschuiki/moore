@@ -4376,7 +4376,7 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
     if p.try_eat(Colon) {
         let n = parse_identifier_name(p, "generate block label")?;
         if let Some(existing) = label {
-            if existing == n {
+            if existing.value == n.value {
                 p.add_diag(
                     DiagBuilder2::warning(format!("Generate block {} labelled twice", n))
                         .span(n.span),
@@ -4403,7 +4403,7 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
     if p.try_eat(Colon) {
         let n = parse_identifier_name(p, "generate block label")?;
         if let Some(existing) = label {
-            if existing != n {
+            if existing.value != n.value {
                 p.add_diag(DiagBuilder2::error(format!("Label {} given after generate block does not match label {} given before the block", n, existing)).span(n.span));
                 return Err(());
             }
