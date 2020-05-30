@@ -645,12 +645,12 @@ impl<'a> ScopedNode<'a> for ast::GenerateCase<'a> {}
 impl<'a> Eq for &'a dyn ScopedNode<'a> {}
 impl<'a> PartialEq for &'a dyn ScopedNode<'a> {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(*self, *other)
+        std::ptr::eq(self.as_ptr(), other.as_ptr())
     }
 }
 impl<'a> Hash for &'a dyn ScopedNode<'a> {
     fn hash<H: Hasher>(&self, h: &mut H) {
-        std::ptr::hash(*self, h)
+        std::ptr::hash(self.as_ptr(), h)
     }
 }
 

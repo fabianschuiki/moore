@@ -47,18 +47,23 @@ pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display + Send + 
     /// generated as part of a later expansion/analysis pass, but needs to hook
     /// into the AST somewhere.
     fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {}
+
+    /// Convert this node reference to a pointer for identity comparisons.
+    fn as_ptr(&self) -> *const u8 {
+        self as *const _ as *const u8
+    }
 }
 
 // Compare and hash nodes by reference for use in the query system.
 impl<'a> Eq for &'a dyn AnyNode<'a> {}
 impl<'a> PartialEq for &'a dyn AnyNode<'a> {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(*self, *other)
+        std::ptr::eq(self.as_ptr(), other.as_ptr())
     }
 }
 impl<'a> Hash for &'a dyn AnyNode<'a> {
     fn hash<H: Hasher>(&self, h: &mut H) {
-        std::ptr::hash(*self, h)
+        std::ptr::hash(self.as_ptr(), h)
     }
 }
 
