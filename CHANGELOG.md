@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Allow names to resolve to instances (#177)
 - Fix scoping of generate blocks (#176)
 - Fix scope and name resolution to support large designs (#171)
+- Fix expressions in instance port lists forgetting parameter bindings
 
 ## 0.8.0 - 2020-05-23
 ### Added

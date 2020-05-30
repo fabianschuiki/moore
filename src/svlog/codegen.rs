@@ -601,7 +601,8 @@ where
             let port_mapping = self.port_mapping(PortMappingSource::ModuleInst {
                 module: module,
                 inst: inst_id,
-                env: inst_env,
+                outer_env: env,
+                inner_env: inst_env,
                 pos: &inst_hir.pos_ports,
                 named: &inst_hir.named_ports,
             })?;

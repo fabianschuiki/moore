@@ -73,7 +73,8 @@ pub(crate) fn compute_inst<'gcx>(
     let port_mapping = cx.port_mapping(PortMappingSource::ModuleInst {
         module: target.module.id,
         inst: node.id(),
-        env: target.inner_env,
+        inner_env: target.inner_env,
+        outer_env: target.outer_env,
         pos: &inst.pos_ports,
         named: &inst.named_ports,
     })?;
