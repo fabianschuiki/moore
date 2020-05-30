@@ -4340,7 +4340,7 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
 
     // Parse the optional block label.
     let mut label = if p.is_ident() && p.peek(1).0 == Colon {
-        let (n, _) = p.eat_ident("generate block label")?;
+        let n = parse_identifier_name(p, "generate block label")?;
         p.require_reported(Colon)?;
         Some(n)
     } else {
@@ -4374,11 +4374,12 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
 
     // Consume the optional label after the "begin" keyword.
     if p.try_eat(Colon) {
-        let (n, sp) = p.eat_ident("generate block label")?;
+        let n = parse_identifier_name(p, "generate block label")?;
         if let Some(existing) = label {
             if existing == n {
                 p.add_diag(
-                    DiagBuilder2::warning(format!("Generate block {} labelled twice", n)).span(sp),
+                    DiagBuilder2::warning(format!("Generate block {} labelled twice", n))
+                        .span(n.span),
                 );
             } else {
                 p.add_diag(
@@ -4386,7 +4387,7 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
                         "Generate block given conflicting labels {} and {}",
                         existing, n
                     ))
-                    .span(sp),
+                    .span(n.span),
                 );
                 return Err(());
             }
@@ -4400,10 +4401,10 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
 
     // Consume the optional label after the "end" keyword.
     if p.try_eat(Colon) {
-        let (n, sp) = p.eat_ident("generate block label")?;
+        let n = parse_identifier_name(p, "generate block label")?;
         if let Some(existing) = label {
             if existing != n {
-                p.add_diag(DiagBuilder2::error(format!("Label {} given after generate block does not match label {} given before the block", n, existing)).span(sp));
+                p.add_diag(DiagBuilder2::error(format!("Label {} given after generate block does not match label {} given before the block", n, existing)).span(n.span));
                 return Err(());
             }
         } else {
@@ -4412,7 +4413,7 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
                     "Generate block has trailing label {}, but is missing leading label",
                     n
                 ))
-                .span(sp),
+                .span(n.span),
             );
         }
     }

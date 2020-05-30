@@ -2066,7 +2066,7 @@ pub struct GenerateCase {
 #[indefinite("generate block")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateBlock<'a> {
-    pub label: Option<Name>,
+    pub label: Option<Spanned<Name>>,
     pub items: Vec<Item<'a>>,
 }
 

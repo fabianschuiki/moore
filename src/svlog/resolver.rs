@@ -640,6 +640,7 @@ impl<'a> ScopedNode<'a> for ast::SubroutineDecl<'a> {}
 impl<'a> ScopedNode<'a> for ast::GenerateFor<'a> {}
 impl<'a> ScopedNode<'a> for ast::GenerateIf<'a> {}
 impl<'a> ScopedNode<'a> for ast::GenerateCase<'a> {}
+impl<'a> ScopedNode<'a> for ast::GenerateBlock<'a> {}
 
 // Compare and hash scoped nodes by reference for use in the query system.
 impl<'a> Eq for &'a dyn ScopedNode<'a> {}
@@ -693,6 +694,7 @@ impl<'a> AsScopedNode<'a> for ast::AllNode<'a> {
             ast::AllNode::GenerateFor(x) => Some(x),
             ast::AllNode::GenerateIf(x) => Some(x),
             ast::AllNode::GenerateCase(x) => Some(x),
+            ast::AllNode::GenerateBlock(x) => Some(x),
             _ => None,
         }
     }
@@ -1129,6 +1131,20 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
 
     fn pre_visit_generate_case(&mut self, node: &'a ast::GenerateCase<'a>) -> bool {
         self.add_subscope(node);
+        false
+    }
+
+    fn pre_visit_generate_block(&mut self, node: &'a ast::GenerateBlock<'a>) -> bool {
+        self.add_subscope(node);
+        if let Some(name) = node.label {
+            self.add_def(Def {
+                node: DefNode::Ast(node),
+                name,
+                vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
+                may_override: false,
+                ordered: true,
+            });
+        }
         false
     }
 
