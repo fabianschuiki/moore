@@ -3484,29 +3484,24 @@ fn parse_stmt_kind<'n>(
             let (expr, vars) = flanked(p, Paren, |p| {
                 let expr = parse_expr_prec(p, Precedence::Scope)?;
                 let vars = flanked(p, Brack, |p| {
-                    let mut v = Vec::new();
-                    while p.peek(0).0 != Eof && p.peek(0).0 != CloseDelim(Brack) {
-                        if p.peek(0).0 != Comma {
-                            v.push(Some(parse_identifier(p, "loop variable name")?));
+                    Ok(comma_list(p, CloseDelim(Brack), "loop variables", |p| {
+                        Ok(if p.peek(0).0 != Comma {
+                            Some(parse_identifier_name(p, "loop variable name")?)
                         } else {
-                            v.push(None)
-                        }
-                        match p.peek(0) {
-                            (Comma, _) => p.bump(),
-                            (CloseDelim(Brack), _) => (),
-                            (tkn, sp) => {
-                                p.add_diag(
-                                    DiagBuilder2::error(format!(
-                                        "expected , or ] after loop variable; found {} instead",
-                                        tkn
-                                    ))
-                                    .span(sp),
-                                );
-                                return Err(());
-                            }
-                        }
-                    }
-                    Ok(v)
+                            None
+                        })
+                    })?
+                    .into_iter()
+                    .enumerate()
+                    .flat_map(|(i, name)| {
+                        name.map(|name| {
+                            ast::ForeachIndex::new(
+                                name.span,
+                                ast::ForeachIndexData { index: i, name },
+                            )
+                        })
+                    })
+                    .collect())
                 })?;
                 Ok((expr, vars))
             })?;

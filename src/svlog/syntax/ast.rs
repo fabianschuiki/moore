@@ -239,6 +239,7 @@ impl<'a> ForEachNode<'a> for Identifier {}
 impl<'a> ForEachNode<'a> for Lit {}
 impl<'a> ForEachNode<'a> for Op {}
 impl<'a> ForEachNode<'a> for bool {}
+impl<'a> ForEachNode<'a> for usize {}
 
 /// Common denominator across all AST nodes.
 #[derive(Clone)]
@@ -551,6 +552,10 @@ impl<'a> WalkVisitor<'a> for Op {
 }
 
 impl<'a> WalkVisitor<'a> for bool {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
+}
+
+impl<'a> WalkVisitor<'a> for usize {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {}
 }
 
@@ -1055,7 +1060,7 @@ pub enum StmtKind<'a> {
     WhileStmt(Expr<'a>, Box<Stmt<'a>>),
     DoStmt(Box<Stmt<'a>>, Expr<'a>),
     ForStmt(Box<Stmt<'a>>, Expr<'a>, Expr<'a>, Box<Stmt<'a>>),
-    ForeachStmt(Expr<'a>, Vec<Option<Identifier>>, Box<Stmt<'a>>),
+    ForeachStmt(Expr<'a>, Vec<ForeachIndex<'a>>, Box<Stmt<'a>>),
     ExprStmt(Expr<'a>),
     VarDeclStmt(VarDecl<'a>),
     GenvarDeclStmt(Vec<GenvarDecl<'a>>),
@@ -1207,6 +1212,18 @@ pub struct GenvarDecl<'a> {
     #[name]
     pub name: Spanned<Name>,
     pub init: Option<Expr<'a>>,
+}
+
+/// A foreach-loop index variable.
+#[moore_derive::node]
+#[indefinite("index variable")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeachIndex {
+    /// The name of the index.
+    #[name]
+    pub name: Spanned<Name>,
+    /// At which index nesting level this index is located.
+    pub index: usize,
 }
 
 /// An expression.

@@ -1178,6 +1178,17 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
             _ => true,
         }
     }
+
+    fn pre_visit_foreach_index(&mut self, node: &'a ast::ForeachIndex<'a>) -> bool {
+        self.add_def(Def {
+            node: DefNode::Ast(node),
+            name: node.name,
+            vis: DefVis::LOCAL,
+            may_override: false,
+            ordered: true,
+        });
+        true
+    }
 }
 
 /// Determine the location of a node within its enclosing scope.
