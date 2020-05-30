@@ -1189,6 +1189,22 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         });
         true
     }
+
+    fn pre_visit_dpi_decl(&mut self, node: &'a ast::DpiDecl<'a>) -> bool {
+        match node.data {
+            ast::DpiDeclData::Import { ref prototype, .. } => {
+                self.add_def(Def {
+                    node: DefNode::Ast(node),
+                    name: prototype.name,
+                    vis: DefVis::LOCAL | DefVis::NAMESPACE,
+                    may_override: false,
+                    ordered: true,
+                });
+            }
+            _ => (),
+        }
+        false
+    }
 }
 
 /// Determine the location of a node within its enclosing scope.

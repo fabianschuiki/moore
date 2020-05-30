@@ -633,6 +633,7 @@ pub enum Item<'a> {
     ClassDecl(#[forward] ClassDecl<'a>),
     ProgramDecl(()),
     ImportDecl(#[forward] ImportDecl<'a>),
+    DpiDecl(#[forward] DpiDecl<'a>),
     ParamDecl(#[forward] ParamDecl<'a>),
     ModportDecl(ModportDecl),
     Typedef(#[forward] Typedef<'a>),
@@ -2101,6 +2102,39 @@ pub enum PortConnMode<'a> {
     Unconnected,
     /// The `.name(expr)` case.
     Connected(Expr<'a>),
+}
+
+/// A DPI declaration such as `import "DPI-C"` or `export "DPI-C"`.
+#[moore_derive::node]
+#[indefinite("DPI declaration")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DpiDecl<'a> {
+    /// An `import`.
+    Import {
+        spec: Spanned<Name>,
+        property: Option<Spanned<DpiProperty>>,
+        cident: Option<Spanned<Name>>,
+        #[forward]
+        prototype: SubroutinePrototype<'a>,
+    },
+    /// An `export`.
+    Export {
+        spec: Spanned<Name>,
+        cident: Option<Spanned<Name>>,
+        kind: SubroutineKind,
+        #[name]
+        name: Spanned<Name>,
+    },
+}
+
+/// A DPI function/task property.
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DpiProperty {
+    /// `context`
+    Context,
+    /// `pure`
+    Pure,
 }
 
 moore_derive::derive_visitor!();

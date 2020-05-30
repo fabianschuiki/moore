@@ -519,6 +519,27 @@ fn parse_identifier_name<'n, M: std::fmt::Display>(
     }
 }
 
+/// Consumes a string literal token, wrapping it in a `Spanned<Name>`.
+fn parse_string_literal<'n, M: std::fmt::Display>(
+    p: &mut dyn AbstractParser<'n>,
+    msg: M,
+) -> ReportedResult<Spanned<Name>> {
+    let (tkn, span) = p.peek(0);
+    match tkn {
+        Literal(Lit::Str(n)) => {
+            p.bump();
+            Ok(Spanned::new(n, span))
+        }
+        x => {
+            p.add_diag(
+                DiagBuilder2::error(format!("expected {}, but found `{}` instead", msg, x))
+                    .span(span),
+            );
+            Err(())
+        }
+    }
+}
+
 fn try_identifier<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Option<ast::Identifier>> {
     try_identifier_name(p).map(|n| {
         n.map(|n| ast::Identifier {
@@ -993,6 +1014,10 @@ fn parse_item_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ItemDat
     // First attempt the simple cases where a keyword reliably identifies the
     // following item.
     let class_follows = p.peek(1).0 == Keyword(Kw::Class);
+    let strlit_follows = match p.peek(1).0 {
+        Literal(Lit::Str(..)) => true,
+        _ => false,
+    };
     match p.peek(0).0 {
         Keyword(Kw::Module) => return parse_module_decl(p).map(ItemData::ModuleDecl),
         Keyword(Kw::Interface) | Keyword(Kw::Virtual) if class_follows => {
@@ -1010,6 +1035,8 @@ fn parse_item_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ItemDat
         }
         Keyword(Kw::Modport) => return parse_modport_decl(p).map(|x| ItemData::ModportDecl(x)),
         Keyword(Kw::Typedef) => return parse_typedef(p).map(|x| ItemData::Typedef(x)),
+        Keyword(Kw::Import) if strlit_follows => return parse_dpi_decl(p).map(ItemData::DpiDecl),
+        Keyword(Kw::Export) => return parse_dpi_decl(p).map(ItemData::DpiDecl),
         Keyword(Kw::Import) => return parse_import_decl(p).map(|x| ItemData::ImportDecl(x)),
 
         // Structured procedures as per IEEE 1800-2009 section 9.2
@@ -3120,6 +3147,24 @@ fn parse_subroutine_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<S
     ))
 }
 
+fn parse_subroutine_kind<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<SubroutineKind> {
+    let span = p.peek(0).1;
+    match p.peek(0).0 {
+        Keyword(Kw::Function) => {
+            p.bump();
+            Ok(SubroutineKind::Func)
+        }
+        Keyword(Kw::Task) => {
+            p.bump();
+            Ok(SubroutineKind::Task)
+        }
+        _ => {
+            p.add_diag(DiagBuilder2::error("expected `function` or `task`").span(span));
+            Err(())
+        }
+    }
+}
+
 fn parse_subroutine_prototype<'n>(
     p: &mut dyn AbstractParser<'n>,
 ) -> ReportedResult<SubroutinePrototype<'n>> {
@@ -3127,20 +3172,7 @@ fn parse_subroutine_prototype<'n>(
 
     // Consume the "function" or "task" keyword, which then also decides what
     // kind of subroutine we're parsing.
-    let kind = match p.peek(0).0 {
-        Keyword(Kw::Function) => {
-            p.bump();
-            SubroutineKind::Func
-        }
-        Keyword(Kw::Task) => {
-            p.bump();
-            SubroutineKind::Task
-        }
-        _ => {
-            p.add_diag(DiagBuilder2::error("expected function or task prototype").span(span));
-            return Err(());
-        }
-    };
+    let kind = parse_subroutine_kind(p)?;
 
     // Parse the optional lifetime specifier.
     let lifetime = as_lifetime(p.peek(0).0);
@@ -5156,41 +5188,76 @@ fn as_charge_strength(tkn: Token) -> Option<ChargeStrength> {
     }
 }
 
-/// Parse a import declaration.
+/// Parse a DPI import or export.
+///
+/// ```text
+/// "import" ("DPI-C"|"DPI") ("context"|"pure")? (ident "=")? subroutine_prototype ";"
+/// "export" ("DPI-C"|"DPI") (ident "=")? ("function"|"task") ident ";"
+/// ```
+fn parse_dpi_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::DpiDecl<'n>> {
+    let mut span = p.peek(0).1;
+
+    let data = if p.try_eat(Keyword(Kw::Import)) {
+        let spec = parse_string_literal(p, "DPI specifier string")?;
+        let property = if p.try_eat(Keyword(Kw::Context)) {
+            Some(Spanned::new(ast::DpiProperty::Context, p.last_span()))
+        } else if p.try_eat(Keyword(Kw::Pure)) {
+            Some(Spanned::new(ast::DpiProperty::Pure, p.last_span()))
+        } else {
+            None
+        };
+        let cident = if let Some(ident) = try_identifier_name(p)? {
+            p.require_reported(Operator(Op::Assign))?;
+            Some(ident)
+        } else {
+            None
+        };
+        let prototype = parse_subroutine_prototype(p)?;
+        // Semicolon is part of the prototype.
+        ast::DpiDeclData::Import {
+            spec,
+            property,
+            cident,
+            prototype,
+        }
+    } else if p.try_eat(Keyword(Kw::Export)) {
+        let spec = parse_string_literal(p, "DPI specifier string")?;
+        let cident = if let Some(ident) = try_identifier_name(p)? {
+            p.require_reported(Operator(Op::Assign))?;
+            Some(ident)
+        } else {
+            None
+        };
+        let kind = parse_subroutine_kind(p)?;
+        let name = parse_identifier_name(p, "DPI task/function name")?;
+        p.require_reported(Semicolon)?;
+        ast::DpiDeclData::Export {
+            spec,
+            cident,
+            kind,
+            name,
+        }
+    } else {
+        let span = p.peek(0).1;
+        p.add_diag(
+            DiagBuilder2::error("expected `import` or `export` at the start of a DPI declaration")
+                .span(span),
+        );
+        return Err(());
+    };
+
+    span.expand(p.last_span());
+    Ok(ast::DpiDecl::new(span, data))
+}
+
+/// Parse an import declaration.
 /// ```text
 /// "import" package_ident "::" "*" ";"
 /// "import" package_ident "::" ident ";"
-/// "import" string ["context"|"pure"] [ident "="] subroutine_prototype ";"
 /// ```
 fn parse_import_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ImportDecl<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Import))?;
-
-    // Handle the DPI import case.
-    if let Literal(Lit::Str(spec)) = p.peek(0).0 {
-        let spec = Spanned::new(spec, p.peek(0).1);
-        p.bump();
-        let property = if p.try_eat(Keyword(Kw::Context)) {
-            ()
-        } else if p.try_eat(Keyword(Kw::Pure)) {
-            ()
-        } else {
-            ()
-        };
-        let cident = if p.peek(1).0 == Operator(Op::Assign) {
-            let (n, sp) = p.eat_ident("C identifier")?;
-            p.require_reported(Operator(Op::Assign))?;
-            Some(Spanned::new(n, sp))
-        } else {
-            None
-        };
-        let proto = parse_subroutine_prototype(p)?;
-        // TODO: Don't just discard the imported DPI magic!
-        span.expand(p.last_span());
-        p.add_diag(DiagBuilder2::warning("unsupported DPI import").span(span));
-        return Ok(ImportDecl::new(span, ImportDeclData { items: vec![] }));
-    }
-
     let items = comma_list_nonempty(p, Semicolon, "import item", |p| {
         // package_ident "::" ident
         // package_ident "::" "*"

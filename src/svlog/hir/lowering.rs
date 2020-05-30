@@ -706,7 +706,11 @@ fn lower_module_block<'gcx>(
                         .span(assert.span),
                 );
             }
-            ast::ItemData::GenvarDecl(..) | ast::ItemData::GenerateRegion(..) => (),
+
+            // The remaining items don't need an HIR representation.
+            ast::ItemData::DpiDecl(..)
+            | ast::ItemData::GenvarDecl(..)
+            | ast::ItemData::GenerateRegion(..) => (),
         }
     }
     Ok(hir::ModuleBlock {
