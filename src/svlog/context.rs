@@ -929,4 +929,9 @@ impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
         self.cx
             .map_ast_with_parent(AstNode::TypeParam(parent, node), parent.id());
     }
+
+    fn post_visit_typedef(&mut self, node: &'a ast::Typedef<'a>) {
+        self.cx
+            .map_ast_with_parent(AstNode::Typedef(node), node.get_parent().unwrap().id());
+    }
 }
