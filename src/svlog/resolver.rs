@@ -1119,6 +1119,17 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         true
     }
 
+    fn pre_visit_inst_name(&mut self, node: &'a ast::InstName<'a>) -> bool {
+        self.add_def(Def {
+            node: DefNode::Ast(node),
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: false,
+        });
+        true
+    }
+
     fn pre_visit_generate_for(&mut self, node: &'a ast::GenerateFor<'a>) -> bool {
         self.add_subscope(node);
         false
@@ -1142,7 +1153,7 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
                 name,
                 vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
                 may_override: false,
-                ordered: true,
+                ordered: false,
             });
         }
         false
