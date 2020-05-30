@@ -139,8 +139,9 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
             #(#doc_attrs)*
             fn #name #generics (&self, #(#arg_names: #arg_types),*) -> #result {
                 let query_storage = self.storage();
-                let query_key = #key_name(#(#arg_names),*);
+                let query_key = #key_name(#(Clone::clone(&#arg_names)),*);
                 let query_tag = QueryTag::#tag_name(query_key.clone());
+                self.before_query(&query_tag);
 
                 // Check if we already have a result for this query.
                 if let Some(result) = query_storage.#cache_name.borrow().get(&query_key) {
@@ -165,6 +166,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 // Pop the query from the stack.
                 query_storage.inflight.borrow_mut().remove(&query_tag);
                 query_storage.stack.borrow_mut().pop();
+                self.after_query(&query_tag);
                 query_result
             }
         });
@@ -208,6 +210,12 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 }
                 panic!("query cycle detected");
             }
+
+            /// Called before a query is executed.
+            fn before_query(&self, tag: &QueryTag #lts) {}
+
+            /// Called after a query is executed.
+            fn after_query(&self, tag: &QueryTag #lts) {}
 
             #(#funcs)*
         }
