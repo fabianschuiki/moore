@@ -1879,65 +1879,37 @@ pub enum PropBinOp {
     SeqFollowNol,
 }
 
-#[moore_derive::visit]
+/// An instantiation of a module.
+///
+/// For example `foo u0(), u1();`.
+#[moore_derive::node]
+#[indefinite("instantiation")]
+#[definite("`{}` instantiation", target)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inst<'a> {
-    pub span: Span,
     /// The name of the module to instantiate.
-    pub target: Identifier,
+    #[name]
+    pub target: Spanned<Name>,
     /// The parameters in the module to be assigned.
     pub params: Vec<ParamAssignment<'a>>,
     /// The names and ports of the module instantiations.
     pub names: Vec<InstName<'a>>,
 }
 
-impl HasSpan for Inst<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.target.span
-    }
-}
-
-impl HasDesc for Inst<'_> {
-    fn desc(&self) -> &'static str {
-        "instantiation"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("`{}` instantiation", self.target.name)
-    }
-}
-
-#[moore_derive::visit]
+/// A single module instance.
+///
+/// For example the `u0()` in `foo u0(), u1();`.
+#[moore_derive::node]
+#[indefinite("instance")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstName<'a> {
-    pub span: Span,
-    pub name: Identifier,
+    /// The name of the instance.
+    #[name]
+    pub name: Spanned<Name>,
+    /// The unpacked dimensions.
     pub dims: Vec<TypeDim<'a>>,
+    /// The port connections.
     pub conns: Vec<PortConn<'a>>,
-}
-
-impl HasSpan for InstName<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn human_span(&self) -> Span {
-        self.name.span
-    }
-}
-
-impl HasDesc for InstName<'_> {
-    fn desc(&self) -> &'static str {
-        "instance"
-    }
-
-    fn desc_full(&self) -> String {
-        format!("instance `{}`", self.name.name)
-    }
 }
 
 #[moore_derive::visit]

@@ -68,7 +68,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             }
             let hir = hir::InstTarget {
                 id: node_id,
-                name: Spanned::new(ast.target.name, ast.target.span),
+                name: ast.target,
                 span: ast.span,
                 pos_params,
                 named_params,
@@ -122,7 +122,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             }
             let hir = hir::Inst {
                 id: node_id,
-                name: Spanned::new(inst.name.name, inst.name.span),
+                name: inst.name,
                 span: inst.span,
                 target: target_id,
                 named_ports,
@@ -617,14 +617,10 @@ fn lower_module_block<'gcx>(
             ast::ItemData::Inst(ref inst) => {
                 let target_id = cx.map_ast_with_parent(AstNode::InstTarget(inst), next_rib);
                 next_rib = target_id;
-                trace!(
-                    "instantiation target `{}` => {:?}",
-                    inst.target.name,
-                    target_id
-                );
+                trace!("instantiation target `{}` => {:?}", inst.target, target_id);
                 for inst in &inst.names {
                     let inst_id = cx.map_ast_with_parent(AstNode::Inst(inst, target_id), next_rib);
-                    trace!("instantiation `{}` => {:?}", inst.name.name, inst_id);
+                    trace!("instantiation `{}` => {:?}", inst.name, inst_id);
                     next_rib = inst_id;
                     insts.push(inst_id);
                 }

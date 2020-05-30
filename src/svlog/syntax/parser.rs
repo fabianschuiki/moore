@@ -5712,7 +5712,7 @@ fn parse_inst<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::Inst<'n
     let mut span = p.peek(0).1;
 
     // Consume the module identifier.
-    let target = parse_identifier(p, "module name")?;
+    let target = parse_identifier_name(p, "module name")?;
     // TODO: Add support for interface instantiations.
 
     // Consume the optional parameter value assignment.
@@ -5725,26 +5725,26 @@ fn parse_inst<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::Inst<'n
     // Consume the instantiations.
     let names = comma_list_nonempty(p, Semicolon, "hierarchical instance", |p| {
         let mut span = p.peek(0).1;
-        let name = parse_identifier(p, "instance name")?;
+        let name = parse_identifier_name(p, "instance name")?;
         let (dims, _) = parse_optional_dimensions(p)?;
         let conns = flanked(p, Paren, parse_list_of_port_connections)?;
         span.expand(p.last_span());
-        Ok(ast::InstName {
-            span: span,
-            name: name,
-            dims: dims,
-            conns: conns,
-        })
+        Ok(ast::InstName::new(
+            span,
+            ast::InstNameData { name, dims, conns },
+        ))
     })?;
 
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
-    Ok(ast::Inst {
-        span: span,
-        target: target,
-        params: params,
-        names: names,
-    })
+    Ok(ast::Inst::new(
+        span,
+        ast::InstData {
+            target,
+            params,
+            names,
+        },
+    ))
 }
 
 fn parse_var_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::VarDecl<'n>> {
