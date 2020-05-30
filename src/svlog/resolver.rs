@@ -744,7 +744,7 @@ pub(crate) fn generated_scope<'a>(
 
     // If this is the AST root, pull up `GLOBAL` definitions from the subscopes.
     if node.as_all().is_root() {
-        debug!("Pulling up global defs from subscopes");
+        trace!("Pulling up global defs from subscopes");
         for node in gen.scope.subscopes.clone() {
             let scope = cx.generated_scope(node);
             for &def in scope.defs.values() {
@@ -754,7 +754,7 @@ pub(crate) fn generated_scope<'a>(
     }
 
     // Allocate the scope into the arena and return it.
-    debug!("Generated scope {:#?}", gen.scope);
+    trace!("Generated scope {:#?}", gen.scope);
     cx.gcx().arena.alloc_scope(gen.scope)
 }
 
@@ -1215,7 +1215,7 @@ pub(crate) fn resolve_local<'a>(
     let mut next = Some(scope);
     while let Some(scope) = next {
         next = scope.parent.map(|p| cx.generated_scope(p));
-        debug!(" - Looking in scope {:?}", scope.node);
+        trace!(" - Looking in scope {:?}", scope.node);
 
         // Try to find a matching definition in this scope.
         if let Some(def) = scope.defs.get(&name) {
@@ -1232,7 +1232,7 @@ pub(crate) fn resolve_local<'a>(
                 // resolve `A` in `foo` now.
                 let def = if let DefNode::Ast(node) = def.node {
                     if let Some(import) = node.as_all().get_import_item() {
-                        debug!(" - Following {:?}", import);
+                        trace!(" - Following {:?}", import);
                         let inside = cx.resolve_imported_scope(import)?;
                         let binding =
                             cx.resolve_namespace_or_error(import.name.unwrap(), inside)?;
