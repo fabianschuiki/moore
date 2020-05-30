@@ -91,7 +91,8 @@ pub(crate) fn compute<'gcx>(
                             ))
                             .span(name.span)
                             .add_note(
-                                "The module has unnamed ports which require connecting by position.",
+                                "The module has unnamed ports which require connecting by \
+                                 position.",
                             )
                             .add_note(format!("Remove `.{}(...)`", name)),
                         );

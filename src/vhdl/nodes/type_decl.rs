@@ -82,9 +82,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                         Some(u) => u,
                         None => {
                             self.emit(
-                                DiagBuilder2::error(format!("physical type `{}` has no primary unit", name.value))
+                                DiagBuilder2::error(format!(
+                                    "physical type `{}` has no primary unit",
+                                    name.value
+                                ))
                                 .span(name.span)
-                                .add_note("A physical type must have a primary unit of the form `<name>;`. See IEEE 1076-2008 section 5.2.4.")
+                                .add_note(
+                                    "A physical type must have a primary unit of the form \
+                                     `<name>;`. See IEEE 1076-2008 section 5.2.4.",
+                                ),
                             );
                             return Err(());
                         }
@@ -92,9 +98,15 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                     let mut had_fails = false;
                     for (_, n) in prim_iter {
                         self.emit(
-                            DiagBuilder2::error(format!("physical type `{}` has multiple primary units", name.value))
+                            DiagBuilder2::error(format!(
+                                "physical type `{}` has multiple primary units",
+                                name.value
+                            ))
                             .span(n.span)
-                            .add_note("A physical type cannot have multiple primary units. See IEEE 1076-2008 section 5.2.4.")
+                            .add_note(
+                                "A physical type cannot have multiple primary units. See IEEE \
+                                 1076-2008 section 5.2.4.",
+                            ),
                         );
                         had_fails = true;
                     }

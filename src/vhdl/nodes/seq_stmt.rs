@@ -74,9 +74,17 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             ast::NullStmt => self.add_null_stmt(stmt).map(Into::into),
             ref wrong => {
                 self.emit(
-                    DiagBuilder2::error(format!("a {} cannot appear in {}", wrong.desc(), container_name))
+                    DiagBuilder2::error(format!(
+                        "a {} cannot appear in {}",
+                        wrong.desc(),
+                        container_name
+                    ))
                     .span(stmt.human_span())
-                    .add_note(format!("Only sequential statements are allowed in {}. See IEEE 1076-2008 section 10.", container_name))
+                    .add_note(format!(
+                        "Only sequential statements are allowed in {}. See IEEE 1076-2008 section \
+                         10.",
+                        container_name
+                    )),
                 );
                 Err(())
             }
@@ -650,17 +658,21 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             };
             let conds = slice
                 .into_iter()
-                .map(|&ast::CondWave(ref wave, ref cond)|{
-                    match *cond {
-                        Some(ref cond) => Ok((wave, cond)),
-                        None => {
-                            self.emit(
-                                DiagBuilder2::error(format!("`{}` missing a `when` condition", wave.span.extract()))
-                                .span(wave.span)
-                                .add_note("Either all or none of the waveforms or expressions in the assignment can have a `when` condition.")
-                            );
-                            Err(())
-                        }
+                .map(|&ast::CondWave(ref wave, ref cond)| match *cond {
+                    Some(ref cond) => Ok((wave, cond)),
+                    None => {
+                        self.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` missing a `when` condition",
+                                wave.span.extract()
+                            ))
+                            .span(wave.span)
+                            .add_note(
+                                "Either all or none of the waveforms or expressions in the \
+                                 assignment can have a `when` condition.",
+                            ),
+                        );
+                        Err(())
                     }
                 })
                 .collect::<Vec<Result<_>>>()
@@ -671,8 +683,11 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             if ast.len() != 1 {
                 self.emit(
                     DiagBuilder2::error(format!("more than one waveform or expression"))
-                    .span(ast[0].0.span)
-                    .add_note("An unconditional assignment must have exactly one waveform or expression.")
+                        .span(ast[0].0.span)
+                        .add_note(
+                            "An unconditional assignment must have exactly one waveform or \
+                             expression.",
+                        ),
                 );
                 Err(())
             } else {

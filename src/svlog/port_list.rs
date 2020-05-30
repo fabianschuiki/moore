@@ -348,7 +348,10 @@ fn lower_module_ports_ansi<'gcx>(
         cx.emit(
             DiagBuilder2::error("port declaration in body of ANSI-style module")
                 .span(ast.span)
-                .add_note("Modules with an ANSI-style port list cannot have port declarations in the body.")
+                .add_note(
+                    "Modules with an ANSI-style port list cannot have port declarations in the \
+                     body.",
+                )
                 .add_note("Consider using non-ANSI style.")
                 .add_note("First port uses ANSI style:")
                 .span(first_span),
@@ -670,9 +673,8 @@ fn lower_module_ports_nonansi<'gcx>(
                     ))
                     .span(span)
                     .add_note(
-                        "Port already has a net/variable type. \
-                        Cannot declare an additional net/variable with the same \
-                        name.",
+                        "Port already has a net/variable type. Cannot declare an additional \
+                         net/variable with the same name.",
                     )
                     .add_note("Port declaration was here:")
                     .span(port.span),

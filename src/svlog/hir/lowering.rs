@@ -941,10 +941,15 @@ fn lower_expr<'gcx>(
                 None => size_needed,
             };
             if size_needed > size {
-                cx.emit(DiagBuilder2::warning(format!(
-                    "`{}` is too large",
-                    value,
-                )).span(expr.span).add_note(format!("constant is {} bits wide, but the value `{}{}` needs {} bits to not be truncated", size, base, value, size_needed)));
+                cx.emit(
+                    DiagBuilder2::warning(format!("`{}` is too large", value,))
+                        .span(expr.span)
+                        .add_note(format!(
+                            "constant is {} bits wide, but the value `{}{}` needs {} bits to not \
+                             be truncated",
+                            size, base, value, size_needed
+                        )),
+                );
             }
 
             // Identify the special bits (x and z) in the input.

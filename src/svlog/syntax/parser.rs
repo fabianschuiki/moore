@@ -172,7 +172,15 @@ trait AbstractParser<'n> {
                 CloseDelim(x) => {
                     if let Some(open) = stack.pop() {
                         if open != x {
-                            self.add_diag(DiagBuilder2::fatal(format!("found closing `{}` which is not the complement to the previous opening `{}`", CloseDelim(x), OpenDelim(open))).span(sp));
+                            self.add_diag(
+                                DiagBuilder2::fatal(format!(
+                                    "found closing `{}` which is not the complement to the \
+                                     previous opening `{}`",
+                                    CloseDelim(x),
+                                    OpenDelim(open)
+                                ))
+                                .span(sp),
+                            );
                             break;
                         }
                     } else {
@@ -3724,7 +3732,14 @@ fn parse_block<'n>(
         let (name, name_span) = p.eat_ident("block label")?;
         if let Some(before) = *label {
             if before != name {
-                p.add_diag(DiagBuilder2::error(format!("Block label {} at end of block does not match label {} at beginning of block", name, before)).span(name_span));
+                p.add_diag(
+                    DiagBuilder2::error(format!(
+                        "Block label {} at end of block does not match label {} at beginning of \
+                         block",
+                        name, before
+                    ))
+                    .span(name_span),
+                );
             }
         } else {
             p.add_diag(
@@ -4443,7 +4458,14 @@ fn parse_generate_block<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Ge
         let n = parse_identifier_name(p, "generate block label")?;
         if let Some(existing) = label {
             if existing.value != n.value {
-                p.add_diag(DiagBuilder2::error(format!("Label {} given after generate block does not match label {} given before the block", n, existing)).span(n.span));
+                p.add_diag(
+                    DiagBuilder2::error(format!(
+                        "Label {} given after generate block does not match label {} given before \
+                         the block",
+                        n, existing
+                    ))
+                    .span(n.span),
+                );
                 return Err(());
             }
         } else {

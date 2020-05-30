@@ -148,8 +148,8 @@ pub fn recover<P: Parser>(p: &mut P, term: &[Token], eat_term: bool) {
                     if open != x {
                         p.emit(
                             DiagBuilder2::fatal(format!(
-                                "Found closing {} which is not the \
-                                complement to the previous opening {}",
+                                "Found closing {} which is not the complement to the previous \
+                                 opening {}",
                                 CloseDelim(x),
                                 OpenDelim(open)
                             ))

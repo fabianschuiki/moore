@@ -775,9 +775,8 @@ pub(crate) fn need_self_determined_type<'gcx>(
                 DiagBuilder2::error(format!("{} has no self-determined type", desc))
                     .span(cx.span(node_id))
                     .add_note(format!(
-                        "The type of {} must be inferred from \
-                         context, but the location where you used it does not \
-                         provide such information.",
+                        "The type of {} must be inferred from context, but the location where you \
+                         used it does not provide such information.",
                         desc
                     ))
                     .add_note(format!("Try a cast: `T'({})`", extract)),
@@ -1154,8 +1153,8 @@ pub(crate) fn operation_type<'gcx>(
                     DiagBuilder2::error(format!("type of {} cannot be inferred", expr.desc_full()))
                         .span(expr.human_span())
                         .add_note(
-                            "The operand does not have a self-determined type, \
-                             and the type cannot be inferred from the context.",
+                            "The operand does not have a self-determined type, and the type \
+                             cannot be inferred from the context.",
                         )
                         .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
                 );
@@ -1226,8 +1225,8 @@ pub(crate) fn operation_type<'gcx>(
                     DiagBuilder2::error(format!("type of {} cannot be inferred", expr.desc_full()))
                         .span(expr.human_span())
                         .add_note(
-                            "Neither of the operands has a self-determined type, \
-                             and the type cannot be inferred from the context.",
+                            "Neither of the operands has a self-determined type, and the type \
+                             cannot be inferred from the context.",
                         )
                         .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
                 );
@@ -1413,9 +1412,8 @@ pub(crate) fn need_type_context<'gcx>(
                 DiagBuilder2::error(format!("type of {} cannot be inferred from context", desc))
                     .span(cx.span(node_id))
                     .add_note(format!(
-                        "The type of {} must be inferred from \
-                         context, but the location where you used it does not \
-                         provide such information.",
+                        "The type of {} must be inferred from context, but the location where you \
+                         used it does not provide such information.",
                         desc
                     ))
                     .add_note(format!("Try a cast: `T'({})`", extract)),

@@ -308,8 +308,8 @@ pub fn parse_name_suffix<P: Parser>(
                     let Spanned { value: wrong, span } = p.peek(0);
                     p.emit(
                         DiagBuilder2::error(
-                            "Expected identifier, character \
-                            literal, operator symbol, or `all` after `.`",
+                            "Expected identifier, character literal, operator symbol, or `all` \
+                             after `.`",
                         )
                         .span(span)
                         .add_note("see IEEE 1076-2008 section 8.3"),
@@ -691,13 +691,13 @@ pub fn parse_intf_decl<P: Parser>(
                     DiagBuilder2::error("Expected an interface declaration")
                         .span(span)
                         .add_note(
-                            "`constant`, `signal`, `variable`, and \
-                            `file` start an object declaration",
+                            "`constant`, `signal`, `variable`, and `file` start an object \
+                             declaration",
                         )
                         .add_note("`type` starts a type declaration")
                         .add_note(
-                            "`procedure`, `function`, `pure function`, or `impure \
-                            function` start a subprogram declaration",
+                            "`procedure`, `function`, `pure function`, or `impure function` start \
+                             a subprogram declaration",
                         )
                         .add_note("`package` starts a package declaration")
                         .add_note("see IEEE 1076-2008 section 6.5"),
@@ -1026,8 +1026,8 @@ pub fn parse_paren_elem_vec<P: Parser>(p: &mut P) -> ReportedResult<Vec<ast::Par
                     DiagBuilder2::error("Superfluous additional expressions")
                         .span(span)
                         .add_note(
-                            "If you wanted an association list, did you \
-                            forget a `=>` after the list of choices?",
+                            "If you wanted an association list, did you forget a `=>` after the \
+                             list of choices?",
                         ),
                 );
                 return Err(Reported);
@@ -1161,10 +1161,9 @@ pub fn parse_primary_expr<P: Parser>(p: &mut P) -> ReportedResult<ast::Expr> {
         ))
         .span(q)
         .add_note(
-            "A primary expression is either an abstract, \
-            bit string, character, or string literal; a name; \
-            a parenthesized expression `( ... )`; an allocation \
-            `new ...`; or the constants `null`, `open`, or `others`.",
+            "A primary expression is either an abstract, bit string, character, or string \
+             literal; a name; a parenthesized expression `( ... )`; an allocation `new ...`; or \
+             the constants `null`, `open`, or `others`.",
         ),
     );
     Err(Reported)
@@ -1202,8 +1201,8 @@ pub fn try_name_or_qualified_primary_expr<P: Parser>(
                     DiagBuilder2::error("Expected a parenthesized expression after `'`")
                         .span(q)
                         .add_note(
-                            "`'` introduces a qualified expression, \
-                            which is of the form `<name>'(<expr>)`",
+                            "`'` introduces a qualified expression, which is of the form \
+                             `<name>'(<expr>)`",
                         )
                         .add_note("see IEEE 1076-2008 section 9.3.5"),
                 );
@@ -1713,14 +1712,13 @@ pub fn parse_alias_decl<P: Parser>(p: &mut P) -> ReportedResult<ast::AliasDecl> 
             let pk = p.peek(0);
             p.emit(
                 DiagBuilder2::error(format!(
-                    "Expected alias designator after \
-                    keyword `alias`, found {} instead",
+                    "Expected alias designator after keyword `alias`, found {} instead",
                     pk.value
                 ))
                 .span(pk.span)
                 .add_note(
-                    "An alias designator is either an identifier, \
-                    a character literal, or an operator symbol",
+                    "An alias designator is either an identifier, a character literal, or an \
+                     operator symbol",
                 )
                 .add_note("see IEEE 1076-2008 section 6.6"),
             );
@@ -2251,8 +2249,8 @@ pub fn parse_block_comp_spec<P: Parser>(p: &mut P) -> ReportedResult<Spanned<ast
                 let sp = p.peek(0).span;
                 p.emit(
                     DiagBuilder2::error(format!(
-                        "Expected block name, component label, \
-                        `all`, or `others`, found {} instead",
+                        "Expected block name, component label, `all`, or `others`, found {} \
+                         instead",
                         wrong
                     ))
                     .span(sp),
@@ -2426,12 +2424,10 @@ pub fn parse_entity_class<P: Parser>(p: &mut P) -> ReportedResult<ast::EntityCla
                 DiagBuilder2::error(format!("Expected entity class, found {} instead", wrong))
                     .span(pk.span)
                     .add_note(
-                        "An entity class is any of the keywords \
-                        `architecture`, `component`, `configuration`, \
-                        `constant`, `entity`, `file`, `function`, `group`, \
-                        `label`, `literal`, `package`, `procedure`, `property`, \
-                        `sequence`, `signal`, `subtype`, `type`, `units`, or \
-                        `variable`",
+                        "An entity class is any of the keywords `architecture`, `component`, \
+                         `configuration`, `constant`, `entity`, `file`, `function`, `group`, \
+                         `label`, `literal`, `package`, `procedure`, `property`, `sequence`, \
+                         `signal`, `subtype`, `type`, `units`, or `variable`",
                     )
                     .add_note("see IEEE 1076-2008 section 7.2"),
             );
@@ -3126,8 +3122,8 @@ where
         let pk = p.peek(0);
         p.emit(
             DiagBuilder2::error(format!(
-                "`begin` is required before {}, to separate \
-                it from the preceding declarative items",
+                "`begin` is required before {}, to separate it from the preceding declarative \
+                 items",
                 pk.value
             ))
             .span(pk.span),

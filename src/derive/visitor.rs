@@ -38,15 +38,9 @@ pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
 
     // Generate some documentation.
     let mut doc = format!(
-        "A visitor.\n\n\
-        Use the `accept()` function to start visiting nodes. For example:\n\n\
-        ```ignore\n\
-        struct MagicVisitor;\n\n\
-        impl Visitor for MagicVisitor {{\n\
-        }}\n\n\
-        node.accept(&mut MagicVisitor);\n\
-        ```\n\n\
-        "
+        "A visitor.\n\nUse the `accept()` function to start visiting nodes. For \
+         example:\n\n```ignore\nstruct MagicVisitor;\n\nimpl Visitor for MagicVisitor \
+         {{\n}}\n\nnode.accept(&mut MagicVisitor);\n```\n\n"
     );
     doc.push_str("Implements the visitor pattern over the following nodes:\n\n");
     for call in &calls {
@@ -77,8 +71,8 @@ pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
 
         // Generate some documentation.
         let pre_doc = format!(
-            "Called for every `{}` node before visiting its children.\n\n\
-            Return `false` from this function to not visit the node's children.",
+            "Called for every `{}` node before visiting its children.\n\nReturn `false` from this \
+             function to not visit the node's children.",
             name
         );
         let post_doc = format!(

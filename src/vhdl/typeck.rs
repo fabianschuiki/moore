@@ -512,8 +512,8 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                         DiagBuilder2::error(format!("`{}` is not a subrange of `{}`", subty, ty))
                             .span(span)
                             .add_note(
-                                "The range of a subtype must be entirely \
-                                contained within the range of the target type.",
+                                "The range of a subtype must be entirely contained within the \
+                                 range of the target type.",
                             ), // TODO: Add reference to standard.
                     );
                 }
