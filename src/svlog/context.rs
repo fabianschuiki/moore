@@ -98,6 +98,7 @@ impl<'gcx> GlobalContext<'gcx> {
         debug!("Linked {} nodes", index);
 
         // Ensure there are no naming conflicts in the scopes.
+        debug!("Materializing scopes");
         crate::resolver::materialize_scope(self, root);
 
         // Register nodes with the AST map. This is a necessary hack until
@@ -105,6 +106,7 @@ impl<'gcx> GlobalContext<'gcx> {
         root.walk(&mut AstMapRegistrator { cx: self });
 
         // Resolve names for debugging purposes.
+        debug!("Checking names");
         self.nameck(root);
 
         // Keep track of some names for now.
@@ -133,6 +135,8 @@ impl<'gcx> GlobalContext<'gcx> {
                 }
             }
         }
+
+        debug!("{:?} added", root);
     }
 
     /// Add an AST root with a series of source files to the context for
