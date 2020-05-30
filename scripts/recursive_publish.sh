@@ -12,4 +12,4 @@ sleep 10 && (cargo install lazy_static > /dev/null 2>&1 || true)
 sleep 10 && (cargo install lazy_static > /dev/null 2>&1 || true)
 (cd src/vhdl && cargo publish "$@")
 sleep 10 && (cargo install lazy_static > /dev/null 2>&1 || true)
-(cd src && cargo publish "$@")
+cargo publish "$@"
