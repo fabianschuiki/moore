@@ -21,6 +21,7 @@ digraph Queries {
         {AST -> scope_location module_ports} -> generated_scope;
         generated_scope -> resolve_local -> resolve_local_or_error;
         generated_scope -> resolve_namespace -> resolve_namespace_or_error;
+        generated_scope -> resolve_hierarchical -> resolve_hierarchical_or_error;
         {scope_location resolve_local_or_error} -> resolve_imported_scope -> resolve_local;
 
         // HIR
