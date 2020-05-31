@@ -1,9 +1,308 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
-//! An implementation of the verilog type system.
+//! A generalized SystemVerilog type system.
+//!
+//! This module covers all types that may arise in a SystemVerilog source file,
+//! plus some additional things like modules/interfaces to streamline the
+//! handling of hierarchical names and interface signals/modports throughout the
+//! compiler.
+//!
+//! ## Packed Types
+//!
+//! Packed types are the core types of SystemVerilog. They combine a core packed
+//! type with an optional sign and zero or more packed dimensions. The core
+//! packed types are:
+//!
+//! - Integer vector types: `bit`, `logic`, `reg`
+//! - Integer atom types: `byte`, `shortint`, `int`, `longint`, `integer`,
+//!   `time`
+//! - Packed structs and unions
+//! - Enums
+//! - Packed named types
+//! - Packed type references
+//!
+//! The packed dimensions can be:
+//!
+//! - Unsized (`[]`)
+//! - Ranges (`[x:y]`)
+//!
+//! Packed types are implemented by the [`PackedType`](struct.PackedType.html)
+//! struct.
+//!
+//! ## Unpacked Types
+//!
+//! Unpacked types are a second level of types in SystemVerilog. They extend a
+//! core unpacked type with a variety of unpacked dimensions, depending on which
+//! syntactic construct generated the type (variable or otherwise). The core
+//! unpacked types are:
+//!
+//! - Packed types
+//! - Non-integer types: `shortreal`, `real`, `realtime`
+//! - Unpacked structs and unions
+//! - `string`, `chandle`, `event`
+//! - Virtual interfaces
+//! - Class types
+//! - Covergroups
+//! - Unpacked named types
+//! - Unpacked type references
+//! - Modules and interfaces
+//!
+//! The unpacked dimensions are:
+//!
+//! - Unsized (`[]`)
+//! - Arrays (`[x]`)
+//! - Ranges (`[x:y]`)
+//! - Associative (`[T]` or `[*]`)
+//! - Queues (`[$]` or `[$:x]`)
+//!
+//! Unpacked types are implemented by the [`UnpackedType`](struct.UnpackedType.html)
+//! struct.
+//!
+//! ## Simple Bit Vector Types
+//!
+//! Some packed types may be converted into an equivalent Simple Bit Vector Type
+//! (SBVT), which has an identical bit pattern as the original type, but
+//! consists only of an integer vector type with a single optional packed
+//! dimension. An SBVT can be converted back into a packed type. SBVTs can be
+//! range-cast, which changes the width of their single dimension.
+//!
+//! SBVTs track whether the original packed type explicitly had a dimension or
+//! used an integer atom type, or was named. When converting back to a packed
+//! type, the SBVT attempts to restore this information, depending on how many
+//! changes were applied.
+//!
+//! ## Signing
+//!
+//! All packed types have an associated signing, indicating whether they are
+//! *signed* or *unsigned*. The types have a default signing, which means that
+//! the signing may have been omitted in the source file. Packed types can be
+//! sign-cast, which changes only their signing.
+//!
+//! ## Domain
+//!
+//! All packed types consist of bits that can either carry two or four values.
+//! An aggregate type is two-valued iff *all* its constituent types are
+//! two-valued, otherwise it is four-valued. Packed types can be domain-cast,
+//! which changes only their value domain.
 
 use crate::{crate_prelude::*, hir::HirNode, ParamEnv};
 use std::fmt::{self, Display, Formatter};
+
+/// A packed type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PackedType<'a> {
+    /// The core packed type.
+    pub core: PackedCore<'a>,
+    /// The type signing.
+    pub signing: Sign,
+    /// Whether the signing was explicit in the source code.
+    pub signing_explicit: bool,
+    /// The packed dimensions.
+    pub dims: Vec<PackedDim>,
+}
+
+/// A core packed type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PackedCore<'a> {
+    /// An error occurred during type computation.
+    Error,
+    /// An integer vector type.
+    IntVec(IntVecType),
+    /// An integer atom type.
+    IntAtom(IntAtomType),
+    /// A packed struct.
+    Struct(StructType<'a>),
+    /// An enum.
+    Enum(EnumType<'a>),
+    /// A named type.
+    Named {
+        /// How the user originally called the type.
+        name: Spanned<Name>,
+        /// The type this name expands to.
+        ty: &'a PackedType<'a>,
+    },
+    /// A type reference.
+    Ref {
+        /// Location of the `type(...)` in the source file.
+        span: Span,
+        /// The type that this reference expands to.
+        ty: &'a PackedType<'a>,
+    },
+}
+
+/// A packed dimension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PackedDim {
+    /// A range dimension, like `[a:b]`.
+    Range(Range),
+    /// A unsized dimension, like `[]`.
+    Unsized,
+}
+
+/// An integer vector type.
+///
+/// These are the builtin single-bit integer types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IntVecType {
+    /// A `bit`.
+    Bit,
+    /// A `logic`.
+    Logic,
+    /// A `reg`.
+    Reg,
+}
+
+/// An integer atom type.
+///
+/// These are the builtin multi-bit integer types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IntAtomType {
+    /// A `byte`.
+    Byte,
+    /// A `shortint`.
+    ShortInt,
+    /// An `int`.
+    Int,
+    /// A `longint`.
+    LongInt,
+    /// An `integer`.
+    Integer,
+    /// A `time`.
+    Time,
+}
+
+/// An unpacked type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UnpackedType<'a> {
+    /// The core unpacked type.
+    pub core: UnpackedCore<'a>,
+    /// The unpacked dimensions.
+    pub dims: Vec<UnpackedDim<'a>>,
+}
+
+/// A core unpacked type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UnpackedCore<'a> {
+    /// An error occurred during type computation.
+    Error,
+    /// A packed type.
+    Packed(&'a PackedType<'a>),
+    /// A real type.
+    Real(RealType),
+    /// A unpacked struct.
+    Struct(StructType<'a>),
+    /// A string.
+    String,
+    /// A chandle.
+    Chandle,
+    /// An event.
+    Event,
+    // TODO: Add virtual interfaces
+    // TODO: Add class types
+    // TODO: Add covergroups
+    /// A named type.
+    Named {
+        /// How the user originally called the type.
+        name: Spanned<Name>,
+        /// The type this name expands to.
+        ty: &'a UnpackedType<'a>,
+    },
+    /// A type reference.
+    Ref {
+        /// Location of the `type(...)` in the source file.
+        span: Span,
+        /// The type that this reference expands to.
+        ty: &'a UnpackedType<'a>,
+    },
+    // TODO: Add modules
+    // TODO: Add interfaces
+}
+
+/// An unpacked dimension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UnpackedDim<'a> {
+    /// A unsized dimension, like `[]`.
+    Unsized,
+    /// An array dimension, like `[a]`.
+    Array(usize),
+    /// A range dimension, like `[a:b]`.
+    Range(Range),
+    /// An associative dimension, like `[T]` or `[*]`.
+    Assoc(Option<&'a UnpackedType<'a>>),
+    /// A queue dimension, like `[$]` or `[$:a]`.
+    Queue(Option<usize>),
+}
+
+/// A real type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RealType {
+    /// A `shortreal`.
+    ShortReal,
+    /// A `real`.
+    Real,
+    /// A `realtime`.
+    RealTime,
+}
+
+/// A struct type.
+///
+/// This represents both packed and unpacked structs. Which one it is depends on
+/// whether this struct is embedded in a `PackedType` or `UnpackedType`. For the
+/// packed version the struct inherits its signing from its parent `PackedType`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StructType<'a> {
+    /// The corresponding AST node of this struct definition.
+    pub ast: &'a ast::Struct<'a>,
+    /// Whether this is a `struct`, `union` or `union tagged`.
+    pub kind: ast::StructKind,
+    /// The list of members.
+    pub members: Vec<(Spanned<Name>, &'a ast::StructMember<'a>)>,
+}
+
+/// An enum type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EnumType<'a> {
+    /// The corresponding AST node of this enum definition.
+    pub ast: &'a ast::Enum<'a>,
+    /// The base type of this enum.
+    pub base: &'a PackedType<'a>,
+    /// Whether the base type was explicit in the source code.
+    pub base_explicit: bool,
+    /// The list of variants.
+    pub variants: Vec<(Spanned<Name>, &'a ast::EnumName<'a>)>,
+}
+
+impl Display for PackedDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Range(x) => write!(f, "{}", x),
+            Self::Unsized => write!(f, "[]"),
+        }
+    }
+}
+
+impl Display for IntVecType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Bit => write!(f, "bit"),
+            Self::Logic => write!(f, "logic"),
+            Self::Reg => write!(f, "reg"),
+        }
+    }
+}
+
+impl Display for IntAtomType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Byte => write!(f, "byte"),
+            Self::ShortInt => write!(f, "shortint"),
+            Self::Int => write!(f, "int"),
+            Self::LongInt => write!(f, "longint"),
+            Self::Integer => write!(f, "integer"),
+            Self::Time => write!(f, "time"),
+        }
+    }
+}
 
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;

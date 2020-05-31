@@ -853,10 +853,13 @@ pub struct Struct<'a> {
 }
 
 #[moore_derive::visit]
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum StructKind {
+    /// A `struct`.
     Struct,
+    /// A `union`.
     Union,
+    /// A `union tagged`.
     TaggedUnion,
 }
 
