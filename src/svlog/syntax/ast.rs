@@ -815,6 +815,17 @@ impl HasDesc for TypeDim<'_> {
     }
 }
 
+/// An enum definition.
+///
+/// For example `enum { FOO = 42 }`.
+#[moore_derive::node]
+#[indefinite("enum definition")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Enum<'a> {
+    pub base_type: Option<Box<Type<'a>>>,
+    pub variants: Vec<EnumName<'a>>,
+}
+
 /// A single entry in an enum.
 ///
 /// For example the `FOO = 42` in `enum { FOO = 42 }`.
@@ -2138,6 +2149,223 @@ pub enum DpiProperty {
     Context,
     /// `pure`
     Pure,
+}
+
+/// A data type.
+///
+/// From §A.2.2.1 (extended to be context-free):
+/// ```text
+/// data_type ::=
+///     integer_vector_type signing? packed_dimension*
+///     integer_atom_type signing?
+///     non_integer_type
+///     ("struct"|"union") ("packed" signing?)? "{" struct_union_member+ "}" packed_dimension*
+///     "enum" enum_base_type? "{" enum_name_declaration ("," enum_name_declaration)* "}" packed_dimension*
+///     "string"
+///     "chandle"
+///     path_segment ("::" path_segment)* packed_dimension*
+///     "event"
+///     type_reference
+///
+/// path_segment ::=
+///     "$unit"
+///     package_identifier
+///     class_identifier (param_value_assignment)?
+///     type_identifier
+/// ```
+#[moore_derive::node]
+#[indefinite("data type")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataType<'a> {
+    /// An integer type, like `bit`, `logic signed`, `reg signed [42:0]`, `int`,
+    /// or `int unsigned`.
+    #[indefinite("integer type")]
+    Int {
+        ty: Spanned<IntType>,
+        signing: Option<TypeSign>,
+        packed_dims: Vec<PackedDim<'a>>,
+    },
+    /// A real type.
+    #[indefinite("real type")]
+    Real(RealType),
+    /// A struct or union type.
+    #[indefinite("struct/union type")]
+    Struct {
+        def: Struct<'a>,
+        packed_dims: Vec<PackedDim<'a>>,
+    },
+    /// An enum type.
+    #[indefinite("enum type")]
+    Enum {
+        def: Enum<'a>,
+        packed_dims: Vec<PackedDim<'a>>,
+    },
+    /// A `string`.
+    #[indefinite("`string` type")]
+    String,
+    /// A `chandle`.
+    #[indefinite("`chandle` type")]
+    Chandle,
+    /// A named type.
+    #[indefinite("named type")]
+    Named {
+        path: Vec<PathSegment<'a>>,
+        packed_dims: Vec<PackedDim<'a>>,
+    },
+    /// An `event`.
+    #[indefinite("`event` type")]
+    Event,
+    /// A type reference, like `type(<type>)` or `type(<expr>)`.
+    #[indefinite("type reference")]
+    TypeRef(Box<TypeOrExpr<'a>>),
+}
+
+/// An integer type.
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IntType {
+    /// A `bit`.
+    Bit,
+    /// A `logic`.
+    Logic,
+    /// A `reg`.
+    Reg,
+    /// A `byte`.
+    Byte,
+    /// A `shortint`.
+    ShortInt,
+    /// An `int`.
+    Int,
+    /// A `longint`.
+    LongInt,
+    /// An `integer`.
+    Integer,
+    /// A `time`.
+    Time,
+}
+
+/// A real type.
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RealType {
+    /// A `shortreal`.
+    ShortReal,
+    /// A `real`.
+    Real,
+    /// A `realtime`.
+    RealTime,
+}
+
+/// An implicit data type.
+///
+/// From §A.2.2.1:
+/// ```text
+/// implicit_data_type ::=
+///     signing? packed_dimension*
+/// ```
+#[moore_derive::node]
+#[indefinite("implicit data type")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplicitDataType<'a> {
+    pub signing: Option<TypeSign>,
+    pub packed_dims: Vec<PackedDim<'a>>,
+}
+
+/// A possible implicit data type.
+///
+/// From §A.2.2.1:
+/// ```text
+/// data_type_or_implicit ::=
+///     data_type
+///     implicit_data_type
+/// ```
+#[moore_derive::visit]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataTypeOrImplicit<'a> {
+    /// An explicit data type.
+    Explicit(DataType<'a>),
+    /// An implicit data type.
+    Implicit(ImplicitDataType<'a>),
+}
+
+/// A variable dimension.
+///
+/// From §A.2.5:
+/// ```text
+/// unsized_dimension
+/// unpacked_dimension
+/// associative_dimension
+/// queue_dimension
+/// ```
+#[moore_derive::node]
+#[indefinite("variable dimension")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VarDim<'a> {
+    /// An unsized dimension, like `[]`.
+    Unsized,
+    /// An unpacked dimension.
+    Unpacked(UnpackedDim<'a>),
+    /// An associative dimension, like `[<type>]` or `[*]`.
+    Assoc(Option<Type<'a>>),
+    /// A queue dimension, like `[$]` or `[$:42]`.
+    Queue(Option<Expr<'a>>),
+}
+
+/// A packed dimension.
+///
+/// From §A.2.5:
+/// ```text
+/// "[" constant_range "]"
+/// unsized_dimension
+/// ```
+#[moore_derive::node]
+#[indefinite("packed dimension")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PackedDim<'a> {
+    /// Such as `[41:0]`.
+    Range(Expr<'a>, Expr<'a>),
+    /// Such as `[]`.
+    Unsized,
+}
+
+/// An unpacked dimension.
+///
+/// From §A.2.5:
+/// ```text
+/// "[" constant_range "]"
+/// "[" constant_expression "]"
+/// ```
+#[moore_derive::node]
+#[indefinite("unpacked dimension")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnpackedDim<'a> {
+    /// Such as `[41:0]`.
+    Range(Expr<'a>, Expr<'a>),
+    /// Such as `[42]`.
+    Expr(Expr<'a>),
+}
+
+/// A segment of a type name.
+///
+/// Adapted from §A.2.2.1:
+/// ```text
+/// path_segment ::=
+///     "$unit"
+///     package_identifier
+///     class_identifier (param_value_assignment)?
+///     type_identifier
+///     covergroup_identifier
+/// ```
+#[moore_derive::node]
+#[indefinite("type name segment")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PathSegment<'a> {
+    /// A `$unit`.
+    Unit,
+    /// A package, type, covergroup, or class identifier.
+    Ident(Spanned<Name>),
+    /// A class identifier with specializations.
+    Class(Spanned<Name>, Vec<ParamAssignment<'a>>),
 }
 
 moore_derive::derive_visitor!();
