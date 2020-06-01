@@ -516,7 +516,7 @@ pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx>
     }
 
     /// Make a struct type.
-    fn mkty_struct(&self, def_id: NodeId) -> Type<'gcx> {
+    fn mkty_struct(&self, def_id: NodeEnvId) -> Type<'gcx> {
         self.intern_type(TypeKind::Struct(def_id))
     }
 
@@ -827,7 +827,7 @@ pub(super) mod queries {
             /// Returns the node id of the corresponding struct definition, the
             /// index of the field that is actually being accessed, and the node
             /// id of the field definition.
-            fn resolve_field_access(node_id: NodeId, env: ParamEnv) -> Result<(NodeId, usize, NodeId)> {
+            fn resolve_field_access(node_id: NodeId, env: ParamEnv) -> Result<(NodeEnvId, usize, NodeEnvId)> {
                 type ResolveFieldAccessQuery;
                 use fn resolver::resolve_field_access;
             }

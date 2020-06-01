@@ -687,16 +687,11 @@ pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) 
         | TypeKind::BitScalar { .. } => cx.intern_value(make_int(ty, Zero::zero())),
         TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
         TypeKind::Struct(id) => {
-            let def = cx.struct_def(id).unwrap();
+            let def = cx.struct_def(id.id()).unwrap();
             let fields = def
                 .fields
                 .iter()
-                .map(|field| {
-                    type_default_value(
-                        cx,
-                        cx.map_to_type(field.ty, cx.default_param_env()).unwrap(),
-                    )
-                })
+                .map(|field| type_default_value(cx, cx.map_to_type(field.ty, id.env()).unwrap()))
                 .collect();
             cx.intern_value(make_struct(ty, fields))
         }

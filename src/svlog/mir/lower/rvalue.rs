@@ -675,7 +675,7 @@ fn pack_struct<'gcx>(
 
     // Get the field names and types.
     let def_id = value.ty.get_struct_def().unwrap();
-    let def = match builder.cx.struct_def(def_id) {
+    let def = match builder.cx.struct_def(def_id.id()) {
         Ok(d) => d,
         Err(()) => return builder.error(),
     };
@@ -759,7 +759,7 @@ fn unpack_struct<'gcx>(
 
     // Get the field names and types.
     let def_id = ty.get_struct_def().unwrap();
-    let def = match builder.cx.struct_def(def_id) {
+    let def = match builder.cx.struct_def(def_id.id()) {
         Ok(d) => d,
         Err(()) => return builder.error(),
     };
@@ -1012,7 +1012,7 @@ fn lower_struct_pattern<'gcx>(
 ) -> &'gcx Rvalue<'gcx> {
     // Determine the field names and types for the struct to be assembled.
     let def_id = ty.get_struct_def().unwrap();
-    let def = match builder.cx.struct_def(def_id) {
+    let def = match builder.cx.struct_def(def_id.id()) {
         Ok(d) => d,
         Err(()) => return builder.error(),
     };
@@ -1064,7 +1064,7 @@ fn lower_struct_pattern<'gcx>(
                                 DiagBuilder2::error(format!("`{}` member does not exist", name))
                                     .span(name.span)
                                     .add_note("Struct definition was here:")
-                                    .span(builder.cx.span(def_id)),
+                                    .span(builder.cx.span(def_id.id())),
                             );
                             failed = true;
                             continue;
@@ -1198,7 +1198,7 @@ fn lower_positional_pattern<'gcx>(
         TypeKind::PackedArray(len, _) => len,
         TypeKind::BitScalar { .. } => 1,
         TypeKind::BitVector { range, .. } => range.size,
-        TypeKind::Struct(def_id) => match builder.cx.struct_def(def_id) {
+        TypeKind::Struct(def_id) => match builder.cx.struct_def(def_id.id()) {
             Ok(d) => d.fields.len(),
             Err(()) => return builder.error(),
         },

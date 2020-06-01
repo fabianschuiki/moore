@@ -369,7 +369,7 @@ fn map_type_kind<'gcx>(
             let binding = cx.resolve_downwards_or_error(name, within)?;
             Ok(cx.mkty_named(name, binding.env(env)))
         }
-        hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id)),
+        hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id.env(env))),
         hir::TypeKind::PackedArray(ref inner, lhs, rhs) => {
             let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
                 match cx.constant_value_of(bound, env)?.kind {
@@ -937,7 +937,7 @@ fn self_determined_expr_type<'gcx>(
         // Member field accesses resolve to the type of the member.
         hir::ExprKind::Field(..) => Some(
             cx.resolve_field_access(expr.id, env)
-                .and_then(|(_, _, field_id)| cx.type_of(field_id, env))
+                .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
                 .unwrap_or(&ty::ERROR_TYPE),
         ),
 
@@ -1653,7 +1653,7 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
             // intermediate struct that distills patterns into proper
             // array/struct mappings, such that misalignments are
             // handled early on, and these type checks become easier.
-            let def = match cx.struct_def(def_id) {
+            let def = match cx.struct_def(def_id.id()) {
                 Ok(d) => d,
                 Err(()) => return Some((&ty::ERROR_TYPE).into()),
             };
@@ -1669,7 +1669,7 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
                 );
             }
             Some(
-                cx.map_to_type(def.fields[index].ty, env)
+                cx.map_to_type(def.fields[index].ty, def_id.env())
                     .unwrap_or(&ty::ERROR_TYPE)
                     .into(),
             )

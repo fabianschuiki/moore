@@ -340,6 +340,7 @@ pub struct StructDef {
 pub struct StructField {
     pub name: Spanned<Name>,
     pub ty: NodeId,
+    pub field: NodeId,
 }
 
 /// Obtain the details of a struct definition.
@@ -364,6 +365,7 @@ pub(crate) fn struct_def<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resu
             Ok(HirNode::VarDecl(vd)) => Some(StructField {
                 name: vd.name,
                 ty: vd.ty,
+                field: id,
             }),
             _ => None,
         })
@@ -379,7 +381,7 @@ pub(crate) fn resolve_field_access<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<(NodeId, usize, NodeId)> {
+) -> Result<(NodeEnvId, usize, NodeEnvId)> {
     let hir = match cx.hir_of(node_id)? {
         HirNode::Expr(x) => x,
         _ => unreachable!(),
@@ -412,7 +414,7 @@ pub(crate) fn resolve_field_access<'gcx>(
             return Err(());
         }
     };
-    let struct_fields = match cx.hir_of(struct_def)? {
+    let struct_fields = match cx.hir_of(struct_def.id())? {
         HirNode::Type(hir::Type {
             kind: hir::TypeKind::Struct(ref fields),
             ..
@@ -431,12 +433,12 @@ pub(crate) fn resolve_field_access<'gcx>(
                 DiagBuilder2::error(format!("{} has no field `{}`", hir.desc_full(), name))
                     .span(name.span())
                     .add_note(format!("{} is a struct defined here:", hir.desc_full()))
-                    .span(cx.span(struct_def)),
+                    .span(cx.span(struct_def.id())),
             );
             return Err(());
         }
     };
-    Ok((struct_def, index, struct_fields[index]))
+    Ok((struct_def, index, struct_fields[index].env(env)))
 }
 
 /// Resolve the fields in an assignment pattern.
@@ -454,7 +456,7 @@ pub(crate) fn resolve_pattern<'gcx>(
     match ty {
         &TypeKind::Named(_, _, &TypeKind::Struct(struct_id)) | &TypeKind::Struct(struct_id) => {
             trace!("struct pattern: defined at {:?}", struct_id);
-            let struct_fields = match cx.hir_of(struct_id)? {
+            let struct_fields = match cx.hir_of(struct_id.id())? {
                 HirNode::Type(hir::Type {
                     kind: hir::TypeKind::Struct(ref fields),
                     ..

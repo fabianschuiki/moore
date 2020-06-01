@@ -532,7 +532,7 @@ pub enum TypeKind<'t> {
     /// third field represents the actual type.
     Named(Spanned<Name>, NodeId, Type<'t>),
     /// A struct type.
-    Struct(NodeId),
+    Struct(NodeEnvId),
     /// A packed array type.
     PackedArray(usize, Type<'t>),
     /// A single bit type.
@@ -626,7 +626,7 @@ impl<'t> TypeKind<'t> {
     }
 
     /// Get the definition of a struct.
-    pub fn get_struct_def(&self) -> Option<NodeId> {
+    pub fn get_struct_def(&self) -> Option<NodeEnvId> {
         match *self.resolve_name() {
             TypeKind::Struct(id) => Some(id),
             _ => None,
@@ -943,7 +943,7 @@ impl<'t> TypeKind<'t> {
             TypeKind::Int(width, _) => Ok(width),
             TypeKind::Named(_, _, ty) => bit_size_of_type(cx, ty, env),
             TypeKind::Struct(struct_id) => {
-                let fields = match cx.hir_of(struct_id)? {
+                let fields = match cx.hir_of(struct_id.id())? {
                     HirNode::Type(hir::Type {
                         kind: hir::TypeKind::Struct(ref fields),
                         ..
@@ -952,7 +952,8 @@ impl<'t> TypeKind<'t> {
                 };
                 let mut size = 0;
                 for &field in fields {
-                    size += bit_size_of_type(cx, cx.type_of(field, env)?, env)?;
+                    size +=
+                        bit_size_of_type(cx, cx.type_of(field, struct_id.env())?, struct_id.env())?;
                 }
                 Ok(size)
             }
