@@ -256,7 +256,18 @@ pub struct StructType<'a> {
     /// Whether this is a `struct`, `union` or `union tagged`.
     pub kind: ast::StructKind,
     /// The list of members.
-    pub members: Vec<(Spanned<Name>, &'a ast::StructMember<'a>)>,
+    pub members: Vec<StructMember<'a>>,
+}
+
+/// A member of a struct type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StructMember<'a> {
+    /// The name.
+    pub name: Spanned<Name>,
+    /// The type.
+    pub ty: &'a UnpackedType<'a>,
+    /// The AST node of this member.
+    pub ast: &'a ast::StructMember<'a>,
 }
 
 /// An enum type.
@@ -270,6 +281,59 @@ pub struct EnumType<'a> {
     pub base_explicit: bool,
     /// The list of variants.
     pub variants: Vec<(Spanned<Name>, &'a ast::EnumName<'a>)>,
+}
+
+impl Display for PackedType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.core.format(
+            f,
+            if self.signing_explicit {
+                Some(self.signing)
+            } else {
+                None
+            },
+        )?;
+        if !self.dims.is_empty() {
+            write!(f, " ")?;
+            for dim in &self.dims {
+                write!(f, "{}", dim)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a> PackedCore<'a> {
+    /// Helper function to format this core packed type.
+    fn format(&self, f: &mut std::fmt::Formatter, signing: Option<Sign>) -> std::fmt::Result {
+        match self {
+            Self::Error => write!(f, "<error>"),
+            Self::IntVec(x) => {
+                write!(f, "{}", x)?;
+                if let Some(signing) = signing {
+                    write!(f, " {}", signing)?;
+                }
+                Ok(())
+            }
+            Self::IntAtom(x) => {
+                write!(f, "{}", x)?;
+                if let Some(signing) = signing {
+                    write!(f, " {}", signing)?;
+                }
+                Ok(())
+            }
+            Self::Struct(x) => x.format(f, true, signing),
+            Self::Enum(x) => write!(f, "{}", x),
+            Self::Named { name, .. } => write!(f, "{}", name),
+            Self::Ref { span, .. } => write!(f, "{}", span.extract()),
+        }
+    }
+}
+
+impl Display for PackedCore<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.format(f, None)
+    }
 }
 
 impl Display for PackedDim {
@@ -301,6 +365,147 @@ impl Display for IntAtomType {
             Self::Integer => write!(f, "integer"),
             Self::Time => write!(f, "time"),
         }
+    }
+}
+
+impl<'a> UnpackedType<'a> {
+    /// Check if this is a tombstone.
+    pub fn is_error(&self) -> bool {
+        self.core.is_error()
+    }
+
+    /// Resolve any references or names and return the fundamental type.
+    pub fn resolve(&self) -> &Self {
+        // TODO: This may require allocating additional types, since resolving
+        // may create a new type that combines the core's resolved type's dims
+        // with ours.
+        unimplemented!()
+    }
+
+    /// Helper function to format this type around a declaration name.
+    fn format_around(&self, f: &mut std::fmt::Formatter, around: impl Display) -> std::fmt::Result {
+        write!(f, "{} {}", self.core, around)?;
+        if !self.dims.is_empty() {
+            write!(f, " ")?;
+            for dim in &self.dims {
+                write!(f, "{}", dim)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Display for UnpackedType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.format_around(f, "$")
+    }
+}
+
+impl<'a> UnpackedCore<'a> {
+    /// Check if this is a tombstone.
+    pub fn is_error(&self) -> bool {
+        match self {
+            Self::Error => true,
+            Self::Named { ty, .. } | Self::Ref { ty, .. } => ty.is_error(),
+            _ => false,
+        }
+    }
+}
+
+impl Display for UnpackedCore<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Error => write!(f, "<error>"),
+            Self::Packed(x) => write!(f, "{}", x),
+            Self::Real(x) => write!(f, "{}", x),
+            Self::Struct(x) => x.format(f, false, None),
+            Self::String => write!(f, "string"),
+            Self::Chandle => write!(f, "chandle"),
+            Self::Event => write!(f, "event"),
+            Self::Named { name, .. } => write!(f, "{}", name),
+            Self::Ref { span, .. } => write!(f, "{}", span.extract()),
+        }
+    }
+}
+
+impl Display for UnpackedDim<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Unsized => write!(f, "[]"),
+            Self::Array(x) => write!(f, "{}", x),
+            Self::Range(x) => write!(f, "{}", x),
+            Self::Assoc(Some(x)) => write!(f, "[{}]", x),
+            Self::Assoc(None) => write!(f, "[*]"),
+            Self::Queue(Some(x)) => write!(f, "[$:{}]", x),
+            Self::Queue(None) => write!(f, "[$]"),
+        }
+    }
+}
+
+impl Display for RealType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::ShortReal => write!(f, "shortreal"),
+            Self::Real => write!(f, "real"),
+            Self::RealTime => write!(f, "realtime"),
+        }
+    }
+}
+
+impl<'a> StructType<'a> {
+    /// Helper function to format this struct.
+    fn format(
+        &self,
+        f: &mut std::fmt::Formatter,
+        packed: bool,
+        signing: Option<Sign>,
+    ) -> std::fmt::Result {
+        write!(f, "struct")?;
+        if packed {
+            write!(f, " packed")?;
+            if let Some(signing) = signing {
+                write!(f, " {}", signing)?;
+            }
+        }
+        write!(f, "{{ ")?;
+        for member in &self.members {
+            write!(f, "{}; ", member)?;
+        }
+        write!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl Display for StructType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.format(f, false, None)
+    }
+}
+
+impl Display for StructMember<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.ty.format_around(f, self.name)
+    }
+}
+
+impl Display for EnumType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "struct")?;
+        if self.base_explicit {
+            write!(f, " {}", self.base)?;
+        }
+        write!(f, "{{")?;
+        let mut first = true;
+        for (name, _) in &self.variants {
+            if !first {
+                write!(f, ",")?;
+            }
+            write!(f, " ")?;
+            first = false;
+            write!(f, "{}", name)?;
+        }
+        write!(f, " }}")?;
+        Ok(())
     }
 }
 

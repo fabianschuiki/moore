@@ -1754,6 +1754,17 @@ pub struct CastType<'a> {
     pub casts: Vec<(CastOp, Type<'a>)>,
 }
 
+/// A type resulting from a sequence of casts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CastType2<'a> {
+    /// The initial type before casting.
+    pub init: &'a ty::UnpackedType<'a>,
+    /// The final type after casting.
+    pub ty: &'a ty::UnpackedType<'a>,
+    /// The cast operations that lead to the result.
+    pub casts: Vec<(CastOp, &'a ty::UnpackedType<'a>)>,
+}
+
 /// A cast operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CastOp {
@@ -1799,6 +1810,39 @@ impl<'a> From<Type<'a>> for CastType<'a> {
 }
 
 impl std::fmt::Display for CastType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.init)?;
+        for (op, ty) in &self.casts {
+            write!(f, " -> {:?} {}", op, ty)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> CastType2<'a> {
+    /// Check if this cast type is a tombstone.
+    pub fn is_error(&self) -> bool {
+        self.ty.is_error()
+    }
+
+    /// Add a cast operation.
+    pub fn add_cast(&mut self, op: CastOp, ty: &'a ty::UnpackedType<'a>) {
+        self.casts.push((op, ty));
+        self.ty = ty;
+    }
+}
+
+impl<'a> From<&'a ty::UnpackedType<'a>> for CastType2<'a> {
+    fn from(ty: &'a ty::UnpackedType<'a>) -> CastType2<'a> {
+        CastType2 {
+            init: ty,
+            ty,
+            casts: vec![],
+        }
+    }
+}
+
+impl std::fmt::Display for CastType2<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.init)?;
         for (op, ty) in &self.casts {
