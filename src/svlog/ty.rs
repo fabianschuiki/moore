@@ -85,7 +85,8 @@
 //! two-valued, otherwise it is four-valued. Packed types can be domain-cast,
 //! which changes only their value domain.
 
-use crate::{crate_prelude::*, hir::HirNode, ParamEnv};
+use crate::crate_prelude::*;
+use crate::{common::arenas::TypedArena, hir::HirNode, ParamEnv};
 use std::fmt::{self, Display, Formatter};
 
 /// A packed type.
@@ -508,6 +509,47 @@ impl Display for EnumType<'_> {
         }
         write!(f, " }}")?;
         Ok(())
+    }
+}
+
+/// A container for type operations.
+pub trait TypeContext<'a> {
+    /// Internalize a packed type.
+    fn intern_packed(&self, ty: PackedType<'a>) -> &'a PackedType<'a>;
+
+    /// Internalize an unpacked type.
+    fn intern_unpacked(&self, ty: UnpackedType<'a>) -> &'a UnpackedType<'a>;
+}
+
+/// An arena that can internalize type data.
+#[derive(Default)]
+pub struct TypeStorage<'a> {
+    packed: TypedArena<PackedType<'a>>,
+    unpacked: TypedArena<UnpackedType<'a>>,
+}
+
+/// An object that has type storage.
+pub trait HasTypeStorage<'a> {
+    /// Get the type storage.
+    fn type_storage(&self) -> &'a TypeStorage<'a>;
+}
+
+impl<'a, T> TypeContext<'a> for T
+where
+    T: HasTypeStorage<'a>,
+{
+    fn intern_packed(&self, ty: PackedType<'a>) -> &'a PackedType<'a> {
+        self.type_storage().packed.alloc(ty)
+    }
+
+    fn intern_unpacked(&self, ty: UnpackedType<'a>) -> &'a UnpackedType<'a> {
+        self.type_storage().unpacked.alloc(ty)
+    }
+}
+
+impl<'a> HasTypeStorage<'a> for &'a TypeStorage<'a> {
+    fn type_storage(&self) -> &'a TypeStorage<'a> {
+        *self
     }
 }
 

@@ -213,6 +213,12 @@ impl<'gcx> QueryDatabase<'gcx> for GlobalContext<'gcx> {
     }
 }
 
+impl<'gcx> ty::HasTypeStorage<'gcx> for GlobalContext<'gcx> {
+    fn type_storage(&self) -> &'gcx ty::TypeStorage<'gcx> {
+        &self.arena.type_storage
+    }
+}
+
 /// The arenas that allocate things in the global context.
 ///
 /// Use this struct whenever you want to allocate or internalize
@@ -234,6 +240,8 @@ pub struct GlobalArenas<'t> {
     ast_types: TypedArena<ast::Type<'t>>,
     /// Additional AST expressions generated during HIR lowering.
     ast_exprs: TypedArena<ast::Expr<'t>>,
+    /// The underlying storage for type operations.
+    type_storage: ty::TypeStorage<'t>,
 }
 
 impl<'t> GlobalArenas<'t> {
@@ -312,7 +320,9 @@ pub struct GlobalTables<'t> {
 /// This trait represents the context within which most compiler operations take
 /// place. It is implemented by [`GlobalContext`] and also provides access to
 /// the global context via the `gcx()` method.
-pub trait BaseContext<'gcx>: salsa::Database + DiagEmitter + QueryDatabase<'gcx> {
+pub trait BaseContext<'gcx>:
+    salsa::Database + DiagEmitter + QueryDatabase<'gcx> + ty::HasTypeStorage<'gcx>
+{
     /// Get the global context.
     fn gcx(&self) -> &GlobalContext<'gcx>;
 
