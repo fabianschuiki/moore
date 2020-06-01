@@ -286,6 +286,17 @@ pub struct EnumType<'a> {
     pub variants: Vec<(Spanned<Name>, &'a ast::EnumName<'a>)>,
 }
 
+impl<'a> PackedType<'a> {
+    /// Create a tombstone.
+    pub fn new_error() -> &'a Self {
+        unsafe { std::mem::transmute(&ERROR_PACKED) }
+    }
+
+    /// Create a `logic` type.
+    pub fn new_logic() -> &'a Self {
+        unsafe { std::mem::transmute(&LOGIC_PACKED) }
+    }
+
 impl Display for PackedType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.core.format(
@@ -372,6 +383,16 @@ impl Display for IntAtomType {
 }
 
 impl<'a> UnpackedType<'a> {
+    /// Create a tombstone.
+    pub fn new_error() -> &'a Self {
+        unsafe { std::mem::transmute(&ERROR_UNPACKED) }
+    }
+
+    /// Create a `logic` type.
+    pub fn new_logic() -> &'a Self {
+        unsafe { std::mem::transmute(&LOGIC_UNPACKED) }
+    }
+
     /// Check if this is a tombstone.
     pub fn is_error(&self) -> bool {
         self.core.is_error()
@@ -552,6 +573,31 @@ impl<'a> HasTypeStorage<'a> for &'a TypeStorage<'a> {
         *self
     }
 }
+
+// Static fundamental types.
+static ERROR_PACKED: PackedType = PackedType {
+    core: PackedCore::Error,
+    signing: Sign::Unsigned,
+    signing_explicit: false,
+    dims: Vec::new(),
+};
+
+static ERROR_UNPACKED: UnpackedType = UnpackedType {
+    core: UnpackedCore::Error,
+    dims: Vec::new(),
+};
+
+static LOGIC_PACKED: PackedType = PackedType {
+    core: PackedCore::IntVec(IntVecType::Logic),
+    signing: Sign::Unsigned,
+    signing_explicit: false,
+    dims: Vec::new(),
+};
+
+static LOGIC_UNPACKED: UnpackedType = UnpackedType {
+    core: UnpackedCore::Packed(&LOGIC_PACKED),
+    dims: Vec::new(),
+};
 
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;
