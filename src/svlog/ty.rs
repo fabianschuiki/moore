@@ -266,8 +266,10 @@ pub struct StructMember<'a> {
     pub name: Spanned<Name>,
     /// The type.
     pub ty: &'a UnpackedType<'a>,
-    /// The AST node of this member.
-    pub ast: &'a ast::StructMember<'a>,
+    /// The AST node of the member declaration.
+    pub ast_member: &'a ast::StructMember<'a>,
+    /// The AST node of the member name.
+    pub ast_name: &'a ast::VarDeclName<'a>,
 }
 
 /// An enum type.
@@ -460,7 +462,7 @@ impl<'a> StructType<'a> {
         packed: bool,
         signing: Option<Sign>,
     ) -> std::fmt::Result {
-        write!(f, "struct")?;
+        write!(f, "{}", self.kind)?;
         if packed {
             write!(f, " packed")?;
             if let Some(signing) = signing {

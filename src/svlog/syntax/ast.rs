@@ -863,6 +863,16 @@ pub enum StructKind {
     TaggedUnion,
 }
 
+impl std::fmt::Display for StructKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Struct => write!(f, "struct"),
+            Self::Union => write!(f, "union"),
+            Self::TaggedUnion => write!(f, "union tagged"),
+        }
+    }
+}
+
 /// A struct field.
 ///
 /// For example the `byte foo;` in `struct packed { byte foo; }`.
