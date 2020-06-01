@@ -86,7 +86,7 @@
 //! which changes only their value domain.
 
 use crate::crate_prelude::*;
-use crate::{common::arenas::TypedArena, hir::HirNode, ParamEnv};
+use crate::{ast_map::AstNode, common::arenas::TypedArena, hir::HirNode, ParamEnv};
 use std::fmt::{self, Display, Formatter};
 
 /// A packed type.
@@ -297,6 +297,151 @@ impl<'a> PackedType<'a> {
         unsafe { std::mem::transmute(&LOGIC_PACKED) }
     }
 
+    /// Convert a legacy `Type` into a `PackedType`.
+    pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
+        cx.intern_packed(match *other {
+            TypeKind::Error => PackedType {
+                core: PackedCore::Error,
+                signing: Sign::Unsigned,
+                signing_explicit: false,
+                dims: vec![],
+            },
+            TypeKind::Time => PackedType {
+                core: PackedCore::IntAtom(IntAtomType::Time),
+                signing: Sign::Unsigned,
+                signing_explicit: false,
+                dims: vec![],
+            },
+            TypeKind::Bit(domain) => PackedType {
+                core: PackedCore::IntVec(match domain {
+                    Domain::TwoValued => IntVecType::Bit,
+                    Domain::FourValued => IntVecType::Logic,
+                }),
+                signing: Sign::Unsigned,
+                signing_explicit: false,
+                dims: vec![],
+            },
+            TypeKind::Int(width, domain) => PackedType {
+                core: PackedCore::IntVec(match domain {
+                    Domain::TwoValued => IntVecType::Bit,
+                    Domain::FourValued => IntVecType::Logic,
+                }),
+                signing: Sign::Unsigned,
+                signing_explicit: false,
+                dims: vec![PackedDim::Range(Range {
+                    size: width,
+                    dir: RangeDir::Down,
+                    offset: 0,
+                })],
+            },
+            TypeKind::Named(name, _, ty) => PackedType {
+                core: PackedCore::Named {
+                    name: name,
+                    ty: PackedType::from_legacy(cx, ty),
+                },
+                signing: Sign::Unsigned,
+                signing_explicit: false,
+                dims: vec![],
+            },
+            TypeKind::Struct(node_id) => {
+                let def = match cx.struct_def(node_id.id()) {
+                    Ok(x) => x,
+                    _ => return Self::new_error(),
+                };
+                assert!(def.packed);
+                let ast = match cx.ast_of(node_id.id()).unwrap() {
+                    AstNode::Type(ty) => match ty.kind.data {
+                        ast::StructType(ref s) => s,
+                        _ => unreachable!("type is not a struct"),
+                    },
+                    _ => unreachable!("invalid struct"),
+                };
+                let members = def
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        let (ast_name, ast_member) = match cx.ast_of(field.field).unwrap() {
+                            AstNode::StructMember(name, member, _) => (name, member),
+                            _ => unreachable!("invalid struct member"),
+                        };
+                        StructMember {
+                            name: field.name,
+                            ty: UnpackedType::from_legacy(
+                                cx,
+                                cx.map_to_type(field.ty, node_id.env()).unwrap(),
+                            ),
+                            ast_name,
+                            ast_member,
+                        }
+                    })
+                    .collect();
+                PackedType {
+                    core: PackedCore::Struct(StructType {
+                        ast,
+                        kind: ast.kind,
+                        members,
+                    }),
+                    signing: Sign::Unsigned,
+                    signing_explicit: false,
+                    dims: vec![],
+                }
+            }
+            TypeKind::PackedArray(size, ty) => {
+                let mut packed = PackedType::from_legacy(cx, ty).clone();
+                packed.dims.push(PackedDim::Range(Range {
+                    size: size,
+                    dir: RangeDir::Down,
+                    offset: 0,
+                }));
+                packed
+            }
+            TypeKind::BitScalar { domain, sign } => PackedType {
+                core: PackedCore::IntVec(match domain {
+                    Domain::TwoValued => IntVecType::Bit,
+                    Domain::FourValued => IntVecType::Logic,
+                }),
+                signing: sign,
+                signing_explicit: sign != Sign::Unsigned,
+                dims: vec![],
+            },
+            TypeKind::BitVector {
+                domain,
+                sign,
+                range,
+                dubbed,
+            } => {
+                let atom = match range.size {
+                    8 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::Byte),
+                    16 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::ShortInt),
+                    32 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::Int),
+                    32 if dubbed && domain == Domain::FourValued => Some(IntAtomType::Integer),
+                    64 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::LongInt),
+                    _ => None,
+                };
+                if let Some(atom) = atom {
+                    PackedType {
+                        core: PackedCore::IntAtom(atom),
+                        signing: sign,
+                        signing_explicit: sign != Sign::Signed,
+                        dims: vec![],
+                    }
+                } else {
+                    PackedType {
+                        core: PackedCore::IntVec(match domain {
+                            Domain::TwoValued => IntVecType::Bit,
+                            Domain::FourValued => IntVecType::Logic,
+                        }),
+                        signing: sign,
+                        signing_explicit: sign != Sign::Unsigned,
+                        dims: vec![PackedDim::Range(range)],
+                    }
+                }
+            }
+            TypeKind::Void => panic!("cannot convert {:?} to PackedType", other),
+        })
+    }
+}
+
 impl Display for PackedType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.core.format(
@@ -359,12 +504,37 @@ impl Display for PackedDim {
     }
 }
 
+impl IntVecType {
+    /// Get the domain for this type.
+    pub fn domain(&self) -> Domain {
+        match self {
+            Self::Bit => Domain::TwoValued,
+            Self::Logic => Domain::FourValued,
+            Self::Reg => Domain::FourValued,
+        }
+    }
+}
+
 impl Display for IntVecType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Bit => write!(f, "bit"),
             Self::Logic => write!(f, "logic"),
             Self::Reg => write!(f, "reg"),
+        }
+    }
+}
+
+impl IntAtomType {
+    /// Get the domain for this type.
+    pub fn domain(&self) -> Domain {
+        match self {
+            Self::Byte => Domain::TwoValued,
+            Self::ShortInt => Domain::TwoValued,
+            Self::Int => Domain::TwoValued,
+            Self::LongInt => Domain::TwoValued,
+            Self::Integer => Domain::FourValued,
+            Self::Time => Domain::TwoValued,
         }
     }
 }
@@ -393,6 +563,14 @@ impl<'a> UnpackedType<'a> {
         unsafe { std::mem::transmute(&LOGIC_UNPACKED) }
     }
 
+    /// Convert a legacy `Type` into an `UnpackedType`.
+    pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
+        cx.intern_unpacked(UnpackedType {
+            core: UnpackedCore::Packed(PackedType::from_legacy(cx, other)),
+            dims: vec![],
+        })
+    }
+
     /// Check if this is a tombstone.
     pub fn is_error(&self) -> bool {
         self.core.is_error()
@@ -407,8 +585,15 @@ impl<'a> UnpackedType<'a> {
     }
 
     /// Helper function to format this type around a declaration name.
-    fn format_around(&self, f: &mut std::fmt::Formatter, around: impl Display) -> std::fmt::Result {
-        write!(f, "{} {}", self.core, around)?;
+    fn format_around(
+        &self,
+        f: &mut std::fmt::Formatter,
+        around: Option<impl Display>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", self.core)?;
+        if let Some(around) = around {
+            write!(f, " {}", around)?;
+        }
         if !self.dims.is_empty() {
             write!(f, " ")?;
             for dim in &self.dims {
@@ -421,7 +606,14 @@ impl<'a> UnpackedType<'a> {
 
 impl Display for UnpackedType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.format_around(f, "$")
+        self.format_around(
+            f,
+            if self.dims.is_empty() {
+                None
+            } else {
+                Some("$")
+            },
+        )
     }
 }
 
@@ -508,13 +700,13 @@ impl Display for StructType<'_> {
 
 impl Display for StructMember<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.ty.format_around(f, self.name)
+        self.ty.format_around(f, Some(self.name))
     }
 }
 
 impl Display for EnumType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "struct")?;
+        write!(f, "enum")?;
         if self.base_explicit {
             write!(f, " {}", self.base)?;
         }
