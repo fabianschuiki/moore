@@ -87,6 +87,7 @@
 
 use crate::crate_prelude::*;
 use crate::{ast_map::AstNode, common::arenas::TypedArena, hir::HirNode, ParamEnv};
+use once_cell::sync::Lazy;
 use std::fmt::{self, Display, Formatter};
 
 /// A packed type.
@@ -289,11 +290,15 @@ pub struct EnumType<'a> {
 impl<'a> PackedType<'a> {
     /// Create a tombstone.
     pub fn new_error() -> &'a Self {
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
         unsafe { std::mem::transmute(&ERROR_PACKED) }
     }
 
     /// Create a `logic` type.
     pub fn new_logic() -> &'a Self {
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
         unsafe { std::mem::transmute(&LOGIC_PACKED) }
     }
 
@@ -555,11 +560,15 @@ impl Display for IntAtomType {
 impl<'a> UnpackedType<'a> {
     /// Create a tombstone.
     pub fn new_error() -> &'a Self {
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
         unsafe { std::mem::transmute(&ERROR_UNPACKED) }
     }
 
     /// Create a `logic` type.
     pub fn new_logic() -> &'a Self {
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
         unsafe { std::mem::transmute(&LOGIC_UNPACKED) }
     }
 
@@ -767,29 +776,29 @@ impl<'a> HasTypeStorage<'a> for &'a TypeStorage<'a> {
 }
 
 // Static fundamental types.
-static ERROR_PACKED: PackedType = PackedType {
+static ERROR_PACKED: Lazy<PackedType> = Lazy::new(|| PackedType {
     core: PackedCore::Error,
     signing: Sign::Unsigned,
     signing_explicit: false,
     dims: Vec::new(),
-};
+});
 
-static ERROR_UNPACKED: UnpackedType = UnpackedType {
+static ERROR_UNPACKED: Lazy<UnpackedType> = Lazy::new(|| UnpackedType {
     core: UnpackedCore::Error,
     dims: Vec::new(),
-};
+});
 
-static LOGIC_PACKED: PackedType = PackedType {
+static LOGIC_PACKED: Lazy<PackedType> = Lazy::new(|| PackedType {
     core: PackedCore::IntVec(IntVecType::Logic),
     signing: Sign::Unsigned,
     signing_explicit: false,
     dims: Vec::new(),
-};
+});
 
-static LOGIC_UNPACKED: UnpackedType = UnpackedType {
+static LOGIC_UNPACKED: Lazy<UnpackedType> = Lazy::new(|| UnpackedType {
     core: UnpackedCore::Packed(&LOGIC_PACKED),
     dims: Vec::new(),
-};
+});
 
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;

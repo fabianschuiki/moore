@@ -467,6 +467,7 @@ dependencies = [
  "moore-derive 0.10.0-dev",
  "moore-svlog-syntax 0.10.0-dev",
  "num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-hash 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "simple_logger 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
