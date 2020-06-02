@@ -101,6 +101,10 @@ pub struct PackedType<'a> {
     pub signing_explicit: bool,
     /// The packed dimensions.
     pub dims: Vec<PackedDim>,
+    /// This type with a one level of name/reference resolved.
+    resolved: Option<&'a Self>,
+    /// This type with all names/references recursively resolved.
+    resolved_full: Option<&'a Self>,
 }
 
 /// A core packed type.
@@ -342,6 +346,8 @@ impl<'a> PackedType<'a> {
             signing,
             signing_explicit,
             dims,
+            resolved: None,
+            resolved_full: None,
         }
     }
 
@@ -397,9 +403,54 @@ impl<'a> PackedType<'a> {
         unsafe { std::mem::transmute(&TYPE) }
     }
 
-    /// Internalize this type in a context.
-    pub fn intern(self, cx: &impl TypeContext<'a>) -> &'a Self {
+    /// Internalize this type in a context and resolve it.
+    pub fn intern(mut self, cx: &impl TypeContext<'a>) -> &'a Self {
+        let inner = match self.core {
+            PackedCore::Named { ty, .. } => Some(ty),
+            PackedCore::Ref { ty, .. } => Some(ty),
+            _ => None,
+        };
+        self.resolved = inner.map(|ty| self.apply_to_inner(cx, ty));
+        self.resolved_full = inner.map(|ty| self.apply_to_inner(cx, ty.resolve_full()));
+        if let Some(x) = self.resolved {
+            trace!("Type `{}` resolves to `{}`", self, x);
+        }
+        if let Some(x) = self.resolved_full {
+            trace!("Type `{}` fully resolves to `{}`", self, x);
+        }
         cx.intern_packed(self)
+    }
+
+    /// Apply the signing and dimensions to a core type that expanded to another
+    /// type.
+    fn apply_to_inner(&self, cx: &impl TypeContext<'a>, inner: &'a Self) -> &'a Self {
+        if self.dims.is_empty()
+            && self.signing == inner.signing
+            && self.signing_explicit == inner.signing_explicit
+        {
+            return inner;
+        }
+        let mut out = inner.clone();
+        out.dims.extend(self.dims.iter().cloned());
+        out.signing = self.signing;
+        out.signing_explicit = self.signing_explicit;
+        out.intern(cx)
+    }
+
+    /// Resolve one level of name or type reference indirection.
+    ///
+    /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
+    /// to `foo`.
+    pub fn resolve(&self) -> &Self {
+        self.resolved.unwrap_or(self)
+    }
+
+    /// Resolve all name or type reference indirections recursively.
+    ///
+    /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
+    /// to `int`.
+    pub fn resolve_full(&self) -> &Self {
+        self.resolved_full.unwrap_or(self)
     }
 
     /// Convert a legacy `Type` into a `PackedType`.
