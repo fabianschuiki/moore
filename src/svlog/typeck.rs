@@ -1724,7 +1724,7 @@ impl<'a> TypeContext2<'a> {
             // This transmute should actually not be needed. Not sure why the
             // static lifetime of LOGIC_UNPACKED does not suffice. Maybe some
             // trouble with `Cell`s in the AST?
-            TypeContext2::Bool => ty::UnpackedType::new_logic(),
+            TypeContext2::Bool => ty::UnpackedType::make_logic(),
         }
     }
 

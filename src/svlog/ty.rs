@@ -288,18 +288,118 @@ pub struct EnumType<'a> {
 }
 
 impl<'a> PackedType<'a> {
+    /// Create a new type with default signing and no packed dimensions.
+    ///
+    /// This creates the type on the stack. In general you will want to use the
+    /// `make_*` functions to create a type that is interned into a context.
+    pub fn new(core: impl Into<PackedCore<'a>>) -> Self {
+        Self::with_dims(core, vec![])
+    }
+
+    /// Create a new type with default signing and packed dimensions.
+    ///
+    /// This creates the type on the stack. In general you will want to use the
+    /// `make_*` functions to create a type that is interned into a context.
+    pub fn with_dims(core: impl Into<PackedCore<'a>>, dims: Vec<PackedDim>) -> Self {
+        let core = core.into();
+        let signing = match &core {
+            PackedCore::IntAtom(IntAtomType::Time)
+            | PackedCore::IntVec(_)
+            | PackedCore::Error
+            | PackedCore::Struct(_)
+            | PackedCore::Enum(_)
+            | PackedCore::Named { .. }
+            | PackedCore::Ref { .. } => Sign::Unsigned,
+            PackedCore::IntAtom(_) => Sign::Signed,
+        };
+        Self::with_signing_and_dims(core, signing, false, dims)
+    }
+
+    /// Create a new type with no packed dimensions.
+    ///
+    /// This creates the type on the stack. In general you will want to use the
+    /// `make_*` functions to create a type that is interned into a context.
+    pub fn with_signing(
+        core: impl Into<PackedCore<'a>>,
+        signing: Sign,
+        signing_explicit: bool,
+    ) -> Self {
+        Self::with_signing_and_dims(core, signing, signing_explicit, vec![])
+    }
+
+    /// Create a new type with packed dimensions.
+    ///
+    /// This creates the type on the stack. In general you will want to use the
+    /// `make_*` functions to create a type that is interned into a context.
+    pub fn with_signing_and_dims(
+        core: impl Into<PackedCore<'a>>,
+        signing: Sign,
+        signing_explicit: bool,
+        dims: Vec<PackedDim>,
+    ) -> Self {
+        Self {
+            core: core.into(),
+            signing,
+            signing_explicit,
+            dims,
+        }
+    }
+
+    /// Create an interned type with default signing and no packed dimensions.
+    pub fn make(cx: &impl TypeContext<'a>, core: impl Into<PackedCore<'a>>) -> &'a Self {
+        cx.intern_packed(Self::new(core))
+    }
+
+    /// Create an interned type with default signing and packed dimensions.
+    pub fn make_dims(
+        cx: &impl TypeContext<'a>,
+        core: impl Into<PackedCore<'a>>,
+        dims: Vec<PackedDim>,
+    ) -> &'a Self {
+        cx.intern_packed(Self::with_dims(core, dims))
+    }
+
+    /// Create an interned type with no packed dimensions.
+    pub fn make_signing(
+        cx: &impl TypeContext<'a>,
+        core: impl Into<PackedCore<'a>>,
+        signing: Sign,
+        signing_explicit: bool,
+    ) -> &'a Self {
+        cx.intern_packed(Self::with_signing(core, signing, signing_explicit))
+    }
+
+    /// Create an interned type with packed dimensions.
+    pub fn make_signing_and_dims(
+        cx: &impl TypeContext<'a>,
+        core: impl Into<PackedCore<'a>>,
+        signing: Sign,
+        signing_explicit: bool,
+        dims: Vec<PackedDim>,
+    ) -> &'a Self {
+        cx.intern_packed(Self::with_signing_and_dims(
+            core,
+            signing,
+            signing_explicit,
+            dims,
+        ))
+    }
+
     /// Create a tombstone.
-    pub fn new_error() -> &'a Self {
+    pub fn make_error() -> &'a Self {
+        static TYPE: Lazy<PackedType> = Lazy::new(|| PackedType::new(PackedCore::Error));
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&ERROR_PACKED) }
+        unsafe { std::mem::transmute(&TYPE) }
     }
 
     /// Create a `logic` type.
-    pub fn new_logic() -> &'a Self {
+    pub fn make_logic() -> &'a Self {
+        static TYPE: Lazy<PackedType> =
+            Lazy::new(|| PackedType::new(PackedCore::IntVec(IntVecType::Logic)));
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&LOGIC_PACKED) }
+        unsafe { std::mem::transmute(&TYPE) }
     }
 
     /// Convert a legacy `Type` into a `PackedType`.
@@ -351,7 +451,7 @@ impl<'a> PackedType<'a> {
             TypeKind::Struct(node_id) => {
                 let def = match cx.struct_def(node_id.id()) {
                     Ok(x) => x,
-                    _ => return Self::new_error(),
+                    _ => return Self::make_error(),
                 };
                 assert!(def.packed);
                 let ast = match cx.ast_of(node_id.id()).unwrap() {
@@ -582,26 +682,58 @@ impl Display for IntAtomType {
 }
 
 impl<'a> UnpackedType<'a> {
+    /// Create a new type with no unpacked dimensions.
+    ///
+    /// This creates the type on the stack. In general you will want to use the
+    /// `make_*` functions to create a type that is interned into a context.
+    pub fn new(core: impl Into<UnpackedCore<'a>>) -> Self {
+        Self::with_dims(core, vec![])
+    }
+
+    /// Create a new type with unpacked dimensions.
+    ///
+    /// This creates the type on the stack. In general you will want to use the
+    /// `make_*` functions to create a type that is interned into a context.
+    pub fn with_dims(core: impl Into<UnpackedCore<'a>>, dims: Vec<UnpackedDim<'a>>) -> Self {
+        Self {
+            core: core.into(),
+            dims,
+        }
+    }
+
+    /// Create an interned type with no unpacked dimensions.
+    pub fn make(cx: &impl TypeContext<'a>, core: impl Into<UnpackedCore<'a>>) -> &'a Self {
+        Self::make_dims(cx, core, vec![])
+    }
+
+    /// Create an interned type with unpacked dimensions.
+    pub fn make_dims(
+        cx: &impl TypeContext<'a>,
+        core: impl Into<UnpackedCore<'a>>,
+        dims: Vec<UnpackedDim<'a>>,
+    ) -> &'a Self {
+        cx.intern_unpacked(Self::with_dims(core, dims))
+    }
+
     /// Create a tombstone.
-    pub fn new_error() -> &'a Self {
+    pub fn make_error() -> &'a Self {
+        static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(UnpackedCore::Error));
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&ERROR_UNPACKED) }
+        unsafe { std::mem::transmute(&TYPE) }
     }
 
     /// Create a `logic` type.
-    pub fn new_logic() -> &'a Self {
+    pub fn make_logic() -> &'a Self {
+        static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(PackedType::make_logic()));
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&LOGIC_UNPACKED) }
+        unsafe { std::mem::transmute(&TYPE) }
     }
 
     /// Convert a legacy `Type` into an `UnpackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
-        cx.intern_unpacked(UnpackedType {
-            core: UnpackedCore::Packed(PackedType::from_legacy(cx, other)),
-            dims: vec![],
-        })
+        Self::make(cx, PackedType::from_legacy(cx, other))
     }
 
     /// Check if this is a tombstone.
@@ -816,31 +948,6 @@ impl<'a> HasTypeStorage<'a> for &'a TypeStorage<'a> {
         *self
     }
 }
-
-// Static fundamental types.
-static ERROR_PACKED: Lazy<PackedType> = Lazy::new(|| PackedType {
-    core: PackedCore::Error,
-    signing: Sign::Unsigned,
-    signing_explicit: false,
-    dims: Vec::new(),
-});
-
-static ERROR_UNPACKED: Lazy<UnpackedType> = Lazy::new(|| UnpackedType {
-    core: UnpackedCore::Error,
-    dims: Vec::new(),
-});
-
-static LOGIC_PACKED: Lazy<PackedType> = Lazy::new(|| PackedType {
-    core: PackedCore::IntVec(IntVecType::Logic),
-    signing: Sign::Unsigned,
-    signing_explicit: false,
-    dims: Vec::new(),
-});
-
-static LOGIC_UNPACKED: Lazy<UnpackedType> = Lazy::new(|| UnpackedType {
-    core: UnpackedCore::Packed(&LOGIC_PACKED),
-    dims: Vec::new(),
-});
 
 /// A verilog type.
 pub type Type<'t> = &'t TypeKind<'t>;
