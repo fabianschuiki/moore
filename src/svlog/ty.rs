@@ -347,7 +347,7 @@ impl<'a> PackedType<'a> {
 
     /// Create an interned type with default signing and no packed dimensions.
     pub fn make(cx: &impl TypeContext<'a>, core: impl Into<PackedCore<'a>>) -> &'a Self {
-        cx.intern_packed(Self::new(core))
+        Self::new(core).intern(cx)
     }
 
     /// Create an interned type with default signing and packed dimensions.
@@ -356,7 +356,7 @@ impl<'a> PackedType<'a> {
         core: impl Into<PackedCore<'a>>,
         dims: Vec<PackedDim>,
     ) -> &'a Self {
-        cx.intern_packed(Self::with_dims(core, dims))
+        Self::with_dims(core, dims).intern(cx)
     }
 
     /// Create an interned type with no packed dimensions.
@@ -366,7 +366,7 @@ impl<'a> PackedType<'a> {
         signing: Sign,
         signing_explicit: bool,
     ) -> &'a Self {
-        cx.intern_packed(Self::with_signing(core, signing, signing_explicit))
+        Self::with_signing(core, signing, signing_explicit).intern(cx)
     }
 
     /// Create an interned type with packed dimensions.
@@ -377,12 +377,7 @@ impl<'a> PackedType<'a> {
         signing_explicit: bool,
         dims: Vec<PackedDim>,
     ) -> &'a Self {
-        cx.intern_packed(Self::with_signing_and_dims(
-            core,
-            signing,
-            signing_explicit,
-            dims,
-        ))
+        Self::with_signing_and_dims(core, signing, signing_explicit, dims).intern(cx)
     }
 
     /// Create a tombstone.
@@ -402,52 +397,42 @@ impl<'a> PackedType<'a> {
         unsafe { std::mem::transmute(&TYPE) }
     }
 
+    /// Internalize this type in a context.
+    pub fn intern(self, cx: &impl TypeContext<'a>) -> &'a Self {
+        cx.intern_packed(self)
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
-        cx.intern_packed(match *other {
-            TypeKind::Error => PackedType {
-                core: PackedCore::Error,
-                signing: Sign::Unsigned,
-                signing_explicit: false,
-                dims: vec![],
-            },
-            TypeKind::Time => PackedType {
-                core: PackedCore::IntAtom(IntAtomType::Time),
-                signing: Sign::Unsigned,
-                signing_explicit: false,
-                dims: vec![],
-            },
-            TypeKind::Bit(domain) => PackedType {
-                core: PackedCore::IntVec(match domain {
+        match *other {
+            TypeKind::Error => PackedType::make_error(),
+            TypeKind::Time => PackedType::make(cx, IntAtomType::Time),
+            TypeKind::Bit(domain) => PackedType::make(
+                cx,
+                match domain {
                     Domain::TwoValued => IntVecType::Bit,
                     Domain::FourValued => IntVecType::Logic,
-                }),
-                signing: Sign::Unsigned,
-                signing_explicit: false,
-                dims: vec![],
-            },
-            TypeKind::Int(width, domain) => PackedType {
-                core: PackedCore::IntVec(match domain {
+                },
+            ),
+            TypeKind::Int(width, domain) => PackedType::make_dims(
+                cx,
+                match domain {
                     Domain::TwoValued => IntVecType::Bit,
                     Domain::FourValued => IntVecType::Logic,
-                }),
-                signing: Sign::Unsigned,
-                signing_explicit: false,
-                dims: vec![PackedDim::Range(Range {
+                },
+                vec![PackedDim::Range(Range {
                     size: width,
                     dir: RangeDir::Down,
                     offset: 0,
                 })],
-            },
-            TypeKind::Named(name, _, ty) => PackedType {
-                core: PackedCore::Named {
+            ),
+            TypeKind::Named(name, _, ty) => PackedType::make(
+                cx,
+                PackedCore::Named {
                     name: name,
                     ty: PackedType::from_legacy(cx, ty),
                 },
-                signing: Sign::Unsigned,
-                signing_explicit: false,
-                dims: vec![],
-            },
+            ),
             TypeKind::Struct(node_id) => {
                 let def = match cx.struct_def(node_id.id()) {
                     Ok(x) => x,
@@ -480,16 +465,14 @@ impl<'a> PackedType<'a> {
                         }
                     })
                     .collect();
-                PackedType {
-                    core: PackedCore::Struct(StructType {
+                PackedType::make(
+                    cx,
+                    StructType {
                         ast,
                         kind: ast.kind,
                         members,
-                    }),
-                    signing: Sign::Unsigned,
-                    signing_explicit: false,
-                    dims: vec![],
-                }
+                    },
+                )
             }
             TypeKind::PackedArray(size, ty) => {
                 let mut packed = PackedType::from_legacy(cx, ty).clone();
@@ -498,17 +481,17 @@ impl<'a> PackedType<'a> {
                     dir: RangeDir::Down,
                     offset: 0,
                 }));
-                packed
+                packed.intern(cx)
             }
-            TypeKind::BitScalar { domain, sign } => PackedType {
-                core: PackedCore::IntVec(match domain {
+            TypeKind::BitScalar { domain, sign } => PackedType::make_signing(
+                cx,
+                match domain {
                     Domain::TwoValued => IntVecType::Bit,
                     Domain::FourValued => IntVecType::Logic,
-                }),
-                signing: sign,
-                signing_explicit: sign != Sign::Unsigned,
-                dims: vec![],
-            },
+                },
+                sign,
+                sign != Sign::Unsigned,
+            ),
             TypeKind::BitVector {
                 domain,
                 sign,
@@ -524,26 +507,22 @@ impl<'a> PackedType<'a> {
                     _ => None,
                 };
                 if let Some(atom) = atom {
-                    PackedType {
-                        core: PackedCore::IntAtom(atom),
-                        signing: sign,
-                        signing_explicit: sign != Sign::Signed,
-                        dims: vec![],
-                    }
+                    PackedType::make_signing(cx, atom, sign, sign != Sign::Signed)
                 } else {
-                    PackedType {
-                        core: PackedCore::IntVec(match domain {
+                    PackedType::make_signing_and_dims(
+                        cx,
+                        match domain {
                             Domain::TwoValued => IntVecType::Bit,
                             Domain::FourValued => IntVecType::Logic,
-                        }),
-                        signing: sign,
-                        signing_explicit: sign != Sign::Unsigned,
-                        dims: vec![PackedDim::Range(range)],
-                    }
+                        },
+                        sign,
+                        sign != Sign::Unsigned,
+                        vec![PackedDim::Range(range)],
+                    )
                 }
             }
             TypeKind::Void => panic!("cannot convert {:?} to PackedType", other),
-        })
+        }
     }
 }
 
