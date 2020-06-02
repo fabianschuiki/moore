@@ -625,6 +625,11 @@ fn lower_cast<'gcx>(
                     );
                 }
             }
+            CastOp::PackSBVT | CastOp::UnpackSBVT => bug_span!(
+                value.span,
+                builder.cx,
+                "packing/unpacking SBVT not yet implemented"
+            ),
         }
         if !ty::identical(value.ty, to) {
             error!(
