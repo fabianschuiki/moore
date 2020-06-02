@@ -509,6 +509,37 @@ impl<'a> PackedType<'a> {
         Some(size)
     }
 
+    /// Check if this type is trivially a SBVT.
+    pub fn is_simple_bit_vector(&self) -> bool {
+        match self.core {
+            PackedCore::IntVec(..) => self.dims.len() == 0 || self.dims.len() == 1,
+            _ => false,
+        }
+    }
+
+    /// Convert this type into an SBVT if possible.
+    pub fn get_simple_bit_vector(&self, cx: &impl TypeContext<'a>) -> Option<&PackedType<'a>> {
+        if self.is_simple_bit_vector() {
+            Some(self)
+        } else {
+            let ty = self.resolve_full();
+            Some(Self::make_signing_and_dims(
+                cx,
+                match ty.domain() {
+                    Domain::TwoValued => IntVecType::Bit,
+                    Domain::FourValued => IntVecType::Logic,
+                },
+                ty.signing,
+                ty.signing_explicit,
+                vec![PackedDim::Range(Range {
+                    size: ty.get_bit_size()?,
+                    dir: RangeDir::Down,
+                    offset: 0,
+                })],
+            ))
+        }
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -952,6 +983,20 @@ impl<'a> UnpackedType<'a> {
             }
         }
         Some(size)
+    }
+
+    /// Check if this type is trivially a SBVT.
+    pub fn is_simple_bit_vector(&self) -> bool {
+        self.get_packed()
+            .map(|ty| ty.is_simple_bit_vector())
+            .unwrap_or(false)
+    }
+
+    /// Convert this type into an SBVT if possible.
+    pub fn get_simple_bit_vector(&self, cx: &impl TypeContext<'a>) -> Option<&'a PackedType<'a>> {
+        self.resolve_full()
+            .get_packed()
+            .and_then(|ty| ty.get_simple_bit_vector(cx))
     }
 
     /// Convert a legacy `Type` into an `UnpackedType`.
