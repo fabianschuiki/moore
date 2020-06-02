@@ -661,6 +661,24 @@ impl<'a> UnpackedCore<'a> {
     }
 }
 
+impl<'a> From<&'a PackedType<'a>> for UnpackedCore<'a> {
+    fn from(inner: &'a PackedType<'a>) -> Self {
+        Self::Packed(inner)
+    }
+}
+
+impl<'a> From<RealType> for UnpackedCore<'a> {
+    fn from(inner: RealType) -> Self {
+        Self::Real(inner)
+    }
+}
+
+impl<'a> From<StructType<'a>> for UnpackedCore<'a> {
+    fn from(inner: StructType<'a>) -> Self {
+        Self::Struct(inner)
+    }
+}
+
 impl Display for UnpackedCore<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
