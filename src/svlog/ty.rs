@@ -101,7 +101,7 @@ pub struct PackedType<'a> {
     pub signing_explicit: bool,
     /// The packed dimensions.
     pub dims: Vec<PackedDim>,
-    /// This type with a one level of name/reference resolved.
+    /// This type with one level of name/reference resolved.
     resolved: Option<&'a Self>,
     /// This type with all names/references recursively resolved.
     resolved_full: Option<&'a Self>,
@@ -184,6 +184,10 @@ pub struct UnpackedType<'a> {
     pub core: UnpackedCore<'a>,
     /// The unpacked dimensions.
     pub dims: Vec<UnpackedDim<'a>>,
+    /// This type with one level of name/reference resolved.
+    resolved: Option<&'a Self>,
+    /// This type with all names/references recursively resolved.
+    resolved_full: Option<&'a Self>,
 }
 
 /// A core unpacked type.
@@ -728,6 +732,8 @@ impl<'a> UnpackedType<'a> {
         Self {
             core: core.into(),
             dims,
+            resolved: None,
+            resolved_full: None,
         }
     }
 
@@ -761,6 +767,57 @@ impl<'a> UnpackedType<'a> {
         unsafe { std::mem::transmute(&TYPE) }
     }
 
+    /// Internalize this type in a context and resolve it.
+    pub fn intern(mut self, cx: &impl TypeContext<'a>) -> &'a Self {
+        let inner = match self.core {
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => {
+                (Some(ty), Some(ty.resolve_full()))
+            }
+            UnpackedCore::Packed(ty) => (
+                ty.resolved.map(|ty| UnpackedType::make(cx, ty)),
+                ty.resolved_full
+                    .map(|ty| UnpackedType::make(cx, ty).resolve_full()),
+            ),
+            _ => (None, None),
+        };
+        self.resolved = inner.0.map(|ty| self.apply_to_inner(cx, ty));
+        self.resolved_full = inner.1.map(|ty| self.apply_to_inner(cx, ty));
+        if let Some(x) = self.resolved {
+            trace!("Type `{}` resolves to `{}`", self, x);
+        }
+        if let Some(x) = self.resolved_full {
+            trace!("Type `{}` fully resolves to `{}`", self, x);
+        }
+        cx.intern_unpacked(self)
+    }
+
+    /// Apply the signing and dimensions to a core type that expanded to another
+    /// type.
+    fn apply_to_inner(&self, cx: &impl TypeContext<'a>, inner: &'a Self) -> &'a Self {
+        if self.dims.is_empty() {
+            return inner;
+        }
+        let mut out = inner.clone();
+        out.dims.extend(self.dims.iter().cloned());
+        out.intern(cx)
+    }
+
+    /// Resolve one level of name or type reference indirection.
+    ///
+    /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
+    /// to `foo`.
+    pub fn resolve(&self) -> &Self {
+        self.resolved.unwrap_or(self)
+    }
+
+    /// Resolve all name or type reference indirections recursively.
+    ///
+    /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
+    /// to `int`.
+    pub fn resolve_full(&self) -> &Self {
+        self.resolved_full.unwrap_or(self)
+    }
+
     /// Convert a legacy `Type` into an `UnpackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         Self::make(cx, PackedType::from_legacy(cx, other))
@@ -769,14 +826,6 @@ impl<'a> UnpackedType<'a> {
     /// Check if this is a tombstone.
     pub fn is_error(&self) -> bool {
         self.core.is_error()
-    }
-
-    /// Resolve any references or names and return the fundamental type.
-    pub fn resolve(&self) -> &Self {
-        // TODO: This may require allocating additional types, since resolving
-        // may create a new type that combines the core's resolved type's dims
-        // with ours.
-        unimplemented!()
     }
 
     /// Helper function to format this type around a declaration name.
