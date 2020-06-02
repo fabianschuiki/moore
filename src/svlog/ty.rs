@@ -441,6 +441,11 @@ impl<'a> PackedType<'a> {
         out.intern(cx)
     }
 
+    /// Wrap this packed type up in an unpacked type.
+    pub fn to_unpacked(&'a self, cx: &impl TypeContext<'a>) -> &'a UnpackedType<'a> {
+        UnpackedType::make(cx, self)
+    }
+
     /// Resolve one level of name or type reference indirection.
     ///
     /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
@@ -897,6 +902,14 @@ impl<'a> UnpackedType<'a> {
     /// types being identical differs from Rust's notion of equality.
     pub fn is_identical(&self, other: &Self) -> bool {
         self == other
+    }
+
+    /// If this type is strictly a packed type, convert it.
+    pub fn get_packed(&self) -> Option<&'a PackedType<'a>> {
+        match self.core {
+            UnpackedCore::Packed(inner) if self.dims.is_empty() => Some(inner),
+            _ => None,
+        }
     }
 
     /// Get the domain for this type.
