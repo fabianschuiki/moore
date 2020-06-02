@@ -462,6 +462,14 @@ impl<'a> PackedType<'a> {
         self.core.is_error()
     }
 
+    /// Check if this type is equal to another one.
+    ///
+    /// This function is provided for future expansion if we determine that
+    /// types being identical differs from Rust's notion of equality.
+    pub fn is_identical(&self, other: &Self) -> bool {
+        self == other
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -835,6 +843,14 @@ impl<'a> UnpackedType<'a> {
     /// Check if this is a tombstone.
     pub fn is_error(&self) -> bool {
         self.core.is_error()
+    }
+
+    /// Check if this type is equal to another one.
+    ///
+    /// This function is provided for future expansion if we determine that
+    /// types being identical differs from Rust's notion of equality.
+    pub fn is_identical(&self, other: &Self) -> bool {
+        self == other
     }
 
     /// Convert a legacy `Type` into an `UnpackedType`.
