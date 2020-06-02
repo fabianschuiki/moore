@@ -482,6 +482,28 @@ impl<'a> PackedType<'a> {
         }
     }
 
+    /// Compute the size of this type in bits.
+    ///
+    /// Returns `None` if one of the type's dimensions is `[]`.
+    pub fn get_bit_size(&self) -> Option<usize> {
+        let ty = self.resolve_full();
+        let mut size = match &ty.core {
+            PackedCore::Error => 0,
+            PackedCore::IntVec(..) => 1,
+            PackedCore::IntAtom(x) => x.bit_size(),
+            PackedCore::Struct(x) => x.get_bit_size()?,
+            PackedCore::Enum(x) => x.base.get_bit_size()?,
+            PackedCore::Named { ty, .. } | PackedCore::Ref { ty, .. } => ty.get_bit_size()?,
+        };
+        for &dim in &self.dims {
+            match dim {
+                PackedDim::Unsized => return None,
+                PackedDim::Range(r) => size *= r.size,
+            }
+        }
+        Some(size)
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -734,6 +756,18 @@ impl IntAtomType {
             Self::Time => Domain::TwoValued,
         }
     }
+
+    /// Compute the size of this type.
+    pub fn bit_size(&self) -> usize {
+        match self {
+            Self::Byte => 8,
+            Self::ShortInt => 16,
+            Self::Int => 32,
+            Self::LongInt => 64,
+            Self::Integer => 32,
+            Self::Time => 64,
+        }
+    }
 }
 
 impl Display for IntAtomType {
@@ -879,6 +913,34 @@ impl<'a> UnpackedType<'a> {
         }
     }
 
+    /// Compute the size of this type in bits.
+    ///
+    /// Returns `None` if one of the type's dimensions is unsized, associative,
+    /// or a queue, or the core type has no known size.
+    pub fn get_bit_size(&self) -> Option<usize> {
+        let ty = self.resolve_full();
+        let mut size = match &ty.core {
+            UnpackedCore::Packed(x) => x.get_bit_size()?,
+            UnpackedCore::Real(x) => x.bit_size(),
+            UnpackedCore::Struct(x) => x.get_bit_size()?,
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_bit_size()?,
+            UnpackedCore::Error
+            | UnpackedCore::String
+            | UnpackedCore::Chandle
+            | UnpackedCore::Event => return None,
+        };
+        for &dim in &self.dims {
+            match dim {
+                UnpackedDim::Array(r) => size *= r,
+                UnpackedDim::Range(r) => size *= r.size,
+                UnpackedDim::Unsized | UnpackedDim::Assoc(..) | UnpackedDim::Queue(..) => {
+                    return None
+                }
+            }
+        }
+        Some(size)
+    }
+
     /// Convert a legacy `Type` into an `UnpackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         Self::make(cx, PackedType::from_legacy(cx, other))
@@ -977,6 +1039,17 @@ impl Display for UnpackedDim<'_> {
     }
 }
 
+impl RealType {
+    /// Compute the size of this type.
+    pub fn bit_size(&self) -> usize {
+        match self {
+            Self::ShortReal => 32,
+            Self::Real => 64,
+            Self::RealTime => 64,
+        }
+    }
+}
+
 impl Display for RealType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -998,6 +1071,17 @@ impl<'a> StructType<'a> {
             true => Domain::FourValued,
             false => Domain::TwoValued,
         }
+    }
+
+    /// Compute the size of this struct in bits.
+    ///
+    /// Returns `None` if any member of the type has a `[]` dimension.
+    pub fn get_bit_size(&self) -> Option<usize> {
+        let mut size = 0;
+        for m in &self.members {
+            size += m.ty.get_bit_size()?;
+        }
+        Some(size)
     }
 
     /// Helper function to format this struct.
