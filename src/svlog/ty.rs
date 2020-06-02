@@ -470,6 +470,18 @@ impl<'a> PackedType<'a> {
         self == other
     }
 
+    /// Get the domain for this type.
+    pub fn domain(&self) -> Domain {
+        match &self.core {
+            PackedCore::Error => Domain::TwoValued,
+            PackedCore::IntVec(x) => x.domain(),
+            PackedCore::IntAtom(x) => x.domain(),
+            PackedCore::Struct(x) => x.domain(),
+            PackedCore::Enum(x) => x.base.domain(),
+            PackedCore::Named { ty, .. } | PackedCore::Ref { ty, .. } => ty.domain(),
+        }
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -853,6 +865,20 @@ impl<'a> UnpackedType<'a> {
         self == other
     }
 
+    /// Get the domain for this type.
+    pub fn domain(&self) -> Domain {
+        match &self.core {
+            UnpackedCore::Packed(x) => x.domain(),
+            UnpackedCore::Struct(x) => x.domain(),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.domain(),
+            UnpackedCore::Error
+            | UnpackedCore::Real(_)
+            | UnpackedCore::String
+            | UnpackedCore::Chandle
+            | UnpackedCore::Event => Domain::TwoValued,
+        }
+    }
+
     /// Convert a legacy `Type` into an `UnpackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         Self::make(cx, PackedType::from_legacy(cx, other))
@@ -962,6 +988,18 @@ impl Display for RealType {
 }
 
 impl<'a> StructType<'a> {
+    /// Get the domain for this struct.
+    pub fn domain(&self) -> Domain {
+        let any_four_valued = self
+            .members
+            .iter()
+            .any(|m| m.ty.domain() == Domain::FourValued);
+        match any_four_valued {
+            true => Domain::FourValued,
+            false => Domain::TwoValued,
+        }
+    }
+
     /// Helper function to format this struct.
     fn format(
         &self,
