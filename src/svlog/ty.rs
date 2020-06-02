@@ -457,6 +457,11 @@ impl<'a> PackedType<'a> {
         self.resolved_full.unwrap_or(self)
     }
 
+    /// Check if this is a tombstone.
+    pub fn is_error(&self) -> bool {
+        self.core.is_error()
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -602,6 +607,15 @@ impl Display for PackedType<'_> {
 }
 
 impl<'a> PackedCore<'a> {
+    /// Check if this is a tombstone.
+    pub fn is_error(&self) -> bool {
+        match self {
+            Self::Error => true,
+            Self::Named { ty, .. } | Self::Ref { ty, .. } => ty.is_error(),
+            _ => false,
+        }
+    }
+
     /// Helper function to format this core packed type.
     fn format(&self, f: &mut std::fmt::Formatter, signing: Option<Sign>) -> std::fmt::Result {
         match self {
@@ -818,14 +832,14 @@ impl<'a> UnpackedType<'a> {
         self.resolved_full.unwrap_or(self)
     }
 
-    /// Convert a legacy `Type` into an `UnpackedType`.
-    pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
-        Self::make(cx, PackedType::from_legacy(cx, other))
-    }
-
     /// Check if this is a tombstone.
     pub fn is_error(&self) -> bool {
         self.core.is_error()
+    }
+
+    /// Convert a legacy `Type` into an `UnpackedType`.
+    pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
+        Self::make(cx, PackedType::from_legacy(cx, other))
     }
 
     /// Helper function to format this type around a declaration name.
@@ -866,6 +880,7 @@ impl<'a> UnpackedCore<'a> {
     pub fn is_error(&self) -> bool {
         match self {
             Self::Error => true,
+            Self::Packed(ty) => ty.is_error(),
             Self::Named { ty, .. } | Self::Ref { ty, .. } => ty.is_error(),
             _ => false,
         }
