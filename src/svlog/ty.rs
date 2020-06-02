@@ -494,6 +494,30 @@ impl<'a> PackedCore<'a> {
     }
 }
 
+impl<'a> From<IntVecType> for PackedCore<'a> {
+    fn from(inner: IntVecType) -> Self {
+        PackedCore::IntVec(inner)
+    }
+}
+
+impl<'a> From<IntAtomType> for PackedCore<'a> {
+    fn from(inner: IntAtomType) -> Self {
+        PackedCore::IntAtom(inner)
+    }
+}
+
+impl<'a> From<StructType<'a>> for PackedCore<'a> {
+    fn from(inner: StructType<'a>) -> Self {
+        PackedCore::Struct(inner)
+    }
+}
+
+impl<'a> From<EnumType<'a>> for PackedCore<'a> {
+    fn from(inner: EnumType<'a>) -> Self {
+        PackedCore::Enum(inner)
+    }
+}
+
 impl Display for PackedCore<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.format(f, None)
