@@ -521,11 +521,10 @@ impl<'a> PackedType<'a> {
     }
 
     /// Check if this type is equal to another one.
-    ///
-    /// This function is provided for future expansion if we determine that
-    /// types being identical differs from Rust's notion of equality.
     pub fn is_identical(&self, other: &Self) -> bool {
-        self == other
+        self.core.is_identical(&other.core)
+            && self.signing == other.signing
+            && self.dims == other.dims
     }
 
     /// Get the domain for this type.
@@ -750,6 +749,20 @@ impl<'a> PackedCore<'a> {
             Self::Enum(_) => Sign::Unsigned,
             Self::Named { .. } => Sign::Unsigned,
             Self::Ref { .. } => Sign::Unsigned,
+        }
+    }
+
+    /// Check if this type is identical to another one.
+    pub fn is_identical(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Error, Self::Error) => true,
+            (Self::IntVec(a), Self::IntVec(b)) => a == b,
+            (Self::IntAtom(a), Self::IntAtom(b)) => a == b,
+            (Self::Struct(a), Self::Struct(b)) => a == b,
+            (Self::Enum(a), Self::Enum(b)) => a == b,
+            (Self::Named { ty: a, .. }, Self::Named { ty: b, .. }) => a.is_identical(b),
+            (Self::Ref { ty: a, .. }, Self::Ref { ty: b, .. }) => a.is_identical(b),
+            _ => false,
         }
     }
 
@@ -1002,7 +1015,7 @@ impl<'a> UnpackedType<'a> {
     /// This function is provided for future expansion if we determine that
     /// types being identical differs from Rust's notion of equality.
     pub fn is_identical(&self, other: &Self) -> bool {
-        self == other
+        self.core.is_identical(&other.core) && self.dims == other.dims
     }
 
     /// If this type is strictly a packed type, convert it.
@@ -1114,6 +1127,22 @@ impl<'a> UnpackedCore<'a> {
             Self::Error => true,
             Self::Packed(ty) => ty.is_error(),
             Self::Named { ty, .. } | Self::Ref { ty, .. } => ty.is_error(),
+            _ => false,
+        }
+    }
+
+    /// Check if this type is identical to another one.
+    pub fn is_identical(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Error, Self::Error) => true,
+            (Self::Packed(a), Self::Packed(b)) => a.is_identical(b),
+            (Self::Real(a), Self::Real(b)) => a == b,
+            (Self::Struct(a), Self::Struct(b)) => a == b,
+            (Self::String, Self::String) => true,
+            (Self::Chandle, Self::Chandle) => true,
+            (Self::Event, Self::Event) => true,
+            (Self::Named { ty: a, .. }, Self::Named { ty: b, .. }) => a.is_identical(b),
+            (Self::Ref { ty: a, .. }, Self::Ref { ty: b, .. }) => a.is_identical(b),
             _ => false,
         }
     }
@@ -1319,6 +1348,11 @@ impl SbvType {
             signing_explicit: self.signing_explicit || self.signing != signing,
             ..*self
         }
+    }
+
+    /// Check whether this type is identical to another one.
+    pub fn is_identical(&self, other: &Self) -> bool {
+        self.domain == other.domain && self.signing == other.signing && self.size == other.size
     }
 }
 
