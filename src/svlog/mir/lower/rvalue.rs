@@ -91,12 +91,13 @@ pub fn lower_expr<'gcx>(
     let cast = cx.cast_type(expr_id, env).unwrap();
 
     // Lower the expression.
-    let rvalue = lower_expr_inner(&builder, hir, cast.init).unwrap_or_else(|_| builder.error());
+    let rvalue = lower_expr_inner(&builder, hir, cast.init.to_legacy(cx))
+        .unwrap_or_else(|_| builder.error());
     if rvalue.is_error() {
         return rvalue;
     }
     assert_span!(
-        ty::identical(rvalue.ty, cast.init),
+        ty::identical(rvalue.ty, cast.init.to_legacy(cx)),
         hir.span,
         cx,
         "rvalue lowering produced type `{}`, expected `{}`",
@@ -392,7 +393,11 @@ fn lower_expr_inner<'gcx>(
             let comp_ty = cx.need_operation_type(expr_id, env);
 
             // Determine the result type for the comparison.
-            let out_ty = cx.cast_type(expr_id, env).unwrap().init;
+            let out_ty = cx
+                .cast_type(expr_id, env)
+                .unwrap()
+                .init
+                .to_legacy(builder.cx);
 
             // Compare the LHS against all ranges.
             let lhs = cx.mir_rvalue(expr, env);
@@ -537,7 +542,7 @@ fn lower_cast<'gcx>(
         return builder.error();
     }
     assert_span!(
-        ty::identical(value.ty, to.init),
+        ty::identical(value.ty, to.init.to_legacy(builder.cx)),
         value.span,
         builder.cx,
         "rvalue type `{}` does not match initial type of cast `{}`",
@@ -554,6 +559,7 @@ fn lower_cast<'gcx>(
     // Lower each cast individually.
     for &(op, to) in &to.casts {
         debug!("- {:?} from `{}` to `{}`", op, value.ty, to);
+        let to = to.to_legacy(builder.cx);
         match op {
             CastOp::Bool => {
                 assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
@@ -641,7 +647,7 @@ fn lower_cast<'gcx>(
 
     // Check that the casts have actually produced the expected output type.
     assert_span!(
-        ty::identical(value.ty, to.ty),
+        ty::identical(value.ty, to.ty.to_legacy(builder.cx)),
         value.span,
         builder.cx,
         "rvalue type `{}` does not match final cast type `{}` after lower_cast",

@@ -56,7 +56,7 @@ pub(crate) fn type_of<'gcx>(
                 );
             }
         }
-        HirNode::Expr(_) => Ok(cast_type(cx, node_id, env).unwrap().ty),
+        HirNode::Expr(_) => Ok(cast_type(cx, node_id, env).unwrap().ty.to_legacy(cx)),
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
                 return cx.map_to_type(p.ty, env);
@@ -463,7 +463,7 @@ pub(crate) fn cast_type<'gcx>(
 ) -> Option<CastType<'gcx>> {
     let hir = match cx.hir_of(node_id) {
         Ok(x) => x,
-        Err(()) => return Some((&ty::ERROR_TYPE).into()),
+        Err(()) => return Some(ty::UnpackedType::make_error().into()),
     };
     match hir {
         HirNode::Expr(e) => Some(cast_expr_type(cx, e, env)),
@@ -478,7 +478,6 @@ fn cast_expr_type<'gcx>(
     env: ParamEnv,
 ) -> CastType<'gcx> {
     let cast = cast_expr_type_inner(cx, expr, env);
-    let _ = cast_expr_type_inner2(cx, expr, env);
     if cx.sess().has_verbosity(Verbosity::CASTS) && !cast.is_error() && !cast.casts.is_empty() {
         let mut d =
             DiagBuilder2::note(format!("cast: `{}` to `{}`", cast.init, cast.ty)).span(expr.span);
@@ -522,232 +521,6 @@ fn cast_expr_type_inner<'gcx>(
     expr: &'gcx hir::Expr,
     env: ParamEnv,
 ) -> CastType<'gcx> {
-    trace!(
-        "Computing cast type of `{}` (line {})",
-        expr.span().extract(),
-        expr.span().begin().human_line()
-    );
-
-    // Determine the inferred type and type context of the expression.
-    let inferred = type_of_expr(cx, expr, env);
-    let context = type_context(cx, expr.id, env);
-    trace!("  Inferred: {}", inferred);
-    trace!(
-        "  Context:  {}",
-        context
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| "<none>".to_string())
-    );
-
-    // No need to cast lvalues.
-    if expr_is_lvalue(cx, expr.id, env) {
-        trace!("  Not casting lvalue");
-        return inferred.into();
-    }
-
-    // If there is no type context which we have to cast to, return.
-    let context = match context {
-        Some(c) => c,
-        None => return inferred.into(),
-    };
-
-    // If any of the inputs are tombstones, return.
-    if inferred.is_error() || context.is_error() {
-        trace!("  Aborting due to error");
-        return inferred.into();
-    }
-
-    // If types already match, return.
-    if let TypeContext::Type(ty) = context {
-        if ty::identical(ty, inferred) {
-            return inferred.into();
-        }
-    }
-
-    // Begin the cast sequence.
-    let mut cast = CastType {
-        init: inferred,
-        ty: inferred,
-        casts: vec![],
-    };
-
-    // Cast the expression to a simple bit vector type.
-    if !cast.ty.is_simple_bit_vector() {
-        trace!("  Casting to SBVT");
-        match cast.ty.get_simple_bit_vector(cx, env, false) {
-            Some(ty) => cast.add_cast(CastOp::SimpleBitVector, ty),
-            None => {
-                cx.emit(
-                    DiagBuilder2::error(format!(
-                        "cannot cast a value of type `{}` to `{}`",
-                        inferred, context
-                    ))
-                    .span(expr.span)
-                    .add_note(format!(
-                        "`{}` has no simple bit-vector type representation",
-                        inferred
-                    )),
-                );
-                error!("Cast chain thus far: {}", cast);
-                return (&ty::ERROR_TYPE).into();
-            }
-        }
-    }
-    if cast.is_error() {
-        trace!("  Aborting due to error");
-        return cast;
-    }
-
-    // Cast the SBVT to a boolean.
-    let context = match context {
-        TypeContext::Bool => {
-            trace!("  Casting to bool ({})", context.ty());
-            cast.add_cast(CastOp::Bool, context.ty());
-            return cast;
-        }
-        TypeContext::Type(ty) => ty,
-    };
-
-    // Change size.
-    let context_sbvt = if context.is_simple_bit_vector() {
-        Some(context)
-    } else {
-        context.get_simple_bit_vector(cx, env, false)
-    };
-    let range = context_sbvt.and_then(|ty| ty.get_range());
-    if cast.ty.get_range() != range && range.is_some() {
-        let range = range.unwrap();
-        let ty = cast.ty.change_range(cx, range);
-        trace!(
-            "  Casting range from {} to {}",
-            cast.ty.get_range().unwrap(),
-            range
-        );
-        cast.add_cast(CastOp::Range(range, cast.ty.is_signed()), ty);
-    }
-    if cast.is_error() {
-        trace!("  Aborting due to error");
-        return cast;
-    }
-
-    // Cast bit scalars from and to bit vectors.
-    match (
-        cast.ty.resolve_name(),
-        context_sbvt.map(|ty| ty.resolve_name()),
-    ) {
-        // Drop a [0:0] when the target is a scalar.
-        (
-            &TypeKind::BitVector {
-                domain,
-                sign,
-                range: ty::Range { size: 1, .. },
-                dubbed: _,
-            },
-            Some(&TypeKind::BitScalar { .. }),
-        ) => {
-            let ty = cx.intern_type(TypeKind::BitScalar { domain, sign });
-            cast.add_cast(CastOp::Transmute, ty);
-        }
-        // Add a [0:0] when the target is such a vector.
-        (
-            &TypeKind::BitScalar { domain, sign },
-            Some(&TypeKind::BitVector {
-                range: range @ ty::Range { size: 1, .. },
-                dubbed,
-                ..
-            }),
-        ) => {
-            let ty = cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed,
-            });
-            cast.add_cast(CastOp::Transmute, ty);
-        }
-        _ => (),
-    }
-
-    // Change signs.
-    if cast.ty.get_sign() != context.get_sign() && context.get_sign().is_some() {
-        trace!(
-            "  Casting sign from {:?} to {:?}",
-            cast.ty.get_sign(),
-            context.get_sign()
-        );
-        let sign = context.get_sign().unwrap();
-        cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
-    }
-    if cast.is_error() {
-        trace!("  Aborting due to error");
-        return cast;
-    }
-
-    // Change value domain.
-    let domain = context_sbvt.and_then(|ty| ty.get_value_domain());
-    if cast.ty.get_value_domain() != domain && domain.is_some() {
-        let domain = domain.unwrap();
-        trace!(
-            "  Casting domain from {:?} to {:?}",
-            cast.ty.get_value_domain().unwrap(),
-            domain
-        );
-        cast.add_cast(
-            CastOp::Domain(domain),
-            cast.ty.change_value_domain(cx, domain),
-        );
-    }
-    if cast.is_error() {
-        trace!("  Aborting due to error");
-        return cast;
-    }
-
-    // Unpack the simple bit vector as struct or array.
-    if context.is_struct() {
-        cast.add_cast(CastOp::Struct, context);
-    } else if context.is_array() {
-        cast.add_cast(CastOp::Array, context);
-    }
-    if cast.is_error() {
-        trace!("  Aborting due to error");
-        return cast;
-    }
-
-    // If types match now, we're good.
-    if ty::identical(context, cast.ty) {
-        trace!("  Cast complete");
-        return cast;
-    }
-
-    // If we arrive here, casting failed.
-    let mut d = DiagBuilder2::error(format!(
-        "cannot cast a value of type `{}` to `{}`",
-        inferred, context
-    ))
-    .span(expr.span);
-    if !cast.casts.is_empty() {
-        d = d.add_note(format!(
-            "`{}` can be cast to an intermediate `{}`, but",
-            inferred, cast.ty
-        ));
-        d = d.add_note(format!(
-            "`{}` cannot be cast to the final `{}`",
-            cast.ty, context
-        ));
-    }
-    cx.emit(d);
-    error!("Inferred type: {:?}", inferred);
-    error!("Context type: {:?}", context);
-    error!("Cast chain thus far: {}", cast);
-    (&ty::ERROR_TYPE).into()
-}
-
-/// Get the cast type of an expression.
-fn cast_expr_type_inner2<'gcx>(
-    cx: &impl Context<'gcx>,
-    expr: &'gcx hir::Expr,
-    env: ParamEnv,
-) -> CastType2<'gcx> {
     trace!(
         "[v2] Computing cast type of `{}` (line {})",
         expr.span().extract(),
@@ -797,7 +570,7 @@ fn cast_expr_type_inner2<'gcx>(
     }
 
     // Begin the cast sequence.
-    let mut cast = CastType2 {
+    let mut cast = CastType {
         init: inferred,
         ty: inferred,
         casts: vec![],
@@ -2025,17 +1798,6 @@ fn type_context_imposed_by_stmt<'gcx>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CastType<'a> {
     /// The initial type before casting.
-    pub init: Type<'a>,
-    /// The final type after casting.
-    pub ty: Type<'a>,
-    /// The cast operations that lead to the result.
-    pub casts: Vec<(CastOp, Type<'a>)>,
-}
-
-/// A type resulting from a sequence of casts.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CastType2<'a> {
-    /// The initial type before casting.
     pub init: &'a ty::UnpackedType<'a>,
     /// The final type after casting.
     pub ty: &'a ty::UnpackedType<'a>,
@@ -2075,14 +1837,14 @@ impl<'a> CastType<'a> {
     }
 
     /// Add a cast operation.
-    pub fn add_cast(&mut self, op: CastOp, ty: Type<'a>) {
+    pub fn add_cast(&mut self, op: CastOp, ty: &'a ty::UnpackedType<'a>) {
         self.casts.push((op, ty));
         self.ty = ty;
     }
 }
 
-impl<'a> From<Type<'a>> for CastType<'a> {
-    fn from(ty: Type<'a>) -> CastType<'a> {
+impl<'a> From<&'a ty::UnpackedType<'a>> for CastType<'a> {
+    fn from(ty: &'a ty::UnpackedType<'a>) -> CastType<'a> {
         CastType {
             init: ty,
             ty,
@@ -2092,39 +1854,6 @@ impl<'a> From<Type<'a>> for CastType<'a> {
 }
 
 impl std::fmt::Display for CastType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.init)?;
-        for (op, ty) in &self.casts {
-            write!(f, " -> {:?} {}", op, ty)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> CastType2<'a> {
-    /// Check if this cast type is a tombstone.
-    pub fn is_error(&self) -> bool {
-        self.ty.is_error()
-    }
-
-    /// Add a cast operation.
-    pub fn add_cast(&mut self, op: CastOp, ty: &'a ty::UnpackedType<'a>) {
-        self.casts.push((op, ty));
-        self.ty = ty;
-    }
-}
-
-impl<'a> From<&'a ty::UnpackedType<'a>> for CastType2<'a> {
-    fn from(ty: &'a ty::UnpackedType<'a>) -> CastType2<'a> {
-        CastType2 {
-            init: ty,
-            ty,
-            casts: vec![],
-        }
-    }
-}
-
-impl std::fmt::Display for CastType2<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.init)?;
         for (op, ty) in &self.casts {

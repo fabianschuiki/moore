@@ -81,6 +81,31 @@ macro_rules! assert_type {
     });
 }
 
+/// Assert that two types are identical, or emit a bug diagnostic and panic.
+#[macro_export]
+macro_rules! assert_type2 {
+    ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr) => ({
+        $crate::assert_type2!($lhs, $rhs, $span, $emitter,)
+    });
+    ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr,) => ({
+        $crate::assert_type2!($lhs, $rhs, $span, $emitter, "type assertion failed: `{}` != `{}`", $lhs, $rhs)
+    });
+    ($lhs:expr, $rhs:expr, $span:expr, $emitter:expr, $($arg:tt)+) => ({
+        if !$lhs.is_identical($rhs) {
+            let msg = format!($($arg)*);
+            $emitter.emit(
+                moore_common::errors::DiagBuilder2::bug(&msg)
+                .span($span)
+                .add_note("Type mismatch:")
+                .add_note(format!("    Left-hand side:  `{}`", $lhs))
+                .add_note(format!("    Right-hand side: `{}`", $rhs))
+                .add_note(format!("Encountered at {}:{}", file!(), line!()))
+            );
+            panic!("{}", msg);
+        }
+    });
+}
+
 mod ast_map;
 mod codegen;
 mod context;
