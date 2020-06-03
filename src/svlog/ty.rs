@@ -577,7 +577,6 @@ impl<'a> PackedType<'a> {
     pub fn is_simple_bit_vector(&self) -> bool {
         match self.core {
             PackedCore::IntVec(..) => self.dims.len() == 0 || self.dims.len() == 1,
-            PackedCore::IntAtom(..) => self.dims.is_empty(),
             _ => false,
         }
     }
@@ -1553,6 +1552,14 @@ impl SbvType {
     /// Check whether this type is identical to another one.
     pub fn is_identical(&self, other: &Self) -> bool {
         self.domain == other.domain && self.signing == other.signing && self.size == other.size
+    }
+
+    /// Return a new SBVT that never converts to an integer atom type.
+    pub fn forget_atom(&self) -> SbvType {
+        SbvType {
+            used_atom: false,
+            ..*self
+        }
     }
 }
 
