@@ -631,11 +631,14 @@ fn lower_cast<'gcx>(
                     );
                 }
             }
-            CastOp::PackSBVT | CastOp::UnpackSBVT => bug_span!(
-                value.span,
-                builder.cx,
-                "packing/unpacking SBVT not yet implemented"
-            ),
+            CastOp::PackSBVT => {
+                assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
+                value = pack_simple_bit_vector(builder, value);
+            }
+            CastOp::UnpackSBVT => {
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                value = unpack_simple_bit_vector(builder, value, to);
+            }
         }
         if !ty::identical(value.ty, to) {
             error!(
@@ -673,7 +676,7 @@ fn pack_simple_bit_vector<'gcx>(
     } else {
         value
     };
-    assert!(out.ty.is_simple_bit_vector());
+    assert_span!(out.ty.is_simple_bit_vector(), value.span, builder.cx);
     out
 }
 
@@ -758,6 +761,27 @@ fn pack_array<'gcx>(
         .get_simple_bit_vector(builder.cx, builder.env, true)
         .expect("array must have sbvt");
     builder.build(ty, RvalueKind::Concat(packed_elements))
+}
+
+/// Generate the nodes necessary to unpack a value from its corresponding simple
+/// bit vector type.
+fn unpack_simple_bit_vector<'gcx>(
+    builder: &Builder<'_, impl Context<'gcx>>,
+    value: &'gcx Rvalue<'gcx>,
+    to: Type<'gcx>,
+) -> &'gcx Rvalue<'gcx> {
+    if value.is_error() {
+        return value;
+    }
+    assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+    let out = if to.is_struct() {
+        unpack_struct(builder, to, value)
+    } else if to.is_array() {
+        unpack_array(builder, to, value)
+    } else {
+        value
+    };
+    out
 }
 
 /// Unpack a struct from a simple bit vector.
