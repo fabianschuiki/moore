@@ -5,7 +5,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{Type, TypeKind, UnpackedType},
+    ty::UnpackedType,
     value::{Value, ValueKind},
     ParamEnv,
 };
@@ -88,7 +88,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut outputs = Vec::new();
         let mut port_id_to_name = HashMap::new();
         for port in &hir.ports_new.int {
-            let ty = self.type_of(port.id, env)?;
+            let ty = UnpackedType::from_legacy(self.cx, self.type_of(port.id, env)?);
             debug!("port {}.{} has type {:?}", hir.name, port.name, ty);
             let ty = llhd::signal_ty(self.emit_type(ty, env)?);
             match port.dir {
@@ -213,15 +213,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut inputs = vec![];
         let mut outputs = vec![];
         for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
-            sig.add_input(llhd::signal_ty(
-                self.emit_type(self.type_of(id, env)?, env)?,
-            ));
+            sig.add_input(llhd::signal_ty(self.emit_type(
+                UnpackedType::from_legacy(self.cx, self.type_of(id, env)?),
+                env,
+            )?));
             inputs.push(id);
         }
         for &id in acc.written.iter() {
-            sig.add_output(llhd::signal_ty(
-                self.emit_type(self.type_of(id, env)?, env)?,
-            ));
+            sig.add_output(llhd::signal_ty(self.emit_type(
+                UnpackedType::from_legacy(self.cx, self.type_of(id, env)?),
+                env,
+            )?));
             outputs.push(id);
         }
         trace!("Process Inputs: {:?}", inputs);
@@ -367,45 +369,57 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a type to an LLHD type (interned).
-    fn emit_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
-        let ty_new = UnpackedType::from_legacy(self.cx, ty);
-        if let Some(x) = self.tables.interned_types.get(&ty_new) {
+    fn emit_type(&mut self, ty: &'gcx UnpackedType<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
+        if let Some(x) = self.tables.interned_types.get(&ty) {
             x.clone()
         } else {
             let x = self.emit_type_uninterned(ty, env);
-            self.tables.interned_types.insert(ty_new, x.clone());
+            self.tables.interned_types.insert(ty, x.clone());
             x
         }
     }
 
     /// Map a type to an LLHD type.
-    fn emit_type_uninterned(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
-        #[allow(unreachable_patterns)]
-        Ok(match *ty {
-            TypeKind::Void => llhd::void_ty(),
-            TypeKind::Bit(_) => llhd::int_ty(1),
-            TypeKind::Int(width, _) => llhd::int_ty(width),
-            TypeKind::Named(_, _, ty) => self.emit_type(ty, env)?,
-            TypeKind::Struct(id) => {
-                let fields = match self.hir_of(id.id())? {
-                    HirNode::Type(hir::Type {
-                        kind: hir::TypeKind::Struct(ref fields),
-                        ..
-                    }) => fields,
-                    _ => unreachable!(),
-                };
-                let mut types = vec![];
-                for &field_id in fields {
-                    types.push(self.emit_type(self.type_of(field_id, id.env())?, id.env())?);
-                }
-                llhd::struct_ty(types)
+    fn emit_type_uninterned(
+        &mut self,
+        ty: &'gcx UnpackedType<'gcx>,
+        env: ParamEnv,
+    ) -> Result<llhd::Type> {
+        let ty = ty.resolve_full();
+
+        // Handle things that coalesce easily to scalars.
+        Ok(if ty.coalesces_to_llhd_scalar() {
+            llhd::int_ty(ty.get_bit_size().unwrap())
+        }
+        // Handle arrays.
+        else if let Some(dim) = ty.dims().last() {
+            let size = match dim.get_size() {
+                Some(size) => size,
+                None => panic!("cannot map unsized array `{}` to LLHD", ty),
+            };
+            let inner = ty.pop_dim(self.cx).unwrap();
+            llhd::array_ty(size, self.emit_type(inner, env)?)
+        }
+        // Handle structs.
+        else if let Some(strukt) = ty.get_struct() {
+            let mut types = vec![];
+            for member in &strukt.members {
+                types.push(self.emit_type(member.ty, strukt.legacy_env)?);
             }
-            TypeKind::PackedArray(size, ty) => llhd::array_ty(size, self.emit_type(ty, env)?),
-            // TODO(fschuiki): emit logic type depending on value domain
-            TypeKind::BitScalar { .. } => llhd::int_ty(1),
-            // TODO(fschuiki): emit logic type depending on value domain
-            TypeKind::BitVector { range, .. } => llhd::int_ty(range.size),
-            _ => unimplemented!("emit type {:?}", ty),
+            llhd::struct_ty(types)
+        }
+        // Handle packed types.
+        else if let Some(packed) = ty.get_packed() {
+            let packed = packed.resolve_full();
+            match packed.core {
+                ty::PackedCore::Error => llhd::void_ty(),
+                ty::PackedCore::Void => llhd::void_ty(),
+                _ => unreachable!("emitting `{}` should have been handled above", packed),
+            }
+        }
+        // Everything else we cannot do.
+        else {
+            panic!("cannot map `{}` to LLHD", ty);
         })
     }
 
@@ -799,31 +813,6 @@ where
         }
     }
 
-    /// Emit the value `1` for a type.
-    fn const_one_for_type(
-        &mut self,
-        ty: Type<'gcx>,
-        env: ParamEnv,
-        span: Span,
-    ) -> Result<llhd::ir::Value> {
-        use num::one;
-        match *ty {
-            TypeKind::Bit(..)
-            | TypeKind::Int(..)
-            | TypeKind::BitScalar { .. }
-            | TypeKind::BitVector { .. } => Ok(self.emit_const(
-                self.intern_value(value::make_int(
-                    ty::UnpackedType::from_legacy(self.cx, ty),
-                    one(),
-                )),
-                env,
-                span,
-            )?),
-            TypeKind::Named(_, _, ty) => self.const_one_for_type(ty, env, span),
-            _ => panic!("no unit-value for type {:?}", ty),
-        }
-    }
-
     /// Emit the zero value for an LLHD type.
     ///
     /// This function is ultimately expected to be moved into LLHD.
@@ -975,8 +964,7 @@ where
 
             mir::RvalueKind::ZeroExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let mir_ty = mir.ty.to_legacy(self.cx);
-                let llty = self.emit_type(mir_ty, mir.env)?;
+                let llty = self.emit_type(mir.ty, mir.env)?;
                 let result = self.emit_zero_for_type(&llty);
                 let value = self.emit_mir_rvalue(value)?;
                 Ok(self.builder.ins().ins_slice(result, value, 0, width))
@@ -984,8 +972,7 @@ where
 
             mir::RvalueKind::SignExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let mir_ty = mir.ty.to_legacy(self.cx);
-                let llty = self.emit_type(mir_ty, mir.env)?;
+                let llty = self.emit_type(mir.ty, mir.env)?;
                 let value = self.emit_mir_rvalue(value)?;
                 let sign = self.builder.ins().ext_slice(value, width - 1, 1);
                 let zeros = self.emit_zero_for_type(&llty);
@@ -1121,8 +1108,7 @@ where
 
             mir::RvalueKind::Concat(ref values) => {
                 let mut offset = 0;
-                let mir_ty = mir.ty.to_legacy(self.cx);
-                let llty = self.emit_type(mir_ty, mir.env)?;
+                let llty = self.emit_type(mir.ty, mir.env)?;
                 let mut value = self.emit_zero_for_type(&llty);
                 for v in values.iter().rev() {
                     let w = v.ty.simple_bit_vector(self.cx, v.span).size;
@@ -1136,8 +1122,7 @@ where
             mir::RvalueKind::Repeat(times, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let value = self.emit_mir_rvalue(value)?;
-                let mir_ty = mir.ty.to_legacy(self.cx);
-                let llty = self.emit_type(mir_ty, mir.env)?;
+                let llty = self.emit_type(mir.ty, mir.env)?;
                 let mut result = self.emit_zero_for_type(&llty);
                 for i in 0..times {
                     result = self
@@ -1382,7 +1367,12 @@ where
     }
 
     /// Emit the code for a statement, given its HIR.
-    fn emit_stmt_regular(&mut self, stmt_id: NodeId, hir: &hir::Stmt, env: ParamEnv) -> Result<()> {
+    fn emit_stmt_regular(
+        &mut self,
+        _stmt_id: NodeId,
+        hir: &hir::Stmt,
+        env: ParamEnv,
+    ) -> Result<()> {
         #[allow(unreachable_patterns)]
         match hir.kind {
             hir::StmtKind::Null => (),
@@ -1581,7 +1571,7 @@ where
                 let repeat_var = match kind {
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(count) => {
-                        let ty = self.type_of(count, env)?;
+                        let ty = UnpackedType::from_legacy(self.cx, self.type_of(count, env)?);
                         let count = self.emit_rvalue(count, env)?;
                         let var = self.builder.ins().var(count);
                         self.builder.set_name(var, "loop_count".to_string());
@@ -1626,7 +1616,10 @@ where
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
                         let value = self.builder.ins().ld(repeat_var);
-                        let one = self.const_one_for_type(ty, env, self.span(stmt_id))?;
+                        let one = self
+                            .builder
+                            .ins()
+                            .const_int((ty.get_bit_size().unwrap(), 0));
                         let value = self.builder.ins().sub(value, one);
                         self.builder.ins().st(repeat_var, value);
                         None
@@ -1742,6 +1735,7 @@ where
         env: ParamEnv,
     ) -> Result<()> {
         let ty = self.type_of(decl_id, env)?;
+        let ty = UnpackedType::from_legacy(self.cx, ty);
         let ty = self.emit_type(ty, env)?;
         let init = match hir.init {
             Some(expr) => self.emit_rvalue(expr, env)?,

@@ -277,7 +277,7 @@ pub struct StructType<'a> {
     pub members: Vec<StructMember<'a>>,
     /// The param env where this struct was declared, to recover the legacy
     /// type.
-    legacy_env: ParamEnv,
+    pub legacy_env: ParamEnv,
 }
 
 /// A member of a struct type.
