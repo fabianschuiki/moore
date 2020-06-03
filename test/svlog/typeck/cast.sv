@@ -13,22 +13,22 @@ module foo;
     assign b = !v;
     assign b = !m;
     assign b = !s;
-    // CHECK: 12: cast_chain(b) = bit -> Bool logic
+    // CHECK: 12: cast_chain(b) = bit -> PackSBVT bit [0:0] -> Bool logic
     // CHECK: 13: cast_chain(v) = bit [7:0] -> Bool logic
-    // CHECK: 14: cast_chain(m) = bit [3:0] [7:0] -> SimpleBitVector logic [31:0] -> Bool logic
-    // CHECK: 15: cast_chain(s) = struct -> SimpleBitVector logic [14:0] -> Bool logic
+    // CHECK: 14: cast_chain(m) = bit [3:0][7:0] -> PackSBVT bit [31:0] -> Bool logic
+    // CHECK: 15: cast_chain(s) = struct packed { bit x; bit [13:0] y; } -> PackSBVT bit [14:0] -> Bool logic
 
     assign b = v && b;
     assign b = v || b;
     assign b = v;
     // CHECK: 21: cast_chain(v) = bit [7:0] -> Bool logic
     // CHECK: 22: cast_chain(v) = bit [7:0] -> Bool logic
-    // CHECK: 23: cast_chain(v) = bit [7:0] -> Range([0:0], false) bit [0:0] -> Transmute bit
+    // CHECK: 23: cast_chain(v) = bit [7:0] -> Range([0:0], false) bit [0:0] -> UnpackSBVT bit
 
     assign s = v;
     assign s = s2;
-    // CHECK: 28: cast_chain(v) = bit [7:0] -> Range([14:0], false) bit [14:0] -> Domain(FourValued) logic [14:0] -> Struct struct
-    // CHECK: 29: cast_chain(s2) = struct -> SimpleBitVector logic [14:0] -> Struct struct
+    // CHECK: 28: cast_chain(v) = bit [7:0] -> Range([14:0], false) bit [14:0] -> UnpackSBVT struct packed { bit x; bit [13:0] y; }
+    // CHECK: 29: cast_chain(s2) = struct packed { bit [13:0] x; bit y; } -> PackSBVT bit [14:0] -> UnpackSBVT struct packed { bit x; bit [13:0] y; }
 
     // Operation type casts
 
