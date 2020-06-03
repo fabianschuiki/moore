@@ -611,11 +611,11 @@ impl<'a> PackedType<'a> {
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
         if !self.dims.is_empty() {
             let mut new = self.clone();
-            new.dims.pop();
+            new.dims.pop().expect("pop_dim should pop a dim");
             Some(new.intern(cx))
         } else if !self.resolve().dims.is_empty() {
             let mut new = self.resolve().clone();
-            new.dims.pop();
+            new.dims.pop().expect("pop_dim should pop a dim");
             Some(new.intern(cx))
         } else {
             None
@@ -1246,11 +1246,11 @@ impl<'a> UnpackedType<'a> {
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
         if !self.dims.is_empty() {
             let mut new = self.clone();
-            new.dims.pop();
+            new.dims.pop().expect("pop_dim should drop a dim");
             Some(new.intern(cx))
-        } else if self.resolve().dims.is_empty() {
+        } else if !self.resolve().dims.is_empty() {
             let mut new = self.resolve().clone();
-            new.dims.pop();
+            new.dims.pop().expect("pop_dim should drop a dim");
             Some(new.intern(cx))
         } else {
             self.get_packed()
