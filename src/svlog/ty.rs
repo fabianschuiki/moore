@@ -577,7 +577,7 @@ impl<'a> PackedType<'a> {
 
     /// Check if this type is trivially a SBVT.
     pub fn is_simple_bit_vector(&self) -> bool {
-        match self.core {
+        match self.resolve_full().core {
             PackedCore::IntVec(..) => self.dims.len() == 0 || self.dims.len() == 1,
             _ => false,
         }
@@ -613,6 +613,10 @@ impl<'a> PackedType<'a> {
             let mut new = self.clone();
             new.dims.pop();
             Some(new.intern(cx))
+        } else if !self.resolve().dims.is_empty() {
+            let mut new = self.resolve().clone();
+            new.dims.pop();
+            Some(new.intern(cx))
         } else {
             None
         }
@@ -620,8 +624,8 @@ impl<'a> PackedType<'a> {
 
     /// Get the underlying struct, or `None` if the type is no struct.
     pub fn get_struct(&self) -> Option<&StructType<'a>> {
-        match self.core {
-            PackedCore::Struct(ref x) if self.dims.is_empty() => Some(x),
+        match self.resolve_full().core {
+            PackedCore::Struct(ref x) if self.resolve_full().dims.is_empty() => Some(x),
             _ => None,
         }
     }
@@ -1135,6 +1139,7 @@ impl<'a> UnpackedType<'a> {
     pub fn get_packed(&self) -> Option<&'a PackedType<'a>> {
         match self.core {
             UnpackedCore::Packed(inner) if self.dims.is_empty() => Some(inner),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_packed(),
             _ => None,
         }
     }
@@ -1190,9 +1195,7 @@ impl<'a> UnpackedType<'a> {
 
     /// Convert this type into an SBVT if possible.
     pub fn get_simple_bit_vector(&self) -> Option<SbvType> {
-        self.resolve_full()
-            .get_packed()
-            .and_then(|ty| ty.get_simple_bit_vector())
+        self.get_packed().and_then(|ty| ty.get_simple_bit_vector())
     }
 
     /// Convert this type into an SBVT, or report a bug with the given span.
@@ -1219,14 +1222,15 @@ impl<'a> UnpackedType<'a> {
 
     /// Get an iterator over the type's packed dimensions.
     pub fn packed_dims(&self) -> impl Iterator<Item = PackedDim> + 'a {
-        self.get_packed()
+        self.resolve_full()
+            .get_packed()
             .into_iter()
             .flat_map(|p| p.dims.iter().cloned())
     }
 
     /// Get an iterator over the type's unpacked dimensions.
     pub fn unpacked_dims<'s>(&'s self) -> impl Iterator<Item = UnpackedDim<'a>> + 's {
-        self.dims.iter().cloned()
+        self.resolve_full().dims.iter().cloned()
     }
 
     /// Get an iterator over the type's dimensions.
@@ -1240,20 +1244,24 @@ impl<'a> UnpackedType<'a> {
 
     /// Pop the outermost dimension off the type.
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
-        if self.dims.is_empty() {
-            self.get_packed()
-                .and_then(|p| p.pop_dim(cx))
-                .map(|p| p.to_unpacked(cx))
-        } else {
+        if !self.dims.is_empty() {
             let mut new = self.clone();
             new.dims.pop();
             Some(new.intern(cx))
+        } else if self.resolve().dims.is_empty() {
+            let mut new = self.resolve().clone();
+            new.dims.pop();
+            Some(new.intern(cx))
+        } else {
+            self.get_packed()
+                .and_then(|p| p.pop_dim(cx))
+                .map(|p| p.to_unpacked(cx))
         }
     }
 
     /// Get the underlying struct, or `None` if the type is no struct.
     pub fn get_struct(&self) -> Option<&StructType<'a>> {
-        match self.core {
+        match self.resolve_full().core {
             UnpackedCore::Packed(x) if self.dims.is_empty() => x.get_struct(),
             UnpackedCore::Struct(ref x) if self.dims.is_empty() => Some(x),
             _ => None,
