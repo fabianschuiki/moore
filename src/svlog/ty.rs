@@ -1123,6 +1123,11 @@ impl<'a> UnpackedType<'a> {
         self.core.is_identical(&other.core) && self.dims == other.dims
     }
 
+    /// Check if this type is strictly a packed type.
+    pub fn is_packed(&self) -> bool {
+        self.get_packed().is_some()
+    }
+
     /// If this type is strictly a packed type, convert it.
     pub fn get_packed(&self) -> Option<&'a PackedType<'a>> {
         match self.core {
