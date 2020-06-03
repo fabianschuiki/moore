@@ -558,9 +558,9 @@ impl<'a> PackedType<'a> {
 
     /// Check if this type is equal to another one.
     pub fn is_identical(&self, other: &Self) -> bool {
-        self.core.is_identical(&other.core)
-            && self.signing == other.signing
-            && self.dims == other.dims
+        let a = self.resolve_full();
+        let b = other.resolve_full();
+        a.core.is_identical(&b.core) && a.signing == b.signing && a.dims == b.dims
     }
 
     /// Get the domain for this type.
@@ -1174,7 +1174,9 @@ impl<'a> UnpackedType<'a> {
     /// This function is provided for future expansion if we determine that
     /// types being identical differs from Rust's notion of equality.
     pub fn is_identical(&self, other: &Self) -> bool {
-        self.core.is_identical(&other.core) && self.dims == other.dims
+        let a = self.resolve_full();
+        let b = other.resolve_full();
+        a.core.is_identical(&b.core) && a.dims == b.dims
     }
 
     /// Check if this type is strictly a packed type.
