@@ -1462,7 +1462,7 @@ impl<'a> StructType<'a> {
                 write!(f, " {}", signing)?;
             }
         }
-        write!(f, "{{ ")?;
+        write!(f, " {{ ")?;
         for member in &self.members {
             write!(f, "{}; ", member)?;
         }
