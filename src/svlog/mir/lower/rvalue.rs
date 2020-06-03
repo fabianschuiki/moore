@@ -593,7 +593,7 @@ fn pack_simple_bit_vector<'gcx>(
     let to = value
         .ty
         .simple_bit_vector(builder.cx, value.span)
-        .forget_atom()
+        .forget()
         .to_unpacked(builder.cx);
     if let Some(dim) = value.ty.dims().last() {
         pack_array(builder, value, dim, to)

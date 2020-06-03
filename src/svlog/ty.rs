@@ -578,7 +578,7 @@ impl<'a> PackedType<'a> {
     /// Check if this type is trivially a SBVT.
     pub fn is_simple_bit_vector(&self) -> bool {
         match self.resolve_full().core {
-            PackedCore::IntVec(..) => self.dims.len() == 0 || self.dims.len() == 1,
+            PackedCore::IntVec(..) => self.dims.len() == 1,
             _ => false,
         }
     }
@@ -1506,7 +1506,7 @@ impl SbvType {
             signing,
             signing_explicit: false,
             size,
-            size_explicit: false,
+            size_explicit: true,
         }
     }
 
@@ -1567,10 +1567,13 @@ impl SbvType {
         self.domain == other.domain && self.signing == other.signing && self.size == other.size
     }
 
-    /// Return a new SBVT that never converts to an integer atom type.
-    pub fn forget_atom(&self) -> SbvType {
+    /// Return a new SBVT that strictly converts to an IntVecType with one
+    /// dimension.
+    pub fn forget(&self) -> SbvType {
         SbvType {
             used_atom: false,
+            signing_explicit: false,
+            size_explicit: true,
             ..*self
         }
     }

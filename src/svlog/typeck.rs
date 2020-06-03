@@ -575,7 +575,7 @@ fn cast_expr_type_inner<'gcx>(
     // Cast the expression to a simple bit vector type.
     let inferred_sbvt = match inferred.get_simple_bit_vector() {
         Some(ty) => {
-            let ty = ty.forget_atom();
+            let ty = ty.forget();
             if !inferred.is_simple_bit_vector() {
                 trace!("[v2]  Packing SBVT");
                 cast.add_cast(CastOp::PackSBVT, ty.to_unpacked(cx));
@@ -616,7 +616,7 @@ fn cast_expr_type_inner<'gcx>(
 
     // Cast the context type to an SBVT.
     let context_sbvt = match context.get_simple_bit_vector() {
-        Some(ty) => ty.forget_atom(),
+        Some(ty) => ty.forget(),
         None => {
             cx.emit(
                 DiagBuilder2::error(format!("cannot cast to a value of type `{}`", context))
