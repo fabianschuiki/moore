@@ -1139,7 +1139,11 @@ impl<'a> UnpackedType<'a> {
     pub fn get_packed(&self) -> Option<&'a PackedType<'a>> {
         match self.core {
             UnpackedCore::Packed(inner) if self.dims.is_empty() => Some(inner),
-            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_packed(),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. }
+                if self.dims.is_empty() =>
+            {
+                ty.get_packed()
+            }
             _ => None,
         }
     }
