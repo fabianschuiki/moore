@@ -806,10 +806,8 @@ fn cast_expr_type_inner2<'gcx>(
     // Cast the expression to a simple bit vector type.
     let inferred_sbvt = match cast.ty.get_simple_bit_vector() {
         Some(ty) => {
-            if !cast.ty.is_simple_bit_vector() {
-                trace!("[v2]  Packing SBVT");
-                cast.add_cast(CastOp::PackSBVT, ty.to_unpacked(cx))
-            }
+            trace!("[v2]  Packing SBVT");
+            cast.add_cast(CastOp::PackSBVT, ty.to_unpacked(cx));
             ty
         }
         None => {
@@ -844,7 +842,7 @@ fn cast_expr_type_inner2<'gcx>(
         TypeContext2::Type(ty) => ty,
     };
 
-    // Change size.
+    // Cast the context type to an SBVT.
     let context_sbvt = match context.get_simple_bit_vector() {
         Some(ty) => ty,
         None => {
@@ -861,99 +859,81 @@ fn cast_expr_type_inner2<'gcx>(
         }
     };
     trace!("[v2]  Mapped `{}` to SBVT `{}`", context, context_sbvt);
-    // let range = context_sbvt.and_then(|ty| ty.get_range());
-    // if cast.ty.get_range() != range && range.is_some() {
-    //     let range = range.unwrap();
-    //     let ty = cast.ty.change_range(cx, range);
-    //     trace!(
-    //         "  Casting range from {} to {}",
-    //         cast.ty.get_range().unwrap(),
-    //         range
-    //     );
-    //     cast.add_cast(CastOp::Range(range, cast.ty.is_signed()), ty);
-    // }
-    // if cast.is_error() {
-    //     trace!("[v2]  Aborting due to error");
-    //     return cast;
-    // }
 
-    // // Cast bit scalars from and to bit vectors.
-    // match (
-    //     cast.ty.resolve_name(),
-    //     context_sbvt.map(|ty| ty.resolve_name()),
-    // ) {
-    //     // Drop a [0:0] when the target is a scalar.
-    //     (
-    //         &TypeKind::BitVector {
-    //             domain,
-    //             sign,
-    //             range: ty::Range { size: 1, .. },
-    //             dubbed: _,
-    //         },
-    //         Some(&TypeKind::BitScalar { .. }),
-    //     ) => {
-    //         let ty = cx.intern_type(TypeKind::BitScalar { domain, sign });
-    //         cast.add_cast(CastOp::Transmute, ty);
-    //     }
-    //     // Add a [0:0] when the target is such a vector.
-    //     (
-    //         &TypeKind::BitScalar { domain, sign },
-    //         Some(&TypeKind::BitVector {
-    //             range: range @ ty::Range { size: 1, .. },
-    //             dubbed,
-    //             ..
-    //         }),
-    //     ) => {
-    //         let ty = cx.intern_type(TypeKind::BitVector {
-    //             domain,
-    //             sign,
-    //             range,
-    //             dubbed,
-    //         });
-    //         cast.add_cast(CastOp::Transmute, ty);
-    //     }
-    //     _ => (),
-    // }
-
-    // // Change signs.
-    // if cast.ty.get_sign() != context.get_sign() && context.get_sign().is_some() {
-    //     trace!(
-    //         "  Casting sign from {:?} to {:?}",
-    //         cast.ty.get_sign(),
-    //         context.get_sign()
-    //     );
-    //     let sign = context.get_sign().unwrap();
-    //     cast.add_cast(CastOp::Sign(sign), cast.ty.change_sign(cx, sign));
-    // }
-    // if cast.is_error() {
-    //     trace!("[v2]  Aborting due to error");
-    //     return cast;
-    // }
-
-    // // Change value domain.
-    // let domain = context_sbvt.and_then(|ty| ty.get_value_domain());
-    // if cast.ty.get_value_domain() != domain && domain.is_some() {
-    //     let domain = domain.unwrap();
-    //     trace!(
-    //         "  Casting domain from {:?} to {:?}",
-    //         cast.ty.get_value_domain().unwrap(),
-    //         domain
-    //     );
-    //     cast.add_cast(
-    //         CastOp::Domain(domain),
-    //         cast.ty.change_value_domain(cx, domain),
-    //     );
-    // }
-    // if cast.is_error() {
-    //     trace!("[v2]  Aborting due to error");
-    //     return cast;
-    // }
-
-    // Unpack the simple bit vector as struct or array.
-    if !context.is_simple_bit_vector() {
-        cast.add_cast(CastOp::UnpackSBVT, context);
-        trace!("[v2]  Unpacking SBVT");
+    // Change size.
+    //
+    // For example: `bit [7:0]` to `bit [2:0]`.
+    let inferred_sbvt = if inferred_sbvt.size != context_sbvt.size {
+        trace!(
+            "[v2]  Casting size from {} to {}",
+            inferred_sbvt.range(),
+            context_sbvt.range()
+        );
+        let ty = inferred_sbvt.change_size(context_sbvt.size);
+        cast.add_cast(
+            CastOp::Range(inferred_sbvt.range(), inferred_sbvt.is_signed()),
+            ty.to_unpacked(cx),
+        );
+        ty
+    } else {
+        inferred_sbvt
+    };
+    if cast.is_error() {
+        trace!("[v2]  Aborting due to error");
+        return cast;
     }
+
+    // Change sign.
+    //
+    // For example: `bit` to `bit signed`, or `bit signed` to `bit unsigned`.
+    let inferred_sbvt = if inferred_sbvt.signing != context_sbvt.signing {
+        trace!(
+            "[v2]  Casting sign from {:?} to {:?}",
+            inferred_sbvt.signing,
+            context_sbvt.signing
+        );
+        let ty = inferred_sbvt.change_signing(context_sbvt.signing);
+        cast.add_cast(CastOp::Sign(context_sbvt.signing), ty.to_unpacked(cx));
+        ty
+    } else {
+        inferred_sbvt
+    };
+    if cast.is_error() {
+        trace!("[v2]  Aborting due to error");
+        return cast;
+    }
+
+    // Change domain.
+    //
+    // For example: `bit` to `logic`, or `logic` to `bit`.
+    let inferred_sbvt = if inferred_sbvt.domain != context_sbvt.domain {
+        trace!(
+            "[v2]  Casting domain from {:?} to {:?}",
+            inferred_sbvt.domain,
+            context_sbvt.domain
+        );
+        let ty = inferred_sbvt.change_domain(context_sbvt.domain);
+        cast.add_cast(CastOp::Domain(context_sbvt.domain), ty.to_unpacked(cx));
+        ty
+    } else {
+        inferred_sbvt
+    };
+    if cast.is_error() {
+        trace!("[v2]  Aborting due to error");
+        return cast;
+    }
+
+    // At this point the SBVTs must match.
+    assert!(
+        inferred_sbvt.is_identical(&context_sbvt),
+        "SBVTs `{}` and `{}` must match at this point",
+        inferred_sbvt,
+        context_sbvt
+    );
+
+    // Unpack the simple bit vector as complex type.
+    cast.add_cast(CastOp::UnpackSBVT, context);
+    trace!("[v2]  Unpacking SBVT");
     if cast.is_error() {
         trace!("[v2]  Aborting due to error");
         return cast;
@@ -964,7 +944,6 @@ fn cast_expr_type_inner2<'gcx>(
         trace!("[v2]  Cast complete");
         return cast;
     }
-    return cast;
 
     // If we arrive here, casting failed.
     let mut d = DiagBuilder2::error(format!(
