@@ -14,7 +14,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{Type, TypeKind},
+    ty::{SbvType, Type, TypeKind},
     ParamEnv, ParamEnvBinding,
 };
 use bit_vec::BitVec;
@@ -296,9 +296,11 @@ fn const_mir_rvalue_inner<'gcx>(
     cx: &impl Context<'gcx>,
     mir: &'gcx mir::Rvalue<'gcx>,
 ) -> Value<'gcx> {
+    let mir_ty = mir.ty.to_legacy(cx);
+
     // Propagate MIR tombstones immediately.
     if mir.is_error() {
-        return cx.intern_value(make_error(mir.ty));
+        return cx.intern_value(make_error(mir_ty));
     }
 
     match mir.kind {
@@ -317,14 +319,14 @@ fn const_mir_rvalue_inner<'gcx>(
                         "Casts `{}` from `{}` to `{}`",
                         value.span.extract(),
                         value.ty,
-                        mir.ty
+                        mir_ty
                     ))
                     .span(value.span),
             );
             let v = cx.const_mir_rvalue(value.into());
             // TODO: This is an incredibly ugly hack.
             cx.intern_value(ValueData {
-                ty: mir.ty,
+                ty: mir_ty,
                 kind: v.kind.clone(),
             })
         }
@@ -332,20 +334,20 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::CastToBool(value) => {
             let value = cx.const_mir_rvalue(value.into());
             if value.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
-            cx.intern_value(make_int(mir.ty, (value.is_true() as usize).into()))
+            cx.intern_value(make_int(mir_ty, (value.is_true() as usize).into()))
         }
 
         mir::RvalueKind::ConstructArray(ref values) => cx.intern_value(make_array(
-            mir.ty,
+            mir_ty,
             (0..values.len())
                 .map(|index| cx.const_mir_rvalue(values[&index].into()))
                 .collect(),
         )),
 
         mir::RvalueKind::ConstructStruct(ref values) => cx.intern_value(make_struct(
-            mir.ty,
+            mir_ty,
             values
                 .iter()
                 .map(|&value| cx.const_mir_rvalue(value.into()))
@@ -357,12 +359,12 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::UnaryBitwise { op, arg } => {
             let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
-                    mir.ty,
-                    const_unary_bitwise_int(cx, arg.ty, op, arg_int),
+                    mir_ty,
+                    const_unary_bitwise_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, arg_int),
                 )),
                 _ => unreachable!(),
             }
@@ -372,13 +374,13 @@ fn const_mir_rvalue_inner<'gcx>(
             let lhs_val = cx.const_mir_rvalue(lhs.into());
             let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
                     cx.intern_value(make_int(
-                        mir.ty,
-                        const_binary_bitwise_int(cx, lhs.ty, op, lhs_int, rhs_int),
+                        mir_ty,
+                        const_binary_bitwise_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int),
                     ))
                 }
                 _ => unreachable!(),
@@ -388,12 +390,12 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
             let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
-                    mir.ty,
-                    const_unary_arith_int(cx, arg.ty, op, arg_int),
+                    mir_ty,
+                    const_unary_arith_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, arg_int),
                 )),
                 _ => unreachable!(),
             }
@@ -403,13 +405,13 @@ fn const_mir_rvalue_inner<'gcx>(
             let lhs_val = cx.const_mir_rvalue(lhs.into());
             let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
                     cx.intern_value(make_int(
-                        mir.ty,
-                        const_binary_arith_int(cx, lhs.ty, op, lhs_int, rhs_int),
+                        mir_ty,
+                        const_binary_arith_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int),
                     ))
                 }
                 _ => unreachable!(),
@@ -420,11 +422,11 @@ fn const_mir_rvalue_inner<'gcx>(
             let lhs_val = cx.const_mir_rvalue(lhs.into());
             let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => cx.intern_value(
-                    make_int(mir.ty, const_comp_int(cx, lhs.ty, op, lhs_int, rhs_int)),
+                    make_int(mir_ty, const_comp_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int)),
                 ),
                 _ => unreachable!(),
             }
@@ -433,37 +435,38 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::Concat(ref values) => {
             let mut result = BigInt::zero();
             for &value in values {
-                result <<= value.ty.width();
+                result <<= value.ty.simple_bit_vector(cx, value.span).size;
                 result |= cx
                     .const_mir_rvalue(value.into())
                     .get_int()
                     .expect("concat non-integer");
             }
-            cx.intern_value(make_int(mir.ty, result))
+            cx.intern_value(make_int(mir_ty, result))
         }
 
         mir::RvalueKind::Repeat(count, value) => {
             let value_const = cx.const_mir_rvalue(value.into());
             if value_const.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
+            let sbvt = value.ty.simple_bit_vector(cx, value.span);
             let mut result = BigInt::zero();
             for _ in 0..count {
-                result <<= value.ty.width();
+                result <<= sbvt.size;
                 result |= value_const.get_int().expect("repeat non-integer");
             }
-            cx.intern_value(make_int(mir.ty, result))
+            cx.intern_value(make_int(mir_ty, result))
         }
 
         mir::RvalueKind::Assignment { .. } | mir::RvalueKind::Var(_) | mir::RvalueKind::Port(_) => {
             cx.emit(DiagBuilder2::error("value is not constant").span(mir.span));
-            cx.intern_value(make_error(mir.ty))
+            cx.intern_value(make_error(mir_ty))
         }
 
         mir::RvalueKind::Member { value, field } => {
             let value_const = cx.const_mir_rvalue(value.into());
             if value_const.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match value_const.kind {
                 ValueKind::StructOrArray(ref fields) => fields[field],
@@ -495,13 +498,13 @@ fn const_mir_rvalue_inner<'gcx>(
             let value_val = cx.const_mir_rvalue(value.into());
             let amount_val = cx.const_mir_rvalue(amount.into());
             if value_val.is_error() || amount_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match (&value_val.kind, &amount_val.kind) {
                 (ValueKind::Int(value_int, ..), ValueKind::Int(amount_int, ..)) => {
                     cx.intern_value(make_int(
-                        mir.ty,
-                        const_shift_int(cx, value.ty, op, arith, value_int, amount_int),
+                        mir_ty,
+                        const_shift_int(cx, value.ty.simple_bit_vector(cx, value.span), op, arith, value_int, amount_int),
                     ))
                 }
                 _ => unreachable!(),
@@ -511,12 +514,12 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::Reduction { op, arg } => {
             let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
-                return cx.intern_value(make_error(mir.ty));
+                return cx.intern_value(make_error(mir_ty));
             }
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
-                    mir.ty,
-                    const_reduction_int(cx, arg.ty, op, arg_int),
+                    mir_ty,
+                    const_reduction_int(cx, arg.ty.simple_bit_vector(cx, arg.span), op, arg_int),
                 )),
                 _ => unreachable!(),
             }
@@ -532,24 +535,24 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         // Propagate tombstones.
-        mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
+        mir::RvalueKind::Error => cx.intern_value(make_error(mir_ty)),
     }
 }
 
 fn const_unary_bitwise_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    ty: Type,
+    ty: SbvType,
     op: mir::UnaryBitwiseOp,
     arg: &BigInt,
 ) -> BigInt {
     match op {
-        mir::UnaryBitwiseOp::Not => (BigInt::one() << ty.width()) - 1 - arg,
+        mir::UnaryBitwiseOp::Not => (BigInt::one() << ty.size) - 1 - arg,
     }
 }
 
 fn const_binary_bitwise_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    _ty: Type,
+    _ty: SbvType,
     op: mir::BinaryBitwiseOp,
     lhs: &BigInt,
     rhs: &BigInt,
@@ -563,7 +566,7 @@ fn const_binary_bitwise_int<'gcx>(
 
 fn const_unary_arith_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    _ty: Type,
+    _ty: SbvType,
     op: mir::IntUnaryArithOp,
     arg: &BigInt,
 ) -> BigInt {
@@ -574,7 +577,7 @@ fn const_unary_arith_int<'gcx>(
 
 fn const_binary_arith_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    _ty: Type,
+    _ty: SbvType,
     op: mir::IntBinaryArithOp,
     lhs: &BigInt,
     rhs: &BigInt,
@@ -599,7 +602,7 @@ fn const_binary_arith_int<'gcx>(
 
 fn const_comp_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    _ty: Type,
+    _ty: SbvType,
     op: mir::IntCompOp,
     lhs: &BigInt,
     rhs: &BigInt,
@@ -616,7 +619,7 @@ fn const_comp_int<'gcx>(
 
 fn const_shift_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    _ty: Type,
+    _ty: SbvType,
     op: mir::ShiftOp,
     _arith: bool,
     value: &BigInt,
@@ -638,14 +641,12 @@ fn const_shift_int<'gcx>(
 
 fn const_reduction_int<'gcx>(
     _cx: &impl Context<'gcx>,
-    ty: Type,
+    ty: SbvType,
     op: mir::BinaryBitwiseOp,
     arg: &BigInt,
 ) -> BigInt {
     match op {
-        mir::BinaryBitwiseOp::And => {
-            ((arg == &((BigInt::one() << ty.width()) - 1)) as usize).into()
-        }
+        mir::BinaryBitwiseOp::And => ((arg == &((BigInt::one() << ty.size) - 1)) as usize).into(),
         mir::BinaryBitwiseOp::Or => ((!arg.is_zero()) as usize).into(),
         mir::BinaryBitwiseOp::Xor => (arg
             .to_bytes_le()

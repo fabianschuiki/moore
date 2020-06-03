@@ -2,11 +2,11 @@
 
 //! Expression lvalue lowering to MIR.
 
+use crate::crate_prelude::*;
 use crate::{
-    crate_prelude::*,
     hir::HirNode,
     mir::{lower::rvalue::compute_indexing, lvalue::*},
-    ty::Type,
+    ty::UnpackedType,
     ParamEnv,
 };
 
@@ -31,7 +31,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     }
 
     /// Intern an MIR node.
-    fn build(&self, ty: Type<'a>, kind: LvalueKind<'a>) -> &'a Lvalue<'a> {
+    fn build(&self, ty: &'a UnpackedType<'a>, kind: LvalueKind<'a>) -> &'a Lvalue<'a> {
         self.cx.arena().alloc_mir_lvalue(Lvalue {
             id: self.cx.alloc_id(self.span),
             origin: self.expr,
@@ -47,7 +47,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     /// This is usually called when something goes wrong during MIR construction
     /// and a marker node is needed to indicate that part of the MIR is invalid.
     fn error(&self) -> &'a Lvalue<'a> {
-        self.build(&ty::ERROR_TYPE, LvalueKind::Error)
+        self.build(UnpackedType::make_error(), LvalueKind::Error)
     }
 }
 
@@ -75,7 +75,7 @@ fn try_lower_expr<'gcx>(
     expr_id: NodeId,
 ) -> Result<&'gcx Lvalue<'gcx>> {
     // Determine the expression type.
-    let ty = builder.cx.type_of(expr_id, builder.env)?;
+    let ty = UnpackedType::from_legacy(builder.cx, builder.cx.type_of(expr_id, builder.env)?);
 
     // Try to extract the expr HIR for this node. Handle a few special cases
     // where the node is not technically an expression, but can be used as a
@@ -107,7 +107,12 @@ fn try_lower_expr<'gcx>(
 
             // Lower the indexee and make sure it can be indexed into.
             let target = builder.cx.mir_lvalue(target, builder.env);
-            if !target.ty.is_array() && !target.ty.is_bit_vector() {
+            if target
+                .ty
+                .get_packed()
+                .map(|p| p.dims.is_empty())
+                .unwrap_or(true)
+            {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
                         "`{}` cannot be index into",

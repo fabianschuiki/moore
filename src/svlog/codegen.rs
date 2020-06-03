@@ -547,7 +547,7 @@ where
             if lhs.is_error() || rhs.is_error() {
                 continue;
             }
-            assert_type!(rhs.ty, lhs.ty, rhs.span, self.cx);
+            assert_type2!(rhs.ty, lhs.ty, rhs.span, self.cx);
             let lhs = self.emit_mir_lvalue(lhs)?.0;
             let rhs = self.emit_mir_rvalue(rhs)?;
             let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
@@ -943,16 +943,18 @@ where
             }
 
             mir::RvalueKind::ZeroExtend(_, value) => {
-                let width = value.ty.width();
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
+                let mir_ty = mir.ty.to_legacy(self.cx);
+                let llty = self.emit_type(mir_ty, mir.env)?;
                 let result = self.emit_zero_for_type(&llty);
                 let value = self.emit_mir_rvalue(value)?;
                 Ok(self.builder.ins().ins_slice(result, value, 0, width))
             }
 
             mir::RvalueKind::SignExtend(_, value) => {
-                let width = value.ty.width();
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
+                let mir_ty = mir.ty.to_legacy(self.cx);
+                let llty = self.emit_type(mir_ty, mir.env)?;
                 let value = self.emit_mir_rvalue(value)?;
                 let sign = self.builder.ins().ext_slice(value, width - 1, 1);
                 let zeros = self.emit_zero_for_type(&llty);
@@ -989,7 +991,7 @@ where
                 let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                 // TODO(fschuiki): make the above a constant of all `x`.
                 let shifted = self.builder.ins().shr(target, hidden, base);
-                if value.ty.is_array() {
+                if !value.ty.get_packed().unwrap().dims.is_empty() {
                     if length == 0 {
                         Ok(self.builder.ins().ext_field(shifted, 0))
                     } else {
@@ -1088,10 +1090,11 @@ where
 
             mir::RvalueKind::Concat(ref values) => {
                 let mut offset = 0;
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let mir_ty = mir.ty.to_legacy(self.cx);
+                let llty = self.emit_type(mir_ty, mir.env)?;
                 let mut value = self.emit_zero_for_type(&llty);
                 for v in values.iter().rev() {
-                    let w = v.ty.width();
+                    let w = v.ty.simple_bit_vector(self.cx, v.span).size;
                     let v = self.emit_mir_rvalue(v)?;
                     value = self.builder.ins().ins_slice(value, v, offset, w);
                     offset += w;
@@ -1100,9 +1103,10 @@ where
             }
 
             mir::RvalueKind::Repeat(times, value) => {
-                let width = value.ty.width();
+                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let value = self.emit_mir_rvalue(value)?;
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let mir_ty = mir.ty.to_legacy(self.cx);
+                let llty = self.emit_type(mir_ty, mir.env)?;
                 let mut result = self.emit_zero_for_type(&llty);
                 for i in 0..times {
                     result = self
@@ -1153,7 +1157,7 @@ where
             }
 
             mir::RvalueKind::Reduction { op, arg } => {
-                let width = arg.ty.width();
+                let width = arg.ty.simple_bit_vector(self.cx, arg.span).size;
                 let arg = self.emit_mir_rvalue(arg)?;
                 let mut value = self.builder.ins().ext_slice(arg, 0, 1);
                 for i in 1..width {
@@ -1183,7 +1187,14 @@ where
     /// Emit the code for an rvalue converted to a boolean..
     fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         let mir = self.mir_rvalue(expr_id, env);
-        assert_span!(mir.ty.is_bool(), mir.span, self);
+        assert_span!(
+            mir.ty
+                .get_simple_bit_vector()
+                .map(|sbv| sbv.size == 1)
+                .unwrap_or(false),
+            mir.span,
+            self
+        );
         self.emit_mir_rvalue(mir)
     }
 
@@ -1252,7 +1263,7 @@ where
                     let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                     self.builder.ins().shr(target, hidden, base)
                 });
-                if value.ty.is_array() {
+                if !value.ty.get_packed().unwrap().dims.is_empty() {
                     if length == 0 {
                         Ok((
                             self.builder.ins().ext_field(shifted_real, 0),
@@ -1358,7 +1369,7 @@ where
                 if lhs_mir.is_error() || rhs_mir.is_error() {
                     return Err(());
                 }
-                assert_type!(rhs_mir.ty, lhs_mir.ty, rhs_mir.span, self.cx);
+                assert_type2!(rhs_mir.ty, lhs_mir.ty, rhs_mir.span, self.cx);
                 let lhs_lv = self.emit_mir_lvalue(lhs_mir)?;
                 let rhs_rv = self.emit_mir_rvalue(rhs_mir)?;
 

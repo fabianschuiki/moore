@@ -483,7 +483,6 @@ fn cast_expr_type<'gcx>(
             DiagBuilder2::note(format!("cast: `{}` to `{}`", cast.init, cast.ty)).span(expr.span);
         for (op, ty) in &cast.casts {
             let msg = match *op {
-                CastOp::SimpleBitVector => format!("cast to simple bit vector type `{}`", ty),
                 CastOp::PackSBVT => format!("pack as simple bit vector type `{}`", ty),
                 CastOp::UnpackSBVT => format!("unpack simple bit vector type as `{}`", ty),
                 CastOp::Bool => format!("cast to boolean `{}`", ty),
@@ -504,9 +503,6 @@ fn cast_expr_type<'gcx>(
                     },
                     ty
                 ),
-                CastOp::Struct => format!("unpack as struct `{}`", ty),
-                CastOp::Array => format!("unpack as array `{}`", ty),
-                CastOp::Transmute => format!("transmute as `{}`", ty),
             };
             d = d.add_note(msg);
         }
@@ -1489,9 +1485,6 @@ impl<'a> TypeContext2<'a> {
     pub fn ty(&self) -> &'a ty::UnpackedType<'a> {
         match *self {
             TypeContext2::Type(t) => t,
-            // This transmute should actually not be needed. Not sure why the
-            // static lifetime of LOGIC_UNPACKED does not suffice. Maybe some
-            // trouble with `Cell`s in the AST?
             TypeContext2::Bool => ty::UnpackedType::make_logic(),
         }
     }
@@ -1808,8 +1801,6 @@ pub struct CastType<'a> {
 /// A cast operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CastOp {
-    /// Cast to a simple bit vector type.
-    SimpleBitVector,
     /// Pack a value into an SBVT.
     PackSBVT,
     /// Unpack a value from an SBVT.
@@ -1822,12 +1813,6 @@ pub enum CastOp {
     Range(ty::Range, bool),
     /// Cast to a different domain.
     Domain(ty::Domain),
-    /// Cast to a struct.
-    Struct,
-    /// Cast to an array.
-    Array,
-    /// Cast a scalar from/to 1-element vector.
-    Transmute,
 }
 
 impl<'a> CastType<'a> {

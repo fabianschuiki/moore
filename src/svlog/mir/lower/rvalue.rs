@@ -2,12 +2,12 @@
 
 //! Expression rvalue lowering to MIR.
 
+use crate::crate_prelude::*;
 use crate::{
-    crate_prelude::*,
     hir::HirNode,
     hir::PatternMapping,
     mir::rvalue::*,
-    ty::{Type, TypeKind},
+    ty::{SbvType, UnpackedType},
     typeck::{CastOp, CastType},
     value::{self, ValueData, ValueKind},
     ParamEnv,
@@ -35,7 +35,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     }
 
     /// Intern an MIR node.
-    fn build(&self, ty: Type<'a>, kind: RvalueKind<'a>) -> &'a Rvalue<'a> {
+    fn build(&self, ty: &'a UnpackedType<'a>, kind: RvalueKind<'a>) -> &'a Rvalue<'a> {
         self.cx.arena().alloc_mir_rvalue(Rvalue {
             id: self.cx.alloc_id(self.span),
             origin: self.expr,
@@ -52,12 +52,15 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     /// This is usually called when something goes wrong during MIR construction
     /// and a marker node is needed to indicate that part of the MIR is invalid.
     fn error(&self) -> &'a Rvalue<'a> {
-        self.build(&ty::ERROR_TYPE, RvalueKind::Error)
+        self.build(UnpackedType::make_error(), RvalueKind::Error)
     }
 
     /// Create a constant node.
     fn constant(&self, value: ValueData<'a>) -> &'a Rvalue<'a> {
-        self.build(value.ty, RvalueKind::Const(self.cx.intern_value(value)))
+        self.build(
+            UnpackedType::from_legacy(self.cx, value.ty),
+            RvalueKind::Const(self.cx.intern_value(value)),
+        )
     }
 }
 
@@ -91,13 +94,12 @@ pub fn lower_expr<'gcx>(
     let cast = cx.cast_type(expr_id, env).unwrap();
 
     // Lower the expression.
-    let rvalue = lower_expr_inner(&builder, hir, cast.init.to_legacy(cx))
-        .unwrap_or_else(|_| builder.error());
+    let rvalue = lower_expr_inner(&builder, hir, cast.init).unwrap_or_else(|_| builder.error());
     if rvalue.is_error() {
         return rvalue;
     }
     assert_span!(
-        ty::identical(rvalue.ty, cast.init.to_legacy(cx)),
+        rvalue.ty.is_identical(cast.init),
         hir.span,
         cx,
         "rvalue lowering produced type `{}`, expected `{}`",
@@ -115,12 +117,13 @@ pub fn lower_expr<'gcx>(
 fn lower_expr_inner<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     hir: &'gcx hir::Expr,
-    ty: Type<'gcx>,
+    ty: &'gcx UnpackedType<'gcx>,
 ) -> Result<&'gcx Rvalue<'gcx>> {
     let expr_id = hir.id;
     let cx = builder.cx;
     let span = cx.span(expr_id);
     let env = builder.env;
+    let ty_legacy = ty.to_legacy(cx);
 
     // Determine the expression type and match on the various forms.
     match hir.kind {
@@ -131,15 +134,23 @@ fn lower_expr_inner<'gcx>(
             ref x_bits,
             ..
         } => Ok(builder.constant(value::make_int_special(
-            ty,
+            ty_legacy,
             k.clone(),
             special_bits.clone(),
             x_bits.clone(),
         ))),
-        hir::ExprKind::UnsizedConst('0') => Ok(builder.constant(value::make_int(ty, num::zero()))),
-        hir::ExprKind::UnsizedConst('1') => Ok(builder.constant(value::make_int(ty, num::one()))),
-        hir::ExprKind::UnsizedConst('x') => Ok(builder.constant(value::make_int(ty, num::one()))),
-        hir::ExprKind::UnsizedConst('z') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::UnsizedConst('0') => {
+            Ok(builder.constant(value::make_int(ty_legacy, num::zero())))
+        }
+        hir::ExprKind::UnsizedConst('1') => {
+            Ok(builder.constant(value::make_int(ty_legacy, num::one())))
+        }
+        hir::ExprKind::UnsizedConst('x') => {
+            Ok(builder.constant(value::make_int(ty_legacy, num::one())))
+        }
+        hir::ExprKind::UnsizedConst('z') => {
+            Ok(builder.constant(value::make_int(ty_legacy, num::one())))
+        }
         hir::ExprKind::UnsizedConst(c) => {
             bug_span!(span, cx, "unsized const with weird '{}' char", c)
         }
@@ -152,7 +163,7 @@ fn lower_expr_inner<'gcx>(
 
         // Built-in function calls
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
-            Ok(builder.constant(value::make_int(ty, num::zero())))
+            Ok(builder.constant(value::make_int(ty_legacy, num::zero())))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
             let arg_val = cx.constant_value_of(arg, env)?;
@@ -165,7 +176,7 @@ fn lower_expr_inner<'gcx>(
             } else {
                 BigInt::from((arg_int - BigInt::one()).bits())
             };
-            Ok(builder.constant(value::make_int(ty, value)))
+            Ok(builder.constant(value::make_int(ty_legacy, value)))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
             let ty = cx.type_of(arg, env)?;
@@ -202,8 +213,8 @@ fn lower_expr_inner<'gcx>(
             let cond = cx.mir_rvalue(cond, env);
             let true_value = cx.mir_rvalue(true_value, env);
             let false_value = cx.mir_rvalue(false_value, env);
-            assert_type!(true_value.ty, ty, true_value.span, builder.cx);
-            assert_type!(false_value.ty, ty, false_value.span, builder.cx);
+            assert_type2!(true_value.ty, ty, true_value.span, builder.cx);
+            assert_type2!(false_value.ty, ty, false_value.span, builder.cx);
             Ok(builder.build(
                 ty,
                 RvalueKind::Ternary {
@@ -215,21 +226,7 @@ fn lower_expr_inner<'gcx>(
         }
 
         hir::ExprKind::PositionalPattern(ref mapping) => {
-            if ty.is_error() {
-                Err(())
-            } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() || ty.is_struct() {
-                Ok(lower_positional_pattern(&builder, mapping, 1, ty))
-            } else {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "cannot construct a value of type `{}` with `'{{...}}`",
-                        ty
-                    ))
-                    .span(span)
-                    .add_note("Positional patterns can only construct arrays or structs."),
-                );
-                Err(())
-            }
+            Ok(lower_positional_pattern(&builder, mapping, 1, ty))
         }
 
         hir::ExprKind::RepeatPattern(count, ref mapping) => {
@@ -247,30 +244,16 @@ fn lower_expr_inner<'gcx>(
                     return Err(());
                 }
             };
-            if ty.is_error() {
-                Err(())
-            } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() || ty.is_struct() {
-                Ok(lower_positional_pattern(&builder, mapping, const_count, ty))
-            } else {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "cannot construct a value of type `{}` with `'{{...}}`",
-                        ty
-                    ))
-                    .span(span)
-                    .add_note("Repeat patterns can only construct arrays or structs."),
-                );
-                Err(())
-            }
+            Ok(lower_positional_pattern(&builder, mapping, const_count, ty))
         }
 
         hir::ExprKind::NamedPattern(ref mapping) => {
             if ty.is_error() {
                 Err(())
-            } else if ty.is_array() || ty.is_bit_vector() || ty.is_bit_scalar() {
-                Ok(lower_array_pattern(&builder, mapping, ty))
-            } else if ty.is_struct() {
-                Ok(lower_struct_pattern(&builder, mapping, ty))
+            } else if let Some(dim) = ty.dims().last() {
+                Ok(lower_named_array_pattern(&builder, mapping, ty, dim))
+            } else if let Some(strukt) = ty.get_struct() {
+                Ok(lower_named_struct_pattern(&builder, mapping, ty, strukt))
             } else {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
@@ -292,22 +275,14 @@ fn lower_expr_inner<'gcx>(
                 .map(|&expr| {
                     let value = builder.cx.mir_rvalue(expr, env);
                     assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
-                    Ok((value.ty.try_bit_size(builder.cx, env)?, value))
+                    Ok((value.ty.get_bit_size().unwrap(), value))
                 })
                 .collect::<Result<Vec<_>>>()?;
 
             // Compute the result type of the concatenation.
             let total_width = exprs.iter().map(|(w, _)| w).sum();
-            let result_ty = builder.cx.intern_type(TypeKind::BitVector {
-                domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
-                sign: ty::Sign::Unsigned,       // fixed by standard
-                range: ty::Range {
-                    size: total_width,
-                    dir: ty::RangeDir::Down,
-                    offset: 0isize,
-                },
-                dubbed: false,
-            });
+            let result_ty = SbvType::new(ty::Domain::FourValued, ty::Sign::Unsigned, total_width)
+                .to_unpacked(builder.cx);
 
             // Assemble the concatenation.
             let concat = builder.build(
@@ -323,16 +298,9 @@ fn lower_expr_inner<'gcx>(
                     .to_usize()
                     .unwrap();
                 let total_width = total_width * count;
-                let result_ty = builder.cx.intern_type(TypeKind::BitVector {
-                    domain: ty::Domain::FourValued,
-                    sign: ty::Sign::Unsigned,
-                    range: ty::Range {
-                        size: total_width,
-                        dir: ty::RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                });
+                let result_ty =
+                    SbvType::new(ty::Domain::FourValued, ty::Sign::Unsigned, total_width)
+                        .to_unpacked(builder.cx);
                 builder.build(result_ty, RvalueKind::Repeat(count, concat))
             } else {
                 concat
@@ -351,11 +319,7 @@ fn lower_expr_inner<'gcx>(
             let target = cx.mir_rvalue(target, env);
 
             // Make sure we can actually index here.
-            assert_span!(
-                target.ty.is_array() || target.ty.is_simple_bit_vector(),
-                target.span,
-                cx,
-            );
+            assert_span!(!target.ty.dims.is_empty(), target.span, cx,);
 
             // Build the cast rvalue.
             Ok(builder.build(
@@ -386,18 +350,14 @@ fn lower_expr_inner<'gcx>(
             // By default nothing matches.
             let mut check = builder.build(
                 ty,
-                RvalueKind::Const(cx.intern_value(value::make_int(ty, Zero::zero()))),
+                RvalueKind::Const(cx.intern_value(value::make_int(ty_legacy, Zero::zero()))),
             );
 
             // Determine the intermediate type for the comparisons.
-            let comp_ty = cx.need_operation_type(expr_id, env);
+            let comp_ty = UnpackedType::from_legacy(cx, cx.need_operation_type(expr_id, env));
 
             // Determine the result type for the comparison.
-            let out_ty = cx
-                .cast_type(expr_id, env)
-                .unwrap()
-                .init
-                .to_legacy(builder.cx);
+            let out_ty = cx.cast_type(expr_id, env).unwrap().init;
 
             // Compare the LHS against all ranges.
             let lhs = cx.mir_rvalue(expr, env);
@@ -491,17 +451,13 @@ pub(crate) fn compute_indexing<'gcx>(
         hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
             let base = cx.mir_rvalue(base, env);
             let delta_rvalue = cx.mir_rvalue(delta, env);
-            assert_span!(
-                ty::identical(delta_rvalue.ty, base.ty),
-                delta_rvalue.span,
-                builder.cx
-            );
+            assert_type2!(delta_rvalue.ty, base.ty, delta_rvalue.span, builder.cx);
             let base = builder.build(
                 base.ty,
                 RvalueKind::IntBinaryArith {
                     op: IntBinaryArithOp::Sub,
-                    sign: base.ty.get_sign().unwrap(),
-                    domain: base.ty.get_value_domain().unwrap(),
+                    sign: base.ty.get_simple_bit_vector().unwrap().signing,
+                    domain: base.ty.domain(),
                     lhs: base,
                     rhs: delta_rvalue,
                 },
@@ -517,8 +473,10 @@ pub(crate) fn compute_indexing<'gcx>(
             let lhs_int = cx.constant_int_value_of(lhs, env)?;
             let rhs_int = cx.constant_int_value_of(rhs, env)?;
             let base = std::cmp::min(lhs_int, rhs_int).clone();
-            let base_ty = cx.mkty_int(max(base.bits(), 1));
-            let base = cx.intern_value(value::make_int(base_ty, base));
+            let base_ty =
+                SbvType::new(ty::Domain::TwoValued, ty::Sign::Signed, max(base.bits(), 1))
+                    .to_unpacked(builder.cx);
+            let base = cx.intern_value(value::make_int(base_ty.to_legacy(builder.cx), base));
             let base = builder.build(base_ty, RvalueKind::Const(base));
             let length = ((lhs_int - rhs_int).abs() + BigInt::one())
                 .to_usize()
@@ -541,8 +499,9 @@ fn lower_cast<'gcx>(
     if to.is_error() {
         return builder.error();
     }
-    assert_span!(
-        ty::identical(value.ty, to.init.to_legacy(builder.cx)),
+    assert_type2!(
+        value.ty,
+        to.init,
         value.span,
         builder.cx,
         "rvalue type `{}` does not match initial type of cast `{}`",
@@ -559,20 +518,10 @@ fn lower_cast<'gcx>(
     // Lower each cast individually.
     for &(op, to) in &to.casts {
         debug!("- {:?} from `{}` to `{}`", op, value.ty, to);
-        let to = to.to_legacy(builder.cx);
         match op {
             CastOp::Bool => {
                 assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
                 value = builder.build(to, RvalueKind::CastToBool(value));
-            }
-            CastOp::SimpleBitVector => {
-                if value.ty.is_struct() {
-                    value = pack_struct(builder, value);
-                } else if value.ty.is_array() {
-                    value = pack_array(builder, value);
-                } else {
-                    error!("Cannot map `{}` to a simple bit vector", value.ty);
-                }
             }
             CastOp::Sign(sign) => {
                 assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
@@ -582,7 +531,7 @@ fn lower_cast<'gcx>(
             CastOp::Range(range, signed) => {
                 assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
                 assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
-                let kind = if value.ty.get_range().unwrap().size < range.size {
+                let kind = if value.ty.simple_bit_vector(builder.cx, value.span).size < range.size {
                     match signed {
                         true => RvalueKind::SignExtend(range.size, value),
                         false => RvalueKind::ZeroExtend(range.size, value),
@@ -596,40 +545,11 @@ fn lower_cast<'gcx>(
                 value = builder.build(
                     to,
                     RvalueKind::CastValueDomain {
-                        from: value.ty.get_value_domain().unwrap(),
+                        from: value.ty.domain(),
                         to: domain,
                         value,
                     },
                 );
-            }
-            CastOp::Struct => {
-                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
-                assert_span!(to.is_struct(), value.span, builder.cx);
-                value = unpack_struct(builder, to, value);
-            }
-            CastOp::Array => {
-                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
-                assert_span!(to.is_array(), value.span, builder.cx);
-                value = unpack_array(builder, to, value);
-            }
-            CastOp::Transmute => {
-                if let TypeKind::BitScalar { .. } = to {
-                    value = builder.build(
-                        to,
-                        RvalueKind::CastVectorToAtom {
-                            domain: value.ty.get_value_domain().unwrap(),
-                            value,
-                        },
-                    );
-                } else {
-                    value = builder.build(
-                        to,
-                        RvalueKind::CastAtomToVector {
-                            domain: value.ty.get_value_domain().unwrap(),
-                            value,
-                        },
-                    );
-                }
             }
             CastOp::PackSBVT => {
                 assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
@@ -640,7 +560,7 @@ fn lower_cast<'gcx>(
                 value = unpack_simple_bit_vector(builder, value, to);
             }
         }
-        if !ty::identical(value.ty, to) {
+        if !value.ty.is_identical(to) {
             error!(
                 "Cast {:?} should have produced `{}`, but value is `{}`",
                 op, to, value.ty
@@ -649,8 +569,9 @@ fn lower_cast<'gcx>(
     }
 
     // Check that the casts have actually produced the expected output type.
-    assert_span!(
-        ty::identical(value.ty, to.ty.to_legacy(builder.cx)),
+    assert_type2!(
+        value.ty,
+        to.ty,
         value.span,
         builder.cx,
         "rvalue type `{}` does not match final cast type `{}` after lower_cast",
@@ -669,11 +590,19 @@ fn pack_simple_bit_vector<'gcx>(
     if value.is_error() {
         return value;
     }
-    let out = if value.ty.is_struct() {
-        pack_struct(builder, value)
-    } else if value.ty.is_array() {
-        pack_array(builder, value)
+    let out = if let Some(dim) = value.ty.dims().last() {
+        pack_array(builder, value, dim)
+    } else if let Some(strukt) = value.ty.get_struct() {
+        pack_struct(builder, value, strukt)
     } else {
+        if !value.ty.is_simple_bit_vector() {
+            bug_span!(
+                value.span,
+                builder.cx,
+                "cannot pack `{}` as SBVT; should be caught by typeck",
+                value.ty
+            );
+        }
         value
     };
     assert_span!(out.ty.is_simple_bit_vector(), value.span, builder.cx);
@@ -681,66 +610,58 @@ fn pack_simple_bit_vector<'gcx>(
 }
 
 /// Pack a struct as a simple bit vector.
-fn pack_struct<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    value: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    let mut failed = false;
-
-    // Get the field names and types.
-    let def_id = value.ty.get_struct_def().unwrap();
-    let def = match builder.cx.struct_def(def_id.id()) {
-        Ok(d) => d,
-        Err(()) => return builder.error(),
-    };
-
+fn pack_struct<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Rvalue<'a>,
+    strukt: &'a ty::StructType<'a>,
+) -> &'a Rvalue<'a> {
     // Pack each of the fields.
     let mut packed_fields = vec![];
-    for (i, field) in def.fields.iter().enumerate() {
-        let field_ty = match builder.cx.map_to_type(field.ty, builder.env) {
-            Ok(t) => t,
-            Err(()) => {
-                failed = true;
-                continue;
-            }
-        };
-        let field_value = builder.build(field_ty, RvalueKind::Member { value, field: i });
+    for (i, field) in strukt.members.iter().enumerate() {
+        let field_value = builder.build(field.ty, RvalueKind::Member { value, field: i });
         let field_value = pack_simple_bit_vector(builder, field_value);
         packed_fields.push(field_value);
     }
 
     // Concatenate the fields.
-    if failed {
-        builder.error()
-    } else {
-        let ty = value
-            .ty
-            .get_simple_bit_vector(builder.cx, builder.env, true)
-            .expect("struct must have sbvt");
-        builder.build(ty, RvalueKind::Concat(packed_fields))
-    }
+    let ty = value.ty.simple_bit_vector(builder.cx, builder.span);
+    builder.build(
+        ty.to_unpacked(builder.cx),
+        RvalueKind::Concat(packed_fields),
+    )
 }
 
 /// Pack an array as a simple bit vector.
-fn pack_array<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    value: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    // Unpack the outermost array dimension.
-    let length = value.ty.get_array_length().expect("array length");
+fn pack_array<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Rvalue<'a>,
+    dim: ty::Dim<'a>,
+) -> &'a Rvalue<'a> {
+    // Determine the length of the array.
+    let length = match dim.get_size() {
+        Some(x) => x,
+        None => bug_span!(
+            builder.span,
+            builder.cx,
+            "pack array with invalid input dimension `{}`",
+            dim
+        ),
+    };
 
-    // Map the element type to its simple bit vector equivalent.
-    let elem_ty = value.ty.get_array_element().expect("array element type");
+    // Determine the element type.
+    let elem_ty = value.ty.pop_dim(builder.cx).unwrap();
 
     // Cast each element.
     let mut packed_elements = vec![];
+    let int_ty =
+        SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
     for i in 0..length {
         let i = builder.build(
-            &ty::INT_TYPE,
+            int_ty,
             RvalueKind::Const(
                 builder
                     .cx
-                    .intern_value(value::make_int(&ty::INT_TYPE, i.into())),
+                    .intern_value(value::make_int(int_ty.to_legacy(builder.cx), i.into())),
             ),
         );
         let elem = builder.build(
@@ -756,170 +677,160 @@ fn pack_array<'gcx>(
     }
 
     // Concatenate the elements.
-    let ty = value
-        .ty
-        .get_simple_bit_vector(builder.cx, builder.env, true)
-        .expect("array must have sbvt");
-    builder.build(ty, RvalueKind::Concat(packed_elements))
+    let ty = value.ty.simple_bit_vector(builder.cx, value.span);
+    builder.build(
+        ty.to_unpacked(builder.cx),
+        RvalueKind::Concat(packed_elements),
+    )
 }
 
 /// Generate the nodes necessary to unpack a value from its corresponding simple
 /// bit vector type.
-fn unpack_simple_bit_vector<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    value: &'gcx Rvalue<'gcx>,
-    to: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
+fn unpack_simple_bit_vector<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Rvalue<'a>,
+    to: &'a UnpackedType<'a>,
+) -> &'a Rvalue<'a> {
     if value.is_error() {
         return value;
     }
-    assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
-    let out = if to.is_struct() {
-        unpack_struct(builder, to, value)
-    } else if to.is_array() {
-        unpack_array(builder, to, value)
+    if let Some(dim) = to.dims().last() {
+        unpack_array(builder, value, to, dim)
+    } else if let Some(strukt) = to.get_struct() {
+        unpack_struct(builder, value, to, strukt)
     } else {
+        if !to.is_simple_bit_vector() {
+            bug_span!(
+                value.span,
+                builder.cx,
+                "cannot unpack SBVT as `{}`; should be caught by typeck",
+                to
+            );
+        }
         value
-    };
-    out
+    }
 }
 
 /// Unpack a struct from a simple bit vector.
-fn unpack_struct<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
-    value: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    let mut failed = false;
-
-    // Get the field names and types.
-    let def_id = ty.get_struct_def().unwrap();
-    let def = match builder.cx.struct_def(def_id.id()) {
-        Ok(d) => d,
-        Err(()) => return builder.error(),
-    };
-
+fn unpack_struct<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Rvalue<'a>,
+    to: &'a UnpackedType<'a>,
+    strukt: &'a ty::StructType<'a>,
+) -> &'a Rvalue<'a> {
     // Unpack each of the fields.
     let mut offset = 0;
     let mut unpacked_fields = vec![];
-    for field in &def.fields {
-        let field_ty = match builder.cx.map_to_type(field.ty, builder.env) {
-            Ok(t) => t,
-            Err(()) => {
-                failed = true;
-                continue;
-            }
-        };
-        let sbvt = field_ty.get_simple_bit_vector(builder.cx, builder.env, true);
-        let sbvt = match sbvt {
-            Some(x) => x,
-            None => {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "field `{}` cannot be cast to a simple bit vector",
-                        field.name
-                    ))
-                    .span(builder.span),
-                );
-                continue;
-            }
-        };
-        let w = sbvt.width();
+    for field in &strukt.members {
+        let sbvt = field.ty.simple_bit_vector(builder.cx, value.span);
+        let ty =
+            SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
+        let w = sbvt.size;
         let i = builder.build(
-            &ty::INT_TYPE,
+            ty,
             RvalueKind::Const(
                 builder
                     .cx
-                    .intern_value(value::make_int(&ty::INT_TYPE, offset.into())),
+                    .intern_value(value::make_int(ty.to_legacy(builder.cx), offset.into())),
             ),
         );
-        let field_value = builder.build(
-            sbvt,
+        let value = builder.build(
+            sbvt.change_size(w).to_unpacked(builder.cx),
             RvalueKind::Index {
                 value,
                 base: i,
                 length: w,
             },
         );
-        let field_value = pack_simple_bit_vector(builder, field_value);
-        unpacked_fields.push(field_value);
+        let value = unpack_simple_bit_vector(builder, value, field.ty);
+        unpacked_fields.push(value);
         offset += w;
     }
 
     // Construct the struct.
-    if failed {
-        builder.error()
-    } else {
-        builder.build(ty, RvalueKind::ConstructStruct(unpacked_fields))
-    }
+    builder.build(to, RvalueKind::ConstructStruct(unpacked_fields))
 }
 
 /// Unpack an array from a simple bit vector.
-fn unpack_array<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
-    value: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    // Unpack the outermost array dimension.
-    let length = ty.get_array_length().expect("array length");
+fn unpack_array<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Rvalue<'a>,
+    to: &'a UnpackedType<'a>,
+    dim: ty::Dim<'a>,
+) -> &'a Rvalue<'a> {
+    // Determine the length of the array.
+    let length = match dim.get_size() {
+        Some(x) => x,
+        None => bug_span!(
+            builder.span,
+            builder.cx,
+            "unpack array with invalid input dimension `{}`",
+            dim
+        ),
+    };
+
+    // Determine the element type.
+    let elem_ty = to.pop_dim(builder.cx).unwrap();
 
     // Map the element type to its simple bit vector equivalent.
-    let elem_ty = ty.get_array_element().expect("array element type");
-    let sbvt = match elem_ty.get_simple_bit_vector(builder.cx, builder.env, true) {
-        Some(x) => x,
-        None => {
-            builder.cx.emit(
-                DiagBuilder2::error(format!(
-                    "element type `{}` cannot be cast to a simple bit vector",
-                    elem_ty
-                ))
-                .span(builder.span),
-            );
-            return builder.error();
-        }
-    };
-    let w = sbvt.width();
+    let sbvt = elem_ty.simple_bit_vector(builder.cx, value.span);
+    let w = sbvt.size;
 
     // Unpack each element.
     let mut unpacked_elements = HashMap::new();
     for i in 0..length {
+        let ty =
+            SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
         let base = builder.build(
-            &ty::INT_TYPE,
+            ty,
             RvalueKind::Const(
                 builder
                     .cx
-                    .intern_value(value::make_int(&ty::INT_TYPE, (i * w).into())),
+                    .intern_value(value::make_int(ty.to_legacy(builder.cx), (i * w).into())),
             ),
         );
         let elem = builder.build(
-            sbvt,
+            sbvt.to_unpacked(builder.cx),
             RvalueKind::Index {
                 value,
                 base: base,
                 length: w,
             },
         );
-        let elem = pack_simple_bit_vector(builder, elem);
+        let elem = unpack_simple_bit_vector(builder, elem, elem_ty);
         unpacked_elements.insert(i, elem);
     }
 
     // Concatenate the elements.
-    builder.build(ty, RvalueKind::ConstructArray(unpacked_elements))
+    builder.build(to, RvalueKind::ConstructArray(unpacked_elements))
 }
 
-/// Lower a `'{...}` array pattern.
-fn lower_array_pattern<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
+/// Lower a named `'{...}` array pattern.
+fn lower_named_array_pattern<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
     mapping: &[(PatternMapping, NodeId)],
-    ty: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
-    let (length, offset, elem_ty) = match *ty {
-        TypeKind::PackedArray(w, t) => (w, 0isize, t),
-        TypeKind::BitScalar { domain, .. } => (1, 0isize, domain.bit_type()),
-        TypeKind::BitVector { domain, range, .. } => (range.size, range.offset, domain.bit_type()),
-        _ => unreachable!("array pattern with invalid input type"),
+    ty: &'a UnpackedType<'a>,
+    dim: ty::Dim<'a>,
+) -> &'a Rvalue<'a> {
+    // Determine the length of the array and the offset of the indexes.
+    let (length, offset) = match dim
+        .get_range()
+        .map(|r| (r.size, r.offset))
+        .or_else(|| dim.get_size().map(|s| (s, 0)))
+    {
+        Some(x) => x,
+        None => bug_span!(
+            builder.span,
+            builder.cx,
+            "array pattern with invalid input dimension `{}`",
+            dim
+        ),
     };
-    let mut failed = false;
+
+    // Determine the element type.
+    let elem_ty = ty.pop_dim(builder.cx).unwrap();
+
+    // Map things.
     let mut default: Option<&Rvalue> = None;
     let mut values = HashMap::<usize, &Rvalue>::new();
     for &(map, to) in mapping {
@@ -929,7 +840,6 @@ fn lower_array_pattern<'gcx>(
                     DiagBuilder2::error("types cannot index into an array")
                         .span(builder.cx.span(type_id)),
                 );
-                failed = true;
                 continue;
             }
             PatternMapping::Member(member_id) => {
@@ -960,14 +870,13 @@ fn lower_array_pattern<'gcx>(
                 }() {
                     Ok(i) => i,
                     Err(_) => {
-                        failed = true;
                         continue;
                     }
                 };
 
                 // Determine the value and insert into the mappings.
                 let value = builder.cx.mir_rvalue(to, builder.env);
-                assert_type!(value.ty, elem_ty, value.span, builder.cx);
+                assert_type2!(value.ty, elem_ty, value.span, builder.cx);
                 let span = value.span;
                 if let Some(prev) = values.insert(index, value) {
                     builder.cx.emit(
@@ -991,12 +900,11 @@ fn lower_array_pattern<'gcx>(
                             .add_note("Previous mapping default mapping was here:")
                             .span(default.span),
                     );
-                    failed = true;
                     continue;
                 }
                 None => {
                     let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_type!(value.ty, elem_ty, value.span, builder.cx);
+                    assert_type2!(value.ty, elem_ty, value.span, builder.cx);
                     default = Some(value);
                 }
             },
@@ -1024,62 +932,51 @@ fn lower_array_pattern<'gcx>(
         }
     }
 
-    match *ty {
-        _ if failed => builder.error(),
-        TypeKind::PackedArray(..) => builder.build(ty, RvalueKind::ConstructArray(values)),
-        TypeKind::BitScalar { .. } => {
-            assert_eq!(values.len(), 1);
+    // Construct the correct output value.
+    if ty.is_simple_bit_vector() {
+        if length == 1 {
             values[&0]
+        } else {
+            builder.build(
+                ty,
+                RvalueKind::Concat((0..length).rev().map(|i| values[&i]).collect()),
+            )
         }
-        TypeKind::BitVector { .. } => builder.build(
-            ty,
-            RvalueKind::Concat((0..length).rev().map(|i| values[&i]).collect()),
-        ),
-        _ => unreachable!("array pattern with invalid input type"),
+    } else {
+        builder.build(ty, RvalueKind::ConstructArray(values))
     }
 }
 
-/// Lower a `'{...}` struct pattern.
-fn lower_struct_pattern<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
+/// Lower a named `'{...}` struct pattern.
+fn lower_named_struct_pattern<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
     mapping: &[(PatternMapping, NodeId)],
-    ty: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
+    ty: &'a UnpackedType<'a>,
+    strukt: &'a ty::StructType<'a>,
+) -> &'a Rvalue<'a> {
     // Determine the field names and types for the struct to be assembled.
-    let def_id = ty.get_struct_def().unwrap();
-    let def = match builder.cx.struct_def(def_id.id()) {
-        Ok(d) => d,
-        Err(()) => return builder.error(),
-    };
-    let fields: Vec<_> = match def
-        .fields
-        .iter()
-        .map(|f| Ok((f.name, builder.cx.map_to_type(f.ty, builder.env)?)))
-        .collect::<Result<Vec<_>>>()
-    {
-        Ok(d) => d,
-        Err(()) => return builder.error(),
-    };
-    let name_lookup: HashMap<Name, usize> = fields
+    let name_lookup: HashMap<Name, usize> = strukt
+        .members
         .iter()
         .enumerate()
-        .map(|(i, f)| (f.0.value, i))
+        .map(|(i, f)| (f.name.value, i))
         .collect();
-    trace!("struct fields are {:?}", fields);
+    trace!("struct fields are {:?}", strukt.members);
     trace!("struct field names are {:?}", name_lookup);
 
     // Disassemble the user's mapping into actual field bindings and defaults.
     let mut failed = false;
     let mut default: Option<NodeId> = None;
-    let mut type_defaults = HashMap::<Type, &Rvalue>::new();
+    let mut type_defaults = HashMap::<&UnpackedType, &Rvalue>::new();
     let mut values = HashMap::<usize, &Rvalue>::new();
     for &(map, to) in mapping {
         match map {
             PatternMapping::Type(type_id) => match builder.cx.map_to_type(type_id, builder.env) {
                 Ok(ty) => {
+                    let ty = UnpackedType::from_legacy(builder.cx, ty);
                     let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_type!(value.ty, ty, value.span, builder.cx);
-                    type_defaults.insert(ty, value);
+                    assert_type2!(value.ty, ty, value.span, builder.cx);
+                    type_defaults.insert(ty.resolve_full(), value);
                 }
                 Err(()) => {
                     failed = true;
@@ -1099,7 +996,7 @@ fn lower_struct_pattern<'gcx>(
                                 DiagBuilder2::error(format!("`{}` member does not exist", name))
                                     .span(name.span)
                                     .add_note("Struct definition was here:")
-                                    .span(builder.cx.span(def_id.id())),
+                                    .span(strukt.ast.span()),
                             );
                             failed = true;
                             continue;
@@ -1108,11 +1005,7 @@ fn lower_struct_pattern<'gcx>(
 
                     // Determine the value and insert into the mappings.
                     let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_span!(
-                        ty::identical(value.ty, fields[index].1),
-                        value.span,
-                        builder.cx
-                    );
+                    assert_type2!(value.ty, strukt.members[index].ty, value.span, builder.cx);
                     let span = value.span;
                     if let Some(prev) = values.insert(index, value) {
                         builder.cx.emit(
@@ -1165,18 +1058,16 @@ fn lower_struct_pattern<'gcx>(
 
     // In case the list of members provided by the user is incomplete, use the
     // defaults to fill in the other members.
-    for (index, &(field_name, field_ty)) in fields.iter().enumerate() {
+    for (index, field) in strukt.members.iter().enumerate() {
         if values.contains_key(&index) {
             continue;
         }
 
         // Try the type-based defaults first.
-        // TODO(fschuiki): Use better type comparison mechanism that is
-        // transparent to user defined types, etc.
-        if let Some(default) = type_defaults.get(field_ty) {
+        if let Some(default) = type_defaults.get(field.ty.resolve_full()) {
             trace!(
                 "applying type default to member `{}`: {:?}",
-                field_name,
+                field.name,
                 default
             );
             values.insert(index, default);
@@ -1188,15 +1079,16 @@ fn lower_struct_pattern<'gcx>(
             default
         } else {
             builder.cx.emit(
-                DiagBuilder2::error(format!("`{}` member missing in struct pattern", field_name))
+                DiagBuilder2::error(format!("`{}` member missing in struct pattern", field.name))
                     .span(builder.span)
                     .add_note("Struct patterns must assign a value to every member."),
             );
             failed = true;
             continue;
         };
+
         let value = builder.cx.mir_rvalue(default, builder.env);
-        assert_type!(value.ty, field_ty, value.span, builder.cx);
+        assert_type2!(value.ty, field.ty, value.span, builder.cx);
         values.insert(index, value);
     }
 
@@ -1210,96 +1102,84 @@ fn lower_struct_pattern<'gcx>(
     }
 }
 
-/// Lower a positional `'{...}` array or struct pattern.
-fn lower_positional_pattern<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
+/// Lower a positional `'{...}` pattern.
+fn lower_positional_pattern<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
     mapping: &[NodeId],
     repeat: usize,
-    ty: Type<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
+    ty: &'a UnpackedType<'a>,
+) -> &'a Rvalue<'a> {
     // Lower each of the values to MIR, and abort on errors.
     let values: Vec<_> = mapping
         .iter()
         .map(|&id| builder.cx.mir_rvalue(id, builder.env))
         .collect();
-    if values.iter().any(|mir| mir.is_error()) {
+    if ty.is_error() || values.iter().any(|mir| mir.is_error()) {
         return builder.error();
     }
     let len = values.len() * repeat;
     let values: Vec<_> = values.into_iter().cycle().take(len).collect();
 
-    // Ensure that the number of values matches the array/struct definition.
-    let exp_len = match *ty.resolve_name() {
-        TypeKind::PackedArray(len, _) => len,
-        TypeKind::BitScalar { .. } => 1,
-        TypeKind::BitVector { range, .. } => range.size,
-        TypeKind::Struct(def_id) => match builder.cx.struct_def(def_id.id()) {
-            Ok(d) => d.fields.len(),
-            Err(()) => return builder.error(),
-        },
-        _ => bug_span!(
+    // Find a mapping for the values.
+    let (exp_len, result) = if ty.is_simple_bit_vector() {
+        let mut values = values;
+        values.reverse();
+        (
+            ty.simple_bit_vector(builder.cx, builder.span).size,
+            builder.build(ty, RvalueKind::Concat(values)),
+        )
+    } else if let Some(dim) = ty.dims().last() {
+        match dim.get_size() {
+            Some(size) => {
+                let result = builder.build(
+                    ty,
+                    RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
+                );
+                (size, result)
+            }
+            None => {
+                builder.cx.emit(
+                    DiagBuilder2::error(format!(
+                        "value of type `{}` cannot be constructed with a pattern;\
+                        dimension `{}` has no fixed size",
+                        ty, dim,
+                    ))
+                    .span(builder.span),
+                );
+                return builder.error();
+            }
+        }
+    } else if let Some(strukt) = ty.get_struct() {
+        let result = builder.build(ty, RvalueKind::ConstructStruct(values));
+        (strukt.members.len(), result)
+    } else {
+        bug_span!(
             builder.span,
             builder.cx,
             "positional pattern with invalid type `{}`",
             ty
-        ),
+        )
     };
-    if exp_len != values.len() {
+
+    // Ensure that the number of values matches the array/struct definition.
+    if exp_len != len {
         builder.cx.emit(
             DiagBuilder2::error(format!(
                 "pattern has {} fields, but type `{}` requires {}",
-                values.len(),
-                ty,
-                exp_len
+                len, ty, exp_len
             ))
             .span(builder.span),
         );
         return builder.error();
     }
 
-    // Construct the required output type.
-    match *ty.resolve_name() {
-        TypeKind::PackedArray(_, elty) => {
-            for v in &values {
-                assert_type!(v.ty, elty, v.span, builder.cx);
-            }
-            builder.build(
-                ty,
-                RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
-            )
-        }
-        TypeKind::BitScalar { .. } => {
-            let v = values[0];
-            assert_type!(v.ty, ty, v.span, builder.cx);
-            v
-        }
-        TypeKind::BitVector { sign, domain, .. } => {
-            for v in &values {
-                assert_type!(
-                    v.ty,
-                    &TypeKind::BitScalar { sign, domain },
-                    v.span,
-                    builder.cx
-                );
-            }
-            let mut values = values;
-            values.reverse();
-            builder.build(ty, RvalueKind::Concat(values))
-        }
-        TypeKind::Struct(..) => builder.build(ty, RvalueKind::ConstructStruct(values)),
-        _ => bug_span!(
-            builder.span,
-            builder.cx,
-            "positional pattern with invalid type `{}`",
-            ty
-        ),
-    }
+    result
 }
 
 /// Map a unary operator to MIR.
 fn lower_unary<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+    ty: &'gcx UnpackedType<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
@@ -1324,7 +1204,7 @@ fn lower_unary<'gcx>(
 /// Map a binary operator to MIR.
 fn lower_binary<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+    ty: &'gcx UnpackedType<'gcx>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
@@ -1361,7 +1241,7 @@ fn lower_binary<'gcx>(
 /// Map an integer unary arithmetic operator to MIR.
 fn lower_int_unary_arith<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    result_ty: Type<'gcx>,
+    result_ty: &'gcx UnpackedType<'gcx>,
     op: hir::UnaryOp,
     arg: NodeId,
 ) -> &'gcx Rvalue<'gcx> {
@@ -1372,7 +1252,8 @@ fn lower_int_unary_arith<'gcx>(
     }
 
     // Check that the operand is of the right type.
-    assert_type!(arg.ty, result_ty, builder.span, builder.cx);
+    let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
+    assert_type2!(arg.ty, result_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1391,21 +1272,21 @@ fn lower_int_unary_arith<'gcx>(
         result_ty,
         RvalueKind::IntUnaryArith {
             op,
-            sign: result_ty.get_sign().unwrap(),
-            domain: result_ty.get_value_domain().unwrap(),
+            sign: sbvt.signing,
+            domain: sbvt.domain,
             arg,
         },
     )
 }
 
 /// Map an integer binary arithmetic operator to MIR.
-fn lower_int_binary_arith<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    result_ty: Type<'gcx>,
+fn lower_int_binary_arith<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
@@ -1414,8 +1295,9 @@ fn lower_int_binary_arith<'gcx>(
     }
 
     // Check that the operands are of the right type.
-    assert_type!(lhs.ty, result_ty, builder.span, builder.cx);
-    assert_type!(rhs.ty, result_ty, builder.span, builder.cx);
+    let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
+    assert_type2!(lhs.ty, result_ty, builder.span, builder.cx);
+    assert_type2!(rhs.ty, result_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1438,8 +1320,8 @@ fn lower_int_binary_arith<'gcx>(
         result_ty,
         RvalueKind::IntBinaryArith {
             op,
-            sign: result_ty.get_sign().unwrap(),
-            domain: result_ty.get_value_domain().unwrap(),
+            sign: sbvt.signing,
+            domain: sbvt.domain,
             lhs,
             rhs,
         },
@@ -1447,15 +1329,18 @@ fn lower_int_binary_arith<'gcx>(
 }
 
 /// Map an integer comparison operator to MIR.
-fn lower_int_comparison<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    result_ty: Type<'gcx>,
+fn lower_int_comparison<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Determine the operation type of the comparison.
-    let ty = builder.cx.need_operation_type(builder.expr, builder.env);
+    let ty = UnpackedType::from_legacy(
+        builder.cx,
+        builder.cx.need_operation_type(builder.expr, builder.env),
+    );
 
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
@@ -1485,25 +1370,26 @@ fn lower_int_comparison<'gcx>(
 }
 
 /// Map an integer comparison operator to MIR.
-fn make_int_comparison<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
+fn make_int_comparison<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
     op: IntCompOp,
-    result_ty: Type<'gcx>,
-    op_ty: Type<'gcx>,
-    lhs: &'gcx Rvalue<'gcx>,
-    rhs: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
+    result_ty: &'a UnpackedType<'a>,
+    op_ty: &'a UnpackedType<'a>,
+    lhs: &'a Rvalue<'a>,
+    rhs: &'a Rvalue<'a>,
+) -> &'a Rvalue<'a> {
     // Check that the operands are of the right type.
-    assert_type!(lhs.ty, op_ty, builder.span, builder.cx);
-    assert_type!(rhs.ty, op_ty, builder.span, builder.cx);
+    let sbvt = op_ty.simple_bit_vector(builder.cx, builder.span);
+    assert_type2!(lhs.ty, op_ty, builder.span, builder.cx);
+    assert_type2!(rhs.ty, op_ty, builder.span, builder.cx);
 
     // Assemble the node.
     builder.build(
         result_ty,
         RvalueKind::IntComp {
             op,
-            sign: op_ty.get_sign().unwrap(),
-            domain: op_ty.get_value_domain().unwrap(),
+            sign: sbvt.signing,
+            domain: sbvt.domain,
             lhs,
             rhs,
         },
@@ -1511,13 +1397,13 @@ fn make_int_comparison<'gcx>(
 }
 
 /// Map an integer shift operator to MIR.
-fn lower_shift<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    result_ty: Type<'gcx>,
+fn lower_shift<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::BinaryOp,
     value: NodeId,
     amount: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Lower the operands.
     let value = builder.cx.mir_rvalue(value, builder.env);
     let amount = builder.cx.mir_rvalue(amount, builder.env);
@@ -1526,15 +1412,16 @@ fn lower_shift<'gcx>(
     }
 
     // Check that the operands are of the right type.
-    assert_type!(value.ty, result_ty, value.span, builder.cx);
+    let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
+    assert_type2!(value.ty, result_ty, value.span, builder.cx);
     assert_span!(amount.ty.is_simple_bit_vector(), amount.span, builder.cx);
 
     // Determine the operation.
     let (op, arith) = match op {
         hir::BinaryOp::LogicShL => (ShiftOp::Left, false),
         hir::BinaryOp::LogicShR => (ShiftOp::Right, false),
-        hir::BinaryOp::ArithShL => (ShiftOp::Left, result_ty.is_signed()),
-        hir::BinaryOp::ArithShR => (ShiftOp::Right, result_ty.is_signed()),
+        hir::BinaryOp::ArithShL => (ShiftOp::Left, sbvt.is_signed()),
+        hir::BinaryOp::ArithShR => (ShiftOp::Right, sbvt.is_signed()),
         _ => bug_span!(
             builder.span,
             builder.cx,
@@ -1556,12 +1443,12 @@ fn lower_shift<'gcx>(
 }
 
 /// Map a bitwise unary operator to MIR.
-fn lower_unary_bitwise<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+fn lower_unary_bitwise<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::UnaryOp,
     arg: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);
     if arg.is_error() {
@@ -1569,7 +1456,7 @@ fn lower_unary_bitwise<'gcx>(
     }
 
     // Check that the operand is of the right type.
-    assert_type!(arg.ty, ty, arg.span, builder.cx);
+    assert_type2!(arg.ty, result_ty, arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1583,17 +1470,17 @@ fn lower_unary_bitwise<'gcx>(
     };
 
     // Assemble the node.
-    builder.build(ty, RvalueKind::UnaryBitwise { op, arg })
+    builder.build(result_ty, RvalueKind::UnaryBitwise { op, arg })
 }
 
 /// Map a bitwise binary operator to MIR.
-fn lower_binary_bitwise<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+fn lower_binary_bitwise<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
@@ -1618,27 +1505,27 @@ fn lower_binary_bitwise<'gcx>(
     };
 
     // Assemble the node.
-    make_binary_bitwise(builder, ty, op, negate, lhs, rhs)
+    make_binary_bitwise(builder, result_ty, op, negate, lhs, rhs)
 }
 
 /// Map a bitwise binary operator to MIR.
-fn make_binary_bitwise<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+fn make_binary_bitwise<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: BinaryBitwiseOp,
     negate: bool,
-    lhs: &'gcx Rvalue<'gcx>,
-    rhs: &'gcx Rvalue<'gcx>,
-) -> &'gcx Rvalue<'gcx> {
+    lhs: &'a Rvalue<'a>,
+    rhs: &'a Rvalue<'a>,
+) -> &'a Rvalue<'a> {
     // Check that the operands are of the right type.
-    assert_type!(lhs.ty, ty, lhs.span, builder.cx);
-    assert_type!(rhs.ty, ty, rhs.span, builder.cx);
+    assert_type2!(lhs.ty, result_ty, lhs.span, builder.cx);
+    assert_type2!(rhs.ty, result_ty, rhs.span, builder.cx);
 
     // Assemble the node.
-    let value = builder.build(ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
+    let value = builder.build(result_ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
     if negate {
         builder.build(
-            ty,
+            result_ty,
             RvalueKind::UnaryBitwise {
                 op: UnaryBitwiseOp::Not,
                 arg: value,
@@ -1650,12 +1537,12 @@ fn make_binary_bitwise<'gcx>(
 }
 
 /// Map a unary logic operator to MIR.
-fn lower_unary_logic<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+fn lower_unary_logic<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::UnaryOp,
     arg: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);
     if arg.is_error() {
@@ -1663,7 +1550,7 @@ fn lower_unary_logic<'gcx>(
     }
 
     // Check that the operand is of the right type.
-    assert_type!(arg.ty, ty, arg.span, builder.cx);
+    assert_type2!(arg.ty, result_ty, arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1677,17 +1564,17 @@ fn lower_unary_logic<'gcx>(
     };
 
     // Assemble the node.
-    builder.build(ty, RvalueKind::UnaryBitwise { op, arg })
+    builder.build(result_ty, RvalueKind::UnaryBitwise { op, arg })
 }
 
 /// Map a binary logic operator to MIR.
-fn lower_binary_logic<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    ty: Type<'gcx>,
+fn lower_binary_logic<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
@@ -1696,8 +1583,8 @@ fn lower_binary_logic<'gcx>(
     }
 
     // Check that the operands are of the right type.
-    assert_type!(lhs.ty, ty, lhs.span, builder.cx);
-    assert_type!(rhs.ty, ty, rhs.span, builder.cx);
+    assert_type2!(lhs.ty, result_ty, lhs.span, builder.cx);
+    assert_type2!(rhs.ty, result_ty, rhs.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1712,18 +1599,21 @@ fn lower_binary_logic<'gcx>(
     };
 
     // Assemble the node.
-    builder.build(ty, RvalueKind::BinaryBitwise { op, lhs, rhs })
+    builder.build(result_ty, RvalueKind::BinaryBitwise { op, lhs, rhs })
 }
 
 /// Map a reduction operator to MIR.
-fn lower_reduction<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    result_ty: Type<'gcx>,
+fn lower_reduction<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
     op: hir::UnaryOp,
     arg: NodeId,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a Rvalue<'a> {
     // Determine the operation type.
-    let op_ty = builder.cx.need_operation_type(builder.expr, builder.env);
+    let op_ty = UnpackedType::from_legacy(
+        builder.cx,
+        builder.cx.need_operation_type(builder.expr, builder.env),
+    );
 
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);
@@ -1733,13 +1623,13 @@ fn lower_reduction<'gcx>(
 
     // Check the result type.
     assert_span!(
-        ty::identical(result_ty, op_ty.get_value_domain().unwrap().bit_type()),
+        result_ty.domain() == op_ty.domain(),
         builder.span,
         builder.cx
     );
 
     // Check that the operand is of the right type.
-    assert_type!(arg.ty, op_ty, builder.span, builder.cx);
+    assert_type2!(arg.ty, op_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let (op, negate) = match op {
@@ -1786,7 +1676,8 @@ fn lower_int_incdec<'gcx>(
     }
 
     // Compute the new value, depending on the operand type.
-    let new = if lv.ty.is_bit_scalar() {
+    let sbvt = lv.ty.simple_bit_vector(builder.cx, builder.span);
+    let new = if sbvt.size == 1 {
         // Single bit values simply toggle the bit.
         builder.build(
             lv.ty,
@@ -1795,7 +1686,7 @@ fn lower_int_incdec<'gcx>(
                 arg: rv,
             },
         )
-    } else if lv.ty.is_bit_vector() {
+    } else {
         // Bit vector values add/subtract one.
         let op = match op {
             hir::UnaryOp::PreInc | hir::UnaryOp::PostInc => IntBinaryArithOp::Add,
@@ -1804,29 +1695,22 @@ fn lower_int_incdec<'gcx>(
         };
         let one = builder.build(
             lv.ty,
-            RvalueKind::Const(builder.cx.intern_value(value::make_int(lv.ty, One::one()))),
+            RvalueKind::Const(
+                builder
+                    .cx
+                    .intern_value(value::make_int(lv.ty.to_legacy(builder.cx), One::one())),
+            ),
         );
         builder.build(
             lv.ty,
             RvalueKind::IntBinaryArith {
                 op,
-                sign: lv.ty.get_sign().unwrap(),
-                domain: lv.ty.get_value_domain().unwrap(),
+                sign: sbvt.signing,
+                domain: sbvt.domain,
                 lhs: rv,
                 rhs: one,
             },
         )
-    } else {
-        // Everything else we cannot do.
-        // TODO(fschuiki): Technically `real` supports this operator as well...
-        builder.cx.emit(
-            DiagBuilder2::error(format!(
-                "value of type `{}` cannot be incremented/decremented",
-                lv.ty
-            ))
-            .span(builder.span),
-        );
-        return builder.error();
     };
 
     // Determine which value to yield as a result.

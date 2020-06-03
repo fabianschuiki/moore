@@ -5,7 +5,8 @@
 //! An MIR representation for all expressions that may appear on the left-hand
 //! side of an assignment.
 
-use crate::{crate_prelude::*, mir::Rvalue, ty::Type, ParamEnv};
+use crate::crate_prelude::*;
+use crate::{mir::Rvalue, ty::UnpackedType, ParamEnv};
 use std::collections::HashMap;
 
 /// An lvalue expression.
@@ -20,7 +21,7 @@ pub struct Lvalue<'a> {
     /// The span in the source file where the lvalue originates from.
     pub span: Span,
     /// The type of the expression.
-    pub ty: Type<'a>,
+    pub ty: &'a UnpackedType<'a>,
     /// The expression data.
     pub kind: LvalueKind<'a>,
 }

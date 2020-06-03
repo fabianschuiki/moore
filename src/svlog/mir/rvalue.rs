@@ -5,10 +5,10 @@
 //! An MIR representation for all expressions that may appear on the right-hand
 //! side of an assignment.
 
+use crate::crate_prelude::*;
 use crate::{
-    crate_prelude::*,
     mir::lvalue::Lvalue,
-    ty::{Domain, Sign, Type},
+    ty::{Domain, Sign, UnpackedType},
     ParamEnv,
 };
 use std::collections::HashMap;
@@ -25,7 +25,7 @@ pub struct Rvalue<'a> {
     /// The span in the source file where the rvalue originates from.
     pub span: Span,
     /// The type of the expression.
-    pub ty: Type<'a>,
+    pub ty: &'a UnpackedType<'a>,
     /// The expression data.
     pub kind: RvalueKind<'a>,
     /// Whether this expression has a constant value.
@@ -77,16 +77,21 @@ pub enum RvalueKind<'a> {
     },
     /// A cast from one sign to another. E.g. `logic signed` to
     /// `logic unsigned`.
+    // TODO: Add SBVT
     CastSign(ty::Sign, &'a Rvalue<'a>),
     /// A cast from a simple bit type to a boolean.
+    // TODO: Add SBVT
     CastToBool(&'a Rvalue<'a>),
     /// Shrink the width of a vector type. E.g. `bit [31:0]` to `bit [7:0]`.
+    // TODO: Add SBVT
     Truncate(usize, &'a Rvalue<'a>),
     /// Increase the width of a vector by zero extension. E.g. `bit [7:0]` to
     /// `bit [31:0]`.
+    // TODO: Add SBVT
     ZeroExtend(usize, &'a Rvalue<'a>),
     /// Increase the width of a vector by sign extension. E.g. `bit signed
     /// [7:0]` to `bit signed [31:0]`.
+    // TODO: Add SBVT
     SignExtend(usize, &'a Rvalue<'a>),
     /// Constructor for an array.
     ConstructArray(HashMap<usize, &'a Rvalue<'a>>),
@@ -97,11 +102,13 @@ pub enum RvalueKind<'a> {
     /// A unary bitwise operator.
     UnaryBitwise {
         op: UnaryBitwiseOp,
+        // TODO: Add SBVT
         arg: &'a Rvalue<'a>,
     },
     /// A binary bitwise operator.
     BinaryBitwise {
         op: BinaryBitwiseOp,
+        // TODO: Add SBVT
         lhs: &'a Rvalue<'a>,
         rhs: &'a Rvalue<'a>,
     },
@@ -110,6 +117,7 @@ pub enum RvalueKind<'a> {
     /// If any bit of the operand is x/z, the entire result is x.
     IntUnaryArith {
         op: IntUnaryArithOp,
+        // TODO: Add SBVT
         sign: Sign,
         domain: Domain,
         arg: &'a Rvalue<'a>,
@@ -119,6 +127,7 @@ pub enum RvalueKind<'a> {
     /// If any bit of the operands are x/z, the entire result is x.
     IntBinaryArith {
         op: IntBinaryArithOp,
+        // TODO: Add SBVT
         sign: Sign,
         domain: Domain,
         lhs: &'a Rvalue<'a>,
@@ -129,6 +138,7 @@ pub enum RvalueKind<'a> {
     /// If any bit of the operands are x/z, the entire result is x.
     IntComp {
         op: IntCompOp,
+        // TODO: Add SBVT
         sign: Sign,
         domain: Domain,
         lhs: &'a Rvalue<'a>,
@@ -138,11 +148,13 @@ pub enum RvalueKind<'a> {
     ///
     /// The values are cast to and treated as packed bit vectors, and the result
     /// is yet another packed bit vector.
+    // TODO: Add SBVT
     Concat(Vec<&'a Rvalue<'a>>),
     /// Repeat a value multiple times.
     ///
     /// The value is cast to and treated as a packed bit vector, and the result
     /// is yet another packed bit vector.
+    // TODO: Add SBVT
     Repeat(usize, &'a Rvalue<'a>),
     /// A reference to a variable declaration.
     Var(NodeId),
@@ -173,6 +185,7 @@ pub enum RvalueKind<'a> {
     /// A reduction operator.
     Reduction {
         op: BinaryBitwiseOp,
+        // TODO: Add SBVT
         arg: &'a Rvalue<'a>,
     },
     /// An assignment operator.
