@@ -267,6 +267,9 @@ pub struct StructType<'a> {
     pub kind: ast::StructKind,
     /// The list of members.
     pub members: Vec<StructMember<'a>>,
+    /// The param env where this struct was declared, to recover the legacy
+    /// type.
+    legacy_env: ParamEnv,
 }
 
 /// A member of a struct type.
@@ -654,6 +657,7 @@ impl<'a> PackedType<'a> {
                         ast,
                         kind: ast.kind,
                         members,
+                        legacy_env: node_id.env(),
                     },
                 )
             }
@@ -706,6 +710,55 @@ impl<'a> PackedType<'a> {
             }
             TypeKind::Void => panic!("cannot convert {:?} to PackedType", other),
         }
+    }
+
+    /// Convert a `PackedType` into a legacy `Type`.
+    pub fn to_legacy(&self, cx: &impl Context<'a>) -> Type<'a> {
+        let mut dims = self.dims.iter().fuse();
+        let mut core = match self.core {
+            PackedCore::Error => return &ERROR_TYPE,
+            PackedCore::IntVec(x) => {
+                if let Some(dim) = dims.next() {
+                    cx.intern_type(TypeKind::BitVector {
+                        domain: x.domain(),
+                        sign: self.signing,
+                        range: match dim {
+                            PackedDim::Range(r) => *r,
+                            _ => panic!("cannot convert type with range `{}` to legacy type", dim),
+                        },
+                        dubbed: false,
+                    })
+                } else {
+                    match x {
+                        IntVecType::Bit => &BIT_TYPE,
+                        IntVecType::Logic => &LOGIC_TYPE,
+                        IntVecType::Reg => &LOGIC_TYPE,
+                    }
+                }
+            }
+            PackedCore::IntAtom(IntAtomType::Byte) => &BYTE_TYPE,
+            PackedCore::IntAtom(IntAtomType::ShortInt) => &SHORTINT_TYPE,
+            PackedCore::IntAtom(IntAtomType::Int) => &INT_TYPE,
+            PackedCore::IntAtom(IntAtomType::LongInt) => &LONGINT_TYPE,
+            PackedCore::IntAtom(IntAtomType::Integer) => &INTEGER_TYPE,
+            PackedCore::IntAtom(IntAtomType::Time) => &TIME_TYPE,
+            PackedCore::Struct(ref x) => {
+                cx.intern_type(TypeKind::Struct(x.ast.id().env(x.legacy_env)))
+            }
+            PackedCore::Enum(ref x) => x.base.to_legacy(cx),
+            PackedCore::Named { name, ty } => {
+                cx.intern_type(TypeKind::Named(name, NodeId::from_u32(0), ty.to_legacy(cx)))
+            }
+            PackedCore::Ref { ty, .. } => ty.to_legacy(cx),
+        };
+        for dim in dims {
+            let size = match dim {
+                PackedDim::Range(r) => r.size,
+                _ => panic!("cannot convert type with range `{}` to legacy type", dim),
+            };
+            core = cx.intern_type(TypeKind::PackedArray(size, core));
+        }
+        core
     }
 }
 
@@ -1085,6 +1138,14 @@ impl<'a> UnpackedType<'a> {
     /// Convert a legacy `Type` into an `UnpackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         Self::make(cx, PackedType::from_legacy(cx, other))
+    }
+
+    /// Convert an `UnpackedType` into a legacy `Type`.
+    pub fn to_legacy(&self, cx: &impl Context<'a>) -> Type<'a> {
+        match self.core {
+            UnpackedCore::Packed(x) => x.to_legacy(cx),
+            _ => panic!("cannot convert `{}` to legacy type", self),
+        }
     }
 
     /// Helper function to format this type around a declaration name.
