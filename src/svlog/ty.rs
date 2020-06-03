@@ -577,6 +577,7 @@ impl<'a> PackedType<'a> {
     pub fn is_simple_bit_vector(&self) -> bool {
         match self.core {
             PackedCore::IntVec(..) => self.dims.len() == 0 || self.dims.len() == 1,
+            PackedCore::IntAtom(..) => self.dims.is_empty(),
             _ => false,
         }
     }
