@@ -884,6 +884,21 @@ impl Display for PackedCore<'_> {
     }
 }
 
+impl PackedDim {
+    /// Get the dimension's range, or `None` if it is unsized.
+    pub fn get_range(&self) -> Option<Range> {
+        match *self {
+            Self::Range(x) => Some(x),
+            Self::Unsized => None,
+        }
+    }
+
+    /// Get the dimension's size, or `None` if it is unsized.
+    pub fn get_size(&self) -> Option<usize> {
+        self.get_range().map(|r| r.size)
+    }
+}
+
 impl Display for PackedDim {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -1273,6 +1288,25 @@ impl Display for UnpackedCore<'_> {
     }
 }
 
+impl UnpackedDim<'_> {
+    /// Get the dimension's range, or `None` if it is unsized.
+    pub fn get_range(&self) -> Option<Range> {
+        match *self {
+            Self::Range(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    /// Get the dimension's size, or `None` if it is unsized.
+    pub fn get_size(&self) -> Option<usize> {
+        match *self {
+            Self::Array(x) => Some(x),
+            Self::Range(x) => Some(x.size),
+            _ => None,
+        }
+    }
+}
+
 impl Display for UnpackedDim<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -1460,6 +1494,24 @@ impl Display for SbvType {
             write!(f, " {}", self.range())?;
         }
         Ok(())
+    }
+}
+
+impl Dim<'_> {
+    /// Get the dimension's range, or `None` if it has no range.
+    pub fn get_range(&self) -> Option<Range> {
+        match self {
+            Self::Packed(x) => x.get_range(),
+            Self::Unpacked(x) => x.get_range(),
+        }
+    }
+
+    /// Get the dimension's size, or `None` if it has no size.
+    pub fn get_size(&self) -> Option<usize> {
+        match self {
+            Self::Packed(x) => x.get_size(),
+            Self::Unpacked(x) => x.get_size(),
+        }
     }
 }
 
