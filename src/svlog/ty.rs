@@ -1097,7 +1097,7 @@ impl<'a> UnpackedType<'a> {
         core: impl Into<UnpackedCore<'a>>,
         dims: Vec<UnpackedDim<'a>>,
     ) -> &'a Self {
-        cx.intern_unpacked(Self::with_dims(core, dims))
+        Self::with_dims(core, dims).intern(cx)
     }
 
     /// Create a tombstone.
@@ -1143,9 +1143,8 @@ impl<'a> UnpackedType<'a> {
                 (Some(ty), Some(ty.resolve_full()))
             }
             UnpackedCore::Packed(ty) => (
-                ty.resolved.map(|ty| UnpackedType::make(cx, ty)),
-                ty.resolved_full
-                    .map(|ty| UnpackedType::make(cx, ty).resolve_full()),
+                ty.resolved.map(|p| p.to_unpacked(cx)),
+                ty.resolved_full.map(|p| p.to_unpacked(cx)),
             ),
             _ => (None, None),
         };
