@@ -88,7 +88,11 @@
 use crate::crate_prelude::*;
 use crate::{ast_map::AstNode, common::arenas::TypedArena, hir::HirNode, ParamEnv};
 use once_cell::sync::Lazy;
-use std::fmt::{self, Display, Formatter};
+use std::{
+    cell::RefCell,
+    collections::HashSet,
+    fmt::{self, Display, Formatter},
+};
 
 /// A packed type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1730,6 +1734,8 @@ pub trait TypeContext<'a> {
 pub struct TypeStorage<'a> {
     packed: TypedArena<PackedType<'a>>,
     unpacked: TypedArena<UnpackedType<'a>>,
+    cached_packed: RefCell<HashSet<&'a PackedType<'a>>>,
+    cached_unpacked: RefCell<HashSet<&'a UnpackedType<'a>>>,
 }
 
 /// An object that has type storage.
@@ -1743,11 +1749,23 @@ where
     T: HasTypeStorage<'a>,
 {
     fn intern_packed(&self, ty: PackedType<'a>) -> &'a PackedType<'a> {
-        self.type_storage().packed.alloc(ty)
+        let st = self.type_storage();
+        if let Some(x) = st.cached_packed.borrow().get(&ty) {
+            return x;
+        }
+        let ty = st.packed.alloc(ty);
+        st.cached_packed.borrow_mut().insert(ty);
+        ty
     }
 
     fn intern_unpacked(&self, ty: UnpackedType<'a>) -> &'a UnpackedType<'a> {
-        self.type_storage().unpacked.alloc(ty)
+        let st = self.type_storage();
+        if let Some(x) = st.cached_unpacked.borrow().get(&ty) {
+            return x;
+        }
+        let ty = st.unpacked.alloc(ty);
+        st.cached_unpacked.borrow_mut().insert(ty);
+        ty
     }
 }
 
