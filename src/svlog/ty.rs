@@ -656,17 +656,16 @@ impl<'a> PackedType<'a> {
 
     /// Pop the outermost dimension off the type.
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
-        if !self.dims.is_empty() {
-            let mut new = self.clone();
-            new.dims.pop().expect("pop_dim should pop a dim");
-            Some(new.intern(cx))
-        } else if !self.resolve().dims.is_empty() {
-            let mut new = self.resolve().clone();
-            new.dims.pop().expect("pop_dim should pop a dim");
-            Some(new.intern(cx))
-        } else {
-            None
+        let mut next = Some(self);
+        while let Some(ty) = next {
+            if !ty.dims.is_empty() {
+                let mut new = ty.clone();
+                new.dims.pop().expect("pop_dim should pop a dim");
+                return Some(new.intern(cx));
+            }
+            next = ty.resolved;
         }
+        None
     }
 
     /// Get the underlying struct, or `None` if the type is no struct.
@@ -1340,19 +1339,18 @@ impl<'a> UnpackedType<'a> {
 
     /// Pop the outermost dimension off the type.
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
-        if !self.dims.is_empty() {
-            let mut new = self.clone();
-            new.dims.pop().expect("pop_dim should drop a dim");
-            Some(new.intern(cx))
-        } else if !self.resolve().dims.is_empty() {
-            let mut new = self.resolve().clone();
-            new.dims.pop().expect("pop_dim should drop a dim");
-            Some(new.intern(cx))
-        } else {
-            self.get_packed()
-                .and_then(|p| p.pop_dim(cx))
-                .map(|p| p.to_unpacked(cx))
+        let mut next = Some(self);
+        while let Some(ty) = next {
+            if !ty.dims.is_empty() {
+                let mut new = ty.clone();
+                new.dims.pop().expect("pop_dim should drop a dim");
+                return Some(new.intern(cx));
+            }
+            next = ty.resolved;
         }
+        self.get_packed()
+            .and_then(|p| p.pop_dim(cx))
+            .map(|p| p.to_unpacked(cx))
     }
 
     /// Get the underlying struct, or `None` if the type is no struct.
