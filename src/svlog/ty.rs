@@ -112,6 +112,8 @@ pub struct PackedType<'a> {
 pub enum PackedCore<'a> {
     /// An error occurred during type computation.
     Error,
+    /// Void.
+    Void,
     /// An integer vector type.
     IntVec(IntVecType),
     /// An integer atom type.
@@ -346,6 +348,7 @@ impl<'a> PackedType<'a> {
             PackedCore::IntAtom(IntAtomType::Time)
             | PackedCore::IntVec(_)
             | PackedCore::Error
+            | PackedCore::Void
             | PackedCore::Struct(_)
             | PackedCore::Enum(_)
             | PackedCore::Named { .. }
@@ -466,6 +469,15 @@ impl<'a> PackedType<'a> {
         unsafe { std::mem::transmute(ty) }
     }
 
+    /// Create a `void` type.
+    pub fn make_void() -> &'a Self {
+        static TYPE: Lazy<PackedType> = Lazy::new(|| PackedType::new(PackedCore::Void));
+        let ty: &PackedType = &TYPE;
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
+        unsafe { std::mem::transmute(ty) }
+    }
+
     /// Create a `logic` type.
     pub fn make_logic() -> &'a Self {
         static TYPE: Lazy<PackedType> =
@@ -547,6 +559,7 @@ impl<'a> PackedType<'a> {
     pub fn domain(&self) -> Domain {
         match &self.core {
             PackedCore::Error => Domain::TwoValued,
+            PackedCore::Void => Domain::TwoValued,
             PackedCore::IntVec(x) => x.domain(),
             PackedCore::IntAtom(x) => x.domain(),
             PackedCore::Struct(x) => x.domain(),
@@ -562,6 +575,7 @@ impl<'a> PackedType<'a> {
         let ty = self.resolve_full();
         let mut size = match &ty.core {
             PackedCore::Error => 0,
+            PackedCore::Void => 0,
             PackedCore::IntVec(..) => 1,
             PackedCore::IntAtom(x) => x.bit_size(),
             PackedCore::Struct(x) => x.get_bit_size()?,
@@ -636,6 +650,7 @@ impl<'a> PackedType<'a> {
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
             TypeKind::Error => PackedType::make_error(),
+            TypeKind::Void => PackedType::make_void(),
             TypeKind::Time => PackedType::make(cx, IntAtomType::Time),
             TypeKind::Bit(domain) => PackedType::make(
                 cx,
@@ -753,7 +768,6 @@ impl<'a> PackedType<'a> {
                     )
                 }
             }
-            TypeKind::Void => panic!("cannot convert {:?} to PackedType", other),
         }
     }
 
@@ -762,6 +776,7 @@ impl<'a> PackedType<'a> {
         let mut dims = self.dims.iter().fuse();
         let mut core = match self.core {
             PackedCore::Error => return &ERROR_TYPE,
+            PackedCore::Void => return &VOID_TYPE,
             PackedCore::IntVec(x) => {
                 if let Some(dim) = dims.next() {
                     cx.intern_type(TypeKind::BitVector {
@@ -841,6 +856,7 @@ impl<'a> PackedCore<'a> {
     pub fn default_signing(&self) -> Sign {
         match self {
             Self::Error => Sign::Unsigned,
+            Self::Void => Sign::Unsigned,
             Self::IntVec(_) => Sign::Unsigned,
             Self::IntAtom(x) => x.default_signing(),
             Self::Struct(_) => Sign::Unsigned,
@@ -854,6 +870,7 @@ impl<'a> PackedCore<'a> {
     pub fn is_identical(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, Self::Error) => true,
+            (Self::Void, Self::Void) => true,
             (Self::IntVec(a), Self::IntVec(b)) => a == b,
             (Self::IntAtom(a), Self::IntAtom(b)) => a == b,
             (Self::Struct(a), Self::Struct(b)) => a == b,
@@ -868,6 +885,7 @@ impl<'a> PackedCore<'a> {
     fn format(&self, f: &mut std::fmt::Formatter, signing: Option<Sign>) -> std::fmt::Result {
         match self {
             Self::Error => write!(f, "<error>"),
+            Self::Void => write!(f, "void"),
             Self::IntVec(x) => {
                 write!(f, "{}", x)?;
                 if let Some(signing) = signing {
@@ -1054,6 +1072,15 @@ impl<'a> UnpackedType<'a> {
     /// Create a tombstone.
     pub fn make_error() -> &'a Self {
         static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(UnpackedCore::Error));
+        let ty: &UnpackedType = &TYPE;
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
+        unsafe { std::mem::transmute(ty) }
+    }
+
+    /// Create a `void` type.
+    pub fn make_void() -> &'a Self {
+        static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(PackedType::make_void()));
         let ty: &UnpackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
