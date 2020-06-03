@@ -458,18 +458,20 @@ impl<'a> PackedType<'a> {
     /// Create a tombstone.
     pub fn make_error() -> &'a Self {
         static TYPE: Lazy<PackedType> = Lazy::new(|| PackedType::new(PackedCore::Error));
+        let ty: &PackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&TYPE) }
+        unsafe { std::mem::transmute(ty) }
     }
 
     /// Create a `logic` type.
     pub fn make_logic() -> &'a Self {
         static TYPE: Lazy<PackedType> =
             Lazy::new(|| PackedType::new(PackedCore::IntVec(IntVecType::Logic)));
+        let ty: &PackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&TYPE) }
+        unsafe { std::mem::transmute(ty) }
     }
 
     /// Internalize this type in a context and resolve it.
@@ -1045,17 +1047,19 @@ impl<'a> UnpackedType<'a> {
     /// Create a tombstone.
     pub fn make_error() -> &'a Self {
         static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(UnpackedCore::Error));
+        let ty: &UnpackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&TYPE) }
+        unsafe { std::mem::transmute(ty) }
     }
 
     /// Create a `logic` type.
     pub fn make_logic() -> &'a Self {
         static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(PackedType::make_logic()));
+        let ty: &UnpackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
-        unsafe { std::mem::transmute(&TYPE) }
+        unsafe { std::mem::transmute(ty) }
     }
 
     /// Internalize this type in a context and resolve it.
@@ -1207,6 +1211,7 @@ impl<'a> UnpackedType<'a> {
     /// Convert an `UnpackedType` into a legacy `Type`.
     pub fn to_legacy(&self, cx: &impl Context<'a>) -> Type<'a> {
         match self.core {
+            UnpackedCore::Error => &ty::ERROR_TYPE,
             UnpackedCore::Packed(x) => x.to_legacy(cx),
             _ => panic!("cannot convert `{}` to legacy type", self),
         }
