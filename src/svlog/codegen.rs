@@ -5,7 +5,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{Type, TypeKind},
+    ty::{Type, TypeKind, UnpackedType},
     value::{Value, ValueKind},
     ParamEnv,
 };
@@ -49,7 +49,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<llhd::ir::UnitId>>,
     module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
-    interned_types: HashMap<(Type<'gcx>, ParamEnv), Result<llhd::Type>>,
+    interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<llhd::Type>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -368,11 +368,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Map a type to an LLHD type (interned).
     fn emit_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
-        if let Some(x) = self.tables.interned_types.get(&(ty, env)) {
+        let ty_new = UnpackedType::from_legacy(self.cx, ty);
+        if let Some(x) = self.tables.interned_types.get(&ty_new) {
             x.clone()
         } else {
             let x = self.emit_type_uninterned(ty, env);
-            self.tables.interned_types.insert((ty, env), x.clone());
+            self.tables.interned_types.insert(ty_new, x.clone());
             x
         }
     }
