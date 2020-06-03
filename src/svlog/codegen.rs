@@ -917,10 +917,8 @@ where
                 self.emit_mir_rvalue(value)
             }
 
-            mir::RvalueKind::CastVectorToAtom { value, .. }
-            | mir::RvalueKind::CastAtomToVector { value, .. } => {
-                // Vector to atom conversions are no-ops since we represent the
-                // atom type as a single-element vector anyway.
+            mir::RvalueKind::Transmute(value) => {
+                // Transmute is a simple no-op.
                 self.emit_mir_rvalue(value)
             }
 
@@ -991,15 +989,15 @@ where
                 let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                 // TODO(fschuiki): make the above a constant of all `x`.
                 let shifted = self.builder.ins().shr(target, hidden, base);
-                if !value.ty.get_packed().unwrap().dims.is_empty() {
+                if value.ty.is_simple_bit_vector() {
+                    let length = std::cmp::max(1, length);
+                    Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                } else {
                     if length == 0 {
                         Ok(self.builder.ins().ext_field(shifted, 0))
                     } else {
                         Ok(self.builder.ins().ext_slice(shifted, 0, length))
                     }
-                } else {
-                    let length = std::cmp::max(1, length);
-                    Ok(self.builder.ins().ext_slice(shifted, 0, length))
                 }
             }
 
@@ -1263,7 +1261,13 @@ where
                     let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                     self.builder.ins().shr(target, hidden, base)
                 });
-                if !value.ty.get_packed().unwrap().dims.is_empty() {
+                if value.ty.is_simple_bit_vector() {
+                    let length = std::cmp::max(1, length);
+                    Ok((
+                        self.builder.ins().ext_slice(shifted_real, 0, length),
+                        shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+                    ))
+                } else {
                     if length == 0 {
                         Ok((
                             self.builder.ins().ext_field(shifted_real, 0),
@@ -1275,12 +1279,6 @@ where
                             shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
                         ))
                     }
-                } else {
-                    let length = std::cmp::max(1, length);
-                    Ok((
-                        self.builder.ins().ext_slice(shifted_real, 0, length),
-                        shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
-                    ))
                 }
             }
 

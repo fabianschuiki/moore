@@ -573,10 +573,13 @@ fn cast_expr_type_inner<'gcx>(
     };
 
     // Cast the expression to a simple bit vector type.
-    let inferred_sbvt = match cast.ty.get_simple_bit_vector() {
+    let inferred_sbvt = match inferred.get_simple_bit_vector() {
         Some(ty) => {
-            trace!("[v2]  Packing SBVT");
-            cast.add_cast(CastOp::PackSBVT, ty.to_unpacked(cx));
+            let ty = ty.forget_atom();
+            if !inferred.is_simple_bit_vector() {
+                trace!("[v2]  Packing SBVT");
+                cast.add_cast(CastOp::PackSBVT, ty.to_unpacked(cx));
+            }
             ty
         }
         None => {
@@ -613,7 +616,7 @@ fn cast_expr_type_inner<'gcx>(
 
     // Cast the context type to an SBVT.
     let context_sbvt = match context.get_simple_bit_vector() {
-        Some(ty) => ty,
+        Some(ty) => ty.forget_atom(),
         None => {
             cx.emit(
                 DiagBuilder2::error(format!("cannot cast to a value of type `{}`", context))
@@ -701,8 +704,10 @@ fn cast_expr_type_inner<'gcx>(
     );
 
     // Unpack the simple bit vector as complex type.
-    cast.add_cast(CastOp::UnpackSBVT, context);
-    trace!("[v2]  Unpacking SBVT");
+    if !context.is_simple_bit_vector() {
+        trace!("[v2]  Unpacking SBVT");
+        cast.add_cast(CastOp::UnpackSBVT, context);
+    }
     if cast.is_error() {
         trace!("[v2]  Aborting due to error");
         return cast;

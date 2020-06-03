@@ -63,18 +63,9 @@ pub enum RvalueKind<'a> {
         to: ty::Domain,
         value: &'a Rvalue<'a>,
     },
-    /// A cast from a single-element vector type to an atom type.
-    /// E.g. `bit [0:0]` to `bit`.
-    CastVectorToAtom {
-        domain: ty::Domain,
-        value: &'a Rvalue<'a>,
-    },
-    /// A cast from an atom type to a single-element vector type.
-    /// E.g. `bit` to `bit [0:0]`.
-    CastAtomToVector {
-        domain: ty::Domain,
-        value: &'a Rvalue<'a>,
-    },
+    /// A type cast which does not incur any operation. For example, going from
+    /// `bit [31:0]` to `int`, or vice versa.
+    Transmute(&'a Rvalue<'a>),
     /// A cast from one sign to another. E.g. `logic signed` to
     /// `logic unsigned`.
     // TODO: Add SBVT
@@ -213,8 +204,7 @@ impl<'a> RvalueKind<'a> {
     pub fn is_const(&self) -> bool {
         match self {
             RvalueKind::CastValueDomain { value, .. }
-            | RvalueKind::CastVectorToAtom { value, .. }
-            | RvalueKind::CastAtomToVector { value, .. }
+            | RvalueKind::Transmute(value)
             | RvalueKind::CastSign(_, value)
             | RvalueKind::CastToBool(value)
             | RvalueKind::Truncate(_, value)

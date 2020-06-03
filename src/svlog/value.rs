@@ -306,8 +306,6 @@ fn const_mir_rvalue_inner<'gcx>(
     match mir.kind {
         // TODO: Casts are just transparent at the moment. That's pretty bad.
         mir::RvalueKind::CastValueDomain { value, .. }
-        | mir::RvalueKind::CastVectorToAtom { value, .. }
-        | mir::RvalueKind::CastAtomToVector { value, .. }
         | mir::RvalueKind::CastSign(_, value)
         | mir::RvalueKind::Truncate(_, value)
         | mir::RvalueKind::ZeroExtend(_, value)
@@ -325,6 +323,14 @@ fn const_mir_rvalue_inner<'gcx>(
             );
             let v = cx.const_mir_rvalue(value.into());
             // TODO: This is an incredibly ugly hack.
+            cx.intern_value(ValueData {
+                ty: mir_ty,
+                kind: v.kind.clone(),
+            })
+        }
+
+        mir::RvalueKind::Transmute(value) => {
+            let v = cx.const_mir_rvalue(value.into());
             cx.intern_value(ValueData {
                 ty: mir_ty,
                 kind: v.kind.clone(),

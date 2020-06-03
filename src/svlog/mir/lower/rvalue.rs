@@ -590,23 +590,18 @@ fn pack_simple_bit_vector<'gcx>(
     if value.is_error() {
         return value;
     }
-    let out = if let Some(dim) = value.ty.dims().last() {
-        pack_array(builder, value, dim)
+    let to = value
+        .ty
+        .simple_bit_vector(builder.cx, value.span)
+        .forget_atom()
+        .to_unpacked(builder.cx);
+    if let Some(dim) = value.ty.dims().last() {
+        pack_array(builder, value, dim, to)
     } else if let Some(strukt) = value.ty.get_struct() {
-        pack_struct(builder, value, strukt)
+        pack_struct(builder, value, strukt, to)
     } else {
-        if !value.ty.is_simple_bit_vector() {
-            bug_span!(
-                value.span,
-                builder.cx,
-                "cannot pack `{}` as SBVT; should be caught by typeck",
-                value.ty
-            );
-        }
-        value
-    };
-    assert_span!(out.ty.is_simple_bit_vector(), value.span, builder.cx);
-    out
+        builder.build(to, RvalueKind::Transmute(value))
+    }
 }
 
 /// Pack a struct as a simple bit vector.
@@ -614,6 +609,7 @@ fn pack_struct<'a>(
     builder: &Builder<'_, impl Context<'a>>,
     value: &'a Rvalue<'a>,
     strukt: &'a ty::StructType<'a>,
+    to: &'a UnpackedType<'a>,
 ) -> &'a Rvalue<'a> {
     // Pack each of the fields.
     let mut packed_fields = vec![];
@@ -624,11 +620,7 @@ fn pack_struct<'a>(
     }
 
     // Concatenate the fields.
-    let ty = value.ty.simple_bit_vector(builder.cx, builder.span);
-    builder.build(
-        ty.to_unpacked(builder.cx),
-        RvalueKind::Concat(packed_fields),
-    )
+    builder.build(to, RvalueKind::Concat(packed_fields))
 }
 
 /// Pack an array as a simple bit vector.
@@ -636,6 +628,7 @@ fn pack_array<'a>(
     builder: &Builder<'_, impl Context<'a>>,
     value: &'a Rvalue<'a>,
     dim: ty::Dim<'a>,
+    to: &'a UnpackedType<'a>,
 ) -> &'a Rvalue<'a> {
     // Determine the length of the array.
     let length = match dim.get_size() {
@@ -677,11 +670,7 @@ fn pack_array<'a>(
     }
 
     // Concatenate the elements.
-    let ty = value.ty.simple_bit_vector(builder.cx, value.span);
-    builder.build(
-        ty.to_unpacked(builder.cx),
-        RvalueKind::Concat(packed_elements),
-    )
+    builder.build(to, RvalueKind::Concat(packed_elements))
 }
 
 /// Generate the nodes necessary to unpack a value from its corresponding simple
@@ -699,15 +688,7 @@ fn unpack_simple_bit_vector<'a>(
     } else if let Some(strukt) = to.get_struct() {
         unpack_struct(builder, value, to, strukt)
     } else {
-        if !to.is_simple_bit_vector() {
-            bug_span!(
-                value.span,
-                builder.cx,
-                "cannot unpack SBVT as `{}`; should be caught by typeck",
-                to
-            );
-        }
-        value
+        builder.build(to, RvalueKind::Transmute(value))
     }
 }
 
