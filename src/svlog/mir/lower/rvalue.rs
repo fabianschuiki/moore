@@ -319,7 +319,7 @@ fn lower_expr_inner<'gcx>(
             let target = cx.mir_rvalue(target, env);
 
             // Make sure we can actually index here.
-            assert_span!(!target.ty.dims.is_empty(), target.span, cx,);
+            assert_span!(target.ty.dims().next().is_some(), target.span, cx,);
 
             // Build the cast rvalue.
             Ok(builder.build(
@@ -1395,7 +1395,11 @@ fn lower_shift<'a>(
     // Check that the operands are of the right type.
     let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
     assert_type2!(value.ty, result_ty, value.span, builder.cx);
-    assert_span!(amount.ty.is_simple_bit_vector(), amount.span, builder.cx);
+    assert_span!(
+        amount.ty.get_simple_bit_vector().is_some(),
+        amount.span,
+        builder.cx
+    );
 
     // Determine the operation.
     let (op, arith) = match op {

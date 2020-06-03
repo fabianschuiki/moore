@@ -1191,7 +1191,9 @@ where
                 .map(|sbv| sbv.size == 1)
                 .unwrap_or(false),
             mir.span,
-            self
+            self,
+            "value of type `{}` should be a bool",
+            mir.ty
         );
         self.emit_mir_rvalue(mir)
     }
