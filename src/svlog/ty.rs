@@ -480,8 +480,16 @@ impl<'a> PackedType<'a> {
 
     /// Create a `logic` type.
     pub fn make_logic() -> &'a Self {
-        static TYPE: Lazy<PackedType> =
-            Lazy::new(|| PackedType::new(PackedCore::IntVec(IntVecType::Logic)));
+        static TYPE: Lazy<PackedType> = Lazy::new(|| PackedType::new(IntVecType::Logic));
+        let ty: &PackedType = &TYPE;
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
+        unsafe { std::mem::transmute(ty) }
+    }
+
+    /// Create a `time` type.
+    pub fn make_time() -> &'a Self {
+        static TYPE: Lazy<PackedType> = Lazy::new(|| PackedType::new(IntAtomType::Time));
         let ty: &PackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
@@ -1090,6 +1098,15 @@ impl<'a> UnpackedType<'a> {
     /// Create a `logic` type.
     pub fn make_logic() -> &'a Self {
         static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(PackedType::make_logic()));
+        let ty: &UnpackedType = &TYPE;
+        // SAFETY: This is safe since the cell which causes 'a to need to
+        // outlive 'static is actually never mutated after AST construction.
+        unsafe { std::mem::transmute(ty) }
+    }
+
+    /// Create a `time` type.
+    pub fn make_time() -> &'a Self {
+        static TYPE: Lazy<UnpackedType> = Lazy::new(|| UnpackedType::new(PackedType::make_time()));
         let ty: &UnpackedType = &TYPE;
         // SAFETY: This is safe since the cell which causes 'a to need to
         // outlive 'static is actually never mutated after AST construction.
