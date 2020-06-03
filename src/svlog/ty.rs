@@ -316,6 +316,15 @@ pub struct SbvType {
     pub size_explicit: bool,
 }
 
+/// A packed or unpacked dimension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Dim<'a> {
+    /// A packed dimension.
+    Packed(PackedDim),
+    /// An unpacked dimension.
+    Unpacked(UnpackedDim<'a>),
+}
+
 impl<'a> PackedType<'a> {
     /// Create a new type with default signing and no packed dimensions.
     ///
@@ -1148,6 +1157,27 @@ impl<'a> UnpackedType<'a> {
         }
     }
 
+    /// Get an iterator over the type's packed dimensions.
+    pub fn packed_dims(&self) -> impl Iterator<Item = PackedDim> + 'a {
+        self.get_packed()
+            .into_iter()
+            .flat_map(|p| p.dims.iter().cloned())
+    }
+
+    /// Get an iterator over the type's unpacked dimensions.
+    pub fn unpacked_dims<'s>(&'s self) -> impl Iterator<Item = UnpackedDim<'a>> + 's {
+        self.dims.iter().cloned()
+    }
+
+    /// Get an iterator over the type's dimensions.
+    ///
+    /// Produces the packed dimensions first, then the unpacked ones.
+    pub fn dims<'s>(&'s self) -> impl Iterator<Item = Dim<'a>> + 's {
+        self.packed_dims()
+            .map(Dim::Packed)
+            .chain(self.unpacked_dims().map(Dim::Unpacked))
+    }
+
     /// Helper function to format this type around a declaration name.
     fn format_around(
         &self,
@@ -1430,6 +1460,15 @@ impl Display for SbvType {
             write!(f, " {}", self.range())?;
         }
         Ok(())
+    }
+}
+
+impl Display for Dim<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Packed(x) => write!(f, "{}", x),
+            Self::Unpacked(x) => write!(f, "{}", x),
+        }
     }
 }
 
