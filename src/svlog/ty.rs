@@ -295,6 +295,24 @@ pub struct EnumType<'a> {
     pub variants: Vec<(Spanned<Name>, &'a ast::EnumName<'a>)>,
 }
 
+/// A simple bit vector type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SbvType {
+    /// The domain, which dictates whether this is a `bit` or `logic` vector.
+    pub domain: Domain,
+    /// Whether the type used an integer atom like `int` in the source text.
+    pub used_atom: bool,
+    /// The signing.
+    pub signing: Sign,
+    /// Whether the signing was explicit in the source text.
+    pub signing_explicit: bool,
+    /// The size of the vector.
+    pub size: usize,
+    /// Whether the single-bit vector had an explicit range in the source text.
+    /// Essentially whether it was `bit` or `bit[a:a]`.
+    pub size_explicit: bool,
+}
+
 impl<'a> PackedType<'a> {
     /// Create a new type with default signing and no packed dimensions.
     ///
@@ -355,6 +373,40 @@ impl<'a> PackedType<'a> {
         }
     }
 
+    /// Create a new type from an SBVT.
+    pub fn with_simple_bit_vector(sbv: SbvType) -> Self {
+        let atom = match (sbv.size, sbv.domain) {
+            (8, Domain::TwoValued) => Some(IntAtomType::Byte),
+            (16, Domain::TwoValued) => Some(IntAtomType::ShortInt),
+            (32, Domain::TwoValued) => Some(IntAtomType::Int),
+            (32, Domain::FourValued) => Some(IntAtomType::Integer),
+            (64, Domain::TwoValued) => Some(IntAtomType::LongInt),
+            _ => None,
+        };
+        match atom {
+            Some(atom) if sbv.used_atom => {
+                Self::with_signing(atom, sbv.signing, sbv.signing_explicit)
+            }
+            _ => Self::with_signing_and_dims(
+                match sbv.domain {
+                    Domain::TwoValued => IntVecType::Bit,
+                    Domain::FourValued => IntVecType::Logic,
+                },
+                sbv.signing,
+                sbv.signing_explicit,
+                if sbv.size > 1 || sbv.size_explicit {
+                    vec![PackedDim::Range(Range {
+                        size: sbv.size,
+                        dir: RangeDir::Down,
+                        offset: 0,
+                    })]
+                } else {
+                    vec![]
+                },
+            ),
+        }
+    }
+
     /// Create an interned type with default signing and no packed dimensions.
     pub fn make(cx: &impl TypeContext<'a>, core: impl Into<PackedCore<'a>>) -> &'a Self {
         Self::new(core).intern(cx)
@@ -388,6 +440,11 @@ impl<'a> PackedType<'a> {
         dims: Vec<PackedDim>,
     ) -> &'a Self {
         Self::with_signing_and_dims(core, signing, signing_explicit, dims).intern(cx)
+    }
+
+    /// Create an interned type from an SBVT.
+    pub fn make_simple_bit_vector(cx: &impl TypeContext<'a>, sbv: SbvType) -> &'a Self {
+        Self::with_simple_bit_vector(sbv).intern(cx)
     }
 
     /// Create a tombstone.
@@ -518,26 +575,19 @@ impl<'a> PackedType<'a> {
     }
 
     /// Convert this type into an SBVT if possible.
-    pub fn get_simple_bit_vector(&self, cx: &impl TypeContext<'a>) -> Option<&PackedType<'a>> {
-        if self.is_simple_bit_vector() {
-            Some(self)
-        } else {
-            let ty = self.resolve_full();
-            Some(Self::make_signing_and_dims(
-                cx,
-                match ty.domain() {
-                    Domain::TwoValued => IntVecType::Bit,
-                    Domain::FourValued => IntVecType::Logic,
-                },
-                ty.signing,
-                ty.signing_explicit,
-                vec![PackedDim::Range(Range {
-                    size: ty.get_bit_size()?,
-                    dir: RangeDir::Down,
-                    offset: 0,
-                })],
-            ))
-        }
+    pub fn get_simple_bit_vector(&self) -> Option<SbvType> {
+        let ty = self.resolve_full();
+        Some(SbvType {
+            domain: ty.domain(),
+            used_atom: match self.core {
+                PackedCore::IntAtom(..) => true,
+                _ => false,
+            },
+            signing: ty.signing,
+            signing_explicit: ty.signing_explicit,
+            size: ty.get_bit_size()?,
+            size_explicit: !ty.dims.is_empty(),
+        })
     }
 
     /// Convert a legacy `Type` into a `PackedType`.
@@ -668,7 +718,7 @@ impl Display for PackedType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.core.format(
             f,
-            if self.signing_explicit {
+            if self.signing != self.core.default_signing() || self.signing_explicit {
                 Some(self.signing)
             } else {
                 None
@@ -691,6 +741,19 @@ impl<'a> PackedCore<'a> {
             Self::Error => true,
             Self::Named { ty, .. } | Self::Ref { ty, .. } => ty.is_error(),
             _ => false,
+        }
+    }
+
+    /// Get the default signing for this type.
+    pub fn default_signing(&self) -> Sign {
+        match self {
+            Self::Error => Sign::Unsigned,
+            Self::IntVec(_) => Sign::Unsigned,
+            Self::IntAtom(x) => x.default_signing(),
+            Self::Struct(_) => Sign::Unsigned,
+            Self::Enum(_) => Sign::Unsigned,
+            Self::Named { .. } => Sign::Unsigned,
+            Self::Ref { .. } => Sign::Unsigned,
         }
     }
 
@@ -802,6 +865,17 @@ impl IntAtomType {
             Self::LongInt => 64,
             Self::Integer => 32,
             Self::Time => 64,
+        }
+    }
+    /// Get the default signing for this type.
+    pub fn default_signing(&self) -> Sign {
+        match self {
+            Self::Byte => Sign::Signed,
+            Self::ShortInt => Sign::Signed,
+            Self::Int => Sign::Signed,
+            Self::LongInt => Sign::Signed,
+            Self::Integer => Sign::Signed,
+            Self::Time => Sign::Unsigned,
         }
     }
 }
@@ -993,10 +1067,10 @@ impl<'a> UnpackedType<'a> {
     }
 
     /// Convert this type into an SBVT if possible.
-    pub fn get_simple_bit_vector(&self, cx: &impl TypeContext<'a>) -> Option<&'a PackedType<'a>> {
+    pub fn get_simple_bit_vector(&self) -> Option<SbvType> {
         self.resolve_full()
             .get_packed()
-            .and_then(|ty| ty.get_simple_bit_vector(cx))
+            .and_then(|ty| ty.get_simple_bit_vector())
     }
 
     /// Convert a legacy `Type` into an `UnpackedType`.
@@ -1194,6 +1268,34 @@ impl Display for EnumType<'_> {
             write!(f, "{}", name)?;
         }
         write!(f, " }}")?;
+        Ok(())
+    }
+}
+
+impl SbvType {
+    /// Convert the SBVT to a packed type.
+    pub fn to_packed<'a>(&self, cx: &impl TypeContext<'a>) -> &'a PackedType<'a> {
+        PackedType::make_simple_bit_vector(cx, *self)
+    }
+
+    /// Convert the SBVT to an unpacked type.
+    pub fn to_unpacked<'a>(&self, cx: &impl TypeContext<'a>) -> &'a UnpackedType<'a> {
+        self.to_packed(cx).to_unpacked(cx)
+    }
+}
+
+impl Display for SbvType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.domain {
+            Domain::TwoValued => write!(f, "bit")?,
+            Domain::FourValued => write!(f, "logic")?,
+        }
+        if self.signing != Sign::Unsigned || self.signing_explicit {
+            write!(f, " {}", self.signing)?;
+        }
+        if self.size > 1 || self.size_explicit {
+            write!(f, " [{}:0]", self.size - 1)?;
+        }
         Ok(())
     }
 }

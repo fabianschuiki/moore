@@ -804,7 +804,7 @@ fn cast_expr_type_inner2<'gcx>(
     };
 
     // Cast the expression to a simple bit vector type.
-    let inferred_sbvt = match cast.ty.get_simple_bit_vector(cx) {
+    let inferred_sbvt = match cast.ty.get_simple_bit_vector() {
         Some(ty) => {
             if !cast.ty.is_simple_bit_vector() {
                 trace!("[v2]  Packing SBVT");
@@ -845,7 +845,7 @@ fn cast_expr_type_inner2<'gcx>(
     };
 
     // Change size.
-    let context_sbvt = match context.get_simple_bit_vector(cx) {
+    let context_sbvt = match context.get_simple_bit_vector() {
         Some(ty) => ty,
         None => {
             cx.emit(
