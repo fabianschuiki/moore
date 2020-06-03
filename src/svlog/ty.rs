@@ -606,6 +606,14 @@ impl<'a> PackedType<'a> {
         }
     }
 
+    /// Get the underlying struct, or `None` if the type is no struct.
+    pub fn get_struct(&self) -> Option<&StructType<'a>> {
+        match self.core {
+            PackedCore::Struct(ref x) if self.dims.is_empty() => Some(x),
+            _ => None,
+        }
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -1208,6 +1216,15 @@ impl<'a> UnpackedType<'a> {
         self.packed_dims()
             .map(Dim::Packed)
             .chain(self.unpacked_dims().map(Dim::Unpacked))
+    }
+
+    /// Get the underlying struct, or `None` if the type is no struct.
+    pub fn get_struct(&self) -> Option<&StructType<'a>> {
+        match self.core {
+            UnpackedCore::Packed(x) if self.dims.is_empty() => x.get_struct(),
+            UnpackedCore::Struct(ref x) if self.dims.is_empty() => Some(x),
+            _ => None,
+        }
     }
 
     /// Helper function to format this type around a declaration name.
