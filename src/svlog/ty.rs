@@ -598,6 +598,14 @@ impl<'a> PackedType<'a> {
         })
     }
 
+    /// Convert this type into an SBVT, or report a bug with the given span.
+    pub fn simple_bit_vector(&self, cx: &impl DiagEmitter, span: Span) -> SbvType {
+        match self.get_simple_bit_vector() {
+            Some(sbv) => sbv,
+            None => bug_span!(span, cx, "`{}` has no simple bit vector equivalent", self),
+        }
+    }
+
     /// Convert a legacy `Type` into a `PackedType`.
     pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
         match *other {
@@ -1158,6 +1166,14 @@ impl<'a> UnpackedType<'a> {
         self.resolve_full()
             .get_packed()
             .and_then(|ty| ty.get_simple_bit_vector())
+    }
+
+    /// Convert this type into an SBVT, or report a bug with the given span.
+    pub fn simple_bit_vector(&self, cx: &impl DiagEmitter, span: Span) -> SbvType {
+        match self.get_simple_bit_vector() {
+            Some(sbv) => sbv,
+            None => bug_span!(span, cx, "`{}` has no simple bit vector equivalent", self),
+        }
     }
 
     /// Convert a legacy `Type` into an `UnpackedType`.
