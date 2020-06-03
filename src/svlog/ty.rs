@@ -606,6 +606,17 @@ impl<'a> PackedType<'a> {
         }
     }
 
+    /// Pop the outermost dimension off the type.
+    pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
+        if !self.dims.is_empty() {
+            let mut new = self.clone();
+            new.dims.pop();
+            Some(new.intern(cx))
+        } else {
+            None
+        }
+    }
+
     /// Get the underlying struct, or `None` if the type is no struct.
     pub fn get_struct(&self) -> Option<&StructType<'a>> {
         match self.core {
@@ -1216,6 +1227,19 @@ impl<'a> UnpackedType<'a> {
         self.packed_dims()
             .map(Dim::Packed)
             .chain(self.unpacked_dims().map(Dim::Unpacked))
+    }
+
+    /// Pop the outermost dimension off the type.
+    pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
+        if self.dims.is_empty() {
+            self.get_packed()
+                .and_then(|p| p.pop_dim(cx))
+                .map(|p| p.to_unpacked(cx))
+        } else {
+            let mut new = self.clone();
+            new.dims.pop();
+            Some(new.intern(cx))
+        }
     }
 
     /// Get the underlying struct, or `None` if the type is no struct.
