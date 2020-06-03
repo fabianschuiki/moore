@@ -601,10 +601,33 @@ impl<'a> PackedType<'a> {
 
     /// Check if this type is trivially a SBVT.
     pub fn is_simple_bit_vector(&self) -> bool {
-        match self.resolve_full().core {
+        // NOTE: It's important that this does not use resolve_full(), since
+        // otherwise the type casting breaks.
+        match self.core {
             PackedCore::IntVec(..) => self.dims.len() == 1,
             _ => false,
         }
+    }
+
+    /// Check if this type is an integer atom type, like `int`.
+    pub fn is_integer_atom(&self) -> bool {
+        match self.resolve_full().core {
+            PackedCore::IntAtom(..) => self.dims.len() == 0,
+            _ => false,
+        }
+    }
+
+    /// Check if this type is a single bit type, like `bit`.
+    pub fn is_single_bit(&self) -> bool {
+        match self.resolve_full().core {
+            PackedCore::IntVec(..) => self.dims.len() == 0,
+            _ => false,
+        }
+    }
+
+    /// Check if this type will coalesce to a scalar type in LLHD, like `i42`.
+    pub fn coalesces_to_llhd_scalar(&self) -> bool {
+        self.resolve_full().is_simple_bit_vector() || self.is_integer_atom() || self.is_single_bit()
     }
 
     /// Convert this type into an SBVT if possible.
@@ -1243,6 +1266,27 @@ impl<'a> UnpackedType<'a> {
     pub fn is_simple_bit_vector(&self) -> bool {
         self.get_packed()
             .map(|ty| ty.is_simple_bit_vector())
+            .unwrap_or(false)
+    }
+
+    /// Check if this type is an integer atom type, like `int`.
+    pub fn is_integer_atom(&self) -> bool {
+        self.get_packed()
+            .map(|ty| ty.is_integer_atom())
+            .unwrap_or(false)
+    }
+
+    /// Check if this type is a single bit type, like `bit`.
+    pub fn is_single_bit(&self) -> bool {
+        self.get_packed()
+            .map(|ty| ty.is_single_bit())
+            .unwrap_or(false)
+    }
+
+    /// Check if this type will coalesce to a scalar type in LLHD, like `i42`.
+    pub fn coalesces_to_llhd_scalar(&self) -> bool {
+        self.get_packed()
+            .map(|ty| ty.coalesces_to_llhd_scalar())
             .unwrap_or(false)
     }
 
