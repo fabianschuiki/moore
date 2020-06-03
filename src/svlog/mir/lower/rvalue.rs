@@ -57,10 +57,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
 
     /// Create a constant node.
     fn constant(&self, value: ValueData<'a>) -> &'a Rvalue<'a> {
-        self.build(
-            UnpackedType::from_legacy(self.cx, value.ty),
-            RvalueKind::Const(self.cx.intern_value(value)),
-        )
+        self.build(value.ty, RvalueKind::Const(self.cx.intern_value(value)))
     }
 }
 
@@ -123,7 +120,6 @@ fn lower_expr_inner<'gcx>(
     let cx = builder.cx;
     let span = cx.span(expr_id);
     let env = builder.env;
-    let ty_legacy = ty.to_legacy(cx);
 
     // Determine the expression type and match on the various forms.
     match hir.kind {
@@ -134,36 +130,40 @@ fn lower_expr_inner<'gcx>(
             ref x_bits,
             ..
         } => Ok(builder.constant(value::make_int_special(
-            ty_legacy,
+            ty,
             k.clone(),
             special_bits.clone(),
             x_bits.clone(),
         ))),
-        hir::ExprKind::UnsizedConst('0') => {
-            Ok(builder.constant(value::make_int(ty_legacy, num::zero())))
-        }
-        hir::ExprKind::UnsizedConst('1') => {
-            Ok(builder.constant(value::make_int(ty_legacy, num::one())))
-        }
-        hir::ExprKind::UnsizedConst('x') => {
-            Ok(builder.constant(value::make_int(ty_legacy, num::one())))
-        }
-        hir::ExprKind::UnsizedConst('z') => {
-            Ok(builder.constant(value::make_int(ty_legacy, num::one())))
-        }
+        hir::ExprKind::UnsizedConst('0') => Ok(builder.constant(value::make_int(ty, num::zero()))),
+        hir::ExprKind::UnsizedConst('1') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::UnsizedConst('x') => Ok(builder.constant(value::make_int(ty, num::one()))),
+        hir::ExprKind::UnsizedConst('z') => Ok(builder.constant(value::make_int(ty, num::one()))),
         hir::ExprKind::UnsizedConst(c) => {
             bug_span!(span, cx, "unsized const with weird '{}' char", c)
         }
         hir::ExprKind::TimeConst(ref k) => Ok(builder.constant(value::make_time(k.clone()))),
         hir::ExprKind::StringConst(_) => Ok(builder.constant(value::make_array(
             // TODO(fschuiki): Actually assemble a real string here!
-            cx.mkty_packed_array(1, &ty::BYTE_TYPE),
-            vec![cx.intern_value(value::make_int(&ty::BYTE_TYPE, num::zero()))],
+            ty::PackedType::make_dims(
+                cx,
+                ty::IntAtomType::Byte,
+                vec![ty::PackedDim::Range(ty::Range {
+                    size: 1,
+                    dir: ty::RangeDir::Down,
+                    offset: 0,
+                })],
+            )
+            .to_unpacked(cx),
+            vec![cx.intern_value(value::make_int(
+                UnpackedType::make(cx, ty::PackedType::make(cx, ty::IntAtomType::Byte)),
+                num::zero(),
+            ))],
         ))),
 
         // Built-in function calls
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported) => {
-            Ok(builder.constant(value::make_int(ty_legacy, num::zero())))
+            Ok(builder.constant(value::make_int(ty, num::zero())))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
             let arg_val = cx.constant_value_of(arg, env)?;
@@ -176,12 +176,12 @@ fn lower_expr_inner<'gcx>(
             } else {
                 BigInt::from((arg_int - BigInt::one()).bits())
             };
-            Ok(builder.constant(value::make_int(ty_legacy, value)))
+            Ok(builder.constant(value::make_int(ty, value)))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
             let ty = cx.type_of(arg, env)?;
             Ok(builder.constant(value::make_int(
-                cx.mkty_int(32),
+                SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(cx),
                 ty::bit_size_of_type(cx, ty, env)?.into(),
             )))
         }
@@ -350,7 +350,7 @@ fn lower_expr_inner<'gcx>(
             // By default nothing matches.
             let mut check = builder.build(
                 ty,
-                RvalueKind::Const(cx.intern_value(value::make_int(ty_legacy, Zero::zero()))),
+                RvalueKind::Const(cx.intern_value(value::make_int(ty, Zero::zero()))),
             );
 
             // Determine the intermediate type for the comparisons.
@@ -476,7 +476,7 @@ pub(crate) fn compute_indexing<'gcx>(
             let base_ty =
                 SbvType::new(ty::Domain::TwoValued, ty::Sign::Signed, max(base.bits(), 1))
                     .to_unpacked(builder.cx);
-            let base = cx.intern_value(value::make_int(base_ty.to_legacy(builder.cx), base));
+            let base = cx.intern_value(value::make_int(base_ty, base));
             let base = builder.build(base_ty, RvalueKind::Const(base));
             let length = ((lhs_int - rhs_int).abs() + BigInt::one())
                 .to_usize()
@@ -651,11 +651,7 @@ fn pack_array<'a>(
     for i in 0..length {
         let i = builder.build(
             int_ty,
-            RvalueKind::Const(
-                builder
-                    .cx
-                    .intern_value(value::make_int(int_ty.to_legacy(builder.cx), i.into())),
-            ),
+            RvalueKind::Const(builder.cx.intern_value(value::make_int(int_ty, i.into()))),
         );
         let elem = builder.build(
             elem_ty,
@@ -709,11 +705,7 @@ fn unpack_struct<'a>(
         let w = sbvt.size;
         let i = builder.build(
             ty,
-            RvalueKind::Const(
-                builder
-                    .cx
-                    .intern_value(value::make_int(ty.to_legacy(builder.cx), offset.into())),
-            ),
+            RvalueKind::Const(builder.cx.intern_value(value::make_int(ty, offset.into()))),
         );
         let value = builder.build(
             sbvt.change_size(w).to_unpacked(builder.cx),
@@ -764,11 +756,7 @@ fn unpack_array<'a>(
             SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
         let base = builder.build(
             ty,
-            RvalueKind::Const(
-                builder
-                    .cx
-                    .intern_value(value::make_int(ty.to_legacy(builder.cx), (i * w).into())),
-            ),
+            RvalueKind::Const(builder.cx.intern_value(value::make_int(ty, (i * w).into()))),
         );
         let elem = builder.build(
             sbvt.to_unpacked(builder.cx),
@@ -1680,11 +1668,7 @@ fn lower_int_incdec<'gcx>(
         };
         let one = builder.build(
             lv.ty,
-            RvalueKind::Const(
-                builder
-                    .cx
-                    .intern_value(value::make_int(lv.ty.to_legacy(builder.cx), One::one())),
-            ),
+            RvalueKind::Const(builder.cx.intern_value(value::make_int(lv.ty, One::one()))),
         );
         builder.build(
             lv.ty,

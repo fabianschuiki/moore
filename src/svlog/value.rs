@@ -14,7 +14,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{SbvType, Type, TypeKind},
+    ty::{SbvType, UnpackedType},
     ParamEnv, ParamEnvBinding,
 };
 use bit_vec::BitVec;
@@ -28,7 +28,7 @@ pub type Value<'t> = &'t ValueData<'t>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ValueData<'t> {
     /// The type of the value.
-    pub ty: Type<'t>,
+    pub ty: &'t UnpackedType<'t>,
     /// The actual value.
     pub kind: ValueKind<'t>,
 }
@@ -107,7 +107,7 @@ impl std::fmt::Display for ValueKind<'_> {
 }
 
 /// Create a new tombstone value.
-pub fn make_error(ty: Type) -> ValueData {
+pub fn make_error<'a>(ty: &'a UnpackedType<'a>) -> ValueData<'a> {
     ValueData {
         ty,
         kind: ValueKind::Error,
@@ -117,8 +117,8 @@ pub fn make_error(ty: Type) -> ValueData {
 /// Create a new integer value.
 ///
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
-pub fn make_int(ty: Type, value: BigInt) -> ValueData {
-    let w = ty.width();
+pub fn make_int<'a>(ty: &'a UnpackedType<'a>, value: BigInt) -> ValueData<'a> {
+    let w = ty.get_bit_size().unwrap();
     make_int_special(
         ty,
         value,
@@ -130,42 +130,30 @@ pub fn make_int(ty: Type, value: BigInt) -> ValueData {
 /// Create a new integer value with special bits.
 ///
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
-pub fn make_int_special(
-    ty: Type,
-    mut value: BigInt,
+pub fn make_int_special<'a>(
+    ty: &'a UnpackedType<'a>,
+    value: BigInt,
     special_bits: BitVec,
     x_bits: BitVec,
-) -> ValueData {
-    match *ty.resolve_name() {
-        TypeKind::Int(width, _)
-        | TypeKind::BitVector {
-            range: ty::Range { size: width, .. },
-            ..
-        } => {
-            value = value % (BigInt::from(1) << width);
-        }
-        TypeKind::Bit(_) | TypeKind::BitScalar { .. } => {
-            value = value % 2;
-        }
-        _ => panic!("create int value `{}` with non-int type {:?}", value, ty),
-    }
+) -> ValueData<'a> {
+    let w = ty.get_bit_size().unwrap();
     ValueData {
         ty: ty,
-        kind: ValueKind::Int(value, special_bits, x_bits),
+        kind: ValueKind::Int(value % (BigInt::from(1) << w), special_bits, x_bits),
     }
 }
 
 /// Create a new time value.
-pub fn make_time(value: BigRational) -> ValueData<'static> {
+pub fn make_time<'a>(value: BigRational) -> ValueData<'a> {
     ValueData {
-        ty: &ty::TIME_TYPE,
+        ty: UnpackedType::make_time(),
         kind: ValueKind::Time(value),
     }
 }
 
 /// Create a new struct value.
-pub fn make_struct<'t>(ty: Type<'t>, fields: Vec<Value<'t>>) -> ValueData<'t> {
-    assert!(ty.is_struct());
+pub fn make_struct<'a>(ty: &'a UnpackedType<'a>, fields: Vec<Value<'a>>) -> ValueData<'a> {
+    assert!(ty.dims().next().is_none() && ty.get_struct().is_some());
     ValueData {
         ty: ty,
         kind: ValueKind::StructOrArray(fields),
@@ -173,8 +161,8 @@ pub fn make_struct<'t>(ty: Type<'t>, fields: Vec<Value<'t>>) -> ValueData<'t> {
 }
 
 /// Create a new array value.
-pub fn make_array<'t>(ty: Type<'t>, elements: Vec<Value<'t>>) -> ValueData<'t> {
-    assert!(ty.is_array());
+pub fn make_array<'a>(ty: &'a UnpackedType<'a>, elements: Vec<Value<'a>>) -> ValueData<'a> {
+    assert!(!ty.dims().next().is_none());
     ValueData {
         ty: ty,
         kind: ValueKind::StructOrArray(elements),
@@ -269,7 +257,10 @@ fn const_node<'gcx>(
         }
         HirNode::EnumVariant(var) => match var.value {
             Some(v) => cx.constant_value_of(v, env),
-            None => Ok(cx.intern_value(make_int(cx.type_of(node_id, env)?, var.index.into()))),
+            None => Ok(cx.intern_value(make_int(
+                UnpackedType::from_legacy(cx, cx.type_of(node_id, env)?),
+                var.index.into(),
+            ))),
         },
         _ => cx.unimp_msg("constant value computation of", &hir),
     }
@@ -296,11 +287,9 @@ fn const_mir_rvalue_inner<'gcx>(
     cx: &impl Context<'gcx>,
     mir: &'gcx mir::Rvalue<'gcx>,
 ) -> Value<'gcx> {
-    let mir_ty = mir.ty.to_legacy(cx);
-
     // Propagate MIR tombstones immediately.
     if mir.is_error() {
-        return cx.intern_value(make_error(mir_ty));
+        return cx.intern_value(make_error(mir.ty));
     }
 
     match mir.kind {
@@ -317,14 +306,14 @@ fn const_mir_rvalue_inner<'gcx>(
                         "Casts `{}` from `{}` to `{}`",
                         value.span.extract(),
                         value.ty,
-                        mir_ty
+                        mir.ty
                     ))
                     .span(value.span),
             );
             let v = cx.const_mir_rvalue(value.into());
             // TODO: This is an incredibly ugly hack.
             cx.intern_value(ValueData {
-                ty: mir_ty,
+                ty: mir.ty,
                 kind: v.kind.clone(),
             })
         }
@@ -332,7 +321,7 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::Transmute(value) => {
             let v = cx.const_mir_rvalue(value.into());
             cx.intern_value(ValueData {
-                ty: mir_ty,
+                ty: mir.ty,
                 kind: v.kind.clone(),
             })
         }
@@ -340,20 +329,20 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::CastToBool(value) => {
             let value = cx.const_mir_rvalue(value.into());
             if value.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
-            cx.intern_value(make_int(mir_ty, (value.is_true() as usize).into()))
+            cx.intern_value(make_int(mir.ty, (value.is_true() as usize).into()))
         }
 
         mir::RvalueKind::ConstructArray(ref values) => cx.intern_value(make_array(
-            mir_ty,
+            mir.ty,
             (0..values.len())
                 .map(|index| cx.const_mir_rvalue(values[&index].into()))
                 .collect(),
         )),
 
         mir::RvalueKind::ConstructStruct(ref values) => cx.intern_value(make_struct(
-            mir_ty,
+            mir.ty,
             values
                 .iter()
                 .map(|&value| cx.const_mir_rvalue(value.into()))
@@ -365,11 +354,11 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::UnaryBitwise { op, arg } => {
             let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
-                    mir_ty,
+                    mir.ty,
                     const_unary_bitwise_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, arg_int),
                 )),
                 _ => unreachable!(),
@@ -380,12 +369,12 @@ fn const_mir_rvalue_inner<'gcx>(
             let lhs_val = cx.const_mir_rvalue(lhs.into());
             let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
                     cx.intern_value(make_int(
-                        mir_ty,
+                        mir.ty,
                         const_binary_bitwise_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int),
                     ))
                 }
@@ -396,11 +385,11 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
             let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
-                    mir_ty,
+                    mir.ty,
                     const_unary_arith_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, arg_int),
                 )),
                 _ => unreachable!(),
@@ -411,12 +400,12 @@ fn const_mir_rvalue_inner<'gcx>(
             let lhs_val = cx.const_mir_rvalue(lhs.into());
             let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
                     cx.intern_value(make_int(
-                        mir_ty,
+                        mir.ty,
                         const_binary_arith_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int),
                     ))
                 }
@@ -428,11 +417,11 @@ fn const_mir_rvalue_inner<'gcx>(
             let lhs_val = cx.const_mir_rvalue(lhs.into());
             let rhs_val = cx.const_mir_rvalue(rhs.into());
             if lhs_val.is_error() || rhs_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => cx.intern_value(
-                    make_int(mir_ty, const_comp_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int)),
+                    make_int(mir.ty, const_comp_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int)),
                 ),
                 _ => unreachable!(),
             }
@@ -447,13 +436,13 @@ fn const_mir_rvalue_inner<'gcx>(
                     .get_int()
                     .expect("concat non-integer");
             }
-            cx.intern_value(make_int(mir_ty, result))
+            cx.intern_value(make_int(mir.ty, result))
         }
 
         mir::RvalueKind::Repeat(count, value) => {
             let value_const = cx.const_mir_rvalue(value.into());
             if value_const.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             let sbvt = value.ty.simple_bit_vector(cx, value.span);
             let mut result = BigInt::zero();
@@ -461,18 +450,18 @@ fn const_mir_rvalue_inner<'gcx>(
                 result <<= sbvt.size;
                 result |= value_const.get_int().expect("repeat non-integer");
             }
-            cx.intern_value(make_int(mir_ty, result))
+            cx.intern_value(make_int(mir.ty, result))
         }
 
         mir::RvalueKind::Assignment { .. } | mir::RvalueKind::Var(_) | mir::RvalueKind::Port(_) => {
             cx.emit(DiagBuilder2::error("value is not constant").span(mir.span));
-            cx.intern_value(make_error(mir_ty))
+            cx.intern_value(make_error(mir.ty))
         }
 
         mir::RvalueKind::Member { value, field } => {
             let value_const = cx.const_mir_rvalue(value.into());
             if value_const.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match value_const.kind {
                 ValueKind::StructOrArray(ref fields) => fields[field],
@@ -504,12 +493,12 @@ fn const_mir_rvalue_inner<'gcx>(
             let value_val = cx.const_mir_rvalue(value.into());
             let amount_val = cx.const_mir_rvalue(amount.into());
             if value_val.is_error() || amount_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match (&value_val.kind, &amount_val.kind) {
                 (ValueKind::Int(value_int, ..), ValueKind::Int(amount_int, ..)) => {
                     cx.intern_value(make_int(
-                        mir_ty,
+                        mir.ty,
                         const_shift_int(cx, value.ty.simple_bit_vector(cx, value.span), op, arith, value_int, amount_int),
                     ))
                 }
@@ -520,11 +509,11 @@ fn const_mir_rvalue_inner<'gcx>(
         mir::RvalueKind::Reduction { op, arg } => {
             let arg_val = cx.const_mir_rvalue(arg.into());
             if arg_val.is_error() {
-                return cx.intern_value(make_error(mir_ty));
+                return cx.intern_value(make_error(mir.ty));
             }
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
-                    mir_ty,
+                    mir.ty,
                     const_reduction_int(cx, arg.ty.simple_bit_vector(cx, arg.span), op, arg_int),
                 )),
                 _ => unreachable!(),
@@ -541,7 +530,7 @@ fn const_mir_rvalue_inner<'gcx>(
         }
 
         // Propagate tombstones.
-        mir::RvalueKind::Error => cx.intern_value(make_error(mir_ty)),
+        mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
     }
 }
 
@@ -677,36 +666,85 @@ pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Res
 }
 
 /// Determine the default value of a type.
-pub(crate) fn type_default_value<'gcx>(cx: &impl Context<'gcx>, ty: Type<'gcx>) -> Value<'gcx> {
-    match *ty {
-        TypeKind::Error => cx.intern_value(ValueData {
-            ty: &ty::ERROR_TYPE,
+pub(crate) fn type_default_value<'gcx>(
+    cx: &impl Context<'gcx>,
+    ty: &'gcx UnpackedType<'gcx>,
+) -> Value<'gcx> {
+    let ty = ty.resolve_full();
+    if ty.is_error() {
+        return cx.intern_value(ValueData {
+            ty: UnpackedType::make_error(),
             kind: ValueKind::Error,
-        }),
-        TypeKind::Void => cx.intern_value(ValueData {
-            ty: &ty::VOID_TYPE,
-            kind: ValueKind::Void,
-        }),
-        TypeKind::Time => cx.intern_value(make_time(Zero::zero())),
-        TypeKind::Bit(..)
-        | TypeKind::Int(..)
-        | TypeKind::BitVector { .. }
-        | TypeKind::BitScalar { .. } => cx.intern_value(make_int(ty, Zero::zero())),
-        TypeKind::Named(_, _, ty) => type_default_value(cx, ty),
-        TypeKind::Struct(id) => {
-            let def = cx.struct_def(id.id()).unwrap();
-            let fields = def
-                .fields
-                .iter()
-                .map(|field| type_default_value(cx, cx.map_to_type(field.ty, id.env()).unwrap()))
-                .collect();
-            cx.intern_value(make_struct(ty, fields))
+        });
+    }
+
+    // Handle structs.
+    if let Some(strukt) = ty.get_struct() {
+        let fields = strukt
+            .members
+            .iter()
+            .map(|field| type_default_value(cx, field.ty))
+            .collect();
+        return cx.intern_value(make_struct(ty, fields));
+    }
+
+    // Handle packed base cases.
+    if let Some(packed) = ty.get_packed() {
+        let packed = packed.resolve_full();
+        match packed.core {
+            ty::PackedCore::IntVec(_) if packed.dims.len() <= 1 => {
+                return cx.intern_value(make_int(ty, Zero::zero()));
+            }
+            ty::PackedCore::IntAtom(ty::IntAtomType::Time) if packed.dims.is_empty() => {
+                return cx.intern_value(make_time(Zero::zero()));
+            }
+            ty::PackedCore::IntAtom(_) if packed.dims.is_empty() => {
+                return cx.intern_value(make_int(ty, Zero::zero()));
+            }
+            _ => (),
         }
-        TypeKind::PackedArray(length, elem_ty) => cx.intern_value(make_array(
-            ty.clone(),
-            std::iter::repeat(cx.type_default_value(elem_ty.clone()))
+    }
+
+    // Handle arrays.
+    if let Some(dim) = ty.dims().last() {
+        let length = dim
+            .get_size()
+            .expect("cannot build const value of unsized array");
+        let elem_ty = ty.pop_dim(cx).unwrap();
+        return cx.intern_value(make_array(
+            ty,
+            std::iter::repeat(cx.type_default_value(elem_ty))
                 .take(length)
                 .collect(),
-        )),
+        ));
+    }
+    assert!(
+        ty.dims.is_empty(),
+        "unpacked dims should have been handled above"
+    );
+
+    // Handle unpacked types.
+    let packed = match ty.core {
+        ty::UnpackedCore::Packed(p) => p.resolve_full(),
+        _ => panic!("cannot build const value of unpacked type `{}`", ty),
+    };
+
+    // Handle packed types.
+    assert!(
+        packed.dims.is_empty(),
+        "packed dims should have been handled above"
+    );
+    match packed.core {
+        ty::PackedCore::Void => {
+            return cx.intern_value(ValueData {
+                ty,
+                kind: ValueKind::Void,
+            })
+        }
+        ty::PackedCore::Enum(ref x) => return cx.type_default_value(x.base.to_unpacked(cx)),
+        ty::PackedCore::IntVec(_) | ty::PackedCore::IntAtom(_) | ty::PackedCore::Struct(_) => {
+            unreachable!("should be handled above")
+        }
+        _ => panic!("cannot build const value of packed type `{}`", packed),
     }
 }

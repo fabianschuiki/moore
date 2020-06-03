@@ -29,7 +29,7 @@ use crate::{
     hir::{self, AccessTable, HirNode},
     port_list::PortList,
     resolver::{Scope, StructDef},
-    ty::{Type, TypeKind},
+    ty::{Type, TypeKind, UnpackedType},
     typeck::{CastType, TypeContext},
     value::{Value, ValueData, ValueKind},
     InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping,
@@ -809,7 +809,7 @@ pub(super) mod queries {
             }
 
             /// Determine the default value of a type.
-            fn type_default_value(ty: Type<'a>) -> Value<'a> {
+            fn type_default_value(ty: &'a UnpackedType<'a>) -> Value<'a> {
                 type TypeDefaultValueQuery;
                 use fn value::type_default_value;
             }

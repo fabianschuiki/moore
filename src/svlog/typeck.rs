@@ -66,7 +66,7 @@ pub(crate) fn type_of<'gcx>(
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
                     return cx.type_of(assigned_id.id(), assigned_id.env())
                 }
-                Some(ParamEnvBinding::Direct(t)) => return Ok(t.ty),
+                Some(ParamEnvBinding::Direct(t)) => return Ok(t.ty.to_legacy(cx)),
                 _ => (),
             }
             if let Some(default) = p.default {

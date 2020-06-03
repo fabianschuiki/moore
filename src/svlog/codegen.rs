@@ -173,9 +173,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 if let Some(default) = port_data.default {
                     gen.constant_value_of(default, env)?
                 } else {
-                    gen.type_default_value(gen.type_of(port_id, env)?)
+                    gen.type_default_value(ty::UnpackedType::from_legacy(
+                        gen.cx,
+                        gen.type_of(port_id, env)?,
+                    ))
                 },
                 env,
+                gen.span(port_data.default.unwrap_or(port_id)),
             )?;
             let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
             let zero_time = gen.builder.ins().const_time(zero_time);
@@ -523,13 +527,14 @@ where
                 HirNode::VarDecl(x) => x,
                 _ => unreachable!(),
             };
-            let ty = self.type_of(decl_id, env)?;
+            let ty = ty::UnpackedType::from_legacy(self.cx, self.type_of(decl_id, env)?);
             let init = self.emit_const(
                 match hir.init {
                     Some(expr) => self.constant_value_of(expr, env)?,
                     None => self.type_default_value(ty),
                 },
                 env,
+                self.span(hir.init.unwrap_or(decl_id)),
             )?;
             let value = self.builder.ins().sig(init);
             self.builder.set_name(value, hir.name.value.into());
@@ -620,14 +625,17 @@ where
                 let value = if let Some(&mapping) = port_mapping_int.get(&port.id) {
                     mapping
                 } else {
-                    let ty = self.type_of(port.id, inst.target.inner_env)?;
+                    let ty = ty::UnpackedType::from_legacy(
+                        self.cx,
+                        self.type_of(port.id, inst.target.inner_env)?,
+                    );
                     let value = match port.data.as_ref().and_then(|d| d.default) {
                         Some(default) => {
                             self.emit_rvalue_mode(default, inst.target.inner_env, Mode::Signal)?
                         }
                         None => {
-                            let v = self.type_default_value(ty.clone());
-                            let v = self.emit_const(v, inst.target.inner_env)?;
+                            let v = self.type_default_value(ty);
+                            let v = self.emit_const(v, inst.target.inner_env, port.span)?;
                             self.builder.ins().sig(v)
                         }
                     };
@@ -724,11 +732,16 @@ where
     }
 
     /// Map a value to an LLHD constant (interned).
-    fn emit_const(&mut self, value: Value<'gcx>, env: ParamEnv) -> Result<llhd::ir::Value> {
+    fn emit_const(
+        &mut self,
+        value: Value<'gcx>,
+        env: ParamEnv,
+        span: Span,
+    ) -> Result<llhd::ir::Value> {
         if let Some(x) = self.interned_consts.get(value) {
             x.clone()
         } else {
-            let x = self.emit_const_uninterned(value, env);
+            let x = self.emit_const_uninterned(value, env, span);
             // self.interned_consts.insert(value, x.clone());
             x
         }
@@ -739,54 +752,73 @@ where
         &mut self,
         value: Value<'gcx>,
         env: ParamEnv,
+        span: Span,
     ) -> Result<llhd::ir::Value> {
-        match (value.ty.resolve_name(), &value.kind) {
-            (&TypeKind::Int(width, _), &ValueKind::Int(ref k, ..))
-            | (
-                &TypeKind::BitVector {
-                    range: ty::Range { size: width, .. },
-                    ..
-                },
-                &ValueKind::Int(ref k, ..),
-            ) => Ok(self.builder.ins().const_int((width, k.clone()))),
-            (&TypeKind::Time, &ValueKind::Time(ref k)) => Ok(self
+        let packed = match value.ty.get_packed() {
+            Some(t) => t.resolve_full(),
+            None => panic!(
+                "codegen does not support unpacked types; got `{}`",
+                value.ty
+            ),
+        };
+        match value.kind {
+            ValueKind::Int(ref k, ..) => {
+                let size = value.ty.simple_bit_vector(self.cx, span).size;
+                Ok(self.builder.ins().const_int((size, k.clone())))
+            }
+            ValueKind::Time(ref k) => Ok(self
                 .builder
                 .ins()
                 .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0))),
-            (&TypeKind::Bit(_), &ValueKind::Int(ref k, ..))
-            | (&TypeKind::BitScalar { .. }, &ValueKind::Int(ref k, ..)) => {
-                Ok(self.builder.ins().const_int((1, k.clone())))
+            ValueKind::StructOrArray(ref v) => {
+                if let Some(_dim) = value.ty.dims().last() {
+                    let fields: Result<Vec<_>> = v
+                        .iter()
+                        .map(|v| self.emit_const(v, env, span).map(Into::into))
+                        .collect();
+                    Ok(self.builder.ins().array(fields?))
+                } else if let Some(_strukt) = value.ty.get_struct() {
+                    let fields: Result<Vec<_>> = v
+                        .iter()
+                        .map(|v| self.emit_const(v, env, span).map(Into::into))
+                        .collect();
+                    Ok(self.builder.ins().strukt(fields?))
+                } else {
+                    panic!(
+                        "invalid type `{}` for const struct/array value {:#?}",
+                        value.ty, value
+                    );
+                }
             }
-            (&TypeKind::PackedArray(..), &ValueKind::StructOrArray(ref v)) => {
-                let fields: Result<Vec<_>> = v
-                    .iter()
-                    .map(|v| self.emit_const(v, env).map(Into::into))
-                    .collect();
-                Ok(self.builder.ins().array(fields?))
-            }
-            (&TypeKind::Struct(..), &ValueKind::StructOrArray(ref v)) => {
-                let fields: Result<Vec<_>> = v
-                    .iter()
-                    .map(|v| self.emit_const(v, env).map(Into::into))
-                    .collect();
-                Ok(self.builder.ins().strukt(fields?))
-            }
-            (&TypeKind::Error, _) | (_, &ValueKind::Error) => Err(()),
-            _ => panic!("invalid type/value combination {:#?}", value),
+            ValueKind::Error => Err(()),
+            _ => panic!(
+                "invalid combination of type `{}` and value {:#?}",
+                packed, value
+            ),
         }
     }
 
     /// Emit the value `1` for a type.
-    fn const_one_for_type(&mut self, ty: Type<'gcx>, env: ParamEnv) -> Result<llhd::ir::Value> {
+    fn const_one_for_type(
+        &mut self,
+        ty: Type<'gcx>,
+        env: ParamEnv,
+        span: Span,
+    ) -> Result<llhd::ir::Value> {
         use num::one;
         match *ty {
             TypeKind::Bit(..)
             | TypeKind::Int(..)
             | TypeKind::BitScalar { .. }
-            | TypeKind::BitVector { .. } => {
-                Ok(self.emit_const(self.intern_value(value::make_int(ty, one())), env)?)
-            }
-            TypeKind::Named(_, _, ty) => self.const_one_for_type(ty, env),
+            | TypeKind::BitVector { .. } => Ok(self.emit_const(
+                self.intern_value(value::make_int(
+                    ty::UnpackedType::from_legacy(self.cx, ty),
+                    one(),
+                )),
+                env,
+                span,
+            )?),
+            TypeKind::Named(_, _, ty) => self.const_one_for_type(ty, env, span),
             _ => panic!("no unit-value for type {:?}", ty),
         }
     }
@@ -873,7 +905,7 @@ where
         // If the value is a constant, emit the fully folded constant value.
         if mir.is_const() {
             let value = self.const_mir_rvalue(mir.into());
-            return self.emit_const(value, mir.env);
+            return self.emit_const(value, mir.env, mir.span);
         }
 
         match mir.kind {
@@ -977,7 +1009,7 @@ where
                 Ok(self.builder.ins().strukt(members))
             }
 
-            mir::RvalueKind::Const(k) => self.emit_const(k, mir.env),
+            mir::RvalueKind::Const(k) => self.emit_const(k, mir.env, mir.span),
 
             mir::RvalueKind::Index {
                 value,
@@ -1349,12 +1381,7 @@ where
     }
 
     /// Emit the code for a statement, given its HIR.
-    fn emit_stmt_regular(
-        &mut self,
-        _stmt_id: NodeId,
-        hir: &hir::Stmt,
-        env: ParamEnv,
-    ) -> Result<()> {
+    fn emit_stmt_regular(&mut self, stmt_id: NodeId, hir: &hir::Stmt, env: ParamEnv) -> Result<()> {
         #[allow(unreachable_patterns)]
         match hir.kind {
             hir::StmtKind::Null => (),
@@ -1598,7 +1625,7 @@ where
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
                         let value = self.builder.ins().ld(repeat_var);
-                        let one = self.const_one_for_type(ty, env)?;
+                        let one = self.const_one_for_type(ty, env, self.span(stmt_id))?;
                         let value = self.builder.ins().sub(value, one);
                         self.builder.ins().st(repeat_var, value);
                         None
@@ -1639,7 +1666,7 @@ where
                             ValueKind::Int(v, s, x) => (v, s, x),
                             _ => panic!("case constant evaluates to non-integer"),
                         };
-                        let way_expr = self.emit_const(way_const, env)?;
+                        let way_expr = self.emit_const(way_const, env, self.span(way_expr))?;
                         let way_width = self.llhd_type(way_expr).unwrap_int();
 
                         // Generate the comparison mask based on the case kind.
