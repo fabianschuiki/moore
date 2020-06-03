@@ -1486,6 +1486,18 @@ impl Display for EnumType<'_> {
 }
 
 impl SbvType {
+    /// Create a new SBVT.
+    pub fn new(domain: Domain, signing: Sign, size: usize) -> Self {
+        Self {
+            domain,
+            used_atom: false,
+            signing,
+            signing_explicit: false,
+            size,
+            size_explicit: false,
+        }
+    }
+
     /// Convert the SBVT to a packed type.
     pub fn to_packed<'a>(&self, cx: &impl TypeContext<'a>) -> &'a PackedType<'a> {
         PackedType::make_simple_bit_vector(cx, *self)
