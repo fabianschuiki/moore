@@ -395,11 +395,7 @@ impl<'a> PackedType<'a> {
                 sbv.signing,
                 sbv.signing_explicit,
                 if sbv.size > 1 || sbv.size_explicit {
-                    vec![PackedDim::Range(Range {
-                        size: sbv.size,
-                        dir: RangeDir::Down,
-                        offset: 0,
-                    })]
+                    vec![PackedDim::Range(sbv.range())]
                 } else {
                     vec![]
                 },
@@ -1282,6 +1278,48 @@ impl SbvType {
     pub fn to_unpacked<'a>(&self, cx: &impl TypeContext<'a>) -> &'a UnpackedType<'a> {
         self.to_packed(cx).to_unpacked(cx)
     }
+
+    /// Check whether the type is unsigned.
+    pub fn is_unsigned(&self) -> bool {
+        self.signing == Sign::Unsigned
+    }
+
+    /// Check whether the type is signed.
+    pub fn is_signed(&self) -> bool {
+        self.signing == Sign::Signed
+    }
+
+    /// Get the range of the type.
+    pub fn range(&self) -> Range {
+        Range {
+            size: self.size,
+            dir: RangeDir::Down,
+            offset: 0,
+        }
+    }
+
+    /// Change the size of the type.
+    pub fn change_size(&self, size: usize) -> SbvType {
+        SbvType {
+            used_atom: self.used_atom && self.size == size,
+            size: size,
+            ..*self
+        }
+    }
+
+    /// Change the domain of the type.
+    pub fn change_domain(&self, domain: Domain) -> SbvType {
+        SbvType { domain, ..*self }
+    }
+
+    /// Change the signing of the type.
+    pub fn change_signing(&self, signing: Sign) -> SbvType {
+        SbvType {
+            signing,
+            signing_explicit: self.signing_explicit || self.signing != signing,
+            ..*self
+        }
+    }
 }
 
 impl Display for SbvType {
@@ -1294,7 +1332,7 @@ impl Display for SbvType {
             write!(f, " {}", self.signing)?;
         }
         if self.size > 1 || self.size_explicit {
-            write!(f, " [{}:0]", self.size - 1)?;
+            write!(f, " {}", self.range())?;
         }
         Ok(())
     }
