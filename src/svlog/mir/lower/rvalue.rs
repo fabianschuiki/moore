@@ -274,7 +274,7 @@ fn lower_expr_inner<'gcx>(
                 .iter()
                 .map(|&expr| {
                     let value = builder.cx.mir_rvalue(expr, env);
-                    assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                    assert_span!(value.ty.coalesces_to_llhd_scalar(), value.span, builder.cx);
                     Ok((value.ty.get_bit_size().unwrap(), value))
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -319,7 +319,13 @@ fn lower_expr_inner<'gcx>(
             let target = cx.mir_rvalue(target, env);
 
             // Make sure we can actually index here.
-            assert_span!(target.ty.dims().next().is_some(), target.span, cx,);
+            assert_span!(
+                target.ty.dims().next().is_some(),
+                target.span,
+                cx,
+                "cannot index into `{}`; should be handled by typeck",
+                target.ty
+            );
 
             // Build the cast rvalue.
             Ok(builder.build(
@@ -595,12 +601,19 @@ fn pack_simple_bit_vector<'gcx>(
         .simple_bit_vector(builder.cx, value.span)
         .forget()
         .to_unpacked(builder.cx);
-    if let Some(dim) = value.ty.dims().last() {
+    if value.ty.coalesces_to_llhd_scalar() {
+        builder.build(to, RvalueKind::Transmute(value))
+    } else if let Some(dim) = value.ty.dims().last() {
         pack_array(builder, value, dim, to)
     } else if let Some(strukt) = value.ty.get_struct() {
         pack_struct(builder, value, strukt, to)
     } else {
-        builder.build(to, RvalueKind::Transmute(value))
+        bug_span!(
+            value.span,
+            builder.cx,
+            "cannot pack a `{}` as SBVT",
+            value.ty
+        );
     }
 }
 
@@ -644,6 +657,14 @@ fn pack_array<'a>(
     // Determine the element type.
     let elem_ty = value.ty.pop_dim(builder.cx).unwrap();
 
+    // Catch the trivial case where the core type now is just an integer bit
+    // vector type, which is already in the right form.
+    if elem_ty.dims().next().is_none() {
+        if let Some(ty::PackedCore::IntVec(_)) = elem_ty.get_packed().map(|x| &x.core) {
+            return builder.build(to, RvalueKind::Transmute(value));
+        }
+    }
+
     // Cast each element.
     let mut packed_elements = vec![];
     let int_ty =
@@ -679,12 +700,14 @@ fn unpack_simple_bit_vector<'a>(
     if value.is_error() {
         return value;
     }
-    if let Some(dim) = to.dims().last() {
+    if to.coalesces_to_llhd_scalar() {
+        builder.build(to, RvalueKind::Transmute(value))
+    } else if let Some(dim) = to.dims().last() {
         unpack_array(builder, value, to, dim)
     } else if let Some(strukt) = to.get_struct() {
         unpack_struct(builder, value, to, strukt)
     } else {
-        builder.build(to, RvalueKind::Transmute(value))
+        bug_span!(value.span, builder.cx, "cannot unpack `{}` from SBVT", to);
     }
 }
 
@@ -744,6 +767,14 @@ fn unpack_array<'a>(
 
     // Determine the element type.
     let elem_ty = to.pop_dim(builder.cx).unwrap();
+
+    // Catch the trivial case where the core type now is just an integer bit
+    // vector type, which is already in the right form.
+    if elem_ty.dims().next().is_none() {
+        if let Some(ty::PackedCore::IntVec(_)) = elem_ty.get_packed().map(|x| &x.core) {
+            return builder.build(to, RvalueKind::Transmute(value));
+        }
+    }
 
     // Map the element type to its simple bit vector equivalent.
     let sbvt = elem_ty.simple_bit_vector(builder.cx, value.span);
@@ -902,7 +933,7 @@ fn lower_named_array_pattern<'a>(
     }
 
     // Construct the correct output value.
-    if ty.is_simple_bit_vector() {
+    if ty.coalesces_to_llhd_scalar() {
         if length == 1 {
             values[&0]
         } else {
@@ -1090,7 +1121,7 @@ fn lower_positional_pattern<'a>(
     let values: Vec<_> = values.into_iter().cycle().take(len).collect();
 
     // Find a mapping for the values.
-    let (exp_len, result) = if ty.is_simple_bit_vector() {
+    let (exp_len, result) = if ty.coalesces_to_llhd_scalar() {
         let mut values = values;
         values.reverse();
         (

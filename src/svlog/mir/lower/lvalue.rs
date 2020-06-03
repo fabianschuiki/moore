@@ -107,21 +107,13 @@ fn try_lower_expr<'gcx>(
 
             // Lower the indexee and make sure it can be indexed into.
             let target = builder.cx.mir_lvalue(target, builder.env);
-            if target
-                .ty
-                .get_packed()
-                .map(|p| p.dims.is_empty())
-                .unwrap_or(true)
-            {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "`{}` cannot be index into",
-                        target.span.extract()
-                    ))
-                    .span(target.span),
-                );
-                return Err(());
-            };
+            assert_span!(
+                target.ty.dims().next().is_some(),
+                target.span,
+                builder.cx,
+                "cannot index into `{}`; should be handled by typeck",
+                target.ty
+            );
 
             // Build the cast lvalue.
             return Ok(builder.build(

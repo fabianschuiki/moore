@@ -1021,7 +1021,7 @@ where
                 let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                 // TODO(fschuiki): make the above a constant of all `x`.
                 let shifted = self.builder.ins().shr(target, hidden, base);
-                if value.ty.is_simple_bit_vector() {
+                if value.ty.coalesces_to_llhd_scalar() {
                     let length = std::cmp::max(1, length);
                     Ok(self.builder.ins().ext_slice(shifted, 0, length))
                 } else {
@@ -1295,7 +1295,7 @@ where
                     let hidden = self.emit_zero_for_type(&self.llhd_type(target));
                     self.builder.ins().shr(target, hidden, base)
                 });
-                if value.ty.is_simple_bit_vector() {
+                if value.ty.coalesces_to_llhd_scalar() {
                     let length = std::cmp::max(1, length);
                     Ok((
                         self.builder.ins().ext_slice(shifted_real, 0, length),

@@ -3,7 +3,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{bit_size_of_type, Domain, Sign, Type, TypeKind},
+    ty::{bit_size_of_type, Domain, Sign, Type, TypeKind, UnpackedType},
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
@@ -518,7 +518,7 @@ fn cast_expr_type_inner<'gcx>(
     env: ParamEnv,
 ) -> CastType<'gcx> {
     trace!(
-        "[v2] Computing cast type of `{}` (line {})",
+        "Computing cast type of `{}` (line {})",
         expr.span().extract(),
         expr.span().begin().human_line()
     );
@@ -532,9 +532,9 @@ fn cast_expr_type_inner<'gcx>(
         Some(TypeContext::Bool) => Some(TypeContext2::Bool),
         None => None,
     };
-    trace!("[v2]  Inferred: {}", inferred);
+    trace!("  Inferred: {}", inferred);
     trace!(
-        "[v2]  Context:  {}",
+        "  Context:  {}",
         context
             .map(|c| c.to_string())
             .unwrap_or_else(|| "<none>".to_string())
@@ -542,7 +542,7 @@ fn cast_expr_type_inner<'gcx>(
 
     // No need to cast lvalues.
     if expr_is_lvalue(cx, expr.id, env) {
-        trace!("[v2]  Not casting lvalue");
+        trace!("  Not casting lvalue");
         return inferred.into();
     }
 
@@ -554,7 +554,7 @@ fn cast_expr_type_inner<'gcx>(
 
     // If any of the inputs are tombstones, return.
     if inferred.is_error() || context.is_error() {
-        trace!("[v2]  Aborting due to error");
+        trace!("  Aborting due to error");
         return inferred.into();
     }
 
@@ -577,7 +577,7 @@ fn cast_expr_type_inner<'gcx>(
         Some(ty) => {
             let ty = ty.forget();
             if !inferred.is_simple_bit_vector() {
-                trace!("[v2]  Packing SBVT");
+                trace!("  Packing SBVT");
                 cast.add_cast(CastOp::PackSBVT, ty.to_unpacked(cx));
             }
             ty
@@ -599,15 +599,15 @@ fn cast_expr_type_inner<'gcx>(
         }
     };
     if cast.is_error() {
-        trace!("[v2]  Aborting due to error");
+        trace!("  Aborting due to error");
         return cast;
     }
-    trace!("[v2]  Mapped `{}` to SBVT `{}`", inferred, inferred_sbvt);
+    trace!("  Mapped `{}` to SBVT `{}`", inferred, inferred_sbvt);
 
     // Cast the SBVT to a boolean.
     let context = match context {
         TypeContext2::Bool => {
-            trace!("[v2]  Casting to bool ({})", context.ty());
+            trace!("  Casting to bool ({})", context.ty());
             cast.add_cast(CastOp::Bool, context.ty());
             return cast;
         }
@@ -630,14 +630,14 @@ fn cast_expr_type_inner<'gcx>(
             return ty::UnpackedType::make_error().into();
         }
     };
-    trace!("[v2]  Mapped `{}` to SBVT `{}`", context, context_sbvt);
+    trace!("  Mapped `{}` to SBVT `{}`", context, context_sbvt);
 
     // Change size.
     //
     // For example: `bit [7:0]` to `bit [2:0]`.
     let inferred_sbvt = if inferred_sbvt.size != context_sbvt.size {
         trace!(
-            "[v2]  Casting size from {} to {}",
+            "  Casting size from {} to {}",
             inferred_sbvt.range(),
             context_sbvt.range()
         );
@@ -651,7 +651,7 @@ fn cast_expr_type_inner<'gcx>(
         inferred_sbvt
     };
     if cast.is_error() {
-        trace!("[v2]  Aborting due to error");
+        trace!("  Aborting due to error");
         return cast;
     }
 
@@ -660,7 +660,7 @@ fn cast_expr_type_inner<'gcx>(
     // For example: `bit` to `bit signed`, or `bit signed` to `bit unsigned`.
     let inferred_sbvt = if inferred_sbvt.signing != context_sbvt.signing {
         trace!(
-            "[v2]  Casting sign from {:?} to {:?}",
+            "  Casting sign from {:?} to {:?}",
             inferred_sbvt.signing,
             context_sbvt.signing
         );
@@ -671,7 +671,7 @@ fn cast_expr_type_inner<'gcx>(
         inferred_sbvt
     };
     if cast.is_error() {
-        trace!("[v2]  Aborting due to error");
+        trace!("  Aborting due to error");
         return cast;
     }
 
@@ -680,7 +680,7 @@ fn cast_expr_type_inner<'gcx>(
     // For example: `bit` to `logic`, or `logic` to `bit`.
     let inferred_sbvt = if inferred_sbvt.domain != context_sbvt.domain {
         trace!(
-            "[v2]  Casting domain from {:?} to {:?}",
+            "  Casting domain from {:?} to {:?}",
             inferred_sbvt.domain,
             context_sbvt.domain
         );
@@ -691,7 +691,7 @@ fn cast_expr_type_inner<'gcx>(
         inferred_sbvt
     };
     if cast.is_error() {
-        trace!("[v2]  Aborting due to error");
+        trace!("  Aborting due to error");
         return cast;
     }
 
@@ -705,17 +705,17 @@ fn cast_expr_type_inner<'gcx>(
 
     // Unpack the simple bit vector as complex type.
     if !context.is_simple_bit_vector() {
-        trace!("[v2]  Unpacking SBVT");
+        trace!("  Unpacking SBVT");
         cast.add_cast(CastOp::UnpackSBVT, context);
     }
     if cast.is_error() {
-        trace!("[v2]  Aborting due to error");
+        trace!("  Aborting due to error");
         return cast;
     }
 
     // If types match now, we're good.
     if context.is_identical(cast.ty) {
-        trace!("[v2]  Cast complete");
+        trace!("  Cast complete");
         return cast;
     }
 
@@ -1665,6 +1665,33 @@ fn type_context_imposed_by_expr<'gcx>(
 
         // The `inside` expression imposes its operation type as type context.
         hir::ExprKind::Inside(..) => Some(cx.need_operation_type(expr.id, env).into()),
+
+        // Bit- and part-select expressions require their argument to be
+        // indexable. Otherwise it should at least be castable to a SBVT.
+        hir::ExprKind::Index(target, _) if onto == target => {
+            let ty = cx.need_self_determined_type(onto, env);
+            let ty = UnpackedType::from_legacy(cx, ty);
+            Some(if ty.dims().next().is_some() {
+                ty.to_legacy(cx).into()
+            } else {
+                match ty.get_simple_bit_vector() {
+                    Some(ty) => ty.forget().to_unpacked(cx).to_legacy(cx),
+                    None => {
+                        cx.emit(
+                            DiagBuilder2::error(
+                                format!("cannot index into a value of type `{}`", ty,),
+                            )
+                            .span(expr.span)
+                            .add_note(format!(
+                                "`{}` must be an array or have a simple bit-vector type representation",
+                                ty
+                            )),
+                        );
+                        &ty::ERROR_TYPE
+                    }
+                }.into()
+            })
+        }
 
         _ => None,
     }

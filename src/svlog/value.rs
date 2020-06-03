@@ -118,7 +118,10 @@ pub fn make_error<'a>(ty: &'a UnpackedType<'a>) -> ValueData<'a> {
 ///
 /// Panics if `ty` is not an integer type. Truncates the value to `ty`.
 pub fn make_int<'a>(ty: &'a UnpackedType<'a>, value: BigInt) -> ValueData<'a> {
-    let w = ty.get_bit_size().unwrap();
+    let w = match ty.get_bit_size() {
+        Some(x) => x,
+        None => panic!("make_int got type `{}` which has no size", ty),
+    };
     make_int_special(
         ty,
         value,
@@ -526,7 +529,8 @@ fn const_mir_rvalue_inner<'gcx>(
             // length,
             ..
         } => {
-            bug_span!(mir.span, cx, "constant folding of slices not implemented");
+            error!("Offending MIR of the following diagnostic: {:#?}", mir);
+            bug_span!(mir.span, cx, "constant folding of slices not implemented: `{}`", mir.ty);
         }
 
         // Propagate tombstones.
@@ -670,7 +674,9 @@ pub(crate) fn type_default_value<'gcx>(
     cx: &impl Context<'gcx>,
     ty: &'gcx UnpackedType<'gcx>,
 ) -> Value<'gcx> {
+    let ty_orig = ty;
     let ty = ty.resolve_full();
+    debug!("Resolved `{}` to `{}`", ty_orig, ty);
     if ty.is_error() {
         return cx.intern_value(ValueData {
             ty: UnpackedType::make_error(),
@@ -690,7 +696,7 @@ pub(crate) fn type_default_value<'gcx>(
 
     // Handle packed base cases.
     if let Some(packed) = ty.get_packed() {
-        let packed = packed.resolve_full();
+        let packed = packed;
         match packed.core {
             ty::PackedCore::IntVec(_) if packed.dims.len() <= 1 => {
                 return cx.intern_value(make_int(ty, Zero::zero()));
@@ -720,19 +726,21 @@ pub(crate) fn type_default_value<'gcx>(
     }
     assert!(
         ty.dims.is_empty(),
-        "unpacked dims should have been handled above"
+        "unpacked dims should have been handled above: `{}`",
+        ty
     );
 
     // Handle unpacked types.
     let packed = match ty.core {
-        ty::UnpackedCore::Packed(p) => p.resolve_full(),
+        ty::UnpackedCore::Packed(p) => p,
         _ => panic!("cannot build const value of unpacked type `{}`", ty),
     };
 
     // Handle packed types.
     assert!(
         packed.dims.is_empty(),
-        "packed dims should have been handled above"
+        "packed dims should have been handled above: `{}`",
+        packed
     );
     match packed.core {
         ty::PackedCore::Void => {
