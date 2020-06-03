@@ -643,7 +643,7 @@ fn cast_expr_type_inner<'gcx>(
         );
         let ty = inferred_sbvt.change_size(context_sbvt.size);
         cast.add_cast(
-            CastOp::Range(inferred_sbvt.range(), inferred_sbvt.is_signed()),
+            CastOp::Range(context_sbvt.range(), inferred_sbvt.is_signed()),
             ty.to_unpacked(cx),
         );
         ty
