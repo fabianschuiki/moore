@@ -263,6 +263,8 @@ pub enum RealType {
 pub struct StructType<'a> {
     /// The corresponding AST node of this struct definition.
     pub ast: &'a ast::Struct<'a>,
+    /// The AST node of the corresponding type.
+    pub ast_type: &'a ast::Type<'a>,
     /// Whether this is a `struct`, `union` or `union tagged`.
     pub kind: ast::StructKind,
     /// The list of members.
@@ -667,9 +669,9 @@ impl<'a> PackedType<'a> {
                     _ => return Self::make_error(),
                 };
                 assert!(def.packed);
-                let ast = match cx.ast_of(node_id.id()).unwrap() {
+                let (ast, ast_type) = match cx.ast_of(node_id.id()).unwrap() {
                     AstNode::Type(ty) => match ty.kind.data {
-                        ast::StructType(ref s) => s,
+                        ast::StructType(ref s) => (s, ty),
                         _ => unreachable!("type is not a struct"),
                     },
                     _ => unreachable!("invalid struct"),
@@ -697,6 +699,7 @@ impl<'a> PackedType<'a> {
                     cx,
                     StructType {
                         ast,
+                        ast_type,
                         kind: ast.kind,
                         members,
                         legacy_env: node_id.env(),
@@ -785,7 +788,7 @@ impl<'a> PackedType<'a> {
             PackedCore::IntAtom(IntAtomType::Integer) => &INTEGER_TYPE,
             PackedCore::IntAtom(IntAtomType::Time) => &TIME_TYPE,
             PackedCore::Struct(ref x) => {
-                cx.intern_type(TypeKind::Struct(x.ast.id().env(x.legacy_env)))
+                cx.intern_type(TypeKind::Struct(x.ast_type.id().env(x.legacy_env)))
             }
             PackedCore::Enum(ref x) => x.base.to_legacy(cx),
             PackedCore::Named { name, ty } => {
