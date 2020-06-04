@@ -280,13 +280,18 @@ fn lower_expr_inner<'gcx>(
                 .collect::<Result<Vec<_>>>()?;
 
             // Compute the result type of the concatenation.
-            let total_width = exprs.iter().map(|(w, _)| w).sum();
-            let result_ty = SbvType::new(ty::Domain::FourValued, ty::Sign::Unsigned, total_width)
-                .to_unpacked(builder.cx);
+            let final_ty = builder.cx.need_self_determined_type(hir.id, env);
+            if final_ty.is_error() {
+                return Err(());
+            }
+            let domain = final_ty.domain();
+            let concat_width = exprs.iter().map(|(w, _)| w).sum();
+            let concat_ty =
+                SbvType::new(domain, ty::Sign::Unsigned, concat_width).to_unpacked(builder.cx);
 
             // Assemble the concatenation.
             let concat = builder.build(
-                result_ty,
+                concat_ty,
                 RvalueKind::Concat(exprs.into_iter().map(|(_, v)| v).collect()),
             );
 
@@ -297,11 +302,7 @@ fn lower_expr_inner<'gcx>(
                     .constant_int_value_of(repeat, env)?
                     .to_usize()
                     .unwrap();
-                let total_width = total_width * count;
-                let result_ty =
-                    SbvType::new(ty::Domain::FourValued, ty::Sign::Unsigned, total_width)
-                        .to_unpacked(builder.cx);
-                builder.build(result_ty, RvalueKind::Repeat(count, concat))
+                builder.build(final_ty, RvalueKind::Repeat(count, concat))
             } else {
                 concat
             };
@@ -515,8 +516,9 @@ fn lower_cast<'gcx>(
         to
     );
     trace!(
-        "Lowering cast `{}` of `{}` (line {})",
+        "Lowering cast to `{}` from `{}` of `{}` (line {})",
         to,
+        value.ty,
         value.span.extract(),
         value.span.begin().human_line()
     );

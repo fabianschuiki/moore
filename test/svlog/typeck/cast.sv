@@ -15,7 +15,7 @@ module foo;
     assign b = !s;
     // CHECK: 12: cast_chain(b) = bit -> PackSBVT bit [0:0] -> Bool logic
     // CHECK: 13: cast_chain(v) = bit [7:0] -> Bool logic
-    // CHECK: 14: cast_chain(m) = bit [3:0][7:0] -> PackSBVT bit [31:0] -> Bool logic
+    // CHECK: 14: cast_chain(m) = bit [7:0][3:0] -> PackSBVT bit [31:0] -> Bool logic
     // CHECK: 15: cast_chain(s) = struct packed { bit x; bit [13:0] y; } -> PackSBVT bit [14:0] -> Bool logic
 
     assign b = v && b;

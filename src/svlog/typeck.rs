@@ -538,7 +538,8 @@ fn cast_expr_type_inner<'gcx>(
 
     // If types already match, return.
     if let TypeContext2::Type(ty) = context {
-        if ty.is_identical(inferred) {
+        if ty.is_strictly_identical(inferred) {
+            trace!("  Already identical");
             return inferred.into();
         }
     }
@@ -692,7 +693,7 @@ fn cast_expr_type_inner<'gcx>(
     }
 
     // If types match now, we're good.
-    if context.is_identical(cast.ty) {
+    if context.is_strictly_identical(cast.ty) {
         trace!("  Cast complete");
         return cast;
     }
@@ -983,10 +984,10 @@ fn self_determined_expr_type<'gcx>(
             };
 
             // Determine the target type.
-            let target_ty = cx
-                .type_of(target, env)
-                .map(|ty| UnpackedType::from_legacy(cx, ty))
-                .unwrap_or(UnpackedType::make_error());
+            let target_ty = cx.need_operation_type(expr.id, env);
+            if target_ty.is_error() {
+                return Some(target_ty);
+            }
 
             // If we are selecting a slice (width not None), the result type is
             // the array, but with the outermost array dimension changed. If we
@@ -1012,24 +1013,8 @@ fn self_determined_expr_type<'gcx>(
                     }
                 }
             } else {
-                // We are not selecting into an array. Map to a simple bit
-                // vector type.
-                let sbvt = match target_ty.get_simple_bit_vector() {
-                    Some(sbvt) => sbvt,
-                    None => {
-                        cx.emit(
-                            DiagBuilder2::error(
-                                format!("cannot index into a value of type `{}`", target_ty),
-                            )
-                            .span(expr.span)
-                            .add_note(format!(
-                                "`{}` must be an array or have a simple bit-vector type representation",
-                                target_ty
-                            )),
-                        );
-                        return Some(UnpackedType::make_error());
-                    }
-                };
+                // We are not selecting into an array.
+                let sbvt = target_ty.simple_bit_vector(cx, cx.span(target));
                 match width {
                     Some(width) => {
                         // We are selecting a bit slice.
@@ -1337,6 +1322,40 @@ pub(crate) fn operation_type<'gcx>(
                 a.into_iter().chain(b.into_iter())
             });
             unify_operator_types(cx, env, tlhs.into_iter().chain(tranges))
+        }
+
+        // Bit- and part-select expressions map their target to an internal type
+        // that is suitable for indexing, then operate on that.
+        hir::ExprKind::Index(target, _mode) => {
+            // Determine the target type.
+            let target_ty = cx.need_self_determined_type(target, env);
+            if target_ty.is_error() {
+                return Some(target_ty);
+            }
+
+            // We are either indexing into an array, in which case the operation
+            // type is simply that array, or into anything else, in which case
+            // the target is cast to an SBVT for indexing.
+            if let Some(_dim) = target_ty.outermost_dim() {
+                Some(target_ty)
+            } else {
+                match target_ty.get_simple_bit_vector() {
+                    Some(sbvt) => Some(sbvt.forget().to_unpacked(cx)),
+                    None => {
+                        cx.emit(
+                            DiagBuilder2::error(
+                                format!("cannot index into a value of type `{}`", target_ty),
+                            )
+                            .span(expr.span)
+                            .add_note(format!(
+                                "`{}` must be an array or have a simple bit-vector type representation",
+                                target_ty
+                            )),
+                        );
+                        Some(UnpackedType::make_error())
+                    }
+                }
+            }
         }
 
         _ => None,
@@ -1682,6 +1701,9 @@ fn type_context_imposed_by_expr<'gcx>(
         // to map to a corresponding SBVT.
         hir::ExprKind::Concat(..) => {
             let ty = cx.need_self_determined_type(onto, env);
+            if ty.is_error() {
+                return Some(ty.into());
+            }
             let sbvt = match ty.get_simple_bit_vector() {
                 Some(ty) => ty.to_unpacked(cx),
                 None => {
@@ -1731,30 +1753,16 @@ fn type_context_imposed_by_expr<'gcx>(
         // The `inside` expression imposes its operation type as type context.
         hir::ExprKind::Inside(..) => Some(cx.need_operation_type(expr.id, env).into()),
 
-        // Bit- and part-select expressions require their argument to be
-        // indexable. Otherwise it should at least be castable to a SBVT.
+        // Bit- and part-select expressions impose their operation type as type
+        // context.
         hir::ExprKind::Index(target, _) if onto == target => {
-            let ty = cx.need_self_determined_type(onto, env);
-            Some(if ty.dims().next().is_some() {
-                ty.into()
-            } else {
-                match ty.get_simple_bit_vector() {
-                    Some(ty) => ty.forget().to_unpacked(cx),
-                    None => {
-                        cx.emit(
-                            DiagBuilder2::error(
-                                format!("cannot index into a value of type `{}`", ty,),
-                            )
-                            .span(expr.span)
-                            .add_note(format!(
-                                "`{}` must be an array or have a simple bit-vector type representation",
-                                ty
-                            )),
-                        );
-                        UnpackedType::make_error()
-                    }
-                }.into()
-            })
+            let opty = cx.need_operation_type(expr.id, env);
+            debug!(
+                "Imposing opty `{}` on `{}`",
+                opty,
+                cx.span(target).extract()
+            );
+            Some(opty.into())
         }
 
         _ => None,
@@ -1774,7 +1782,14 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
     if ty.is_error() {
         return Some(UnpackedType::make_error().into());
     }
-    match *ty.to_legacy(cx).resolve_name() {
+    let legacy = ty.to_legacy(cx);
+    trace!(
+        "Pattern `{}` has type `{}`, legacy type is `{}`",
+        cx.span(expr.id).extract(),
+        ty,
+        legacy
+    );
+    match *legacy.resolve_name() {
         TypeKind::PackedArray(_, elty) => Some(UnpackedType::from_legacy(cx, elty).into()),
         TypeKind::BitScalar { .. } => Some(ty.into()),
         TypeKind::BitVector { .. } => Some(ty.into()),
