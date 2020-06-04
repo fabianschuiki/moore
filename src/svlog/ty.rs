@@ -564,7 +564,12 @@ impl<'a> PackedType<'a> {
     pub fn is_identical(&self, other: &Self) -> bool {
         let a = self.resolve_full();
         let b = other.resolve_full();
-        a.core.is_identical(&b.core) && a.signing == b.signing && a.dims == b.dims
+        if a.coalesces_to_llhd_scalar() && b.coalesces_to_llhd_scalar() {
+            a.get_simple_bit_vector().map(|x| x.forget())
+                == b.get_simple_bit_vector().map(|x| x.forget())
+        } else {
+            a.core.is_identical(&b.core) && a.signing == b.signing && a.dims == b.dims
+        }
     }
 
     /// Get the domain for this type.
