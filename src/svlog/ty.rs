@@ -555,6 +555,9 @@ impl<'a> PackedType<'a> {
     }
 
     /// Check if this type is equal to another one.
+    ///
+    /// Types which coalesce to `iN` in LLHD are checked for equality of their
+    /// SBVT.
     pub fn is_identical(&self, other: &Self) -> bool {
         let a = self.resolve_full();
         let b = other.resolve_full();
@@ -562,8 +565,15 @@ impl<'a> PackedType<'a> {
             a.get_simple_bit_vector().map(|x| x.forget())
                 == b.get_simple_bit_vector().map(|x| x.forget())
         } else {
-            a.core.is_identical(&b.core) && a.sign == b.sign && a.dims == b.dims
+            a.is_strictly_identical(b)
         }
+    }
+
+    /// Check if this type is strictly equal to another one.
+    pub fn is_strictly_identical(&self, other: &Self) -> bool {
+        let a = self.resolve_full();
+        let b = other.resolve_full();
+        a.core.is_identical(&b.core) && a.sign == b.sign && a.dims == b.dims
     }
 
     /// Get the domain for this type.
@@ -1222,12 +1232,19 @@ impl<'a> UnpackedType<'a> {
 
     /// Check if this type is equal to another one.
     ///
-    /// This function is provided for future expansion if we determine that
-    /// types being identical differs from Rust's notion of equality.
+    /// Types which coalesce to `iN` in LLHD are checked for equality of their
+    /// SBVT.
     pub fn is_identical(&self, other: &Self) -> bool {
         let a = self.resolve_full();
         let b = other.resolve_full();
         a.core.is_identical(&b.core) && a.dims == b.dims
+    }
+
+    /// Check if this type is strictly equal to another one.
+    pub fn is_strictly_identical(&self, other: &Self) -> bool {
+        let a = self.resolve_full();
+        let b = other.resolve_full();
+        a.core.is_strictly_identical(&b.core) && a.dims == b.dims
     }
 
     /// Check if this type is strictly a packed type.
@@ -1496,6 +1513,22 @@ impl<'a> UnpackedCore<'a> {
             (Self::Event, Self::Event) => true,
             (Self::Named { ty: a, .. }, Self::Named { ty: b, .. }) => a.is_identical(b),
             (Self::Ref { ty: a, .. }, Self::Ref { ty: b, .. }) => a.is_identical(b),
+            _ => false,
+        }
+    }
+
+    /// Check if this type is strictly identical to another one.
+    pub fn is_strictly_identical(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Error, Self::Error) => true,
+            (Self::Packed(a), Self::Packed(b)) => a.is_strictly_identical(b),
+            (Self::Real(a), Self::Real(b)) => a == b,
+            (Self::Struct(a), Self::Struct(b)) => a == b,
+            (Self::String, Self::String) => true,
+            (Self::Chandle, Self::Chandle) => true,
+            (Self::Event, Self::Event) => true,
+            (Self::Named { ty: a, .. }, Self::Named { ty: b, .. }) => a.is_strictly_identical(b),
+            (Self::Ref { ty: a, .. }, Self::Ref { ty: b, .. }) => a.is_strictly_identical(b),
             _ => false,
         }
     }
