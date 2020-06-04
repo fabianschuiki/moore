@@ -992,6 +992,12 @@ impl PackedDim {
     }
 }
 
+impl From<Range> for PackedDim {
+    fn from(range: Range) -> Self {
+        Self::Range(range)
+    }
+}
+
 impl Display for PackedDim {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -1485,6 +1491,17 @@ impl UnpackedDim<'_> {
     }
 }
 
+impl From<usize> for UnpackedDim<'_> {
+    fn from(size: usize) -> Self {
+        Self::Array(size)
+    }
+}
+impl From<Range> for UnpackedDim<'_> {
+    fn from(range: Range) -> Self {
+        Self::Range(range)
+    }
+}
+
 impl Display for UnpackedDim<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -1855,6 +1872,17 @@ pub enum RangeDir {
     Up,
     /// `a > b`
     Down,
+}
+
+impl Range {
+    /// Create a new `[<size>-1:0]` range.
+    pub fn with_size(size: usize) -> Self {
+        Self {
+            size,
+            dir: RangeDir::Down,
+            offset: 0,
+        }
+    }
 }
 
 impl std::fmt::Debug for Range {
