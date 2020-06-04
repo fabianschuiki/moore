@@ -787,11 +787,14 @@ impl<'a> PackedType<'a> {
             }
             TypeKind::PackedArray(size, ty) => {
                 let mut packed = PackedType::from_legacy(cx, ty).clone();
-                packed.dims.push(PackedDim::Range(Range {
-                    size: size,
-                    dir: RangeDir::Down,
-                    offset: 0,
-                }));
+                packed.dims.insert(
+                    0,
+                    PackedDim::Range(Range {
+                        size: size,
+                        dir: RangeDir::Down,
+                        offset: 0,
+                    }),
+                );
                 packed.intern(cx)
             }
             TypeKind::BitScalar { domain, sign } => PackedType::make_sign(
@@ -837,7 +840,7 @@ impl<'a> PackedType<'a> {
 
     /// Convert a `PackedType` into a legacy `Type`.
     pub fn to_legacy(&self, cx: &impl Context<'a>) -> Type<'a> {
-        let mut dims = self.dims.iter().fuse();
+        let mut dims = self.dims.iter().rev().fuse();
         let mut core = match self.core {
             PackedCore::Error => return &ERROR_TYPE,
             PackedCore::Void => return &VOID_TYPE,
