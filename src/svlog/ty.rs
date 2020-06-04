@@ -664,17 +664,38 @@ impl<'a> PackedType<'a> {
     }
 
     /// Pop the outermost dimension off the type.
+    ///
+    /// For example, maps `bit [3:0][7:0]` to `bit [7:0]`.
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
-        let mut next = Some(self);
-        while let Some(ty) = next {
-            if !ty.dims.is_empty() {
-                let mut new = ty.clone();
-                new.dims.pop().expect("pop_dim should pop a dim");
-                return Some(new.intern(cx));
-            }
-            next = ty.resolved;
+        let ty = self.resolve_full();
+        if !ty.dims.is_empty() {
+            let mut new = ty.clone();
+            new.dims.remove(0);
+            Some(new.intern(cx))
+        } else {
+            None
         }
-        None
+    }
+
+    /// Replace the outermost dimension of the type.
+    ///
+    /// Panics if the type has no dimensions.
+    pub fn replace_dim(&self, cx: &impl TypeContext<'a>, dim: PackedDim) -> &'a Self {
+        let ty = self.resolve_full();
+        if !ty.dims.is_empty() {
+            let mut new = ty.clone();
+            new.dims[0] = dim;
+            new.intern(cx)
+        } else {
+            panic!("no dimension in `{}` to substitute with `{}`", self, dim);
+        }
+    }
+
+    /// Get the outermost dimension of the type.
+    ///
+    /// For example, yields the `[3:0]` in `bit [3:0][7:0]`.
+    pub fn outermost_dim(&self) -> Option<PackedDim> {
+        self.resolve_full().dims.iter().cloned().next()
     }
 
     /// Get the underlying struct, or `None` if the type is no struct.
@@ -1330,7 +1351,10 @@ impl<'a> UnpackedType<'a> {
         }
     }
 
-    /// Get an iterator over the type's packed dimensions.
+    /// Get an iterator over the type's packed dimensions, slowest-varying
+    /// first.
+    ///
+    /// For example, produces `[3:0], [7:0]` for `bit [3:0][7:0] $ [1][2]`.
     pub fn packed_dims(&self) -> impl Iterator<Item = PackedDim> + 'a {
         self.resolve_full()
             .get_packed()
@@ -1338,34 +1362,79 @@ impl<'a> UnpackedType<'a> {
             .flat_map(|p| p.dims.iter().cloned())
     }
 
-    /// Get an iterator over the type's unpacked dimensions.
+    /// Get an iterator over the type's unpacked dimensions, slowest-varying
+    /// first.
+    ///
+    /// For example, produces `[1], [2]` for `bit [3:0][7:0] $ [1][2]`.
     pub fn unpacked_dims<'s>(&'s self) -> impl Iterator<Item = UnpackedDim<'a>> + 's {
         self.resolve_full().dims.iter().cloned()
     }
 
-    /// Get an iterator over the type's dimensions.
+    /// Get an iterator over the type's dimensions. slowest-varying first.
     ///
-    /// Produces the packed dimensions first, then the unpacked ones.
+    /// For example, produces `[1], [2], [3:0], [7:0]` for `bit [3:0][7:0] $
+    /// [1][2]`.
     pub fn dims<'s>(&'s self) -> impl Iterator<Item = Dim<'a>> + 's {
-        self.packed_dims()
-            .map(Dim::Packed)
-            .chain(self.unpacked_dims().map(Dim::Unpacked))
+        self.unpacked_dims()
+            .map(Dim::Unpacked)
+            .chain(self.packed_dims().map(Dim::Packed))
     }
 
     /// Pop the outermost dimension off the type.
+    ///
+    /// For example, maps `bit $ [1][2]` to `bit $ [2]`. Pops off the packed
+    /// type as well, mapping `bit [7:0] $` to `bit $`.
     pub fn pop_dim(&self, cx: &impl TypeContext<'a>) -> Option<&'a Self> {
-        let mut next = Some(self);
-        while let Some(ty) = next {
-            if !ty.dims.is_empty() {
-                let mut new = ty.clone();
-                new.dims.pop().expect("pop_dim should drop a dim");
-                return Some(new.intern(cx));
-            }
-            next = ty.resolved;
+        let ty = self.resolve_full();
+        if !ty.dims.is_empty() {
+            let mut new = ty.clone();
+            new.dims.remove(0);
+            Some(new.intern(cx))
+        } else {
+            self.get_packed()
+                .and_then(|p| p.pop_dim(cx))
+                .map(|p| p.to_unpacked(cx))
         }
-        self.get_packed()
-            .and_then(|p| p.pop_dim(cx))
-            .map(|p| p.to_unpacked(cx))
+    }
+
+    /// Replace the outermost dimension of the type.
+    ///
+    /// Panics if the type has no dimensions, or a packed dimension is replaced
+    /// with an unpacked dimension, or vice-versa.
+    pub fn replace_dim(&self, cx: &impl TypeContext<'a>, dim: Dim<'a>) -> &'a Self {
+        let ty = self.resolve_full();
+        if !ty.dims.is_empty() {
+            let mut new = ty.clone();
+            let dim = match dim {
+                Dim::Unpacked(d) => d,
+                Dim::Packed(d) => panic!(
+                    "substituting {:?} for type `{}` whose outermost dimension is unpacked",
+                    d, self
+                ),
+            };
+            new.dims[0] = dim;
+            new.intern(cx)
+        } else {
+            let packed = match self.get_packed() {
+                Some(packed) => packed,
+                None => panic!("no dimension in `{}` to substitute with `{}`", self, dim),
+            };
+            let dim = match dim {
+                Dim::Packed(d) => d,
+                Dim::Unpacked(d) => panic!(
+                    "substituting {:?} for type `{}` whose outermost dimension is packed",
+                    d, self
+                ),
+            };
+            packed.replace_dim(cx, dim).to_unpacked(cx)
+        }
+    }
+
+    /// Get the outermost dimension of the type.
+    ///
+    /// For example, yields the `[1]` in `bit $ [1][2]`.
+    pub fn outermost_dim(&self) -> Option<Dim<'a>> {
+        self.dims().next()
     }
 
     /// Get the underlying struct, or `None` if the type is no struct.
