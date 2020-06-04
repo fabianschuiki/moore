@@ -555,7 +555,7 @@ impl<'a, 'gcx> svlog::hir::Visitor<'gcx> for TypeVerbosityVisitor<'a, 'gcx> {
 
 impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
     fn print(&mut self, id: NodeId) {
-        use svlog::{BaseContext, Context};
+        use svlog::BaseContext;
         let span = self.0.span(id);
         let ext = span.extract();
         let line = span.begin().human_line();

@@ -10,11 +10,12 @@ use crate::{
 use num::{cast::ToPrimitive, BigInt, One, Signed};
 
 /// Determine the type of a node.
-pub(crate) fn type_of<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn type_of<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<Type<'gcx>> {
+) -> Result<Type<'a>> {
     let hir = cx.hir_of(node_id)?;
     #[allow(unreachable_patterns)]
     match hir {

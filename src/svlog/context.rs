@@ -705,12 +705,6 @@ pub(super) mod queries {
                 use fn param_env::compute;
             }
 
-            /// Determine the type of a node.
-            fn type_of(node_id: NodeId, env: ParamEnv) -> Result<Type<'a>> {
-                type TypeOfQuery;
-                use fn typeck::type_of;
-            }
-
             /// Determine the local rib that applies to a node.
             fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
                 type LocalRibQuery;
@@ -833,7 +827,6 @@ pub(super) mod queries {
             impl Context<'gcx> {
                 fn hir_of() for HirOfQuery<'gcx>;
                 fn param_env() for ParamEnvQuery<'gcx>;
-                fn type_of() for TypeOfQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
