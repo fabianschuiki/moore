@@ -1618,7 +1618,8 @@ impl Display for EnumType<'_> {
 }
 
 impl SbvType {
-    /// Create a new SBVT.
+    /// Create a new SBVT which expands exactly to `<domain> <signing>
+    /// [<size>-1:0]`.
     pub fn new(domain: Domain, signing: Sign, size: usize) -> Self {
         Self {
             domain,
@@ -1627,6 +1628,21 @@ impl SbvType {
             signing_explicit: false,
             size,
             size_explicit: true,
+        }
+    }
+
+    /// Create a new SBVT which expands to most terse representation possible.
+    ///
+    /// For example, creating a signed, two-value, 32 bit SBVT will expand to
+    /// `int`.
+    pub fn nice(domain: Domain, signing: Sign, size: usize) -> Self {
+        Self {
+            domain,
+            used_atom: true,
+            signing,
+            signing_explicit: false,
+            size,
+            size_explicit: false,
         }
     }
 
