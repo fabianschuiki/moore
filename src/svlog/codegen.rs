@@ -892,6 +892,28 @@ where
         &mut self,
         mir: &'gcx mir::Rvalue<'gcx>,
     ) -> Result<llhd::ir::Value> {
+        let result = self.emit_mir_rvalue_inner(mir);
+        match result {
+            Ok(result) => {
+                let llty_exp = self.emit_type(mir.ty, mir.env)?;
+                let llty_act = self.llhd_type(result);
+                assert_span!(
+                    llty_exp == llty_act,
+                    mir.span,
+                    self.cx,
+                    "codegen for MIR rvalue `{}` should produce `{}`, but got `{}`",
+                    mir.span.extract(),
+                    llty_exp,
+                    llty_act
+                );
+            }
+            Err(()) => (),
+        }
+        result
+    }
+
+    /// Emit the code for an MIR rvalue.
+    fn emit_mir_rvalue_inner(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
         // If the value is a constant, emit the fully folded constant value.
         if mir.is_const() {
             let value = self.const_mir_rvalue(mir.into());
@@ -1241,6 +1263,47 @@ where
     /// The first returned value is the actually targeted lvalue. The second is
     /// a potential shadow variable that must be kept up-to-date.
     fn emit_mir_lvalue_uninterned(
+        &mut self,
+        mir: &mir::Lvalue<'gcx>,
+    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+        let result = self.emit_mir_lvalue_inner(mir);
+        match result {
+            Ok((sig, var)) => {
+                let llty_exp = llhd::signal_ty(self.emit_type(mir.ty, mir.env)?);
+                let llty_act = self.llhd_type(sig);
+                assert_span!(
+                    llty_exp == llty_act,
+                    mir.span,
+                    self.cx,
+                    "codegen for MIR lvalue `{}` should produce `{}`, but got `{}`",
+                    mir.span.extract(),
+                    llty_exp,
+                    llty_act
+                );
+                if let Some(var) = var {
+                    let llty_exp = llhd::pointer_ty(self.emit_type(mir.ty, mir.env)?);
+                    let llty_act = self.llhd_type(var);
+                    assert_span!(
+                        llty_exp == llty_act,
+                        mir.span,
+                        self.cx,
+                        "codegen for MIR lvalue `{}` should produce `{}`, but got `{}`",
+                        mir.span.extract(),
+                        llty_exp,
+                        llty_act
+                    );
+                }
+            }
+            Err(()) => (),
+        }
+        result
+    }
+
+    /// Emit the code for an MIR lvalue.
+    ///
+    /// The first returned value is the actually targeted lvalue. The second is
+    /// a potential shadow variable that must be kept up-to-date.
+    fn emit_mir_lvalue_inner(
         &mut self,
         mir: &mir::Lvalue<'gcx>,
     ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
