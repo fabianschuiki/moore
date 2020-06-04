@@ -638,9 +638,20 @@ impl<'a> PackedType<'a> {
         }
     }
 
+    /// Check if this type is the `time` type.
+    pub fn is_time(&self) -> bool {
+        match self.resolve_full().core {
+            PackedCore::IntAtom(IntAtomType::Time) => self.dims.len() == 0,
+            _ => false,
+        }
+    }
+
     /// Check if this type will coalesce to a scalar type in LLHD, like `i42`.
     pub fn coalesces_to_llhd_scalar(&self) -> bool {
-        self.resolve_full().is_simple_bit_vector() || self.is_integer_atom() || self.is_single_bit()
+        !self.is_time()
+            && (self.resolve_full().is_simple_bit_vector()
+                || self.is_integer_atom()
+                || self.is_single_bit())
     }
 
     /// Convert this type into an SBVT if possible.

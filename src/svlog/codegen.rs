@@ -89,7 +89,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut port_id_to_name = HashMap::new();
         for port in &hir.ports_new.int {
             let ty = UnpackedType::from_legacy(self.cx, self.type_of(port.id, env)?);
-            debug!("port {}.{} has type {:?}", hir.name, port.name, ty);
+            debug!("port `{}.{}` has type `{}`", hir.name, port.name, ty);
             let ty = llhd::signal_ty(self.emit_type(ty, env)?);
             match port.dir {
                 ast::PortDir::Input | ast::PortDir::Ref => {
@@ -388,7 +388,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let ty = ty.resolve_full();
 
         // Handle things that coalesce easily to scalars.
-        Ok(if ty.coalesces_to_llhd_scalar() {
+        let result = if ty.coalesces_to_llhd_scalar() {
             llhd::int_ty(ty.get_bit_size().unwrap())
         }
         // Handle arrays.
@@ -414,13 +414,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             match packed.core {
                 ty::PackedCore::Error => llhd::void_ty(),
                 ty::PackedCore::Void => llhd::void_ty(),
+                ty::PackedCore::IntAtom(ty::IntAtomType::Time) => llhd::time_ty(),
                 _ => unreachable!("emitting `{}` should have been handled above", packed),
             }
         }
         // Everything else we cannot do.
         else {
             panic!("cannot map `{}` to LLHD", ty);
-        })
+        };
+
+        Ok(result)
     }
 
     /// Execute the initialization step of a generate loop.
@@ -984,24 +987,26 @@ where
                 Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
             }
 
-            mir::RvalueKind::ZeroExtend(target_width, value) => {
+            mir::RvalueKind::ZeroExtend(_, value) => {
+                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let llty = self.emit_type(mir.ty, mir.env)?;
                 let result = self.emit_zero_for_type(&llty);
                 let value = self.emit_mir_rvalue(value)?;
-                let result = self.builder.ins().ins_slice(result, value, 0, target_width);
+                let result = self.builder.ins().ins_slice(result, value, 0, width);
                 self.builder.set_name(result, "zext".to_string());
                 Ok(result)
             }
 
-            mir::RvalueKind::SignExtend(target_width, value) => {
+            mir::RvalueKind::SignExtend(_, value) => {
+                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let llty = self.emit_type(mir.ty, mir.env)?;
                 let value = self.emit_mir_rvalue(value)?;
-                let sign = self.builder.ins().ext_slice(value, target_width - 1, 1);
+                let sign = self.builder.ins().ext_slice(value, width - 1, 1);
                 let zeros = self.emit_zero_for_type(&llty);
                 let ones = self.builder.ins().not(zeros);
                 let mux = self.builder.ins().array(vec![zeros, ones]);
                 let mux = self.builder.ins().mux(mux, sign);
-                let result = self.builder.ins().ins_slice(mux, value, 0, target_width);
+                let result = self.builder.ins().ins_slice(mux, value, 0, width);
                 self.builder.set_name(result, "sext".to_string());
                 Ok(result)
             }
@@ -1285,15 +1290,17 @@ where
         let result = self.emit_mir_lvalue_inner(mir);
         match result {
             Ok((sig, var)) => {
-                let llty_exp = llhd::signal_ty(self.emit_type(mir.ty, mir.env)?);
+                let llty_exp1 = llhd::signal_ty(self.emit_type(mir.ty, mir.env)?);
+                let llty_exp2 = llhd::pointer_ty(self.emit_type(mir.ty, mir.env)?);
                 let llty_act = self.llhd_type(sig);
                 assert_span!(
-                    llty_exp == llty_act,
+                    llty_exp1 == llty_act || llty_exp2 == llty_act,
                     mir.span,
                     self.cx,
-                    "codegen for MIR lvalue `{}` should produce `{}`, but got `{}`",
+                    "codegen for MIR lvalue `{}` should produce `{}` or `{}`, but got `{}`",
                     mir.span.extract(),
-                    llty_exp,
+                    llty_exp1,
+                    llty_exp2,
                     llty_act
                 );
                 if let Some(var) = var {
