@@ -392,7 +392,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             llhd::int_ty(ty.get_bit_size().unwrap())
         }
         // Handle arrays.
-        else if let Some(dim) = ty.dims().last() {
+        else if let Some(dim) = ty.outermost_dim() {
             let size = match dim.get_size() {
                 Some(size) => size,
                 None => panic!("cannot map unsized array `{}` to LLHD", ty),
@@ -786,7 +786,7 @@ where
                 .ins()
                 .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0))),
             ValueKind::StructOrArray(ref v) => {
-                if let Some(_dim) = value.ty.dims().last() {
+                if let Some(_dim) = value.ty.outermost_dim() {
                     let fields: Result<Vec<_>> = v
                         .iter()
                         .map(|v| self.emit_const(v, env, span).map(Into::into))
