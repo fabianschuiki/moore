@@ -462,7 +462,7 @@ pub(crate) fn compute_indexing<'gcx>(
                 base.ty,
                 RvalueKind::IntBinaryArith {
                     op: IntBinaryArithOp::Sub,
-                    sign: base.ty.get_simple_bit_vector().unwrap().signing,
+                    sign: base.ty.get_simple_bit_vector().unwrap().sign,
                     domain: base.ty.domain(),
                     lhs: base,
                     rhs: delta_rvalue,
@@ -1272,7 +1272,7 @@ fn lower_int_unary_arith<'gcx>(
         result_ty,
         RvalueKind::IntUnaryArith {
             op,
-            sign: sbvt.signing,
+            sign: sbvt.sign,
             domain: sbvt.domain,
             arg,
         },
@@ -1320,7 +1320,7 @@ fn lower_int_binary_arith<'a>(
         result_ty,
         RvalueKind::IntBinaryArith {
             op,
-            sign: sbvt.signing,
+            sign: sbvt.sign,
             domain: sbvt.domain,
             lhs,
             rhs,
@@ -1385,7 +1385,7 @@ fn make_int_comparison<'a>(
         result_ty,
         RvalueKind::IntComp {
             op,
-            sign: sbvt.signing,
+            sign: sbvt.sign,
             domain: sbvt.domain,
             lhs,
             rhs,
@@ -1699,7 +1699,7 @@ fn lower_int_incdec<'gcx>(
             lv.ty,
             RvalueKind::IntBinaryArith {
                 op,
-                sign: sbvt.signing,
+                sign: sbvt.sign,
                 domain: sbvt.domain,
                 lhs: rv,
                 rhs: one,

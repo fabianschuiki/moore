@@ -71,12 +71,12 @@
 //! type, the SBVT attempts to restore this information, depending on how many
 //! changes were applied.
 //!
-//! ## Signing
+//! ## Sign
 //!
-//! All packed types have an associated signing, indicating whether they are
-//! *signed* or *unsigned*. The types have a default signing, which means that
-//! the signing may have been omitted in the source file. Packed types can be
-//! sign-cast, which changes only their signing.
+//! All packed types have an associated sign, indicating whether they are
+//! *signed* or *unsigned*. The types have a default sign, which means that
+//! the sign may have been omitted in the source file. Packed types can be
+//! sign-cast, which changes only their sign.
 //!
 //! ## Domain
 //!
@@ -99,10 +99,10 @@ use std::{
 pub struct PackedType<'a> {
     /// The core packed type.
     pub core: PackedCore<'a>,
-    /// The type signing.
-    pub signing: Sign,
-    /// Whether the signing was explicit in the source code.
-    pub signing_explicit: bool,
+    /// The type sign.
+    pub sign: Sign,
+    /// Whether the sign was explicit in the source code.
+    pub sign_explicit: bool,
     /// The packed dimensions.
     pub dims: Vec<PackedDim>,
     /// This type with one level of name/reference resolved.
@@ -264,7 +264,7 @@ pub enum RealType {
 ///
 /// This represents both packed and unpacked structs. Which one it is depends on
 /// whether this struct is embedded in a `PackedType` or `UnpackedType`. For the
-/// packed version the struct inherits its signing from its parent `PackedType`.
+/// packed version the struct inherits its sign from its parent `PackedType`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructType<'a> {
     /// The corresponding AST node of this struct definition.
@@ -313,10 +313,10 @@ pub struct SbvType {
     pub domain: Domain,
     /// Whether the type used an integer atom like `int` in the source text.
     pub used_atom: bool,
-    /// The signing.
-    pub signing: Sign,
-    /// Whether the signing was explicit in the source text.
-    pub signing_explicit: bool,
+    /// The sign.
+    pub sign: Sign,
+    /// Whether the sign was explicit in the source text.
+    pub sign_explicit: bool,
     /// The size of the vector.
     pub size: usize,
     /// Whether the single-bit vector had an explicit range in the source text.
@@ -334,7 +334,7 @@ pub enum Dim<'a> {
 }
 
 impl<'a> PackedType<'a> {
-    /// Create a new type with default signing and no packed dimensions.
+    /// Create a new type with default sign and no packed dimensions.
     ///
     /// This creates the type on the stack. In general you will want to use the
     /// `make_*` functions to create a type that is interned into a context.
@@ -342,13 +342,13 @@ impl<'a> PackedType<'a> {
         Self::with_dims(core, vec![])
     }
 
-    /// Create a new type with default signing and packed dimensions.
+    /// Create a new type with default sign and packed dimensions.
     ///
     /// This creates the type on the stack. In general you will want to use the
     /// `make_*` functions to create a type that is interned into a context.
     pub fn with_dims(core: impl Into<PackedCore<'a>>, dims: Vec<PackedDim>) -> Self {
         let core = core.into();
-        let signing = match &core {
+        let sign = match &core {
             PackedCore::IntAtom(IntAtomType::Time)
             | PackedCore::IntVec(_)
             | PackedCore::Error
@@ -359,35 +359,31 @@ impl<'a> PackedType<'a> {
             | PackedCore::Ref { .. } => Sign::Unsigned,
             PackedCore::IntAtom(_) => Sign::Signed,
         };
-        Self::with_signing_and_dims(core, signing, false, dims)
+        Self::with_sign_and_dims(core, sign, false, dims)
     }
 
     /// Create a new type with no packed dimensions.
     ///
     /// This creates the type on the stack. In general you will want to use the
     /// `make_*` functions to create a type that is interned into a context.
-    pub fn with_signing(
-        core: impl Into<PackedCore<'a>>,
-        signing: Sign,
-        signing_explicit: bool,
-    ) -> Self {
-        Self::with_signing_and_dims(core, signing, signing_explicit, vec![])
+    pub fn with_sign(core: impl Into<PackedCore<'a>>, sign: Sign, sign_explicit: bool) -> Self {
+        Self::with_sign_and_dims(core, sign, sign_explicit, vec![])
     }
 
     /// Create a new type with packed dimensions.
     ///
     /// This creates the type on the stack. In general you will want to use the
     /// `make_*` functions to create a type that is interned into a context.
-    pub fn with_signing_and_dims(
+    pub fn with_sign_and_dims(
         core: impl Into<PackedCore<'a>>,
-        signing: Sign,
-        signing_explicit: bool,
+        sign: Sign,
+        sign_explicit: bool,
         dims: Vec<PackedDim>,
     ) -> Self {
         Self {
             core: core.into(),
-            signing,
-            signing_explicit,
+            sign,
+            sign_explicit,
             dims,
             resolved: None,
             resolved_full: None,
@@ -405,16 +401,14 @@ impl<'a> PackedType<'a> {
             _ => None,
         };
         match atom {
-            Some(atom) if sbv.used_atom => {
-                Self::with_signing(atom, sbv.signing, sbv.signing_explicit)
-            }
-            _ => Self::with_signing_and_dims(
+            Some(atom) if sbv.used_atom => Self::with_sign(atom, sbv.sign, sbv.sign_explicit),
+            _ => Self::with_sign_and_dims(
                 match sbv.domain {
                     Domain::TwoValued => IntVecType::Bit,
                     Domain::FourValued => IntVecType::Logic,
                 },
-                sbv.signing,
-                sbv.signing_explicit,
+                sbv.sign,
+                sbv.sign_explicit,
                 if sbv.size > 1 || sbv.size_explicit {
                     vec![PackedDim::Range(sbv.range())]
                 } else {
@@ -424,12 +418,12 @@ impl<'a> PackedType<'a> {
         }
     }
 
-    /// Create an interned type with default signing and no packed dimensions.
+    /// Create an interned type with default sign and no packed dimensions.
     pub fn make(cx: &impl TypeContext<'a>, core: impl Into<PackedCore<'a>>) -> &'a Self {
         Self::new(core).intern(cx)
     }
 
-    /// Create an interned type with default signing and packed dimensions.
+    /// Create an interned type with default sign and packed dimensions.
     pub fn make_dims(
         cx: &impl TypeContext<'a>,
         core: impl Into<PackedCore<'a>>,
@@ -439,24 +433,24 @@ impl<'a> PackedType<'a> {
     }
 
     /// Create an interned type with no packed dimensions.
-    pub fn make_signing(
+    pub fn make_sign(
         cx: &impl TypeContext<'a>,
         core: impl Into<PackedCore<'a>>,
-        signing: Sign,
-        signing_explicit: bool,
+        sign: Sign,
+        sign_explicit: bool,
     ) -> &'a Self {
-        Self::with_signing(core, signing, signing_explicit).intern(cx)
+        Self::with_sign(core, sign, sign_explicit).intern(cx)
     }
 
     /// Create an interned type with packed dimensions.
-    pub fn make_signing_and_dims(
+    pub fn make_sign_and_dims(
         cx: &impl TypeContext<'a>,
         core: impl Into<PackedCore<'a>>,
-        signing: Sign,
-        signing_explicit: bool,
+        sign: Sign,
+        sign_explicit: bool,
         dims: Vec<PackedDim>,
     ) -> &'a Self {
-        Self::with_signing_and_dims(core, signing, signing_explicit, dims).intern(cx)
+        Self::with_sign_and_dims(core, sign, sign_explicit, dims).intern(cx)
     }
 
     /// Create an interned type from an SBVT.
@@ -518,19 +512,19 @@ impl<'a> PackedType<'a> {
         cx.intern_packed(self)
     }
 
-    /// Apply the signing and dimensions to a core type that expanded to another
+    /// Apply the sign and dimensions to a core type that expanded to another
     /// type.
     fn apply_to_inner(&self, cx: &impl TypeContext<'a>, inner: &'a Self) -> &'a Self {
         if self.dims.is_empty()
-            && self.signing == inner.signing
-            && self.signing_explicit == inner.signing_explicit
+            && self.sign == inner.sign
+            && self.sign_explicit == inner.sign_explicit
         {
             return inner;
         }
         let mut out = inner.clone();
         out.dims.extend(self.dims.iter().cloned());
-        out.signing = self.signing;
-        out.signing_explicit = self.signing_explicit;
+        out.sign = self.sign;
+        out.sign_explicit = self.sign_explicit;
         out.intern(cx)
     }
 
@@ -568,7 +562,7 @@ impl<'a> PackedType<'a> {
             a.get_simple_bit_vector().map(|x| x.forget())
                 == b.get_simple_bit_vector().map(|x| x.forget())
         } else {
-            a.core.is_identical(&b.core) && a.signing == b.signing && a.dims == b.dims
+            a.core.is_identical(&b.core) && a.sign == b.sign && a.dims == b.dims
         }
     }
 
@@ -648,8 +642,8 @@ impl<'a> PackedType<'a> {
                 PackedCore::IntAtom(..) => true,
                 _ => false,
             },
-            signing: ty.signing,
-            signing_explicit: ty.signing_explicit,
+            sign: ty.sign,
+            sign_explicit: ty.sign_explicit,
             size: ty.get_bit_size()?,
             size_explicit: !ty.dims.is_empty(),
         })
@@ -790,7 +784,7 @@ impl<'a> PackedType<'a> {
                 }));
                 packed.intern(cx)
             }
-            TypeKind::BitScalar { domain, sign } => PackedType::make_signing(
+            TypeKind::BitScalar { domain, sign } => PackedType::make_sign(
                 cx,
                 match domain {
                     Domain::TwoValued => IntVecType::Bit,
@@ -814,9 +808,9 @@ impl<'a> PackedType<'a> {
                     _ => None,
                 };
                 if let Some(atom) = atom {
-                    PackedType::make_signing(cx, atom, sign, sign != Sign::Signed)
+                    PackedType::make_sign(cx, atom, sign, sign != Sign::Signed)
                 } else {
-                    PackedType::make_signing_and_dims(
+                    PackedType::make_sign_and_dims(
                         cx,
                         match domain {
                             Domain::TwoValued => IntVecType::Bit,
@@ -841,7 +835,7 @@ impl<'a> PackedType<'a> {
                 if let Some(dim) = dims.next() {
                     cx.intern_type(TypeKind::BitVector {
                         domain: x.domain(),
-                        sign: self.signing,
+                        sign: self.sign,
                         range: match dim {
                             PackedDim::Range(r) => *r,
                             _ => panic!("cannot convert type with range `{}` to legacy type", dim),
@@ -886,8 +880,8 @@ impl Display for PackedType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.core.format(
             f,
-            if self.signing != self.core.default_signing() || self.signing_explicit {
-                Some(self.signing)
+            if self.sign != self.core.default_sign() || self.sign_explicit {
+                Some(self.sign)
             } else {
                 None
             },
@@ -912,13 +906,13 @@ impl<'a> PackedCore<'a> {
         }
     }
 
-    /// Get the default signing for this type.
-    pub fn default_signing(&self) -> Sign {
+    /// Get the default sign for this type.
+    pub fn default_sign(&self) -> Sign {
         match self {
             Self::Error => Sign::Unsigned,
             Self::Void => Sign::Unsigned,
             Self::IntVec(_) => Sign::Unsigned,
-            Self::IntAtom(x) => x.default_signing(),
+            Self::IntAtom(x) => x.default_sign(),
             Self::Struct(_) => Sign::Unsigned,
             Self::Enum(_) => Sign::Unsigned,
             Self::Named { .. } => Sign::Unsigned,
@@ -942,25 +936,25 @@ impl<'a> PackedCore<'a> {
     }
 
     /// Helper function to format this core packed type.
-    fn format(&self, f: &mut std::fmt::Formatter, signing: Option<Sign>) -> std::fmt::Result {
+    fn format(&self, f: &mut std::fmt::Formatter, sign: Option<Sign>) -> std::fmt::Result {
         match self {
             Self::Error => write!(f, "<error>"),
             Self::Void => write!(f, "void"),
             Self::IntVec(x) => {
                 write!(f, "{}", x)?;
-                if let Some(signing) = signing {
-                    write!(f, " {}", signing)?;
+                if let Some(sign) = sign {
+                    write!(f, " {}", sign)?;
                 }
                 Ok(())
             }
             Self::IntAtom(x) => {
                 write!(f, "{}", x)?;
-                if let Some(signing) = signing {
-                    write!(f, " {}", signing)?;
+                if let Some(sign) = sign {
+                    write!(f, " {}", sign)?;
                 }
                 Ok(())
             }
-            Self::Struct(x) => x.format(f, true, signing),
+            Self::Struct(x) => x.format(f, true, sign),
             Self::Enum(x) => write!(f, "{}", x),
             Self::Named { name, .. } => write!(f, "{}", name),
             Self::Ref { span, .. } => write!(f, "{}", span.extract()),
@@ -1073,8 +1067,8 @@ impl IntAtomType {
             Self::Time => 64,
         }
     }
-    /// Get the default signing for this type.
-    pub fn default_signing(&self) -> Sign {
+    /// Get the default sign for this type.
+    pub fn default_sign(&self) -> Sign {
         match self {
             Self::Byte => Sign::Signed,
             Self::ShortInt => Sign::Signed,
@@ -1194,7 +1188,7 @@ impl<'a> UnpackedType<'a> {
         cx.intern_unpacked(self)
     }
 
-    /// Apply the signing and dimensions to a core type that expanded to another
+    /// Apply the sign and dimensions to a core type that expanded to another
     /// type.
     fn apply_to_inner(&self, cx: &impl TypeContext<'a>, inner: &'a Self) -> &'a Self {
         if self.dims.is_empty() {
@@ -1635,13 +1629,13 @@ impl<'a> StructType<'a> {
         &self,
         f: &mut std::fmt::Formatter,
         packed: bool,
-        signing: Option<Sign>,
+        sign: Option<Sign>,
     ) -> std::fmt::Result {
         write!(f, "{}", self.kind)?;
         if packed {
             write!(f, " packed")?;
-            if let Some(signing) = signing {
-                write!(f, " {}", signing)?;
+            if let Some(sign) = sign {
+                write!(f, " {}", sign)?;
             }
         }
         write!(f, " {{ ")?;
@@ -1687,14 +1681,14 @@ impl Display for EnumType<'_> {
 }
 
 impl SbvType {
-    /// Create a new SBVT which expands exactly to `<domain> <signing>
+    /// Create a new SBVT which expands exactly to `<domain> <sign>
     /// [<size>-1:0]`.
-    pub fn new(domain: Domain, signing: Sign, size: usize) -> Self {
+    pub fn new(domain: Domain, sign: Sign, size: usize) -> Self {
         Self {
             domain,
             used_atom: false,
-            signing,
-            signing_explicit: false,
+            sign,
+            sign_explicit: false,
             size,
             size_explicit: true,
         }
@@ -1704,12 +1698,12 @@ impl SbvType {
     ///
     /// For example, creating a signed, two-value, 32 bit SBVT will expand to
     /// `int`.
-    pub fn nice(domain: Domain, signing: Sign, size: usize) -> Self {
+    pub fn nice(domain: Domain, sign: Sign, size: usize) -> Self {
         Self {
             domain,
             used_atom: true,
-            signing,
-            signing_explicit: false,
+            sign,
+            sign_explicit: false,
             size,
             size_explicit: false,
         }
@@ -1727,12 +1721,12 @@ impl SbvType {
 
     /// Check whether the type is unsigned.
     pub fn is_unsigned(&self) -> bool {
-        self.signing == Sign::Unsigned
+        self.sign == Sign::Unsigned
     }
 
     /// Check whether the type is signed.
     pub fn is_signed(&self) -> bool {
-        self.signing == Sign::Signed
+        self.sign == Sign::Signed
     }
 
     /// Get the range of the type.
@@ -1758,18 +1752,18 @@ impl SbvType {
         SbvType { domain, ..*self }
     }
 
-    /// Change the signing of the type.
-    pub fn change_signing(&self, signing: Sign) -> SbvType {
+    /// Change the sign of the type.
+    pub fn change_sign(&self, sign: Sign) -> SbvType {
         SbvType {
-            signing,
-            signing_explicit: self.signing_explicit || self.signing != signing,
+            sign,
+            sign_explicit: self.sign_explicit || self.sign != sign,
             ..*self
         }
     }
 
     /// Check whether this type is identical to another one.
     pub fn is_identical(&self, other: &Self) -> bool {
-        self.domain == other.domain && self.signing == other.signing && self.size == other.size
+        self.domain == other.domain && self.sign == other.sign && self.size == other.size
     }
 
     /// Return a new SBVT that strictly converts to an IntVecType with one
@@ -1777,7 +1771,7 @@ impl SbvType {
     pub fn forget(&self) -> SbvType {
         SbvType {
             used_atom: false,
-            signing_explicit: false,
+            sign_explicit: false,
             size_explicit: true,
             ..*self
         }
@@ -1790,8 +1784,8 @@ impl Display for SbvType {
             Domain::TwoValued => write!(f, "bit")?,
             Domain::FourValued => write!(f, "logic")?,
         }
-        if self.signing != Sign::Unsigned || self.signing_explicit {
-            write!(f, " {}", self.signing)?;
+        if self.sign != Sign::Unsigned || self.sign_explicit {
+            write!(f, " {}", self.sign)?;
         }
         if self.size > 1 || self.size_explicit {
             write!(f, " {}", self.range())?;

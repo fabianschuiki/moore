@@ -636,14 +636,14 @@ fn cast_expr_type_inner<'gcx>(
     // Change sign.
     //
     // For example: `bit` to `bit signed`, or `bit signed` to `bit unsigned`.
-    let inferred_sbvt = if inferred_sbvt.signing != context_sbvt.signing {
+    let inferred_sbvt = if inferred_sbvt.sign != context_sbvt.sign {
         trace!(
             "  Casting sign from {:?} to {:?}",
-            inferred_sbvt.signing,
-            context_sbvt.signing
+            inferred_sbvt.sign,
+            context_sbvt.sign
         );
-        let ty = inferred_sbvt.change_signing(context_sbvt.signing);
-        cast.add_cast(CastOp::Sign(context_sbvt.signing), ty.to_unpacked(cx));
+        let ty = inferred_sbvt.change_sign(context_sbvt.sign);
+        cast.add_cast(CastOp::Sign(context_sbvt.sign), ty.to_unpacked(cx));
         ty
     } else {
         inferred_sbvt
@@ -1173,7 +1173,7 @@ fn self_determined_sign_cast_type<'gcx>(
     };
 
     // Change sign and return the new type.
-    sbv.change_signing(sign).to_unpacked(cx)
+    sbv.change_sign(sign).to_unpacked(cx)
 }
 
 /// Get the operation type of an expression.
