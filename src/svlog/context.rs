@@ -30,7 +30,6 @@ use crate::{
     port_list::PortList,
     resolver::{Scope, StructDef},
     ty::{Type, TypeKind, UnpackedType},
-    typeck::{CastType, TypeContext2},
     value::{Value, ValueData, ValueKind},
     InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping,
     PortMappingSource, QueryDatabase, QueryStorage,
@@ -712,60 +711,6 @@ pub(super) mod queries {
                 use fn typeck::type_of;
             }
 
-            /// Convert a node to a type.
-            fn map_to_type(node_id: NodeId, env: ParamEnv) -> Result<Type<'a>> {
-                type MapToTypeQuery;
-                use fn typeck::map_to_type;
-            }
-
-            /// Get the cast type of a node.
-            fn cast_type(node_id: NodeId, env: ParamEnv) -> Option<CastType<'a>> {
-                type CastTypeQuery;
-                use fn typeck::cast_type;
-            }
-
-            /// Get the self-determined type of a node.
-            fn self_determined_type(node_id: NodeId, env: ParamEnv) -> Option<&'a UnpackedType<'a>> {
-                type SelfDeterminedTypeQuery;
-                use fn typeck::self_determined_type;
-            }
-
-            /// Require a node to have a self-determined type.
-            ///
-            /// Emits an error if the node has no self-determined type.
-            fn need_self_determined_type(node_id: NodeId, env: ParamEnv) -> &'a UnpackedType<'a> {
-                type NeedSelfDeterminedTypeQuery;
-                use fn typeck::need_self_determined_type;
-            }
-
-            /// Get the operation type of an expression.
-            fn operation_type(node_id: NodeId, env: ParamEnv) -> Option<&'a UnpackedType<'a>> {
-                type OperationTypeQuery;
-                use fn typeck::operation_type;
-            }
-
-            /// Require a node to have an operation type.
-            ///
-            /// Emits an error if the node has no operation type.
-            fn need_operation_type(node_id: NodeId, env: ParamEnv) -> &'a UnpackedType<'a> {
-                type NeedOperationTypeQuery;
-                use fn typeck::need_operation_type;
-            }
-
-            /// Get the type context of a node.
-            fn type_context(node_id: NodeId, env: ParamEnv) -> Option<TypeContext2<'a>> {
-                type TypeContextQuery;
-                use fn typeck::type_context;
-            }
-
-            /// Require a node to have a type context.
-            ///
-            /// Emits an error if the node has no type context.
-            fn need_type_context(node_id: NodeId, env: ParamEnv) -> TypeContext2<'a> {
-                type NeedTypeContextQuery;
-                use fn typeck::need_type_context;
-            }
-
             /// Determine the local rib that applies to a node.
             fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
                 type LocalRibQuery;
@@ -889,14 +834,6 @@ pub(super) mod queries {
                 fn hir_of() for HirOfQuery<'gcx>;
                 fn param_env() for ParamEnvQuery<'gcx>;
                 fn type_of() for TypeOfQuery<'gcx>;
-                fn map_to_type() for MapToTypeQuery<'gcx>;
-                fn cast_type() for CastTypeQuery<'gcx>;
-                fn self_determined_type() for SelfDeterminedTypeQuery<'gcx>;
-                fn need_self_determined_type() for NeedSelfDeterminedTypeQuery<'gcx>;
-                fn operation_type() for OperationTypeQuery<'gcx>;
-                fn need_operation_type() for NeedOperationTypeQuery<'gcx>;
-                fn type_context() for TypeContextQuery<'gcx>;
-                fn need_type_context() for NeedTypeContextQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;

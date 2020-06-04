@@ -56,7 +56,7 @@ pub(crate) fn type_of<'gcx>(
                 );
             }
         }
-        HirNode::Expr(_) => Ok(cast_type(cx, node_id, env).unwrap().ty.to_legacy(cx)),
+        HirNode::Expr(_) => Ok(cx.cast_type(node_id, env).unwrap().ty.to_legacy(cx)),
         HirNode::ValueParam(p) => {
             if is_explicit_type(cx, p.ty)? {
                 return cx.map_to_type(p.ty, env);
@@ -141,11 +141,13 @@ pub(crate) fn type_of<'gcx>(
 }
 
 /// Determine the type of an expression.
-fn type_of_expr<'gcx>(
-    cx: &impl Context<'gcx>,
-    expr: &'gcx hir::Expr,
+#[moore_derive::query]
+pub(crate) fn type_of_expr<'a>(
+    cx: &impl Context<'a>,
+    expr: Ref<'a, hir::Expr>,
     env: ParamEnv,
-) -> &'gcx UnpackedType<'gcx> {
+) -> &'a UnpackedType<'a> {
+    let Ref(expr) = expr;
     match expr.kind {
         // These expressions are have a fully self-determined type.
         hir::ExprKind::IntConst { .. }
@@ -246,11 +248,12 @@ fn type_of_expr<'gcx>(
 }
 
 /// Convert a node to a type.
-pub(crate) fn map_to_type<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn map_to_type<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<Type<'gcx>> {
+) -> Result<Type<'a>> {
     let hir = cx.hir_of(node_id)?;
     #[allow(unreachable_patterns)]
     match hir {
@@ -440,11 +443,12 @@ fn map_type_kind<'gcx>(
 }
 
 /// Get the cast type of a node.
-pub(crate) fn cast_type<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn cast_type<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Option<CastType<'gcx>> {
+) -> Option<CastType<'a>> {
     let hir = match cx.hir_of(node_id) {
         Ok(x) => x,
         Err(()) => return Some(ty::UnpackedType::make_error().into()),
@@ -508,8 +512,8 @@ fn cast_expr_type_inner<'gcx>(
     );
 
     // Determine the inferred type and type context of the expression.
-    let inferred = type_of_expr(cx, expr, env);
-    let context = type_context(cx, expr.id, env);
+    let inferred = cx.type_of_expr(Ref(expr), env);
+    let context = cx.type_context(expr.id, env);
     trace!("  Inferred: {}", inferred);
     trace!(
         "  Context:  {}",
@@ -722,11 +726,12 @@ fn cast_expr_type_inner<'gcx>(
 }
 
 /// Get the self-determined type of a node.
-pub(crate) fn self_determined_type<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn self_determined_type<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Option<&'gcx UnpackedType<'gcx>> {
+) -> Option<&'a UnpackedType<'a>> {
     let hir = match cx.hir_of(node_id) {
         Ok(x) => x,
         Err(()) => return Some(UnpackedType::make_error()),
@@ -740,11 +745,12 @@ pub(crate) fn self_determined_type<'gcx>(
 /// Require a node to have a self-determined type.
 ///
 /// Emits an error if the node has no self-determined type.
-pub(crate) fn need_self_determined_type<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn need_self_determined_type<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> &'gcx UnpackedType<'gcx> {
+) -> &'a UnpackedType<'a> {
     match cx.self_determined_type(node_id, env) {
         Some(ty) => ty,
         None => {
@@ -1162,11 +1168,12 @@ fn self_determined_sign_cast_type<'gcx>(
 }
 
 /// Get the operation type of an expression.
-pub(crate) fn operation_type<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn operation_type<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Option<&'gcx UnpackedType<'gcx>> {
+) -> Option<&'a UnpackedType<'a>> {
     let hir = match cx.hir_of(node_id) {
         Ok(x) => x,
         Err(_) => return Some(UnpackedType::make_error()),
@@ -1390,11 +1397,12 @@ fn unify_operator_types<'gcx>(
 /// Require a node to have an operation type.
 ///
 /// Emits an error if the node has no operation type.
-pub(crate) fn need_operation_type<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn need_operation_type<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> &'gcx UnpackedType<'gcx> {
+) -> &'a UnpackedType<'a> {
     match cx.operation_type(node_id, env) {
         Some(x) => x,
         None => {
@@ -1408,11 +1416,12 @@ pub(crate) fn need_operation_type<'gcx>(
 }
 
 /// Get the type context of a node.
-pub(crate) fn type_context<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn type_context<'a>(
+    cx: &impl Context<'a>,
     onto: NodeId,
     env: ParamEnv,
-) -> Option<TypeContext2<'gcx>> {
+) -> Option<TypeContext2<'a>> {
     let hir = match cx.hir_of(cx.parent_node_id(onto).unwrap()) {
         Ok(x) => x,
         Err(()) => return None,
@@ -1482,11 +1491,12 @@ pub(crate) fn type_context<'gcx>(
 }
 
 /// Get the type context of a node.
-pub(crate) fn need_type_context<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn need_type_context<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> TypeContext2<'gcx> {
+) -> TypeContext2<'a> {
     match cx.type_context(node_id, env) {
         Some(ty) => ty,
         None => {

@@ -255,7 +255,13 @@ mod checks {
 // `MOORE_LOG` env var.
 mod queries {
     use crate::crate_prelude::*;
-    use crate::{port_list::*, resolver::*};
+    use crate::{
+        param_env::*,
+        port_list::*,
+        resolver::*,
+        ty::{Type, UnpackedType},
+        typeck::*,
+    };
     use std::{
         cell::RefCell,
         collections::{HashMap, HashSet},

@@ -12,7 +12,7 @@ use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
-use moore::svlog::hir::Visitor as _;
+use moore::svlog::{hir::Visitor as _, QueryDatabase as _};
 use moore::*;
 use std::path::Path;
 

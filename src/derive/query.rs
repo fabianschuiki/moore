@@ -7,6 +7,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
 };
+use syn::visit::Visit;
 
 // CAUTION: This is all wildly unstable and relies on the compiler maintaining
 // a certain order between proc macro expansions. So this could break any
@@ -103,6 +104,54 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
             }
         }
 
+        // Determine the generics that go into the key.
+        struct KeyGenerics(HashSet<String>);
+        impl Visit<'_> for KeyGenerics {
+            fn visit_lifetime(&mut self, arg: &syn::Lifetime) {
+                self.0.insert(arg.to_string());
+            }
+
+            fn visit_generic_argument(&mut self, arg: &syn::GenericArgument) {
+                match arg {
+                    syn::GenericArgument::Lifetime(x) => {
+                        self.0.insert(x.to_string());
+                    }
+                    syn::GenericArgument::Type(syn::Type::Path(x)) => {
+                        if let Some(x) = x.path.get_ident() {
+                            self.0.insert(x.to_string());
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        let mut key_generics_set = KeyGenerics(Default::default());
+        for arg_type in &arg_types {
+            key_generics_set.visit_type(&arg_type);
+        }
+        // println!("Key generics of {}: {:?}", name, key_generics_set.0);
+
+        let mut key_generics = syn::Generics {
+            lt_token: original_generics.lt_token,
+            params: Default::default(),
+            gt_token: original_generics.gt_token,
+            where_clause: None,
+        };
+        for param in original_generics.params.iter() {
+            let keep = match param {
+                syn::GenericParam::Type(x) => key_generics_set.0.contains(&x.ident.to_string()),
+                syn::GenericParam::Lifetime(x) => {
+                    key_generics_set.0.contains(&x.lifetime.to_string())
+                }
+                syn::GenericParam::Const(x) => key_generics_set.0.contains(&x.ident.to_string()),
+            };
+            if keep {
+                key_generics.params.push(param.clone());
+            }
+        }
+        // println!("Key generics: {}", quote! { #key_generics });
+
         // Render the key type that we use to look up things in the database.
         let key_name = format_ident!("{}QueryKey", name.to_string().to_camel_case());
         let key_indices = (0..arg_types.len()).map(syn::Index::from);
@@ -110,9 +159,9 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         keys.push(quote! {
             #[doc = #doc]
             #[derive(Clone, PartialEq, Eq, Hash)]
-            pub struct #key_name #original_generics (#(#arg_types),*);
+            pub struct #key_name #key_generics (#(#arg_types),*);
 
-            impl #original_generics std::fmt::Debug for #key_name #original_generics {
+            impl #key_generics std::fmt::Debug for #key_name #key_generics {
                 fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                     f.debug_tuple("")#(.field(&self.#key_indices))*.finish()
                 }
@@ -128,7 +177,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         let doc = format!("The `{}` query.", name);
         tags.push(quote! {
             #[doc = #doc]
-            #tag_name (#key_name #original_generics),
+            #tag_name (#key_name #key_generics),
         });
         tag_debugs.push(quote! {
             QueryTag::#tag_name (x) => write!(f, "{}{:?}", stringify!(#name), x),
@@ -146,7 +195,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 // Check if we already have a result for this query.
                 if let Some(result) = query_storage.#cache_name.borrow().get(&query_key) {
                     trace!("Serving {}{:?} from cache", stringify!(#name), query_key);
-                    return result.clone();
+                    return Clone::clone(&result);
                 }
                 trace!("Executing {}{:?}", stringify!(#name), query_key);
 
@@ -161,7 +210,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 // Execute the query.
                 #[allow(deprecated)]
                 let query_result = #name(self.context(), #(#arg_names),*);
-                query_storage.#cache_name.borrow_mut().insert(query_key, query_result.clone());
+                query_storage.#cache_name.borrow_mut().insert(query_key, Clone::clone(&query_result));
 
                 // Pop the query from the stack.
                 query_storage.inflight.borrow_mut().remove(&query_tag);
@@ -175,7 +224,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         let doc = format!("Cached results of the `{}` query.", name);
         caches.push(quote! {
             #[doc = #doc]
-            pub #cache_name: RefCell<HashMap<#key_name #original_generics, #result>>,
+            pub #cache_name: RefCell<HashMap<#key_name #key_generics, #result>>,
         });
     }
 
