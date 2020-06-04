@@ -3,7 +3,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    ty::{bit_size_of_type, Domain, Sign, Type, TypeKind, UnpackedType},
+    ty::{Domain, PackedType, SbvType, Sign, Type, TypeKind, UnpackedType},
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
@@ -141,7 +141,11 @@ pub(crate) fn type_of<'gcx>(
 }
 
 /// Determine the type of an expression.
-fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: ParamEnv) -> Type<'gcx> {
+fn type_of_expr<'gcx>(
+    cx: &impl Context<'gcx>,
+    expr: &'gcx hir::Expr,
+    env: ParamEnv,
+) -> &'gcx UnpackedType<'gcx> {
     match expr.kind {
         // These expressions are have a fully self-determined type.
         hir::ExprKind::IntConst { .. }
@@ -164,7 +168,8 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         // otherwise fall back to a self-determined mode.
         hir::ExprKind::UnsizedConst(..) => cx
             .type_context(expr.id, env)
-            .and_then(|x| x.ty().get_simple_bit_vector(cx, env, false))
+            .and_then(|x| x.ty().get_simple_bit_vector())
+            .map(|x| x.to_unpacked(cx))
             .unwrap_or_else(|| cx.need_self_determined_type(expr.id, env)),
 
         // Unary operators either return their internal operation type, or they
@@ -228,36 +233,15 @@ fn type_of_expr<'gcx>(cx: &impl Context<'gcx>, expr: &'gcx hir::Expr, env: Param
         // Ternary operators return their internal operation type.
         hir::ExprKind::Ternary(..) => cx.need_operation_type(expr.id, env),
 
-        // Sign casts "forward" the type of their argument, with the sign
-        // replaced.
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx
-            .type_of(arg, env)
-            .unwrap_or(&ty::ERROR_TYPE)
-            .change_sign(cx, Sign::Signed),
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx
-            .type_of(arg, env)
-            .unwrap_or(&ty::ERROR_TYPE)
-            .change_sign(cx, Sign::Unsigned),
+        // Other things simply evaluate to their self-determined type.
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(_))
+        | hir::ExprKind::FunctionCall(..) => cx.need_self_determined_type(expr.id, env),
 
         // Pattern expressions require a type context.
         hir::ExprKind::PositionalPattern(..)
         | hir::ExprKind::NamedPattern(..)
         | hir::ExprKind::RepeatPattern(..) => cx.need_type_context(expr.id, env).ty(),
-
-        // Function calls resolve to the function's return type.
-        hir::ExprKind::FunctionCall(target, _) => cx
-            .hir_of(target)
-            .and_then(|hir| {
-                let hir = match hir {
-                    HirNode::Subroutine(s) => s,
-                    _ => unreachable!(),
-                };
-                match hir.retty {
-                    Some(retty_id) => cx.map_to_type(retty_id, env),
-                    None => Ok(&ty::VOID_TYPE),
-                }
-            })
-            .unwrap_or(&ty::ERROR_TYPE),
     }
 }
 
@@ -524,14 +508,8 @@ fn cast_expr_type_inner<'gcx>(
     );
 
     // Determine the inferred type and type context of the expression.
-    let inferred = ty::UnpackedType::from_legacy(cx, type_of_expr(cx, expr, env));
-    let context = match type_context(cx, expr.id, env) {
-        Some(TypeContext::Type(ty)) => {
-            Some(TypeContext2::Type(ty::UnpackedType::from_legacy(cx, ty)))
-        }
-        Some(TypeContext::Bool) => Some(TypeContext2::Bool),
-        None => None,
-    };
+    let inferred = type_of_expr(cx, expr, env);
+    let context = type_context(cx, expr.id, env);
     trace!("  Inferred: {}", inferred);
     trace!(
         "  Context:  {}",
@@ -747,10 +725,10 @@ pub(crate) fn self_determined_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Option<Type<'gcx>> {
+) -> Option<&'gcx UnpackedType<'gcx>> {
     let hir = match cx.hir_of(node_id) {
         Ok(x) => x,
-        Err(()) => return Some(&ty::ERROR_TYPE),
+        Err(()) => return Some(UnpackedType::make_error()),
     };
     match hir {
         HirNode::Expr(e) => self_determined_expr_type(cx, e, env),
@@ -765,7 +743,7 @@ pub(crate) fn need_self_determined_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Type<'gcx> {
+) -> &'gcx UnpackedType<'gcx> {
     match cx.self_determined_type(node_id, env) {
         Some(ty) => ty,
         None => {
@@ -784,7 +762,7 @@ pub(crate) fn need_self_determined_type<'gcx>(
                     ))
                     .add_note(format!("Try a cast: `T'({})`", extract)),
             );
-            &ty::ERROR_TYPE
+            UnpackedType::make_error()
         }
     }
 }
@@ -794,42 +772,57 @@ fn self_determined_expr_type<'gcx>(
     cx: &impl Context<'gcx>,
     expr: &'gcx hir::Expr,
     env: ParamEnv,
-) -> Option<Type<'gcx>> {
+) -> Option<&'gcx UnpackedType<'gcx>> {
     match expr.kind {
         // Unsized constants fall back to their single bit equivalent.
-        hir::ExprKind::UnsizedConst(_) => Some(&ty::LOGIC_TYPE),
+        hir::ExprKind::UnsizedConst(_) => Some(UnpackedType::make_logic()),
 
         // Sized integer constants have a well-defined type.
-        // TODO(fschuiki): Inherit signedness from `s` character in base.
-        hir::ExprKind::IntConst { width, signed, .. } => {
-            Some(cx.intern_type(TypeKind::BitVector {
-                domain: ty::Domain::TwoValued, // TODO(fschuiki): Is this correct?
-                sign: if signed {
+        hir::ExprKind::IntConst {
+            width,
+            signed,
+            ref special_bits,
+            ..
+        } => Some(
+            SbvType::nice(
+                match special_bits.any() {
+                    true => ty::Domain::FourValued,
+                    false => ty::Domain::TwoValued,
+                },
+                if signed {
                     ty::Sign::Signed
                 } else {
                     ty::Sign::Unsigned
                 },
-                range: ty::Range {
-                    size: width,
-                    dir: ty::RangeDir::Down,
-                    offset: 0isize,
-                },
-                dubbed: true,
-            }))
-        }
+                width,
+            )
+            .to_unpacked(cx),
+        ),
 
         // Time constants are of time type.
-        hir::ExprKind::TimeConst(_) => Some(cx.mkty_time()),
+        hir::ExprKind::TimeConst(_) => Some(UnpackedType::make_time()),
 
         // String literals are of string type.
-        hir::ExprKind::StringConst(_) => Some(cx.mkty_packed_array(1, &ty::BYTE_TYPE)),
+        hir::ExprKind::StringConst(_) => Some(
+            ty::PackedType::make_dims(
+                cx,
+                ty::IntAtomType::Byte,
+                vec![ty::PackedDim::Range(ty::Range {
+                    size: 1,
+                    dir: ty::RangeDir::Down,
+                    offset: 0,
+                })],
+            )
+            .to_unpacked(cx),
+        ),
 
         // Identifiers and scoped identifiers inherit their type from the bound
         // node.
         hir::ExprKind::Ident(_) | hir::ExprKind::Scope(..) => Some(
             cx.resolve_node(expr.id, env)
                 .and_then(|x| cx.type_of(x, env))
-                .unwrap_or(&ty::ERROR_TYPE),
+                .map(|ty| UnpackedType::from_legacy(cx, ty))
+                .unwrap_or(UnpackedType::make_error()),
         ),
 
         // Concatenation yields an unsigned logic vector whose bit width is the
@@ -840,112 +833,132 @@ fn self_determined_expr_type<'gcx>(
             let mut failed = false;
 
             // Determine the cumulative width of all fields.
-            // TODO(fschuiki): Use a more benign function that does not fail,
-            // but returns an option which can be used to hint the user at the
-            // fact that the concatenation only accepts packable types.
             let mut bit_width = 0;
+            let mut domain = ty::Domain::TwoValued;
             for &expr in exprs {
-                match cx
-                    .type_of(expr, env)
-                    .and_then(|ty| bit_size_of_type(cx, ty, env))
-                {
-                    Ok(w) => bit_width += w,
-                    Err(()) => failed = true,
+                let ty = cx.need_self_determined_type(expr, env);
+                if ty.is_error() {
+                    failed = true;
+                    continue;
+                }
+                if ty.domain() == ty::Domain::FourValued {
+                    domain = ty::Domain::FourValued;
+                }
+                match ty.get_simple_bit_vector() {
+                    Some(sbv) => bit_width += sbv.size,
+                    None => {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "cannot concatenate a value of type `{}`",
+                                ty
+                            ))
+                            .span(cx.span(expr))
+                            .add_note(format!(
+                                "`{}` has no simple bit-vector type representation",
+                                ty
+                            )),
+                        );
+                        failed = true;
+                        continue;
+                    }
                 }
             }
 
             // Determine the repetition factor.
-            let repeat = match repeat.map(|r| cx.constant_int_value_of(r, env)) {
-                Some(Ok(r)) => r.to_usize().unwrap(),
-                Some(Err(_)) => {
-                    failed = true;
-                    0
-                }
+            let repeat = match repeat {
+                Some(repeat) => match cx.constant_int_value_of(repeat, env) {
+                    Ok(r) => r.to_usize().unwrap(),
+                    Err(()) => {
+                        failed = true;
+                        0
+                    }
+                },
                 None => 1,
             };
 
             // Package up the result.
-            Some(if failed {
-                &ty::ERROR_TYPE
+            if failed {
+                Some(UnpackedType::make_error())
             } else {
-                cx.intern_type(TypeKind::BitVector {
-                    sign: Sign::Unsigned,
-                    domain: Domain::FourValued,
-                    range: ty::Range {
-                        size: repeat * bit_width,
-                        dir: ty::RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                })
-            })
+                Some(SbvType::new(domain, Sign::Unsigned, repeat * bit_width).to_unpacked(cx))
+            }
         }
 
         // Casts trivially evaluate to the cast type.
-        hir::ExprKind::Cast(ty, _) => Some(cx.map_to_type(ty, env).unwrap_or(&ty::ERROR_TYPE)),
+        hir::ExprKind::Cast(ty, _) => Some(
+            cx.map_to_type(ty, env)
+                .map(|ty| UnpackedType::from_legacy(cx, ty))
+                .unwrap_or(UnpackedType::make_error()),
+        ),
 
         // Sign casts trivially evaluate to the sign-converted inner type.
-        hir::ExprKind::CastSign(sign, arg) => cx
-            .self_determined_type(arg, env)
-            .map(|x| x.change_sign(cx, sign.value)),
-        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => cx
-            .self_determined_type(arg, env)
-            .map(|x| x.change_sign(cx, Sign::Signed)),
-        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => cx
-            .self_determined_type(arg, env)
-            .map(|x| x.change_sign(cx, Sign::Unsigned)),
+        hir::ExprKind::CastSign(sign, arg) => {
+            Some(self_determined_sign_cast_type(cx, sign.value, arg, env))
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Signed(arg)) => {
+            Some(self_determined_sign_cast_type(cx, Sign::Signed, arg, env))
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::Unsigned(arg)) => {
+            Some(self_determined_sign_cast_type(cx, Sign::Unsigned, arg, env))
+        }
 
         // Sign casts trivially evaluate to the size-converted inner type.
         hir::ExprKind::CastSize(size, arg) => {
-            let mut failed = false;
-
             // Determine the actual size.
             let size = match cx.constant_int_value_of(size, env) {
                 Ok(r) => r.to_usize().unwrap(),
                 Err(_) => {
-                    failed = true;
-                    0
+                    return Some(UnpackedType::make_error());
                 }
             };
 
             // Map the inner type to a simple bit vector.
             let inner_ty = cx.need_self_determined_type(arg, env);
-            failed |= inner_ty.is_error();
+            if inner_ty.is_error() {
+                return Some(UnpackedType::make_error());
+            }
+            let sbv = match inner_ty.get_simple_bit_vector() {
+                Some(sbv) => sbv,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "cannot size-cast a value of type `{}`",
+                            inner_ty
+                        ))
+                        .span(cx.span(arg))
+                        .add_note(format!(
+                            "`{}` has no simple bit-vector type representation",
+                            inner_ty
+                        )),
+                    );
+                    return Some(UnpackedType::make_error());
+                }
+            };
 
-            // Create a new type with the correct size.
-            Some(if failed {
-                &ty::ERROR_TYPE
-            } else {
-                cx.intern_type(TypeKind::BitVector {
-                    domain: inner_ty.get_value_domain().unwrap_or(Domain::TwoValued),
-                    sign: inner_ty.get_sign().unwrap_or(Sign::Unsigned),
-                    range: ty::Range {
-                        size: size,
-                        dir: ty::RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                })
-            })
+            // Change the size and return the new type.
+            Some(sbv.change_size(size).to_unpacked(cx))
         }
 
         // The `inside` expression evaluates to a boolean.
-        hir::ExprKind::Inside(..) => Some(&ty::LOGIC_TYPE),
+        hir::ExprKind::Inside(..) => Some(UnpackedType::make_logic()),
 
         // Most builtin functions evaluate to the integer type.
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => Some(&ty::INT_TYPE),
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
+            Some(PackedType::make(cx, ty::IntAtomType::Int).to_unpacked(cx))
+        }
 
         // Member field accesses resolve to the type of the member.
         hir::ExprKind::Field(..) => Some(
             cx.resolve_field_access(expr.id, env)
                 .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
-                .unwrap_or(&ty::ERROR_TYPE),
+                .map(|ty| UnpackedType::from_legacy(cx, ty))
+                .unwrap_or(UnpackedType::make_error()),
         ),
 
         // Bit- and part-select expressions
-        hir::ExprKind::Index(target, mode) => Some({
+        hir::ExprKind::Index(target, mode) => {
             // Determine the width of the accessed slice. `None` indicates a
             // single element access, which needs to be treated differently in
             // some cases.
@@ -966,86 +979,91 @@ fn self_determined_expr_type<'gcx>(
             }();
             let width = match width {
                 Ok(w) => w,
-                Err(_) => return Some(&ty::ERROR_TYPE),
+                Err(_) => return Some(UnpackedType::make_error()),
             };
 
-            // TODO(fschuiki): In case the target type is not something we can
-            // directly index into, map it to the equivalent simple bit vector
-            // type first.
-            let target_ty = cx.type_of(target, env).unwrap_or(&ty::ERROR_TYPE);
-            match *target_ty.resolve_name() {
-                TypeKind::PackedArray(_, ty) => {
-                    if let Some(width) = width {
-                        cx.intern_type(TypeKind::PackedArray(width, ty))
-                    } else {
-                        ty
+            // Determine the target type.
+            let target_ty = cx
+                .type_of(target, env)
+                .map(|ty| UnpackedType::from_legacy(cx, ty))
+                .unwrap_or(UnpackedType::make_error());
+
+            // If we are selecting a slice (width not None), the result type is
+            // the array, but with the outermost array dimension changed. If we
+            // are selecting a bit, the result is the type with the selected
+            // dimension removed. Also, distinguish arrays from SBVTs.
+            let result = if let Some(dim) = target_ty.outermost_dim() {
+                // We are selecting into an array.
+                match width {
+                    Some(width) => {
+                        // We are selecting an array slice.
+                        let range = ty::Range::with_size(width);
+                        target_ty.replace_dim(
+                            cx,
+                            match dim {
+                                ty::Dim::Packed(..) => ty::Dim::Packed(range.into()),
+                                ty::Dim::Unpacked(..) => ty::Dim::Unpacked(range.into()),
+                            },
+                        )
+                    }
+                    None => {
+                        // We are selecting an array index.
+                        target_ty.pop_dim(cx).unwrap()
                     }
                 }
-                TypeKind::Bit(domain) | TypeKind::Int(_, domain) => {
-                    cx.intern_type(TypeKind::BitVector {
-                        domain,
-                        sign: Sign::Signed,
-                        range: ty::Range {
-                            size: width.unwrap_or(1),
-                            dir: ty::RangeDir::Down,
-                            offset: 0isize,
-                        },
-                        dubbed: false,
-                    })
+            } else {
+                // We are not selecting into an array. Map to a simple bit
+                // vector type.
+                let sbvt = match target_ty.get_simple_bit_vector() {
+                    Some(sbvt) => sbvt,
+                    None => {
+                        cx.emit(
+                            DiagBuilder2::error(
+                                format!("cannot index into a value of type `{}`", target_ty),
+                            )
+                            .span(expr.span)
+                            .add_note(format!(
+                                "`{}` must be an array or have a simple bit-vector type representation",
+                                target_ty
+                            )),
+                        );
+                        return Some(UnpackedType::make_error());
+                    }
+                };
+                match width {
+                    Some(width) => {
+                        // We are selecting a bit slice.
+                        sbvt.change_size(width).to_unpacked(cx)
+                    }
+                    None => {
+                        // We are selecting a bit index.
+                        let mut sbvt = sbvt.change_size(1);
+                        sbvt.size_explicit = false;
+                        sbvt.to_unpacked(cx)
+                    }
                 }
-                TypeKind::BitScalar { domain, sign } => cx.intern_type(TypeKind::BitVector {
-                    domain,
-                    sign,
-                    range: ty::Range {
-                        size: width.unwrap_or(1),
-                        dir: ty::RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }),
-                TypeKind::BitVector {
-                    domain,
-                    sign,
-                    range,
-                    ..
-                } => cx.intern_type(TypeKind::BitVector {
-                    domain,
-                    sign,
-                    range: ty::Range {
-                        size: width.unwrap_or(1),
-                        dir: range.dir,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }),
-                TypeKind::Error => (target_ty),
-                _ => {
-                    cx.emit(
-                        DiagBuilder2::error(format!(
-                            "cannot index into a value of type `{}`",
-                            target_ty
-                        ))
-                        .span(expr.span()),
-                    );
-                    error!("Type is {:?}", target_ty);
-                    &ty::ERROR_TYPE
-                }
-            }
-        }),
+            };
+            Some(result)
+        }
 
         // Some unary operators have a fully self-determined type.
         hir::ExprKind::Unary(op, arg) => match op {
             // Handle the self-determined cases.
-            hir::UnaryOp::LogicNot => Some(&ty::LOGIC_TYPE),
+            hir::UnaryOp::LogicNot => Some(UnpackedType::make_logic()),
             hir::UnaryOp::RedAnd
             | hir::UnaryOp::RedOr
             | hir::UnaryOp::RedXor
             | hir::UnaryOp::RedNand
             | hir::UnaryOp::RedNor
             | hir::UnaryOp::RedXnor => cx.self_determined_type(arg, env).map(|ty| {
-                ty.get_value_domain()
-                    .map(|dom| dom.bit_type())
-                    .unwrap_or(&ty::LOGIC_TYPE)
+                PackedType::make(
+                    cx,
+                    match ty.domain() {
+                        Domain::TwoValued => ty::IntVecType::Bit,
+                        Domain::FourValued => ty::IntVecType::Logic,
+                    },
+                )
+                .to_unpacked(cx)
             }),
 
             // For all other cases we try to infer the argument's type.
@@ -1070,7 +1088,7 @@ fn self_determined_expr_type<'gcx>(
             | hir::BinaryOp::Gt
             | hir::BinaryOp::Geq
             | hir::BinaryOp::LogicAnd
-            | hir::BinaryOp::LogicOr => Some(&ty::LOGIC_TYPE),
+            | hir::BinaryOp::LogicOr => Some(UnpackedType::make_logic()),
 
             // For all other cases we try to infer a type based on the maximum
             // over the operand's self-determined types.
@@ -1106,8 +1124,56 @@ fn self_determined_expr_type<'gcx>(
             unify_operator_types(cx, env, tlhs.into_iter().chain(trhs.into_iter()))
         }
 
+        // Function calls resolve to the function's return type.
+        hir::ExprKind::FunctionCall(target, _) => Some(
+            cx.hir_of(target)
+                .and_then(|hir| {
+                    let hir = match hir {
+                        HirNode::Subroutine(s) => s,
+                        _ => unreachable!(),
+                    };
+                    match hir.retty {
+                        Some(retty_id) => cx
+                            .map_to_type(retty_id, env)
+                            .map(|ty| UnpackedType::from_legacy(cx, ty)),
+                        None => Ok(UnpackedType::make_void()),
+                    }
+                })
+                .unwrap_or(UnpackedType::make_error()),
+        ),
+
         _ => None,
     }
+}
+
+fn self_determined_sign_cast_type<'gcx>(
+    cx: &impl Context<'gcx>,
+    sign: Sign,
+    arg: NodeId,
+    env: ParamEnv,
+) -> &'gcx UnpackedType<'gcx> {
+    // Map the inner type to a simple bit vector.
+    let ty = cx.need_self_determined_type(arg, env);
+    if ty.is_error() {
+        return UnpackedType::make_error();
+    }
+    let sbv = match ty.get_simple_bit_vector() {
+        Some(sbv) => sbv,
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("cannot sign-cast a value of type `{}`", ty))
+                    .span(cx.span(arg))
+                    .add_note(format!(
+                        "`{}` has no simple bit-vector type representation",
+                        ty
+                    )),
+            );
+            return UnpackedType::make_error();
+        }
+    };
+
+    // Change sign and return the new type.
+    sbv.change_signing(sign).to_unpacked(cx)
 }
 
 /// Get the operation type of an expression.
@@ -1115,10 +1181,10 @@ pub(crate) fn operation_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Option<Type<'gcx>> {
+) -> Option<&'gcx UnpackedType<'gcx>> {
     let hir = match cx.hir_of(node_id) {
         Ok(x) => x,
-        Err(_) => return Some(&ty::ERROR_TYPE),
+        Err(_) => return Some(UnpackedType::make_error()),
     };
     let expr = match hir {
         HirNode::Expr(x) => x,
@@ -1149,7 +1215,7 @@ pub(crate) fn operation_type<'gcx>(
                 }
 
                 // Handle the self-determined cases.
-                hir::UnaryOp::LogicNot => Some(&ty::LOGIC_TYPE),
+                hir::UnaryOp::LogicNot => Some(UnpackedType::make_logic()),
             };
             if ty.is_none() {
                 cx.emit(
@@ -1161,7 +1227,7 @@ pub(crate) fn operation_type<'gcx>(
                         )
                         .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
                 );
-                Some(&ty::ERROR_TYPE)
+                Some(UnpackedType::make_error())
             } else {
                 ty
             }
@@ -1210,7 +1276,9 @@ pub(crate) fn operation_type<'gcx>(
                 }
 
                 // The boolean logic operators simply operate on bits.
-                hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(&ty::LOGIC_TYPE),
+                hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => {
+                    Some(UnpackedType::make_logic())
+                }
 
                 // Exponentiation and shifts operate on the left-hand side type.
                 hir::BinaryOp::Pow
@@ -1233,7 +1301,7 @@ pub(crate) fn operation_type<'gcx>(
                         )
                         .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
                 );
-                Some(&ty::ERROR_TYPE)
+                Some(UnpackedType::make_error())
             } else {
                 ty
             }
@@ -1279,45 +1347,25 @@ pub(crate) fn operation_type<'gcx>(
 /// an expression.
 fn unify_operator_types<'gcx>(
     cx: &impl Context<'gcx>,
-    env: ParamEnv,
-    types: impl Iterator<Item = Type<'gcx>>,
-) -> Option<Type<'gcx>> {
+    _env: ParamEnv,
+    types: impl Iterator<Item = &'gcx UnpackedType<'gcx>>,
+) -> Option<&'gcx UnpackedType<'gcx>> {
     // Map the iterator to a sequence of sign, domain, and bit width tuples.
-    let inner: Vec<_> = types
-        .flat_map(|ty| {
-            bit_size_of_type(cx, ty, env)
-                .map(|w| ((ty.get_sign(), ty.get_value_domain(), ty.is_dubbed(), w)))
-        })
-        .collect();
+    let inner: Vec<_> = types.flat_map(|ty| ty.get_simple_bit_vector()).collect();
 
     // Determine the maximum width, sign, and domain.
-    let width: Option<usize> = inner.iter().map(|&(_, _, _, w)| w).max();
-    let sign = match inner.iter().all(|&(s, _, _, _)| s == Some(Sign::Signed)) {
+    let width: Option<usize> = inner.iter().map(|&sbv| sbv.size).max();
+    let sign = match inner.iter().all(|&sbv| sbv.is_signed()) {
         true => Sign::Signed,
         false => Sign::Unsigned,
     };
-    let domain = match inner
-        .iter()
-        .all(|&(_, d, _, _)| d == Some(Domain::TwoValued))
-    {
+    let domain = match inner.iter().all(|&sbv| sbv.domain == Domain::TwoValued) {
         true => Domain::TwoValued,
         false => Domain::FourValued,
     };
-    let dubbed = inner.iter().all(|&(_, _, d, _)| d);
 
     // Construct the type.
-    width.map(|w| {
-        cx.intern_type(TypeKind::BitVector {
-            sign,
-            domain,
-            range: ty::Range {
-                size: w,
-                dir: ty::RangeDir::Down,
-                offset: 0isize,
-            },
-            dubbed,
-        })
-    })
+    width.map(|w| SbvType::nice(domain, sign, w).to_unpacked(cx))
 }
 
 /// Require a node to have an operation type.
@@ -1327,7 +1375,7 @@ pub(crate) fn need_operation_type<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Type<'gcx> {
+) -> &'gcx UnpackedType<'gcx> {
     match cx.operation_type(node_id, env) {
         Some(x) => x,
         None => {
@@ -1335,7 +1383,7 @@ pub(crate) fn need_operation_type<'gcx>(
             cx.emit(
                 DiagBuilder2::bug(format!("`{}` has no operation type", span.extract())).span(span),
             );
-            &ty::ERROR_TYPE
+            UnpackedType::make_error()
         }
     }
 }
@@ -1345,7 +1393,7 @@ pub(crate) fn type_context<'gcx>(
     cx: &impl Context<'gcx>,
     onto: NodeId,
     env: ParamEnv,
-) -> Option<TypeContext<'gcx>> {
+) -> Option<TypeContext2<'gcx>> {
     let hir = match cx.hir_of(cx.parent_node_id(onto).unwrap()) {
         Ok(x) => x,
         Err(()) => return None,
@@ -1365,17 +1413,32 @@ pub(crate) fn type_context<'gcx>(
         HirNode::IntPort(hir::IntPort { data: Some(v), .. })
             if v.default == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
         {
-            Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
+            Some(
+                cx.map_to_type(v.ty, env)
+                    .map(|ty| UnpackedType::from_legacy(cx, ty))
+                    .unwrap_or(UnpackedType::make_error())
+                    .into(),
+            )
         }
         HirNode::VarDecl(v)
             if v.init == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
         {
-            Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
+            Some(
+                cx.map_to_type(v.ty, env)
+                    .map(|ty| UnpackedType::from_legacy(cx, ty))
+                    .unwrap_or(UnpackedType::make_error())
+                    .into(),
+            )
         }
         HirNode::ValueParam(v)
             if v.default == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
         {
-            Some(cx.map_to_type(v.ty, env).unwrap_or(&ty::ERROR_TYPE).into())
+            Some(
+                cx.map_to_type(v.ty, env)
+                    .map(|ty| UnpackedType::from_legacy(cx, ty))
+                    .unwrap_or(UnpackedType::make_error())
+                    .into(),
+            )
         }
         HirNode::Inst(inst) => {
             let details = cx.inst_details(inst.id.env(env)).ok()?;
@@ -1383,6 +1446,7 @@ pub(crate) fn type_context<'gcx>(
                 .ports
                 .reverse_find(onto)
                 .and_then(|id| cx.type_of(id, details.inner_env).ok())
+                .map(|ty| UnpackedType::from_legacy(cx, ty))
                 .map(Into::into)
         }
         HirNode::InstTarget(inst) => {
@@ -1391,6 +1455,7 @@ pub(crate) fn type_context<'gcx>(
                 .params
                 .reverse_find_value(onto)
                 .and_then(|param_id| cx.type_of(param_id, details.inner_env).ok())
+                .map(|ty| UnpackedType::from_legacy(cx, ty))
                 .map(Into::into)
         }
         _ => None,
@@ -1402,7 +1467,7 @@ pub(crate) fn need_type_context<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     env: ParamEnv,
-) -> TypeContext<'gcx> {
+) -> TypeContext2<'gcx> {
     match cx.type_context(node_id, env) {
         Some(ty) => ty,
         None => {
@@ -1421,7 +1486,7 @@ pub(crate) fn need_type_context<'gcx>(
                     ))
                     .add_note(format!("Try a cast: `T'({})`", extract)),
             );
-            TypeContext::Type(&ty::ERROR_TYPE)
+            UnpackedType::make_error().into()
         }
     }
 }
@@ -1526,7 +1591,7 @@ fn type_context_imposed_by_expr<'gcx>(
     onto: NodeId,
     expr: &'gcx hir::Expr,
     env: ParamEnv,
-) -> Option<TypeContext<'gcx>> {
+) -> Option<TypeContext2<'gcx>> {
     match expr.kind {
         hir::ExprKind::Unary(op, _) => match op {
             // The unary operators whose output type does not depend on the
@@ -1539,7 +1604,7 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::UnaryOp::RedXnor => None,
 
             // The logic operators require boolean arguments.
-            hir::UnaryOp::LogicNot => Some(TypeContext::Bool),
+            hir::UnaryOp::LogicNot => Some(TypeContext2::Bool),
 
             // For all other cases we impose our self-determined type as
             // context.
@@ -1554,7 +1619,7 @@ fn type_context_imposed_by_expr<'gcx>(
 
         hir::ExprKind::Binary(op, lhs, _) => match op {
             // The logic operators require boolean arguments.
-            hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(TypeContext::Bool),
+            hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(TypeContext2::Bool),
 
             // Exponentiation and shifts impose a type context on their left
             // hand side.
@@ -1597,7 +1662,7 @@ fn type_context_imposed_by_expr<'gcx>(
         }
 
         // The ternary operator imposes a boolean context on its condition.
-        hir::ExprKind::Ternary(cond, _, _) if onto == cond => Some(TypeContext::Bool),
+        hir::ExprKind::Ternary(cond, _, _) if onto == cond => Some(TypeContext2::Bool),
 
         // Static casts are *not* assignment-like contexts. See §10.8
         // "Assignment-like contexts". We use a trick here to get the implicit
@@ -1617,8 +1682,8 @@ fn type_context_imposed_by_expr<'gcx>(
         // to map to a corresponding SBVT.
         hir::ExprKind::Concat(..) => {
             let ty = cx.need_self_determined_type(onto, env);
-            let sbvt = match ty.get_simple_bit_vector(cx, env, false) {
-                Some(ty) => ty,
+            let sbvt = match ty.get_simple_bit_vector() {
+                Some(ty) => ty.to_unpacked(cx),
                 None => {
                     cx.emit(
                         DiagBuilder2::error(
@@ -1630,7 +1695,7 @@ fn type_context_imposed_by_expr<'gcx>(
                             ty
                         )),
                     );
-                    &ty::ERROR_TYPE
+                    UnpackedType::make_error()
                 }
             };
             Some(sbvt.into())
@@ -1645,7 +1710,7 @@ fn type_context_imposed_by_expr<'gcx>(
             // This should really go into a pattern analysis struct.
             let const_count = match cx.constant_int_value_of(count, env) {
                 Ok(c) => c,
-                Err(()) => return Some((&ty::ERROR_TYPE).into()),
+                Err(()) => return Some(UnpackedType::make_error().into()),
             };
             let const_count = match const_count.to_usize() {
                 Some(c) => c,
@@ -1657,7 +1722,7 @@ fn type_context_imposed_by_expr<'gcx>(
                         ))
                         .span(cx.span(count)),
                     );
-                    return Some((&ty::ERROR_TYPE).into());
+                    return Some(UnpackedType::make_error().into());
                 }
             };
             type_context_imposed_by_positional_pattern(cx, onto, expr, args, const_count, env)
@@ -1670,12 +1735,11 @@ fn type_context_imposed_by_expr<'gcx>(
         // indexable. Otherwise it should at least be castable to a SBVT.
         hir::ExprKind::Index(target, _) if onto == target => {
             let ty = cx.need_self_determined_type(onto, env);
-            let ty = UnpackedType::from_legacy(cx, ty);
             Some(if ty.dims().next().is_some() {
-                ty.to_legacy(cx).into()
+                ty.into()
             } else {
                 match ty.get_simple_bit_vector() {
-                    Some(ty) => ty.forget().to_unpacked(cx).to_legacy(cx),
+                    Some(ty) => ty.forget().to_unpacked(cx),
                     None => {
                         cx.emit(
                             DiagBuilder2::error(
@@ -1687,7 +1751,7 @@ fn type_context_imposed_by_expr<'gcx>(
                                 ty
                             )),
                         );
-                        &ty::ERROR_TYPE
+                        UnpackedType::make_error()
                     }
                 }.into()
             })
@@ -1704,18 +1768,16 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
     args: &[NodeId],
     repeat: usize,
     env: ParamEnv,
-) -> Option<TypeContext<'gcx>> {
+) -> Option<TypeContext2<'gcx>> {
     let index = args.iter().position(|&n| n == onto)?;
     let ty = cx.need_type_context(expr.id, env).ty();
     if ty.is_error() {
-        return Some((&ty::ERROR_TYPE).into());
+        return Some(UnpackedType::make_error().into());
     }
-    match *ty.resolve_name() {
-        TypeKind::PackedArray(_, elty) => Some(elty.into()),
+    match *ty.to_legacy(cx).resolve_name() {
+        TypeKind::PackedArray(_, elty) => Some(UnpackedType::from_legacy(cx, elty).into()),
         TypeKind::BitScalar { .. } => Some(ty.into()),
-        TypeKind::BitVector { sign, domain, .. } => {
-            Some(cx.intern_type(TypeKind::BitScalar { sign, domain }).into())
-        }
+        TypeKind::BitVector { .. } => Some(ty.into()),
         TypeKind::Struct(_) if repeat != 1 => {
             bug_span!(
                 expr.span,
@@ -1731,7 +1793,7 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
             // handled early on, and these type checks become easier.
             let def = match cx.struct_def(def_id.id()) {
                 Ok(d) => d,
-                Err(()) => return Some((&ty::ERROR_TYPE).into()),
+                Err(()) => return Some(UnpackedType::make_error().into()),
             };
             if args.len() > def.fields.len() {
                 cx.emit(
@@ -1746,7 +1808,8 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
             }
             Some(
                 cx.map_to_type(def.fields[index].ty, def_id.env())
-                    .unwrap_or(&ty::ERROR_TYPE)
+                    .map(|ty| UnpackedType::from_legacy(cx, ty))
+                    .unwrap_or(UnpackedType::make_error())
                     .into(),
             )
         }
@@ -1770,7 +1833,7 @@ fn type_context_imposed_by_stmt<'gcx>(
     onto: NodeId,
     stmt: &'gcx hir::Stmt,
     env: ParamEnv,
-) -> Option<TypeContext<'gcx>> {
+) -> Option<TypeContext2<'gcx>> {
     match stmt.kind {
         // Assignments impose the self-determined type of the other operand on
         // an operand, if available.
@@ -1785,7 +1848,7 @@ fn type_context_imposed_by_stmt<'gcx>(
         }
 
         // If statements and do/while loops require a boolean condition.
-        hir::StmtKind::If { cond, .. } if onto == cond => Some(TypeContext::Bool),
+        hir::StmtKind::If { cond, .. } if onto == cond => Some(TypeContext2::Bool),
 
         // Do/while loops require a boolean condition.
         hir::StmtKind::Loop { kind, .. } => {
@@ -1799,7 +1862,7 @@ fn type_context_imposed_by_stmt<'gcx>(
                 | hir::LoopKind::For(_, cond, _)
                     if onto == cond =>
                 {
-                    Some(TypeContext::Bool)
+                    Some(TypeContext2::Bool)
                 }
                 _ => None,
             }

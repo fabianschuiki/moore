@@ -302,17 +302,10 @@ fn const_mir_rvalue_inner<'gcx>(
         | mir::RvalueKind::Truncate(_, value)
         | mir::RvalueKind::ZeroExtend(_, value)
         | mir::RvalueKind::SignExtend(_, value) => {
-            cx.emit(
-                DiagBuilder2::warning("cast ignored during constant evaluation")
-                    .span(mir.span)
-                    .add_note(format!(
-                        "Casts `{}` from `{}` to `{}`",
+            warn!("Cast ignored during constant evaluation: `{}` from `{}` to `{}`",
                         value.span.extract(),
                         value.ty,
-                        mir.ty
-                    ))
-                    .span(value.span),
-            );
+                        mir.ty);
             let v = cx.const_mir_rvalue(value.into());
             // TODO: This is an incredibly ugly hack.
             cx.intern_value(ValueData {
@@ -712,7 +705,7 @@ pub(crate) fn type_default_value<'gcx>(
     }
 
     // Handle arrays.
-    if let Some(dim) = ty.dims().last() {
+    if let Some(dim) = ty.outermost_dim() {
         let length = dim
             .get_size()
             .expect("cannot build const value of unsized array");

@@ -250,7 +250,7 @@ fn lower_expr_inner<'gcx>(
         hir::ExprKind::NamedPattern(ref mapping) => {
             if ty.is_error() {
                 Err(())
-            } else if let Some(dim) = ty.dims().last() {
+            } else if let Some(dim) = ty.outermost_dim() {
                 Ok(lower_named_array_pattern(&builder, mapping, ty, dim))
             } else if let Some(strukt) = ty.get_struct() {
                 Ok(lower_named_struct_pattern(&builder, mapping, ty, strukt))
@@ -360,7 +360,7 @@ fn lower_expr_inner<'gcx>(
             );
 
             // Determine the intermediate type for the comparisons.
-            let comp_ty = UnpackedType::from_legacy(cx, cx.need_operation_type(expr_id, env));
+            let comp_ty = cx.need_operation_type(expr_id, env);
 
             // Determine the result type for the comparison.
             let out_ty = cx.cast_type(expr_id, env).unwrap().init;
@@ -603,7 +603,7 @@ fn pack_simple_bit_vector<'gcx>(
         .to_unpacked(builder.cx);
     if value.ty.coalesces_to_llhd_scalar() {
         builder.build(to, RvalueKind::Transmute(value))
-    } else if let Some(dim) = value.ty.dims().last() {
+    } else if let Some(dim) = value.ty.outermost_dim() {
         pack_array(builder, value, dim, to)
     } else if let Some(strukt) = value.ty.get_struct() {
         pack_struct(builder, value, strukt, to)
@@ -702,7 +702,7 @@ fn unpack_simple_bit_vector<'a>(
     }
     if to.coalesces_to_llhd_scalar() {
         builder.build(to, RvalueKind::Transmute(value))
-    } else if let Some(dim) = to.dims().last() {
+    } else if let Some(dim) = to.outermost_dim() {
         unpack_array(builder, value, to, dim)
     } else if let Some(strukt) = to.get_struct() {
         unpack_struct(builder, value, to, strukt)
@@ -1128,7 +1128,7 @@ fn lower_positional_pattern<'a>(
             ty.simple_bit_vector(builder.cx, builder.span).size,
             builder.build(ty, RvalueKind::Concat(values)),
         )
-    } else if let Some(dim) = ty.dims().last() {
+    } else if let Some(dim) = ty.outermost_dim() {
         match dim.get_size() {
             Some(size) => {
                 let result = builder.build(
@@ -1337,10 +1337,7 @@ fn lower_int_comparison<'a>(
     rhs: NodeId,
 ) -> &'a Rvalue<'a> {
     // Determine the operation type of the comparison.
-    let ty = UnpackedType::from_legacy(
-        builder.cx,
-        builder.cx.need_operation_type(builder.expr, builder.env),
-    );
+    let ty = builder.cx.need_operation_type(builder.expr, builder.env);
 
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
@@ -1614,10 +1611,7 @@ fn lower_reduction<'a>(
     arg: NodeId,
 ) -> &'a Rvalue<'a> {
     // Determine the operation type.
-    let op_ty = UnpackedType::from_legacy(
-        builder.cx,
-        builder.cx.need_operation_type(builder.expr, builder.env),
-    );
+    let op_ty = builder.cx.need_operation_type(builder.expr, builder.env);
 
     // Lower the operand.
     let arg = builder.cx.mir_rvalue(arg, builder.env);

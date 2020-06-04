@@ -588,8 +588,8 @@ impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
                 line,
                 ext,
                 match ty {
-                    svlog::typeck::TypeContext::Type(ty) => format!("{}", ty),
-                    svlog::typeck::TypeContext::Bool => "<bool>".to_string(),
+                    svlog::typeck::TypeContext2::Type(ty) => format!("{}", ty),
+                    svlog::typeck::TypeContext2::Bool => "<bool>".to_string(),
                 }
             );
         }

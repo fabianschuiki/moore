@@ -1,4 +1,4 @@
-// RUN: moore %s -e a0 -e a1 -e a2 -e a3 -Vtypes
+// RUN: moore %s -e a0 -e a1 -e a2 -e a3 -Vtypes -O0
 module a0;
     logic [3:0] a;
     logic [8:0] b;
@@ -53,9 +53,12 @@ module a1;
 endmodule
 
 module a2;
-  logic [31:0] inst_data_i;
-  logic [31:0] iimm;
-  assign iimm = $signed({inst_data_i[31:20]});
+    logic [31:0] inst_data_i;
+    logic [31:0] iimm;
+    assign iimm = $signed({inst_data_i[31:20]});
+    // CHECK: 58: self_type($signed({inst_data_i[31:20]})) = logic signed [11:0]
+    // CHECK: 58: self_type({inst_data_i[31:20]}) = logic [11:0]
+    // CHECK: 58: self_type(inst_data_i[31:20]) = logic [11:0]
 endmodule
 
 module a3;

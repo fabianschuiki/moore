@@ -30,7 +30,7 @@ use crate::{
     port_list::PortList,
     resolver::{Scope, StructDef},
     ty::{Type, TypeKind, UnpackedType},
-    typeck::{CastType, TypeContext},
+    typeck::{CastType, TypeContext2},
     value::{Value, ValueData, ValueKind},
     InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping,
     PortMappingSource, QueryDatabase, QueryStorage,
@@ -725,7 +725,7 @@ pub(super) mod queries {
             }
 
             /// Get the self-determined type of a node.
-            fn self_determined_type(node_id: NodeId, env: ParamEnv) -> Option<Type<'a>> {
+            fn self_determined_type(node_id: NodeId, env: ParamEnv) -> Option<&'a UnpackedType<'a>> {
                 type SelfDeterminedTypeQuery;
                 use fn typeck::self_determined_type;
             }
@@ -733,13 +733,13 @@ pub(super) mod queries {
             /// Require a node to have a self-determined type.
             ///
             /// Emits an error if the node has no self-determined type.
-            fn need_self_determined_type(node_id: NodeId, env: ParamEnv) -> Type<'a> {
+            fn need_self_determined_type(node_id: NodeId, env: ParamEnv) -> &'a UnpackedType<'a> {
                 type NeedSelfDeterminedTypeQuery;
                 use fn typeck::need_self_determined_type;
             }
 
             /// Get the operation type of an expression.
-            fn operation_type(node_id: NodeId, env: ParamEnv) -> Option<Type<'a>> {
+            fn operation_type(node_id: NodeId, env: ParamEnv) -> Option<&'a UnpackedType<'a>> {
                 type OperationTypeQuery;
                 use fn typeck::operation_type;
             }
@@ -747,13 +747,13 @@ pub(super) mod queries {
             /// Require a node to have an operation type.
             ///
             /// Emits an error if the node has no operation type.
-            fn need_operation_type(node_id: NodeId, env: ParamEnv) -> Type<'a> {
+            fn need_operation_type(node_id: NodeId, env: ParamEnv) -> &'a UnpackedType<'a> {
                 type NeedOperationTypeQuery;
                 use fn typeck::need_operation_type;
             }
 
             /// Get the type context of a node.
-            fn type_context(node_id: NodeId, env: ParamEnv) -> Option<TypeContext<'a>> {
+            fn type_context(node_id: NodeId, env: ParamEnv) -> Option<TypeContext2<'a>> {
                 type TypeContextQuery;
                 use fn typeck::type_context;
             }
@@ -761,7 +761,7 @@ pub(super) mod queries {
             /// Require a node to have a type context.
             ///
             /// Emits an error if the node has no type context.
-            fn need_type_context(node_id: NodeId, env: ParamEnv) -> TypeContext<'a> {
+            fn need_type_context(node_id: NodeId, env: ParamEnv) -> TypeContext2<'a> {
                 type NeedTypeContextQuery;
                 use fn typeck::need_type_context;
             }
