@@ -984,24 +984,26 @@ where
                 Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
             }
 
-            mir::RvalueKind::ZeroExtend(_, value) => {
-                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
+            mir::RvalueKind::ZeroExtend(target_width, value) => {
                 let llty = self.emit_type(mir.ty, mir.env)?;
                 let result = self.emit_zero_for_type(&llty);
                 let value = self.emit_mir_rvalue(value)?;
-                Ok(self.builder.ins().ins_slice(result, value, 0, width))
+                let result = self.builder.ins().ins_slice(result, value, 0, target_width);
+                self.builder.set_name(result, "zext".to_string());
+                Ok(result)
             }
 
-            mir::RvalueKind::SignExtend(_, value) => {
-                let width = value.ty.simple_bit_vector(self.cx, value.span).size;
+            mir::RvalueKind::SignExtend(target_width, value) => {
                 let llty = self.emit_type(mir.ty, mir.env)?;
                 let value = self.emit_mir_rvalue(value)?;
-                let sign = self.builder.ins().ext_slice(value, width - 1, 1);
+                let sign = self.builder.ins().ext_slice(value, target_width - 1, 1);
                 let zeros = self.emit_zero_for_type(&llty);
                 let ones = self.builder.ins().not(zeros);
                 let mux = self.builder.ins().array(vec![zeros, ones]);
                 let mux = self.builder.ins().mux(mux, sign);
-                Ok(self.builder.ins().ins_slice(mux, value, 0, width))
+                let result = self.builder.ins().ins_slice(mux, value, 0, target_width);
+                self.builder.set_name(result, "sext".to_string());
+                Ok(result)
             }
 
             mir::RvalueKind::ConstructArray(ref indices) => {
@@ -1131,14 +1133,27 @@ where
             mir::RvalueKind::Concat(ref values) => {
                 let mut offset = 0;
                 let llty = self.emit_type(mir.ty, mir.env)?;
-                let mut value = self.emit_zero_for_type(&llty);
-                for v in values.iter().rev() {
-                    let w = v.ty.simple_bit_vector(self.cx, v.span).size;
-                    let v = self.emit_mir_rvalue(v)?;
-                    value = self.builder.ins().ins_slice(value, v, offset, w);
-                    offset += w;
+                let mut result = self.emit_zero_for_type(&llty);
+                debug!(
+                    "Concatenating {} values into `{}` (as `{}`)",
+                    values.len(),
+                    mir.ty,
+                    llty
+                );
+                for value in values.iter().rev() {
+                    let width = value.ty.simple_bit_vector(self.cx, value.span).size;
+                    let llval = self.emit_mir_rvalue(value)?;
+                    debug!(
+                        " - Value has width {}, type `{}`, in LLHD `{}`",
+                        width,
+                        value.ty,
+                        self.llhd_type(llval)
+                    );
+                    result = self.builder.ins().ins_slice(result, llval, offset, width);
+                    offset += width;
                 }
-                Ok(value)
+                self.builder.set_name(result, "concat".to_string());
+                Ok(result)
             }
 
             mir::RvalueKind::Repeat(times, value) => {
@@ -1152,6 +1167,7 @@ where
                         .ins()
                         .ins_slice(result, value, i * width, width);
                 }
+                self.builder.set_name(result, "repeat".to_string());
                 Ok(result)
             }
 
