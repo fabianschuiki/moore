@@ -1342,12 +1342,17 @@ pub enum Expr<'a> {
     CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
 }
 
+/// An ambiguous node that can either be a type or and expression.
+///
+/// Use the `disamb_type_or_expr` query to disambiguate based on name
+/// resolution.
+#[moore_derive::arena]
 #[moore_derive::visit]
-#[derive(AnyNodeData, Debug, Clone, PartialEq, Eq)]
+#[derive(AnyNodeData, Debug, Clone, Copy, PartialEq, Eq)]
 #[forward]
 pub enum TypeOrExpr<'a> {
-    Type(Type<'a>),
-    Expr(Expr<'a>),
+    Type(&'a Type<'a>),
+    Expr(&'a Expr<'a>),
 }
 
 impl<'a> AnyNode<'a> for TypeOrExpr<'a> {

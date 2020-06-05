@@ -10,7 +10,7 @@ use crate::ast;
 use crate::ast::*;
 use crate::lexer::{Lexer, TokenAndSpan};
 use crate::token::*;
-use moore_common::{errors::*, name::*, source::*, util::HasSpan};
+use moore_common::{arenas::Alloc, errors::*, name::*, source::*, util::HasSpan};
 use std;
 use std::collections::VecDeque;
 
@@ -1912,15 +1912,15 @@ fn try_dimension<'n>(
             }
             _ => match parse_type_or_expr(p, &[Colon, CloseDelim(Brack)])? {
                 // associative_dimension ::= '[' data_type ']'
-                TypeOrExpr::Type(ty) => TypeDim::Associative(Some(ty)),
+                TypeOrExpr::Type(ty) => TypeDim::Associative(Some(ty.clone())),
                 // unpacked_dimension ::= '[' constant_expression ']'
                 // unpacked_dimension ::= '[' constant_range ']'
                 TypeOrExpr::Expr(expr) => {
                     if p.try_eat(Colon) {
                         let other = parse_expr(p)?;
-                        TypeDim::Range(expr, other)
+                        TypeDim::Range(expr.clone(), other.clone())
                     } else {
-                        TypeDim::Expr(expr)
+                        TypeDim::Expr(expr.clone())
                     }
                 }
             },
@@ -1974,12 +1974,12 @@ fn parse_type_or_expr<'n>(
     pp.add_greedy("expression", |p| {
         let expr = parse_expr(p)?;
         p.anticipate(&terminators)?;
-        Ok(ast::TypeOrExpr::Expr(expr))
+        Ok(ast::TypeOrExpr::Expr(p.arena().alloc(expr)))
     });
     pp.add("type", |p| {
         let ty = parse_explicit_type(p)?;
         p.anticipate(&terminators)?;
-        Ok(ast::TypeOrExpr::Type(ty))
+        Ok(ast::TypeOrExpr::Type(p.arena().alloc(ty)))
     });
     pp.finish(p, "type or expression")
 }

@@ -778,7 +778,7 @@ fn lower_type<'gcx>(
         ast::TypeRef(ref arg) => {
             // Special care is needed here for types that were mistakenly parsed
             // as an expression.
-            match arg.as_ref() {
+            match *arg.as_ref() {
                 ast::TypeOrExpr::Expr(expr) => match expr.data {
                     ast::IdentExpr(n) => {
                         let binding = cx.resolve_upwards_or_error(n, node_id)?;
