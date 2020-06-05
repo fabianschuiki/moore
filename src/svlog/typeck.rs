@@ -833,7 +833,7 @@ fn cast_expr_type_inner<'gcx>(
     }
 
     // If types already match, return.
-    if let TypeContext2::Type(ty) = context {
+    if let TypeContext::Type(ty) = context {
         if ty.is_strictly_identical(inferred) {
             trace!("  Already identical");
             return inferred.into();
@@ -881,12 +881,12 @@ fn cast_expr_type_inner<'gcx>(
 
     // Cast the SBVT to a boolean.
     let context = match context {
-        TypeContext2::Bool => {
+        TypeContext::Bool => {
             trace!("  Casting to bool ({})", context.ty());
             cast.add_cast(CastOp::Bool, context.ty());
             return cast;
         }
-        TypeContext2::Type(ty) => ty,
+        TypeContext::Type(ty) => ty,
     };
 
     // Cast the context type to an SBVT.
@@ -1717,7 +1717,7 @@ pub(crate) fn type_context<'a>(
     cx: &impl Context<'a>,
     onto: NodeId,
     env: ParamEnv,
-) -> Option<TypeContext2<'a>> {
+) -> Option<TypeContext<'a>> {
     let hir_id = cx.parent_node_id(onto).unwrap();
     let hir = match cx.hir_of(hir_id) {
         Ok(x) => x,
@@ -1802,7 +1802,7 @@ pub(crate) fn need_type_context<'a>(
     cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> TypeContext2<'a> {
+) -> TypeContext<'a> {
     match cx.type_context(node_id, env) {
         Some(ty) => ty,
         None => {
@@ -1832,7 +1832,7 @@ pub(crate) fn need_type_context<'a>(
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum TypeContext<'a> {
     /// The surroundings impose a regular type.
-    Type(Type<'a>),
+    Type(&'a ty::UnpackedType<'a>),
     /// The surroundings ask for implicit boolean mapping (not truncation).
     Bool,
 }
@@ -1841,10 +1841,10 @@ impl<'a> TypeContext<'a> {
     /// Convert the type context to an actual type.
     ///
     /// This resolves implicit boolean casts to the `logic` type.
-    pub fn ty(&self) -> Type<'a> {
+    pub fn ty(&self) -> &'a ty::UnpackedType<'a> {
         match *self {
             TypeContext::Type(t) => t,
-            TypeContext::Bool => &ty::LOGIC_TYPE,
+            TypeContext::Bool => ty::UnpackedType::make_logic(),
         }
     }
 
@@ -1857,8 +1857,8 @@ impl<'a> TypeContext<'a> {
     }
 }
 
-impl<'a> From<Type<'a>> for TypeContext<'a> {
-    fn from(ty: Type<'a>) -> Self {
+impl<'a> From<&'a ty::UnpackedType<'a>> for TypeContext<'a> {
+    fn from(ty: &'a ty::UnpackedType<'a>) -> Self {
         TypeContext::Type(ty)
     }
 }
@@ -1872,52 +1872,6 @@ impl std::fmt::Display for TypeContext<'_> {
     }
 }
 
-/// A type context imposed by a node's surroundings.
-///
-/// This is used to treat things such as assignment-like contexts.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum TypeContext2<'a> {
-    /// The surroundings impose a regular type.
-    Type(&'a ty::UnpackedType<'a>),
-    /// The surroundings ask for implicit boolean mapping (not truncation).
-    Bool,
-}
-
-impl<'a> TypeContext2<'a> {
-    /// Convert the type context to an actual type.
-    ///
-    /// This resolves implicit boolean casts to the `logic` type.
-    pub fn ty(&self) -> &'a ty::UnpackedType<'a> {
-        match *self {
-            TypeContext2::Type(t) => t,
-            TypeContext2::Bool => ty::UnpackedType::make_logic(),
-        }
-    }
-
-    /// Check if the type context is a tombstone.
-    pub fn is_error(&self) -> bool {
-        match self {
-            TypeContext2::Type(t) => t.is_error(),
-            TypeContext2::Bool => false,
-        }
-    }
-}
-
-impl<'a> From<&'a ty::UnpackedType<'a>> for TypeContext2<'a> {
-    fn from(ty: &'a ty::UnpackedType<'a>) -> Self {
-        TypeContext2::Type(ty)
-    }
-}
-
-impl std::fmt::Display for TypeContext2<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TypeContext2::Type(t) => write!(f, "{}", t),
-            TypeContext2::Bool => write!(f, "<bool>"),
-        }
-    }
-}
-
 /// Get the type context imposed by an expression.
 ///
 /// Determine the type context `expr` imposes on `onto`.
@@ -1926,7 +1880,7 @@ fn type_context_imposed_by_expr<'gcx>(
     onto: NodeId,
     expr: &'gcx hir::Expr,
     env: ParamEnv,
-) -> Option<TypeContext2<'gcx>> {
+) -> Option<TypeContext<'gcx>> {
     match expr.kind {
         hir::ExprKind::Unary(op, _) => match op {
             // The unary operators whose output type does not depend on the
@@ -1939,7 +1893,7 @@ fn type_context_imposed_by_expr<'gcx>(
             | hir::UnaryOp::RedXnor => None,
 
             // The logic operators require boolean arguments.
-            hir::UnaryOp::LogicNot => Some(TypeContext2::Bool),
+            hir::UnaryOp::LogicNot => Some(TypeContext::Bool),
 
             // For all other cases we impose our self-determined type as
             // context.
@@ -1954,7 +1908,7 @@ fn type_context_imposed_by_expr<'gcx>(
 
         hir::ExprKind::Binary(op, lhs, _) => match op {
             // The logic operators require boolean arguments.
-            hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(TypeContext2::Bool),
+            hir::BinaryOp::LogicAnd | hir::BinaryOp::LogicOr => Some(TypeContext::Bool),
 
             // Exponentiation and shifts impose a type context on their left
             // hand side.
@@ -1997,7 +1951,7 @@ fn type_context_imposed_by_expr<'gcx>(
         }
 
         // The ternary operator imposes a boolean context on its condition.
-        hir::ExprKind::Ternary(cond, _, _) if onto == cond => Some(TypeContext2::Bool),
+        hir::ExprKind::Ternary(cond, _, _) if onto == cond => Some(TypeContext::Bool),
 
         // Static casts are *not* assignment-like contexts. See §10.8
         // "Assignment-like contexts". We use a trick here to get the implicit
@@ -2092,7 +2046,7 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
     args: &[NodeId],
     repeat: usize,
     env: ParamEnv,
-) -> Option<TypeContext2<'gcx>> {
+) -> Option<TypeContext<'gcx>> {
     let index = args.iter().position(|&n| n == onto)?;
     let ty = cx.need_type_context(expr.id, env).ty();
     if ty.is_error() {
@@ -2170,7 +2124,7 @@ fn type_context_imposed_by_stmt<'gcx>(
     onto: NodeId,
     stmt: &'gcx hir::Stmt,
     env: ParamEnv,
-) -> Option<TypeContext2<'gcx>> {
+) -> Option<TypeContext<'gcx>> {
     match stmt.kind {
         // Assignments impose the self-determined type of the other operand on
         // an operand, if available.
@@ -2185,7 +2139,7 @@ fn type_context_imposed_by_stmt<'gcx>(
         }
 
         // If statements and do/while loops require a boolean condition.
-        hir::StmtKind::If { cond, .. } if onto == cond => Some(TypeContext2::Bool),
+        hir::StmtKind::If { cond, .. } if onto == cond => Some(TypeContext::Bool),
 
         // Do/while loops require a boolean condition.
         hir::StmtKind::Loop { kind, .. } => {
@@ -2199,7 +2153,7 @@ fn type_context_imposed_by_stmt<'gcx>(
                 | hir::LoopKind::For(_, cond, _)
                     if onto == cond =>
                 {
-                    Some(TypeContext2::Bool)
+                    Some(TypeContext::Bool)
                 }
                 _ => None,
             }
