@@ -1713,7 +1713,7 @@ impl Display for EnumType<'_> {
         if self.base_explicit {
             write!(f, " {}", self.base)?;
         }
-        write!(f, "{{")?;
+        write!(f, " {{")?;
         let mut first = true;
         for (name, _) in &self.variants {
             if !first {
