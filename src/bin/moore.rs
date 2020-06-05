@@ -160,6 +160,7 @@ fn main() {
 
 fn score(sess: &Session, matches: &ArgMatches) {
     use crate::name::get_name_table;
+    let svlog_arenas = svlog::GlobalArenas::default();
 
     // Prepare a list of include paths.
     let include_paths: Vec<_> = match matches.values_of("inc") {
@@ -238,7 +239,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
                 }
 
                 let lexer = svlog::lexer::Lexer::new(preproc);
-                match svlog::parser::parse(lexer) {
+                match svlog::parser::parse(lexer, &svlog_arenas.ast) {
                     Ok(x) => asts.push(score::Ast::Svlog(x)),
                     Err(()) => failed = true,
                 }
@@ -282,7 +283,6 @@ fn score(sess: &Session, matches: &ArgMatches) {
     let arenas = score::Arenas::new();
     let sb = ScoreBoard::new(&arenas);
     let vhdl_sb = vhdl::score::ScoreBoard::new(&arenas.vhdl);
-    let svlog_arenas = svlog::GlobalArenas::default();
     let svlog_sb = svlog::GlobalContext::new(&sess, &svlog_arenas);
 
     // Elaborate the requested entities or modules.

@@ -33,6 +33,7 @@ type ReportedResult<T> = Result<T, ()>;
 ///
 /// The lifetime `'n` represents nodes allocated into the the AST node arena.
 trait AbstractParser<'n> {
+    fn arena(&self) -> &'n ast::Arena<'n>;
     fn peek(&mut self, offset: usize) -> TokenAndSpan;
     fn bump(&mut self);
     fn skip(&mut self);
@@ -235,10 +236,14 @@ struct Parser<'a, 'n> {
     last_span: Span,
     severity: Severity,
     consumed: usize,
-    arena_dummy: std::marker::PhantomData<&'n ()>,
+    arena: &'n ast::Arena<'n>,
 }
 
 impl<'a, 'n> AbstractParser<'n> for Parser<'a, 'n> {
+    fn arena(&self) -> &'n ast::Arena<'n> {
+        self.arena
+    }
+
     fn peek(&mut self, offset: usize) -> TokenAndSpan {
         self.ensure_queue_filled(offset);
         if offset < self.queue.len() {
@@ -298,8 +303,8 @@ impl<'a, 'n> AbstractParser<'n> for Parser<'a, 'n> {
     }
 }
 
-impl Parser<'_, '_> {
-    fn new(input: Lexer) -> Parser {
+impl<'a, 'n> Parser<'a, 'n> {
+    fn new(input: Lexer<'a>, arena: &'n ast::Arena<'n>) -> Self {
         Parser {
             input: input,
             queue: VecDeque::new(),
@@ -307,7 +312,7 @@ impl Parser<'_, '_> {
             last_span: INVALID_SPAN,
             severity: Severity::Note,
             consumed: 0,
-            arena_dummy: Default::default(),
+            arena,
         }
     }
 
@@ -617,8 +622,8 @@ impl<
     }
 }
 
-pub fn parse(input: Lexer) -> Result<ast::SourceFile, ()> {
-    let mut p = Parser::new(input);
+pub fn parse<'n>(input: Lexer, arena: &'n ast::Arena<'n>) -> Result<ast::SourceFile<'n>, ()> {
+    let mut p = Parser::new(input, arena);
     let root = parse_source_text(&mut p);
     if p.is_error() {
         Err(())
@@ -4974,6 +4979,10 @@ impl<'tp, 'n> BranchParser<'tp, 'n> {
 }
 
 impl<'tp, 'n> AbstractParser<'n> for BranchParser<'tp, 'n> {
+    fn arena(&self) -> &'n ast::Arena<'n> {
+        self.parser.arena()
+    }
+
     fn peek(&mut self, offset: usize) -> TokenAndSpan {
         self.parser.peek(self.consumed + offset)
     }
