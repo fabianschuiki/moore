@@ -725,6 +725,13 @@ pub struct Type<'a> {
     pub dims: Vec<TypeDim<'a>>,
 }
 
+impl<'a> Type<'a> {
+    /// Check if this is an implicit type.
+    pub fn is_implicit(&self) -> bool {
+        self.kind.is_implicit()
+    }
+}
+
 /// A type without sign and packed dimensions.
 #[moore_derive::node]
 #[indefinite("type")]
@@ -775,6 +782,18 @@ pub enum TypeKind<'a> {
 
     /// Type reference, such as `type(x)` or `type(int)`.
     TypeRef(Box<TypeOrExpr<'a>>),
+}
+
+impl<'a> TypeKind<'a> {
+    /// Check if this is an implicit type.
+    pub fn is_implicit(&self) -> bool {
+        match self.data {
+            ImplicitType => true,
+            ImplicitSignedType => true,
+            ImplicitUnsignedType => true,
+            _ => false,
+        }
+    }
 }
 
 #[moore_derive::visit]
