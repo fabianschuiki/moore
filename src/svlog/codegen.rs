@@ -772,6 +772,9 @@ where
         env: ParamEnv,
         span: Span,
     ) -> Result<llhd::ir::Value> {
+        if value.ty.is_error() {
+            return Err(());
+        }
         let packed = match value.ty.get_packed() {
             Some(t) => t.resolve_full(),
             None => panic!(
