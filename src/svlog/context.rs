@@ -408,7 +408,10 @@ pub trait BaseContext<'gcx>:
 
     /// Associate an AST node with a node id.
     fn set_ast(&self, node_id: NodeId, ast: AstNode<'gcx>) {
-        self.gcx().ast_map.set(node_id, ast)
+        self.gcx().ast_map.set(node_id, ast);
+        if let Some(any) = ast.get_any() {
+            self.gcx().ast_map2.borrow_mut().insert(node_id, any);
+        }
     }
 
     /// Allocate a node id for an AST node and associate that id with the node.
@@ -460,7 +463,7 @@ pub trait BaseContext<'gcx>:
     fn ast_for_id(&self, node_id: NodeId) -> &'gcx dyn ast::AnyNode<'gcx> {
         match self.gcx().ast_map2.borrow().get(&node_id) {
             Some(&node) => node,
-            None => panic!("no AST node for {:?} registered"),
+            None => panic!("no AST node for {:?} registered", node_id),
         }
     }
 
