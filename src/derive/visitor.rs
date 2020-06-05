@@ -29,7 +29,9 @@ pub(crate) fn add_call(name: &Ident, generics: &Generics) {
     CALLS.with(|c| c.borrow_mut().push(call));
 }
 
-pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
+pub(crate) fn visitor(input: TokenStream) -> TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+
     // Flush the accumulated calls.
     let calls = CALLS.with(|c| std::mem::replace(&mut *c.borrow_mut(), Default::default()));
 
@@ -97,6 +99,7 @@ pub(crate) fn visitor(_input: TokenStream) -> TokenStream {
     let output = quote! {
         #[doc = #doc]
         pub trait Visitor<#lt> {
+            #input
             #(#pre_calls)*
             #(#post_calls)*
         }

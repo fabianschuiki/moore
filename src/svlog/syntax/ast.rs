@@ -2381,5 +2381,15 @@ pub enum PathSegment<'a> {
     Class(Spanned<Name>, Vec<ParamAssignment<'a>>),
 }
 
-moore_derive::derive_visitor!();
+moore_derive::derive_visitor!(
+    /// Called for every node before visiting its children.
+    ///
+    /// Return `false` from this function to not visit the node's children.
+    fn pre_visit_node(&mut self, node: &'a dyn AnyNode<'a>) -> bool {
+        true
+    }
+
+    /// Called for every node after visiting its children.
+    fn post_visit_node(&mut self, node: &'a dyn AnyNode<'a>) {}
+);
 moore_derive::derive_all_node!();
