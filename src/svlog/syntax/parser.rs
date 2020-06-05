@@ -1712,6 +1712,8 @@ fn parse_type_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKin
 }
 
 fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKindData<'n>> {
+    let mut span = p.peek(0).1;
+
     // Consume the enum keyword.
     p.bump();
 
@@ -1726,8 +1728,15 @@ fn parse_enum_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeKin
     let names = flanked(p, Brace, |p| {
         comma_list(p, CloseDelim(Brace), "enum name", parse_enum_name)
     })?;
+    span.expand(p.last_span());
 
-    Ok(EnumType(base, names))
+    Ok(ast::EnumType(ast::Enum::new(
+        span,
+        ast::EnumData {
+            base_type: base,
+            variants: names,
+        },
+    )))
 }
 
 fn parse_enum_name<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<EnumName<'n>> {

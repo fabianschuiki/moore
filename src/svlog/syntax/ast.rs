@@ -767,7 +767,7 @@ pub enum TypeKind<'a> {
     RealtimeType,
 
     // Enumerations
-    EnumType(Option<Box<Type<'a>>>, Vec<EnumName<'a>>),
+    EnumType(Enum<'a>),
     StructType(Struct<'a>),
 
     // Specialization

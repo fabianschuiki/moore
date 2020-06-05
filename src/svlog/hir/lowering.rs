@@ -756,7 +756,9 @@ fn lower_type<'gcx>(
             cx.map_ast_with_parent(AstNode::Type(ty.as_ref()), node_id),
             name,
         ),
-        ast::EnumType(ref repr_ty, ref names) => {
+        ast::EnumType(ref enm) => {
+            let repr_ty = &enm.base_type;
+            let names = &enm.variants;
             let mut next_rib = node_id;
             let ty = match repr_ty {
                 Some(ref ty) => {
