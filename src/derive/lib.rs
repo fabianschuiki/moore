@@ -8,6 +8,7 @@ use quote::quote;
 
 mod accept_visitor;
 mod all_node;
+mod arena;
 mod node;
 mod node_data;
 mod query;
@@ -94,4 +95,16 @@ pub fn query(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn derive_query_db(input: TokenStream) -> TokenStream {
     query::derive_query_db(input)
+}
+
+/// Generate an arena struct.
+#[proc_macro]
+pub fn derive_arena(input: TokenStream) -> TokenStream {
+    arena::derive_arena(input)
+}
+
+/// Mark an item to be allocatable in an arena.
+#[proc_macro_attribute]
+pub fn arena(args: TokenStream, input: TokenStream) -> TokenStream {
+    arena::mark_arena(args, input)
 }

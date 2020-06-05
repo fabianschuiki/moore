@@ -225,6 +225,7 @@ impl<'gcx> ty::HasTypeStorage<'gcx> for GlobalContext<'gcx> {
 #[derive(Default)]
 pub struct GlobalArenas<'t> {
     ids: TypedArena<NodeId>,
+    pub ast: ast::Arena<'t>,
     hir: hir::Arena<'t>,
     param_envs: TypedArena<ParamEnvData<'t>>,
     ribs: TypedArena<Rib>,
@@ -296,6 +297,16 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate an AST expression.
     pub fn alloc_ast_expr(&'t self, ast: ast::Expr<'t>) -> &'t ast::Expr {
         self.ast_exprs.alloc(ast)
+    }
+}
+
+/// Allow AST nodes to be allocated into `GlobalArenas`.
+impl<'t, T: 't> Alloc<'t, 't, T> for GlobalArenas<'t>
+where
+    ast::Arena<'t>: Alloc<'t, 't, T>,
+{
+    fn alloc(&'t self, value: T) -> &'t mut T {
+        self.ast.alloc(value)
     }
 }
 

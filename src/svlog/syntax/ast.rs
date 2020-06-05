@@ -2393,3 +2393,4 @@ moore_derive::derive_visitor!(
     fn post_visit_node(&mut self, node: &'a dyn AnyNode<'a>) {}
 );
 moore_derive::derive_all_node!();
+moore_derive::derive_arena!();
