@@ -1,9 +1,14 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
+use crate::crate_prelude::*;
 use crate::{
-    crate_prelude::*,
+    ast_map::AstNode,
     hir::HirNode,
-    ty::{Domain, PackedType, SbvType, Sign, Type, TypeKind, UnpackedType},
+    resolver::DefNode,
+    ty::{
+        Domain, IntAtomType, IntVecType, PackedCore, PackedType, RealType, SbvType, Sign, Type,
+        TypeKind, UnpackedCore, UnpackedType,
+    },
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
 };
@@ -86,8 +91,25 @@ pub(crate) fn type_of<'a>(
             Err(())
         }
         HirNode::VarDecl(d) => {
+            let (ast_ty, ast_name, ast_implicit_default) = match cx.ast_of(node_id)? {
+                AstNode::VarDecl(name, var, _) => (&var.ty, name, None),
+                AstNode::NetDecl(name, decl, _) => (
+                    &decl.ty,
+                    name,
+                    Some(ty::PackedCore::IntVec(ty::IntVecType::Logic)),
+                ),
+                AstNode::StructMember(name, strukt, _) => (strukt.ty.as_ref(), name, None),
+                x => unreachable!("VarDecl HIR node expanded to {:?}", x),
+            };
             if is_explicit_type(cx, d.ty)? {
-                cx.map_to_type(d.ty, env)
+                let ty = cx.unpacked_type_from_ast(
+                    Ref(&ast_ty),
+                    Ref(&ast_name.dims),
+                    env,
+                    ast_implicit_default,
+                );
+                debug!("Type of {:?} = `{}`", ast_name, ty);
+                Ok(ty.to_legacy(cx))
             } else if let Some(init) = d.init {
                 cx.type_of(init, env)
             } else if let hir::VarKind::Net { .. } = d.kind {
@@ -138,6 +160,393 @@ pub(crate) fn type_of<'a>(
                 .span(hir.span())
             )
         }
+    }
+}
+
+/// Map a type node in the AST to an packed type.
+///
+/// This is the first half of type computation, and is concerned with the type
+/// information that is usually carried on the left of a declaration name. In a
+/// separate step, the declarations extend this packed type with the unpacked
+/// dimensions provided on the right of the declaration name.
+///
+/// Note that this function nevertheless returns an `UnpackedType`, since the
+/// AST can contain types like `string` and `event`, which don't map to the
+/// `PackedType` struct.
+///
+/// If an implicit default is present, implicit types are expanded to that core
+/// type. Otherwise the mapping fails with a diagnostic.
+#[moore_derive::query]
+pub(crate) fn packed_type_from_ast<'a>(
+    cx: &impl Context<'a>,
+    ast: Ref<'a, ast::Type<'a>>,
+    env: ParamEnv,
+    implicit_default: Option<ty::PackedCore<'a>>,
+) -> &'a UnpackedType<'a> {
+    let Ref(ast) = ast;
+    debug!("Make packed type from {:?}", ast);
+    let mut failed = false;
+
+    // A simple enum that keeps either a packed or unpacked core type.
+    enum PackedOrUnpacked<'b> {
+        Packed(PackedCore<'b>),
+        Unpacked(UnpackedCore<'b>),
+    }
+    use PackedOrUnpacked::*;
+
+    // Map the type core.
+    let mut ast_sign = ast.sign;
+    let core = match ast.kind.data {
+        ast::ImplicitType | ast::ImplicitSignedType | ast::ImplicitUnsignedType => {
+            match implicit_default {
+                Some(core) => Packed(core),
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("cannot infer implicit type"))
+                            .span(ast.span())
+                            .add_note(
+                                "This usually indicates that a declaration is missing a default \
+                                 value.",
+                            ),
+                    );
+                    error!("offending implicit type is {:#1?}", ast.kind);
+                    return UnpackedType::make_error();
+                }
+            }
+        }
+        ast::VoidType => Packed(PackedCore::Void),
+
+        // Integer vector types
+        ast::BitType => Packed(PackedCore::IntVec(IntVecType::Bit)),
+        ast::LogicType => Packed(PackedCore::IntVec(IntVecType::Logic)),
+        ast::RegType => Packed(PackedCore::IntVec(IntVecType::Reg)),
+
+        // Integer atom types
+        ast::ByteType => Packed(PackedCore::IntAtom(IntAtomType::Byte)),
+        ast::ShortIntType => Packed(PackedCore::IntAtom(IntAtomType::ShortInt)),
+        ast::IntType => Packed(PackedCore::IntAtom(IntAtomType::Int)),
+        ast::IntegerType => Packed(PackedCore::IntAtom(IntAtomType::Integer)),
+        ast::LongIntType => Packed(PackedCore::IntAtom(IntAtomType::LongInt)),
+        ast::TimeType => Packed(PackedCore::IntAtom(IntAtomType::Time)),
+
+        // Real types
+        ast::ShortRealType => Unpacked(UnpackedCore::Real(RealType::ShortReal)),
+        ast::RealType => Unpacked(UnpackedCore::Real(RealType::Real)),
+        ast::RealtimeType => Unpacked(UnpackedCore::Real(RealType::RealTime)),
+
+        // Other unpacked types
+        ast::StringType => Unpacked(UnpackedCore::String),
+        ast::ChandleType => Unpacked(UnpackedCore::Chandle),
+        ast::EventType => Unpacked(UnpackedCore::Event),
+
+        // Struct types
+        ast::StructType(ref strukt) => {
+            // Assemble the struct type, with no members.
+            let mut def = ty::StructType {
+                ast: strukt,
+                ast_type: ast,
+                kind: strukt.kind,
+                members: Default::default(),
+                legacy_env: env,
+            };
+
+            // Populate the members.
+            for member in &strukt.members {
+                for name in &member.names {
+                    // Depending on whether the struct is packed or unpacked, we
+                    // admit packed or unpacked members types.
+                    let ty = if strukt.packed {
+                        cx.packed_type_from_ast(Ref(&member.ty), env, None)
+                    } else {
+                        cx.unpacked_type_from_ast(Ref(&member.ty), Ref(&name.dims), env, None)
+                    };
+
+                    def.members.push(ty::StructMember {
+                        name: Spanned::new(name.name, name.span),
+                        ty,
+                        ast_member: member,
+                        ast_name: name,
+                    });
+                }
+            }
+
+            // Keep track of the sign, and complain if the packed type itself
+            // has separate sign information.
+            if ast_sign != ast::TypeSign::None {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "`signed` or `unsigned` goes before the struct contents"
+                    ))
+                    .span(ast.span()),
+                );
+                failed = true;
+            }
+            ast_sign = strukt.signing;
+
+            // Package up as packed or unpacked struct.
+            if strukt.packed {
+                Packed(PackedCore::Struct(def))
+            } else {
+                Unpacked(UnpackedCore::Struct(def))
+            }
+        }
+
+        // Enum types
+        ast::EnumType(ref enm) => {
+            // Determine the base type, or default to int.
+            let base = match enm.base_type {
+                Some(ref ty) => {
+                    let bty = cx.packed_type_from_ast(Ref(ty), env, None);
+                    if bty.is_error() {
+                        return UnpackedType::make_error();
+                    }
+                    if let Some(packed) = bty.get_packed() {
+                        packed
+                    } else {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "enum base type must be packed, but `{}` is unpacked",
+                                bty
+                            ))
+                            .span(ty.span()),
+                        );
+                        return UnpackedType::make_error();
+                    }
+                }
+                None => SbvType::nice(ty::Domain::TwoValued, ty::Sign::Signed, 32).to_packed(cx),
+            };
+            let base_explicit = enm.base_type.is_some();
+
+            // Assemble the enum type.
+            let def = ty::EnumType {
+                ast: enm,
+                base,
+                base_explicit,
+                variants: enm.variants.iter().map(|v| (v.name, v)).collect(),
+            };
+
+            // Package up.
+            Packed(PackedCore::Enum(def))
+        }
+
+        // Named types
+        ast::NamedType(name) => {
+            // Resolve the name.
+            let loc = cx.scope_location(ast);
+            let def = match cx.resolve_local_or_error(name, loc, false) {
+                Ok(def) => def,
+                Err(()) => return UnpackedType::make_error(),
+            };
+
+            // See if the binding is a type.
+            let ty = match def.node {
+                DefNode::Ast(node) => match cx.map_to_type(node.id(), env) {
+                    Ok(x) => UnpackedType::from_legacy(cx, x),
+                    Err(()) => return UnpackedType::make_error(),
+                },
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("`{}` is not a type", name))
+                            .span(name.span)
+                            .add_note(format!("`{}` was declared here:", name))
+                            .span(def.node.span()),
+                    );
+                    return UnpackedType::make_error();
+                }
+            };
+
+            // Distinguish between packed and unpacked types here.
+            if let Some(ty) = ty.get_packed() {
+                Packed(PackedCore::Named { name, ty })
+            } else {
+                Unpacked(UnpackedCore::Named { name, ty })
+            }
+        }
+
+        // Type references
+        ast::TypeRef(ref arg) => {
+            // Disambiguate if this is a `type(<type>)` or `type(<expr>)`.
+            let arg = match cx.disamb_type_or_expr(Ref(arg)) {
+                Ok(arg) => arg,
+                Err(()) => return UnpackedType::make_error(),
+            };
+            let ty = match arg {
+                ast::TypeOrExpr::Expr(expr) => cx.need_self_determined_type(expr.id(), env),
+                ast::TypeOrExpr::Type(ty) => cx.packed_type_from_ast(Ref(ty), env, None),
+            };
+
+            // Distinguish between packed and unpacked types here.
+            if let Some(ty) = ty.get_packed() {
+                Packed(PackedCore::Ref {
+                    span: ast.kind.span(),
+                    ty,
+                })
+            } else {
+                Unpacked(UnpackedCore::Ref {
+                    span: ast.kind.span(),
+                    ty,
+                })
+            }
+        }
+
+        ast::VirtIntfType { .. }
+        | ast::MailboxType
+        | ast::SpecializedType(..)
+        | ast::ScopedType { .. } => {
+            bug_span!(ast.span(), cx, "type {:#1?} not implemented", ast.kind)
+        }
+    };
+
+    let ty = match core {
+        // Handle the packed case, which can still be extended by a sign and
+        // packed dimensions.
+        Packed(core) => {
+            let sign = match ast_sign {
+                ast::TypeSign::None => core.default_sign(),
+                ast::TypeSign::Unsigned => ty::Sign::Unsigned,
+                ast::TypeSign::Signed => ty::Sign::Signed,
+            };
+            let sign_explicit = ast_sign != ast::TypeSign::None;
+            let mut dims = vec![];
+            for dim in &ast.dims {
+                match dim {
+                    ast::TypeDim::Unsized => dims.push(ty::PackedDim::Unsized),
+                    ast::TypeDim::Range(lhs, rhs) => {
+                        match range_from_bounds_exprs(cx, lhs.id(), rhs.id(), env, ast.span()) {
+                            Ok(r) => dims.push(ty::PackedDim::Range(r)),
+                            Err(()) => {
+                                failed = true;
+                                continue;
+                            }
+                        }
+                    }
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "unpacked dimension in the position of a packed dimension",
+                            ))
+                            .span(ast.span()),
+                        );
+                        failed = true;
+                        continue;
+                    }
+                }
+            }
+            PackedType::make_sign_and_dims(cx, core, sign, sign_explicit, dims).to_unpacked(cx)
+        }
+
+        // Handle the unpacked case, where providing any sign or packed
+        // dimension is invalid.
+        Unpacked(core) => {
+            if ast_sign != ast::TypeSign::None {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "unpacked type `{}` cannot be signed or unsigned",
+                        core
+                    ))
+                    .span(ast.span()),
+                );
+                failed = true;
+            }
+            if !ast.dims.is_empty() {
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "unpacked type `{}` cannot have packed dimensions",
+                        core
+                    ))
+                    .span(ast.span()),
+                );
+                failed = true;
+            }
+            UnpackedType::make(cx, core)
+        }
+    };
+
+    if failed {
+        UnpackedType::make_error()
+    } else {
+        ty
+    }
+}
+
+/// Map a type node and unpacked dimensions in the AST to an unpacked type.
+///
+/// This is the second half of type computation. Maps the given type to a packed
+/// type first, then applies the given dimensions as unpacked dimensions.
+///
+/// If an implicit default is present, implicit types are expanded to that core
+/// type. Otherwise the mapping fails with a diagnostic.
+#[moore_derive::query]
+pub(crate) fn unpacked_type_from_ast<'a>(
+    cx: &impl Context<'a>,
+    ast_type: Ref<'a, ast::Type<'a>>,
+    ast_dims: Ref<'a, [ast::TypeDim<'a>]>,
+    env: ParamEnv,
+    implicit_default: Option<ty::PackedCore<'a>>,
+) -> &'a UnpackedType<'a> {
+    debug!("Make unpacked type from {:?} and {:?}", ast_type, ast_dims);
+    // Map the type itself.
+    let ty = cx.packed_type_from_ast(ast_type, env, implicit_default);
+
+    // Apply unpacked dimensions.
+    let mut failed = false;
+    let Ref(ast_dims) = ast_dims;
+    let mut dims = vec![];
+    for dim in ast_dims {
+        match dim {
+            ast::TypeDim::Unsized => dims.push(ty::UnpackedDim::Unsized),
+            ast::TypeDim::Expr(size) => {
+                match size_from_bounds_expr(cx, size.id(), env, ast_type.span()) {
+                    Ok(s) => dims.push(ty::UnpackedDim::Array(s)),
+                    Err(()) => {
+                        failed = true;
+                        continue;
+                    }
+                }
+            }
+            ast::TypeDim::Range(lhs, rhs) => {
+                match range_from_bounds_exprs(cx, lhs.id(), rhs.id(), env, ast_type.span()) {
+                    Ok(r) => dims.push(ty::UnpackedDim::Range(r)),
+                    Err(()) => {
+                        failed = true;
+                        continue;
+                    }
+                }
+            }
+            ast::TypeDim::Queue(Some(init_size)) => {
+                match size_from_bounds_expr(cx, init_size.id(), env, ast_type.span()) {
+                    Ok(s) => dims.push(ty::UnpackedDim::Queue(Some(s))),
+                    Err(()) => {
+                        failed = true;
+                        continue;
+                    }
+                }
+            }
+            ast::TypeDim::Queue(None) => dims.push(ty::UnpackedDim::Queue(None)),
+            ast::TypeDim::Associative(Some(ty)) => {
+                let ty = match cx.map_to_type(ty.id(), env) {
+                    Ok(x) => UnpackedType::from_legacy(cx, x),
+                    Err(()) => {
+                        failed = true;
+                        continue;
+                    }
+                };
+                dims.push(ty::UnpackedDim::Assoc(Some(ty)));
+            }
+            ast::TypeDim::Associative(None) => dims.push(ty::UnpackedDim::Assoc(None)),
+        }
+    }
+
+    // Return either an error, the unmodified type, or the type with the
+    // unpacked dimensions added.
+    if failed {
+        UnpackedType::make_error()
+    } else if dims.is_empty() {
+        ty
+    } else {
+        let mut ty = ty.clone();
+        ty.dims.extend(dims);
+        ty.intern(cx)
     }
 }
 
