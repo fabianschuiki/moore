@@ -116,6 +116,7 @@ mod param_env;
 pub mod port_list;
 mod port_mapping;
 mod resolver;
+pub mod rst;
 pub mod ty;
 pub mod typeck;
 pub mod value;
@@ -257,6 +258,7 @@ mod queries {
         param_env::*,
         port_list::*,
         resolver::*,
+        rst::*,
         ty::{Type, UnpackedType},
         typeck::*,
     };
