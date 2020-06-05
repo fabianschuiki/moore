@@ -107,22 +107,21 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         // Determine the generics that go into the key.
         struct KeyGenerics(HashSet<String>);
         impl Visit<'_> for KeyGenerics {
-            fn visit_lifetime(&mut self, arg: &syn::Lifetime) {
-                self.0.insert(arg.to_string());
+            fn visit_lifetime(&mut self, node: &syn::Lifetime) {
+                self.0.insert(node.to_string());
+                syn::visit::visit_lifetime(self, node);
             }
 
-            fn visit_generic_argument(&mut self, arg: &syn::GenericArgument) {
-                match arg {
-                    syn::GenericArgument::Lifetime(x) => {
-                        self.0.insert(x.to_string());
-                    }
-                    syn::GenericArgument::Type(syn::Type::Path(x)) => {
+            fn visit_type(&mut self, node: &syn::Type) {
+                match node {
+                    syn::Type::Path(x) => {
                         if let Some(x) = x.path.get_ident() {
                             self.0.insert(x.to_string());
                         }
                     }
                     _ => (),
                 }
+                syn::visit::visit_type(self, node);
             }
         }
 
