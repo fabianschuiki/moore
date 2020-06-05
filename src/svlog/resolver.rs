@@ -862,15 +862,24 @@ impl<'a> ast::AnyNodeData for DefNode<'a> {
 
 impl<'a> ast::BasicNode<'a> for DefNode<'a> {
     fn type_name(&self) -> &'static str {
-        "DefNode"
+        match self {
+            DefNode::Ast(node) => node.type_name(),
+            DefNode::IntPort(node) => node.ast.type_name(),
+        }
     }
 
     fn as_all(&'a self) -> syntax::ast::AllNode<'a> {
-        panic!("as_all() called on non-AST node {:?}", self);
+        match self {
+            DefNode::Ast(node) => node.as_all(),
+            DefNode::IntPort(node) => node.ast.as_all(),
+        }
     }
 
     fn as_any(&'a self) -> &'a (dyn syntax::ast::AnyNode<'a> + 'a) {
-        panic!("as_any() called on non-AST node {:?}", self);
+        match self {
+            DefNode::Ast(node) => node.as_any(),
+            DefNode::IntPort(node) => node.ast.as_any(),
+        }
     }
 }
 
