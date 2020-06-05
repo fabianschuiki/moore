@@ -165,8 +165,15 @@ mod crate_prelude {
 /// This reference is useful when querying the compiler database for information
 /// about a node. It compares the reference *by pointer address*, thus allowing
 /// for pessimistic compiler queries.
-#[derive(Copy, Clone)]
 pub struct Ref<'a, T: 'a + ?Sized>(&'a T);
+
+impl<'a, T: ?Sized> Copy for Ref<'a, T> {}
+
+impl<'a, T: ?Sized> Clone for Ref<'a, T> {
+    fn clone(&self) -> Self {
+        Ref(self.0)
+    }
+}
 
 impl<'a, T: ?Sized> From<&'a T> for Ref<'a, T> {
     fn from(r: &'a T) -> Ref<'a, T> {
@@ -211,15 +218,6 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         std::fmt::Display::fmt(self.0, f)
-    }
-}
-
-impl<T: ?Sized> std::fmt::Binary for Ref<'_, T>
-where
-    T: std::fmt::Binary,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::Binary::fmt(self.0, f)
     }
 }
 
