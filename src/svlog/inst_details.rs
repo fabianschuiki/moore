@@ -23,7 +23,7 @@ pub struct InstDetails<'a> {
     /// The target details.
     pub target: Arc<InstTargetDetails<'a>>,
     /// The port connections.
-    pub ports: Arc<PortMapping>,
+    pub ports: Arc<PortMapping<'a>>,
 }
 
 impl<'a> Deref for InstDetails<'a> {

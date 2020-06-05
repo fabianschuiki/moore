@@ -256,15 +256,17 @@ mod queries {
     use crate::crate_prelude::*;
     use crate::{
         param_env::*,
-        port_list::*,
+        port_list::{self, *},
+        port_mapping::*,
         resolver::*,
         rst::*,
-        ty::{Type, UnpackedType},
+        ty::UnpackedType,
         typeck::*,
     };
     use std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
+        sync::Arc,
     };
 
     moore_derive::derive_query_db! {

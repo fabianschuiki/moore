@@ -1711,28 +1711,19 @@ pub enum SubroutinePortDir {
     ConstRef,
 }
 
-#[moore_derive::visit]
+/// A net declaration.
+///
+/// For example `wire x, y, z`.
+#[moore_derive::node]
+#[indefinite("net declaration")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetDecl<'a> {
-    pub span: Span,
     pub net_type: NetType,
     pub strength: Option<NetStrength>,
     pub kind: NetKind,
     pub ty: Type<'a>,
     pub delay: Option<DelayControl<'a>>,
     pub names: Vec<VarDeclName<'a>>,
-}
-
-impl HasSpan for NetDecl<'_> {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl HasDesc for NetDecl<'_> {
-    fn desc(&self) -> &'static str {
-        "net declaration"
-    }
 }
 
 #[moore_derive::visit]

@@ -10,7 +10,7 @@ module foo;
         signed'(y);
     end
     // CHECK: 7: cast_type(unsigned'(x)) = int unsigned
-    // CHECK: 8: cast_type(unsigned'(y)) = bit
-    // CHECK: 9: cast_type(signed'(x)) = int
+    // CHECK: 8: cast_type(unsigned'(y)) = bit unsigned
+    // CHECK: 9: cast_type(signed'(x)) = int signed
     // CHECK: 10: cast_type(signed'(y)) = bit signed
 endmodule

@@ -2,13 +2,13 @@
 
 use crate::crate_prelude::*;
 use crate::{
-    ast_map::AstNode,
     common::arenas::Alloc,
     hir::HirNode,
+    port_list,
     resolver::DefNode,
     ty::{
-        Domain, IntAtomType, IntVecType, PackedCore, PackedType, RealType, SbvType, Sign, Type,
-        TypeKind, UnpackedCore, UnpackedType,
+        Domain, IntAtomType, IntVecType, PackedCore, PackedType, RealType, SbvType, Sign,
+        UnpackedCore, UnpackedType,
     },
     value::ValueKind,
     ParamEnv, ParamEnvBinding,
@@ -21,136 +21,54 @@ pub(crate) fn type_of<'a>(
     cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<Type<'a>> {
+) -> Result<&'a UnpackedType<'a>> {
+    // Handle the cases we can already do on the AST.
+    let ast = cx.ast_for_id(node_id);
+    match ast.as_all() {
+        ast::AllNode::VarDeclName(name) => match name.get_parent().unwrap().as_all() {
+            ast::AllNode::VarDecl(..) => return Ok(cx.type_of_var_decl(Ref(name), env)),
+            ast::AllNode::NetDecl(..) => return Ok(cx.type_of_net_decl(Ref(name), env)),
+            ast::AllNode::StructMember(..) => return Ok(cx.type_of_struct_member(Ref(name), env)),
+            x => bug_span!(ast.span(), cx, "VarDeclName with weird parent {:?}", x),
+        },
+        ast::AllNode::ParamValueDecl(x) => return Ok(cx.type_of_value_param(Ref(x), env)),
+        _ => (),
+    };
+
+    // Handle all the other cases.
     let hir = cx.hir_of(node_id)?;
     #[allow(unreachable_patterns)]
     match hir {
-        HirNode::IntPort(p) => match &p.data {
-            Some(data) => Ok(cx
-                .packed_type_from_ast(
-                    Ref(cx.ast_for_id(data.ty).as_all().get_type().unwrap()),
-                    env,
-                    None,
-                )
-                .to_legacy(cx)),
-            None => {
-                // Resolve the port to a net/var decl in the module, then use
-                // that decl's type.
-                let decl_id = cx.resolve_node(node_id, env)?;
-                cx.type_of(decl_id, env)
-            }
-        },
-        HirNode::ExtPort(p) => {
-            if p.exprs.len() == 1 {
-                let expr = &p.exprs[0];
-                if !expr.selects.is_empty() {
-                    bug_span!(
-                        p.span,
-                        cx,
-                        "port{} contains a `[...]` selection; not yet supported in typeck",
-                        p.name
-                            .map(|n| format!(" `{}`", n))
-                            .unwrap_or_else(String::new)
-                    );
-                }
-                let module = match cx.hir_of(p.module)? {
-                    HirNode::Module(m) => m,
-                    _ => unreachable!(),
-                };
-                cx.type_of(module.ports_new.int[expr.port].id, env)
-            } else {
-                bug_span!(
-                    p.span,
-                    cx,
-                    "port{} is a concatenation; not yet supported in typeck",
-                    p.name
-                        .map(|n| format!(" `{}`", n))
-                        .unwrap_or_else(String::new)
-                );
-            }
+        HirNode::IntPort(p) => Ok(cx.type_of_int_port(Ref(p), env)),
+        HirNode::ExtPort(p) => Ok(cx.type_of_ext_port(Ref(p), env)),
+        HirNode::Expr(_) => Ok(cx.cast_type(node_id, env).unwrap().ty),
+        HirNode::GenvarDecl(_) => {
+            Ok(SbvType::nice(ty::Domain::TwoValued, ty::Sign::Signed, 32).to_unpacked(cx))
         }
-        HirNode::Expr(_) => Ok(cx.cast_type(node_id, env).unwrap().ty.to_legacy(cx)),
-        HirNode::ValueParam(p) => {
-            let ast = cx
-                .ast_for_id(node_id)
-                .as_all()
-                .get_param_value_decl()
-                .unwrap();
-            if !ast.ty.is_implicit() {
-                return Ok(cx
-                    .unpacked_type_from_ast(Ref(&ast.ty), Ref(&ast.dims), env, None)
-                    .to_legacy(cx));
-            }
-            let env_data = cx.param_env_data(env);
-            match env_data.find_value(node_id) {
-                Some(ParamEnvBinding::Indirect(assigned_id)) => {
-                    return cx.type_of(assigned_id.id(), assigned_id.env())
-                }
-                Some(ParamEnvBinding::Direct(t)) => return Ok(t.ty.to_legacy(cx)),
-                _ => (),
-            }
-            if let Some(default) = p.default {
-                return cx.type_of(default, env);
-            }
-            cx.emit(
-                DiagBuilder2::error(format!(
-                    "{} has implicit type but was not assigned and has no default",
-                    p.desc_full()
-                ))
-                .span(p.human_span())
-                .add_note("specify a type for the parameter; or")
-                .add_note("add a default value for the parameter; or")
-                .add_note("override the parameter from outside"),
-            );
-            Err(())
-        }
-        HirNode::VarDecl(d) => {
-            let (ast_ty, ast_name, ast_implicit_default) = match cx.ast_of(node_id)? {
-                AstNode::VarDecl(name, var, _) => (&var.ty, name, None),
-                AstNode::NetDecl(name, decl, _) => (
-                    &decl.ty,
-                    name,
-                    Some(ty::PackedCore::IntVec(ty::IntVecType::Logic)),
-                ),
-                AstNode::StructMember(name, strukt, _) => (strukt.ty.as_ref(), name, None),
-                x => unreachable!("VarDecl HIR node expanded to {:?}", x),
-            };
-            if is_explicit_type(cx, d.ty)? {
-                // let ast_ty = &ast_name.get_parent().unwrap().as_all().get_var_decl().unwrap().ty;
-                let ty = cx.unpacked_type_from_ast(
-                    Ref(&ast_ty),
-                    Ref(&ast_name.dims),
-                    env,
-                    ast_implicit_default,
-                );
-                debug!("Type of {:?} = `{}`", ast_name, ty);
-                Ok(ty.to_legacy(cx))
-            } else if let Some(init) = d.init {
-                cx.type_of(init, env)
-            } else if let hir::VarKind::Net { .. } = d.kind {
-                Ok(&ty::LOGIC_TYPE)
-            } else {
-                cx.emit(
-                    DiagBuilder2::error(format!(
-                        "{} has implicit type but is not initialized",
-                        d.desc_full()
-                    ))
-                    .span(d.human_span())
-                    .add_note("specify a type for the variable; or")
-                    .add_note("add an initial value"),
-                );
-                Err(())
-            }
-        }
-        HirNode::GenvarDecl(_) => Ok(&ty::INT_TYPE),
-        HirNode::EnumVariant(v) => Ok(cx
-            .packed_type_from_ast(
-                Ref(cx.ast_for_id(v.enum_id).as_all().get_type().unwrap()),
+        HirNode::EnumVariant(v) => {
+            let ty = cx.packed_type_from_ast(
+                Ref(cx
+                    .ast_for_id(v.enum_id)
+                    .as_all()
+                    .get_type()
+                    .expect("enum_id should resolve to a type")),
                 env,
                 None,
-            )
-            .to_legacy(cx)),
-        HirNode::Package(_) => Ok(&ty::VOID_TYPE),
+            );
+            if ty.is_error() {
+                return Ok(ty);
+            }
+            let packed = match ty.resolve_full().core {
+                ty::UnpackedCore::Packed(p) => p,
+                _ => panic!("enum type should have a packed core; got `{}`", ty),
+            };
+            let enm = match packed.resolve_full().core {
+                ty::PackedCore::Enum(ref e) => e,
+                _ => panic!("enum type should actually be an enum; got `{}`", packed),
+            };
+            Ok(enm.base.to_unpacked(cx))
+        }
+        HirNode::Package(_) => Ok(UnpackedType::make_void()),
         HirNode::Assign(_) => unreachable!("has no type: {:?}", hir),
         _ => {
             error!("{:#?}", hir);
@@ -164,6 +82,203 @@ pub(crate) fn type_of<'a>(
             )
         }
     }
+}
+
+/// Determine the type of an internal port.
+#[moore_derive::query]
+pub(crate) fn type_of_int_port<'a>(
+    cx: &impl Context<'a>,
+    Ref(port): Ref<'a, port_list::IntPort<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    match port.data {
+        Some(ref data) => cx.packed_type_from_ast(Ref(data.ty), env, None),
+        None => {
+            // Resolve the port to a net/var decl in the module, then use
+            // that decl's type.
+            cx.resolve_node(port.id, env)
+                .and_then(|decl_id| cx.type_of(decl_id, env))
+                .unwrap_or(UnpackedType::make_error())
+        }
+    }
+}
+
+/// Determine the type of an external port.
+#[moore_derive::query]
+pub(crate) fn type_of_ext_port<'a>(
+    cx: &impl Context<'a>,
+    Ref(port): Ref<'a, port_list::ExtPort<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    if port.exprs.len() == 1 {
+        let expr = &port.exprs[0];
+        if !expr.selects.is_empty() {
+            bug_span!(
+                port.span,
+                cx,
+                "port{} contains a `[...]` selection; not yet supported in typeck",
+                port.name
+                    .map(|n| format!(" `{}`", n))
+                    .unwrap_or_else(String::new)
+            );
+        }
+        let port_list = cx.module_ports(port.module);
+        cx.type_of_int_port(Ref(&port_list.int[expr.port]), env)
+    } else {
+        bug_span!(
+            port.span,
+            cx,
+            "port{} is a concatenation; not yet supported in typeck",
+            port.name
+                .map(|n| format!(" `{}`", n))
+                .unwrap_or_else(String::new)
+        );
+    }
+}
+
+/// Determine the type of a variable declaration.
+#[moore_derive::query]
+pub(crate) fn type_of_var_decl<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, ast::VarDeclName<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    let ast_decl = ast
+        .get_parent()
+        .unwrap()
+        .as_all()
+        .get_var_decl()
+        .expect("parent not a VarDecl");
+    type_of_varlike(cx, ast_decl, &ast_decl.ty, ast, &ast.dims, env)
+}
+
+/// Determine the type of a net declaration.
+#[moore_derive::query]
+pub(crate) fn type_of_net_decl<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, ast::VarDeclName<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    let ast_decl = ast
+        .get_parent()
+        .unwrap()
+        .as_all()
+        .get_net_decl()
+        .expect("parent not a NetDecl");
+    type_of_varlike(cx, ast_decl, &ast_decl.ty, ast, &ast.dims, env)
+}
+
+/// Determine the type of a struct member.
+#[moore_derive::query]
+pub(crate) fn type_of_struct_member<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, ast::VarDeclName<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    let ast_member = ast
+        .get_parent()
+        .unwrap()
+        .as_all()
+        .get_struct_member()
+        .expect("parent not a StructMember");
+    type_of_varlike(cx, ast_member, &ast_member.ty, ast, &ast.dims, env)
+}
+
+/// Determine the type of something variable-like. This includes variable and
+/// net declarations, as well as struct fields.
+fn type_of_varlike<'a>(
+    cx: &impl Context<'a>,
+    ast_decl: &'a dyn ast::AnyNode<'a>,
+    ast_ty: &'a ast::Type<'a>,
+    ast_name: &'a ast::VarDeclName<'a>,
+    ast_dims: &'a [ast::TypeDim<'a>],
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    // If this is a net declaration, we map implicit types to the default net
+    // type.
+    let ast_implicit_default = if ast_decl.as_all().is_net_decl() {
+        Some(ty::PackedCore::IntVec(ty::IntVecType::Logic))
+    } else {
+        None
+    };
+
+    // Handle the trivial case where the type is explicit.
+    if !ast_ty.is_implicit() || ast_implicit_default.is_some() {
+        return cx.unpacked_type_from_ast(Ref(ast_ty), Ref(ast_dims), env, ast_implicit_default);
+    }
+
+    // Handle the case where the type is implicit, but we can infer it from the
+    // initial value.
+    if let Some(init) = &ast_name.init {
+        let hir = match cx.hir_of(init.id()) {
+            Ok(HirNode::Expr(e)) => e,
+            Err(()) => return UnpackedType::make_error(),
+            _ => unreachable!(),
+        };
+        return cx.type_of_expr(Ref(hir), env);
+    }
+
+    // Otherwise complain.
+    cx.emit(
+        DiagBuilder2::error(format!(
+            "`{}` has implicit type but is not initialized",
+            ast_name.name
+        ))
+        .span(ast_name.name_span)
+        .add_note("specify a type or add an initial value"),
+    );
+    UnpackedType::make_error()
+}
+
+/// Determine the type of a value parameter.
+#[moore_derive::query]
+pub(crate) fn type_of_value_param<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, ast::ParamValueDecl<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    // Handle the trivial case where the type is explicit.
+    if !ast.ty.is_implicit() {
+        return cx.unpacked_type_from_ast(Ref(&ast.ty), Ref(&ast.dims), env, None);
+    }
+
+    // Otherwise see what the parameter is bound to, an use that for the type.
+    let env_data = cx.param_env_data(env);
+    match env_data.find_value(ast.id()) {
+        Some(ParamEnvBinding::Indirect(assigned_id)) => {
+            let hir = match cx.hir_of(assigned_id.id()) {
+                Ok(HirNode::Expr(e)) => e,
+                Err(()) => return UnpackedType::make_error(),
+                _ => unreachable!(),
+            };
+            return cx.type_of_expr(Ref(hir), assigned_id.env());
+        }
+        Some(ParamEnvBinding::Direct(t)) => return t.ty,
+        _ => (),
+    }
+
+    // Otherwise try to infer the type from the default expression.
+    if let Some(ref expr) = ast.expr {
+        let hir = match cx.hir_of(expr.id()) {
+            Ok(HirNode::Expr(e)) => e,
+            Err(()) => return UnpackedType::make_error(),
+            _ => unreachable!(),
+        };
+        return cx.type_of_expr(Ref(hir), env);
+    }
+
+    // Otherwise complain.
+    cx.emit(
+        DiagBuilder2::error(format!(
+            "{} has implicit type but was not assigned and has no default",
+            ast
+        ))
+        .span(ast.human_span())
+        .add_note("specify a type for the parameter; or")
+        .add_note("add a default value for the parameter; or")
+        .add_note("override the parameter from outside"),
+    );
+    UnpackedType::make_error()
 }
 
 /// Map an AST node to the type it represents.
@@ -255,7 +370,6 @@ pub(crate) fn packed_type_from_ast<'a>(
     implicit_default: Option<ty::PackedCore<'a>>,
 ) -> &'a UnpackedType<'a> {
     let Ref(ast) = ast;
-    debug!("Make packed type from {:?}", ast);
     let mut failed = false;
 
     // A simple enum that keeps either a packed or unpacked core type.
@@ -556,7 +670,6 @@ pub(crate) fn unpacked_type_from_ast<'a>(
     env: ParamEnv,
     implicit_default: Option<ty::PackedCore<'a>>,
 ) -> &'a UnpackedType<'a> {
-    debug!("Make unpacked type from {:?} and {:?}", ast_type, ast_dims);
     // Map the type itself.
     let ty = cx.packed_type_from_ast(ast_type, env, implicit_default);
 
@@ -726,14 +839,6 @@ pub(crate) fn type_of_expr<'a>(
     }
 }
 
-/// Check if a type (given by its node id) is explicit.
-fn is_explicit_type<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<bool> {
-    Ok(match cx.hir_of(node_id)? {
-        HirNode::Type(x) => x.is_explicit(),
-        _ => false,
-    })
-}
-
 /// Get the cast type of a node.
 #[moore_derive::query]
 pub(crate) fn cast_type<'a>(
@@ -746,17 +851,18 @@ pub(crate) fn cast_type<'a>(
         Err(()) => return Some(ty::UnpackedType::make_error().into()),
     };
     match hir {
-        HirNode::Expr(e) => Some(cast_expr_type(cx, e, env)),
+        HirNode::Expr(e) => Some(cx.cast_expr_type(Ref(e), env)),
         _ => None,
     }
 }
 
 /// Get the cast type of an expression.
-fn cast_expr_type<'gcx>(
-    cx: &impl Context<'gcx>,
-    expr: &'gcx hir::Expr,
+#[moore_derive::query]
+pub(crate) fn cast_expr_type<'a>(
+    cx: &impl Context<'a>,
+    Ref(expr): Ref<'a, hir::Expr>,
     env: ParamEnv,
-) -> CastType<'gcx> {
+) -> CastType<'a> {
     let cast = cast_expr_type_inner(cx, expr, env);
     if cx.sess().has_verbosity(Verbosity::CASTS) && !cast.is_error() && !cast.casts.is_empty() {
         let mut d =
@@ -1120,7 +1226,6 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::Ident(_) | hir::ExprKind::Scope(..) => Some(
             cx.resolve_node(expr.id, env)
                 .and_then(|x| cx.type_of(x, env))
-                .map(|ty| UnpackedType::from_legacy(cx, ty))
                 .unwrap_or(UnpackedType::make_error()),
         ),
 
@@ -1252,7 +1357,6 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::Field(..) => Some(
             cx.resolve_field_access(expr.id, env)
                 .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
-                .map(|ty| UnpackedType::from_legacy(cx, ty))
                 .unwrap_or(UnpackedType::make_error()),
         ),
 
@@ -1735,25 +1839,17 @@ pub(crate) fn type_context<'a>(
                 None
             }
         }
-        HirNode::IntPort(hir::IntPort { data: Some(v), .. }) if v.default == Some(onto) => {
-            let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
-            if !ty.is_implicit() {
-                Some(
-                    cx.type_of(hir_id, env)
-                        .map(|ty| UnpackedType::from_legacy(cx, ty))
-                        .unwrap_or(UnpackedType::make_error())
-                        .into(),
-                )
-            } else {
-                None
+        HirNode::IntPort(p) => match p.data {
+            Some(ref v) if v.default == Some(onto) && !v.ty.is_implicit() => {
+                Some(cx.type_of_int_port(Ref(p), env).into())
             }
-        }
+            _ => None,
+        },
         HirNode::VarDecl(v) if v.init == Some(onto) => {
             let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
             if !ty.is_implicit() {
                 Some(
                     cx.type_of(hir_id, env)
-                        .map(|ty| UnpackedType::from_legacy(cx, ty))
                         .unwrap_or(UnpackedType::make_error())
                         .into(),
                 )
@@ -1766,7 +1862,6 @@ pub(crate) fn type_context<'a>(
             if !ty.is_implicit() {
                 Some(
                     cx.type_of(hir_id, env)
-                        .map(|ty| UnpackedType::from_legacy(cx, ty))
                         .unwrap_or(UnpackedType::make_error())
                         .into(),
                 )
@@ -1779,8 +1874,15 @@ pub(crate) fn type_context<'a>(
             details
                 .ports
                 .reverse_find(onto)
-                .and_then(|id| cx.type_of(id, details.inner_env).ok())
-                .map(|ty| UnpackedType::from_legacy(cx, ty))
+                .map(|id| {
+                    trace!(
+                        "Need to look up type of port {:?} {:?}, imposed on {:?}",
+                        id,
+                        details.inner_env,
+                        onto
+                    );
+                    cx.type_of_ext_port(Ref(id), details.inner_env)
+                })
                 .map(Into::into)
         }
         HirNode::InstTarget(inst) => {
@@ -1789,7 +1891,6 @@ pub(crate) fn type_context<'a>(
                 .params
                 .reverse_find_value(onto)
                 .and_then(|param_id| cx.type_of(param_id, details.inner_env).ok())
-                .map(|ty| UnpackedType::from_legacy(cx, ty))
                 .map(Into::into)
         }
         _ => None,
@@ -2028,7 +2129,7 @@ fn type_context_imposed_by_expr<'gcx>(
         hir::ExprKind::Index(target, _) if onto == target => {
             let opty = cx.need_operation_type(expr.id, env);
             debug!(
-                "Imposing opty `{}` on `{}`",
+                "Imposing operation type `{}` on `{}`",
                 opty,
                 cx.span(target).extract()
             );
@@ -2044,76 +2145,50 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
     onto: NodeId,
     expr: &'gcx hir::Expr,
     args: &[NodeId],
-    repeat: usize,
+    _repeat: usize,
     env: ParamEnv,
 ) -> Option<TypeContext<'gcx>> {
     let index = args.iter().position(|&n| n == onto)?;
-    let ty = cx.need_type_context(expr.id, env).ty();
+    let ty = cx.cast_expr_type(Ref(expr), env).init;
     if ty.is_error() {
         return Some(UnpackedType::make_error().into());
     }
-    let legacy = ty.to_legacy(cx);
-    trace!(
-        "Pattern `{}` has type `{}`, legacy type is `{}`",
-        cx.span(expr.id).extract(),
-        ty,
-        legacy
-    );
-    match *legacy.resolve_name() {
-        TypeKind::PackedArray(_, elty) => Some(UnpackedType::from_legacy(cx, elty).into()),
-        TypeKind::BitScalar { .. } => Some(ty.into()),
-        TypeKind::BitVector { .. } => Some(ty.into()),
-        TypeKind::Struct(_) if repeat != 1 => {
-            bug_span!(
-                expr.span,
-                cx,
-                "struct patterns with repeat count other than 1 not supported",
-            );
-        }
-        TypeKind::Struct(def_id) => {
-            // TODO: This code shares quite some similarity with the one
-            // in HIR lowering. It would be much smarter to create an
-            // intermediate struct that distills patterns into proper
-            // array/struct mappings, such that misalignments are
-            // handled early on, and these type checks become easier.
-            let def = match cx.struct_def(def_id.id()) {
-                Ok(d) => d,
-                Err(()) => return Some(UnpackedType::make_error().into()),
-            };
-            if args.len() > def.fields.len() {
-                cx.emit(
-                    DiagBuilder2::error(format!(
-                        "pattern has {} fields, but type `{}` requires {}",
-                        args.len(),
-                        ty,
-                        def.fields.len()
-                    ))
-                    .span(expr.span),
-                );
-            }
-            Some(
-                cx.packed_type_from_ast(
-                    Ref(cx
-                        .ast_for_id(def.fields[index].ty)
-                        .as_all()
-                        .get_type()
-                        .unwrap()),
-                    def_id.env(),
-                    None,
-                )
-                .into(),
-            )
-        }
-        _ => {
-            bug_span!(
-                expr.span,
-                cx,
-                "type context for field {} of positional pattern with invalid type `{}`",
-                ty,
-                index
-            );
-        }
+
+    // Handle arrays.
+    if let Some(_dim) = ty.outermost_dim() {
+        let elty = ty.pop_dim(cx).unwrap();
+        return Some(elty.into());
     }
+
+    // Handle structs.
+    if let Some(strukt) = ty.get_struct() {
+        if args.len() > strukt.members.len() {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "pattern has {} fields, but type `{}` requires {}",
+                    args.len(),
+                    ty,
+                    strukt.members.len()
+                ))
+                .span(expr.span),
+            );
+        }
+        return Some(strukt.members[index].ty.into());
+    }
+
+    // Handle SBVTs.
+    if let Some(sbv) = ty.get_simple_bit_vector() {
+        return Some(sbv.change_size(1).to_unpacked(cx).into());
+    }
+
+    bug_span!(
+        expr.span,
+        cx,
+        "type context for field `{}` of positional pattern with invalid type `{}`; should have \
+         been caught by type check of the pattern",
+        ty,
+        index
+    );
 }
 
 /// Get the type context imposed by a statement.

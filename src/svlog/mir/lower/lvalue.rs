@@ -74,18 +74,20 @@ fn try_lower_expr<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     expr_id: NodeId,
 ) -> Result<&'gcx Lvalue<'gcx>> {
-    // Determine the expression type.
-    let ty = UnpackedType::from_legacy(builder.cx, builder.cx.type_of(expr_id, builder.env)?);
-
     // Try to extract the expr HIR for this node. Handle a few special cases
     // where the node is not technically an expression, but can be used as a
     // lvalue.
-    let hir = match builder.cx.hir_of(expr_id)? {
-        HirNode::Expr(x) => x,
-        HirNode::VarDecl(decl) => return Ok(builder.build(ty, LvalueKind::Var(decl.id))),
-        HirNode::IntPort(port) => return Ok(builder.build(ty, LvalueKind::Port(port.id))),
-        x => unreachable!("lvalue for {:#?}", x),
+    let hir = match builder.cx.hir_of(expr_id) {
+        Ok(HirNode::Expr(x)) => x,
+        Ok(x) => bug_span!(builder.span, builder.cx, "no lvalue for {:?}", x),
+        Err(_) => return Ok(builder.error()),
     };
+
+    // Determine the expression type.
+    let ty = builder.cx.type_of_expr(Ref(hir), builder.env);
+    if ty.is_error() {
+        return Ok(builder.error());
+    }
 
     // Match on the various forms.
     match hir.kind {
@@ -93,12 +95,20 @@ fn try_lower_expr<'gcx>(
         // the resolved node to an MIR node.
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = builder.cx.resolve_node(expr_id, builder.env)?;
-            match builder.cx.hir_of(binding)? {
-                HirNode::VarDecl(..) | HirNode::IntPort(..) => {
-                    return try_lower_expr(builder, binding);
+            return match builder.cx.hir_of(binding)? {
+                HirNode::VarDecl(decl) => Ok(builder.build(ty, LvalueKind::Var(decl.id))),
+                HirNode::IntPort(port) => Ok(builder.build(ty, LvalueKind::Port(port.id))),
+                x => {
+                    builder.cx.emit(
+                        DiagBuilder2::error(format!(
+                            "{} cannot be used as the target of an assignment",
+                            x.desc_full()
+                        ))
+                        .span(builder.span),
+                    );
+                    Err(())
                 }
-                _ => (),
-            }
+            };
         }
 
         hir::ExprKind::Index(target, mode) => {

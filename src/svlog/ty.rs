@@ -648,10 +648,14 @@ impl<'a> PackedType<'a> {
 
     /// Check if this type will coalesce to a scalar type in LLHD, like `i42`.
     pub fn coalesces_to_llhd_scalar(&self) -> bool {
-        !self.is_time()
-            && (self.resolve_full().is_simple_bit_vector()
-                || self.is_integer_atom()
-                || self.is_single_bit())
+        if let Some(enm) = self.get_enum() {
+            enm.base.coalesces_to_llhd_scalar()
+        } else {
+            !self.is_time()
+                && (self.resolve_full().is_simple_bit_vector()
+                    || self.is_integer_atom()
+                    || self.is_single_bit())
+        }
     }
 
     /// Convert this type into an SBVT if possible.
@@ -717,6 +721,14 @@ impl<'a> PackedType<'a> {
     pub fn get_struct(&self) -> Option<&StructType<'a>> {
         match self.resolve_full().core {
             PackedCore::Struct(ref x) if self.resolve_full().dims.is_empty() => Some(x),
+            _ => None,
+        }
+    }
+
+    /// Get the underlying enum, or `None` if the type is no enum.
+    pub fn get_enum(&self) -> Option<&EnumType<'a>> {
+        match self.resolve_full().core {
+            PackedCore::Enum(ref x) if self.resolve_full().dims.is_empty() => Some(x),
             _ => None,
         }
     }
@@ -1472,6 +1484,11 @@ impl<'a> UnpackedType<'a> {
         }
     }
 
+    /// Get the underlying enum, or `None` if the type is no enum.
+    pub fn get_enum(&self) -> Option<&EnumType<'a>> {
+        self.get_packed().and_then(|packed| packed.get_enum())
+    }
+
     /// Helper function to format this type around a declaration name.
     fn format_around(
         &self,
@@ -1617,7 +1634,7 @@ impl Display for UnpackedDim<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Unsized => write!(f, "[]"),
-            Self::Array(x) => write!(f, "{}", x),
+            Self::Array(x) => write!(f, "[{}]", x),
             Self::Range(x) => write!(f, "{}", x),
             Self::Assoc(Some(x)) => write!(f, "[{}]", x),
             Self::Assoc(None) => write!(f, "[*]"),
@@ -2378,8 +2395,13 @@ impl<'t> TypeKind<'t> {
                 };
                 let mut size = 0;
                 for &field in fields {
-                    size +=
-                        bit_size_of_type(cx, cx.type_of(field, struct_id.env())?, struct_id.env())?;
+                    size += cx
+                        .map_to_type(
+                            Ref(cx.ast_for_id(field).as_all().get_var_decl_name().unwrap()),
+                            struct_id.env(),
+                        )
+                        .and_then(|ty| ty.get_bit_size())
+                        .unwrap();
                 }
                 Ok(size)
             }

@@ -5173,15 +5173,17 @@ fn parse_net_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<NetDecl<
     }
 
     span.expand(p.last_span());
-    Ok(NetDecl {
-        span: span,
-        net_type: net_type,
-        strength: strength,
-        kind: kind,
-        ty: ty,
-        delay: delay,
-        names: names,
-    })
+    Ok(ast::NetDecl::new(
+        span,
+        ast::NetDeclData {
+            net_type,
+            strength,
+            kind,
+            ty,
+            delay,
+            names,
+        },
+    ))
 }
 
 fn try_drive_strength<'n>(

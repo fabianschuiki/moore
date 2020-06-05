@@ -88,17 +88,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut outputs = Vec::new();
         let mut port_id_to_name = HashMap::new();
         for port in &hir.ports_new.int {
-            let ty = UnpackedType::from_legacy(self.cx, self.type_of(port.id, env)?);
+            let ty = self.type_of_int_port(Ref(port), env);
             debug!("port `{}.{}` has type `{}`", hir.name, port.name, ty);
             let ty = llhd::signal_ty(self.emit_type(ty, env)?);
             match port.dir {
                 ast::PortDir::Input | ast::PortDir::Ref => {
                     sig.add_input(ty);
-                    inputs.push(port.id);
+                    inputs.push(port);
                 }
                 ast::PortDir::Inout | ast::PortDir::Output => {
                     sig.add_output(ty);
-                    outputs.push(port.id);
+                    outputs.push(port);
                 }
             }
             port_id_to_name.insert(port.id, port.name);
@@ -130,26 +130,26 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
 
         // Assign proper port names and collect ports into a lookup table.
-        for (index, port_id) in inputs.into_iter().enumerate() {
+        for (index, port) in inputs.into_iter().enumerate() {
             let arg = gen.builder.input_arg(index);
             gen.builder
-                .set_name(arg, port_id_to_name[&port_id].value.to_string());
-            gen.values.insert(port_id, arg);
+                .set_name(arg, port_id_to_name[&port.id].value.to_string());
+            gen.values.insert(port.id, arg);
         }
-        for (index, &port_id) in outputs.iter().enumerate() {
+        for (index, &port) in outputs.iter().enumerate() {
             let arg = gen.builder.output_arg(index);
             gen.builder
-                .set_name(arg, port_id_to_name[&port_id].value.to_string());
-            gen.values.insert(port_id, arg);
+                .set_name(arg, port_id_to_name[&port.id].value.to_string());
+            gen.values.insert(port.id, arg);
         }
 
         // Emit the actual contents of the entity.
         gen.emit_module_block(id, env, &hir.block, &entity_name)?;
 
         // Assign default values to undriven output ports.
-        for port_id in outputs {
+        for port in outputs {
             let driven = {
-                let value = gen.values[&port_id];
+                let value = gen.values[&port.id];
                 gen.builder
                     .all_insts()
                     .any(|inst| match gen.builder[inst].opcode() {
@@ -161,11 +161,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             if driven {
                 continue;
             }
-            let hir = match gen.hir_of(port_id)? {
-                HirNode::IntPort(p) => p,
-                _ => unreachable!(),
-            };
-            let port_data = match &hir.data {
+            let port_data = match &port.data {
                 Some(data) => data,
                 None => continue,
             };
@@ -173,19 +169,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 if let Some(default) = port_data.default {
                     gen.constant_value_of(default, env)?
                 } else {
-                    gen.type_default_value(ty::UnpackedType::from_legacy(
-                        gen.cx,
-                        gen.type_of(port_id, env)?,
-                    ))
+                    gen.type_default_value(gen.type_of_int_port(Ref(port), env))
                 },
                 env,
-                gen.span(port_data.default.unwrap_or(port_id)),
+                port.span(),
             )?;
             let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
             let zero_time = gen.builder.ins().const_time(zero_time);
             gen.builder
                 .ins()
-                .drv(gen.values[&port_id], default_value, zero_time);
+                .drv(gen.values[&port.id], default_value, zero_time);
         }
 
         trace!("{}", gen.builder.unit());
@@ -213,17 +206,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut inputs = vec![];
         let mut outputs = vec![];
         for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
-            sig.add_input(llhd::signal_ty(self.emit_type(
-                UnpackedType::from_legacy(self.cx, self.type_of(id, env)?),
-                env,
-            )?));
+            sig.add_input(llhd::signal_ty(
+                self.emit_type(self.type_of(id, env)?, env)?,
+            ));
             inputs.push(id);
         }
         for &id in acc.written.iter() {
-            sig.add_output(llhd::signal_ty(self.emit_type(
-                UnpackedType::from_legacy(self.cx, self.type_of(id, env)?),
-                env,
-            )?));
+            sig.add_output(llhd::signal_ty(
+                self.emit_type(self.type_of(id, env)?, env)?,
+            ));
             outputs.push(id);
         }
         trace!("Process Inputs: {:?}", inputs);
@@ -388,42 +379,43 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let ty = ty.resolve_full();
 
         // Handle things that coalesce easily to scalars.
-        let result = if ty.coalesces_to_llhd_scalar() {
-            llhd::int_ty(ty.get_bit_size().unwrap())
+        if ty.coalesces_to_llhd_scalar() {
+            return Ok(llhd::int_ty(ty.get_bit_size().unwrap()));
         }
+
         // Handle arrays.
-        else if let Some(dim) = ty.outermost_dim() {
+        if let Some(dim) = ty.outermost_dim() {
             let size = match dim.get_size() {
                 Some(size) => size,
                 None => panic!("cannot map unsized array `{}` to LLHD", ty),
             };
             let inner = ty.pop_dim(self.cx).unwrap();
-            llhd::array_ty(size, self.emit_type(inner, env)?)
+            return Ok(llhd::array_ty(size, self.emit_type(inner, env)?));
         }
+
         // Handle structs.
-        else if let Some(strukt) = ty.get_struct() {
+        if let Some(strukt) = ty.get_struct() {
             let mut types = vec![];
             for member in &strukt.members {
                 types.push(self.emit_type(member.ty, strukt.legacy_env)?);
             }
-            llhd::struct_ty(types)
+            return Ok(llhd::struct_ty(types));
         }
-        // Handle packed types.
-        else if let Some(packed) = ty.get_packed() {
-            let packed = packed.resolve_full();
-            match packed.core {
-                ty::PackedCore::Error => llhd::void_ty(),
-                ty::PackedCore::Void => llhd::void_ty(),
-                ty::PackedCore::IntAtom(ty::IntAtomType::Time) => llhd::time_ty(),
-                _ => unreachable!("emitting `{}` should have been handled above", packed),
-            }
-        }
-        // Everything else we cannot do.
-        else {
-            panic!("cannot map `{}` to LLHD", ty);
-        };
 
-        Ok(result)
+        // Handle packed types.
+        if let Some(packed) = ty.get_packed() {
+            let packed = packed.resolve_full();
+            return match packed.core {
+                ty::PackedCore::Error => Ok(llhd::void_ty()),
+                ty::PackedCore::Void => Ok(llhd::void_ty()),
+                ty::PackedCore::IntAtom(ty::IntAtomType::Time) => Ok(llhd::time_ty()),
+                ty::PackedCore::Enum(ref enm) => self.emit_type(enm.base.to_unpacked(self.cx), env),
+                _ => unreachable!("emitting `{}` should have been handled above", packed),
+            };
+        }
+
+        // Everything else we cannot do.
+        panic!("cannot map `{}` to LLHD", ty);
     }
 
     /// Execute the initialization step of a generate loop.
@@ -545,7 +537,7 @@ where
                 HirNode::VarDecl(x) => x,
                 _ => unreachable!(),
             };
-            let ty = ty::UnpackedType::from_legacy(self.cx, self.type_of(decl_id, env)?);
+            let ty = self.type_of(decl_id, env)?;
             let init = self.emit_const(
                 match hir.init {
                     Some(expr) => self.constant_value_of(expr, env)?,
@@ -643,10 +635,7 @@ where
                 let value = if let Some(&mapping) = port_mapping_int.get(&port.id) {
                     mapping
                 } else {
-                    let ty = ty::UnpackedType::from_legacy(
-                        self.cx,
-                        self.type_of(port.id, inst.target.inner_env)?,
-                    );
+                    let ty = self.type_of_int_port(Ref(port), inst.target.inner_env);
                     let value = match port.data.as_ref().and_then(|d| d.default) {
                         Some(default) => {
                             self.emit_rvalue_mode(default, inst.target.inner_env, Mode::Signal)?
@@ -775,13 +764,6 @@ where
         if value.ty.is_error() {
             return Err(());
         }
-        let packed = match value.ty.get_packed() {
-            Some(t) => t.resolve_full(),
-            None => panic!(
-                "codegen does not support unpacked types; got `{}`",
-                value.ty
-            ),
-        };
         match value.kind {
             ValueKind::Int(ref k, ..) => {
                 let size = value.ty.simple_bit_vector(self.cx, span).size;
@@ -814,7 +796,7 @@ where
             ValueKind::Error => Err(()),
             _ => panic!(
                 "invalid combination of type `{}` and value {:#?}",
-                packed, value
+                value.ty, value
             ),
         }
     }
@@ -907,10 +889,11 @@ where
                     llty_exp == llty_act,
                     mir.span,
                     self.cx,
-                    "codegen for MIR rvalue `{}` should produce `{}`, but got `{}`",
+                    "codegen for MIR rvalue `{}` should produce `{}`, but got `{}`; {:#?}",
                     mir.span.extract(),
                     llty_exp,
-                    llty_act
+                    llty_act,
+                    mir
                 );
             }
             Err(()) => (),
@@ -1660,7 +1643,7 @@ where
                 let repeat_var = match kind {
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(count) => {
-                        let ty = UnpackedType::from_legacy(self.cx, self.type_of(count, env)?);
+                        let ty = self.type_of(count, env)?;
                         let count = self.emit_rvalue(count, env)?;
                         let var = self.builder.ins().var(count);
                         self.builder.set_name(var, "loop_count".to_string());
@@ -1823,8 +1806,14 @@ where
         hir: &hir::VarDecl,
         env: ParamEnv,
     ) -> Result<()> {
-        let ty = self.type_of(decl_id, env)?;
-        let ty = UnpackedType::from_legacy(self.cx, ty);
+        let ty = self.type_of_var_decl(
+            Ref(self
+                .ast_for_id(decl_id)
+                .as_all()
+                .get_var_decl_name()
+                .unwrap()),
+            env,
+        );
         let ty = self.emit_type(ty, env)?;
         let init = match hir.init {
             Some(expr) => self.emit_rvalue(expr, env)?,
@@ -1973,18 +1962,21 @@ enum ShiftDir {
 /// Emit a detailed description of a module's ports.
 ///
 /// Called when the PORTS verbosity flag is set.
-fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module, env: ParamEnv) {
+fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module<'gcx>, env: ParamEnv) {
     trace!("Port details of {:#?}", hir.ports_new);
     println!("Ports of `{}`:", hir.name);
 
     // Dump the internal ports.
     println!("  internal:");
     for (i, port) in hir.ports_new.int.iter().enumerate() {
-        let ty = match cx.type_of(port.id, env) {
-            Ok(ty) => format!("{}", ty),
-            Err(_) => format!("<type-error>"),
-        };
-        println!("    {}: {} {} {} {}", i, port.dir, port.kind, ty, port.name);
+        println!(
+            "    {}: {} {} {} {}",
+            i,
+            port.dir,
+            port.kind,
+            cx.type_of_int_port(Ref(port), env),
+            port.name
+        );
     }
 
     // Dump the external ports.

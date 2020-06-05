@@ -14,7 +14,7 @@ pub use crate::port_list::{ExtPort, ExtPortExpr, ExtPortSelect, IntPort, IntPort
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
     IntPort(&'hir IntPort<'hir>),
-    ExtPort(&'hir ExtPort),
+    ExtPort(&'hir ExtPort<'hir>),
     Type(&'hir Type),
     Expr(&'hir Expr),
     InstTarget(&'hir InstTarget),

@@ -260,10 +260,7 @@ fn const_node<'gcx>(
         }
         HirNode::EnumVariant(var) => match var.value {
             Some(v) => cx.constant_value_of(v, env),
-            None => Ok(cx.intern_value(make_int(
-                UnpackedType::from_legacy(cx, cx.type_of(node_id, env)?),
-                var.index.into(),
-            ))),
+            None => Ok(cx.intern_value(make_int(cx.type_of(node_id, env)?, var.index.into()))),
         },
         _ => cx.unimp_msg("constant value computation of", &hir),
     }

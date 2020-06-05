@@ -56,6 +56,7 @@ pub(crate) fn disamb_type_or_expr<'a>(
                             },
                         ));
                         ty.link_attach(expr);
+                        cx.register_ast(ty);
                         cx.map_ast_with_parent(AstNode::Type(ty), ty.id());
                         Ok(cx.arena().alloc(ast::TypeOrExpr::Type(ty)))
                     }

@@ -17,7 +17,7 @@ module foo (
     // CHECK:   internal:
     // CHECK:     0: input wire logic foo
     // CHECK:     1: input wire logic [7:0] bar
-    // CHECK:     2: input wire logic [41:0] [7:0] baz
+    // CHECK:     2: input wire logic [7:0][41:0] baz
     // CHECK:   external:
     // CHECK:     0: .a()
     // CHECK:     1: .b(foo)

@@ -20,8 +20,8 @@
 // only thing we really need from the `Context` is ID allocation (no more AST
 // mapping business).
 
-use crate::ast_map::AstNode;
 use crate::crate_prelude::*;
+use crate::{ast_map::AstNode, common::arenas::Alloc};
 use std::{borrow::Cow, collections::HashMap};
 
 /// List of internal and external ports of a module.
@@ -35,7 +35,7 @@ pub struct PortList<'a> {
     pub int: Vec<IntPort<'a>>,
     /// The external ports, in order for positional connections. Port indices
     /// are indices into `int`.
-    pub ext_pos: Vec<ExtPort>,
+    pub ext_pos: Vec<ExtPort<'a>>,
     /// The external ports, for named connections. Values are indices into
     /// `ext_pos`. `None` if there are any purely positional external ports.
     pub ext_named: Option<HashMap<Name, usize>>,
@@ -64,30 +64,32 @@ pub struct IntPort<'a> {
     /// Additional port details. Omitted if this is an explicitly-named ANSI
     /// port, and the port details must be inferred from declarations inside the
     /// module.
-    pub data: Option<IntPortData>,
+    pub data: Option<IntPortData<'a>>,
 }
 
 /// Additional internal port details.
 #[derive(Debug, PartialEq, Eq)]
-pub struct IntPortData {
+pub struct IntPortData<'a> {
     /// Type of the port.
-    pub ty: NodeId,
+    pub ty: &'a ast::Type<'a>,
     /// Unpacked dimensions of the port.
-    pub unpacked_dims: (),
+    pub unpacked_dims: &'a [ast::TypeDim<'a>],
     /// Optional redundant type (possible in non-ANSI ports), which must be
     /// checked against `ty`.
+    // TODO: Make this an AST reference.
     pub matching: Option<(NodeId, ())>,
     /// Optional default value assigned to the port if left unconnected.
+    // TODO: Make this an AST reference.
     pub default: Option<NodeId>,
 }
 
 /// An external port.
 #[derive(Debug, PartialEq, Eq)]
-pub struct ExtPort {
+pub struct ExtPort<'a> {
     /// Node ID of the port.
     pub id: NodeId,
     /// The module containing the port.
-    pub module: NodeId,
+    pub module: &'a ast::Module<'a>,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Optional name of the port.
@@ -135,7 +137,7 @@ impl HasDesc for IntPort<'_> {
     }
 }
 
-impl HasSpan for ExtPort {
+impl HasSpan for ExtPort<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -145,7 +147,7 @@ impl HasSpan for ExtPort {
     }
 }
 
-impl HasDesc for ExtPort {
+impl HasDesc for ExtPort<'_> {
     fn desc(&self) -> &'static str {
         "port"
     }
@@ -216,8 +218,8 @@ pub(crate) fn module_ports<'a>(
 
     // Create the external and internal port views.
     let partial_ports = match nonansi {
-        true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span, module.id()),
-        false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span, module.id()),
+        true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span, module),
+        false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span, module),
     };
     trace!("Lowered ports: {:#?}", partial_ports);
 
@@ -277,7 +279,7 @@ pub(crate) fn module_ports<'a>(
             } else {
                 port.ty
             };
-            let ty_ast = cx.arena().alloc_ast_type(ast::Type::new(
+            let ty = cx.arena().alloc(ast::Type::new(
                 port.span,
                 ast::TypeData {
                     kind: ty.into_owned(),
@@ -285,11 +287,9 @@ pub(crate) fn module_ports<'a>(
                     dims: port.packed_dims.to_vec(),
                 },
             ));
-            ty_ast.link_attach(port.ast);
-            let ty = cx.map_ast_with_parent(AstNode::Type(ty_ast), next_rib);
-            // NOTE: This was here for some reason. Not sure what this was
-            // accomplishing. Maybe some side effects?
-            // let _ = crate::hir::lowering::lower_type(cx, ty, ty_ast);
+            ty.link_attach(port.ast);
+            cx.register_ast(ty);
+            cx.map_ast_with_parent(AstNode::Type(ty), next_rib);
 
             // Allocate the default expression.
             let default = port
@@ -301,7 +301,7 @@ pub(crate) fn module_ports<'a>(
 
             Some(IntPortData {
                 ty,
-                unpacked_dims: (),
+                unpacked_dims: port.unpacked_dims,
                 matching: None,
                 default,
             })
@@ -332,13 +332,13 @@ pub(crate) fn module_ports<'a>(
 }
 
 /// Lower the ANSI ports of a module.
-fn lower_module_ports_ansi<'gcx>(
-    cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port<'gcx>],
-    ast_items: &'gcx [ast::Item<'gcx>],
+fn lower_module_ports_ansi<'a>(
+    cx: &impl Context<'a>,
+    ast_ports: &'a [ast::Port<'a>],
+    ast_items: &'a [ast::Item<'a>],
     first_span: Span,
-    module: NodeId,
-) -> PartialPortList<'gcx> {
+    module: &'a ast::Module<'a>,
+) -> PartialPortList<'a> {
     // Emit errors for any port declarations inside the module.
     for item in ast_items {
         let ast = match &item.data {
@@ -465,7 +465,7 @@ fn lower_module_ports_ansi<'gcx>(
 
                 // Map the expression to a port expression.
                 let pe = match expr {
-                    Some(expr) => lower_port_expr(cx, expr, module),
+                    Some(expr) => lower_port_expr(cx, expr, module.id()),
                     None => vec![],
                 };
 
@@ -554,13 +554,13 @@ fn lower_module_ports_ansi<'gcx>(
 }
 
 /// Lower the non-ANSI ports of a module.
-fn lower_module_ports_nonansi<'gcx>(
-    cx: &impl Context<'gcx>,
-    ast_ports: &'gcx [ast::Port<'gcx>],
-    ast_items: &'gcx [ast::Item<'gcx>],
+fn lower_module_ports_nonansi<'a>(
+    cx: &impl Context<'a>,
+    ast_ports: &'a [ast::Port<'a>],
+    ast_items: &'a [ast::Item<'a>],
     first_span: Span,
-    module: NodeId,
-) -> PartialPortList<'gcx> {
+    module: &'a ast::Module<'a>,
+) -> PartialPortList<'a> {
     // As a first step, collect the ports declared inside the module body. These
     // will form the internal view of the ports.
     let mut decl_order: Vec<PartialPort> = vec![];
@@ -800,7 +800,7 @@ fn lower_module_ports_nonansi<'gcx>(
                 ref expr,
             } => {
                 if let Some(expr) = expr {
-                    let pe = lower_port_expr(cx, expr, module);
+                    let pe = lower_port_expr(cx, expr, module.id());
                     (Some(name), pe)
                 } else {
                     (Some(name), vec![])
@@ -839,13 +839,13 @@ fn lower_module_ports_nonansi<'gcx>(
                     .iter()
                     .map(|dim| match dim {
                         ast::TypeDim::Expr(index) => ExtPortSelect::Index(hir::IndexMode::One(
-                            cx.map_ast_with_parent(AstNode::Expr(index), module),
+                            cx.map_ast_with_parent(AstNode::Expr(index), module.id()),
                         )),
                         ast::TypeDim::Range(lhs, rhs) => {
                             ExtPortSelect::Index(hir::IndexMode::Many(
                                 ast::RangeMode::Absolute,
-                                cx.map_ast_with_parent(AstNode::Expr(lhs), module),
-                                cx.map_ast_with_parent(AstNode::Expr(rhs), module),
+                                cx.map_ast_with_parent(AstNode::Expr(lhs), module.id()),
+                                cx.map_ast_with_parent(AstNode::Expr(rhs), module.id()),
                             ))
                         }
                         _ => {
@@ -873,7 +873,7 @@ fn lower_module_ports_nonansi<'gcx>(
             }
 
             // expr
-            ast::PortData::Implicit(ref expr) => (None, lower_port_expr(cx, expr, module)),
+            ast::PortData::Implicit(ref expr) => (None, lower_port_expr(cx, expr, module.id())),
 
             // Everything else is just an error.
             _ => {
@@ -1043,7 +1043,7 @@ struct PartialPortList<'a> {
     int: Vec<PartialPort<'a>>,
     /// The external ports, in order for positional connections. Port indices
     /// are indices into `int`.
-    ext_pos: Vec<ExtPort>,
+    ext_pos: Vec<ExtPort<'a>>,
     /// The external ports, for named connections. Values are indices into
     /// `ext_pos`.
     ext_named: Option<HashMap<Name, usize>>,

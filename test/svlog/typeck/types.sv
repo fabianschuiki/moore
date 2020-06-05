@@ -1,4 +1,4 @@
-// RUN: moore %s -e foo -Vtypes
+// RUN: moore %s -Vtypes
 
 module foo;
     // Integer types
@@ -44,7 +44,7 @@ module foo;
     // event   v18;
 
     // Unpacked Structs
-    // struct { bit x; bit y; } v198897;
+    struct { bit x; bit y; } v198897;
 
     // Variable dimensions
     bit v19 [];
@@ -56,7 +56,7 @@ module foo;
     bit v25 [$:4];
 
     // Unpacked reference
-    // type(struct { bit x; }) v128904a;
+    type(struct { bit x; }) v128904a;
     type(v20) v8932895;
 
     // Module instances

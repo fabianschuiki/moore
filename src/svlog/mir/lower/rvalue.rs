@@ -179,11 +179,24 @@ fn lower_expr_inner<'gcx>(
             Ok(builder.constant(value::make_int(ty, value)))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)) => {
-            let ty = cx.type_of(arg, env)?;
-            Ok(builder.constant(value::make_int(
-                SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(cx),
-                ty::bit_size_of_type(cx, ty, env)?.into(),
-            )))
+            let hir = match cx.hir_of(arg)? {
+                HirNode::Expr(e) => e,
+                _ => unreachable!(),
+            };
+            let arg_ty = cx.type_of_expr(Ref(hir), env);
+            match arg_ty.get_bit_size() {
+                Some(size) => Ok(builder.constant(value::make_int(ty, size.into()))),
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "value of type `{}` does not have a fixed number of bits",
+                            arg_ty
+                        ))
+                        .span(hir.span()),
+                    );
+                    Ok(builder.error())
+                }
+            }
         }
 
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
@@ -313,10 +326,6 @@ fn lower_expr_inner<'gcx>(
             let (base, length) = compute_indexing(cx, builder.expr, env, mode)?;
 
             // Cast the target to a simple bit vector type if needed.
-            let target_ty = cx.type_of(target, env)?;
-            if target_ty.is_error() {
-                return Ok(builder.error());
-            }
             let target = cx.mir_rvalue(target, env);
 
             // Make sure we can actually index here.
@@ -1301,7 +1310,9 @@ fn lower_int_binary_arith<'a>(
     // Check that the operands are of the right type.
     let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
     assert_type2!(lhs.ty, result_ty, builder.span, builder.cx);
-    assert_type2!(rhs.ty, result_ty, builder.span, builder.cx);
+    if op != hir::BinaryOp::Pow {
+        assert_type2!(rhs.ty, result_ty, builder.span, builder.cx);
+    }
 
     // Determine the operation.
     let op = match op {

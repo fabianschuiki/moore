@@ -23,7 +23,7 @@
 use crate::crate_prelude::*;
 use crate::salsa; // TODO(fschuiki): Remove this once salsa is regular dep again
 use crate::{
-    ast::{self, WalkVisitor},
+    ast::{self, Visitor},
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
     hir::{self, AccessTable, HirNode},
@@ -31,8 +31,8 @@ use crate::{
     resolver::{Scope, StructDef},
     ty::{Type, TypeKind, UnpackedType},
     value::{Value, ValueData, ValueKind},
-    InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, PortMapping,
-    PortMappingSource, QueryDatabase, QueryStorage,
+    InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, QueryDatabase,
+    QueryStorage,
 };
 use std::{
     cell::RefCell,
@@ -105,7 +105,7 @@ impl<'gcx> GlobalContext<'gcx> {
 
         // Register nodes with the AST map. This is a necessary hack until
         // we have moved away from querying nodes merely by ID.
-        root.walk(&mut AstMapRegistrator { cx: self });
+        self.register_ast(root);
 
         // Resolve names for debugging purposes.
         debug!("Checking names");
@@ -459,6 +459,14 @@ pub trait BaseContext<'gcx>:
         }
     }
 
+    /// Register an `ast::AnyNode` for later retrieval by ID.
+    fn register_ast(&self, node: &'gcx dyn ast::AnyNode<'gcx>) {
+        let mut visitor = AstMapRegistrator { cx: self.gcx() };
+        visitor.pre_visit_node(node);
+        node.accept(&mut visitor);
+        visitor.post_visit_node(node);
+    }
+
     /// Obtain an `ast::AnyNode` associated with a node id.
     fn ast_for_id(&self, node_id: NodeId) -> &'gcx dyn ast::AnyNode<'gcx> {
         match self.gcx().ast_map2.borrow().get(&node_id) {
@@ -785,12 +793,6 @@ pub(super) mod queries {
                 use fn  hir::accessed_nodes;
             }
 
-            /// Compute the port assignments for an instantiation.
-            fn port_mapping(src: PortMappingSource<'a>) -> Result<Arc<PortMapping>> {
-                type PortMappingQuery;
-                use fn port_mapping::compute;
-            }
-
             /// Obtain the details of a struct definition.
             fn struct_def(node_id: NodeId) -> Result<Arc<StructDef>> {
                 type StructDefQuery;
@@ -862,7 +864,6 @@ pub(super) mod queries {
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn accessed_nodes() for AccessedNodesQuery<'gcx>;
-                fn port_mapping() for PortMappingQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
                 fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;

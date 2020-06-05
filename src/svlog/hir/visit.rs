@@ -7,6 +7,7 @@
 
 use super::{nodes::*, HirNode};
 use crate::{
+    ast::AnyNode as _,
     common::{name::Name, source::Spanned, NodeId},
     Context,
 };
@@ -370,7 +371,7 @@ pub fn walk_assign<'a>(visitor: &mut impl Visitor<'a>, assign: &'a Assign) {
 /// Walk the contents of an internal port.
 pub fn walk_int_port<'a>(visitor: &mut impl Visitor<'a>, int_port: &'a IntPort) {
     if let Some(data) = &int_port.data {
-        visitor.visit_node_with_id(data.ty, false);
+        visitor.visit_node_with_id(data.ty.id(), false);
         if let Some(default) = data.default {
             visitor.visit_node_with_id(default, false);
         }

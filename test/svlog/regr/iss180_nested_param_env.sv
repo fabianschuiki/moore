@@ -1,7 +1,7 @@
 // RUN: moore %s -e foo
 
 module foo;
-    alice #(.T(int)) u0(.x(42));
+    alice #(.T(byte)) u0(.x(42));
 endmodule
 
 module alice #(parameter type T)(input T x);
