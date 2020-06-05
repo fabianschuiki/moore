@@ -18,13 +18,13 @@ module test(a,b,c,d,e,f,g,h);
     // CHECK: Ports of `test`:
     // CHECK:   internal:
     // CHECK:     0: input wire logic [7:0] a
-    // CHECK:     1: input wire logic [7:0] b
-    //! CHECK:     2: input wire logic signed [7:0] c
-    //! CHECK:     3: input wire logic signed [7:0] d
+    // CHECK:     1: input wire logic signed [7:0] b
+    // CHECK:     2: input wire logic signed [7:0] c
+    // CHECK:     3: input wire logic signed [7:0] d
     // CHECK:     4: output wire logic [7:0] e
-    //! CHECK:     5: output var logic signed [7:0] f
-    //! CHECK:     6: output var logic signed [7:0] g
-    //! CHECK:     7: output var logic signed [7:0] h
+    // CHECK:     5: output var logic signed [7:0] f
+    // CHECK:     6: output var logic signed [7:0] g
+    // CHECK:     7: output wire logic signed [7:0] h
     // CHECK:   external:
     // CHECK:     0: .a(a)
     // CHECK:     1: .b(b)
