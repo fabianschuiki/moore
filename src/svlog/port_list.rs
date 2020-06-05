@@ -227,7 +227,7 @@ pub(crate) fn module_ports<'a>(
     let default_net_type = ast::NetType::Wire; // TODO: Make changeable by directive
 
     for port in partial_ports.int {
-        let port_id = cx.alloc_id(port.span);
+        let port_id = port.ast.id();
 
         // Determine the port kind.
         let kind = port.kind.unwrap_or_else(|| match port.dir {
