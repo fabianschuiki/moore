@@ -186,12 +186,9 @@ impl<'a> AstNode<'a> {
                     .map(move |n| AstNode::StructMember(n, x, n.id())),
             ),
             AllNode::Package(x) => Box::new(Some(AstNode::Package(x)).into_iter()),
-            AllNode::Enum(x) => Box::new(
-                x.variants
-                    .iter()
-                    .enumerate()
-                    .map(move |(i, n)| AstNode::EnumVariant(n, x.id(), i)),
-            ),
+            AllNode::Enum(x) => Box::new(x.variants.iter().enumerate().map(move |(i, n)| {
+                AstNode::EnumVariant(n, x.get_parent().unwrap().get_parent().unwrap().id(), i)
+            })),
             AllNode::ImportItem(x) => Box::new(Some(AstNode::Import(x)).into_iter()),
             AllNode::SubroutineDecl(x) => Box::new(Some(AstNode::SubroutineDecl(x)).into_iter()),
             AllNode::Interface(x) => Box::new(Some(AstNode::Interface(x)).into_iter()),

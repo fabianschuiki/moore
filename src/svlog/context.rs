@@ -454,7 +454,7 @@ pub trait BaseContext<'gcx>:
                         node_id
                     )));
                 }
-                Err(())
+                panic!("Other map contains: {:?}", self.ast_for_id(node_id));
             }
         }
     }
@@ -888,6 +888,11 @@ impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
 
         for n in AstNode::from_all(node.as_all()) {
             let parent = n.get_any().unwrap().get_parent().unwrap();
+            let parent = if let Some(kind) = parent.as_all().get_type_kind() {
+                kind.get_parent().unwrap()
+            } else {
+                parent
+            };
             self.cx.map_ast_with_parent(n, parent.id());
         }
     }
