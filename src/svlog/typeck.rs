@@ -1724,12 +1724,14 @@ pub(crate) fn operation_type<'a>(
                     Some(sbvt) => Some(sbvt.forget().to_unpacked(cx)),
                     None => {
                         cx.emit(
-                            DiagBuilder2::error(
-                                format!("cannot index into a value of type `{}`", target_ty),
-                            )
+                            DiagBuilder2::error(format!(
+                                "cannot index into a value of type `{}`",
+                                target_ty
+                            ))
                             .span(expr.span)
                             .add_note(format!(
-                                "`{}` must be an array or have a simple bit-vector type representation",
+                                "`{}` must be an array or have a simple bit-vector type \
+                                 representation",
                                 target_ty
                             )),
                         );
