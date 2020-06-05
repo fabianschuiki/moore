@@ -4,8 +4,8 @@ module foo;
     bit b;
     bit [7:0] v;
     bit [7:0][3:0] m;
-    struct { bit x; bit [13:0] y; } s;
-    struct { bit [13:0] x; bit y; } s2;
+    struct packed { bit x; bit [13:0] y; } s;
+    struct packed { bit [13:0] x; bit y; } s2;
 
     // Cast to boolean
 

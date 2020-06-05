@@ -1,6 +1,6 @@
 // RUN: moore %s -e foo -O0
 module foo;
-    struct {
+    struct packed {
         byte a;
         int b;
         struct packed {

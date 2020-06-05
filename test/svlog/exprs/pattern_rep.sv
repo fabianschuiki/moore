@@ -24,7 +24,7 @@ module foo;
 
     // Structs
     // struct {int X,Y,Z;} XYZ = '{3{1}}; // not yet supported
-    typedef struct {int a; int[3:0] b;} ab_t;
+    typedef struct packed {int a; int[3:0] b;} ab_t;
     int a,b,c;
     ab_t [1:0] [2:0] v1;
     initial v1 = '{2{'{3{'{a,'{2{b,c}}}}}}};
