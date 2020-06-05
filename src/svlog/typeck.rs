@@ -3,6 +3,7 @@
 use crate::crate_prelude::*;
 use crate::{
     ast_map::AstNode,
+    common::arenas::Alloc,
     hir::HirNode,
     resolver::DefNode,
     ty::{
@@ -25,7 +26,13 @@ pub(crate) fn type_of<'a>(
     #[allow(unreachable_patterns)]
     match hir {
         HirNode::IntPort(p) => match &p.data {
-            Some(data) => cx.map_to_type(data.ty, env),
+            Some(data) => Ok(cx
+                .packed_type_from_ast(
+                    Ref(cx.ast_for_id(data.ty).as_all().get_type().unwrap()),
+                    env,
+                    None,
+                )
+                .to_legacy(cx)),
             None => {
                 // Resolve the port to a net/var decl in the module, then use
                 // that decl's type.
@@ -64,8 +71,15 @@ pub(crate) fn type_of<'a>(
         }
         HirNode::Expr(_) => Ok(cx.cast_type(node_id, env).unwrap().ty.to_legacy(cx)),
         HirNode::ValueParam(p) => {
-            if is_explicit_type(cx, p.ty)? {
-                return cx.map_to_type(p.ty, env);
+            let ast = cx
+                .ast_for_id(node_id)
+                .as_all()
+                .get_param_value_decl()
+                .unwrap();
+            if !ast.ty.is_implicit() {
+                return Ok(cx
+                    .unpacked_type_from_ast(Ref(&ast.ty), Ref(&ast.dims), env, None)
+                    .to_legacy(cx));
             }
             let env_data = cx.param_env_data(env);
             match env_data.find_value(node_id) {
@@ -102,6 +116,7 @@ pub(crate) fn type_of<'a>(
                 x => unreachable!("VarDecl HIR node expanded to {:?}", x),
             };
             if is_explicit_type(cx, d.ty)? {
+                // let ast_ty = &ast_name.get_parent().unwrap().as_all().get_var_decl().unwrap().ty;
                 let ty = cx.unpacked_type_from_ast(
                     Ref(&ast_ty),
                     Ref(&ast_name.dims),
@@ -128,25 +143,13 @@ pub(crate) fn type_of<'a>(
             }
         }
         HirNode::GenvarDecl(_) => Ok(&ty::INT_TYPE),
-        HirNode::EnumVariant(v) => {
-            // TODO: This is ultra hacky. The enum itself does not get its own
-            // node ID, but rather shares this with the associated array dims.
-            // So we nee to unpack those here again. This is horribly ugly and
-            // should rather be done differently. E.g. by having the AST be more
-            // of an ID-based graph.
-            let hir = match cx.hir_of(v.enum_id)? {
-                HirNode::Type(hir) => hir,
-                _ => unreachable!(),
-            };
-            let mut kind = &hir.kind;
-            loop {
-                kind = match kind {
-                    hir::TypeKind::PackedArray(ref inner, ..) => inner.as_ref(),
-                    _ => break,
-                }
-            }
-            map_type_kind(cx, v.enum_id, env, hir, kind)
-        }
+        HirNode::EnumVariant(v) => Ok(cx
+            .packed_type_from_ast(
+                Ref(cx.ast_for_id(v.enum_id).as_all().get_type().unwrap()),
+                env,
+                None,
+            )
+            .to_legacy(cx)),
         HirNode::Package(_) => Ok(&ty::VOID_TYPE),
         HirNode::Assign(_) => unreachable!("has no type: {:?}", hir),
         _ => {
@@ -159,6 +162,74 @@ pub(crate) fn type_of<'a>(
                 ))
                 .span(hir.span())
             )
+        }
+    }
+}
+
+/// Map an AST node to the type it represents.
+///
+/// Returns `None` if the given AST node does not evaluate to a type.
+#[moore_derive::query]
+pub(crate) fn map_to_type<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, dyn ast::AnyNode<'a>>,
+    env: ParamEnv,
+) -> Option<&'a UnpackedType<'a>> {
+    match ast.as_all() {
+        ast::AllNode::Type(ast) => Some(cx.packed_type_from_ast(Ref(ast), env, None)),
+        // The following is an ugly hack, and should actually never happen. But
+        // as the HIR is implemented at the moment, certain parameter bindings
+        // can bind expressions to type parameters.
+        ast::AllNode::Expr(ast) => {
+            let ast = cx.arena().alloc(ast::TypeOrExpr::Expr(ast));
+            debug!("Disambiguating {:?}", ast);
+            let rst = match cx.disamb_type_or_expr(Ref(ast)) {
+                Ok(rst) => rst,
+                Err(()) => return Some(UnpackedType::make_error()),
+            };
+            match rst {
+                ast::TypeOrExpr::Type(ast) => Some(cx.packed_type_from_ast(Ref(ast), env, None)),
+                ast::TypeOrExpr::Expr(_) => None,
+            }
+        }
+        ast::AllNode::Typedef(ast) => {
+            Some(cx.unpacked_type_from_ast(Ref(&ast.ty), Ref(&ast.dims), env, None))
+        }
+        ast::AllNode::ParamTypeDecl(ast) => {
+            // Look for a parameter assignment in the param env.
+            let env_data = cx.param_env_data(env);
+            match env_data.find_type(ast.id()) {
+                Some(ParamEnvBinding::Indirect(assigned_id)) => {
+                    return cx.map_to_type(Ref(cx.ast_for_id(assigned_id.id())), assigned_id.env());
+                }
+                Some(ParamEnvBinding::Direct(t)) => return Some(UnpackedType::from_legacy(cx, t)),
+                _ => (),
+            }
+
+            // Look for a default assignment.
+            if let Some(ref ty) = ast.ty {
+                return Some(cx.packed_type_from_ast(Ref(ty), env, None));
+            }
+
+            // Otherwise complain.
+            let d = DiagBuilder2::error(format!("{} not assigned and has no default", ast,));
+            let contexts = cx.param_env_contexts(env);
+            for &context in &contexts {
+                cx.emit(
+                    d.clone()
+                        .span(cx.span(context))
+                        .add_note("parameter declared here:")
+                        .span(ast.human_span()),
+                );
+            }
+            if contexts.is_empty() {
+                cx.emit(d.span(ast.human_span()));
+            }
+            Some(UnpackedType::make_error())
+        }
+        _ => {
+            debug!("{:#1?} does not map to a type", ast);
+            None
         }
     }
 }
@@ -340,11 +411,12 @@ pub(crate) fn packed_type_from_ast<'a>(
 
             // See if the binding is a type.
             let ty = match def.node {
-                DefNode::Ast(node) => match cx.map_to_type(node.id(), env) {
-                    Ok(x) => UnpackedType::from_legacy(cx, x),
-                    Err(()) => return UnpackedType::make_error(),
-                },
-                _ => {
+                DefNode::Ast(node) => cx.map_to_type(Ref(node), env),
+                _ => None,
+            };
+            let ty = match ty {
+                Some(x) => x,
+                None => {
                     cx.emit(
                         DiagBuilder2::error(format!("`{}` is not a type", name))
                             .span(name.span)
@@ -524,13 +596,10 @@ pub(crate) fn unpacked_type_from_ast<'a>(
             }
             ast::TypeDim::Queue(None) => dims.push(ty::UnpackedDim::Queue(None)),
             ast::TypeDim::Associative(Some(ty)) => {
-                let ty = match cx.map_to_type(ty.id(), env) {
-                    Ok(x) => UnpackedType::from_legacy(cx, x),
-                    Err(()) => {
-                        failed = true;
-                        continue;
-                    }
-                };
+                let ty = cx.packed_type_from_ast(Ref(ty), env, None);
+                if ty.is_error() {
+                    failed = true;
+                }
                 dims.push(ty::UnpackedDim::Assoc(Some(ty)));
             }
             ast::TypeDim::Associative(None) => dims.push(ty::UnpackedDim::Assoc(None)),
@@ -657,163 +726,12 @@ pub(crate) fn type_of_expr<'a>(
     }
 }
 
-/// Convert a node to a type.
-#[moore_derive::query]
-pub(crate) fn map_to_type<'a>(
-    cx: &impl Context<'a>,
-    node_id: NodeId,
-    env: ParamEnv,
-) -> Result<Type<'a>> {
-    let hir = cx.hir_of(node_id)?;
-    #[allow(unreachable_patterns)]
-    match hir {
-        HirNode::Type(hir) => map_type_kind(cx, node_id, env, hir, &hir.kind),
-        HirNode::TypeParam(param) => {
-            let env_data = cx.param_env_data(env);
-            match env_data.find_type(node_id) {
-                Some(ParamEnvBinding::Indirect(assigned_id)) => {
-                    return cx.map_to_type(assigned_id.id(), assigned_id.env())
-                }
-                Some(ParamEnvBinding::Direct(t)) => return Ok(t),
-                _ => (),
-            }
-            if let Some(default) = param.default {
-                return cx.map_to_type(default, env);
-            }
-            let d = DiagBuilder2::error(format!(
-                "{} not assigned and has no default",
-                param.desc_full(),
-            ));
-            let contexts = cx.param_env_contexts(env);
-            for &context in &contexts {
-                cx.emit(
-                    d.clone()
-                        .span(cx.span(context))
-                        .add_note("parameter declared here:")
-                        .span(param.human_span()),
-                );
-            }
-            if contexts.is_empty() {
-                cx.emit(d.span(param.human_span()));
-            }
-            Err(())
-        }
-        HirNode::Typedef(def) => cx.map_to_type(def.ty, env),
-
-        // Certain expressions are actually types. In that case we also support
-        // a mapping to a type.
-        HirNode::Expr(hir) => match hir.kind {
-            hir::ExprKind::Ident(name) => {
-                let binding = cx.resolve_upwards_or_error(name, node_id)?;
-                Ok(cx.mkty_named(name, binding.env(env)))
-            }
-            hir::ExprKind::Scope(scope_id, name) => {
-                let within = cx.resolve_node(scope_id, env)?;
-                let binding = cx.resolve_downwards_or_error(name, within)?;
-                Ok(cx.mkty_named(name, binding.env(env)))
-            }
-            _ => {
-                error!("{:#?}", hir);
-                cx.emit(
-                    DiagBuilder2::error(format!("{} is not a type", hir.desc_full()))
-                        .span(hir.span()),
-                );
-                Err(())
-            }
-        },
-        _ => cx.unimp_msg("conversion to type of", &hir),
-    }
-}
-
 /// Check if a type (given by its node id) is explicit.
 fn is_explicit_type<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<bool> {
     Ok(match cx.hir_of(node_id)? {
         HirNode::Type(x) => x.is_explicit(),
         _ => false,
     })
-}
-
-/// Map an HIR type into the type system.
-///
-/// This essentially converts `hir::TypeKind` to `Type`.
-fn map_type_kind<'gcx>(
-    cx: &impl Context<'gcx>,
-    node_id: NodeId,
-    env: ParamEnv,
-    root: &hir::Type,
-    kind: &hir::TypeKind,
-) -> Result<Type<'gcx>> {
-    #[allow(unreachable_patterns)]
-    match *kind {
-        hir::TypeKind::Builtin(hir::BuiltinType::Void) => Ok(cx.mkty_void()),
-        hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(&ty::BIT_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::Logic) => Ok(&ty::LOGIC_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::Byte) => Ok(&ty::BYTE_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::ShortInt) => Ok(&ty::SHORTINT_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::Int) => Ok(&ty::INT_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::Integer) => Ok(&ty::INTEGER_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::LongInt) => Ok(&ty::LONGINT_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::Time) => Ok(&ty::TIME_TYPE),
-        hir::TypeKind::Builtin(hir::BuiltinType::String) => {
-            Ok(cx.mkty_packed_array(1, &ty::BYTE_TYPE))
-        }
-        hir::TypeKind::Named(name) => {
-            let binding = cx.resolve_upwards_or_error(name, node_id)?;
-            Ok(cx.mkty_named(name, binding.env(env)))
-        }
-        hir::TypeKind::Scope(scope_id, name) => {
-            let within = cx.resolve_node(scope_id, env)?;
-            let binding = cx.resolve_downwards_or_error(name, within)?;
-            Ok(cx.mkty_named(name, binding.env(env)))
-        }
-        hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id.env(env))),
-        hir::TypeKind::PackedArray(ref inner, lhs, rhs) => {
-            let range = range_from_bounds_exprs(cx, lhs, rhs, env, root.span)?;
-            match **inner {
-                hir::TypeKind::Implicit | hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx
-                    .intern_type(TypeKind::BitVector {
-                        domain: ty::Domain::TwoValued,
-                        sign: ty::Sign::Unsigned,
-                        range,
-                        dubbed: false,
-                    })),
-                hir::TypeKind::Builtin(hir::BuiltinType::Logic) => {
-                    Ok(cx.intern_type(TypeKind::BitVector {
-                        domain: ty::Domain::FourValued,
-                        sign: ty::Sign::Unsigned,
-                        range,
-                        dubbed: false,
-                    }))
-                }
-                _ => {
-                    let inner_ty = map_type_kind(cx, node_id, env, root, inner)?;
-                    Ok(cx.mkty_packed_array(range.size, inner_ty))
-                }
-            }
-        }
-        hir::TypeKind::Enum(ref variants, repr) => match repr {
-            Some(repr) => cx.map_to_type(repr, env),
-            None => Ok(cx.mkty_int(variants.len().next_power_of_two().trailing_zeros() as usize)),
-        },
-
-        hir::TypeKind::RefExpr(expr) => cx.type_of(expr, env),
-        hir::TypeKind::RefType(ty) => cx.map_to_type(ty, env),
-
-        // We should never request mapping of an implicit type. Rather, the
-        // actual type should be mapped. Arriving here is a bug in the
-        // calling function.
-        hir::TypeKind::Implicit => {
-            error!("{:#?}", root);
-            unreachable!(
-                "{}",
-                DiagBuilder2::bug("implicit type not resolved").span(root.span)
-            )
-        }
-        _ => {
-            error!("{:#?}", root);
-            cx.unimp_msg("type analysis of", root)
-        }
-    }
 }
 
 /// Get the cast type of a node.
@@ -1266,11 +1184,11 @@ fn self_determined_expr_type<'gcx>(
         }
 
         // Casts trivially evaluate to the cast type.
-        hir::ExprKind::Cast(ty, _) => Some(
-            cx.map_to_type(ty, env)
-                .map(|ty| UnpackedType::from_legacy(cx, ty))
-                .unwrap_or(UnpackedType::make_error()),
-        ),
+        hir::ExprKind::Cast(ty, _) => Some(cx.packed_type_from_ast(
+            Ref(cx.ast_for_id(ty).as_all().get_type().unwrap()),
+            env,
+            None,
+        )),
 
         // Sign casts trivially evaluate to the sign-converted inner type.
         hir::ExprKind::CastSign(sign, arg) => {
@@ -1498,9 +1416,11 @@ fn self_determined_expr_type<'gcx>(
                         _ => unreachable!(),
                     };
                     match hir.retty {
-                        Some(retty_id) => cx
-                            .map_to_type(retty_id, env)
-                            .map(|ty| UnpackedType::from_legacy(cx, ty)),
+                        Some(retty_id) => Ok(cx.packed_type_from_ast(
+                            Ref(cx.ast_for_id(retty_id).as_all().get_type().unwrap()),
+                            env,
+                            None,
+                        )),
                         None => Ok(UnpackedType::make_void()),
                     }
                 })
@@ -1798,7 +1718,8 @@ pub(crate) fn type_context<'a>(
     onto: NodeId,
     env: ParamEnv,
 ) -> Option<TypeContext2<'a>> {
-    let hir = match cx.hir_of(cx.parent_node_id(onto).unwrap()) {
+    let hir_id = cx.parent_node_id(onto).unwrap();
+    let hir = match cx.hir_of(hir_id) {
         Ok(x) => x,
         Err(()) => return None,
     };
@@ -1814,35 +1735,44 @@ pub(crate) fn type_context<'a>(
                 None
             }
         }
-        HirNode::IntPort(hir::IntPort { data: Some(v), .. })
-            if v.default == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
-        {
-            Some(
-                cx.map_to_type(v.ty, env)
-                    .map(|ty| UnpackedType::from_legacy(cx, ty))
-                    .unwrap_or(UnpackedType::make_error())
-                    .into(),
-            )
+        HirNode::IntPort(hir::IntPort { data: Some(v), .. }) if v.default == Some(onto) => {
+            let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
+            if !ty.is_implicit() {
+                Some(
+                    cx.type_of(hir_id, env)
+                        .map(|ty| UnpackedType::from_legacy(cx, ty))
+                        .unwrap_or(UnpackedType::make_error())
+                        .into(),
+                )
+            } else {
+                None
+            }
         }
-        HirNode::VarDecl(v)
-            if v.init == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
-        {
-            Some(
-                cx.map_to_type(v.ty, env)
-                    .map(|ty| UnpackedType::from_legacy(cx, ty))
-                    .unwrap_or(UnpackedType::make_error())
-                    .into(),
-            )
+        HirNode::VarDecl(v) if v.init == Some(onto) => {
+            let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
+            if !ty.is_implicit() {
+                Some(
+                    cx.type_of(hir_id, env)
+                        .map(|ty| UnpackedType::from_legacy(cx, ty))
+                        .unwrap_or(UnpackedType::make_error())
+                        .into(),
+                )
+            } else {
+                None
+            }
         }
-        HirNode::ValueParam(v)
-            if v.default == Some(onto) && is_explicit_type(cx, v.ty).unwrap_or(false) =>
-        {
-            Some(
-                cx.map_to_type(v.ty, env)
-                    .map(|ty| UnpackedType::from_legacy(cx, ty))
-                    .unwrap_or(UnpackedType::make_error())
-                    .into(),
-            )
+        HirNode::ValueParam(v) if v.default == Some(onto) => {
+            let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
+            if !ty.is_implicit() {
+                Some(
+                    cx.type_of(hir_id, env)
+                        .map(|ty| UnpackedType::from_legacy(cx, ty))
+                        .unwrap_or(UnpackedType::make_error())
+                        .into(),
+                )
+            } else {
+                None
+            }
         }
         HirNode::Inst(inst) => {
             let details = cx.inst_details(inst.id.env(env)).ok()?;
@@ -2208,10 +2138,16 @@ fn type_context_imposed_by_positional_pattern<'gcx>(
                 );
             }
             Some(
-                cx.map_to_type(def.fields[index].ty, def_id.env())
-                    .map(|ty| UnpackedType::from_legacy(cx, ty))
-                    .unwrap_or(UnpackedType::make_error())
-                    .into(),
+                cx.packed_type_from_ast(
+                    Ref(cx
+                        .ast_for_id(def.fields[index].ty)
+                        .as_all()
+                        .get_type()
+                        .unwrap()),
+                    def_id.env(),
+                    None,
+                )
+                .into(),
             )
         }
         _ => {

@@ -776,9 +776,10 @@ impl<'a> PackedType<'a> {
                         };
                         StructMember {
                             name: field.name,
-                            ty: UnpackedType::from_legacy(
-                                cx,
-                                cx.map_to_type(field.ty, node_id.env()).unwrap(),
+                            ty: cx.packed_type_from_ast(
+                                Ref(cx.ast_for_id(field.ty).as_all().get_type().unwrap()),
+                                node_id.env(),
+                                None,
                             ),
                             ast_name,
                             ast_member,

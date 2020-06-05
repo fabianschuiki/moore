@@ -534,7 +534,8 @@ pub trait BaseContext<'gcx>:
             name,
             binding.id(),
             self.gcx()
-                .map_to_type(binding.id(), binding.env())
+                .map_to_type(Ref(self.ast_for_id(binding.id())), binding.env())
+                .map(|ty| ty.to_legacy(self.gcx()))
                 .unwrap_or(&ty::ERROR_TYPE),
         ))
     }

@@ -973,18 +973,20 @@ fn lower_named_struct_pattern<'a>(
     let mut values = HashMap::<usize, &Rvalue>::new();
     for &(map, to) in mapping {
         match map {
-            PatternMapping::Type(type_id) => match builder.cx.map_to_type(type_id, builder.env) {
-                Ok(ty) => {
-                    let ty = UnpackedType::from_legacy(builder.cx, ty);
-                    let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_type2!(value.ty, ty, value.span, builder.cx);
-                    type_defaults.insert(ty.resolve_full(), value);
-                }
-                Err(()) => {
+            PatternMapping::Type(type_id) => {
+                let ty = builder.cx.packed_type_from_ast(
+                    Ref(builder.cx.ast_for_id(type_id).as_all().get_type().unwrap()),
+                    builder.env,
+                    None,
+                );
+                if ty.is_error() {
                     failed = true;
                     continue;
                 }
-            },
+                let value = builder.cx.mir_rvalue(to, builder.env);
+                assert_type2!(value.ty, ty, value.span, builder.cx);
+                type_defaults.insert(ty.resolve_full(), value);
+            }
             PatternMapping::Member(member_id) => match builder.cx.hir_of(member_id) {
                 Ok(HirNode::Expr(&hir::Expr {
                     kind: hir::ExprKind::Ident(name),
@@ -1142,8 +1144,8 @@ fn lower_positional_pattern<'a>(
             None => {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
-                        "value of type `{}` cannot be constructed with a pattern;\
-                        dimension `{}` has no fixed size",
+                        "value of type `{}` cannot be constructed with a pattern; dimension `{}` \
+                         has no fixed size",
                         ty, dim,
                     ))
                     .span(builder.span),
