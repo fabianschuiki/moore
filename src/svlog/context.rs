@@ -54,6 +54,8 @@ pub struct GlobalContext<'gcx> {
     storage: QueryStorage<'gcx>,
     /// The mapping of node IDs to abstract syntax tree nodes.
     ast_map: AstMap<'gcx>,
+    /// The AST nodes.
+    ast_map2: RefCell<HashMap<NodeId, &'gcx dyn ast::AnyNode<'gcx>>>,
     /// The modules in the AST.
     modules: RefCell<HashMap<Name, NodeId>>,
     /// The packages in the AST.
@@ -77,6 +79,7 @@ impl<'gcx> GlobalContext<'gcx> {
             runtime: Default::default(),
             storage: Default::default(),
             ast_map: Default::default(),
+            ast_map2: Default::default(),
             modules: Default::default(),
             packages: Default::default(),
             interfaces: Default::default(),
@@ -450,6 +453,14 @@ pub trait BaseContext<'gcx>:
                 }
                 Err(())
             }
+        }
+    }
+
+    /// Obtain an `ast::AnyNode` associated with a node id.
+    fn ast_for_id(&self, node_id: NodeId) -> &'gcx dyn ast::AnyNode<'gcx> {
+        match self.gcx().ast_map2.borrow().get(&node_id) {
+            Some(&node) => node,
+            None => panic!("no AST node for {:?} registered"),
         }
     }
 
@@ -870,6 +881,8 @@ struct AstMapRegistrator<'a, 'b> {
 
 impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
     fn post_visit_node(&mut self, node: &'a dyn ast::AnyNode<'a>) {
+        self.cx.gcx().ast_map2.borrow_mut().insert(node.id(), node);
+
         for n in AstNode::from_all(node.as_all()) {
             let parent = n.get_any().unwrap().get_parent().unwrap();
             self.cx.map_ast_with_parent(n, parent.id());
