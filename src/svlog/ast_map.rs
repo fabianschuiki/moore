@@ -138,6 +138,66 @@ impl<'a> AstNode<'a> {
             _ => None,
         }
     }
+
+    /// Create an `AstNode` from an `AllNode`.
+    pub fn from_all(all: ast::AllNode<'a>) -> Box<dyn Iterator<Item = AstNode<'a>> + 'a> {
+        use crate::ast::AllNode;
+        match all {
+            AllNode::Module(x) => Box::new(Some(AstNode::Module(x)).into_iter()),
+            AllNode::Type(x) => Box::new(Some(AstNode::Type(x)).into_iter()),
+            AllNode::Expr(x) => Box::new(Some(AstNode::Expr(x)).into_iter()),
+            AllNode::Inst(x) => Box::new(Some(AstNode::InstTarget(x)).into_iter()),
+            AllNode::InstName(x) => {
+                Box::new(Some(AstNode::Inst(x, x.get_parent().unwrap().id())).into_iter())
+            }
+            AllNode::ParamTypeDecl(x) => Box::new(
+                Some(AstNode::TypeParam(
+                    x.get_parent().unwrap().as_all().get_param_decl().unwrap(),
+                    x,
+                ))
+                .into_iter(),
+            ),
+            AllNode::ParamValueDecl(x) => Box::new(
+                Some(AstNode::ValueParam(
+                    x.get_parent().unwrap().as_all().get_param_decl().unwrap(),
+                    x,
+                ))
+                .into_iter(),
+            ),
+            AllNode::VarDecl(x) => {
+                Box::new(x.names.iter().map(move |n| AstNode::VarDecl(n, x, n.id())))
+            }
+            // AllNode::NetDecl(x) => x.names.iter().map(|n| AstNode::NetDecl(n, x, n.id())),
+            AllNode::Procedure(x) => Box::new(Some(AstNode::Proc(x)).into_iter()),
+            AllNode::Stmt(x) => Box::new(Some(AstNode::Stmt(x)).into_iter()),
+            AllNode::GenerateIf(x) => Box::new(Some(AstNode::GenIf(x)).into_iter()),
+            AllNode::GenerateFor(x) => Box::new(Some(AstNode::GenFor(x)).into_iter()),
+            AllNode::GenerateCase(x) => Box::new(Some(AstNode::GenCase(x)).into_iter()),
+            AllNode::GenvarDecl(x) => Box::new(Some(AstNode::GenvarDecl(x)).into_iter()),
+            AllNode::Typedef(x) => Box::new(Some(AstNode::Typedef(x)).into_iter()),
+            AllNode::ContAssign(x) => Box::new(
+                x.assignments
+                    .iter()
+                    .map(move |(lhs, rhs)| AstNode::ContAssign(x, lhs, rhs)),
+            ),
+            AllNode::StructMember(x) => Box::new(
+                x.names
+                    .iter()
+                    .map(move |n| AstNode::StructMember(n, x, n.id())),
+            ),
+            AllNode::Package(x) => Box::new(Some(AstNode::Package(x)).into_iter()),
+            AllNode::Enum(x) => Box::new(
+                x.variants
+                    .iter()
+                    .enumerate()
+                    .map(move |(i, n)| AstNode::EnumVariant(n, x.id(), i)),
+            ),
+            AllNode::ImportItem(x) => Box::new(Some(AstNode::Import(x)).into_iter()),
+            AllNode::SubroutineDecl(x) => Box::new(Some(AstNode::SubroutineDecl(x)).into_iter()),
+            AllNode::Interface(x) => Box::new(Some(AstNode::Interface(x)).into_iter()),
+            _ => Box::new(None.into_iter()),
+        }
+    }
 }
 
 impl<'ast> HasSpan for AstNode<'ast> {

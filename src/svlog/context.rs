@@ -858,20 +858,15 @@ struct AstMapRegistrator<'a, 'b> {
 }
 
 impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
-    fn post_visit_param_value_decl(&mut self, node: &'a ast::ParamValueDecl<'a>) {
-        let parent = node.get_parent().unwrap().as_all().unwrap_param_decl();
-        self.cx
-            .map_ast_with_parent(AstNode::ValueParam(parent, node), parent.id());
+    fn post_visit_node(&mut self, node: &'a dyn ast::AnyNode<'a>) {
+        for n in AstNode::from_all(node.as_all()) {
+            let parent = n.get_any().unwrap().get_parent().unwrap();
+            self.cx.map_ast_with_parent(n, parent.id());
+        }
     }
 
-    fn post_visit_param_type_decl(&mut self, node: &'a ast::ParamTypeDecl<'a>) {
-        let parent = node.get_parent().unwrap().as_all().unwrap_param_decl();
-        self.cx
-            .map_ast_with_parent(AstNode::TypeParam(parent, node), parent.id());
-    }
-
-    fn post_visit_typedef(&mut self, node: &'a ast::Typedef<'a>) {
-        self.cx
-            .map_ast_with_parent(AstNode::Typedef(node), node.get_parent().unwrap().id());
+    fn post_visit_module(&mut self, node: &'a ast::Module<'a>) {
+        // Ensure the ports are added to the AST map. Pretty ugly, but necessary.
+        self.cx.module_ports(node);
     }
 }
