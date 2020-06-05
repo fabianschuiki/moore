@@ -359,62 +359,26 @@ fn map_type_kind<'gcx>(
         }
         hir::TypeKind::Struct(..) => Ok(cx.mkty_struct(node_id.env(env))),
         hir::TypeKind::PackedArray(ref inner, lhs, rhs) => {
-            let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
-                match cx.constant_value_of(bound, env)?.kind {
-                    ValueKind::Int(ref int, ..) => Ok(int),
-                    ValueKind::Error => Err(()),
-                    _ => {
-                        let span = cx.span(bound);
-                        cx.emit(
-                            DiagBuilder2::error(format!(
-                                "array bound `{}` is not an integer",
-                                span.extract()
-                            ))
-                            .span(span),
-                        );
-                        return Err(());
-                    }
-                }
-            };
-            let lhs = map_bound(lhs)?;
-            let rhs = map_bound(rhs)?;
-            let (dir, lo, hi) = if lhs < rhs {
-                (ty::RangeDir::Up, lhs, rhs)
-            } else {
-                (ty::RangeDir::Down, rhs, lhs)
-            };
-            let size = (hi - lo) + num::BigInt::one();
-            let size = match size.to_usize() {
-                Some(i) => i,
-                None => {
-                    cx.emit(
-                        DiagBuilder2::error(format!("{} is too large", kind.desc_full()))
-                            .span(root.human_span())
-                            .add_note(format!("array would contain {} elements", size)),
-                    );
-                    return Err(());
-                }
-            };
-            let offset = lo.to_isize().unwrap();
+            let range = range_from_bounds_exprs(cx, lhs, rhs, env, root.span)?;
             match **inner {
                 hir::TypeKind::Implicit | hir::TypeKind::Builtin(hir::BuiltinType::Bit) => Ok(cx
                     .intern_type(TypeKind::BitVector {
                         domain: ty::Domain::TwoValued,
                         sign: ty::Sign::Unsigned,
-                        range: ty::Range { size, dir, offset },
+                        range,
                         dubbed: false,
                     })),
                 hir::TypeKind::Builtin(hir::BuiltinType::Logic) => {
                     Ok(cx.intern_type(TypeKind::BitVector {
                         domain: ty::Domain::FourValued,
                         sign: ty::Sign::Unsigned,
-                        range: ty::Range { size, dir, offset },
+                        range,
                         dubbed: false,
                     }))
                 }
                 _ => {
                     let inner_ty = map_type_kind(cx, node_id, env, root, inner)?;
-                    Ok(cx.mkty_packed_array(size, inner_ty))
+                    Ok(cx.mkty_packed_array(range.size, inner_ty))
                 }
             }
         }
@@ -1993,4 +1957,86 @@ pub(crate) fn expr_is_lvalue<'gcx>(cx: &impl Context<'gcx>, onto: NodeId, _env: 
         HirNode::Assign(a) => a.lhs == onto,
         _ => false,
     }
+}
+
+fn size_from_bounds_expr<'a>(
+    cx: &impl Context<'a>,
+    expr: NodeId,
+    env: ParamEnv,
+    span: Span,
+) -> Result<usize> {
+    let size = match cx.constant_value_of(expr, env)?.kind {
+        ValueKind::Int(ref int, ..) => int,
+        ValueKind::Error => return Err(()),
+        _ => {
+            let span = cx.span(expr);
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "array bound `{}` is not an integer",
+                    span.extract()
+                ))
+                .span(span),
+            );
+            return Err(());
+        }
+    };
+    let size = match size.to_usize() {
+        Some(i) => i,
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("{} is too large", span.extract()))
+                    .span(span)
+                    .add_note(format!("array would contain {} elements", size)),
+            );
+            return Err(());
+        }
+    };
+    Ok(size)
+}
+
+fn range_from_bounds_exprs<'a>(
+    cx: &impl Context<'a>,
+    lhs: NodeId,
+    rhs: NodeId,
+    env: ParamEnv,
+    span: Span,
+) -> Result<ty::Range> {
+    let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
+        match cx.constant_value_of(bound, env)?.kind {
+            ValueKind::Int(ref int, ..) => Ok(int),
+            ValueKind::Error => Err(()),
+            _ => {
+                let span = cx.span(bound);
+                cx.emit(
+                    DiagBuilder2::error(format!(
+                        "array bound `{}` is not an integer",
+                        span.extract()
+                    ))
+                    .span(span),
+                );
+                return Err(());
+            }
+        }
+    };
+    let lhs = map_bound(lhs)?;
+    let rhs = map_bound(rhs)?;
+    let (dir, lo, hi) = if lhs < rhs {
+        (ty::RangeDir::Up, lhs, rhs)
+    } else {
+        (ty::RangeDir::Down, rhs, lhs)
+    };
+    let size = (hi - lo) + num::BigInt::one();
+    let size = match size.to_usize() {
+        Some(i) => i,
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("{} is too large", span.extract()))
+                    .span(span)
+                    .add_note(format!("array would contain {} elements", size)),
+            );
+            return Err(());
+        }
+    };
+    let offset = lo.to_isize().unwrap();
+    Ok(ty::Range { size, dir, offset })
 }
