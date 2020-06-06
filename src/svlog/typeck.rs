@@ -1,5 +1,33 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
+//! Type checking and computation.
+//!
+//! This module performs type computation and type checking of a SystemVerilog
+//! design. A large portion is dedicated to expression typing, which is the most
+//! involved angle. However, there are also other bits and pieces that compute
+//! types for things like ports or instances. Finally, there are functions that
+//! map AST nodes of type kind to actual `UnpackedType`s.
+//!
+//! Expression type checking occurs in the following sequence, and through the
+//! following queries:
+//!
+//! 1. `self_determined_type` evaluates an expression to its self-determined
+//!    type, or returns `None` if the expression requires context information to
+//!    determine a type. There is also `need_self_determined_type` which issues
+//!    a diagnostic in the latter case.
+//! 2. `operation_type` determines if an expression has an internal type under
+//!    which its operation takes place. E.g. comparisons have the expanded arg.
+//!    types as operation type. There is also `need_operation_type`.
+//! 3. `type_context` determines what type the parent of an expression imposes
+//!    on the expression. In an assignment for example, this would be the left
+//!    hand side's type impose on the right hand side, and vice versa. This is
+//!    the main driver for casting operations, and the rest of the compiler
+//!    expects the type context to fully line up with the parent's needs.
+//! 4. `type_of_expr` computes the type of an expression *before casting*.
+//! 5. `cast_type` computes the final type of an expression, ensuring that its
+//!    type as returned by `type_of_expr` is castable, and deriving a cast
+//!    sequence` to the `type_context`.
+
 use crate::crate_prelude::*;
 use crate::{
     common::arenas::Alloc,
