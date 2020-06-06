@@ -75,7 +75,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             HirNode::Module(m) => m,
             _ => panic!("expected {:?} to be a module", id),
         };
-        debug!("emit module `{}` with {:?}", hir.name, env);
+        info!("Emit module `{}` with {:?}", hir.name, env);
 
         // Emit detailed port information if requested.
         if self.sess().has_verbosity(Verbosity::PORTS) {
@@ -1125,7 +1125,7 @@ where
                 let mut offset = 0;
                 let llty = self.emit_type(mir.ty, mir.env)?;
                 let mut result = self.emit_zero_for_type(&llty);
-                debug!(
+                trace!(
                     "Concatenating {} values into `{}` (as `{}`)",
                     values.len(),
                     mir.ty,
@@ -1134,7 +1134,7 @@ where
                 for value in values.iter().rev() {
                     let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                     let llval = self.emit_mir_rvalue(value)?;
-                    debug!(
+                    trace!(
                         " - Value has width {}, type `{}`, in LLHD `{}`",
                         width,
                         value.ty,
@@ -1445,6 +1445,14 @@ where
         hir: &hir::Stmt,
         env: ParamEnv,
     ) -> Result<()> {
+        debug!("Emit stmt `{}`", {
+            let s = hir.span.extract();
+            if s.len() > 40 {
+                format!("{} [...]", &s[0..40])
+            } else {
+                s
+            }
+        });
         #[allow(unreachable_patterns)]
         match hir.kind {
             hir::StmtKind::Null => (),
