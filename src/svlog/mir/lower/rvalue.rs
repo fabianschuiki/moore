@@ -239,7 +239,7 @@ fn lower_expr_inner<'gcx>(
         }
 
         hir::ExprKind::PositionalPattern(ref mapping) => {
-            Ok(lower_positional_pattern(&builder, mapping, 1, ty))
+            Ok(lower_positional_pattern(&builder, hir, mapping, 1, ty))
         }
 
         hir::ExprKind::RepeatPattern(count, ref mapping) => {
@@ -257,16 +257,24 @@ fn lower_expr_inner<'gcx>(
                     return Err(());
                 }
             };
-            Ok(lower_positional_pattern(&builder, mapping, const_count, ty))
+            Ok(lower_positional_pattern(
+                &builder,
+                hir,
+                mapping,
+                const_count,
+                ty,
+            ))
         }
 
         hir::ExprKind::NamedPattern(ref mapping) => {
             if ty.is_error() {
                 Err(())
             } else if let Some(dim) = ty.outermost_dim() {
-                Ok(lower_named_array_pattern(&builder, mapping, ty, dim))
+                Ok(lower_named_array_pattern(&builder, hir, mapping, ty, dim))
             } else if let Some(strukt) = ty.get_struct() {
-                Ok(lower_named_struct_pattern(&builder, mapping, ty, strukt))
+                Ok(lower_named_struct_pattern(
+                    &builder, hir, mapping, ty, strukt,
+                ))
             } else {
                 builder.cx.emit(
                     DiagBuilder2::error(format!(
@@ -819,352 +827,115 @@ fn unpack_array<'a>(
 /// Lower a named `'{...}` array pattern.
 fn lower_named_array_pattern<'a>(
     builder: &Builder<'_, impl Context<'a>>,
-    mapping: &[(PatternMapping, NodeId)],
+    expr: &'a hir::Expr,
+    _mapping: &[(PatternMapping, NodeId)],
     ty: &'a UnpackedType<'a>,
-    dim: ty::Dim<'a>,
+    _dim: ty::Dim<'a>,
 ) -> &'a Rvalue<'a> {
-    // Determine the length of the array and the offset of the indexes.
-    let (length, offset) = match dim
-        .get_range()
-        .map(|r| (r.size, r.offset))
-        .or_else(|| dim.get_size().map(|s| (s, 0)))
-    {
-        Some(x) => x,
-        None => bug_span!(
-            builder.span,
-            builder.cx,
-            "array pattern with invalid input dimension `{}`",
-            dim
-        ),
+    // Compute the pattern mapping.
+    let map = match builder.cx.map_pattern(Ref(expr), builder.env) {
+        Ok(x) => x,
+        _ => return builder.error(),
     };
+    assert_type2!(ty, map.ty, builder.span, builder.cx);
 
-    // Determine the element type.
-    let elem_ty = ty.pop_dim(builder.cx).unwrap();
-
-    // Map things.
-    let mut default: Option<&Rvalue> = None;
-    let mut values = HashMap::<usize, &Rvalue>::new();
-    for &(map, to) in mapping {
-        match map {
-            PatternMapping::Type(type_id) => {
-                builder.cx.emit(
-                    DiagBuilder2::error("types cannot index into an array")
-                        .span(builder.cx.span(type_id)),
-                );
-                continue;
-            }
-            PatternMapping::Member(member_id) => {
-                // Determine the index for the mapping.
-                let index = match || -> Result<usize> {
-                    let index = builder.cx.constant_value_of(member_id, builder.env)?;
-                    let index = match &index.kind {
-                        ValueKind::Int(i, ..) => i - num::BigInt::from(offset),
-                        _ => {
-                            builder.cx.emit(
-                                DiagBuilder2::error("array index must be a constant integer")
-                                    .span(builder.cx.span(member_id)),
-                            );
-                            return Err(());
-                        }
-                    };
-                    let index = match index.to_isize() {
-                        Some(i) if i >= 0 && i < length as isize => i as usize,
-                        _ => {
-                            builder.cx.emit(
-                                DiagBuilder2::error(format!("index `{}` out of bounds", index))
-                                    .span(builder.cx.span(member_id)),
-                            );
-                            return Err(());
-                        }
-                    };
-                    Ok(index)
-                }() {
-                    Ok(i) => i,
-                    Err(_) => {
-                        continue;
-                    }
-                };
-
-                // Determine the value and insert into the mappings.
-                let value = builder.cx.mir_rvalue(to, builder.env);
-                assert_type2!(value.ty, elem_ty, value.span, builder.cx);
-                let span = value.span;
-                if let Some(prev) = values.insert(index, value) {
-                    builder.cx.emit(
-                        DiagBuilder2::warning(format!(
-                            "`{}` overwrites previous value `{}` at index {}",
-                            span.extract(),
-                            prev.span.extract(),
-                            index
-                        ))
-                        .span(span)
-                        .add_note("Previous value was here:")
-                        .span(prev.span),
-                    );
-                }
-            }
-            PatternMapping::Default => match default {
-                Some(ref default) => {
-                    builder.cx.emit(
-                        DiagBuilder2::error("pattern has multiple default mappings")
-                            .span(builder.cx.span(to))
-                            .add_note("Previous mapping default mapping was here:")
-                            .span(default.span),
-                    );
-                    continue;
-                }
-                None => {
-                    let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_type2!(value.ty, elem_ty, value.span, builder.cx);
-                    default = Some(value);
-                }
-            },
-        }
-    }
-
-    // In case the list of indices provided by the user is incomplete, use the
-    // default to fill in the other elements.
-    if values.len() != length {
-        let default = if let Some(default) = default {
-            default
-        } else {
-            builder.cx.emit(
-                DiagBuilder2::error("`default:` missing in non-exhaustive array pattern")
-                    .span(builder.span)
-                    .add_note("Array patterns must assign a value to every index."),
-            );
-            return builder.error();
-        };
-        for i in 0..length {
-            if values.contains_key(&i) {
-                continue;
-            }
-            values.insert(i, default);
-        }
-    }
+    // Construct the values.
+    let values: Vec<_> = map
+        .fields
+        .iter()
+        .map(|&(field, expr)| {
+            let value = builder.cx.mir_rvalue(expr.id, builder.env);
+            assert_type2!(value.ty, field.ty(builder.cx), value.span, builder.cx);
+            value
+        })
+        .collect();
 
     // Construct the correct output value.
     if ty.coalesces_to_llhd_scalar() {
-        if length == 1 {
-            values[&0]
+        if values.len() == 1 {
+            values[0]
         } else {
-            builder.build(
-                ty,
-                RvalueKind::Concat((0..length).rev().map(|i| values[&i]).collect()),
-            )
+            builder.build(ty, RvalueKind::Concat(values))
         }
     } else {
-        builder.build(ty, RvalueKind::ConstructArray(values))
+        builder.build(
+            ty,
+            // TODO: This should rather be a Vec<>.
+            RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
+        )
     }
 }
 
 /// Lower a named `'{...}` struct pattern.
 fn lower_named_struct_pattern<'a>(
     builder: &Builder<'_, impl Context<'a>>,
-    mapping: &[(PatternMapping, NodeId)],
+    expr: &'a hir::Expr,
+    _mapping: &[(PatternMapping, NodeId)],
     ty: &'a UnpackedType<'a>,
-    strukt: &'a ty::StructType<'a>,
+    _strukt: &'a ty::StructType<'a>,
 ) -> &'a Rvalue<'a> {
-    // Determine the field names and types for the struct to be assembled.
-    let name_lookup: HashMap<Name, usize> = strukt
-        .members
+    // Compute the pattern mapping.
+    let map = match builder.cx.map_pattern(Ref(expr), builder.env) {
+        Ok(x) => x,
+        _ => return builder.error(),
+    };
+    assert_type2!(ty, map.ty, builder.span, builder.cx);
+
+    // Construct the values.
+    let values: Vec<_> = map
+        .fields
         .iter()
-        .enumerate()
-        .map(|(i, f)| (f.name.value, i))
+        .map(|&(field, expr)| {
+            let value = builder.cx.mir_rvalue(expr.id, builder.env);
+            assert_type2!(value.ty, field.ty(builder.cx), value.span, builder.cx);
+            value
+        })
         .collect();
-    trace!("struct fields are {:?}", strukt.members);
-    trace!("struct field names are {:?}", name_lookup);
 
-    // Disassemble the user's mapping into actual field bindings and defaults.
-    let mut failed = false;
-    let mut default: Option<NodeId> = None;
-    let mut type_defaults = HashMap::<&UnpackedType, &Rvalue>::new();
-    let mut values = HashMap::<usize, &Rvalue>::new();
-    for &(map, to) in mapping {
-        match map {
-            PatternMapping::Type(type_id) => {
-                let ty = builder.cx.packed_type_from_ast(
-                    Ref(builder.cx.ast_for_id(type_id).as_all().get_type().unwrap()),
-                    builder.env,
-                    None,
-                );
-                if ty.is_error() {
-                    failed = true;
-                    continue;
-                }
-                let value = builder.cx.mir_rvalue(to, builder.env);
-                assert_type2!(value.ty, ty, value.span, builder.cx);
-                type_defaults.insert(ty.resolve_full(), value);
-            }
-            PatternMapping::Member(member_id) => match builder.cx.hir_of(member_id) {
-                Ok(HirNode::Expr(&hir::Expr {
-                    kind: hir::ExprKind::Ident(name),
-                    ..
-                })) => {
-                    // Determine the index for the mapping.
-                    let index = match name_lookup.get(&name.value) {
-                        Some(&index) => index,
-                        None => {
-                            builder.cx.emit(
-                                DiagBuilder2::error(format!("`{}` member does not exist", name))
-                                    .span(name.span)
-                                    .add_note("Struct definition was here:")
-                                    .span(strukt.ast.span()),
-                            );
-                            failed = true;
-                            continue;
-                        }
-                    };
-
-                    // Determine the value and insert into the mappings.
-                    let value = builder.cx.mir_rvalue(to, builder.env);
-                    assert_type2!(value.ty, strukt.members[index].ty, value.span, builder.cx);
-                    let span = value.span;
-                    if let Some(prev) = values.insert(index, value) {
-                        builder.cx.emit(
-                            DiagBuilder2::warning(format!(
-                                "`{}` overwrites previous value `{}` for member `{}`",
-                                span.extract(),
-                                prev.span.extract(),
-                                name
-                            ))
-                            .span(span)
-                            .add_note("Previous value was here:")
-                            .span(prev.span),
-                        );
-                    }
-                }
-                Ok(_) => {
-                    let span = builder.cx.span(member_id);
-                    builder.cx.emit(
-                        DiagBuilder2::error(format!(
-                            "`{}` is not a valid struct member name",
-                            span.extract()
-                        ))
-                        .span(span),
-                    );
-                    failed = true;
-                    continue;
-                }
-                Err(()) => {
-                    failed = true;
-                    continue;
-                }
-            },
-            PatternMapping::Default => match default {
-                Some(default) => {
-                    builder.cx.emit(
-                        DiagBuilder2::error("pattern has multiple default mappings")
-                            .span(builder.cx.span(to))
-                            .add_note("Previous mapping default mapping was here:")
-                            .span(builder.cx.span(default)),
-                    );
-                    failed = true;
-                    continue;
-                }
-                None => {
-                    default = Some(to);
-                }
-            },
-        }
-    }
-
-    // In case the list of members provided by the user is incomplete, use the
-    // defaults to fill in the other members.
-    for (index, field) in strukt.members.iter().enumerate() {
-        if values.contains_key(&index) {
-            continue;
-        }
-
-        // Try the type-based defaults first.
-        if let Some(default) = type_defaults.get(field.ty.resolve_full()) {
-            trace!(
-                "applying type default to member `{}`: {:?}",
-                field.name,
-                default
-            );
-            values.insert(index, default);
-            continue;
-        }
-
-        // Try to assign a default value.
-        let default = if let Some(default) = default {
-            default
-        } else {
-            builder.cx.emit(
-                DiagBuilder2::error(format!("`{}` member missing in struct pattern", field.name))
-                    .span(builder.span)
-                    .add_note("Struct patterns must assign a value to every member."),
-            );
-            failed = true;
-            continue;
-        };
-
-        let value = builder.cx.mir_rvalue(default, builder.env);
-        assert_type2!(value.ty, field.ty, value.span, builder.cx);
-        values.insert(index, value);
-    }
-
-    if failed {
-        builder.error()
-    } else {
-        builder.build(
-            ty,
-            RvalueKind::ConstructStruct((0..values.len()).map(|i| values[&i]).collect()),
-        )
-    }
+    builder.build(ty, RvalueKind::ConstructStruct(values))
 }
 
 /// Lower a positional `'{...}` pattern.
 fn lower_positional_pattern<'a>(
     builder: &Builder<'_, impl Context<'a>>,
-    mapping: &[NodeId],
-    repeat: usize,
+    expr: &'a hir::Expr,
+    _mapping: &[NodeId],
+    _repeat: usize,
     ty: &'a UnpackedType<'a>,
 ) -> &'a Rvalue<'a> {
-    // Lower each of the values to MIR, and abort on errors.
-    let values: Vec<_> = mapping
-        .iter()
-        .map(|&id| builder.cx.mir_rvalue(id, builder.env))
-        .collect();
-    if ty.is_error() || values.iter().any(|mir| mir.is_error()) {
-        return builder.error();
-    }
-    let len = values.len() * repeat;
-    let values: Vec<_> = values.into_iter().cycle().take(len).collect();
+    // Compute the pattern mapping.
+    let map = match builder.cx.map_pattern(Ref(expr), builder.env) {
+        Ok(x) => x,
+        _ => return builder.error(),
+    };
+    assert_type2!(ty, map.ty, builder.span, builder.cx);
 
-    // Find a mapping for the values.
-    let (exp_len, result) = if ty.coalesces_to_llhd_scalar() {
-        let mut values = values;
-        values.reverse();
-        (
-            ty.simple_bit_vector(builder.cx, builder.span).size,
-            builder.build(ty, RvalueKind::Concat(values)),
-        )
-    } else if let Some(dim) = ty.outermost_dim() {
-        match dim.get_size() {
-            Some(size) => {
-                let result = builder.build(
-                    ty,
-                    RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
-                );
-                (size, result)
-            }
-            None => {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "value of type `{}` cannot be constructed with a pattern; dimension `{}` \
-                         has no fixed size",
-                        ty, dim,
-                    ))
-                    .span(builder.span),
-                );
-                return builder.error();
-            }
+    // Construct the values.
+    let values: Vec<_> = map
+        .fields
+        .iter()
+        .map(|&(field, expr)| {
+            let value = builder.cx.mir_rvalue(expr.id, builder.env);
+            assert_type2!(value.ty, field.ty(builder.cx), value.span, builder.cx);
+            value
+        })
+        .collect();
+
+    // Construct the correct output value.
+    if ty.coalesces_to_llhd_scalar() {
+        if values.len() == 1 {
+            values[0]
+        } else {
+            builder.build(ty, RvalueKind::Concat(values))
         }
-    } else if let Some(strukt) = ty.get_struct() {
-        let result = builder.build(ty, RvalueKind::ConstructStruct(values));
-        (strukt.members.len(), result)
+    } else if ty.outermost_dim().is_some() {
+        builder.build(
+            ty,
+            // TODO: This should rather be a Vec<>.
+            RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
+        )
+    } else if ty.get_struct().is_some() {
+        builder.build(ty, RvalueKind::ConstructStruct(values))
     } else {
         bug_span!(
             builder.span,
@@ -1172,21 +943,7 @@ fn lower_positional_pattern<'a>(
             "positional pattern with invalid type `{}`",
             ty
         )
-    };
-
-    // Ensure that the number of values matches the array/struct definition.
-    if exp_len != len {
-        builder.cx.emit(
-            DiagBuilder2::error(format!(
-                "pattern has {} fields, but type `{}` requires {}",
-                len, ty, exp_len
-            ))
-            .span(builder.span),
-        );
-        return builder.error();
     }
-
-    result
 }
 
 /// Map a unary operator to MIR.

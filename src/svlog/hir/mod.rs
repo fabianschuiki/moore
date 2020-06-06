@@ -87,6 +87,25 @@ where
 
     fn visit_expr(&mut self, expr: &'gcx Expr, lvalue: bool) {
         match expr.kind {
+            ExprKind::PositionalPattern(ref nodes) => {
+                for &node in nodes {
+                    self.visit_node_with_id(node, false);
+                }
+                return;
+            }
+            ExprKind::RepeatPattern(node, ref nodes) => {
+                self.visit_node_with_id(node, false);
+                for &node in nodes {
+                    self.visit_node_with_id(node, false);
+                }
+                return;
+            }
+            ExprKind::NamedPattern(ref pats) => {
+                for &(_, node) in pats {
+                    self.visit_node_with_id(node, false);
+                }
+                return;
+            }
             ExprKind::Ident(name) => match self.cx.resolve_upwards_or_error(name, expr.id) {
                 Ok(binding) => {
                     if self.is_binding_interesting(binding) {

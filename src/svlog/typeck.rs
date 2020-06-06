@@ -42,6 +42,7 @@ use crate::{
     ParamEnv, ParamEnvBinding,
 };
 use num::{cast::ToPrimitive, BigInt, One, Signed};
+use std::collections::HashSet;
 
 /// Determine the type of a node.
 #[moore_derive::query]
@@ -2123,30 +2124,14 @@ fn type_context_imposed_by_expr<'gcx>(
         }
 
         // Patterns impose the field types onto their arguments.
-        hir::ExprKind::PositionalPattern(ref args) => {
-            type_context_imposed_by_positional_pattern(cx, onto, expr, args, 1, env)
+        hir::ExprKind::PositionalPattern(ref nodes)
+        | hir::ExprKind::RepeatPattern(_, ref nodes)
+            if nodes.contains(&onto) =>
+        {
+            type_context_imposed_by_pattern(cx, onto, expr, env)
         }
-        hir::ExprKind::RepeatPattern(count, ref args) if onto != count => {
-            // TODO(fschuiki): This is a verbatim copy of code in MIR lowering.
-            // This should really go into a pattern analysis struct.
-            let const_count = match cx.constant_int_value_of(count, env) {
-                Ok(c) => c,
-                Err(()) => return Some(UnpackedType::make_error().into()),
-            };
-            let const_count = match const_count.to_usize() {
-                Some(c) => c,
-                None => {
-                    cx.emit(
-                        DiagBuilder2::error(format!(
-                            "repetition count {} is outside copable range",
-                            const_count,
-                        ))
-                        .span(cx.span(count)),
-                    );
-                    return Some(UnpackedType::make_error().into());
-                }
-            };
-            type_context_imposed_by_positional_pattern(cx, onto, expr, args, const_count, env)
+        hir::ExprKind::NamedPattern(ref nodes) if nodes.iter().any(|&(_, n)| n == onto) => {
+            type_context_imposed_by_pattern(cx, onto, expr, env)
         }
 
         // The `inside` expression imposes its operation type as type context.
@@ -2168,55 +2153,45 @@ fn type_context_imposed_by_expr<'gcx>(
     }
 }
 
-fn type_context_imposed_by_positional_pattern<'gcx>(
+// Determine the type context a pattern expression imposes on its arguments.
+// Only call this for `onto` that are strictly outside of potential field index
+// expressions, i.e. not on the left of any `:` in the pattern.
+fn type_context_imposed_by_pattern<'gcx>(
     cx: &impl Context<'gcx>,
     onto: NodeId,
     expr: &'gcx hir::Expr,
-    args: &[NodeId],
-    _repeat: usize,
     env: ParamEnv,
 ) -> Option<TypeContext<'gcx>> {
-    let index = args.iter().position(|&n| n == onto)?;
-    let ty = cx.cast_expr_type(Ref(expr), env).init;
-    if ty.is_error() {
-        return Some(UnpackedType::make_error().into());
-    }
+    let map = match cx.map_pattern(Ref(expr), env) {
+        Ok(x) => x,
+        _ => return Some(UnpackedType::make_error().into()),
+    };
 
-    // Handle arrays.
-    if let Some(_dim) = ty.outermost_dim() {
-        let elty = ty.pop_dim(cx).unwrap();
-        return Some(elty.into());
-    }
+    // Determine the types of the fields where the `onto` expression is
+    // assigned.
+    let tys: HashSet<_> = map
+        .fields
+        .iter()
+        .flat_map(|(field, expr)| {
+            if expr.id == onto {
+                Some(field.ty(cx))
+            } else {
+                None
+            }
+        })
+        .collect();
 
-    // Handle structs.
-    if let Some(strukt) = ty.get_struct() {
-        if args.len() > strukt.members.len() {
-            cx.emit(
-                DiagBuilder2::error(format!(
-                    "pattern has {} fields, but type `{}` requires {}",
-                    args.len(),
-                    ty,
-                    strukt.members.len()
-                ))
-                .span(expr.span),
-            );
-        }
-        return Some(strukt.members[index].ty.into());
+    // If the type is unique, we impose that as a constraint. Otherwise
+    // we can't decide and just return.
+    if tys.len() == 1 {
+        Some(tys.into_iter().next().unwrap().into())
+    } else {
+        trace!(
+            "Expression `{}` assigned to multiple fields with distinct types; no context imposed",
+            expr.span().extract()
+        );
+        None
     }
-
-    // Handle SBVTs.
-    if let Some(sbv) = ty.get_simple_bit_vector() {
-        return Some(sbv.change_size(1).to_unpacked(cx).into());
-    }
-
-    bug_span!(
-        expr.span,
-        cx,
-        "type context for field `{}` of positional pattern with invalid type `{}`; should have \
-         been caught by type check of the pattern",
-        ty,
-        index
-    );
 }
 
 /// Get the type context imposed by a statement.

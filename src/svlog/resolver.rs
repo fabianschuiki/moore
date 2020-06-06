@@ -1359,7 +1359,7 @@ where
         {
             match patfield.data {
                 ast::PatternFieldData::Member(ref name_expr, ..) if name_expr.as_ref() == node => {
-                    return false
+                    return false;
                 }
                 _ => (),
             }

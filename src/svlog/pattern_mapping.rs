@@ -35,6 +35,17 @@ pub enum PatternField<'a> {
     Struct(&'a ty::StructMember<'a>),
 }
 
+impl<'a> PatternField<'a> {
+    /// Determine the type of the underlying field.
+    pub fn ty(&self, cx: &impl ty::TypeContext<'a>) -> &'a ty::UnpackedType<'a> {
+        match self {
+            Self::Bit(sbv) => sbv.to_unpacked(cx),
+            Self::Array(ty) => ty,
+            Self::Struct(m) => m.ty,
+        }
+    }
+}
+
 /// Determine the mapping of a named or positional `'{...}` pattern.
 #[moore_derive::query]
 pub(crate) fn map_pattern<'a>(
@@ -43,10 +54,11 @@ pub(crate) fn map_pattern<'a>(
     env: ParamEnv,
 ) -> Result<Arc<PatternMapping<'a>>> {
     // First determine the type the pattern will have.
-    let ty = cx.cast_expr_type(Ref(expr), env).init;
+    let ty = cx.need_type_context(expr.id, env);
     if ty.is_error() {
         return Err(());
     }
+    let ty = ty.ty();
 
     // Then handle the different pattern styles.
     let fields = match expr.kind {
