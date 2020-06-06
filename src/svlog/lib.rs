@@ -113,6 +113,8 @@ pub mod hir;
 mod inst_details;
 pub mod mir;
 mod param_env;
+#[warn(missing_docs)]
+pub mod pattern_mapping;
 pub mod port_list;
 mod port_mapping;
 mod resolver;
@@ -146,7 +148,7 @@ pub use crate::{
 mod crate_prelude {
     #[allow(unused_imports)]
     pub(crate) use crate::{
-        ast::{self, AnyNode, AnyNodeData},
+        ast::{AnyNode, AnyNodeData},
         common::{
             errors::*,
             name::Name,
@@ -157,8 +159,8 @@ mod crate_prelude {
         },
         context::{BaseContext, Context, GlobalContext},
         hir, mir, param_env, port_mapping,
-        resolver::{self, Rib, RibKind},
-        ty, typeck, value, IntoNodeEnvId, NodeEnvId, Ref,
+        resolver::{Rib, RibKind},
+        ty, typeck, value, IntoNodeEnvId, NodeEnvId, Ref, *,
     };
 }
 
@@ -257,9 +259,9 @@ mod queries {
     use crate::crate_prelude::*;
     use crate::{
         param_env::*,
+        pattern_mapping::*,
         port_list::{self, *},
         port_mapping::*,
-        resolver::*,
         rst::*,
         ty::UnpackedType,
         typeck::*,
