@@ -317,7 +317,7 @@ pub(crate) fn map_to_type<'a>(
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
                     return cx.map_to_type(Ref(cx.ast_for_id(assigned_id.id())), assigned_id.env());
                 }
-                Some(ParamEnvBinding::Direct(t)) => return Some(UnpackedType::from_legacy(cx, t)),
+                Some(ParamEnvBinding::Direct(t)) => return Some(t),
                 _ => (),
             }
 

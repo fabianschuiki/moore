@@ -6,7 +6,7 @@ use crate::{
     ast_map::AstNode,
     crate_prelude::*,
     hir::{HirNode, NamedParam, PosParam},
-    ty::Type,
+    ty::UnpackedType,
     value::Value,
 };
 
@@ -79,7 +79,7 @@ impl std::fmt::Debug for NodeEnvId {
 pub struct ParamEnvData<'t> {
     module: Option<NodeId>,
     values: Vec<(NodeId, ParamEnvBinding<Value<'t>>)>,
-    types: Vec<(NodeId, ParamEnvBinding<Type<'t>>)>,
+    types: Vec<(NodeId, ParamEnvBinding<&'t UnpackedType<'t>>)>,
 }
 
 impl<'t> ParamEnvData<'t> {
@@ -92,7 +92,7 @@ impl<'t> ParamEnvData<'t> {
     }
 
     /// Find the type assigned to a node.
-    pub fn find_type(&self, node_id: NodeId) -> Option<ParamEnvBinding<Type<'t>>> {
+    pub fn find_type(&self, node_id: NodeId) -> Option<ParamEnvBinding<&'t UnpackedType<'t>>> {
         self.types
             .iter()
             .find(|&&(id, _)| id == node_id)
