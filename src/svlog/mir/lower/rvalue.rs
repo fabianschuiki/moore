@@ -5,7 +5,6 @@
 use crate::crate_prelude::*;
 use crate::{
     hir::HirNode,
-    hir::PatternMapping,
     mir::rvalue::*,
     ty::{SbvType, UnpackedType},
     typeck::{CastOp, CastType},
@@ -120,6 +119,9 @@ fn lower_expr_inner<'gcx>(
     let cx = builder.cx;
     let span = cx.span(expr_id);
     let env = builder.env;
+    if ty.is_error() {
+        return Err(());
+    }
 
     // Determine the expression type and match on the various forms.
     match hir.kind {
@@ -238,55 +240,9 @@ fn lower_expr_inner<'gcx>(
             ))
         }
 
-        hir::ExprKind::PositionalPattern(ref mapping) => {
-            Ok(lower_positional_pattern(&builder, hir, mapping, 1, ty))
-        }
-
-        hir::ExprKind::RepeatPattern(count, ref mapping) => {
-            let const_count = cx.constant_int_value_of(count, env)?;
-            let const_count = match const_count.to_usize() {
-                Some(c) => c,
-                None => {
-                    builder.cx.emit(
-                        DiagBuilder2::error(format!(
-                            "repetition count {} is outside copable range",
-                            const_count,
-                        ))
-                        .span(cx.span(count)),
-                    );
-                    return Err(());
-                }
-            };
-            Ok(lower_positional_pattern(
-                &builder,
-                hir,
-                mapping,
-                const_count,
-                ty,
-            ))
-        }
-
-        hir::ExprKind::NamedPattern(ref mapping) => {
-            if ty.is_error() {
-                Err(())
-            } else if let Some(dim) = ty.outermost_dim() {
-                Ok(lower_named_array_pattern(&builder, hir, mapping, ty, dim))
-            } else if let Some(strukt) = ty.get_struct() {
-                Ok(lower_named_struct_pattern(
-                    &builder, hir, mapping, ty, strukt,
-                ))
-            } else {
-                builder.cx.emit(
-                    DiagBuilder2::error(format!(
-                        "cannot construct a value of type `{}` with `'{{...}}`",
-                        ty
-                    ))
-                    .span(span)
-                    .add_note("Named patterns can only construct arrays or structs."),
-                );
-                Err(())
-            }
-        }
+        hir::ExprKind::PositionalPattern(..)
+        | hir::ExprKind::RepeatPattern(..)
+        | hir::ExprKind::NamedPattern(..) => Ok(lower_pattern(&builder, hir, ty)),
 
         hir::ExprKind::Concat(repeat, ref exprs) => {
             // Compute the SBVT for each expression and lower it to MIR,
@@ -824,83 +780,10 @@ fn unpack_array<'a>(
     builder.build(to, RvalueKind::ConstructArray(unpacked_elements))
 }
 
-/// Lower a named `'{...}` array pattern.
-fn lower_named_array_pattern<'a>(
+/// Lower a `'{...}` pattern.
+fn lower_pattern<'a>(
     builder: &Builder<'_, impl Context<'a>>,
     expr: &'a hir::Expr,
-    _mapping: &[(PatternMapping, NodeId)],
-    ty: &'a UnpackedType<'a>,
-    _dim: ty::Dim<'a>,
-) -> &'a Rvalue<'a> {
-    // Compute the pattern mapping.
-    let map = match builder.cx.map_pattern(Ref(expr), builder.env) {
-        Ok(x) => x,
-        _ => return builder.error(),
-    };
-    assert_type2!(ty, map.ty, builder.span, builder.cx);
-
-    // Construct the values.
-    let values: Vec<_> = map
-        .fields
-        .iter()
-        .map(|&(field, expr)| {
-            let value = builder.cx.mir_rvalue(expr.id, builder.env);
-            assert_type2!(value.ty, field.ty(builder.cx), value.span, builder.cx);
-            value
-        })
-        .collect();
-
-    // Construct the correct output value.
-    if ty.coalesces_to_llhd_scalar() {
-        if values.len() == 1 {
-            values[0]
-        } else {
-            builder.build(ty, RvalueKind::Concat(values))
-        }
-    } else {
-        builder.build(
-            ty,
-            // TODO: This should rather be a Vec<>.
-            RvalueKind::ConstructArray(values.into_iter().enumerate().collect()),
-        )
-    }
-}
-
-/// Lower a named `'{...}` struct pattern.
-fn lower_named_struct_pattern<'a>(
-    builder: &Builder<'_, impl Context<'a>>,
-    expr: &'a hir::Expr,
-    _mapping: &[(PatternMapping, NodeId)],
-    ty: &'a UnpackedType<'a>,
-    _strukt: &'a ty::StructType<'a>,
-) -> &'a Rvalue<'a> {
-    // Compute the pattern mapping.
-    let map = match builder.cx.map_pattern(Ref(expr), builder.env) {
-        Ok(x) => x,
-        _ => return builder.error(),
-    };
-    assert_type2!(ty, map.ty, builder.span, builder.cx);
-
-    // Construct the values.
-    let values: Vec<_> = map
-        .fields
-        .iter()
-        .map(|&(field, expr)| {
-            let value = builder.cx.mir_rvalue(expr.id, builder.env);
-            assert_type2!(value.ty, field.ty(builder.cx), value.span, builder.cx);
-            value
-        })
-        .collect();
-
-    builder.build(ty, RvalueKind::ConstructStruct(values))
-}
-
-/// Lower a positional `'{...}` pattern.
-fn lower_positional_pattern<'a>(
-    builder: &Builder<'_, impl Context<'a>>,
-    expr: &'a hir::Expr,
-    _mapping: &[NodeId],
-    _repeat: usize,
     ty: &'a UnpackedType<'a>,
 ) -> &'a Rvalue<'a> {
     // Compute the pattern mapping.
