@@ -86,12 +86,12 @@
 //! which changes only their value domain.
 
 use crate::crate_prelude::*;
-use crate::{ast_map::AstNode, common::arenas::TypedArena, hir::HirNode, ParamEnv};
+use crate::{common::arenas::TypedArena, ParamEnv};
 use once_cell::sync::Lazy;
 use std::{
     cell::RefCell,
     collections::HashSet,
-    fmt::{self, Display, Formatter},
+    fmt::{Debug, Display},
 };
 
 /// A packed type.
@@ -181,6 +181,44 @@ pub enum IntAtomType {
     Integer,
     /// A `time`.
     Time,
+}
+
+/// The number of values each bit of a type can assume.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Domain {
+    /// Two-valued types such as `bit` or `int`.
+    TwoValued,
+    /// Four-valued types such as `logic` or `integer`.
+    FourValued,
+}
+
+/// Whether a type is signed or unsigned.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Sign {
+    /// A `signed` type.
+    Signed,
+    /// An `unsigned` type.
+    Unsigned,
+}
+
+/// The `[a:b]` part in a vector/array type such as `logic [a:b]`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Range {
+    /// The total number of bits, given as `|a-b|+1`.
+    pub size: usize,
+    /// The direction of the vector, i.e. whether `a > b` or `a < b`.
+    pub dir: RangeDir,
+    /// The starting offset of the range.
+    pub offset: isize,
+}
+
+/// Which side is greater in a range `[a:b]`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RangeDir {
+    /// `a < b`
+    Up,
+    /// `a > b`
+    Down,
 }
 
 /// An unpacked type.
@@ -732,185 +770,6 @@ impl<'a> PackedType<'a> {
             _ => None,
         }
     }
-
-    /// Convert a legacy `Type` into a `PackedType`.
-    pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
-        match *other {
-            TypeKind::Error => PackedType::make_error(),
-            TypeKind::Void => PackedType::make_void(),
-            TypeKind::Time => PackedType::make(cx, IntAtomType::Time),
-            TypeKind::Bit(domain) => PackedType::make(
-                cx,
-                match domain {
-                    Domain::TwoValued => IntVecType::Bit,
-                    Domain::FourValued => IntVecType::Logic,
-                },
-            ),
-            TypeKind::Int(width, domain) => PackedType::make_dims(
-                cx,
-                match domain {
-                    Domain::TwoValued => IntVecType::Bit,
-                    Domain::FourValued => IntVecType::Logic,
-                },
-                vec![PackedDim::Range(Range {
-                    size: width,
-                    dir: RangeDir::Down,
-                    offset: 0,
-                })],
-            ),
-            TypeKind::Named(name, _, ty) => PackedType::make(
-                cx,
-                PackedCore::Named {
-                    name: name,
-                    ty: PackedType::from_legacy(cx, ty),
-                },
-            ),
-            TypeKind::Struct(node_id) => {
-                let def = match cx.struct_def(node_id.id()) {
-                    Ok(x) => x,
-                    _ => return Self::make_error(),
-                };
-                assert!(def.packed);
-                let (ast, ast_type) = match cx.ast_of(node_id.id()).unwrap() {
-                    AstNode::Type(ty) => match ty.kind.data {
-                        ast::StructType(ref s) => (s, ty),
-                        _ => unreachable!("type is not a struct"),
-                    },
-                    _ => unreachable!("invalid struct"),
-                };
-                let members = def
-                    .fields
-                    .iter()
-                    .map(|field| {
-                        let (ast_name, ast_member) = match cx.ast_of(field.field).unwrap() {
-                            AstNode::StructMember(name, member, _) => (name, member),
-                            _ => unreachable!("invalid struct member"),
-                        };
-                        StructMember {
-                            name: field.name,
-                            ty: cx.packed_type_from_ast(
-                                Ref(cx.ast_for_id(field.ty).as_all().get_type().unwrap()),
-                                node_id.env(),
-                                None,
-                            ),
-                            ast_name,
-                            ast_member,
-                        }
-                    })
-                    .collect();
-                PackedType::make(
-                    cx,
-                    StructType {
-                        ast,
-                        ast_type,
-                        kind: ast.kind,
-                        members,
-                        legacy_env: node_id.env(),
-                    },
-                )
-            }
-            TypeKind::PackedArray(size, ty) => {
-                let mut packed = PackedType::from_legacy(cx, ty).clone();
-                packed.dims.insert(
-                    0,
-                    PackedDim::Range(Range {
-                        size: size,
-                        dir: RangeDir::Down,
-                        offset: 0,
-                    }),
-                );
-                packed.intern(cx)
-            }
-            TypeKind::BitScalar { domain, sign } => PackedType::make_sign(
-                cx,
-                match domain {
-                    Domain::TwoValued => IntVecType::Bit,
-                    Domain::FourValued => IntVecType::Logic,
-                },
-                sign,
-                sign != Sign::Unsigned,
-            ),
-            TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed,
-            } => {
-                let atom = match range.size {
-                    8 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::Byte),
-                    16 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::ShortInt),
-                    32 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::Int),
-                    32 if dubbed && domain == Domain::FourValued => Some(IntAtomType::Integer),
-                    64 if dubbed && domain == Domain::TwoValued => Some(IntAtomType::LongInt),
-                    _ => None,
-                };
-                if let Some(atom) = atom {
-                    PackedType::make_sign(cx, atom, sign, sign != Sign::Signed)
-                } else {
-                    PackedType::make_sign_and_dims(
-                        cx,
-                        match domain {
-                            Domain::TwoValued => IntVecType::Bit,
-                            Domain::FourValued => IntVecType::Logic,
-                        },
-                        sign,
-                        sign != Sign::Unsigned,
-                        vec![PackedDim::Range(range)],
-                    )
-                }
-            }
-        }
-    }
-
-    /// Convert a `PackedType` into a legacy `Type`.
-    pub fn to_legacy(&self, cx: &impl Context<'a>) -> Type<'a> {
-        let mut dims = self.dims.iter().rev().fuse();
-        let mut core = match self.core {
-            PackedCore::Error => return &ERROR_TYPE,
-            PackedCore::Void => return &VOID_TYPE,
-            PackedCore::IntVec(x) => {
-                if let Some(dim) = dims.next() {
-                    cx.intern_type(TypeKind::BitVector {
-                        domain: x.domain(),
-                        sign: self.sign,
-                        range: match dim {
-                            PackedDim::Range(r) => *r,
-                            _ => panic!("cannot convert type with range `{}` to legacy type", dim),
-                        },
-                        dubbed: false,
-                    })
-                } else {
-                    match x {
-                        IntVecType::Bit => &BIT_TYPE,
-                        IntVecType::Logic => &LOGIC_TYPE,
-                        IntVecType::Reg => &LOGIC_TYPE,
-                    }
-                }
-            }
-            PackedCore::IntAtom(IntAtomType::Byte) => &BYTE_TYPE,
-            PackedCore::IntAtom(IntAtomType::ShortInt) => &SHORTINT_TYPE,
-            PackedCore::IntAtom(IntAtomType::Int) => &INT_TYPE,
-            PackedCore::IntAtom(IntAtomType::LongInt) => &LONGINT_TYPE,
-            PackedCore::IntAtom(IntAtomType::Integer) => &INTEGER_TYPE,
-            PackedCore::IntAtom(IntAtomType::Time) => &TIME_TYPE,
-            PackedCore::Struct(ref x) => {
-                cx.intern_type(TypeKind::Struct(x.ast_type.id().env(x.legacy_env)))
-            }
-            PackedCore::Enum(ref x) => x.base.to_legacy(cx),
-            PackedCore::Named { name, ty } => {
-                cx.intern_type(TypeKind::Named(name, NodeId::from_u32(0), ty.to_legacy(cx)))
-            }
-            PackedCore::Ref { ty, .. } => ty.to_legacy(cx),
-        };
-        for dim in dims {
-            let size = match dim {
-                PackedDim::Range(r) => r.size,
-                _ => panic!("cannot convert type with range `{}` to legacy type", dim),
-            };
-            core = cx.intern_type(TypeKind::PackedArray(size, core));
-        }
-        core
-    }
 }
 
 impl Display for PackedType<'_> {
@@ -1127,6 +986,75 @@ impl Display for IntAtomType {
             Self::Integer => write!(f, "integer"),
             Self::Time => write!(f, "time"),
         }
+    }
+}
+impl Domain {
+    /// Return the single-bit type for this domain (`bit` or `logic`).
+    pub fn bit_type(&self) -> IntVecType {
+        match self {
+            Domain::TwoValued => IntVecType::Bit,
+            Domain::FourValued => IntVecType::Logic,
+        }
+    }
+}
+
+impl Sign {
+    /// Check whether the type is unsigned.
+    ///
+    /// Returns false for types which have no sign.
+    pub fn is_unsigned(&self) -> bool {
+        *self == Sign::Unsigned
+    }
+
+    /// Check whether the type is signed.
+    ///
+    /// Returns false for types which have no sign.
+    pub fn is_signed(&self) -> bool {
+        *self == Sign::Signed
+    }
+}
+
+impl Display for Sign {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Sign::Signed => write!(f, "signed"),
+            Sign::Unsigned => write!(f, "unsigned"),
+        }
+    }
+}
+
+impl Debug for Sign {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Range {
+    /// Create a new `[<size>-1:0]` range.
+    pub fn with_size(size: usize) -> Self {
+        Self {
+            size,
+            dir: RangeDir::Down,
+            offset: 0,
+        }
+    }
+}
+
+impl Display for Range {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let lo = self.offset;
+        let hi = lo + self.size as isize - 1;
+        let (lhs, rhs) = match self.dir {
+            RangeDir::Up => (lo, hi),
+            RangeDir::Down => (hi, lo),
+        };
+        write!(f, "[{}:{}]", lhs, rhs)
+    }
+}
+
+impl Debug for Range {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Display::fmt(self, f)
     }
 }
 
@@ -1372,20 +1300,6 @@ impl<'a> UnpackedType<'a> {
         match self.get_simple_bit_vector() {
             Some(sbv) => sbv,
             None => bug_span!(span, cx, "`{}` has no simple bit vector equivalent", self),
-        }
-    }
-
-    /// Convert a legacy `Type` into an `UnpackedType`.
-    pub fn from_legacy(cx: &impl Context<'a>, other: Type<'a>) -> &'a Self {
-        Self::make(cx, PackedType::from_legacy(cx, other))
-    }
-
-    /// Convert an `UnpackedType` into a legacy `Type`.
-    pub fn to_legacy(&self, cx: &impl Context<'a>) -> Type<'a> {
-        match self.core {
-            UnpackedCore::Error => &ty::ERROR_TYPE,
-            UnpackedCore::Packed(x) => x.to_legacy(cx),
-            _ => panic!("cannot convert `{}` to legacy type", self),
         }
     }
 
@@ -1938,831 +1852,5 @@ where
 impl<'a> HasTypeStorage<'a> for &'a TypeStorage<'a> {
     fn type_storage(&self) -> &'a TypeStorage<'a> {
         *self
-    }
-}
-
-/// A verilog type.
-pub type Type<'t> = &'t TypeKind<'t>;
-
-/// Type data.
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum TypeKind<'t> {
-    /// An error occurred during type computation.
-    Error,
-    /// The `void` type.
-    Void,
-    /// The `time` type.
-    Time,
-    /// A single bit type.
-    Bit(Domain),
-    /// An integer type.
-    Int(usize, Domain),
-    /// A named type.
-    ///
-    /// The first field represents how the type was originally named by the
-    /// user. The second field represents the binding of the resolved name. The
-    /// third field represents the actual type.
-    Named(Spanned<Name>, NodeId, Type<'t>),
-    /// A struct type.
-    Struct(NodeEnvId),
-    /// A packed array type.
-    PackedArray(usize, Type<'t>),
-    /// A single bit type.
-    BitScalar { domain: Domain, sign: Sign },
-    /// A simple bit vector type (SBVT).
-    ///
-    /// The innermost dimension of a multi-dimensional bit vector type is always
-    /// represented as a SBVT.
-    BitVector {
-        domain: Domain,
-        sign: Sign,
-        range: Range,
-        dubbed: bool,
-    },
-}
-
-/// The number of values each bit of a type can assume.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Domain {
-    /// Two-valued types such as `bit` or `int`.
-    TwoValued,
-    /// Four-valued types such as `logic` or `integer`.
-    FourValued,
-}
-
-/// Whether a type is signed or unsigned.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[allow(missing_docs)]
-pub enum Sign {
-    Signed,
-    Unsigned,
-}
-
-/// The `[a:b]` part in a vector/array type such as `logic [a:b]`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Range {
-    /// The total number of bits, given as `|a-b|+1`.
-    pub size: usize,
-    /// The direction of the vector, i.e. whether `a > b` or `a < b`.
-    pub dir: RangeDir,
-    /// The starting offset of the range.
-    pub offset: isize,
-}
-
-/// Which side is greater in a range `[a:b]`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RangeDir {
-    /// `a < b`
-    Up,
-    /// `a > b`
-    Down,
-}
-
-impl Range {
-    /// Create a new `[<size>-1:0]` range.
-    pub fn with_size(size: usize) -> Self {
-        Self {
-            size,
-            dir: RangeDir::Down,
-            offset: 0,
-        }
-    }
-}
-
-impl std::fmt::Debug for Range {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl<'t> TypeKind<'t> {
-    /// Check if this is the error type.
-    pub fn is_error(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::Error => true,
-            _ => false,
-        }
-    }
-
-    /// Check if this is the void type.
-    pub fn is_void(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::Void => true,
-            _ => false,
-        }
-    }
-
-    /// Check if this is a struct type.
-    pub fn is_struct(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::Struct(..) => true,
-            _ => false,
-        }
-    }
-
-    /// Check if this is an array type.
-    pub fn is_array(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::PackedArray(..) => true,
-            _ => false,
-        }
-    }
-
-    /// Get the definition of a struct.
-    pub fn get_struct_def(&self) -> Option<NodeEnvId> {
-        match *self.resolve_name() {
-            TypeKind::Struct(id) => Some(id),
-            _ => None,
-        }
-    }
-
-    /// Get the element type of an array.
-    pub fn get_array_element(&self) -> Option<Type<'t>> {
-        match *self.resolve_name() {
-            TypeKind::PackedArray(_, e) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// Get the length of an array.
-    pub fn get_array_length(&self) -> Option<usize> {
-        match *self.resolve_name() {
-            TypeKind::PackedArray(l, _) => Some(l),
-            _ => None,
-        }
-    }
-
-    /// Get the width of the type.
-    ///
-    /// Panics if the type is not an integer.
-    pub fn width(&self) -> usize {
-        match *self.resolve_name() {
-            TypeKind::Bit(_) => 1,
-            TypeKind::Int(w, _) => w,
-            TypeKind::BitScalar { .. } => 1,
-            TypeKind::BitVector { range, .. } => range.size,
-            _ => panic!("{:?} has no width", self),
-        }
-    }
-
-    /// Check if this is a bit vector type.
-    pub fn is_bit_vector(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::BitVector { .. } => true,
-            _ => false,
-        }
-    }
-
-    /// Check if this is a bit scalar type.
-    pub fn is_bit_scalar(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::BitScalar { .. } => true,
-            _ => false,
-        }
-    }
-
-    /// Check if this type uses a predefined type alias as name.
-    pub fn is_dubbed(&self) -> bool {
-        match *self.resolve_name() {
-            TypeKind::BitScalar { .. } => true,
-            TypeKind::BitVector { dubbed, .. } => dubbed,
-            _ => false,
-        }
-    }
-
-    /// Check if this type is a valid boolean.
-    pub fn is_bool(&self) -> bool {
-        ty::identical(self, &ty::BIT_TYPE) || ty::identical(self, &ty::LOGIC_TYPE)
-    }
-
-    /// Remove all typedefs and reveal the concrete fundamental type.
-    pub fn resolve_name(&self) -> &Self {
-        match self {
-            TypeKind::Named(_, _, ty) => ty.resolve_name(),
-            _ => self,
-        }
-    }
-
-    /// Return the domain of the type, if it has one.
-    pub fn get_value_domain(&self) -> Option<Domain> {
-        match *self.resolve_name() {
-            TypeKind::Bit(d) => Some(d),
-            TypeKind::Int(_, d) => Some(d),
-            TypeKind::BitScalar { domain, .. } => Some(domain),
-            TypeKind::BitVector { domain, .. } => Some(domain),
-            TypeKind::PackedArray(_, ty) => ty.get_value_domain(),
-            _ => None,
-        }
-    }
-
-    /// Return the sign of the type, if it has one.
-    pub fn get_sign(&self) -> Option<Sign> {
-        match *self.resolve_name() {
-            TypeKind::Bit(..) => Some(Sign::Unsigned),
-            TypeKind::Int(..) => Some(Sign::Unsigned),
-            TypeKind::BitScalar { sign, .. } => Some(sign),
-            TypeKind::BitVector { sign, .. } => Some(sign),
-            TypeKind::PackedArray(_, ty) => ty.get_sign(),
-            _ => None,
-        }
-    }
-
-    /// Return the range of the type, if it has one.
-    pub fn get_range(&self) -> Option<Range> {
-        match self.resolve_name() {
-            TypeKind::Bit(..) => Some(Range {
-                size: 1,
-                dir: RangeDir::Down,
-                offset: 0isize,
-            }),
-            TypeKind::Int(..) => Some(Range {
-                size: 32,
-                dir: RangeDir::Down,
-                offset: 0isize,
-            }),
-            TypeKind::BitScalar { .. } => Some(Range {
-                size: 1,
-                dir: RangeDir::Down,
-                offset: 0isize,
-            }),
-            TypeKind::BitVector { range, .. } => Some(*range),
-            _ => None,
-        }
-    }
-
-    /// Check whether the type is unsigned.
-    ///
-    /// Returns false for types which have no sign.
-    pub fn is_unsigned(&self) -> bool {
-        self.get_sign() == Some(Sign::Unsigned)
-    }
-
-    /// Check whether the type is signed.
-    ///
-    /// Returns false for types which have no sign.
-    pub fn is_signed(&self) -> bool {
-        self.get_sign() == Some(Sign::Signed)
-    }
-
-    /// Change the value domain of a type.
-    pub fn change_value_domain<'gcx>(
-        &'gcx self,
-        cx: &impl Context<'gcx>,
-        domain: Domain,
-    ) -> Type<'gcx> {
-        if self.get_value_domain() == Some(domain) {
-            return self;
-        }
-        match *self.resolve_name() {
-            TypeKind::Bit(_) => cx.intern_type(TypeKind::BitScalar {
-                domain,
-                sign: Sign::Unsigned,
-            }),
-            TypeKind::Int(size, _) => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign: Sign::Signed,
-                range: Range {
-                    size,
-                    dir: RangeDir::Down,
-                    offset: 0isize,
-                },
-                dubbed: true,
-            }),
-            TypeKind::BitScalar { sign, .. } => {
-                cx.intern_type(TypeKind::BitScalar { domain, sign })
-            }
-            TypeKind::BitVector {
-                sign,
-                range,
-                dubbed,
-                ..
-            } => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed,
-            }),
-            _ => self,
-        }
-    }
-
-    /// Change the sign of a simple bit type.
-    pub fn change_sign<'gcx>(&'gcx self, cx: &impl Context<'gcx>, sign: Sign) -> Type<'gcx> {
-        if self.get_sign() == Some(sign) {
-            return self;
-        }
-        match *self.resolve_name() {
-            TypeKind::BitScalar { domain, .. } => {
-                cx.intern_type(TypeKind::BitScalar { domain, sign })
-            }
-            TypeKind::BitVector {
-                domain,
-                range,
-                dubbed,
-                ..
-            } => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed,
-            }),
-            _ => self,
-        }
-    }
-
-    /// Change the range of a simple bit type.
-    pub fn change_range<'gcx>(&'gcx self, cx: &impl Context<'gcx>, range: Range) -> Type<'gcx> {
-        if self.get_range() == Some(range) {
-            return self;
-        }
-        match *self.resolve_name() {
-            TypeKind::Bit(domain) => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign: Sign::Unsigned,
-                range,
-                dubbed: false,
-            }),
-            TypeKind::Int(_, domain) => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign: Sign::Signed,
-                range,
-                dubbed: false,
-            }),
-            TypeKind::BitScalar { domain, sign } => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed: false,
-            }),
-            TypeKind::BitVector {
-                domain,
-                sign,
-                dubbed,
-                ..
-            } => cx.intern_type(TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed,
-            }),
-            _ => self,
-        }
-    }
-
-    /// Check if this type has a simple bit vector equivalent.
-    pub fn has_simple_bit_vector(&self) -> bool {
-        match self.resolve_name() {
-            TypeKind::Error | TypeKind::Void | TypeKind::Time => false,
-            TypeKind::BitVector { .. } | TypeKind::BitScalar { .. } => true,
-            TypeKind::Bit(..)
-            | TypeKind::Int(..)
-            | TypeKind::Struct(..)
-            | TypeKind::PackedArray(..) => true,
-            TypeKind::Named(..) => unreachable!("handled by resolve_name()"),
-        }
-    }
-
-    /// Check if this type is a simple bit vector type.
-    pub fn is_simple_bit_vector(&self) -> bool {
-        match self.resolve_name() {
-            TypeKind::Error | TypeKind::Void | TypeKind::Time => false,
-            TypeKind::BitVector { .. } | TypeKind::BitScalar { .. } => true,
-            TypeKind::Bit(..) => true,
-            TypeKind::Int(..) => true,
-            TypeKind::Struct(..) | TypeKind::PackedArray(..) => false,
-            TypeKind::Named(..) => unreachable!("handled by resolve_name()"),
-        }
-    }
-
-    /// Try to convert to an equivalent simple bit vector type.
-    ///
-    /// All *integral* data types have an equivalent *simple bit vector type*.
-    /// These include the following:
-    ///
-    /// - all basic integers
-    /// - packed arrays
-    /// - packed structures
-    /// - packed unions
-    /// - enums
-    /// - time (excluded in this implementation)
-    ///
-    /// If `force_vector` is `true`, the returned type has range `[0:0]` if it
-    /// would otherwise be a single bit.
-    pub fn get_simple_bit_vector<'gcx>(
-        &'gcx self,
-        cx: &impl Context<'gcx>,
-        env: ParamEnv,
-        force_vector: bool,
-    ) -> Option<Type<'gcx>> {
-        let bits = match *self.resolve_name() {
-            TypeKind::Error | TypeKind::Void | TypeKind::Time => return None,
-            TypeKind::BitVector { .. } => return Some(self),
-            TypeKind::BitScalar { .. } if force_vector => 1,
-            TypeKind::BitScalar { .. } => return Some(self),
-            TypeKind::Bit(..)
-            | TypeKind::Int(..)
-            | TypeKind::Struct(..)
-            | TypeKind::PackedArray(..) => bit_size_of_type(cx, self, env).ok()?,
-            TypeKind::Named(..) => unreachable!("handled by resolve_name()"),
-        };
-        Some(cx.intern_type(TypeKind::BitVector {
-            domain: ty::Domain::FourValued, // TODO(fschuiki): check if this is correct
-            sign: ty::Sign::Unsigned,
-            range: ty::Range {
-                size: bits,
-                dir: ty::RangeDir::Down,
-                offset: 0isize,
-            },
-            dubbed: false,
-        }))
-    }
-
-    /// Compute the size of the type in bits.
-    pub fn try_bit_size<'gcx>(&'gcx self, cx: &impl Context<'gcx>, env: ParamEnv) -> Result<usize> {
-        match *self {
-            TypeKind::Error | TypeKind::Void => Ok(0),
-            TypeKind::Time => panic!("time value has no bit size"),
-            TypeKind::Bit(_) => Ok(1),
-            TypeKind::Int(width, _) => Ok(width),
-            TypeKind::Named(_, _, ty) => bit_size_of_type(cx, ty, env),
-            TypeKind::Struct(struct_id) => {
-                let fields = match cx.hir_of(struct_id.id())? {
-                    HirNode::Type(hir::Type {
-                        kind: hir::TypeKind::Struct(ref fields),
-                        ..
-                    }) => fields,
-                    _ => unreachable!(),
-                };
-                let mut size = 0;
-                for &field in fields {
-                    size += cx
-                        .map_to_type(
-                            Ref(cx.ast_for_id(field).as_all().get_var_decl_name().unwrap()),
-                            struct_id.env(),
-                        )
-                        .and_then(|ty| ty.get_bit_size())
-                        .unwrap();
-                }
-                Ok(size)
-            }
-            TypeKind::PackedArray(elements, ty) => Ok(elements * bit_size_of_type(cx, ty, env)?),
-            TypeKind::BitScalar { .. } => Ok(1),
-            TypeKind::BitVector {
-                range: Range { size, .. },
-                ..
-            } => Ok(size),
-        }
-    }
-}
-
-impl<'t> Display for TypeKind<'t> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
-            TypeKind::Error => write!(f, "<error>"),
-            TypeKind::Void => write!(f, "void"),
-            TypeKind::Time => write!(f, "time"),
-            TypeKind::Bit(Domain::TwoValued) => write!(f, "bit"),
-            TypeKind::Bit(Domain::FourValued) => write!(f, "logic"),
-            TypeKind::Int(32, Domain::TwoValued) => write!(f, "int"),
-            TypeKind::Int(32, Domain::FourValued) => write!(f, "integer"),
-            TypeKind::Int(width, Domain::TwoValued) => write!(f, "int<{}>", width),
-            TypeKind::Int(width, Domain::FourValued) => write!(f, "integer<{}>", width),
-            TypeKind::Named(name, ..) => write!(f, "{}", name.value),
-            TypeKind::Struct(_) => write!(f, "struct"),
-            TypeKind::PackedArray(length, ty) => write!(f, "{} [{}:0]", ty, length - 1),
-            TypeKind::BitScalar { domain, sign } => {
-                write!(f, "{}", domain.bit_name())?;
-                if sign == Sign::Signed {
-                    write!(f, " signed")?;
-                }
-                Ok(())
-            }
-            TypeKind::BitVector {
-                domain,
-                sign,
-                range,
-                dubbed,
-            } => {
-                // Use the builtin name if called such by the user.
-                if dubbed {
-                    let dub = match range.size {
-                        8 if domain == Domain::TwoValued => Some("byte"),
-                        16 if domain == Domain::TwoValued => Some("shortint"),
-                        32 if domain == Domain::TwoValued => Some("int"),
-                        32 if domain == Domain::FourValued => Some("integer"),
-                        64 if domain == Domain::TwoValued => Some("longint"),
-                        _ => None,
-                    };
-                    if let Some(dub) = dub {
-                        write!(f, "{}", dub)?;
-                        if sign != Sign::Signed {
-                            write!(f, " {}", sign)?;
-                        }
-                        return Ok(());
-                    }
-                }
-
-                // Otherwise use the regular bit name with vector range.
-                write!(f, "{}", domain.bit_name())?;
-                if sign != Sign::Unsigned {
-                    write!(f, " {}", sign)?;
-                }
-                write!(f, " {}", range)
-            }
-        }
-    }
-}
-
-impl Domain {
-    /// Return the single-bit name for this domain (`bit` or `logic`).
-    pub fn bit_name(&self) -> &'static str {
-        match self {
-            Domain::TwoValued => "bit",
-            Domain::FourValued => "logic",
-        }
-    }
-
-    /// Return the single-bit type for this domain (`bit` or `logic`).
-    pub fn bit_type(&self) -> &'static TypeKind<'static> {
-        match self {
-            Domain::TwoValued => &BIT_TYPE,
-            Domain::FourValued => &LOGIC_TYPE,
-        }
-    }
-}
-
-impl Sign {
-    /// Check whether the type is unsigned.
-    ///
-    /// Returns false for types which have no sign.
-    pub fn is_unsigned(&self) -> bool {
-        *self == Sign::Unsigned
-    }
-
-    /// Check whether the type is signed.
-    ///
-    /// Returns false for types which have no sign.
-    pub fn is_signed(&self) -> bool {
-        *self == Sign::Signed
-    }
-}
-
-impl Display for Sign {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Sign::Signed => write!(f, "signed"),
-            Sign::Unsigned => write!(f, "unsigned"),
-        }
-    }
-}
-
-impl Display for Range {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let lo = self.offset;
-        let hi = lo + self.size as isize - 1;
-        let (lhs, rhs) = match self.dir {
-            RangeDir::Up => (lo, hi),
-            RangeDir::Down => (hi, lo),
-        };
-        write!(f, "[{}:{}]", lhs, rhs)
-    }
-}
-
-/// The `<error>` type.
-pub static ERROR_TYPE: TypeKind<'static> = TypeKind::Error;
-
-/// The `void` type.
-pub static VOID_TYPE: TypeKind<'static> = TypeKind::Void;
-
-/// The `time` type.
-pub static TIME_TYPE: TypeKind<'static> = TypeKind::Time;
-
-/// The `bit` type.
-pub static BIT_TYPE: TypeKind<'static> = TypeKind::BitScalar {
-    domain: ty::Domain::TwoValued,
-    sign: Sign::Unsigned,
-};
-
-/// The `logic` type.
-pub static LOGIC_TYPE: TypeKind<'static> = TypeKind::BitScalar {
-    domain: ty::Domain::FourValued,
-    sign: Sign::Unsigned,
-};
-
-/// The `byte` type.
-pub static BYTE_TYPE: TypeKind<'static> = TypeKind::BitVector {
-    domain: Domain::TwoValued,
-    sign: Sign::Signed,
-    range: Range {
-        size: 8,
-        dir: RangeDir::Down,
-        offset: 0isize,
-    },
-    dubbed: true,
-};
-
-/// The `shortint` type.
-pub static SHORTINT_TYPE: TypeKind<'static> = TypeKind::BitVector {
-    domain: Domain::TwoValued,
-    sign: Sign::Signed,
-    range: Range {
-        size: 16,
-        dir: RangeDir::Down,
-        offset: 0isize,
-    },
-    dubbed: true,
-};
-
-/// The `int` type.
-pub static INT_TYPE: TypeKind<'static> = TypeKind::BitVector {
-    domain: Domain::TwoValued,
-    sign: Sign::Signed,
-    range: Range {
-        size: 32,
-        dir: RangeDir::Down,
-        offset: 0isize,
-    },
-    dubbed: true,
-};
-
-/// The `integer` type.
-pub static INTEGER_TYPE: TypeKind<'static> = TypeKind::BitVector {
-    domain: Domain::FourValued,
-    sign: Sign::Signed,
-    range: Range {
-        size: 32,
-        dir: RangeDir::Down,
-        offset: 0isize,
-    },
-    dubbed: true,
-};
-
-/// The `longint` type.
-pub static LONGINT_TYPE: TypeKind<'static> = TypeKind::BitVector {
-    domain: Domain::TwoValued,
-    sign: Sign::Signed,
-    range: Range {
-        size: 64,
-        dir: RangeDir::Down,
-        offset: 0isize,
-    },
-    dubbed: true,
-};
-
-// Compute the size of a type in bits.
-pub fn bit_size_of_type<'gcx>(
-    cx: &impl Context<'gcx>,
-    ty: Type<'gcx>,
-    env: ParamEnv,
-) -> Result<usize> {
-    ty.try_bit_size(cx, env)
-}
-
-/// Check if two types are identical.
-///
-/// This is not the same as a check for equality, since the types may contain
-/// names and spans in the source code which are different, yet still refer to
-/// the same type.
-pub fn identical(a: Type, b: Type) -> bool {
-    let a = a.resolve_name();
-    let b = b.resolve_name();
-    match (a, b) {
-        (
-            TypeKind::BitVector {
-                domain: da,
-                sign: sa,
-                range: ra,
-                ..
-            },
-            TypeKind::BitVector {
-                domain: db,
-                sign: sb,
-                range: rb,
-                ..
-            },
-        ) => da == db && sa == sb && ra == rb,
-
-        (TypeKind::PackedArray(sa, ta), TypeKind::PackedArray(sb, tb)) => {
-            sa == sb && identical(ta, tb)
-        }
-
-        _ => a == b,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn builtin_type_names() {
-        // Check the builtint dubbed types.
-        assert_eq!(format!("{}", BYTE_TYPE), "byte");
-        assert_eq!(format!("{}", SHORTINT_TYPE), "shortint");
-        assert_eq!(format!("{}", INT_TYPE), "int");
-        assert_eq!(format!("{}", INTEGER_TYPE), "integer");
-        assert_eq!(format!("{}", LONGINT_TYPE), "longint");
-
-        // Check the direction and offset.
-        assert_eq!(
-            format!(
-                "{}",
-                TypeKind::BitVector {
-                    domain: Domain::TwoValued,
-                    sign: Sign::Unsigned,
-                    range: Range {
-                        size: 42,
-                        dir: RangeDir::Up,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }
-            ),
-            "bit [0:41]"
-        );
-        assert_eq!(
-            format!(
-                "{}",
-                TypeKind::BitVector {
-                    domain: Domain::TwoValued,
-                    sign: Sign::Unsigned,
-                    range: Range {
-                        size: 42,
-                        dir: RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }
-            ),
-            "bit [41:0]"
-        );
-        assert_eq!(
-            format!(
-                "{}",
-                TypeKind::BitVector {
-                    domain: Domain::TwoValued,
-                    sign: Sign::Unsigned,
-                    range: Range {
-                        size: 42,
-                        dir: RangeDir::Down,
-                        offset: -2isize,
-                    },
-                    dubbed: false,
-                }
-            ),
-            "bit [39:-2]"
-        );
-        assert_eq!(
-            format!(
-                "{}",
-                TypeKind::BitVector {
-                    domain: Domain::TwoValued,
-                    sign: Sign::Unsigned,
-                    range: Range {
-                        size: 42,
-                        dir: RangeDir::Down,
-                        offset: 3isize,
-                    },
-                    dubbed: false,
-                }
-            ),
-            "bit [44:3]"
-        );
-
-        // Check the domain.
-        assert_eq!(
-            format!(
-                "{}",
-                TypeKind::BitVector {
-                    domain: Domain::FourValued,
-                    sign: Sign::Unsigned,
-                    range: Range {
-                        size: 42,
-                        dir: RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }
-            ),
-            "logic [41:0]"
-        );
-
-        // Check the sign.
-        assert_eq!(
-            format!(
-                "{}",
-                TypeKind::BitVector {
-                    domain: Domain::FourValued,
-                    sign: Sign::Signed,
-                    range: Range {
-                        size: 42,
-                        dir: RangeDir::Down,
-                        offset: 0isize,
-                    },
-                    dubbed: false,
-                }
-            ),
-            "logic signed [41:0]"
-        );
     }
 }

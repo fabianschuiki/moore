@@ -29,7 +29,7 @@ use crate::{
     hir::{self, AccessTable, HirNode},
     port_list::PortList,
     resolver::{Scope, StructDef},
-    ty::{Type, TypeKind, UnpackedType},
+    ty::UnpackedType,
     value::{Value, ValueData, ValueKind},
     InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, QueryDatabase,
     QueryStorage,
@@ -234,7 +234,6 @@ pub struct GlobalArenas<'t> {
     ribs: TypedArena<Rib>,
     port_lists: TypedArena<PortList<'t>>,
     scopes: TypedArena<Scope<'t>>,
-    types: TypedArena<TypeKind<'t>>,
     values: TypedArena<ValueData<'t>>,
     mir_lvalue: TypedArena<mir::Lvalue<'t>>,
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
@@ -322,7 +321,6 @@ pub struct GlobalTables<'t> {
     param_envs: RefCell<Vec<&'t ParamEnvData<'t>>>,
     param_env_contexts: RefCell<HashMap<ParamEnv, BTreeSet<NodeId>>>,
     node_id_to_parent_node_id: RefCell<HashMap<NodeId, NodeId>>,
-    interned_types: RefCell<HashSet<Type<'t>>>,
     interned_values: RefCell<HashSet<Value<'t>>>,
     lowering_hints: RefCell<HashMap<NodeId, hir::Hint>>,
     interned_hir: RefCell<HashMap<NodeId, HirNode<'t>>>,
@@ -496,16 +494,6 @@ pub trait BaseContext<'gcx>:
         self.tables().interned_hir.borrow().get(&id).cloned()
     }
 
-    /// Internalize a type.
-    fn intern_type(&self, ty: TypeKind<'gcx>) -> Type<'gcx> {
-        if let Some(&x) = self.tables().interned_types.borrow().get(&ty) {
-            return x;
-        }
-        let ty = self.arena().types.alloc(ty);
-        self.tables().interned_types.borrow_mut().insert(ty);
-        ty
-    }
-
     /// Internalize a value.
     fn intern_value(&self, value: ValueData<'gcx>) -> Value<'gcx> {
         if let Some(&x) = self.tables().interned_values.borrow().get(&value) {
@@ -514,58 +502,6 @@ pub trait BaseContext<'gcx>:
         let value = self.arena().values.alloc(value);
         self.tables().interned_values.borrow_mut().insert(value);
         value
-    }
-
-    /// Make a void type.
-    fn mkty_void(&self) -> Type<'gcx> {
-        &ty::VOID_TYPE
-    }
-
-    /// Make a time type.
-    fn mkty_time(&self) -> Type<'gcx> {
-        &ty::TIME_TYPE
-    }
-
-    /// Make a bit type.
-    fn mkty_bit(&self) -> Type<'gcx> {
-        &ty::BIT_TYPE
-    }
-
-    /// Make a logic type.
-    fn mkty_logic(&self) -> Type<'gcx> {
-        &ty::LOGIC_TYPE
-    }
-
-    /// Make a named type.
-    fn mkty_named(&self, name: Spanned<Name>, binding: NodeEnvId) -> Type<'gcx> {
-        self.intern_type(TypeKind::Named(
-            name,
-            binding.id(),
-            self.gcx()
-                .map_to_type(Ref(self.ast_for_id(binding.id())), binding.env())
-                .map(|ty| ty.to_legacy(self.gcx()))
-                .unwrap_or(&ty::ERROR_TYPE),
-        ))
-    }
-
-    /// Make a 2-value integer type.
-    fn mkty_int(&self, width: usize) -> Type<'gcx> {
-        self.intern_type(TypeKind::Int(width, ty::Domain::TwoValued))
-    }
-
-    /// Make a 4-value integer type.
-    fn mkty_integer(&self, width: usize) -> Type<'gcx> {
-        self.intern_type(TypeKind::Int(width, ty::Domain::FourValued))
-    }
-
-    /// Make a struct type.
-    fn mkty_struct(&self, def_id: NodeEnvId) -> Type<'gcx> {
-        self.intern_type(TypeKind::Struct(def_id))
-    }
-
-    /// Make a packed array type.
-    fn mkty_packed_array(&self, size: usize, elem_ty: Type<'gcx>) -> Type<'gcx> {
-        self.intern_type(TypeKind::PackedArray(size, elem_ty))
     }
 
     /// Internalize a parameter environment.

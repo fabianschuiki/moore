@@ -117,6 +117,7 @@ pub mod port_list;
 mod port_mapping;
 mod resolver;
 pub mod rst;
+#[warn(missing_docs)]
 pub mod ty;
 pub mod typeck;
 pub mod value;
