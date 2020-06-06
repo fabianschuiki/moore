@@ -1500,7 +1500,8 @@ fn parse_explicit_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typ
 }
 
 fn parse_type_suffix<'n>(p: &mut dyn AbstractParser<'n>, ty: Type<'n>) -> ReportedResult<Type<'n>> {
-    let (tkn, sp) = p.peek(0);
+    let tkn = p.peek(0).0;
+    let sp = ty.span;
     match tkn {
         // Interfaces allow their internal modports and typedefs to be accessed
         // via the `.` operator.
