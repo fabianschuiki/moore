@@ -400,12 +400,6 @@ pub(crate) fn packed_type_from_ast<'a>(
 ) -> &'a UnpackedType<'a> {
     let Ref(ast) = ast;
     let mut failed = false;
-
-    // A simple enum that keeps either a packed or unpacked core type.
-    enum PackedOrUnpacked<'b> {
-        Packed(PackedCore<'b>),
-        Unpacked(UnpackedCore<'b>),
-    }
     use PackedOrUnpacked::*;
 
     // Map the type core.
@@ -551,31 +545,62 @@ pub(crate) fn packed_type_from_ast<'a>(
                 Ok(def) => def,
                 Err(()) => return UnpackedType::make_error(),
             };
+            packed_type_from_def(cx, def, name.span, env)
+        }
 
-            // See if the binding is a type.
-            let ty = match def.node {
-                DefNode::Ast(node) => cx.map_to_type(Ref(node), env),
-                _ => None,
-            };
-            let ty = match ty {
-                Some(x) => x,
-                None => {
-                    cx.emit(
-                        DiagBuilder2::error(format!("`{}` is not a type", name))
-                            .span(name.span)
-                            .add_note(format!("`{}` was declared here:", name))
-                            .span(def.node.span()),
-                    );
-                    return UnpackedType::make_error();
-                }
-            };
+        // Scoped types
+        ast::ScopedType {
+            ref ty,
+            member: false,
+            name,
+        } => match ty.kind.data {
+            ast::NamedType(pkg_name) => {
+                // Resolve the name.
+                let loc = cx.scope_location(ty.as_ref());
+                let def = match cx.resolve_local_or_error(pkg_name, loc, false) {
+                    Ok(def) => def,
+                    _ => return UnpackedType::make_error(),
+                };
 
-            // Distinguish between packed and unpacked types here.
-            if let Some(ty) = ty.get_packed() {
-                Packed(PackedCore::Named { name, ty })
-            } else {
-                Unpacked(UnpackedCore::Named { name, ty })
+                // See if the binding is a package.
+                let pkg = match def.node {
+                    DefNode::Ast(node) => node.as_all().get_package(),
+                    _ => None,
+                };
+                let pkg = match pkg {
+                    Some(x) => x,
+                    None => {
+                        cx.emit(
+                            DiagBuilder2::error(format!("`{}` is not a package", pkg_name))
+                                .span(pkg_name.span)
+                                .add_note(format!("`{}` was declared here:", pkg_name))
+                                .span(def.node.span()),
+                        );
+                        return UnpackedType::make_error();
+                    }
+                };
+
+                // Resolve the type name within the package.
+                let def = match cx.resolve_hierarchical_or_error(name, pkg) {
+                    Ok(def) => def,
+                    _ => return UnpackedType::make_error(),
+                };
+                packed_type_from_def(cx, def, ast.span(), env)
             }
+            _ => {
+                cx.emit(
+                    DiagBuilder2::error(format!("`{}` is not a package", ty.span().extract()))
+                        .span(ty.span()),
+                );
+                return UnpackedType::make_error();
+            }
+        },
+        ast::ScopedType { .. } => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` is not a type", ast.span().extract()))
+                    .span(ast.span()),
+            );
+            return UnpackedType::make_error();
         }
 
         // Type references
@@ -604,10 +629,7 @@ pub(crate) fn packed_type_from_ast<'a>(
             }
         }
 
-        ast::VirtIntfType { .. }
-        | ast::MailboxType
-        | ast::SpecializedType(..)
-        | ast::ScopedType { .. } => {
+        ast::VirtIntfType { .. } | ast::MailboxType | ast::SpecializedType(..) => {
             bug_span!(ast.span(), cx, "type {:#1?} not implemented", ast.kind)
         }
     };
@@ -682,6 +704,46 @@ pub(crate) fn packed_type_from_ast<'a>(
     } else {
         ty
     }
+}
+
+fn packed_type_from_def<'a>(
+    cx: &impl Context<'a>,
+    def: &'a resolver::Def<'a>,
+    span: Span,
+    env: ParamEnv,
+) -> PackedOrUnpacked<'a> {
+    use PackedOrUnpacked::*;
+
+    // See if the binding is a type.
+    let ty = match def.node {
+        DefNode::Ast(node) => cx.map_to_type(Ref(node), env),
+        _ => None,
+    };
+    let ty = match ty {
+        Some(x) => x,
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` is not a type", def.name))
+                    .span(span)
+                    .add_note(format!("`{}` was declared here:", def.name))
+                    .span(def.node.span()),
+            );
+            return Packed(PackedCore::Error);
+        }
+    };
+
+    // Distinguish between packed and unpacked types here.
+    if let Some(ty) = ty.get_packed() {
+        Packed(PackedCore::Named { name: def.name, ty })
+    } else {
+        Unpacked(UnpackedCore::Named { name: def.name, ty })
+    }
+}
+
+// A simple enum that keeps either a packed or unpacked core type.
+enum PackedOrUnpacked<'a> {
+    Packed(PackedCore<'a>),
+    Unpacked(UnpackedCore<'a>),
 }
 
 /// Map a type node and unpacked dimensions in the AST to an unpacked type.

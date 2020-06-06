@@ -1,4 +1,4 @@
-// RUN: moore %s -Vtypes
+// RUN: moore %s -Vtypes -e foo
 
 module foo;
     // Integer types
@@ -25,6 +25,9 @@ module foo;
     type(bit) v128904;
     type(v1) v893289;
 
+    // Packed named
+    pkg::foo_t v129034;
+
     // Signing
     bit unsigned v9;
     bit signed   v10;
@@ -47,17 +50,20 @@ module foo;
     struct { bit x; bit y; } v198897;
 
     // Variable dimensions
-    bit v19 [];
+    // bit v19 [];
     bit v20 [4];
     bit v21 [4:0];
-    bit v22 [string];
-    bit v23 [*];
-    bit v24 [$];
-    bit v25 [$:4];
+    // bit v22 [string];
+    // bit v23 [*];
+    // bit v24 [$];
+    // bit v25 [$:4];
 
     // Unpacked reference
     type(struct { bit x; }) v128904a;
     type(v20) v8932895;
+
+    // Unpacked named
+    pkg::bar_t v129023434;
 
     // Module instances
     bar m0 ();
@@ -77,3 +83,8 @@ endmodule
 
 interface baz;
 endinterface
+
+package pkg;
+    typedef bit foo_t; // packed
+    typedef bit bar_t [42]; // unpacked
+endpackage
