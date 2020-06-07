@@ -151,7 +151,7 @@ pub(crate) fn type_of_ext_port<'a>(
                     .unwrap_or_else(String::new)
             );
         }
-        let port_list = cx.module_ports(port.module);
+        let port_list = cx.canonicalize_ports(port.node);
         cx.type_of_int_port(Ref(&port_list.int[expr.port]), env)
     } else {
         bug_span!(

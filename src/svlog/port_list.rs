@@ -1,20 +1,20 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
-//! A list of ports on a module, with ANSI/non-ANSI styles resolved.
+//! A list of ports on a node, with ANSI/non-ANSI styles resolved.
 //!
-//! This module implements the port analysis required to determine if a module
+//! This module implements the port analysis required to determine if a node
 //! uses an ANSI or non-ANSI port list, and to match up ports with other bits
-//! and pieces in the module body. It produces separate, clean-cut internal and
+//! and pieces in the node body. It produces separate, clean-cut internal and
 //! external views of the port list.
 //!
 //! More concretely, it does the following:
 //!
 //! - Detect ANSI/non-ANSI style
 //! - Fill in implicit port details (defaults and carried-over from previous)
-//! - Combine port declarations in the module body with var/net declarations
-//! - Build internal port list (visible from within the module)
+//! - Combine port declarations in the node body with var/net declarations
+//! - Build internal port list (visible from within the node)
 //! - Parse port expressions into an external port list (visible when
-//!   instantiating the module)
+//!   instantiating the node)
 
 // TODO: This should eventually be moved into the `syntax` crate, as soon as the
 // only thing we really need from the `Context` is ID allocation (no more AST
@@ -22,9 +22,13 @@
 
 use crate::crate_prelude::*;
 use crate::{ast_map::AstNode, common::arenas::Alloc};
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
-/// List of internal and external ports of a module.
+/// List of internal and external ports of a node.
 ///
 /// A `PortList` consists of an ordered list of internal and external ports. The
 /// external ports map to one or more internal ports via `PortExpr`. An optional
@@ -51,8 +55,8 @@ pub struct IntPort<'a> {
     pub id: NodeId,
     /// The AST node that spawned this port.
     pub ast: &'a dyn ast::AnyNode<'a>,
-    /// The module containing the port.
-    pub module: &'a ast::Module<'a>,
+    /// The node containing the port.
+    pub node: &'a dyn PortedNode<'a>,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Name of the port.
@@ -63,7 +67,7 @@ pub struct IntPort<'a> {
     pub kind: ast::PortKind,
     /// Additional port details. Omitted if this is an explicitly-named ANSI
     /// port, and the port details must be inferred from declarations inside the
-    /// module.
+    /// node.
     pub data: Option<IntPortData<'a>>,
 }
 
@@ -88,8 +92,8 @@ pub struct IntPortData<'a> {
 pub struct ExtPort<'a> {
     /// Node ID of the port.
     pub id: NodeId,
-    /// The module containing the port.
-    pub module: &'a ast::Module<'a>,
+    /// The node containing the port.
+    pub node: &'a dyn PortedNode<'a>,
     /// Location of the port declaration in the source file.
     pub span: Span,
     /// Optional name of the port.
@@ -159,22 +163,102 @@ impl HasDesc for ExtPort<'_> {
     }
 }
 
-/// Lower the ports of a module to HIR.
-///
-/// This is a fairly complex process due to the many degrees of freedom in SV.
-/// Mainly we identify if the module uses an ANSI or non-ANSI style and then go
-/// ahead and create the external and internal views of the ports.
+/// Marker trait for AST nodes that have ports.
+pub trait PortedNode<'a>: ast::AnyNode<'a> + resolver::ScopedNode<'a> {
+    /// Get the ports of the node.
+    fn ports(&self) -> &[ast::Port<'a>];
+
+    /// Get the items of the node.
+    fn items(&self) -> &[ast::Item<'a>];
+}
+
+impl<'a> PortedNode<'a> for ast::Module<'a> {
+    fn ports(&self) -> &[ast::Port<'a>] {
+        &self.ports
+    }
+    fn items(&self) -> &[ast::Item<'a>] {
+        &self.items
+    }
+}
+
+impl<'a> PortedNode<'a> for ast::Interface<'a> {
+    fn ports(&self) -> &[ast::Port<'a>] {
+        &self.ports
+    }
+    fn items(&self) -> &[ast::Item<'a>] {
+        &self.items
+    }
+}
+
+// Compare and hash `PortedNode` by reference for use in the query system.
+impl<'a> Eq for &'a dyn PortedNode<'a> {}
+impl<'a> PartialEq for &'a dyn PortedNode<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.as_ptr(), other.as_ptr())
+    }
+}
+impl<'a> Hash for &'a dyn PortedNode<'a> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        std::ptr::hash(self.as_ptr(), h)
+    }
+}
+
+/// Anything that can be converted to a `PortedNode`.
+pub trait AsPortedNode<'a> {
+    /// Return this node as a `PortedNode`, or `None` if it generates no scope.
+    fn get_ported(&self) -> Option<&'a dyn PortedNode<'a>>;
+
+    /// Check if this node is a `PortedNode`.
+    fn is_ported(&self) -> bool {
+        self.get_ported().is_some()
+    }
+}
+
+impl<'a> AsPortedNode<'a> for ast::AllNode<'a> {
+    fn get_ported(&self) -> Option<&'a dyn PortedNode<'a>> {
+        match *self {
+            // This should reflect the impl trait list above!
+            ast::AllNode::Module(x) => Some(x),
+            ast::AllNode::Interface(x) => Some(x),
+            _ => None,
+        }
+    }
+}
+
+/// Resolve the ports of a module to a canonical list.
 #[moore_derive::query]
 pub(crate) fn module_ports<'a>(
     cx: &impl Context<'a>,
-    module: &'a ast::Module<'a>,
+    node: &'a ast::Module<'a>,
 ) -> &'a PortList<'a> {
-    debug!("Building port list of {:?}", module);
-    let mut next_rib = module.id();
-    let ast_ports = &module.ports;
-    let ast_items = &module.items;
+    cx.canonicalize_ports(node)
+}
 
-    // First determined if the module uses ANSI or non-ANSI style. We do this by
+/// Resolve the ports of an interface to a canonical list.
+#[moore_derive::query]
+pub(crate) fn interface_ports<'a>(
+    cx: &impl Context<'a>,
+    node: &'a ast::Interface<'a>,
+) -> &'a PortList<'a> {
+    cx.canonicalize_ports(node)
+}
+
+/// Resolve the ports of a module or interface to a canonical list.
+///
+/// This is a fairly complex process due to the many degrees of freedom in SV.
+/// Mainly we identify if the item uses an ANSI or non-ANSI style and then go
+/// ahead and create the external and internal views of the ports.
+#[moore_derive::query]
+pub(crate) fn canonicalize_ports<'a>(
+    cx: &impl Context<'a>,
+    node: &'a dyn PortedNode<'a>,
+) -> &'a PortList<'a> {
+    debug!("Building port list of {:?}", node);
+    let mut next_rib = node.id();
+    let ast_ports = node.ports();
+    let ast_items = node.items();
+
+    // First determined if the node uses ANSI or non-ANSI style. We do this by
     // Determining whether the first port has type, sign, and direction omitted.
     // If it has, the ports are declared in non-ANSI style.
     let (nonansi, first_span) = {
@@ -218,8 +302,8 @@ pub(crate) fn module_ports<'a>(
 
     // Create the external and internal port views.
     let partial_ports = match nonansi {
-        true => lower_module_ports_nonansi(cx, ast_ports, ast_items, first_span, module),
-        false => lower_module_ports_ansi(cx, ast_ports, ast_items, first_span, module),
+        true => lower_node_ports_nonansi(cx, ast_ports, ast_items, first_span, node),
+        false => lower_node_ports_ansi(cx, ast_ports, ast_items, first_span, node),
     };
     trace!("Lowered ports: {:#?}", partial_ports);
 
@@ -311,7 +395,7 @@ pub(crate) fn module_ports<'a>(
         ports.push(IntPort {
             id: port_id,
             ast: port.ast,
-            module,
+            node,
             span: port.span,
             name: port.name,
             dir: port.dir,
@@ -327,26 +411,26 @@ pub(crate) fn module_ports<'a>(
         ext_named: partial_ports.ext_named,
         tail_rib: next_rib,
     };
-    trace!("Port list of {:?} is: {:#?}", module, list);
+    trace!("Port list of {:?} is: {:#?}", node, list);
     cx.gcx().arena.alloc_port_list(list)
 }
 
-/// Lower the ANSI ports of a module.
-fn lower_module_ports_ansi<'a>(
+/// Lower the ANSI ports of a node.
+fn lower_node_ports_ansi<'a>(
     cx: &impl Context<'a>,
     ast_ports: &'a [ast::Port<'a>],
     ast_items: &'a [ast::Item<'a>],
     first_span: Span,
-    module: &'a ast::Module<'a>,
+    node: &'a dyn PortedNode<'a>,
 ) -> PartialPortList<'a> {
-    // Emit errors for any port declarations inside the module.
+    // Emit errors for any port declarations inside the node.
     for item in ast_items {
         let ast = match &item.data {
             ast::ItemData::PortDecl(pd) => pd,
             _ => continue,
         };
         cx.emit(
-            DiagBuilder2::error("port declaration in body of ANSI-style module")
+            DiagBuilder2::error(format!("port declaration in body of ANSI-style {:#}", node))
                 .span(ast.span)
                 .add_note(
                     "Modules with an ANSI-style port list cannot have port declarations in the \
@@ -433,7 +517,7 @@ fn lower_module_ports_ansi<'a>(
                 };
                 let ext_port = ExtPort {
                     id: cx.alloc_id(port.span()),
-                    module,
+                    node,
                     span: port.span(),
                     name: Some(data.name),
                     exprs: vec![ExtPortExpr {
@@ -465,7 +549,7 @@ fn lower_module_ports_ansi<'a>(
 
                 // Map the expression to a port expression.
                 let pe = match expr {
-                    Some(expr) => lower_port_expr(cx, expr, module.id()),
+                    Some(expr) => lower_port_expr(cx, expr, node.id()),
                     None => vec![],
                 };
 
@@ -510,7 +594,7 @@ fn lower_module_ports_ansi<'a>(
 
                 ExtPort {
                     id: cx.alloc_id(port.span()),
-                    module,
+                    node,
                     span: port.span(),
                     name: Some(*name),
                     exprs: pe,
@@ -553,15 +637,15 @@ fn lower_module_ports_ansi<'a>(
     }
 }
 
-/// Lower the non-ANSI ports of a module.
-fn lower_module_ports_nonansi<'a>(
+/// Lower the non-ANSI ports of a node.
+fn lower_node_ports_nonansi<'a>(
     cx: &impl Context<'a>,
     ast_ports: &'a [ast::Port<'a>],
     ast_items: &'a [ast::Item<'a>],
     first_span: Span,
-    module: &'a ast::Module<'a>,
+    node: &'a dyn PortedNode<'a>,
 ) -> PartialPortList<'a> {
-    // As a first step, collect the ports declared inside the module body. These
+    // As a first step, collect the ports declared inside the node body. These
     // will form the internal view of the ports.
     let mut decl_order: Vec<PartialPort> = vec![];
     let mut decl_names = HashMap::new();
@@ -606,7 +690,7 @@ fn lower_module_ports_nonansi<'a>(
     }
 
     // As a second step, collect the variable and net declarations inside the
-    // module body which further specify a port.
+    // node body which further specify a port.
     for item in ast_items {
         match &item.data {
             ast::ItemData::VarDecl(vd) => {
@@ -786,7 +870,7 @@ fn lower_module_ports_nonansi<'a>(
     }
 
     // As a fourth step, go through the ports themselves and pair them up with
-    // declarations inside the module body. This forms the external view of the
+    // declarations inside the node body. This forms the external view of the
     // ports.
     let mut ext_pos: Vec<ExtPort> = vec![];
     let mut ext_named: HashMap<Name, usize> = HashMap::new();
@@ -800,7 +884,7 @@ fn lower_module_ports_nonansi<'a>(
                 ref expr,
             } => {
                 if let Some(expr) = expr {
-                    let pe = lower_port_expr(cx, expr, module.id());
+                    let pe = lower_port_expr(cx, expr, node.id());
                     (Some(name), pe)
                 } else {
                     (Some(name), vec![])
@@ -839,13 +923,13 @@ fn lower_module_ports_nonansi<'a>(
                     .iter()
                     .map(|dim| match dim {
                         ast::TypeDim::Expr(index) => ExtPortSelect::Index(hir::IndexMode::One(
-                            cx.map_ast_with_parent(AstNode::Expr(index), module.id()),
+                            cx.map_ast_with_parent(AstNode::Expr(index), node.id()),
                         )),
                         ast::TypeDim::Range(lhs, rhs) => {
                             ExtPortSelect::Index(hir::IndexMode::Many(
                                 ast::RangeMode::Absolute,
-                                cx.map_ast_with_parent(AstNode::Expr(lhs), module.id()),
-                                cx.map_ast_with_parent(AstNode::Expr(rhs), module.id()),
+                                cx.map_ast_with_parent(AstNode::Expr(lhs), node.id()),
+                                cx.map_ast_with_parent(AstNode::Expr(rhs), node.id()),
                             ))
                         }
                         _ => {
@@ -873,7 +957,7 @@ fn lower_module_ports_nonansi<'a>(
             }
 
             // expr
-            ast::PortData::Implicit(ref expr) => (None, lower_port_expr(cx, expr, module.id())),
+            ast::PortData::Implicit(ref expr) => (None, lower_port_expr(cx, expr, node.id())),
 
             // Everything else is just an error.
             _ => {
@@ -900,11 +984,11 @@ fn lower_module_ports_nonansi<'a>(
                 None => {
                     cx.emit(
                         DiagBuilder2::error(format!(
-                            "port `{}` not declared in module body",
-                            expr.name
+                            "port `{}` not declared in {:#} body",
+                            expr.name, node
                         ))
                         .span(expr.name.span)
-                        .add_note("Declare the port inside the module, e.g.:")
+                        .add_note(format!("Declare the port inside the {:#}, e.g.:", node))
                         .add_note(format!("input {};", expr.name)),
                     );
                     None
@@ -915,7 +999,7 @@ fn lower_module_ports_nonansi<'a>(
         // Wrap things up in an external port.
         let port = ExtPort {
             id: cx.alloc_id(port.span()),
-            module,
+            node,
             span: port.span(),
             name,
             exprs,
@@ -1016,7 +1100,7 @@ struct PartialPort<'a> {
     /// The default value assigned to this port if left unconnected.
     default: Option<&'a ast::Expr<'a>>,
     /// Whether the port characteristics are inferred from a declaration in the
-    /// module. This is used for explicitly-named ANSI ports.
+    /// node. This is used for explicitly-named ANSI ports.
     inferred: bool,
     /// The variable declaration associated with a non-ANSI port.
     var_decl: Option<(&'a ast::VarDecl<'a>, &'a ast::VarDeclName<'a>)>,
