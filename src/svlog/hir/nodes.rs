@@ -13,6 +13,7 @@ pub use crate::port_list::{ExtPort, ExtPortExpr, ExtPortSelect, IntPort, IntPort
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HirNode<'hir> {
     Module(&'hir Module<'hir>),
+    Interface(&'hir Interface<'hir>),
     IntPort(&'hir IntPort<'hir>),
     ExtPort(&'hir ExtPort<'hir>),
     Type(&'hir Type),
@@ -38,6 +39,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
     fn span(&self) -> Span {
         match *self {
             HirNode::Module(x) => x.span(),
+            HirNode::Interface(x) => x.span(),
             HirNode::IntPort(x) => x.span(),
             HirNode::ExtPort(x) => x.span(),
             HirNode::Type(x) => x.span(),
@@ -63,6 +65,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
     fn human_span(&self) -> Span {
         match *self {
             HirNode::Module(x) => x.human_span(),
+            HirNode::Interface(x) => x.human_span(),
             HirNode::IntPort(x) => x.human_span(),
             HirNode::ExtPort(x) => x.human_span(),
             HirNode::Type(x) => x.human_span(),
@@ -90,6 +93,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
     fn desc(&self) -> &'static str {
         match *self {
             HirNode::Module(x) => x.desc(),
+            HirNode::Interface(x) => x.desc(),
             HirNode::IntPort(x) => x.desc(),
             HirNode::ExtPort(x) => x.desc(),
             HirNode::Type(x) => x.desc(),
@@ -115,6 +119,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
     fn desc_full(&self) -> String {
         match *self {
             HirNode::Module(x) => x.desc_full(),
+            HirNode::Interface(x) => x.desc_full(),
             HirNode::IntPort(x) => x.desc_full(),
             HirNode::ExtPort(x) => x.desc_full(),
             HirNode::Type(x) => x.desc_full(),
@@ -334,16 +339,34 @@ impl HasDesc for ValueParam {
     }
 }
 
-// /// An interface.
-// pub struct Interface {
-//     pub id: NodeId,
-//     pub name: Name,
-//     pub span: Span,
-//     pub lifetime: ast::Lifetime,
-//     pub ports: Vec<Port>,
-//     pub params: Vec<ast::ParamDecl>,
-//     pub body: HierarchyBody,
-// }
+/// An interface.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Interface<'a> {
+    /// The AST node.
+    pub ast: &'a ast::Interface<'a>,
+    /// The ports of the interface.
+    pub ports: &'a PortList<'a>,
+}
+
+impl HasSpan for Interface<'_> {
+    fn span(&self) -> Span {
+        self.ast.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.ast.name.span
+    }
+}
+
+impl HasDesc for Interface<'_> {
+    fn desc(&self) -> &'static str {
+        "interface"
+    }
+
+    fn desc_full(&self) -> String {
+        format!("interface `{}`", self.ast.name)
+    }
+}
 
 // /// A package.
 // pub struct Package {

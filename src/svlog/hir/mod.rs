@@ -21,6 +21,7 @@ make_arenas!(
     /// An arena to allocate HIR nodes into.
     pub struct Arena<'hir> {
         modules: Module<'hir>,
+        interfaces: Interface<'hir>,
         ports: Port,
         types: Type,
         exprs: Expr,

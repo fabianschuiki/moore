@@ -25,6 +25,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
     #[allow(unreachable_patterns)]
     match ast {
         AstNode::Module(x) => cx.hir_of_module(x).map(HirNode::Module),
+        AstNode::Interface(x) => cx.hir_of_interface(x).map(HirNode::Interface),
         AstNode::Type(ty) => lower_type(cx, node_id, ty),
         AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty)) => lower_type(cx, node_id, ty),
         AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr)) => lower_expr(cx, node_id, expr),
@@ -558,6 +559,30 @@ pub(crate) fn hir_of_module<'a>(
         cx.intern_hir(port.id, HirNode::IntPort(port));
     }
     for port in &hir.ports_new.ext_pos {
+        cx.intern_hir_with_parent(port.id, HirNode::ExtPort(port), ast.id());
+    }
+
+    Ok(hir)
+}
+
+/// Lower an interface to HIR.
+#[moore_derive::query]
+pub(crate) fn hir_of_interface<'a>(
+    cx: &impl Context<'a>,
+    ast: &'a ast::Interface<'a>,
+) -> Result<&'a hir::Interface<'a>> {
+    // Lower the interface's ports.
+    let ports = cx.canonicalize_ports(ast);
+
+    // Create the HIR node.
+    let hir = hir::Interface { ast, ports };
+    let hir = cx.arena().alloc_hir(hir);
+
+    // Internalize the ports.
+    for port in &hir.ports.int {
+        cx.intern_hir(port.id, HirNode::IntPort(port));
+    }
+    for port in &hir.ports.ext_pos {
         cx.intern_hir_with_parent(port.id, HirNode::ExtPort(port), ast.id());
     }
 
