@@ -221,7 +221,7 @@ pub struct InstTarget<'a> {
     pub named_params: Vec<NamedParam>,
 }
 
-impl<'a> std::ops::Deref for InstTarget<'a> {
+impl<'a> Deref for InstTarget<'a> {
     type Target = &'a ast::Inst<'a>;
 
     fn deref(&self) -> &Self::Target {
