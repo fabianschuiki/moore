@@ -573,7 +573,11 @@ where
         // Emit instantiations.
         for &inst_id in &hir.insts {
             // Resolve the instantiation details.
-            let inst = self.inst_details(inst_id.env(env))?;
+            let inst = match self.hir_of(inst_id)? {
+                HirNode::Inst(x) => x,
+                _ => unreachable!(),
+            };
+            let inst = self.inst_details(Ref(inst), env)?;
 
             // Map external to internal ports.
             let mut port_mapping_int: HashMap<NodeId, llhd::ir::Value> = HashMap::new();

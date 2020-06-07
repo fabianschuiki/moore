@@ -1961,7 +1961,7 @@ pub(crate) fn type_context<'a>(
             }
         }
         HirNode::Inst(inst) => {
-            let details = cx.inst_details(inst.id.env(env)).ok()?;
+            let details = cx.inst_details(Ref(inst), env).ok()?;
             details
                 .ports
                 .reverse_find(onto)
@@ -1977,7 +1977,7 @@ pub(crate) fn type_context<'a>(
                 .map(Into::into)
         }
         HirNode::InstTarget(inst) => {
-            let details = cx.inst_target_details(inst.id.env(env)).ok()?;
+            let details = cx.inst_target_details(Ref(inst), env).ok()?;
             details
                 .params
                 .reverse_find_value(onto)
