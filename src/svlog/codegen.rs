@@ -552,6 +552,43 @@ where
             self.values.insert(decl_id, value.into());
         }
 
+        // Emit interface instances.
+        for &inst_id in &hir.insts {
+            // Resolve the instantiation details.
+            let inst = match self.hir_of(inst_id)? {
+                HirNode::Inst(x) => x,
+                _ => unreachable!(),
+            };
+            let inst = self.inst_details(Ref(inst), env)?;
+            let intf_hir = match inst.target.kind {
+                InstKind::Interface(x) => x,
+                _ => continue,
+            };
+
+            // Expand the interface declarations.
+            for &decl_id in &intf_hir.block.decls {
+                let hir = match self.hir_of(decl_id)? {
+                    HirNode::VarDecl(x) => x,
+                    _ => unreachable!(),
+                };
+                let ty = self.type_of(decl_id, env)?;
+                let init = self.emit_const(
+                    match hir.init {
+                        Some(expr) => self.constant_value_of(expr, env)?,
+                        None => self.type_default_value(ty),
+                    },
+                    env,
+                    self.span(hir.init.unwrap_or(decl_id)),
+                )?;
+                let value = self.builder.ins().sig(init);
+                self.builder
+                    .set_name(value, format!("{}.{}", inst.inst.name, hir.name));
+                // TODO: Add this to the value table -- requires pairing up of
+                // the intf inst id and the decl id.
+                // self.values.insert(decl_id, value.into());
+            }
+        }
+
         // Emit assignments.
         for &assign_id in &hir.assigns {
             let hir = match self.hir_of(assign_id)? {
