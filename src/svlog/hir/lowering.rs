@@ -542,9 +542,7 @@ pub(crate) fn hir_of_module<'a>(
 
     // Create the HIR module.
     let hir = hir::Module {
-        id: ast.id(),
-        name: ast.name,
-        span: ast.span,
+        ast,
         ports_new,
         params: cx.arena().alloc_ids(params),
         last_rib: block.last_rib,

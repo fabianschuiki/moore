@@ -5,6 +5,7 @@
 use crate::crate_prelude::*;
 use bit_vec::BitVec;
 use num::{BigInt, BigRational};
+use std::ops::Deref;
 
 // Re-export the ports as part of the HIR.
 pub use crate::port_list::{ExtPort, ExtPortExpr, ExtPortSelect, IntPort, IntPortData, PortList};
@@ -145,27 +146,34 @@ impl<'hir> HasDesc for HirNode<'hir> {
 
 /// A module.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Module<'hir> {
-    pub id: NodeId,
-    pub name: Spanned<Name>,
-    pub span: Span,
+pub struct Module<'a> {
+    /// The AST node.
+    pub ast: &'a ast::Module<'a>,
     /// The ports of the module.
-    pub ports_new: &'hir PortList<'hir>,
+    pub ports_new: &'a PortList<'a>,
     /// The parameters of the module.
-    pub params: &'hir [NodeId],
+    pub params: &'a [NodeId],
     /// The contents of the module.
     pub block: ModuleBlock,
     /// The bottom of the name scope tree.
     pub last_rib: NodeId,
 }
 
+impl<'a> Deref for Module<'a> {
+    type Target = &'a ast::Module<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ast
+    }
+}
+
 impl HasSpan for Module<'_> {
     fn span(&self) -> Span {
-        self.span
+        self.ast.span
     }
 
     fn human_span(&self) -> Span {
-        self.name.span
+        self.ast.name.span
     }
 }
 
@@ -175,7 +183,7 @@ impl HasDesc for Module<'_> {
     }
 
     fn desc_full(&self) -> String {
-        format!("module `{}`", self.name.value)
+        format!("module `{}`", self.ast.name)
     }
 }
 
