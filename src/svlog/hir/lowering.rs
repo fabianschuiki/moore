@@ -68,9 +68,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 }
             }
             let hir = hir::InstTarget {
-                id: node_id,
-                name: ast.target,
-                span: ast.span,
+                ast,
                 pos_params,
                 named_params,
             };

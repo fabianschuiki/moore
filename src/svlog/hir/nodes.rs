@@ -18,7 +18,7 @@ pub enum HirNode<'hir> {
     ExtPort(&'hir ExtPort<'hir>),
     Type(&'hir Type),
     Expr(&'hir Expr),
-    InstTarget(&'hir InstTarget),
+    InstTarget(&'hir InstTarget<'hir>),
     Inst(&'hir Inst<'hir>),
     TypeParam(&'hir TypeParam),
     ValueParam(&'hir ValueParam),
@@ -204,31 +204,40 @@ pub struct ModuleBlock {
 /// `foo #(...)` part. Multiple instantiations (`a()`, `b()`, `c()`) may share
 /// the same target.
 #[derive(Debug, PartialEq, Eq)]
-pub struct InstTarget {
-    pub id: NodeId,
-    pub name: Spanned<Name>,
-    pub span: Span,
+pub struct InstTarget<'a> {
+    /// The underlying AST node.
+    pub ast: &'a ast::Inst<'a>,
+    /// The positional parameters.
     pub pos_params: Vec<PosParam>,
+    /// The named parameters.
     pub named_params: Vec<NamedParam>,
 }
 
-impl HasSpan for InstTarget {
-    fn span(&self) -> Span {
-        self.span
-    }
+impl<'a> std::ops::Deref for InstTarget<'a> {
+    type Target = &'a ast::Inst<'a>;
 
-    fn human_span(&self) -> Span {
-        self.name.span
+    fn deref(&self) -> &Self::Target {
+        &self.ast
     }
 }
 
-impl HasDesc for InstTarget {
+impl HasSpan for InstTarget<'_> {
+    fn span(&self) -> Span {
+        self.ast.span
+    }
+
+    fn human_span(&self) -> Span {
+        self.ast.target.span
+    }
+}
+
+impl HasDesc for InstTarget<'_> {
     fn desc(&self) -> &'static str {
         "instantiation"
     }
 
     fn desc_full(&self) -> String {
-        format!("`{}` instantiation", self.name.value)
+        format!("`{}` instantiation", self.target)
     }
 }
 

@@ -43,7 +43,7 @@ impl<'a> Deref for InstDetails<'a> {
 #[derive(Debug)]
 pub struct InstTargetDetails<'a> {
     /// The HIR instantiation target.
-    pub inst_target: &'a hir::InstTarget,
+    pub inst_target: &'a hir::InstTarget<'a>,
     /// The instantiated HIR module.
     pub module: &'a hir::Module<'a>,
     /// The parameter environment around the instantiation.
@@ -94,19 +94,19 @@ pub(crate) fn inst_details<'a>(
 #[moore_derive::query]
 pub(crate) fn inst_target_details<'a>(
     cx: &impl Context<'a>,
-    Ref(inst_target): Ref<'a, hir::InstTarget>,
+    Ref(inst_target): Ref<'a, hir::InstTarget<'a>>,
     env: ParamEnv,
 ) -> Result<Arc<InstTargetDetails<'a>>> {
     // Resolve the name of the instantiated module.
-    let module = match cx.gcx().find_module(inst_target.name.value) {
+    let module = match cx.gcx().find_module(inst_target.target.value) {
         Some(id) => id,
         None => {
             cx.emit(
                 DiagBuilder2::error(format!(
                     "unknown module or interface `{}`",
-                    inst_target.name.value
+                    inst_target.target.value
                 ))
-                .span(inst_target.name.span),
+                .span(inst_target.target.span),
             );
             return Err(());
         }
@@ -122,7 +122,7 @@ pub(crate) fn inst_target_details<'a>(
     // parametrization of this instance.
     let inst_env = cx.param_env(ParamEnvSource::ModuleInst {
         module: module,
-        inst: inst_target.id,
+        inst: inst_target.id(),
         env,
         pos: &inst_target.pos_params,
         named: &inst_target.named_params,
