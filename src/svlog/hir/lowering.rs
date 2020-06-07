@@ -570,8 +570,12 @@ pub(crate) fn hir_of_interface<'a>(
     // Lower the interface's ports.
     let ports = cx.canonicalize_ports(ast);
 
+    // Lower the interface body.
+    let mut next_rib = ast.id();
+    let block = lower_module_block(cx, next_rib, &ast.items, true)?;
+
     // Create the HIR node.
-    let hir = hir::Interface { ast, ports };
+    let hir = hir::Interface { ast, ports, block };
     let hir = cx.arena().alloc_hir(hir);
 
     // Internalize the ports.

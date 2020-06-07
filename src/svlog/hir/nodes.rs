@@ -363,6 +363,16 @@ pub struct Interface<'a> {
     pub ast: &'a ast::Interface<'a>,
     /// The ports of the interface.
     pub ports: &'a PortList<'a>,
+    /// The contents of the interface.
+    pub block: ModuleBlock,
+}
+
+impl<'a> Deref for Interface<'a> {
+    type Target = &'a ast::Interface<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ast
+    }
 }
 
 impl HasSpan for Interface<'_> {
