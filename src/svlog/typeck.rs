@@ -2192,8 +2192,12 @@ fn type_context_imposed_by_expr<'gcx>(
         {
             type_context_imposed_by_pattern(cx, onto, expr, env)
         }
-        hir::ExprKind::NamedPattern(ref nodes) if nodes.iter().any(|&(_, n)| n == onto) => {
-            type_context_imposed_by_pattern(cx, onto, expr, env)
+        hir::ExprKind::NamedPattern(ref nodes) => {
+            if nodes.iter().any(|&(_, n)| n == onto) {
+                type_context_imposed_by_pattern(cx, onto, expr, env)
+            } else {
+                None
+            }
         }
 
         // The `inside` expression imposes its operation type as type context.
