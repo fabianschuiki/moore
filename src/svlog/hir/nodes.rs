@@ -260,10 +260,9 @@ pub type NamedParam = (Span, Spanned<Name>, Option<NodeId>);
 /// In an instantiation `foo #(...) a(), b(), c();`, this struct represents the
 /// `a()` part.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Inst<'hir> {
-    pub id: NodeId,
-    pub name: Spanned<Name>,
-    pub span: Span,
+pub struct Inst<'a> {
+    /// The underlying AST node.
+    pub ast: &'a ast::InstName<'a>,
     /// The target of the instantiation.
     pub target: NodeId,
     /// The positional port connections.
@@ -272,16 +271,23 @@ pub struct Inst<'hir> {
     pub named_ports: Vec<NamedParam>,
     /// If the instantiation has a wildcard port connection `.*`.
     pub has_wildcard_port: bool,
-    pub dummy: std::marker::PhantomData<&'hir ()>,
+}
+
+impl<'a> Deref for Inst<'a> {
+    type Target = &'a ast::InstName<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ast
+    }
 }
 
 impl HasSpan for Inst<'_> {
     fn span(&self) -> Span {
-        self.span
+        self.ast.span
     }
 
     fn human_span(&self) -> Span {
-        self.name.span
+        self.ast.name.span
     }
 }
 
@@ -291,7 +297,7 @@ impl HasDesc for Inst<'_> {
     }
 
     fn desc_full(&self) -> String {
-        format!("instance `{}`", self.name.value)
+        format!("instance `{}`", self.ast.name)
     }
 }
 

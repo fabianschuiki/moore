@@ -117,14 +117,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                 }
             }
             let hir = hir::Inst {
-                id: node_id,
-                name: inst.name,
-                span: inst.span,
+                ast: inst,
                 target: target_id,
                 named_ports,
                 pos_ports,
                 has_wildcard_port,
-                dummy: Default::default(),
             };
             Ok(HirNode::Inst(cx.arena().alloc_hir(hir)))
         }

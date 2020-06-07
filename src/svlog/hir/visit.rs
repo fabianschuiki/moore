@@ -97,11 +97,11 @@ pub trait Visitor<'a>: Sized {
         walk_ext_port(self, ext_port);
     }
 
-    fn visit_inst(&mut self, hir: &'a Inst) {
+    fn visit_inst(&mut self, hir: &'a Inst<'a>) {
         walk_inst(self, hir);
     }
 
-    fn visit_inst_target(&mut self, hir: &'a InstTarget) {
+    fn visit_inst_target(&mut self, hir: &'a InstTarget<'a>) {
         walk_inst_target(self, hir);
     }
 }

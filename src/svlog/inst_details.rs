@@ -199,7 +199,7 @@ impl<'a, 'gcx> hir::Visitor<'gcx> for InstVerbosityVisitor<'a, 'gcx> {
         self.cx
     }
 
-    fn visit_inst(&mut self, hir: &'gcx hir::Inst) {
+    fn visit_inst(&mut self, hir: &'gcx hir::Inst<'gcx>) {
         let details = match self.cx.inst_details(Ref(hir), self.env) {
             Ok(x) => x,
             Err(()) => return,
