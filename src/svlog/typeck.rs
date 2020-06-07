@@ -32,6 +32,7 @@ use crate::crate_prelude::*;
 use crate::{
     common::arenas::Alloc,
     hir::HirNode,
+    inst_details::InstKind,
     port_list,
     resolver::DefNode,
     ty::{
@@ -99,6 +100,7 @@ pub(crate) fn type_of<'a>(
         }
         HirNode::Package(_) => Ok(UnpackedType::make_void()),
         HirNode::Assign(_) => unreachable!("has no type: {:?}", hir),
+        HirNode::Inst(hir) => Ok(cx.type_of_inst(Ref(hir), env)),
         _ => {
             error!("{:#?}", hir);
             panic!(
@@ -308,6 +310,32 @@ pub(crate) fn type_of_value_param<'a>(
         .add_note("override the parameter from outside"),
     );
     UnpackedType::make_error()
+}
+
+/// Determine the type of an instance.
+#[moore_derive::query]
+pub(crate) fn type_of_inst<'a>(
+    cx: &impl Context<'a>,
+    Ref(hir): Ref<'a, hir::Inst<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    let details = match cx.inst_details(Ref(hir), env) {
+        Ok(x) => x,
+        _ => return UnpackedType::make_error(),
+    };
+    UnpackedType::make(
+        cx,
+        match details.target.kind {
+            InstKind::Module(x) => ty::UnpackedCore::Module {
+                ast: x.ast,
+                env: details.inner_env,
+            },
+            InstKind::Interface(x) => ty::UnpackedCore::Interface {
+                ast: x.ast,
+                env: details.inner_env,
+            },
+        },
+    )
 }
 
 /// Map an AST node to the type it represents.
