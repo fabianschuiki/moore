@@ -11,7 +11,8 @@ use crate::{
     ast_map::AstNode,
     common::{SessionContext, Verbosity},
     hir::HirNode,
-    port_list, ParamEnv,
+    port_list::{self, AsPortedNode},
+    ParamEnv,
 };
 use std::{
     collections::HashMap,
@@ -538,9 +539,9 @@ pub(crate) fn generated_scope<'a>(
     );
     debug!("Generating scope {:?}", node);
 
-    // Add definitions for the analyzed module ports.
-    if let Some(module) = node.as_all().get_module() {
-        for node in &cx.module_ports(module).int {
+    // Add definitions for the analyzed ports.
+    if let Some(node) = node.as_all().get_ported() {
+        for node in &cx.canonicalize_ports(node).int {
             // Skip ports which are not definitions themselves, but reference
             // another definition in the body.
             if node.data.is_some() {

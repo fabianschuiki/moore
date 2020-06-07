@@ -539,7 +539,7 @@ fn lower_module<'gcx>(
     }
 
     // Lower the module's ports.
-    let ports_new = cx.module_ports(ast);
+    let ports_new = cx.canonicalize_ports(ast);
     next_rib = ports_new.tail_rib;
 
     // Lower the module body.

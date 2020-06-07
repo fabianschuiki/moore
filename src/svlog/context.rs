@@ -822,6 +822,11 @@ impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
 
     fn post_visit_module(&mut self, node: &'a ast::Module<'a>) {
         // Ensure the ports are added to the AST map. Pretty ugly, but necessary.
-        self.cx.module_ports(node);
+        self.cx.canonicalize_ports(node);
+    }
+
+    fn post_visit_interface(&mut self, node: &'a ast::Interface<'a>) {
+        // Ensure the ports are added to the AST map. Pretty ugly, but necessary.
+        self.cx.canonicalize_ports(node);
     }
 }

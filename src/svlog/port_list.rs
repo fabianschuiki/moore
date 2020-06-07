@@ -225,24 +225,6 @@ impl<'a> AsPortedNode<'a> for ast::AllNode<'a> {
     }
 }
 
-/// Resolve the ports of a module to a canonical list.
-#[moore_derive::query]
-pub(crate) fn module_ports<'a>(
-    cx: &impl Context<'a>,
-    node: &'a ast::Module<'a>,
-) -> &'a PortList<'a> {
-    cx.canonicalize_ports(node)
-}
-
-/// Resolve the ports of an interface to a canonical list.
-#[moore_derive::query]
-pub(crate) fn interface_ports<'a>(
-    cx: &impl Context<'a>,
-    node: &'a ast::Interface<'a>,
-) -> &'a PortList<'a> {
-    cx.canonicalize_ports(node)
-}
-
 /// Resolve the ports of a module or interface to a canonical list.
 ///
 /// This is a fairly complex process due to the many degrees of freedom in SV.

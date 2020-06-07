@@ -63,29 +63,30 @@ pub(crate) fn port_mapping<'a>(
             ..
         } => {
             let module = cx.ast_for_id(module).as_all().get_module().unwrap();
-            let module_ports = cx.module_ports(module);
+            let port_list = cx.canonicalize_ports(module);
 
             // Associate the positional assignments with external ports.
-            let pos_iter = pos.iter().enumerate().map(|(index, &(span, assign_id))| {
-                match module_ports.ext_pos.get(index) {
-                    Some(port) => Ok((port, assign_id)),
-                    None => {
-                        cx.emit(
-                            DiagBuilder2::error(format!(
-                                "{} only has {} ports(s)",
-                                module,
-                                module_ports.ext_pos.len()
-                            ))
-                            .span(span),
-                        );
-                        Err(())
+            let pos_iter =
+                pos.iter().enumerate().map(|(index, &(span, assign_id))| {
+                    match port_list.ext_pos.get(index) {
+                        Some(port) => Ok((port, assign_id)),
+                        None => {
+                            cx.emit(
+                                DiagBuilder2::error(format!(
+                                    "{} only has {} ports(s)",
+                                    module,
+                                    port_list.ext_pos.len()
+                                ))
+                                .span(span),
+                            );
+                            Err(())
+                        }
                     }
-                }
-            });
+                });
 
             // Associate the named assignments with external ports.
             let named_iter = named.iter().map(|&(_span, name, assign_id)| {
-                let names = match module_ports.ext_named.as_ref() {
+                let names = match port_list.ext_named.as_ref() {
                     Some(x) => x,
                     None => {
                         cx.emit(
@@ -104,14 +105,14 @@ pub(crate) fn port_mapping<'a>(
                     }
                 };
                 match names.get(&name.value) {
-                    Some(&index) => Ok((&module_ports.ext_pos[index], assign_id)),
+                    Some(&index) => Ok((&port_list.ext_pos[index], assign_id)),
                     None => {
                         cx.emit(
                             DiagBuilder2::error(format!("no port `{}` in {}", name, module,))
                                 .span(name.span)
                                 .add_note(format!(
                                     "Declared ports are {}",
-                                    module_ports
+                                    port_list
                                         .ext_pos
                                         .iter()
                                         .flat_map(|n| n.name)
