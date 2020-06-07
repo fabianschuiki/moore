@@ -92,10 +92,11 @@ use std::{
     cell::RefCell,
     collections::HashSet,
     fmt::{Debug, Display},
+    hash::{Hash, Hasher},
 };
 
 /// A packed type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct PackedType<'a> {
     /// The core packed type.
     pub core: PackedCore<'a>,
@@ -222,7 +223,7 @@ pub enum RangeDir {
 }
 
 /// An unpacked type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct UnpackedType<'a> {
     /// The core unpacked type.
     pub core: UnpackedCore<'a>,
@@ -769,6 +770,42 @@ impl<'a> PackedType<'a> {
             PackedCore::Enum(ref x) if self.resolve_full().dims.is_empty() => Some(x),
             _ => None,
         }
+    }
+}
+
+// Compare and hash `PackedType` by reference.
+impl Eq for PackedType<'_> {}
+impl PartialEq for PackedType<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+impl Hash for PackedType<'_> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        std::ptr::hash(self, h)
+    }
+}
+
+// Compare and hash `Intern<PackedType>` by value.
+impl Eq for Intern<PackedType<'_>> {}
+impl PartialEq for Intern<PackedType<'_>> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.core == other.0.core
+            && self.0.sign == other.0.sign
+            && self.0.sign_explicit == other.0.sign_explicit
+            && self.0.dims == other.0.dims
+            && self.0.resolved == other.0.resolved
+            && self.0.resolved_full == other.0.resolved_full
+    }
+}
+impl Hash for Intern<PackedType<'_>> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.0.core.hash(h);
+        self.0.sign.hash(h);
+        self.0.sign_explicit.hash(h);
+        self.0.dims.hash(h);
+        self.0.resolved.hash(h);
+        self.0.resolved_full.hash(h);
     }
 }
 
@@ -1423,6 +1460,38 @@ impl<'a> UnpackedType<'a> {
     }
 }
 
+// Compare and hash `UnpackedType` by reference.
+impl Eq for UnpackedType<'_> {}
+impl PartialEq for UnpackedType<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+impl Hash for UnpackedType<'_> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        std::ptr::hash(self, h)
+    }
+}
+
+// Compare and hash `Intern<UnpackedType>` by value.
+impl Eq for Intern<UnpackedType<'_>> {}
+impl PartialEq for Intern<UnpackedType<'_>> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.core == other.0.core
+            && self.0.dims == other.0.dims
+            && self.0.resolved == other.0.resolved
+            && self.0.resolved_full == other.0.resolved_full
+    }
+}
+impl Hash for Intern<UnpackedType<'_>> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.0.core.hash(h);
+        self.0.dims.hash(h);
+        self.0.resolved.hash(h);
+        self.0.resolved_full.hash(h);
+    }
+}
+
 impl Display for UnpackedType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.format_around(
@@ -1812,10 +1881,10 @@ pub trait TypeContext<'a> {
 /// An arena that can internalize type data.
 #[derive(Default)]
 pub struct TypeStorage<'a> {
-    packed: TypedArena<PackedType<'a>>,
-    unpacked: TypedArena<UnpackedType<'a>>,
-    cached_packed: RefCell<HashSet<&'a PackedType<'a>>>,
-    cached_unpacked: RefCell<HashSet<&'a UnpackedType<'a>>>,
+    packed: TypedArena<Intern<PackedType<'a>>>,
+    unpacked: TypedArena<Intern<UnpackedType<'a>>>,
+    cached_packed: RefCell<HashSet<&'a Intern<PackedType<'a>>>>,
+    cached_unpacked: RefCell<HashSet<&'a Intern<UnpackedType<'a>>>>,
 }
 
 /// An object that has type storage.
@@ -1824,28 +1893,34 @@ pub trait HasTypeStorage<'a> {
     fn type_storage(&self) -> &'a TypeStorage<'a>;
 }
 
+/// An wrapper around types that hash/compare by pointer, but must hash/compare
+/// by value for interning.
+struct Intern<T>(T);
+
 impl<'a, T> TypeContext<'a> for T
 where
     T: HasTypeStorage<'a>,
 {
     fn intern_packed(&self, ty: PackedType<'a>) -> &'a PackedType<'a> {
+        let ty = Intern(ty);
         let st = self.type_storage();
         if let Some(x) = st.cached_packed.borrow().get(&ty) {
-            return x;
+            return &x.0;
         }
         let ty = st.packed.alloc(ty);
         st.cached_packed.borrow_mut().insert(ty);
-        ty
+        &ty.0
     }
 
     fn intern_unpacked(&self, ty: UnpackedType<'a>) -> &'a UnpackedType<'a> {
+        let ty = Intern(ty);
         let st = self.type_storage();
         if let Some(x) = st.cached_unpacked.borrow().get(&ty) {
-            return x;
+            return &x.0;
         }
         let ty = st.unpacked.alloc(ty);
         st.cached_unpacked.borrow_mut().insert(ty);
-        ty
+        &ty.0
     }
 }
 
