@@ -654,7 +654,7 @@ pub enum Item<'a> {
 
 /// A module.
 #[moore_derive::node]
-#[indefinite("module declaration")]
+#[indefinite("module")]
 #[definite("module `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module<'a> {
@@ -669,7 +669,7 @@ pub struct Module<'a> {
 
 /// An interface.
 #[moore_derive::node]
-#[indefinite("interface declaration")]
+#[indefinite("interface")]
 #[definite("interface `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interface<'a> {
@@ -683,7 +683,7 @@ pub struct Interface<'a> {
 
 /// A package.
 #[moore_derive::node]
-#[indefinite("package declaration")]
+#[indefinite("package")]
 #[definite("package `{}`", name)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package<'a> {
