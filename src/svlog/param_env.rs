@@ -5,7 +5,7 @@
 use crate::{
     ast_map::AstNode,
     crate_prelude::*,
-    hir::{HirNode, NamedParam, PosParam},
+    hir::{NamedParam, PosParam},
     ty::UnpackedType,
     value::Value,
 };
@@ -130,8 +130,13 @@ pub enum ParamEnvBinding<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ParamEnvSource<'hir> {
     ModuleInst {
-        module: NodeId,
-        inst: NodeId,
+        module: Ref<'hir, hir::Module<'hir>>,
+        env: ParamEnv,
+        pos: &'hir [PosParam],
+        named: &'hir [NamedParam],
+    },
+    InterfaceInst {
+        interface: Ref<'hir, hir::Interface<'hir>>,
         env: ParamEnv,
         pos: &'hir [PosParam],
         named: &'hir [NamedParam],
@@ -145,115 +150,130 @@ pub(crate) fn compute<'gcx>(
     match src {
         ParamEnvSource::ModuleInst {
             module,
-            inst,
             env,
             pos,
             named,
-        } => {
-            let module = match cx.hir_of(module)? {
-                HirNode::Module(m) => m,
-                _ => panic!("expected module"),
-            };
-
-            // Collect a list of module parameters.
-            let module_params: Vec<_> = module
+        } => param_env_from_instance(
+            cx,
+            module.ast,
+            module
                 .params
                 .iter()
                 .cloned()
                 .chain(module.block.params.iter().cloned())
-                .collect();
-
-            // Associate the positional and named assignments with the actual
-            // parameters of the module.
-            let param_iter = pos
+                .collect(),
+            env,
+            pos,
+            named,
+        ),
+        ParamEnvSource::InterfaceInst {
+            interface,
+            env,
+            pos,
+            named,
+        } => param_env_from_instance(
+            cx,
+            interface.ast,
+            interface
+                .params
                 .iter()
-                .enumerate()
-                .map(
-                    |(index, &(span, assign_id))| match module_params.get(index) {
-                        Some(&param_id) => Ok((param_id, (assign_id, env))),
-                        None => {
-                            cx.emit(
-                                DiagBuilder2::error(format!(
-                                    "{} only has {} parameter(s)",
-                                    module.desc_full(),
-                                    module_params.len()
-                                ))
-                                .span(span),
-                            );
-                            Err(())
-                        }
-                    },
-                )
-                .chain(named.iter().map(|&(_span, name, assign_id)| {
-                    let names: Vec<_> = module_params
-                        .iter()
-                        .flat_map(|&id| match cx.ast_of(id) {
-                            Ok(AstNode::TypeParam(_, p)) => Some((p.name.value, id)),
-                            Ok(AstNode::ValueParam(_, p)) => Some((p.name.value, id)),
-                            Ok(_) => unreachable!(),
-                            Err(()) => None,
-                        })
-                        .collect();
-                    match names
-                        .iter()
-                        .find(|&(param_name, _)| *param_name == name.value)
-                    {
-                        Some(&(_, param_id)) => Ok((param_id, (assign_id, env))),
-                        None => {
-                            cx.emit(
-                                DiagBuilder2::error(format!(
-                                    "no parameter `{}` in {}",
-                                    name,
-                                    module.desc_full(),
-                                ))
-                                .span(name.span)
-                                .add_note(format!(
-                                    "declared parameters are {}",
-                                    names
-                                        .iter()
-                                        .map(|&(n, _)| format!("`{}`", n))
-                                        .collect::<Vec<_>>()
-                                        .join(", ")
-                                )),
-                            );
-                            Err(())
-                        }
-                    }
-                }));
-            let param_iter = param_iter
-                .collect::<Vec<_>>()
-                .into_iter()
-                .collect::<Result<Vec<_>>>()?
-                .into_iter();
+                .map(|p| p.id())
+                .chain(interface.block.params.iter().cloned())
+                .collect(),
+            env,
+            pos,
+            named,
+        ),
+    }
+}
 
-            // Split up type and value parameters.
-            let mut types = vec![];
-            let mut values = vec![];
-            for (param_id, assign_id) in param_iter {
-                let assign_id = match assign_id {
-                    (Some(i), n) => i.env(n),
-                    _ => continue,
-                };
-                match cx.ast_of(param_id)? {
-                    AstNode::TypeParam(..) => {
-                        cx.set_lowering_hint(assign_id.0, hir::Hint::Type);
-                        types.push((param_id, ParamEnvBinding::Indirect(assign_id)))
-                    }
-                    AstNode::ValueParam(..) => {
-                        cx.set_lowering_hint(assign_id.0, hir::Hint::Expr);
-                        values.push((param_id, ParamEnvBinding::Indirect(assign_id)))
-                    }
-                    _ => unreachable!(),
+fn param_env_from_instance<'a>(
+    cx: &impl Context<'a>,
+    node: &'a dyn ast::AnyNode<'a>,
+    params: Vec<NodeId>,
+    env: ParamEnv,
+    pos: &[PosParam],
+    named: &[NamedParam],
+) -> Result<ParamEnv> {
+    // Associate the positional and named assignments with the actual
+    // parameters of the module.
+    let param_iter = pos
+        .iter()
+        .enumerate()
+        .map(|(index, &(span, assign_id))| match params.get(index) {
+            Some(&param_id) => Ok((param_id, (assign_id, env))),
+            None => {
+                cx.emit(
+                    DiagBuilder2::error(format!("{} only has {} parameter(s)", node, params.len()))
+                        .span(span),
+                );
+                Err(())
+            }
+        })
+        .chain(named.iter().map(|&(_span, name, assign_id)| {
+            let names: Vec<_> = params
+                .iter()
+                .flat_map(|&id| match cx.ast_of(id) {
+                    Ok(AstNode::TypeParam(_, p)) => Some((p.name.value, id)),
+                    Ok(AstNode::ValueParam(_, p)) => Some((p.name.value, id)),
+                    Ok(_) => unreachable!(),
+                    Err(()) => None,
+                })
+                .collect();
+            match names
+                .iter()
+                .find(|&(param_name, _)| *param_name == name.value)
+            {
+                Some(&(_, param_id)) => Ok((param_id, (assign_id, env))),
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("no parameter `{}` in {}", name, node,))
+                            .span(name.span)
+                            .add_note(format!(
+                                "declared parameters are {}",
+                                names
+                                    .iter()
+                                    .map(|&(n, _)| format!("`{}`", n))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )),
+                    );
+                    Err(())
                 }
             }
+        }));
+    let param_iter = param_iter
+        .collect::<Vec<_>>()
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?
+        .into_iter();
 
-            let env = cx.intern_param_env(ParamEnvData {
-                module: Some(module.id),
-                types,
-                values,
-            });
-            cx.add_param_env_context(env, inst);
-            Ok(env)
+    // Split up type and value parameters.
+    let mut types = vec![];
+    let mut values = vec![];
+    for (param_id, assign_id) in param_iter {
+        let assign_id = match assign_id {
+            (Some(i), n) => i.env(n),
+            _ => continue,
+        };
+        match cx.ast_of(param_id)? {
+            AstNode::TypeParam(..) => {
+                cx.set_lowering_hint(assign_id.0, hir::Hint::Type);
+                types.push((param_id, ParamEnvBinding::Indirect(assign_id)))
+            }
+            AstNode::ValueParam(..) => {
+                cx.set_lowering_hint(assign_id.0, hir::Hint::Expr);
+                values.push((param_id, ParamEnvBinding::Indirect(assign_id)))
+            }
+            _ => unreachable!(),
         }
     }
+
+    let env = cx.intern_param_env(ParamEnvData {
+        module: Some(node.id()),
+        types,
+        values,
+    });
+    cx.add_param_env_context(env, node.id());
+    Ok(env)
 }

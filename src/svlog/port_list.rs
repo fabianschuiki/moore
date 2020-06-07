@@ -414,10 +414,11 @@ fn lower_node_ports_ansi<'a>(
         cx.emit(
             DiagBuilder2::error(format!("port declaration in body of ANSI-style {:#}", node))
                 .span(ast.span)
-                .add_note(
-                    "Modules with an ANSI-style port list cannot have port declarations in the \
+                .add_note(format!(
+                    "A {:#} with an ANSI-style port list cannot have port declarations in the \
                      body.",
-                )
+                    node
+                ))
                 .add_note("Consider using non-ANSI style.")
                 .add_note("First port uses ANSI style:")
                 .span(first_span),

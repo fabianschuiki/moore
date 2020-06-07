@@ -5,6 +5,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
+    inst_details::InstKind,
     ty::UnpackedType,
     value::{Value, ValueKind},
     ParamEnv,
@@ -570,7 +571,7 @@ where
             self.builder.ins().drv(lhs, rhs, one_epsilon);
         }
 
-        // Emit instantiations.
+        // Emit module instantiations.
         for &inst_id in &hir.insts {
             // Resolve the instantiation details.
             let inst = match self.hir_of(inst_id)? {
@@ -578,10 +579,14 @@ where
                 _ => unreachable!(),
             };
             let inst = self.inst_details(Ref(inst), env)?;
+            let target_module = match inst.target.kind {
+                InstKind::Module(x) => x,
+                _ => continue,
+            };
 
             // Map external to internal ports.
             let mut port_mapping_int: HashMap<NodeId, llhd::ir::Value> = HashMap::new();
-            for port in &inst.target.module.ports_new.ext_pos {
+            for port in &target_module.ports_new.ext_pos {
                 // trace!("Checking connection of {:?}", port);
                 let mapping = match inst.ports.find(port.id) {
                     Some(m) => m,
@@ -609,7 +614,7 @@ where
                     );
                     continue;
                 }
-                let int = &inst.target.module.ports_new.int[expr.port];
+                let int = &target_module.ports_new.int[expr.port];
                 // trace!("Attaching {:?} to {:?}", mapping, int);
                 let value = match int.dir {
                     ast::PortDir::Input | ast::PortDir::Ref => {
@@ -635,7 +640,7 @@ where
             // interface.
             let mut inputs = Vec::new();
             let mut outputs = Vec::new();
-            for port in &inst.target.module.ports_new.int {
+            for port in &target_module.ports_new.int {
                 let value = if let Some(&mapping) = port_mapping_int.get(&port.id) {
                     mapping
                 } else {
@@ -663,7 +668,7 @@ where
             }
 
             // Emit the instantiated module, and instantiate it.
-            let target = self.emit_module_with_env(inst.target.module.id, inst.target.inner_env)?;
+            let target = self.emit_module_with_env(target_module.id, inst.target.inner_env)?;
             let ext_unit = self.builder.add_extern(
                 self.into.unit(target).name().clone(),
                 self.into.unit(target).sig().clone(),
