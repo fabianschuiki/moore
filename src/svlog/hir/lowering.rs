@@ -24,7 +24,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
 
     #[allow(unreachable_patterns)]
     match ast {
-        AstNode::Module(m) => lower_module(cx, node_id, m),
+        AstNode::Module(x) => cx.hir_of_module(x).map(HirNode::Module),
         AstNode::Type(ty) => lower_type(cx, node_id, ty),
         AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty)) => lower_type(cx, node_id, ty),
         AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr)) => lower_expr(cx, node_id, expr),
@@ -514,16 +514,12 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
 }
 
 /// Lower a module to HIR.
-///
-/// This allocates node IDs to everything in the module and registers AST nodes
-/// for each ID.
-fn lower_module<'gcx>(
-    cx: &impl Context<'gcx>,
-    node_id: NodeId,
-    ast: &'gcx ast::Module<'gcx>,
-) -> Result<HirNode<'gcx>> {
-    assert_eq!(node_id, ast.id());
-    let mut next_rib = node_id;
+#[moore_derive::query]
+pub(crate) fn hir_of_module<'a>(
+    cx: &impl Context<'a>,
+    ast: &'a ast::Module<'a>,
+) -> Result<&'a hir::Module<'a>> {
+    let mut next_rib = ast.id();
 
     // Allocate the imports in the module header.
     for import in &ast.imports {
@@ -547,7 +543,7 @@ fn lower_module<'gcx>(
 
     // Create the HIR module.
     let hir = hir::Module {
-        id: node_id,
+        id: ast.id(),
         name: ast.name,
         span: ast.span,
         ports_new,
@@ -562,10 +558,10 @@ fn lower_module<'gcx>(
         cx.intern_hir(port.id, HirNode::IntPort(port));
     }
     for port in &hir.ports_new.ext_pos {
-        cx.intern_hir_with_parent(port.id, HirNode::ExtPort(port), node_id);
+        cx.intern_hir_with_parent(port.id, HirNode::ExtPort(port), ast.id());
     }
 
-    Ok(HirNode::Module(hir))
+    Ok(hir)
 }
 
 fn lower_module_block<'gcx>(
