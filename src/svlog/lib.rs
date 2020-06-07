@@ -258,6 +258,7 @@ mod checks {
 mod queries {
     use crate::crate_prelude::*;
     use crate::{
+        inst_details::*,
         param_env::*,
         pattern_mapping::*,
         port_list::{self, *},

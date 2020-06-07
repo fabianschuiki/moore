@@ -31,8 +31,7 @@ use crate::{
     resolver::{Scope, StructDef},
     ty::UnpackedType,
     value::{Value, ValueData, ValueKind},
-    InstDetails, InstTargetDetails, ParamEnv, ParamEnvData, ParamEnvSource, QueryDatabase,
-    QueryStorage,
+    ParamEnv, ParamEnvData, ParamEnvSource, QueryDatabase, QueryStorage,
 };
 use std::{
     cell::RefCell,
@@ -770,18 +769,6 @@ pub(super) mod queries {
                 type ConstMirRvalueQuery;
                 use fn value::const_mir_rvalue_query;
             }
-
-            /// Determine the details of an instantiation.
-            fn inst_details(inst: NodeEnvId) -> Result<Arc<InstDetails<'a>>> {
-                type InstDetailsQuery;
-                use fn crate::inst_details::compute_inst;
-            }
-
-            /// Determine the details of an instantiation target.
-            fn inst_target_details(inst: NodeEnvId) -> Result<Arc<InstTargetDetails<'a>>> {
-                type InstTargetDetailsQuery;
-                use fn crate::inst_details::compute_inst_target;
-            }
         }
     }
 
@@ -805,8 +792,6 @@ pub(super) mod queries {
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;
                 fn mir_rvalue() for MirRvalueQuery<'gcx>;
                 fn const_mir_rvalue() for ConstMirRvalueQuery<'gcx>;
-                fn inst_details() for InstDetailsQuery<'gcx>;
-                fn inst_target_details() for InstTargetDetailsQuery<'gcx>;
             }
         }
     }

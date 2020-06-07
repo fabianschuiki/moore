@@ -16,7 +16,7 @@ use std::{ops::Deref, sync::Arc};
 /// most importantly the parameter bindings and port connections.
 ///
 /// This corresponds to the `bar(y)` in `foo #(x) bar(y);`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct InstDetails<'a> {
     /// The HIR instantiation.
     pub inst: &'a hir::Inst<'a>,
@@ -40,7 +40,7 @@ impl<'a> Deref for InstDetails<'a> {
 /// target, most importantly the parameter bindings.
 ///
 /// This corresponds to the `foo #(x)` in `foo #(x) bar(y);`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct InstTargetDetails<'a> {
     /// The HIR instantiation target.
     pub inst_target: &'a hir::InstTarget,
@@ -54,10 +54,12 @@ pub struct InstTargetDetails<'a> {
     pub params: &'a ParamEnvData<'a>,
 }
 
-pub(crate) fn compute_inst<'gcx>(
-    cx: &impl Context<'gcx>,
+/// Compute the details of an instantiation.
+#[moore_derive::query]
+pub(crate) fn inst_details<'a>(
+    cx: &impl Context<'a>,
     node: NodeEnvId,
-) -> Result<Arc<InstDetails<'gcx>>> {
+) -> Result<Arc<InstDetails<'a>>> {
     // Look up the HIR of the instantiation.
     let inst = match cx.hir_of(node.id())? {
         HirNode::Inst(x) => x,
@@ -87,10 +89,12 @@ pub(crate) fn compute_inst<'gcx>(
     }))
 }
 
-pub(crate) fn compute_inst_target<'gcx>(
-    cx: &impl Context<'gcx>,
+/// Compute the details of an instantiated module or interface.
+#[moore_derive::query]
+pub(crate) fn inst_target_details<'a>(
+    cx: &impl Context<'a>,
     node: NodeEnvId,
-) -> Result<Arc<InstTargetDetails<'gcx>>> {
+) -> Result<Arc<InstTargetDetails<'a>>> {
     // Look up the HIR of the instantiation target.
     let inst_target = match cx.hir_of(node.id())? {
         HirNode::InstTarget(x) => x,
