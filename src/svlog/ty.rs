@@ -269,8 +269,20 @@ pub enum UnpackedCore<'a> {
         /// The type that this reference expands to.
         ty: &'a UnpackedType<'a>,
     },
-    // TODO: Add modules
-    // TODO: Add interfaces
+    /// A module instance.
+    Module {
+        /// The AST node of the module.
+        ast: &'a ast::Module<'a>,
+        /// The parametrization of the module.
+        env: ParamEnv,
+    },
+    /// An interface instance.
+    Interface {
+        /// The AST node of the interface.
+        ast: &'a ast::Interface<'a>,
+        /// The parametrization of the interface.
+        env: ParamEnv,
+    },
 }
 
 /// An unpacked dimension.
@@ -1267,7 +1279,9 @@ impl<'a> UnpackedType<'a> {
             | UnpackedCore::Real(_)
             | UnpackedCore::String
             | UnpackedCore::Chandle
-            | UnpackedCore::Event => Domain::TwoValued,
+            | UnpackedCore::Event
+            | UnpackedCore::Module { .. }
+            | UnpackedCore::Interface { .. } => Domain::TwoValued,
         }
     }
 
@@ -1285,7 +1299,9 @@ impl<'a> UnpackedType<'a> {
             UnpackedCore::Error
             | UnpackedCore::String
             | UnpackedCore::Chandle
-            | UnpackedCore::Event => return None,
+            | UnpackedCore::Event
+            | UnpackedCore::Module { .. }
+            | UnpackedCore::Interface { .. } => return None,
         };
         for &dim in &self.dims {
             match dim {
@@ -1577,6 +1593,8 @@ impl Display for UnpackedCore<'_> {
             Self::String => write!(f, "string"),
             Self::Chandle => write!(f, "chandle"),
             Self::Event => write!(f, "event"),
+            Self::Module { ast, .. } => write!(f, "{}", ast.name),
+            Self::Interface { ast, .. } => write!(f, "{}", ast.name),
             Self::Named { name, .. } => write!(f, "{}", name),
             Self::Ref { span, .. } => write!(f, "{}", span.extract()),
         }
