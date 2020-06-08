@@ -1277,7 +1277,9 @@ pub struct ForeachIndex {
 pub enum Expr<'a> {
     DummyExpr,
     LiteralExpr(Lit),
+    /// An identifier, like `foo`.
     IdentExpr(Spanned<Name>),
+    /// A system identifier, like `$foo`.
     SysIdentExpr(Spanned<Name>),
     ThisExpr,
     DollarExpr,
@@ -1331,6 +1333,7 @@ pub enum Expr<'a> {
         lhs: Box<Expr<'a>>,
         rhs: Box<Expr<'a>>,
     },
+    /// A member expression, like `a.b`.
     MemberExpr {
         expr: Box<Expr<'a>>,
         name: Spanned<Name>,
@@ -1970,6 +1973,19 @@ pub struct InstName<'a> {
     pub dims: Vec<TypeDim<'a>>,
     /// The port connections.
     pub conns: Vec<PortConn<'a>>,
+}
+
+impl<'a> InstName<'a> {
+    /// Get the parent instantiation.
+    pub fn inst(&self) -> &'a Inst<'a> {
+        match self.get_parent().unwrap().as_all().get_inst() {
+            Some(x) => x,
+            None => panic!(
+                "parent {:?} of InstName is not Inst",
+                self.get_parent().unwrap()
+            ),
+        }
+    }
 }
 
 #[moore_derive::visit]
