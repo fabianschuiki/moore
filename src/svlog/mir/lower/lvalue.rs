@@ -142,6 +142,20 @@ fn try_lower_expr<'gcx>(
             return Ok(builder.build(ty, LvalueKind::Member { value, field }));
         }
 
+        hir::ExprKind::LocalIntfSignal { inst, name } => {
+            let intf = builder
+                .cx
+                .type_of(inst.id(), builder.env)?
+                .get_interface()
+                .unwrap();
+            let def = builder
+                .cx
+                .resolve_hierarchical_or_error(name, intf)?
+                .node
+                .id();
+            return Ok(builder.build(ty, LvalueKind::IntfSignal(inst.id(), def)));
+        }
+
         _ => (),
     }
 

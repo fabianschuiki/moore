@@ -542,7 +542,7 @@ impl<'a, 'gcx> svlog::hir::Visitor<'gcx> for TypeVerbosityVisitor<'a, 'gcx> {
         self.0
     }
 
-    fn visit_expr(&mut self, expr: &'gcx svlog::hir::Expr, lvalue: bool) {
+    fn visit_expr(&mut self, expr: &'gcx svlog::hir::Expr<'gcx>, lvalue: bool) {
         self.print(expr.id);
         svlog::hir::walk_expr(self, expr, lvalue);
     }

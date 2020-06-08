@@ -45,6 +45,8 @@ pub enum LvalueKind<'a> {
     Var(NodeId),
     /// A reference to a port declaration.
     Port(NodeId),
+    /// A reference to a locally instantiated interface signal.
+    IntfSignal(NodeId, NodeId),
     /// A bit- or part-select.
     Index {
         value: &'a Lvalue<'a>,

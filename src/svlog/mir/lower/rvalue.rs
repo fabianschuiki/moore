@@ -112,7 +112,7 @@ pub fn lower_expr<'gcx>(
 /// May return an error if any of the database queries break.
 fn lower_expr_inner<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
-    hir: &'gcx hir::Expr,
+    hir: &'gcx hir::Expr<'gcx>,
     ty: &'gcx UnpackedType<'gcx>,
 ) -> Result<&'gcx Rvalue<'gcx>> {
     let expr_id = hir.id;
@@ -316,6 +316,12 @@ fn lower_expr_inner<'gcx>(
             let value = cx.mir_rvalue(target, env);
             let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
             Ok(builder.build(ty, RvalueKind::Member { value, field }))
+        }
+
+        hir::ExprKind::LocalIntfSignal { inst, name } => {
+            let intf = cx.type_of(inst.id(), env)?.get_interface().unwrap();
+            let def = cx.resolve_hierarchical_or_error(name, intf)?.node.id();
+            Ok(builder.build(ty, RvalueKind::IntfSignal(inst.id(), def)))
         }
 
         // Casts are handled by the `cast_type` query, and the cast handling
@@ -783,7 +789,7 @@ fn unpack_array<'a>(
 /// Lower a `'{...}` pattern.
 fn lower_pattern<'a>(
     builder: &Builder<'_, impl Context<'a>>,
-    expr: &'a hir::Expr,
+    expr: &'a hir::Expr<'a>,
     ty: &'a UnpackedType<'a>,
 ) -> &'a Rvalue<'a> {
     // Compute the pattern mapping.

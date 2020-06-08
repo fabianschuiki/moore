@@ -32,9 +32,8 @@ use crate::crate_prelude::*;
 use crate::{
     common::arenas::Alloc,
     hir::HirNode,
-    inst_details::InstKind,
     port_list,
-    resolver::DefNode,
+    resolver::{DefNode, InstTarget},
     ty::{
         Domain, IntAtomType, IntVecType, PackedCore, PackedType, RealType, SbvType, Sign,
         UnpackedCore, UnpackedType,
@@ -326,12 +325,12 @@ pub(crate) fn type_of_inst<'a>(
     UnpackedType::make(
         cx,
         match details.target.kind {
-            InstKind::Module(x) => ty::UnpackedCore::Module {
-                ast: x.ast,
+            InstTarget::Module(ast) => ty::UnpackedCore::Module {
+                ast,
                 env: details.inner_env,
             },
-            InstKind::Interface(x) => ty::UnpackedCore::Interface {
-                ast: x.ast,
+            InstTarget::Interface(ast) => ty::UnpackedCore::Interface {
+                ast,
                 env: details.inner_env,
             },
         },
@@ -855,7 +854,7 @@ pub(crate) fn unpacked_type_from_ast<'a>(
 #[moore_derive::query]
 pub(crate) fn type_of_expr<'a>(
     cx: &impl Context<'a>,
-    expr: Ref<'a, hir::Expr>,
+    expr: Ref<'a, hir::Expr<'a>>,
     env: ParamEnv,
 ) -> &'a UnpackedType<'a> {
     let Ref(expr) = expr;
@@ -875,6 +874,7 @@ pub(crate) fn type_of_expr<'a>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
         | hir::ExprKind::Field(..)
+        | hir::ExprKind::LocalIntfSignal { .. }
         | hir::ExprKind::Index(..) => cx.need_self_determined_type(expr.id, env),
 
         // Unsized constants infer their type from the context if possible, and
@@ -979,7 +979,7 @@ pub(crate) fn cast_type<'a>(
 #[moore_derive::query]
 pub(crate) fn cast_expr_type<'a>(
     cx: &impl Context<'a>,
-    Ref(expr): Ref<'a, hir::Expr>,
+    Ref(expr): Ref<'a, hir::Expr<'a>>,
     env: ParamEnv,
 ) -> CastType<'a> {
     let cast = cast_expr_type_inner(cx, expr, env);
@@ -1019,7 +1019,7 @@ pub(crate) fn cast_expr_type<'a>(
 /// Get the cast type of an expression.
 fn cast_expr_type_inner<'gcx>(
     cx: &impl Context<'gcx>,
-    expr: &'gcx hir::Expr,
+    expr: &'gcx hir::Expr<'gcx>,
     env: ParamEnv,
 ) -> CastType<'gcx> {
     trace!(
@@ -1294,7 +1294,7 @@ pub(crate) fn need_self_determined_type<'a>(
 /// Get the self-determined type of an expression.
 fn self_determined_expr_type<'gcx>(
     cx: &impl Context<'gcx>,
-    expr: &'gcx hir::Expr,
+    expr: &'gcx hir::Expr<'gcx>,
     env: ParamEnv,
 ) -> Option<&'gcx UnpackedType<'gcx>> {
     match expr.kind {
@@ -1476,6 +1476,16 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::Field(..) => Some(
             cx.resolve_field_access(expr.id, env)
                 .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
+                .unwrap_or(UnpackedType::make_error()),
+        ),
+
+        // Interface signal accesses resolve to the type of the signal.
+        hir::ExprKind::LocalIntfSignal { inst, name } => Some(
+            cx.type_of(inst.id(), env)
+                .map(|ty| ty.get_interface().unwrap())
+                .and_then(|intf| cx.resolve_hierarchical_or_error(name, intf))
+                .map(|def| def.node.id())
+                .and_then(|def| cx.type_of(def, env))
                 .unwrap_or(UnpackedType::make_error()),
         ),
 
@@ -2098,7 +2108,7 @@ impl std::fmt::Display for TypeContext<'_> {
 fn type_context_imposed_by_expr<'gcx>(
     cx: &impl Context<'gcx>,
     onto: NodeId,
-    expr: &'gcx hir::Expr,
+    expr: &'gcx hir::Expr<'gcx>,
     env: ParamEnv,
 ) -> Option<TypeContext<'gcx>> {
     match expr.kind {
@@ -2253,7 +2263,7 @@ fn type_context_imposed_by_expr<'gcx>(
 fn type_context_imposed_by_pattern<'gcx>(
     cx: &impl Context<'gcx>,
     onto: NodeId,
-    expr: &'gcx hir::Expr,
+    expr: &'gcx hir::Expr<'gcx>,
     env: ParamEnv,
 ) -> Option<TypeContext<'gcx>> {
     let map = match cx.map_pattern(Ref(expr), env) {

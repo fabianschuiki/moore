@@ -24,7 +24,7 @@ make_arenas!(
         interfaces: Interface<'hir>,
         ports: Port,
         types: Type,
-        exprs: Expr,
+        exprs: Expr<'hir>,
         inst_target: InstTarget<'hir>,
         insts: Inst<'hir>,
         type_params: TypeParam,

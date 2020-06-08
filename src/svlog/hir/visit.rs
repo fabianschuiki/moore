@@ -61,7 +61,7 @@ pub trait Visitor<'a>: Sized {
         walk_stmt(self, stmt)
     }
 
-    fn visit_expr(&mut self, expr: &'a Expr, lvalue: bool) {
+    fn visit_expr(&mut self, expr: &'a Expr<'a>, lvalue: bool) {
         walk_expr(self, expr, lvalue);
     }
 
@@ -223,7 +223,8 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         | ExprKind::IntConst { .. }
         | ExprKind::UnsizedConst(_)
         | ExprKind::TimeConst(_)
-        | ExprKind::StringConst(_) => (),
+        | ExprKind::StringConst(_)
+        | ExprKind::LocalIntfSignal { .. } => (),
         ExprKind::Ident(x) => {
             visitor.visit_ident(x);
         }

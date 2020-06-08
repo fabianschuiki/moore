@@ -117,7 +117,7 @@ mod param_env;
 pub mod pattern_mapping;
 pub mod port_list;
 mod port_mapping;
-mod resolver;
+pub mod resolver;
 pub mod rst;
 #[warn(missing_docs)]
 pub mod ty;
@@ -140,7 +140,7 @@ pub use crate::{
         IntoNodeEnvId, NodeEnvId, ParamEnv, ParamEnvBinding, ParamEnvData, ParamEnvSource,
     },
     port_mapping::{PortMapping, PortMappingSource},
-    resolver::*,
+    // resolver::*,
     syntax::*,
 };
 
@@ -264,6 +264,7 @@ mod queries {
         pattern_mapping::*,
         port_list::{self, *},
         port_mapping::*,
+        resolver::*,
         rst::*,
         ty::UnpackedType,
         typeck::*,

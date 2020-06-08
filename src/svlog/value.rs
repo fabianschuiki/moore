@@ -462,6 +462,9 @@ fn const_mir_rvalue_inner<'gcx>(
             }
         }
 
+        mir::RvalueKind::IntfSignal(..) =>
+            unreachable!("intf signals are never const"),
+
         mir::RvalueKind::Ternary {
             cond,
             true_value,

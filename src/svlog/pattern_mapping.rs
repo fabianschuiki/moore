@@ -12,12 +12,12 @@ use std::{collections::HashMap, sync::Arc};
 #[derive(Clone, Debug)]
 pub struct PatternMapping<'a> {
     /// The corresponding pattern expression.
-    pub hir: &'a hir::Expr,
+    pub hir: &'a hir::Expr<'a>,
     /// The type the pattern maps to.
     pub ty: &'a ty::UnpackedType<'a>,
     /// The mapped expression for each field. The fields are in type order.
     /// Multiple fields may be assigned the same expression.
-    pub fields: Vec<(PatternField<'a>, &'a hir::Expr)>,
+    pub fields: Vec<(PatternField<'a>, &'a hir::Expr<'a>)>,
 }
 
 /// A field correspondence in a mapped pattern.
@@ -50,7 +50,7 @@ impl<'a> PatternField<'a> {
 #[moore_derive::query]
 pub(crate) fn map_pattern<'a>(
     cx: &impl Context<'a>,
-    Ref(expr): Ref<'a, hir::Expr>,
+    Ref(expr): Ref<'a, hir::Expr<'a>>,
     env: ParamEnv,
 ) -> Result<Arc<PatternMapping<'a>>> {
     // First determine the type the pattern will have.
@@ -112,7 +112,7 @@ pub(crate) fn map_pattern<'a>(
 
 /// Helper function to get the HIR expr associated with a node ID. This should
 /// eventually go into the HIR module.
-fn hir_of_expr<'a>(cx: &impl Context<'a>, node: NodeId) -> Result<&'a hir::Expr> {
+fn hir_of_expr<'a>(cx: &impl Context<'a>, node: NodeId) -> Result<&'a hir::Expr<'a>> {
     match cx.hir_of(node)? {
         HirNode::Expr(e) => Ok(e),
         x => unreachable!("expected HIR expression, got {:?}", x),
@@ -127,7 +127,7 @@ fn map_named_array_pattern<'a>(
     dim: ty::Dim<'a>,
     span: Span,
     env: ParamEnv,
-) -> Result<Vec<(PatternField<'a>, &'a hir::Expr)>> {
+) -> Result<Vec<(PatternField<'a>, &'a hir::Expr<'a>)>> {
     // Determine the length of the array and the offset of the indexes.
     let (length, offset) = match dim
         .get_range()
@@ -272,7 +272,7 @@ fn map_named_struct_pattern<'a>(
     strukt: &'a ty::StructType<'a>,
     span: Span,
     env: ParamEnv,
-) -> Result<Vec<(PatternField<'a>, &'a hir::Expr)>> {
+) -> Result<Vec<(PatternField<'a>, &'a hir::Expr<'a>)>> {
     // Determine the field names and types for the struct to be assembled.
     let name_lookup: HashMap<Name, usize> = strukt
         .members
@@ -427,7 +427,7 @@ fn map_positional_pattern<'a>(
     repeat: usize,
     ty: &'a ty::UnpackedType<'a>,
     span: Span,
-) -> Result<Vec<(PatternField<'a>, &'a hir::Expr)>> {
+) -> Result<Vec<(PatternField<'a>, &'a hir::Expr<'a>)>> {
     // Lower each of the values to HIR, and abort on errors.
     let values: Result<Vec<_>> = mapping.iter().map(|&id| hir_of_expr(cx, id)).collect();
     let values = values?;

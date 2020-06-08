@@ -1405,3 +1405,56 @@ where
         }
     }
 }
+
+/// Any AST node that can be instantiated.
+#[derive(Debug, Clone, Copy)]
+pub enum InstTarget<'a> {
+    /// A module instance.
+    Module(&'a ast::Module<'a>),
+    /// A interface instance.
+    Interface(&'a ast::Interface<'a>),
+}
+
+impl<'a> InstTarget<'a> {
+    /// Get the instantiated node as a `AnyNode`.
+    pub fn as_any(&self) -> &'a dyn ast::AnyNode<'a> {
+        match *self {
+            Self::Module(x) => x,
+            Self::Interface(x) => x,
+        }
+    }
+}
+
+/// Resolve the target of an instantiation.
+#[moore_derive::query]
+pub(crate) fn resolve_inst_target<'a>(
+    cx: &impl Context<'a>,
+    inst: &'a ast::Inst<'a>,
+) -> Result<InstTarget<'a>> {
+    // Resolve the name of the instantiated module.
+    let loc = cx.scope_location(inst);
+    let def = cx.resolve_local_or_error(inst.target, loc, false)?;
+    trace!("Resolved instance `{}` to {:?}", inst.target, def);
+
+    // Check what exactly we are instantiating.
+    let target = match def.node {
+        DefNode::Ast(ast) => match ast.as_all() {
+            ast::AllNode::Module(x) => Some(InstTarget::Module(x)),
+            ast::AllNode::Interface(x) => Some(InstTarget::Interface(x)),
+            _ => None,
+        },
+        _ => None,
+    };
+    match target {
+        Some(x) => Ok(x),
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` is not a module or interface", inst.target))
+                    .span(inst.target.span)
+                    .add_note(format!("{} was declared here:", def.node))
+                    .span(def.node.span()),
+            );
+            Err(())
+        }
+    }
+}

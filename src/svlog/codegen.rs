@@ -5,7 +5,7 @@
 use crate::{
     crate_prelude::*,
     hir::HirNode,
-    inst_details::InstKind,
+    resolver::InstTarget,
     ty::UnpackedType,
     value::{Value, ValueKind},
     ParamEnv,
@@ -119,7 +119,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         self.tables
             .module_signatures
             .insert(id.env(env), (name, sig));
-        let mut values = HashMap::<NodeId, llhd::ir::Value>::new();
+        let mut values = HashMap::new();
         let mut gen = UnitGenerator {
             gen: self,
             builder: &mut builder,
@@ -135,13 +135,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let arg = gen.builder.input_arg(index);
             gen.builder
                 .set_name(arg, port_id_to_name[&port.id].value.to_string());
-            gen.values.insert(port.id, arg);
+            gen.values.insert(port.id.into(), arg);
         }
         for (index, &port) in outputs.iter().enumerate() {
             let arg = gen.builder.output_arg(index);
             gen.builder
                 .set_name(arg, port_id_to_name[&port.id].value.to_string());
-            gen.values.insert(port.id, arg);
+            gen.values.insert(port.id.into(), arg);
         }
 
         // Emit the actual contents of the entity.
@@ -150,7 +150,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Assign default values to undriven output ports.
         for port in outputs {
             let driven = {
-                let value = gen.values[&port.id];
+                let value = gen.values[&port.id.into()];
                 gen.builder
                     .all_insts()
                     .any(|inst| match gen.builder[inst].opcode() {
@@ -179,7 +179,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let zero_time = gen.builder.ins().const_time(zero_time);
             gen.builder
                 .ins()
-                .drv(gen.values[&port.id], default_value, zero_time);
+                .drv(gen.values[&port.id.into()], default_value, zero_time);
         }
 
         trace!("{}", gen.builder.unit());
@@ -269,7 +269,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             .zip(builder.input_args())
             .chain(outputs.iter().zip(builder.output_args()))
         {
-            values.insert(id, arg);
+            values.insert(id.into(), arg);
         }
         let mut pg = UnitGenerator {
             gen: self,
@@ -289,16 +289,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let input_set: HashSet<_> = inputs.iter().cloned().collect();
         let output_set: HashSet<_> = outputs.iter().cloned().collect();
         for &id in input_set.intersection(&output_set) {
-            let init = pg.builder.ins().prb(pg.values[&id]);
+            let init = pg.builder.ins().prb(pg.values[&id.into()]);
             let shadow = pg.builder.ins().var(init);
             if let Some(name) = pg
                 .builder
-                .get_name(pg.values[&id])
+                .get_name(pg.values[&id.into()])
                 .map(|name| format!("{}.shadow", name))
             {
                 pg.builder.set_name(shadow, name);
             }
-            pg.shadows.insert(id, shadow);
+            pg.shadows.insert(id.into(), shadow);
         }
 
         // Emit prologue and determine which basic block to jump back to.
@@ -479,7 +479,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The builder into which instructions are emitted.
     builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
-    values: &'a mut HashMap<NodeId, llhd::ir::Value>,
+    values: &'a mut HashMap<ValueSource, llhd::ir::Value>,
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
     /// The MIR lvalues emitted into the unit.
@@ -489,7 +489,19 @@ struct UnitGenerator<'a, 'gcx, C> {
     interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
     /// The shadow variables introduced to handle signals which are both read
     /// and written in a process.
-    shadows: HashMap<NodeId, llhd::ir::Value>,
+    shadows: HashMap<ValueSource, llhd::ir::Value>,
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+enum ValueSource {
+    Regular(NodeId),
+    Intf(NodeId, NodeId),
+}
+
+impl From<NodeId> for ValueSource {
+    fn from(other: NodeId) -> Self {
+        Self::Regular(other)
+    }
 }
 
 impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
@@ -510,18 +522,25 @@ impl<'a, 'b, 'gcx, C> UnitGenerator<'a, 'gcx, &'b C>
 where
     C: Context<'gcx> + 'b,
 {
-    fn emitted_value(&self, node_id: NodeId) -> llhd::ir::Value {
-        match self.values.get(&node_id) {
+    fn emitted_value(&self, src: impl Into<ValueSource>) -> llhd::ir::Value {
+        let src = src.into();
+        match self.values.get(&src) {
             Some(&v) => v,
-            None => panic!(
-                "{}",
-                DiagBuilder2::bug("no value emitted").span(self.span(node_id))
+            None => bug_span!(
+                self.span(match src {
+                    ValueSource::Regular(id) => id,
+                    ValueSource::Intf(_, id) => id,
+                }),
+                self.cx,
+                "no value emitted for {:?}",
+                src
             ),
         }
     }
 
-    fn set_emitted_value(&mut self, node_id: NodeId, value: llhd::ir::Value) {
-        self.values.insert(node_id, value);
+    fn set_emitted_value(&mut self, src: impl Into<ValueSource>, value: llhd::ir::Value) {
+        let src = src.into();
+        self.values.insert(src, value);
     }
 
     /// Emit the code for the contents of a module.
@@ -549,7 +568,7 @@ where
             )?;
             let value = self.builder.ins().sig(init);
             self.builder.set_name(value, hir.name.value.into());
-            self.values.insert(decl_id, value.into());
+            self.values.insert(decl_id.into(), value.into());
         }
 
         // Emit interface instances.
@@ -561,7 +580,7 @@ where
             };
             let inst = self.inst_details(Ref(inst), env)?;
             let intf_hir = match inst.target.kind {
-                InstKind::Interface(x) => x,
+                InstTarget::Interface(x) => self.hir_of_interface(x)?,
                 _ => continue,
             };
 
@@ -583,9 +602,14 @@ where
                 let value = self.builder.ins().sig(init);
                 self.builder
                     .set_name(value, format!("{}.{}", inst.inst.name, hir.name));
-                // TODO: Add this to the value table -- requires pairing up of
-                // the intf inst id and the decl id.
-                // self.values.insert(decl_id, value.into());
+                let src = ValueSource::Intf(inst_id, decl_id);
+                trace!(
+                    "Emitted value for {:?} {}.{}",
+                    src,
+                    inst.inst.name,
+                    hir.name
+                );
+                self.values.insert(src, value.into());
             }
         }
 
@@ -617,7 +641,7 @@ where
             };
             let inst = self.inst_details(Ref(inst), env)?;
             let target_module = match inst.target.kind {
-                InstKind::Module(x) => x,
+                InstTarget::Module(x) => self.hir_of_module(x)?,
                 _ => continue,
             };
 
@@ -758,7 +782,7 @@ where
         // Emit and instantiate procedures.
         for &proc_id in &hir.procs {
             let prok = self.emit_procedure(proc_id, env, name_prefix)?;
-            let lookup_value = |&id| match self.values.get(&id) {
+            let lookup_value = |&id: &NodeId| match self.values.get(&id.into()) {
                 Some(v) => v.clone(),
                 None => {
                     self.emit(
@@ -959,7 +983,7 @@ where
             mir::RvalueKind::Var(id) => {
                 let value = self
                     .shadows
-                    .get(&id)
+                    .get(&id.into())
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
                 Ok(match *self.llhd_type(value) {
@@ -980,6 +1004,19 @@ where
             }
 
             mir::RvalueKind::Port(id) => {
+                let value = self
+                    .shadows
+                    .get(&id.into())
+                    .cloned()
+                    .unwrap_or_else(|| self.emitted_value(id));
+                let value = self.builder.ins().prb(value);
+                self.builder
+                    .set_name(value, format!("{}", mir.span.extract()));
+                Ok(value)
+            }
+
+            mir::RvalueKind::IntfSignal(intf, signal) => {
+                let id = ValueSource::Intf(intf, signal);
                 let value = self
                     .shadows
                     .get(&id)
@@ -1368,8 +1405,16 @@ where
             // them.
             mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => Ok((
                 self.emitted_value(id).clone(),
-                self.shadows.get(&id).cloned(),
+                self.shadows.get(&id.into()).cloned(),
             )),
+
+            mir::LvalueKind::IntfSignal(intf, signal) => {
+                let id = ValueSource::Intf(intf, signal);
+                Ok((
+                    self.emitted_value(id).clone(),
+                    self.shadows.get(&id).cloned(),
+                ))
+            }
 
             // Member accesses simply look up their inner lvalue and extract the
             // signal or pointer to the respective subfield.
@@ -1977,8 +2022,8 @@ where
 
     /// Emit the code to update the shadow variables of signals.
     fn emit_shadow_update(&mut self) {
-        for (id, &shadow) in &self.shadows {
-            let value = self.builder.ins().prb(self.values[id]);
+        for (&id, &shadow) in &self.shadows {
+            let value = self.builder.ins().prb(self.values[&id.into()]);
             self.builder.ins().st(shadow, value);
         }
     }

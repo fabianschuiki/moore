@@ -12,28 +12,28 @@ pub use crate::port_list::{ExtPort, ExtPortExpr, ExtPortSelect, IntPort, IntPort
 
 /// A reference to an HIR node.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum HirNode<'hir> {
-    Module(&'hir Module<'hir>),
-    Interface(&'hir Interface<'hir>),
-    IntPort(&'hir IntPort<'hir>),
-    ExtPort(&'hir ExtPort<'hir>),
-    Type(&'hir Type),
-    Expr(&'hir Expr),
-    InstTarget(&'hir InstTarget<'hir>),
-    Inst(&'hir Inst<'hir>),
-    TypeParam(&'hir TypeParam),
-    ValueParam(&'hir ValueParam),
-    VarDecl(&'hir VarDecl),
-    Proc(&'hir Proc),
-    Stmt(&'hir Stmt),
-    EventExpr(&'hir EventExpr),
-    Gen(&'hir Gen),
-    GenvarDecl(&'hir GenvarDecl),
-    Typedef(&'hir Typedef),
-    Assign(&'hir Assign),
-    Package(&'hir Package),
-    EnumVariant(&'hir EnumVariant),
-    Subroutine(&'hir Subroutine),
+pub enum HirNode<'a> {
+    Module(&'a Module<'a>),
+    Interface(&'a Interface<'a>),
+    IntPort(&'a IntPort<'a>),
+    ExtPort(&'a ExtPort<'a>),
+    Type(&'a Type),
+    Expr(&'a Expr<'a>),
+    InstTarget(&'a InstTarget<'a>),
+    Inst(&'a Inst<'a>),
+    TypeParam(&'a TypeParam),
+    ValueParam(&'a ValueParam),
+    VarDecl(&'a VarDecl),
+    Proc(&'a Proc),
+    Stmt(&'a Stmt),
+    EventExpr(&'a EventExpr),
+    Gen(&'a Gen),
+    GenvarDecl(&'a GenvarDecl),
+    Typedef(&'a Typedef),
+    Assign(&'a Assign),
+    Package(&'a Package),
+    EnumVariant(&'a EnumVariant),
+    Subroutine(&'a Subroutine),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -571,19 +571,19 @@ pub enum BuiltinType {
 
 /// An expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Expr {
+pub struct Expr<'a> {
     pub id: NodeId,
     pub span: Span,
-    pub kind: ExprKind,
+    pub kind: ExprKind<'a>,
 }
 
-impl HasSpan for Expr {
+impl HasSpan for Expr<'_> {
     fn span(&self) -> Span {
         self.span
     }
 }
 
-impl HasDesc for Expr {
+impl HasDesc for Expr<'_> {
     fn desc(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self.kind {
@@ -610,7 +610,7 @@ impl HasDesc for Expr {
 
 /// The different forms an expression can take.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExprKind {
+pub enum ExprKind<'a> {
     /// An integer constant literal such as `42` or `'d42` or `32'd42`.
     ///
     /// The `special_bits` mask keeps track of which bits in the number are `x`
@@ -636,6 +636,11 @@ pub enum ExprKind {
     Binary(BinaryOp, NodeId, NodeId),
     /// A field access such as `a.b`.
     Field(NodeId, Spanned<Name>),
+    /// A signal in a locally instantiated interface, such as `intf.a`.
+    LocalIntfSignal {
+        inst: &'a ast::InstName<'a>,
+        name: Spanned<Name>,
+    },
     /// An index access such as `a[b]` or `a[b:c]`.
     Index(NodeId, IndexMode),
     /// A builtin function call such as `$clog2(x)`.

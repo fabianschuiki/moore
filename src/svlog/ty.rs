@@ -1456,6 +1456,22 @@ impl<'a> UnpackedType<'a> {
         self.get_packed().and_then(|packed| packed.get_enum())
     }
 
+    /// Get the underlying module, or `None` if the type is not a module.
+    pub fn get_module(&self) -> Option<&'a ast::Module<'a>> {
+        match self.resolve_full().core {
+            UnpackedCore::Module { ast, .. } if self.dims.is_empty() => Some(ast),
+            _ => None,
+        }
+    }
+
+    /// Get the underlying interface, or `None` if the type is not a interface.
+    pub fn get_interface(&self) -> Option<&'a ast::Interface<'a>> {
+        match self.resolve_full().core {
+            UnpackedCore::Interface { ast, .. } if self.dims.is_empty() => Some(ast),
+            _ => None,
+        }
+    }
+
     /// Helper function to format this type around a declaration name.
     fn format_around(
         &self,
