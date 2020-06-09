@@ -348,6 +348,9 @@ pub(crate) fn map_to_type<'a>(
 ) -> Option<&'a UnpackedType<'a>> {
     match ast.as_all() {
         ast::AllNode::Type(ast) => Some(cx.packed_type_from_ast(Ref(ast), env, None)),
+        ast::AllNode::Interface(ast) => {
+            Some(UnpackedType::make(cx, UnpackedCore::Interface { ast, env }))
+        }
         // The following is an ugly hack, and should actually never happen. But
         // as the HIR is implemented at the moment, certain parameter bindings
         // can bind expressions to type parameters.
@@ -627,6 +630,7 @@ pub(crate) fn packed_type_from_ast<'a>(
                 DiagBuilder2::error(format!("`{}` is not a type", ast.span().extract()))
                     .span(ast.span()),
             );
+            error!("Offending AST: {:#3?}", ast);
             return UnpackedType::make_error();
         }
 
