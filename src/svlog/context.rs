@@ -26,7 +26,7 @@ use crate::{
     ast::{self, Visitor},
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
-    hir::{self, AccessTable, HirNode},
+    hir::{self, HirNode},
     port_list::PortList,
     resolver::{Scope, StructDef},
     ty::UnpackedType,
@@ -722,12 +722,6 @@ pub(super) mod queries {
                 use fn value::type_default_value;
             }
 
-            /// Determine the nodes accessed by another node.
-            fn accessed_nodes(node_id: NodeId) -> Result<Arc<AccessTable>> {
-                type AccessedNodesQuery;
-                use fn  hir::accessed_nodes;
-            }
-
             /// Obtain the details of a struct definition.
             fn struct_def(node_id: NodeId) -> Result<Arc<StructDef>> {
                 type StructDefQuery;
@@ -786,7 +780,6 @@ pub(super) mod queries {
                 fn is_constant() for IsConstantQuery<'gcx>;
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
-                fn accessed_nodes() for AccessedNodesQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
                 fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;

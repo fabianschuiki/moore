@@ -4,7 +4,7 @@
 
 use crate::{
     crate_prelude::*,
-    hir::HirNode,
+    hir::{AccessedNode, HirNode},
     resolver::InstTarget,
     ty::UnpackedType,
     value::{Value, ValueKind},
@@ -201,21 +201,29 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
 
         // Find the accessed nodes.
-        let acc = self.accessed_nodes(hir.stmt)?;
+        let acc = self.accessed_nodes(hir.stmt, env)?;
         trace!("Process accesses {:#?}", acc);
         let mut sig = llhd::ir::Signature::new();
         let mut inputs = vec![];
         let mut outputs = vec![];
         for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
-            sig.add_input(llhd::signal_ty(
-                self.emit_type(self.type_of(id, env)?, env)?,
-            ));
+            sig.add_input(llhd::signal_ty(self.emit_type(
+                match id {
+                    AccessedNode::Regular(id) => self.type_of(id, env)?,
+                    AccessedNode::Intf(_, id) => self.type_of(id, env)?,
+                },
+                env,
+            )?));
             inputs.push(id);
         }
         for &id in acc.written.iter() {
-            sig.add_output(llhd::signal_ty(
-                self.emit_type(self.type_of(id, env)?, env)?,
-            ));
+            sig.add_output(llhd::signal_ty(self.emit_type(
+                match id {
+                    AccessedNode::Regular(id) => self.type_of(id, env)?,
+                    AccessedNode::Intf(_, id) => self.type_of(id, env)?,
+                },
+                env,
+            )?));
             outputs.push(id);
         }
         trace!("Process Inputs: {:?}", inputs);
@@ -244,21 +252,38 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
 
         // Assign names to inputs and outputs.
-        let guess_name = |id| match self.hir_of(id).ok()? {
-            hir::HirNode::VarDecl(x) => Some(x.name),
-            hir::HirNode::IntPort(x) => Some(x.name),
-            _ => None,
+        let guess_name = |id| {
+            let (prefix, id) = match id {
+                AccessedNode::Regular(id) => (None, id),
+                AccessedNode::Intf(inst_id, id) => {
+                    let inst_name = match self.hir_of(inst_id).ok()? {
+                        HirNode::Inst(x) => x.name,
+                        _ => unreachable!(),
+                    };
+                    (Some(inst_name), id)
+                }
+            };
+            let name = match self.hir_of(id).ok()? {
+                HirNode::VarDecl(x) => Some(x.name),
+                HirNode::IntPort(x) => Some(x.name),
+                _ => None,
+            };
+            match (prefix, name) {
+                (Some(prefix), Some(name)) => Some(format!("{}.{}", prefix, name)),
+                (None, Some(name)) => Some(format!("{}", name)),
+                _ => None,
+            }
         };
         for (i, &id) in inputs.iter().enumerate() {
             if let Some(name) = guess_name(id) {
                 let value = builder.input_arg(i);
-                builder.set_name(value, format!("{}", name));
+                builder.set_name(value, name);
             }
         }
         for (i, &id) in outputs.iter().enumerate() {
             if let Some(name) = guess_name(id) {
                 let value = builder.output_arg(i);
-                builder.set_name(value, format!("{}", name));
+                builder.set_name(value, name);
             }
         }
 
@@ -479,7 +504,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The builder into which instructions are emitted.
     builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
-    values: &'a mut HashMap<ValueSource, llhd::ir::Value>,
+    values: &'a mut HashMap<AccessedNode, llhd::ir::Value>,
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
     /// The MIR lvalues emitted into the unit.
@@ -489,19 +514,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
     /// The shadow variables introduced to handle signals which are both read
     /// and written in a process.
-    shadows: HashMap<ValueSource, llhd::ir::Value>,
-}
-
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
-enum ValueSource {
-    Regular(NodeId),
-    Intf(NodeId, NodeId),
-}
-
-impl From<NodeId> for ValueSource {
-    fn from(other: NodeId) -> Self {
-        Self::Regular(other)
-    }
+    shadows: HashMap<AccessedNode, llhd::ir::Value>,
 }
 
 impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
@@ -522,14 +535,14 @@ impl<'a, 'b, 'gcx, C> UnitGenerator<'a, 'gcx, &'b C>
 where
     C: Context<'gcx> + 'b,
 {
-    fn emitted_value(&self, src: impl Into<ValueSource>) -> llhd::ir::Value {
+    fn emitted_value(&self, src: impl Into<AccessedNode>) -> llhd::ir::Value {
         let src = src.into();
         match self.values.get(&src) {
             Some(&v) => v,
             None => bug_span!(
                 self.span(match src {
-                    ValueSource::Regular(id) => id,
-                    ValueSource::Intf(_, id) => id,
+                    AccessedNode::Regular(id) => id,
+                    AccessedNode::Intf(_, id) => id,
                 }),
                 self.cx,
                 "no value emitted for {:?}",
@@ -538,7 +551,7 @@ where
         }
     }
 
-    fn set_emitted_value(&mut self, src: impl Into<ValueSource>, value: llhd::ir::Value) {
+    fn set_emitted_value(&mut self, src: impl Into<AccessedNode>, value: llhd::ir::Value) {
         let src = src.into();
         self.values.insert(src, value);
     }
@@ -602,7 +615,7 @@ where
                 let value = self.builder.ins().sig(init);
                 self.builder
                     .set_name(value, format!("{}.{}", inst.inst.name, hir.name));
-                let src = ValueSource::Intf(inst_id, decl_id);
+                let src = AccessedNode::Intf(inst_id, decl_id);
                 trace!(
                     "Emitted value for {:?} {}.{}",
                     src,
@@ -782,16 +795,16 @@ where
         // Emit and instantiate procedures.
         for &proc_id in &hir.procs {
             let prok = self.emit_procedure(proc_id, env, name_prefix)?;
-            let lookup_value = |&id: &NodeId| match self.values.get(&id.into()) {
+            let lookup_value = |&id: &AccessedNode| match self.values.get(&id) {
                 Some(v) => v.clone(),
                 None => {
                     self.emit(
                         DiagBuilder2::bug(format!(
                             "{} used as input/output of {}, but no value has been emitted",
-                            self.hir_of(id).unwrap().desc_full(),
+                            self.hir_of(id.id()).unwrap().desc_full(),
                             self.hir_of(proc_id).unwrap().desc_full(),
                         ))
-                        .span(self.span(id)),
+                        .span(self.span(id.id())),
                     );
                     panic!("no value emitted for {:?}", id);
                 }
@@ -1016,7 +1029,7 @@ where
             }
 
             mir::RvalueKind::IntfSignal(intf, signal) => {
-                let id = ValueSource::Intf(intf, signal);
+                let id = AccessedNode::Intf(intf, signal);
                 let value = self
                     .shadows
                     .get(&id)
@@ -1409,7 +1422,7 @@ where
             )),
 
             mir::LvalueKind::IntfSignal(intf, signal) => {
-                let id = ValueSource::Intf(intf, signal);
+                let id = AccessedNode::Intf(intf, signal);
                 Ok((
                     self.emitted_value(id).clone(),
                     self.shadows.get(&id).cloned(),
@@ -1646,7 +1659,7 @@ where
                 let check_blk = self.add_named_block("check");
                 let mut trigger_on = vec![];
                 for event in &expr_hir.events {
-                    let acc = self.accessed_nodes(event.expr)?;
+                    let acc = self.accessed_nodes(event.expr, env)?;
                     for &id in &acc.read {
                         trigger_on.push(self.emitted_value(id).clone());
                     }
@@ -1700,7 +1713,7 @@ where
                 // Wait for any of the inputs to the statement to change.
                 let trigger_blk = self.add_named_block("trigger");
                 let mut trigger_on = vec![];
-                let acc = self.accessed_nodes(stmt)?;
+                let acc = self.accessed_nodes(stmt, env)?;
                 for &id in &acc.read {
                     trigger_on.push(self.emitted_value(id).clone());
                 }
@@ -2113,6 +2126,6 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module<'gcx>, env
 /// Result of emitting a procedure.
 struct EmittedProcedure {
     unit: llhd::ir::UnitId,
-    inputs: Vec<NodeId>,
-    outputs: Vec<NodeId>,
+    inputs: Vec<AccessedNode>,
+    outputs: Vec<AccessedNode>,
 }

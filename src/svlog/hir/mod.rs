@@ -44,12 +44,15 @@ make_arenas!(
 );
 
 /// Determine the nodes accessed by another node.
-pub(crate) fn accessed_nodes<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn accessed_nodes<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
+    env: ParamEnv,
 ) -> Result<Arc<AccessTable>> {
     let mut k = AccessTableCollector {
         cx,
+        env,
         table: AccessTable {
             node_id,
             read: Default::default(),
@@ -66,14 +69,43 @@ pub struct AccessTable {
     /// The node for which the analysis was performed.
     pub node_id: NodeId,
     /// All nodes being read.
-    pub read: BTreeSet<NodeId>,
+    pub read: BTreeSet<AccessedNode>,
     /// All nodes being written.
-    pub written: BTreeSet<NodeId>,
+    pub written: BTreeSet<AccessedNode>,
+}
+
+/// An accessed node. The `AccessTable` carries this enum as entries.
+///
+/// The `AccessTable` collects accessed nodes across a design. Most of the nodes
+/// are pretty simple, but some -- like an interface signal -- require special
+/// care.
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum AccessedNode {
+    /// A regular value.
+    Regular(NodeId),
+    /// An interface signal.
+    Intf(NodeId, NodeId),
+}
+
+impl AccessedNode {
+    /// Get the ID of the accessed node, dropping any context information.
+    pub fn id(&self) -> NodeId {
+        match *self {
+            Self::Regular(id) | Self::Intf(_, id) => id,
+        }
+    }
+}
+
+impl From<NodeId> for AccessedNode {
+    fn from(other: NodeId) -> Self {
+        Self::Regular(other)
+    }
 }
 
 /// A visitor for the HIR that populates an access table.
 struct AccessTableCollector<'a, C> {
     cx: &'a C,
+    env: ParamEnv,
     table: AccessTable,
 }
 
@@ -111,14 +143,35 @@ where
                 Ok(binding) => {
                     if self.is_binding_interesting(binding) {
                         if lvalue {
-                            self.table.written.insert(binding);
+                            self.table.written.insert(binding.into());
                         } else {
-                            self.table.read.insert(binding);
+                            self.table.read.insert(binding.into());
                         }
                     }
                 }
                 Err(()) => (),
             },
+            ExprKind::LocalIntfSignal { inst, name } => {
+                let node = self
+                    .cx
+                    .type_of(inst.id(), self.env)
+                    .map(|ty| ty.get_interface().unwrap())
+                    .and_then(|intf| {
+                        self.cx
+                            .resolve_hierarchical_or_error(name, intf)
+                            .map(|def| AccessedNode::Intf(inst.id(), def.node.id()))
+                    });
+                match node {
+                    Ok(node) => {
+                        if lvalue {
+                            self.table.written.insert(node);
+                        } else {
+                            self.table.read.insert(node);
+                        }
+                    }
+                    Err(()) => (),
+                }
+            }
             _ => (),
         }
         walk_expr(self, expr, lvalue)

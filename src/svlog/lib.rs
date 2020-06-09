@@ -257,8 +257,10 @@ mod checks {
 // `MOORE_LOG` env var.
 mod queries {
     use crate::crate_prelude::*;
+    #[allow(deprecated)]
     use crate::{
         hir::lowering::*,
+        hir::{accessed_nodes, AccessTable},
         inst_details::*,
         param_env::*,
         pattern_mapping::*,
