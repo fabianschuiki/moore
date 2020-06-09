@@ -1478,11 +1478,22 @@ fn self_determined_expr_type<'gcx>(
         }
 
         // Member field accesses resolve to the type of the member.
-        hir::ExprKind::Field(..) => Some(
-            cx.resolve_field_access(expr.id, env)
-                .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
-                .unwrap_or(UnpackedType::make_error()),
-        ),
+        hir::ExprKind::Field(target, name) => {
+            let target_ty = cx.self_determined_type(target, env)?;
+            if let Some(intf) = target_ty.get_interface() {
+                let def = cx.resolve_hierarchical_or_error(name, intf.ast).ok()?;
+                Some(
+                    cx.type_of(def.node.id(), env)
+                        .unwrap_or(UnpackedType::make_error()),
+                )
+            } else {
+                Some(
+                    cx.resolve_field_access(expr.id, env)
+                        .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
+                        .unwrap_or(UnpackedType::make_error()),
+                )
+            }
+        }
 
         // Interface signal accesses resolve to the type of the signal.
         hir::ExprKind::LocalIntfSignal { inst, name } => Some(

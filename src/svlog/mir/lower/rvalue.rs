@@ -205,6 +205,9 @@ fn lower_expr_inner<'gcx>(
             let binding = builder.cx.resolve_node(expr_id, env)?;
             match builder.cx.hir_of(binding)? {
                 HirNode::VarDecl(decl) => Ok(builder.build(ty, RvalueKind::Var(decl.id))),
+                HirNode::IntPort(port) if ty.get_interface().is_some() => {
+                    Ok(builder.build(ty, RvalueKind::Intf(port.id)))
+                }
                 HirNode::IntPort(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
                 HirNode::EnumVariant(..) | HirNode::ValueParam(..) | HirNode::GenvarDecl(..) => {
                     let k = builder.cx.constant_value_of(binding, env)?;
@@ -312,10 +315,23 @@ fn lower_expr_inner<'gcx>(
             ))
         }
 
-        hir::ExprKind::Field(target, _) => {
+        hir::ExprKind::Field(target, name) => {
+            let target_ty = cx.self_determined_type(target, env);
             let value = cx.mir_rvalue(target, env);
-            let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
-            Ok(builder.build(ty, RvalueKind::Member { value, field }))
+            if let Some(intf) = target_ty.and_then(|ty| ty.get_interface()) {
+                let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
+                let inst = match value.kind {
+                    RvalueKind::Intf(x) => x,
+                    ref x => unreachable!(
+                        "target {:?} should produce an interface MIR rvalue, but got {:?}",
+                        target, x
+                    ),
+                };
+                Ok(builder.build(ty, RvalueKind::IntfSignal(inst, def)))
+            } else {
+                let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
+                Ok(builder.build(ty, RvalueKind::Member { value, field }))
+            }
         }
 
         hir::ExprKind::LocalIntfSignal { inst, name } => {

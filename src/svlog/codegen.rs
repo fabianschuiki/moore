@@ -1082,6 +1082,13 @@ where
                 Ok(value)
             }
 
+            mir::RvalueKind::Intf(_) => {
+                self.emit(
+                    DiagBuilder2::error("interface cannot be used in an expression").span(mir.span),
+                );
+                Err(())
+            }
+
             mir::RvalueKind::IntfSignal(intf, signal) => {
                 let id = AccessedNode::Intf(intf, signal);
                 let value = self

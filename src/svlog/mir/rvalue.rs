@@ -151,6 +151,8 @@ pub enum RvalueKind<'a> {
     Var(NodeId),
     /// A reference to a port declaration.
     Port(NodeId),
+    /// A reference to an interface.
+    Intf(NodeId),
     /// A reference to a locally instantiated interface signal.
     IntfSignal(NodeId, NodeId),
     /// A bit- or part-select.
@@ -214,7 +216,6 @@ impl<'a> RvalueKind<'a> {
             | RvalueKind::SignExtend(_, value)
             | RvalueKind::Repeat(_, value)
             | RvalueKind::Member { value, .. } => value.is_const(),
-            RvalueKind::IntfSignal(..) => false,
             RvalueKind::ConstructArray(values) => values.values().all(|v| v.is_const()),
             RvalueKind::ConstructStruct(values) => values.iter().all(|v| v.is_const()),
             RvalueKind::Const(_) => true,
@@ -227,6 +228,8 @@ impl<'a> RvalueKind<'a> {
             RvalueKind::Concat(values) => values.iter().all(|v| v.is_const()),
             RvalueKind::Var(_) => false,
             RvalueKind::Port(_) => false,
+            RvalueKind::Intf(_) => false,
+            RvalueKind::IntfSignal(..) => false,
             RvalueKind::Index { .. } => false, // TODO(fschuiki): reactivate once impl
             // RvalueKind::Index { value, base, .. } => value.is_const() && base.is_const(),
             RvalueKind::Ternary {

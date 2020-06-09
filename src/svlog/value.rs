@@ -446,7 +446,7 @@ fn const_mir_rvalue_inner<'gcx>(
             cx.intern_value(make_int(mir.ty, result))
         }
 
-        mir::RvalueKind::Assignment { .. } | mir::RvalueKind::Var(_) | mir::RvalueKind::Port(_) => {
+        mir::RvalueKind::Assignment { .. } | mir::RvalueKind::Var(_) | mir::RvalueKind::Port(_) | mir::RvalueKind::IntfSignal(..) | mir::RvalueKind::Intf(..) => {
             cx.emit(DiagBuilder2::error("value is not constant").span(mir.span));
             cx.intern_value(make_error(mir.ty))
         }
@@ -461,9 +461,6 @@ fn const_mir_rvalue_inner<'gcx>(
                 _ => unreachable!("member access on non-struct should be caught in typeck"),
             }
         }
-
-        mir::RvalueKind::IntfSignal(..) =>
-            unreachable!("intf signals are never const"),
 
         mir::RvalueKind::Ternary {
             cond,

@@ -74,17 +74,21 @@ fn try_lower_expr<'gcx>(
     builder: &Builder<'_, impl Context<'gcx>>,
     expr_id: NodeId,
 ) -> Result<&'gcx Lvalue<'gcx>> {
+    let cx = builder.cx;
+    let span = builder.span;
+    let env = builder.env;
+
     // Try to extract the expr HIR for this node. Handle a few special cases
     // where the node is not technically an expression, but can be used as a
     // lvalue.
-    let hir = match builder.cx.hir_of(expr_id) {
+    let hir = match cx.hir_of(expr_id) {
         Ok(HirNode::Expr(x)) => x,
-        Ok(x) => bug_span!(builder.span, builder.cx, "no lvalue for {:?}", x),
+        Ok(x) => bug_span!(span, cx, "no lvalue for {:?}", x),
         Err(_) => return Ok(builder.error()),
     };
 
     // Determine the expression type.
-    let ty = builder.cx.type_of_expr(Ref(hir), builder.env);
+    let ty = cx.type_of_expr(Ref(hir), env);
     if ty.is_error() {
         return Ok(builder.error());
     }
@@ -94,17 +98,20 @@ fn try_lower_expr<'gcx>(
         // Identifiers and scoped identifiers we simply resolve and try to lower
         // the resolved node to an MIR node.
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
-            let binding = builder.cx.resolve_node(expr_id, builder.env)?;
-            return match builder.cx.hir_of(binding)? {
+            let binding = cx.resolve_node(expr_id, env)?;
+            return match cx.hir_of(binding)? {
                 HirNode::VarDecl(decl) => Ok(builder.build(ty, LvalueKind::Var(decl.id))),
+                HirNode::IntPort(port) if ty.get_interface().is_some() => {
+                    Ok(builder.build(ty, LvalueKind::Intf(port.id)))
+                }
                 HirNode::IntPort(port) => Ok(builder.build(ty, LvalueKind::Port(port.id))),
                 x => {
-                    builder.cx.emit(
+                    cx.emit(
                         DiagBuilder2::error(format!(
                             "{} cannot be used as the target of an assignment",
                             x.desc_full()
                         ))
-                        .span(builder.span),
+                        .span(span),
                     );
                     Err(())
                 }
@@ -113,14 +120,14 @@ fn try_lower_expr<'gcx>(
 
         hir::ExprKind::Index(target, mode) => {
             // Compute the indexing parameters.
-            let (base, length) = compute_indexing(builder.cx, builder.expr, builder.env, mode)?;
+            let (base, length) = compute_indexing(cx, builder.expr, env, mode)?;
 
             // Lower the indexee and make sure it can be indexed into.
-            let target = builder.cx.mir_lvalue(target, builder.env);
+            let target = cx.mir_lvalue(target, env);
             assert_span!(
                 target.ty.dims().next().is_some(),
                 target.span,
-                builder.cx,
+                cx,
                 "cannot index into `{}`; should be handled by typeck",
                 target.ty
             );
@@ -136,18 +143,27 @@ fn try_lower_expr<'gcx>(
             ));
         }
 
-        hir::ExprKind::Field(target, _) => {
-            let value = builder.cx.mir_lvalue(target, builder.env);
-            let (_, field, _) = builder.cx.resolve_field_access(expr_id, builder.env)?;
-            return Ok(builder.build(ty, LvalueKind::Member { value, field }));
+        hir::ExprKind::Field(target, name) => {
+            let target_ty = cx.self_determined_type(target, env);
+            let value = cx.mir_lvalue(target, env);
+            if let Some(intf) = target_ty.and_then(|ty| ty.get_interface()) {
+                let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
+                let inst = match value.kind {
+                    LvalueKind::Intf(x) => x,
+                    ref x => unreachable!(
+                        "target {:?} should produce an interface MIR lvalue, but got {:?}",
+                        target, x
+                    ),
+                };
+                return Ok(builder.build(ty, LvalueKind::IntfSignal(inst, def)));
+            } else {
+                let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
+                return Ok(builder.build(ty, LvalueKind::Member { value, field }));
+            }
         }
 
         hir::ExprKind::LocalIntfSignal { inst, name } => {
-            let intf = builder
-                .cx
-                .type_of(inst.id(), builder.env)?
-                .get_interface()
-                .unwrap();
+            let intf = builder.cx.type_of(inst.id(), env)?.get_interface().unwrap();
             let def = builder
                 .cx
                 .resolve_hierarchical_or_error(name, intf.ast)?
@@ -162,9 +178,6 @@ fn try_lower_expr<'gcx>(
     // Show an error informing the user that the given expression cannot be
     // assigned to.
     error!("{:#?}", hir);
-    builder.cx.emit(
-        DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full()))
-            .span(builder.span),
-    );
+    cx.emit(DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full())).span(span));
     Err(())
 }
