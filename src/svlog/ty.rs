@@ -270,19 +270,9 @@ pub enum UnpackedCore<'a> {
         ty: &'a UnpackedType<'a>,
     },
     /// A module instance.
-    Module {
-        /// The AST node of the module.
-        ast: &'a ast::Module<'a>,
-        /// The parametrization of the module.
-        env: ParamEnv,
-    },
+    Module(ModuleType<'a>),
     /// An interface instance.
-    Interface {
-        /// The AST node of the interface.
-        ast: &'a ast::Interface<'a>,
-        /// The parametrization of the interface.
-        env: ParamEnv,
-    },
+    Interface(InterfaceType<'a>),
 }
 
 /// An unpacked dimension.
@@ -355,6 +345,24 @@ pub struct EnumType<'a> {
     pub base_explicit: bool,
     /// The list of variants.
     pub variants: Vec<(Spanned<Name>, &'a ast::EnumName<'a>)>,
+}
+
+/// A module instance.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ModuleType<'a> {
+    /// The AST node of the module.
+    pub ast: &'a ast::Module<'a>,
+    /// The parametrization of the module.
+    pub env: ParamEnv,
+}
+
+/// An interface instance.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InterfaceType<'a> {
+    /// The AST node of the interface.
+    pub ast: &'a ast::Interface<'a>,
+    /// The parametrization of the interface.
+    pub env: ParamEnv,
 }
 
 /// A simple bit vector type.
@@ -1457,17 +1465,17 @@ impl<'a> UnpackedType<'a> {
     }
 
     /// Get the underlying module, or `None` if the type is not a module.
-    pub fn get_module(&self) -> Option<&'a ast::Module<'a>> {
+    pub fn get_module(&self) -> Option<&ModuleType<'a>> {
         match self.resolve_full().core {
-            UnpackedCore::Module { ast, .. } if self.dims.is_empty() => Some(ast),
+            UnpackedCore::Module(ref x) if self.dims.is_empty() => Some(x),
             _ => None,
         }
     }
 
     /// Get the underlying interface, or `None` if the type is not a interface.
-    pub fn get_interface(&self) -> Option<&'a ast::Interface<'a>> {
+    pub fn get_interface(&self) -> Option<&InterfaceType<'a>> {
         match self.resolve_full().core {
-            UnpackedCore::Interface { ast, .. } if self.dims.is_empty() => Some(ast),
+            UnpackedCore::Interface(ref x) if self.dims.is_empty() => Some(x),
             _ => None,
         }
     }
@@ -1560,6 +1568,8 @@ impl<'a> UnpackedCore<'a> {
             (Self::Event, Self::Event) => true,
             (Self::Named { ty: a, .. }, Self::Named { ty: b, .. }) => a.is_identical(b),
             (Self::Ref { ty: a, .. }, Self::Ref { ty: b, .. }) => a.is_identical(b),
+            (Self::Module(a), Self::Module(b)) => a == b,
+            (Self::Interface(a), Self::Interface(b)) => a == b,
             _ => false,
         }
     }
@@ -1576,6 +1586,8 @@ impl<'a> UnpackedCore<'a> {
             (Self::Event, Self::Event) => true,
             (Self::Named { ty: a, .. }, Self::Named { ty: b, .. }) => a.is_strictly_identical(b),
             (Self::Ref { ty: a, .. }, Self::Ref { ty: b, .. }) => a.is_strictly_identical(b),
+            (Self::Module(a), Self::Module(b)) => a == b,
+            (Self::Interface(a), Self::Interface(b)) => a == b,
             _ => false,
         }
     }
@@ -1609,8 +1621,8 @@ impl Display for UnpackedCore<'_> {
             Self::String => write!(f, "string"),
             Self::Chandle => write!(f, "chandle"),
             Self::Event => write!(f, "event"),
-            Self::Module { ast, .. } => write!(f, "{}", ast.name),
-            Self::Interface { ast, .. } => write!(f, "{}", ast.name),
+            Self::Module(x) => write!(f, "{}", x.ast.name),
+            Self::Interface(x) => write!(f, "{}", x.ast.name),
             Self::Named { name, .. } => write!(f, "{}", name),
             Self::Ref { span, .. } => write!(f, "{}", span.extract()),
         }

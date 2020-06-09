@@ -150,7 +150,7 @@ fn try_lower_expr<'gcx>(
                 .unwrap();
             let def = builder
                 .cx
-                .resolve_hierarchical_or_error(name, intf)?
+                .resolve_hierarchical_or_error(name, intf.ast)?
                 .node
                 .id();
             return Ok(builder.build(ty, LvalueKind::IntfSignal(inst.id(), def)));

@@ -320,7 +320,7 @@ fn lower_expr_inner<'gcx>(
 
         hir::ExprKind::LocalIntfSignal { inst, name } => {
             let intf = cx.type_of(inst.id(), env)?.get_interface().unwrap();
-            let def = cx.resolve_hierarchical_or_error(name, intf)?.node.id();
+            let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
             Ok(builder.build(ty, RvalueKind::IntfSignal(inst.id(), def)))
         }
 

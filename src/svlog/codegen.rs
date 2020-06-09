@@ -181,7 +181,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             // Distinguish interfaces and regular ports.
             if let Some(intf) = ty.get_interface() {
                 trace!("    Expanding interface {:?}", intf);
-                let intf_hir = self.hir_of_interface(intf)?;
+                let intf_hir = self.hir_of_interface(intf.ast)?;
                 for &decl_id in &intf_hir.block.decls {
                     let hir = match self.hir_of(decl_id)? {
                         HirNode::VarDecl(x) => x,
@@ -198,7 +198,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         name,
                         accnode: AccessedNode::Intf(port.id, decl_id),
                         default: hir.init,
-                        kind: ModulePortKind::IntfSignal { intf, env, decl_id },
+                        kind: ModulePortKind::IntfSignal {
+                            intf: intf.ast,
+                            env,
+                            decl_id,
+                        },
                     });
                 }
             } else {

@@ -325,14 +325,14 @@ pub(crate) fn type_of_inst<'a>(
     UnpackedType::make(
         cx,
         match details.target.kind {
-            InstTarget::Module(ast) => ty::UnpackedCore::Module {
+            InstTarget::Module(ast) => ty::UnpackedCore::Module(ty::ModuleType {
                 ast,
                 env: details.inner_env,
-            },
-            InstTarget::Interface(ast) => ty::UnpackedCore::Interface {
+            }),
+            InstTarget::Interface(ast) => ty::UnpackedCore::Interface(ty::InterfaceType {
                 ast,
                 env: details.inner_env,
-            },
+            }),
         },
     )
 }
@@ -348,9 +348,10 @@ pub(crate) fn map_to_type<'a>(
 ) -> Option<&'a UnpackedType<'a>> {
     match ast.as_all() {
         ast::AllNode::Type(ast) => Some(cx.packed_type_from_ast(Ref(ast), env, None)),
-        ast::AllNode::Interface(ast) => {
-            Some(UnpackedType::make(cx, UnpackedCore::Interface { ast, env }))
-        }
+        ast::AllNode::Interface(ast) => Some(UnpackedType::make(
+            cx,
+            UnpackedCore::Interface(ty::InterfaceType { ast, env }),
+        )),
         // The following is an ugly hack, and should actually never happen. But
         // as the HIR is implemented at the moment, certain parameter bindings
         // can bind expressions to type parameters.
@@ -1487,7 +1488,7 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::LocalIntfSignal { inst, name } => Some(
             cx.type_of(inst.id(), env)
                 .map(|ty| ty.get_interface().unwrap())
-                .and_then(|intf| cx.resolve_hierarchical_or_error(name, intf))
+                .and_then(|intf| cx.resolve_hierarchical_or_error(name, intf.ast))
                 .map(|def| def.node.id())
                 .and_then(|def| cx.type_of(def, env))
                 .unwrap_or(UnpackedType::make_error()),

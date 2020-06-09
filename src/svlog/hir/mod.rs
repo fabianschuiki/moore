@@ -158,7 +158,7 @@ where
                     .map(|ty| ty.get_interface().unwrap())
                     .and_then(|intf| {
                         self.cx
-                            .resolve_hierarchical_or_error(name, intf)
+                            .resolve_hierarchical_or_error(name, intf.ast)
                             .map(|def| AccessedNode::Intf(inst.id(), def.node.id()))
                     });
                 match node {
