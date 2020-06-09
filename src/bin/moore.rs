@@ -81,7 +81,7 @@ fn main() {
                 .help("Write preprocessed input files to stdout"),
         )
         .arg(
-            Arg::with_name("dump_ast")
+            Arg::with_name("dump-ast")
                 .long("dump-ast")
                 .help("Dump the parsed abstract syntax tree"),
         )
@@ -258,8 +258,8 @@ fn score(sess: &Session, matches: &ArgMatches) {
     }
 
     // Dump the AST if so requested.
-    if matches.is_present("dump_ast") {
-        println!("{:#?}", asts);
+    if matches.is_present("dump-ast") {
+        println!("{:#99?}", asts);
     }
 
     if matches.is_present("emit_pkgs") {
