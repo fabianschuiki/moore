@@ -84,26 +84,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Determine entity type and port names.
-        let mut sig = llhd::ir::Signature::new();
-        let mut inputs = Vec::new();
-        let mut outputs = Vec::new();
-        let mut port_id_to_name = HashMap::new();
-        for port in &hir.ports_new.int {
-            let ty = self.type_of_int_port(Ref(port), env);
-            debug!("port `{}.{}` has type `{}`", hir.name, port.name, ty);
-            let ty = llhd::signal_ty(self.emit_type(ty, env)?);
-            match port.dir {
-                ast::PortDir::Input | ast::PortDir::Ref => {
-                    sig.add_input(ty);
-                    inputs.push(port);
-                }
-                ast::PortDir::Inout | ast::PortDir::Output => {
-                    sig.add_output(ty);
-                    outputs.push(port);
-                }
-            }
-            port_id_to_name.insert(port.id, port.name);
-        }
+        let ports = self.determine_module_ports(hir, env)?;
 
         // Pick an entity name.
         let mut entity_name: String = hir.name.value.into();
@@ -114,11 +95,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create entity.
         let mut ent =
-            llhd::ir::UnitData::new(llhd::ir::UnitKind::Entity, name.clone(), sig.clone());
+            llhd::ir::UnitData::new(llhd::ir::UnitKind::Entity, name.clone(), ports.sig.clone());
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut ent);
         self.tables
             .module_signatures
-            .insert(id.env(env), (name, sig));
+            .insert(id.env(env), (name, ports.sig));
         let mut values = HashMap::new();
         let mut gen = UnitGenerator {
             gen: self,
@@ -131,61 +112,129 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
 
         // Assign proper port names and collect ports into a lookup table.
-        for (index, port) in inputs.into_iter().enumerate() {
+        for (index, port) in ports.inputs.iter().enumerate() {
             let arg = gen.builder.input_arg(index);
-            gen.builder
-                .set_name(arg, port_id_to_name[&port.id].value.to_string());
-            gen.values.insert(port.id.into(), arg);
+            gen.builder.set_name(arg, port.name.clone());
+            gen.values.insert(port.accnode, arg);
         }
-        for (index, &port) in outputs.iter().enumerate() {
+        for (index, port) in ports.outputs.iter().enumerate() {
             let arg = gen.builder.output_arg(index);
-            gen.builder
-                .set_name(arg, port_id_to_name[&port.id].value.to_string());
-            gen.values.insert(port.id.into(), arg);
+            gen.builder.set_name(arg, port.name.clone());
+            gen.values.insert(port.accnode, arg);
         }
 
         // Emit the actual contents of the entity.
         gen.emit_module_block(id, env, &hir.block, &entity_name)?;
 
         // Assign default values to undriven output ports.
-        for port in outputs {
-            let driven = {
-                let value = gen.values[&port.id.into()];
-                gen.builder
-                    .all_insts()
-                    .any(|inst| match gen.builder[inst].opcode() {
-                        llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value,
-                        llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value),
-                        _ => false,
-                    })
-            };
+        for port in ports.outputs.iter() {
+            let value = gen.values[&port.accnode];
+            let driven = gen
+                .builder
+                .all_insts()
+                .any(|inst| match gen.builder[inst].opcode() {
+                    llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value,
+                    llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value),
+                    _ => false,
+                });
             if driven {
                 continue;
             }
-            let port_data = match &port.data {
-                Some(data) => data,
-                None => continue,
-            };
             let default_value = gen.emit_const(
-                if let Some(default) = port_data.default {
+                if let Some(default) = port.default {
                     gen.constant_value_of(default, env)?
                 } else {
-                    gen.type_default_value(gen.type_of_int_port(Ref(port), env))
+                    gen.type_default_value(port.ty)
                 },
                 env,
-                port.span(),
+                port.port.span(),
             )?;
             let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
             let zero_time = gen.builder.ins().const_time(zero_time);
             gen.builder
                 .ins()
-                .drv(gen.values[&port.id.into()], default_value, zero_time);
+                .drv(gen.values[&port.accnode], default_value, zero_time);
         }
 
         trace!("{}", gen.builder.unit());
         let result = Ok(self.into.add_unit(ent));
         self.tables.module_defs.insert(id.env(env), result.clone());
         result
+    }
+
+    fn determine_module_ports(
+        &mut self,
+        hir: &'gcx hir::Module<'gcx>,
+        env: ParamEnv,
+    ) -> Result<ModuleIntf<'gcx>> {
+        debug!("Determining ports of `{}` with {:?}", hir.name, env);
+        let mut sig = llhd::ir::Signature::new();
+        let mut inputs = vec![];
+        let mut outputs = vec![];
+
+        // Go through the ports and expand each to one or more entity inputs and
+        // outputs.
+        for port in &hir.ports_new.int {
+            let ty = self.type_of_int_port(Ref(port), env);
+            debug!("  Port `{}.{}` has type `{}`", hir.name, port.name, ty);
+
+            // Distinguish interfaces and regular ports.
+            if let Some(intf) = ty.get_interface() {
+                trace!("    Expanding interface {:?}", intf);
+                let intf_hir = self.hir_of_interface(intf)?;
+                for &decl_id in &intf_hir.block.decls {
+                    let hir = match self.hir_of(decl_id)? {
+                        HirNode::VarDecl(x) => x,
+                        _ => unreachable!(),
+                    };
+                    let ty = self.type_of(decl_id, env)?;
+                    let llty = llhd::signal_ty(self.emit_type(ty, env)?);
+                    let name = format!("{}.{}", port.name, hir.name);
+                    trace!("    Signal `{}` of type `{}` / `{}`", name, ty, llty);
+                    sig.add_output(llty);
+                    outputs.push(ModulePort {
+                        port,
+                        ty,
+                        name,
+                        accnode: AccessedNode::Intf(port.id, decl_id),
+                        default: hir.init,
+                        kind: ModulePortKind::IntfSignal { intf, env, decl_id },
+                    });
+                }
+            } else {
+                trace!("    Regular port");
+                let llty = llhd::signal_ty(self.emit_type(ty, env)?);
+                let name = port.name.to_string();
+                let mp = ModulePort {
+                    port,
+                    ty,
+                    name,
+                    accnode: AccessedNode::Regular(port.id),
+                    default: port.data.as_ref().and_then(|pd| pd.default),
+                    kind: ModulePortKind::Port,
+                };
+                match port.dir {
+                    ast::PortDir::Input | ast::PortDir::Ref => {
+                        sig.add_input(llty);
+                        inputs.push(mp);
+                    }
+                    ast::PortDir::Inout | ast::PortDir::Output => {
+                        sig.add_output(llty);
+                        outputs.push(mp);
+                    }
+                }
+            }
+        }
+
+        debug!("  Signature: {}", sig);
+        debug!("  Inputs: {:?}", inputs);
+        debug!("  Outputs: {:?}", outputs);
+
+        Ok(ModuleIntf {
+            sig,
+            inputs,
+            outputs,
+        })
     }
 
     /// Emit the code for a procedure.
@@ -441,6 +490,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Everything else we cannot do.
+        error!("Cannot map type {:#?}", ty);
         panic!("cannot map `{}` to LLHD", ty);
     }
 
@@ -2128,4 +2178,46 @@ struct EmittedProcedure {
     unit: llhd::ir::UnitId,
     inputs: Vec<AccessedNode>,
     outputs: Vec<AccessedNode>,
+}
+
+/// A module's port interface.
+#[derive(Debug)]
+pub struct ModuleIntf<'a> {
+    /// The signature of the module.
+    pub sig: llhd::ir::Signature,
+    /// The inputs to the module.
+    pub inputs: Vec<ModulePort<'a>>,
+    /// The outputs of the module.
+    pub outputs: Vec<ModulePort<'a>>,
+}
+
+/// A canonicalized port of a module.
+#[derive(Debug)]
+pub struct ModulePort<'a> {
+    /// The original port that generated this port. One `IntPort`s may spawn
+    /// multiple module ports, e.g. in an interface.
+    pub port: &'a port_list::IntPort<'a>,
+    /// The type of the port.
+    pub ty: &'a UnpackedType<'a>,
+    /// The preferred name in the LLHD IR.
+    pub name: String,
+    /// The corresponding `AccessedNode` specifier.
+    pub accnode: AccessedNode,
+    /// The default value assigned to this port.
+    pub default: Option<NodeId>,
+    /// The kind of port.
+    pub kind: ModulePortKind<'a>,
+}
+
+/// The different kinds of module ports.
+#[derive(Debug)]
+pub enum ModulePortKind<'a> {
+    /// A regular port.
+    Port,
+    /// An interface signal.
+    IntfSignal {
+        intf: &'a ast::Interface<'a>,
+        env: ParamEnv,
+        decl_id: NodeId,
+    },
 }
