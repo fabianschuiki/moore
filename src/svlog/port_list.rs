@@ -346,7 +346,7 @@ pub(crate) fn canonicalize_ports<'a>(
                 port.ty
             };
             let ty = cx.arena().alloc(ast::Type::new(
-                port.span,
+                port.ty_span.unwrap_or(port.span),
                 ast::TypeData {
                     kind: ty.into_owned(),
                     sign: port.sign,
@@ -465,13 +465,18 @@ fn lower_node_ports_ansi<'a>(
 
                 // If no port type has been provided, use the one carried over
                 //  from the previous port.
-                let (ty, sign, packed_dims) = if ty.kind.data == ast::ImplicitType
+                let (ty, sign, packed_dims, ty_span) = if ty.kind.data == ast::ImplicitType
                     && ty.sign == ast::TypeSign::None
                     && ty.dims.is_empty()
                 {
-                    (carry_ty, carry_sign, carry_packed_dims)
+                    (carry_ty, carry_sign, carry_packed_dims, None)
                 } else {
-                    (Cow::Borrowed(&ty.kind), ty.sign, ty.dims.as_slice())
+                    (
+                        Cow::Borrowed(&ty.kind),
+                        ty.sign,
+                        ty.dims.as_slice(),
+                        Some(ty.span),
+                    )
                 };
 
                 // Keep the direction, kind, and type around for the next port
@@ -490,6 +495,7 @@ fn lower_node_ports_ansi<'a>(
                     dir,
                     sign,
                     ty,
+                    ty_span,
                     packed_dims,
                     unpacked_dims,
                     default: expr.as_ref(),
@@ -558,6 +564,7 @@ fn lower_node_ports_ansi<'a>(
                                             port.span().begin().into(),
                                             ast::ImplicitType,
                                         )), // inferred from expression
+                                        ty_span: None,
                                         packed_dims: &[], // inferred from expression
                                         unpacked_dims: &[],
                                         default: None,
@@ -647,6 +654,7 @@ fn lower_node_ports_nonansi<'a>(
                 dir: ast.dir,
                 sign: ast.ty.sign,
                 ty: Cow::Borrowed(&ast.ty.kind),
+                ty_span: Some(ast.ty.span),
                 packed_dims: &ast.ty.dims,
                 unpacked_dims: &name.dims,
                 default: name.init.as_ref(),
@@ -1078,6 +1086,7 @@ struct PartialPort<'a> {
     kind: Option<ast::PortKind>,
     sign: ast::TypeSign,
     ty: Cow<'a, ast::TypeKind<'a>>,
+    ty_span: Option<Span>,
     packed_dims: &'a [ast::TypeDim<'a>],
     unpacked_dims: &'a [ast::TypeDim<'a>],
     /// The default value assigned to this port if left unconnected.
