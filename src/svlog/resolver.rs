@@ -1219,7 +1219,9 @@ pub(crate) fn resolve_namespace_or_error<'a>(
         None => {
             cx.emit(
                 DiagBuilder2::error(format!("`{}` not found in {}", name.value, inside))
-                    .span(name.span),
+                    .span(name.span)
+                    .add_note(format!("{} was defined here:", inside))
+                    .span(inside.human_span()),
             );
             Err(())
         }
@@ -1271,7 +1273,9 @@ pub(crate) fn resolve_hierarchical_or_error<'a>(
         None => {
             cx.emit(
                 DiagBuilder2::error(format!("`{}` not found in {}", name.value, inside))
-                    .span(name.span),
+                    .span(name.span)
+                    .add_note(format!("{} was defined here:", inside))
+                    .span(inside.human_span()),
             );
             Err(())
         }
