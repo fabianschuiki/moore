@@ -36,7 +36,7 @@ impl<'ast> AstMap<'ast> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AstNode<'ast> {
     /// A module.
-    Module(&'ast ast::ModDecl<'ast>),
+    Module(&'ast ast::Module<'ast>),
     /// A module or interface port placeholder (defined in HIR).
     Port(Span),
     /// A type.
@@ -94,7 +94,7 @@ pub enum AstNode<'ast> {
         NodeId,
     ),
     /// A package.
-    Package(&'ast ast::PackageDecl<'ast>),
+    Package(&'ast ast::Package<'ast>),
     /// An enum variant, given as `(variant, enum_def, index)`.
     EnumVariant(&'ast ast::EnumName<'ast>, NodeId, usize),
     /// An import.
@@ -102,7 +102,7 @@ pub enum AstNode<'ast> {
     /// A subroutine declaration.
     SubroutineDecl(&'ast ast::SubroutineDecl<'ast>),
     /// An interface.
-    Interface(&'ast ast::IntfDecl<'ast>),
+    Interface(&'ast ast::Interface<'ast>),
 }
 
 impl<'a> AstNode<'a> {

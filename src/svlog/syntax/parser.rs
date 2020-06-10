@@ -710,7 +710,7 @@ fn as_lifetime(tkn: Token) -> Option<Lifetime> {
     }
 }
 
-fn parse_interface_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<IntfDecl<'n>> {
+fn parse_interface_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Interface<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Interface))?;
     let result = recovered(p, Keyword(Kw::Endinterface), |p| {
@@ -872,7 +872,7 @@ fn parse_parameter_port_list<'n>(
 
 /// Parse a module declaration, assuming that the leading `module` keyword has
 /// already been consumed.
-fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ModDecl<'n>> {
+fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Module<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Module))?;
     let result = recovered(p, Keyword(Kw::Endmodule), |p| {
@@ -949,7 +949,7 @@ fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ModDe
     result
 }
 
-fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<PackageDecl<'n>> {
+fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Package<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Package))?;
     let result = recovered(p, Keyword(Kw::Endpackage), |p| {

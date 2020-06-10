@@ -1586,7 +1586,7 @@ fn alloc_struct_member<'gcx>(
 fn lower_package<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
-    ast: &'gcx ast::PackageDecl<'gcx>,
+    ast: &'gcx ast::Package<'gcx>,
 ) -> Result<HirNode<'gcx>> {
     let mut next_rib = node_id;
     let mut names = Vec::new();

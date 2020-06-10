@@ -591,8 +591,11 @@ pub use self::StmtKind::*;
 pub use self::TypeKindData::*;
 
 // Deprecated names.
+#[deprecated(note = "use ast::Module instead")]
 pub type ModDecl<'a> = Module<'a>;
+#[deprecated(note = "use ast::Interface instead")]
 pub type IntfDecl<'a> = Interface<'a>;
+#[deprecated(note = "use ast::Package instead")]
 pub type PackageDecl<'a> = Package<'a>;
 
 /// All things being compiled.
