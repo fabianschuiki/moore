@@ -224,6 +224,8 @@ fn lower_expr_inner<'gcx>(
                         ))
                         .span(span),
                     );
+                    error!("Offending HIR: {:?}", hir);
+                    error!("Resolved to: {:?}", x);
                     Err(())
                 }
             }
