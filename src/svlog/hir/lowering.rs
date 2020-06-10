@@ -389,11 +389,15 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         }
         AstNode::GenIf(gen) => {
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), node_id);
-            let main_body = lower_module_block(cx, node_id, &gen.main_block.items, false)?;
+            let main_body = lower_module_block(cx, node_id, &gen.main_block.items, false, false)?;
             let else_body = match gen.else_block {
-                Some(ref else_block) => {
-                    Some(lower_module_block(cx, node_id, &else_block.items, false)?)
-                }
+                Some(ref else_block) => Some(lower_module_block(
+                    cx,
+                    node_id,
+                    &else_block.items,
+                    false,
+                    false,
+                )?),
                 None => None,
             };
             let hir = hir::Gen {
@@ -412,7 +416,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
             let rib = *init.last().unwrap();
             let cond = cx.map_ast_with_parent(AstNode::Expr(&gen.cond), rib);
             let step = cx.map_ast_with_parent(AstNode::Expr(&gen.step), rib);
-            let body = lower_module_block(cx, rib, &gen.block.items, false)?;
+            let body = lower_module_block(cx, rib, &gen.block.items, false, false)?;
             let hir = hir::Gen {
                 id: node_id,
                 span: gen.span(),
@@ -535,7 +539,7 @@ pub(crate) fn hir_of_module<'a>(
     next_rib = ports_new.tail_rib;
 
     // Lower the module body.
-    let block = lower_module_block(cx, next_rib, &ast.items, true)?;
+    let block = lower_module_block(cx, next_rib, &ast.items, true, false)?;
 
     // Create the HIR module.
     let hir = hir::Module {
@@ -568,7 +572,7 @@ pub(crate) fn hir_of_interface<'a>(
     let ports = cx.canonicalize_ports(ast);
 
     // Lower the interface body.
-    let block = lower_module_block(cx, ast.id(), &ast.items, true)?;
+    let block = lower_module_block(cx, ast.id(), &ast.items, true, true)?;
 
     // Create the HIR node.
     let hir = hir::Interface { ast, ports, block };
@@ -590,6 +594,7 @@ fn lower_module_block<'gcx>(
     parent_rib: NodeId,
     items: impl IntoIterator<Item = &'gcx ast::Item<'gcx>>,
     allow_ports: bool,
+    allow_modports: bool,
 ) -> Result<hir::ModuleBlock> {
     let mut next_rib = parent_rib;
     let mut insts = Vec::new();
@@ -697,6 +702,7 @@ fn lower_module_block<'gcx>(
                     );
                 }
             }
+            ast::ItemData::ModportDecl(ref _decl) if allow_modports => (),
             ast::ItemData::ModportDecl(ref decl) => {
                 cx.emit(
                     DiagBuilder2::error("modport declaration in module")
