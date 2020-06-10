@@ -6,10 +6,18 @@
 //! side of an assignment.
 
 use crate::crate_prelude::*;
-use crate::{mir::Rvalue, ty::UnpackedType, ParamEnv};
+use crate::{
+    mir::{
+        rvalue::Rvalue,
+        visit::{AcceptVisitor, Visitor, WalkVisitor},
+    },
+    ty::UnpackedType,
+    ParamEnv,
+};
 use std::collections::HashMap;
 
 /// An lvalue expression.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Lvalue<'a> {
     /// A unique id.
@@ -34,6 +42,7 @@ impl<'a> Lvalue<'a> {
 }
 
 /// The different forms an lvalue expression may take.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
 pub enum LvalueKind<'a> {

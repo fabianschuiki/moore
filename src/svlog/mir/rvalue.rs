@@ -7,13 +7,17 @@
 
 use crate::crate_prelude::*;
 use crate::{
-    mir::lvalue::Lvalue,
+    mir::{
+        lvalue::Lvalue,
+        visit::{AcceptVisitor, Visitor, WalkVisitor},
+    },
     ty::{Domain, Sign, UnpackedType},
     ParamEnv,
 };
 use std::collections::HashMap;
 
 /// An rvalue expression.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Rvalue<'a> {
     /// A unique id.
@@ -53,6 +57,7 @@ impl<'a> std::ops::Deref for Rvalue<'a> {
 }
 
 /// The different forms an rvalue expression may take.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
 pub enum RvalueKind<'a> {
@@ -245,6 +250,7 @@ impl<'a> RvalueKind<'a> {
 }
 
 /// The unary bitwise operators.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum UnaryBitwiseOp {
@@ -252,6 +258,7 @@ pub enum UnaryBitwiseOp {
 }
 
 /// The binary bitwise operators.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum BinaryBitwiseOp {
@@ -261,6 +268,7 @@ pub enum BinaryBitwiseOp {
 }
 
 /// The integer unary arithmetic operators.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum IntUnaryArithOp {
@@ -268,6 +276,7 @@ pub enum IntUnaryArithOp {
 }
 
 /// The integer binary arithmetic operators.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum IntBinaryArithOp {
@@ -280,6 +289,7 @@ pub enum IntBinaryArithOp {
 }
 
 /// The integer comparison operators.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum IntCompOp {
@@ -292,6 +302,7 @@ pub enum IntCompOp {
 }
 
 /// The shift operators.
+#[moore_derive::visit_without_foreach]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum ShiftOp {
