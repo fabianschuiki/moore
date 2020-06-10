@@ -363,6 +363,8 @@ pub struct InterfaceType<'a> {
     pub ast: &'a ast::Interface<'a>,
     /// The parametrization of the interface.
     pub env: ParamEnv,
+    /// The optional modport that was specified together with the interface.
+    pub modport: Option<&'a ast::ModportName<'a>>,
 }
 
 /// A simple bit vector type.

@@ -332,6 +332,7 @@ pub(crate) fn type_of_inst<'a>(
             InstTarget::Interface(ast) => ty::UnpackedCore::Interface(ty::InterfaceType {
                 ast,
                 env: details.inner_env,
+                modport: None,
             }),
         },
     )
@@ -350,7 +351,11 @@ pub(crate) fn map_to_type<'a>(
         ast::AllNode::Type(ast) => Some(cx.packed_type_from_ast(Ref(ast), env, None)),
         ast::AllNode::Interface(ast) => Some(UnpackedType::make(
             cx,
-            UnpackedCore::Interface(ty::InterfaceType { ast, env }),
+            UnpackedCore::Interface(ty::InterfaceType {
+                ast,
+                env,
+                modport: None,
+            }),
         )),
         // The following is an ugly hack, and should actually never happen. But
         // as the HIR is implemented at the moment, certain parameter bindings
