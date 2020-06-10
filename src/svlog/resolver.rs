@@ -800,6 +800,17 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
         false
     }
 
+    fn pre_visit_modport_name(&mut self, node: &'a ast::ModportName<'a>) -> bool {
+        self.add_def(Def {
+            node: DefNode::Ast(node),
+            name: node.name,
+            vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
+            may_override: false,
+            ordered: false,
+        });
+        false
+    }
+
     fn pre_visit_package(&mut self, node: &'a ast::Package<'a>) -> bool {
         self.add_subscope(node);
         self.add_def(Def {
