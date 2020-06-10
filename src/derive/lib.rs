@@ -35,7 +35,13 @@ fn first_lifetime(gen: &mut syn::Generics) -> syn::Lifetime {
 /// Generate an `AcceptVisitor` implementation.
 #[proc_macro_derive(AcceptVisitor, attributes(dont_visit))]
 pub fn accept_visitor(input: TokenStream) -> TokenStream {
-    accept_visitor::accept_visitor(input)
+    accept_visitor::accept_visitor(input, false)
+}
+
+/// Generate an `AcceptVisitor`, `ForEachNode`, and `ForEachChild` implementation.
+#[proc_macro_derive(AcceptVisitorAndForeach, attributes(dont_visit))]
+pub fn accept_visitor_and_foreach(input: TokenStream) -> TokenStream {
+    accept_visitor::accept_visitor(input, true)
 }
 
 /// Wrap a struct or enum in a `Node`.
@@ -56,13 +62,24 @@ pub fn walk_visitor(args: TokenStream, input: TokenStream) -> TokenStream {
     walk_visitor::walk_visitor(args, input)
 }
 
-/// Convenience macro to derive `AcceptVisitor` and `walk_visitor`.
+/// Convenience macro to derive `AcceptVisitorAndForeach` and `walk_visitor`.
 #[proc_macro_attribute]
 pub fn visit(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input = proc_macro2::TokenStream::from(input);
     TokenStream::from(quote! {
         #[moore_derive::walk_visitor]
-        #[derive(AcceptVisitor)]
+        #[derive(moore_derive::AcceptVisitorAndForeach)]
+        #input
+    })
+}
+
+/// Convenience macro to derive `AcceptVisitor` and `walk_visitor`.
+#[proc_macro_attribute]
+pub fn visit_without_foreach(_args: TokenStream, input: TokenStream) -> TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+    TokenStream::from(quote! {
+        #[moore_derive::walk_visitor]
+        #[derive(moore_derive::AcceptVisitor)]
         #input
     })
 }

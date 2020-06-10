@@ -11,7 +11,7 @@ use moore_common::{
     source::{Span, Spanned},
     util::{HasDesc, HasSpan},
 };
-use moore_derive::{AcceptVisitor, AnyNodeData};
+use moore_derive::AnyNodeData;
 use std::{
     cell::Cell,
     hash::{Hash, Hasher},

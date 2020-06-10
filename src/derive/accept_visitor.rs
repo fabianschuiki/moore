@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::DeriveInput;
 
-pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
+pub(crate) fn accept_visitor(input: TokenStream, with_foreach: bool) -> TokenStream {
     // Parse the input.
     let input = syn::parse_macro_input!(input as DeriveInput);
     let mut output = proc_macro2::TokenStream::new();
@@ -55,21 +55,24 @@ pub(crate) fn accept_visitor(input: TokenStream) -> TokenStream {
                 }
             }
         }
-
-        impl #impl_generics ForEachChild<#lt> for #name #generics {
-            fn for_each_child(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
-                match self {
-                    #(#eachs,)*
+    });
+    if with_foreach {
+        output.extend(quote! {
+            impl #impl_generics ForEachChild<#lt> for #name #generics {
+                fn for_each_child(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
+                    match self {
+                        #(#eachs,)*
+                    }
                 }
             }
-        }
 
-        impl #impl_generics ForEachNode<#lt> for #name #generics {
-            fn for_each_node(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
-                self.for_each_child(each);
+            impl #impl_generics ForEachNode<#lt> for #name #generics {
+                fn for_each_node(&#lt self, each: &mut dyn FnMut(&#lt dyn AnyNode<#lt>)) {
+                    self.for_each_child(each);
+                }
             }
-        }
-    });
+        });
+    }
 
     output.into()
 }

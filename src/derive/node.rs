@@ -36,7 +36,10 @@ pub(crate) fn node(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Emit the modified data.
     output.extend(quote! {
-        #[derive(moore_derive::AcceptVisitor, moore_derive::AnyNodeData)]
+        #[derive(
+            moore_derive::AcceptVisitorAndForeach,
+            moore_derive::AnyNodeData
+        )]
         #input
     });
 
