@@ -6,6 +6,7 @@
 //! of syntactic sugar and resolving any syntactic ambiguities.
 
 use crate::crate_prelude::*;
+use crate::mir::WalkVisitor as _;
 use std::{collections::BTreeSet, sync::Arc};
 
 pub(crate) mod lowering;
@@ -119,62 +120,48 @@ where
     }
 
     fn visit_expr(&mut self, expr: &'gcx Expr, lvalue: bool) {
-        match expr.kind {
-            ExprKind::PositionalPattern(ref nodes) => {
-                for &node in nodes {
-                    self.visit_node_with_id(node, false);
-                }
-                return;
-            }
-            ExprKind::RepeatPattern(node, ref nodes) => {
-                self.visit_node_with_id(node, false);
-                for &node in nodes {
-                    self.visit_node_with_id(node, false);
-                }
-                return;
-            }
-            ExprKind::NamedPattern(ref pats) => {
-                for &(_, node) in pats {
-                    self.visit_node_with_id(node, false);
-                }
-                return;
-            }
-            ExprKind::Ident(name) => match self.cx.resolve_upwards_or_error(name, expr.id) {
-                Ok(binding) => {
-                    if self.is_binding_interesting(binding) {
-                        if lvalue {
-                            self.table.written.insert(binding.into());
-                        } else {
-                            self.table.read.insert(binding.into());
-                        }
-                    }
-                }
-                Err(()) => (),
-            },
-            ExprKind::LocalIntfSignal { inst, name } => {
-                let node = self
-                    .cx
-                    .type_of(inst.id(), self.env)
-                    .map(|ty| ty.get_interface().unwrap())
-                    .and_then(|intf| {
-                        self.cx
-                            .resolve_hierarchical_or_error(name, intf.ast)
-                            .map(|def| AccessedNode::Intf(inst.id(), def.node.id()))
-                    });
-                match node {
-                    Ok(node) => {
-                        if lvalue {
-                            self.table.written.insert(node);
-                        } else {
-                            self.table.read.insert(node);
-                        }
-                    }
-                    Err(()) => (),
-                }
-            }
-            _ => (),
+        if lvalue {
+            self.cx.mir_lvalue(expr.id, self.env).walk(self);
+        } else {
+            self.cx.mir_rvalue(expr.id, self.env).walk(self);
         }
-        walk_expr(self, expr, lvalue)
+    }
+}
+
+impl<'a, 'gcx: 'a, C> mir::Visitor<'gcx> for AccessTableCollector<'a, C>
+where
+    C: Context<'gcx>,
+{
+    fn pre_visit_lvalue(&mut self, mir: &mir::Lvalue) -> bool {
+        match mir.kind {
+            mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id)
+                if self.is_binding_interesting(id) =>
+            {
+                self.table.written.insert(AccessedNode::Regular(id));
+                false
+            }
+            mir::LvalueKind::IntfSignal(intf, sig) if self.is_binding_interesting(intf) => {
+                self.table.written.insert(AccessedNode::Intf(intf, sig));
+                false
+            }
+            _ => true,
+        }
+    }
+
+    fn pre_visit_rvalue(&mut self, mir: &mir::Rvalue) -> bool {
+        match mir.kind {
+            mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id)
+                if self.is_binding_interesting(id) =>
+            {
+                self.table.read.insert(AccessedNode::Regular(id));
+                false
+            }
+            mir::RvalueKind::IntfSignal(intf, sig) if self.is_binding_interesting(intf) => {
+                self.table.read.insert(AccessedNode::Intf(intf, sig));
+                false
+            }
+            _ => true,
+        }
     }
 }
 
@@ -183,19 +170,6 @@ where
     C: Context<'gcx>,
 {
     fn is_binding_interesting(&self, binding: NodeId) -> bool {
-        if self.cx.is_parent_of(self.table.node_id, binding) {
-            return false;
-        }
-        match self.cx.hir_of(binding) {
-            Ok(HirNode::ValueParam(..)) => return false,
-            Ok(HirNode::TypeParam(..)) => return false,
-            Ok(HirNode::GenvarDecl(..)) => return false,
-            Ok(HirNode::EnumVariant(..)) => return false,
-            Ok(HirNode::Package(..)) => return false,
-            Ok(HirNode::Module(..)) => return false,
-            Err(_) => return false,
-            _ => (),
-        }
-        true
+        !self.cx.is_parent_of(self.table.node_id, binding)
     }
 }
