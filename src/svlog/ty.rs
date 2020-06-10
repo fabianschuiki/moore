@@ -1611,6 +1611,18 @@ impl<'a> From<StructType<'a>> for UnpackedCore<'a> {
     }
 }
 
+impl<'a> From<ModuleType<'a>> for UnpackedCore<'a> {
+    fn from(inner: ModuleType<'a>) -> Self {
+        Self::Module(inner)
+    }
+}
+
+impl<'a> From<InterfaceType<'a>> for UnpackedCore<'a> {
+    fn from(inner: InterfaceType<'a>) -> Self {
+        Self::Interface(inner)
+    }
+}
+
 impl Display for UnpackedCore<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
