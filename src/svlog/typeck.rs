@@ -631,13 +631,54 @@ pub(crate) fn packed_type_from_ast<'a>(
                 return UnpackedType::make_error();
             }
         },
-        ast::ScopedType { .. } => {
-            cx.emit(
-                DiagBuilder2::error(format!("`{}` is not a type", ast.span().extract()))
-                    .span(ast.span()),
-            );
-            error!("Offending AST: {:#3?}", ast);
-            return UnpackedType::make_error();
+        ast::ScopedType {
+            ref ty,
+            member: true,
+            name,
+        } => {
+            let inner_ty = cx.packed_type_from_ast(Ref(ty), env, None);
+            if let Some(intf) = inner_ty.get_interface() {
+                // Resolve the modport name within the interface.
+                let def = match cx.resolve_hierarchical_or_error(name, intf.ast) {
+                    Ok(def) => def,
+                    _ => return UnpackedType::make_error(),
+                };
+
+                // Make sure that we have selected a modport.
+                let modport = match def.node {
+                    DefNode::Ast(node) => node.as_all().get_modport_name(),
+                    _ => None,
+                };
+                let modport = match modport {
+                    Some(x) => x,
+                    None => {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "`{}` is not a modport of {}",
+                                name, intf.ast
+                            ))
+                            .span(name.span)
+                            .add_note(format!("`{}` was defined here:", name))
+                            .span(def.name.span),
+                        );
+                        return UnpackedType::make_error();
+                    }
+                };
+
+                // Package up a new interface type with the modport annotated.
+                let new_intf = ty::InterfaceType {
+                    modport: Some(modport),
+                    ..*intf
+                };
+                Unpacked(UnpackedCore::Interface(new_intf))
+            } else {
+                cx.emit(
+                    DiagBuilder2::error(format!("`{}` is not an interface", ty.span().extract()))
+                        .span(ty.span()),
+                );
+                error!("Offending AST: {:#2?}", ast);
+                return UnpackedType::make_error();
+            }
         }
 
         // Type references
