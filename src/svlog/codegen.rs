@@ -310,10 +310,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 AccessedNode::Regular(id) => (None, id),
                 AccessedNode::Intf(inst_id, id) => {
                     let inst_name = match self.hir_of(inst_id).ok()? {
-                        HirNode::Inst(x) => x.name,
-                        _ => unreachable!(),
+                        HirNode::IntPort(x) => Some(x.name),
+                        HirNode::Inst(x) => Some(x.name),
+                        _ => None,
                     };
-                    (Some(inst_name), id)
+                    (inst_name, id)
                 }
             };
             let name = match self.hir_of(id).ok()? {
