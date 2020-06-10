@@ -1283,17 +1283,14 @@ fn parse_parameter_names<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<V
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::ModportDecl> {
+fn parse_modport_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::Modport<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Modport))?;
-    let items = comma_list_nonempty(p, Semicolon, "modport item", parse_modport_item)?;
+    let names = comma_list_nonempty(p, Semicolon, "modport item", parse_modport_item)?;
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
 
-    Ok(ast::ModportDecl {
-        span: span,
-        items: items,
-    })
+    Ok(ast::Modport::new(span, ast::ModportData { names }))
 
     // loop {
     //  parse_modport_item(p)?;
@@ -1328,11 +1325,11 @@ fn parse_modport_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::ModportItem> {
+fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::ModportName<'n>> {
     let mut span = p.peek(0).1;
 
     // Eat the modport item name.
-    let name = parse_identifier(p, "modport name")?;
+    let name = parse_identifier_name(p, "modport name")?;
 
     // Eat the port declarations.
     let ports = flanked(p, Paren, |p| {
@@ -1344,55 +1341,15 @@ fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
         )
     })?;
 
-    // // Eat the opening parenthesis.
-    // if !p.try_eat(OpenDelim(Paren)) {
-    //  let (tkn, q) = p.peek(0);
-    //  p.add_diag(DiagBuilder2::error(format!("expected ( after modport name `{}`, got `{:?}`", name, tkn)).span(q));
-    //  return Err(());
-    // }
-
     span.expand(p.last_span());
-    Ok(ast::ModportItem {
-        span: span,
-        name: name,
-        ports: ports,
-    })
-
-    // // Parse the port declarations.
-    // loop {
-    //  match parse_modport_port_decl(p) {
-    //      Ok(x) => x,
-    //      Err(_) => {
-    //          p.recover(&[CloseDelim(Paren)], true);
-    //          return Err(());
-    //      }
-    //  }
-    //  match p.peek(0) {
-    //      (Comma, sp) => {
-    //          p.bump();
-    //          if let (CloseDelim(Paren), _) = p.peek(0) {
-    //              p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
-    //              break;
-    //          } else {
-    //              continue;
-    //          }
-    //      }
-    //      (CloseDelim(Paren), _) => break,
-    //      (x, sp) => {
-    //          p.add_diag(DiagBuilder2::error(format!("expected , or ) after port declaration, got `{:?}`", x)).span(sp));
-    //          return Err(());
-    //      }
-    //  }
-    // }
-
-    // // Eat the closing parenthesis.
-    // if !p.try_eat(CloseDelim(Paren)) {
-    //  let (tkn, q) = p.peek(0);
-    //  p.add_diag(DiagBuilder2::error(format!("expected ) after port list of modport `{}`, got `{:?}`", name, tkn)).span(q));
-    //  return Err(());
-    // }
-
-    // Ok(())
+    Ok(ast::ModportName::new(
+        span,
+        ast::ModportNameData {
+            name,
+            ports,
+            marker: Default::default(),
+        },
+    ))
 }
 
 /// ```text

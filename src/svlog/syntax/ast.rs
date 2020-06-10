@@ -597,6 +597,8 @@ pub type ModDecl<'a> = Module<'a>;
 pub type IntfDecl<'a> = Interface<'a>;
 #[deprecated(note = "use ast::Package instead")]
 pub type PackageDecl<'a> = Package<'a>;
+#[deprecated(note = "use ast::Modport instead")]
+pub type ModportDecl<'a> = Modport<'a>;
 
 /// All things being compiled.
 #[moore_derive::node]
@@ -638,7 +640,7 @@ pub enum Item<'a> {
     ImportDecl(#[forward] ImportDecl<'a>),
     DpiDecl(#[forward] DpiDecl<'a>),
     ParamDecl(#[forward] ParamDecl<'a>),
-    ModportDecl(ModportDecl),
+    ModportDecl(#[forward] Modport<'a>),
     Typedef(#[forward] Typedef<'a>),
     PortDecl(#[forward] PortDecl<'a>),
     Procedure(#[forward] Procedure<'a>),
@@ -1991,19 +1993,31 @@ impl<'a> InstName<'a> {
     }
 }
 
-#[moore_derive::visit]
+/// A modport declaration in an interface.
+///
+/// For example `modport in (...), out (...);`.
+#[moore_derive::node]
+#[indefinite("modport")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModportDecl {
-    pub span: Span,
-    pub items: Vec<ModportItem>,
+pub struct Modport<'a> {
+    /// The names of the modports.
+    pub names: Vec<ModportName<'a>>,
 }
 
-#[moore_derive::visit]
+/// A single modport declaration.
+///
+/// For example the `in (...)` in `modport in (...), out (...);`.
+#[moore_derive::node]
+#[indefinite("modport")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModportItem {
-    pub span: Span,
-    pub name: Identifier,
+pub struct ModportName<'a> {
+    /// The name of the modport.
+    #[name]
+    pub name: Spanned<Name>,
+    /// The individual port specifications.
     pub ports: Vec<ModportPort>,
+    #[dont_visit]
+    pub(crate) marker: std::marker::PhantomData<&'a ()>,
 }
 
 #[moore_derive::visit]
