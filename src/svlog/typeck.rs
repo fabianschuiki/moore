@@ -879,7 +879,6 @@ pub(crate) fn type_of_expr<'a>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
         | hir::ExprKind::Field(..)
-        | hir::ExprKind::LocalIntfSignal { .. }
         | hir::ExprKind::Index(..) => cx.need_self_determined_type(expr.id, env),
 
         // Unsized constants infer their type from the context if possible, and
@@ -1494,16 +1493,6 @@ fn self_determined_expr_type<'gcx>(
                 )
             }
         }
-
-        // Interface signal accesses resolve to the type of the signal.
-        hir::ExprKind::LocalIntfSignal { inst, name } => Some(
-            cx.type_of(inst.id(), env)
-                .map(|ty| ty.get_interface().unwrap())
-                .and_then(|intf| cx.resolve_hierarchical_or_error(name, intf.ast))
-                .map(|def| def.node.id())
-                .and_then(|def| cx.type_of(def, env))
-                .unwrap_or(UnpackedType::make_error()),
-        ),
 
         // Bit- and part-select expressions
         hir::ExprKind::Index(target, mode) => {

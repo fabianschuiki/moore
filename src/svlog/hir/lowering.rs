@@ -3,7 +3,7 @@
 //! Lowering of AST nodes to HIR nodes.
 
 use crate::crate_prelude::*;
-use crate::{ast::BasicNode, ast_map::AstNode, hir::HirNode, resolver::InstTarget};
+use crate::{ast_map::AstNode, hir::HirNode};
 use bit_vec::BitVec;
 use num::BigInt;
 
@@ -888,6 +888,7 @@ fn lower_expr<'gcx>(
         id: node_id,
         span: expr.span,
         kind: kind,
+        dummy: Default::default(),
     };
     Ok(HirNode::Expr(cx.arena().alloc_hir(hir)))
 }
@@ -896,7 +897,7 @@ fn lower_expr_inner<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     expr: &'gcx ast::Expr<'gcx>,
-) -> Result<hir::ExprKind<'gcx>> {
+) -> Result<hir::ExprKind> {
     use crate::syntax::token::{Lit, Op};
     Ok(match expr.data {
         ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
@@ -1130,25 +1131,6 @@ fn lower_expr_inner<'gcx>(
             cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
         ),
         ast::MemberExpr { ref expr, name } => {
-            // Catch interface signal accesses.
-            if let ast::IdentExpr(target_name) = expr.data {
-                let loc = cx.scope_location(expr.as_ref());
-                let def = cx.resolve_local_or_error(target_name, loc, false)?;
-                if let Some(inst) = def.node.as_all().get_inst_name() {
-                    trace!(
-                        "Found hierarchical identifier `{}.{}`",
-                        expr.span().extract(),
-                        name
-                    );
-                    let target = cx.resolve_inst_target(inst.inst())?;
-                    match target {
-                        InstTarget::Interface(_) => {
-                            return Ok(hir::ExprKind::LocalIntfSignal { inst, name })
-                        }
-                        _ => bug_span!(expr.span, cx, "hierarchical identifiers not supported"),
-                    }
-                }
-            }
             hir::ExprKind::Field(cx.map_ast_with_parent(AstNode::Expr(expr), node_id), name)
         }
         ast::IndexExpr {

@@ -105,6 +105,9 @@ fn try_lower_expr<'gcx>(
                     Ok(builder.build(ty, LvalueKind::Intf(port.id)))
                 }
                 HirNode::IntPort(port) => Ok(builder.build(ty, LvalueKind::Port(port.id))),
+                HirNode::Inst(inst) if ty.get_interface().is_some() => {
+                    Ok(builder.build(ty, LvalueKind::Intf(inst.id)))
+                }
                 x => {
                     cx.emit(
                         DiagBuilder2::error(format!(
@@ -160,16 +163,6 @@ fn try_lower_expr<'gcx>(
                 let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
                 return Ok(builder.build(ty, LvalueKind::Member { value, field }));
             }
-        }
-
-        hir::ExprKind::LocalIntfSignal { inst, name } => {
-            let intf = builder.cx.type_of(inst.id(), env)?.get_interface().unwrap();
-            let def = builder
-                .cx
-                .resolve_hierarchical_or_error(name, intf.ast)?
-                .node
-                .id();
-            return Ok(builder.build(ty, LvalueKind::IntfSignal(inst.id(), def)));
         }
 
         _ => (),

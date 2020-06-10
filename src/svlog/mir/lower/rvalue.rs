@@ -209,6 +209,9 @@ fn lower_expr_inner<'gcx>(
                     Ok(builder.build(ty, RvalueKind::Intf(port.id)))
                 }
                 HirNode::IntPort(port) => Ok(builder.build(ty, RvalueKind::Port(port.id))),
+                HirNode::Inst(inst) if ty.get_interface().is_some() => {
+                    Ok(builder.build(ty, RvalueKind::Intf(inst.id)))
+                }
                 HirNode::EnumVariant(..) | HirNode::ValueParam(..) | HirNode::GenvarDecl(..) => {
                     let k = builder.cx.constant_value_of(binding, env)?;
                     Ok(builder.build(ty, RvalueKind::Const(k)))
@@ -332,12 +335,6 @@ fn lower_expr_inner<'gcx>(
                 let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
                 Ok(builder.build(ty, RvalueKind::Member { value, field }))
             }
-        }
-
-        hir::ExprKind::LocalIntfSignal { inst, name } => {
-            let intf = cx.type_of(inst.id(), env)?.get_interface().unwrap();
-            let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
-            Ok(builder.build(ty, RvalueKind::IntfSignal(inst.id(), def)))
         }
 
         // Casts are handled by the `cast_type` query, and the cast handling

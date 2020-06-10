@@ -574,7 +574,8 @@ pub enum BuiltinType {
 pub struct Expr<'a> {
     pub id: NodeId,
     pub span: Span,
-    pub kind: ExprKind<'a>,
+    pub kind: ExprKind,
+    pub(crate) dummy: std::marker::PhantomData<&'a ()>,
 }
 
 impl HasSpan for Expr<'_> {
@@ -610,7 +611,7 @@ impl HasDesc for Expr<'_> {
 
 /// The different forms an expression can take.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExprKind<'a> {
+pub enum ExprKind {
     /// An integer constant literal such as `42` or `'d42` or `32'd42`.
     ///
     /// The `special_bits` mask keeps track of which bits in the number are `x`
@@ -636,11 +637,6 @@ pub enum ExprKind<'a> {
     Binary(BinaryOp, NodeId, NodeId),
     /// A field access such as `a.b`.
     Field(NodeId, Spanned<Name>),
-    /// A signal in a locally instantiated interface, such as `intf.a`.
-    LocalIntfSignal {
-        inst: &'a ast::InstName<'a>,
-        name: Spanned<Name>,
-    },
     /// An index access such as `a[b]` or `a[b:c]`.
     Index(NodeId, IndexMode),
     /// A builtin function call such as `$clog2(x)`.
