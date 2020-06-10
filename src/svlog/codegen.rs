@@ -456,6 +456,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         ty: &'gcx UnpackedType<'gcx>,
         env: ParamEnv,
     ) -> Result<llhd::Type> {
+        if ty.is_error() {
+            return Err(());
+        }
         let ty = ty.resolve_full();
 
         // Handle things that coalesce easily to scalars.
