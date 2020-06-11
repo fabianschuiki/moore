@@ -177,7 +177,14 @@ pub(crate) fn compute<'gcx>(
             interface
                 .params
                 .iter()
-                .map(|p| p.id())
+                .flat_map(|p| match &p.kind {
+                    ast::ParamKind::Type(x) => {
+                        x.iter().map(|d| d.id()).collect::<Vec<_>>().into_iter()
+                    }
+                    ast::ParamKind::Value(x) => {
+                        x.iter().map(|d| d.id()).collect::<Vec<_>>().into_iter()
+                    }
+                })
                 .chain(interface.block.params.iter().cloned())
                 .collect(),
             env,
