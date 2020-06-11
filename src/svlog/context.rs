@@ -438,26 +438,27 @@ pub trait BaseContext<'gcx>:
     /// Obtain the AST node associated with a node id.
     fn ast_of(&self, node_id: NodeId) -> Result<AstNode<'gcx>> {
         match self.gcx().ast_map.get(node_id) {
-            Some(node) => Ok(node),
-            None => {
-                if let Some(&span) = self.gcx().node_id_to_span.borrow().get(&node_id) {
-                    self.emit(
-                        DiagBuilder2::bug(format!(
-                            "no ast node for `{}` in the map",
-                            span.extract()
-                        ))
-                        .span(span),
-                    );
-                    error!("Offending node: {:?}", node_id);
-                } else {
-                    self.emit(DiagBuilder2::bug(format!(
-                        "no ast node for {:?} in the map",
-                        node_id
-                    )));
-                }
-                panic!("Other map contains: {:?}", self.ast_for_id(node_id));
-            }
+            Some(node) => return Ok(node),
+            None => (),
         }
+        let other = self.ast_for_id(node_id);
+        match AstNode::from_all(other.as_all()).next() {
+            Some(node) => return Ok(node),
+            None => (),
+        }
+        if let Some(&span) = self.gcx().node_id_to_span.borrow().get(&node_id) {
+            self.emit(
+                DiagBuilder2::bug(format!("no ast node for `{}` in the map", span.extract()))
+                    .span(span),
+            );
+            error!("Offending node: {:?}", node_id);
+        } else {
+            self.emit(DiagBuilder2::bug(format!(
+                "no ast node for {:?} in the map",
+                node_id
+            )));
+        }
+        panic!("Other map contains: {:?}", other);
     }
 
     /// Register an `ast::AnyNode` for later retrieval by ID.
