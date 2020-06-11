@@ -6,7 +6,7 @@
 //! the AST. This is achieved by resolving AST ambiguities through name lookups.
 
 use crate::crate_prelude::*;
-use crate::{ast, ast_map::AstNode, common::arenas::Alloc};
+use crate::{ast, ast_map::AstNode, common::arenas::Alloc, resolver::DefNode};
 
 /// A node kind.
 ///
@@ -62,6 +62,86 @@ pub(crate) fn disamb_type_or_expr<'a>(
                     }
                 }
             }
+
+            // TODO: The following is an ugly duplicate of code which also lives
+            // in typeck. This whole scoped name resolution thing should be a
+            // distinct RST query which returns something like a rst::Path.
+            ast::ScopeExpr(ref target, name) => match target.data {
+                ast::IdentExpr(pkg_name) => {
+                    // Resolve the name.
+                    let loc = cx.scope_location(target.as_ref());
+                    let def = match cx.resolve_local_or_error(pkg_name, loc, false) {
+                        Ok(def) => def,
+                        _ => return Err(()),
+                    };
+
+                    // See if the binding is a package.
+                    let pkg = match def.node {
+                        DefNode::Ast(node) => node.as_all().get_package(),
+                        _ => None,
+                    };
+                    let pkg = match pkg {
+                        Some(x) => x,
+                        None => {
+                            cx.emit(
+                                DiagBuilder2::error(format!("`{}` is not a package", pkg_name))
+                                    .span(pkg_name.span)
+                                    .add_note(format!("`{}` was declared here:", pkg_name))
+                                    .span(def.node.span()),
+                            );
+                            return Err(());
+                        }
+                    };
+
+                    // Resolve the type name within the package.
+                    let def = match cx.resolve_hierarchical_or_error(name, pkg) {
+                        Ok(def) => def,
+                        _ => return Err(()),
+                    };
+                    match cx.disamb_kind(Ref(&def.node)) {
+                        Kind::Value => Ok(ast),
+                        Kind::Type => {
+                            let target_ty = ast::Type::new(
+                                target.span,
+                                ast::TypeData {
+                                    kind: ast::TypeKind::new(expr.span, ast::NamedType(pkg_name)),
+                                    sign: ast::TypeSign::None,
+                                    dims: vec![],
+                                },
+                            );
+                            let ty = cx.arena().alloc(ast::Type::new(
+                                expr.span,
+                                ast::TypeData {
+                                    kind: ast::TypeKind::new(
+                                        expr.span,
+                                        ast::ScopedType {
+                                            ty: Box::new(target_ty),
+                                            member: false,
+                                            name,
+                                        },
+                                    ),
+                                    sign: ast::TypeSign::None,
+                                    dims: vec![],
+                                },
+                            ));
+                            ty.link_attach(expr);
+                            cx.register_ast(ty);
+                            cx.map_ast_with_parent(AstNode::Type(ty), ty.id());
+                            Ok(cx.arena().alloc(ast::TypeOrExpr::Type(ty)))
+                        }
+                    }
+                }
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "`{}` is not a package",
+                            expr.span().extract()
+                        ))
+                        .span(expr.span()),
+                    );
+                    return Err(());
+                }
+            },
             _ => Ok(ast),
         },
         ast::TypeOrExpr::Type(_ty) => Ok(ast),
