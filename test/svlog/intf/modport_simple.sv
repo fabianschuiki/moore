@@ -1,5 +1,4 @@
 // RUN: moore %s -e foo -O0
-// IGNORE
 
 module foo (bar.in x, bar.out y);
 endmodule

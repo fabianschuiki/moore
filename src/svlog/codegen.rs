@@ -181,6 +181,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             // Distinguish interfaces and regular ports.
             if let Some(intf) = ty.get_interface() {
                 trace!("    Expanding interface {:?}", intf);
+
+                // If a modport was specified, make a list of directions for
+                // each port by name.
+                let mut dirs = HashMap::new();
+                for port in intf.modport.iter().flat_map(|modport| modport.ports.iter()) {
+                    match port.data {
+                        ast::ModportPortData::Simple { dir, ref port } => {
+                            for port_name in port {
+                                if port_name.expr.is_none() {
+                                    dirs.insert(port_name.name.value, dir.value);
+                                }
+                            }
+                        }
+                    }
+                }
+                trace!("    Modport-derived directions: {:?}", dirs);
+
                 let intf_hir = self.hir_of_interface(intf.ast)?;
                 for &decl_id in &intf_hir.block.decls {
                     let hir = match self.hir_of(decl_id)? {
@@ -191,8 +208,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     let llty = llhd::signal_ty(self.emit_type(ty, env)?);
                     let name = format!("{}.{}", port.name, hir.name);
                     trace!("    Signal `{}` of type `{}` / `{}`", name, ty, llty);
-                    sig.add_output(llty);
-                    outputs.push(ModulePort {
+                    let port = ModulePort {
                         port,
                         ty,
                         name,
@@ -203,7 +219,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                             env,
                             decl_id,
                         },
-                    });
+                    };
+                    match dirs.get(&hir.name.value).copied() {
+                        Some(ast::PortDir::Input) | Some(ast::PortDir::Ref) => {
+                            sig.add_input(llty);
+                            inputs.push(port);
+                        }
+                        Some(ast::PortDir::Output) | Some(ast::PortDir::Inout) | None => {
+                            sig.add_output(llty);
+                            outputs.push(port);
+                        }
+                    }
                 }
             } else {
                 trace!("    Regular port");
