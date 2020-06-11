@@ -2001,7 +2001,7 @@ impl<'a> InstName<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Modport<'a> {
     /// The names of the modports.
-    pub names: Vec<ModportName<'a>>,
+    pub names: Vec<&'a ModportName<'a>>,
 }
 
 /// A single modport declaration.
@@ -2015,15 +2015,35 @@ pub struct ModportName<'a> {
     #[name]
     pub name: Spanned<Name>,
     /// The individual port specifications.
-    pub ports: Vec<ModportPort>,
-    #[dont_visit]
-    pub(crate) marker: std::marker::PhantomData<&'a ()>,
+    pub ports: Vec<&'a ModportPort<'a>>,
 }
 
-#[moore_derive::visit]
+/// A modport ports declaration.
+///
+/// For example `input a, .b(expr)`, or `import ...`, or `clocking foo`.
+#[moore_derive::node]
+#[indefinite("modport port")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModportPort {
-    Port,
+pub enum ModportPort<'a> {
+    /// A simple port, for example `input a, .b(expr)`.
+    Simple {
+        dir: Spanned<PortDir>,
+        port: Vec<&'a ModportSimplePort<'a>>,
+    },
+}
+
+/// A single simple modport port.
+///
+/// For example the `a` or `.b(expr)` in `input a, .b(expr)`.
+#[moore_derive::node]
+#[indefinite("simple modport port")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModportSimplePort<'a> {
+    /// The name of the port.
+    #[name]
+    pub name: Spanned<Name>,
+    /// The optional parenthesized expression of the port.
+    pub expr: Option<&'a Expr<'a>>,
 }
 
 /// A parameter or localparam declaration.

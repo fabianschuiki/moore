@@ -1325,7 +1325,9 @@ fn parse_modport_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::ModportName<'n>> {
+fn parse_modport_item<'n>(
+    p: &mut dyn AbstractParser<'n>,
+) -> ReportedResult<&'n ast::ModportName<'n>> {
     let mut span = p.peek(0).1;
 
     // Eat the modport item name.
@@ -1336,20 +1338,16 @@ fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
         comma_list(
             p,
             CloseDelim(Paren),
-            "port declaration",
-            parse_modport_port_decl,
+            "modport ports declaration",
+            parse_modport_ports_decl,
         )
     })?;
 
     span.expand(p.last_span());
-    Ok(ast::ModportName::new(
+    Ok(p.arena().alloc(ast::ModportName::new(
         span,
-        ast::ModportNameData {
-            name,
-            ports,
-            marker: Default::default(),
-        },
-    ))
+        ast::ModportNameData { name, ports },
+    )))
 }
 
 /// ```text
@@ -1359,22 +1357,34 @@ fn parse_modport_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast:
 ///   "clocking" ident
 /// modport_simple_port: ident | "." ident "(" [expr] ")"
 /// ```
-fn parse_modport_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::ModportPort> {
-    let (tkn, span) = p.peek(0);
+fn parse_modport_ports_decl<'n>(
+    p: &mut dyn AbstractParser<'n>,
+) -> ReportedResult<&'n ast::ModportPort<'n>> {
+    let mut span = p.peek(0).1;
 
     // Attempt to parse a simple port introduced by one of the port direction
     // keywords.
-    if let Some(dir) = as_port_direction(tkn) {
+    if let Some(dir) = as_port_direction(p.peek(0).0) {
+        let dir = Spanned::new(dir, p.peek(0).1);
+        let mut port: Vec<&_> = vec![];
         p.bump();
         loop {
-            if p.try_eat(Period) {
-                let name = parse_identifier(p, "port name")?;
+            let mut span = p.peek(0).1;
+            let (name, expr) = if p.try_eat(Period) {
+                let name = parse_identifier_name(p, "port name")?;
                 p.require_reported(OpenDelim(Paren))?;
-                let expr = parse_expr(p)?;
+                let expr: &_ = p.arena().alloc(parse_expr(p)?);
                 p.require_reported(CloseDelim(Paren))?;
+                (name, Some(expr))
             } else {
-                let name = parse_identifier(p, "port name")?;
-            }
+                let name = parse_identifier_name(p, "port name")?;
+                (name, None)
+            };
+            span.expand(p.last_span());
+            port.push(p.arena().alloc(ast::ModportSimplePort::new(
+                span,
+                ast::ModportSimplePortData { name, expr },
+            )));
 
             // Decide whether we should continue iterating and thus consuming
             // more simple ports. According to the grammar, a comma followed by
@@ -1391,10 +1401,21 @@ fn parse_modport_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult
                 _ => break,
             }
         }
-        return Ok(ast::ModportPort::Port);
+        span.expand(p.last_span());
+        return Ok(p.arena().alloc(ast::ModportPort::new(
+            span,
+            ast::ModportPortData::Simple { dir, port },
+        )));
     }
 
-    // TODO: Parse modport_tf_port.
+    // Attempt to parse a TF port.
+    if p.try_eat(Keyword(Kw::Import)) || p.try_eat(Keyword(Kw::Export)) {
+        // TODO: Parse modport_tf_ports_declaration.
+        p.add_diag(
+            DiagBuilder2::error("modport task/function ports not implemented").span(p.last_span()),
+        );
+        return Err(());
+    }
 
     // Attempt to parse a clocking declaration.
     if p.try_eat(Keyword(Kw::Clocking)) {
@@ -1403,8 +1424,8 @@ fn parse_modport_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult
         return Err(());
     }
 
-    // If we've come thus far, none of the above matched.
-    p.add_diag(DiagBuilder2::error("expected port declaration").span(span));
+    // If we've come this far, none of the above matched.
+    p.add_diag(DiagBuilder2::error("expected modport port declaration").span(span));
     Err(())
 }
 
