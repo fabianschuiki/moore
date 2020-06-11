@@ -380,7 +380,23 @@ pub(crate) fn map_to_type<'a>(
             let env_data = cx.param_env_data(env);
             match env_data.find_type(ast.id()) {
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
-                    return cx.map_to_type(Ref(cx.ast_for_id(assigned_id.id())), assigned_id.env());
+                    let assigned_ast = cx.ast_for_id(assigned_id.id());
+                    match cx.map_to_type(Ref(assigned_ast), assigned_id.env()) {
+                        Some(x) => return Some(x),
+                        None => {
+                            cx.emit(
+                                DiagBuilder2::error(format!("{} is not a type", assigned_ast))
+                                    .span(assigned_ast.human_span())
+                                    .add_note(format!(
+                                        "Assigned to type parameter `{}` here:",
+                                        ast.name
+                                    ))
+                                    .span(ast.human_span()),
+                            );
+                            error!("Offending node: {:#2?}", assigned_ast);
+                            return Some(UnpackedType::make_error());
+                        }
+                    }
                 }
                 Some(ParamEnvBinding::Direct(t)) => return Some(t),
                 _ => (),
@@ -805,6 +821,7 @@ fn packed_type_from_def<'a>(
                     .add_note(format!("`{}` was declared here:", def.name))
                     .span(def.node.span()),
             );
+            error!("Offending node: {:#2?}", def.node);
             return Packed(PackedCore::Error);
         }
     };
