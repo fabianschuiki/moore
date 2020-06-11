@@ -205,7 +205,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         _ => unreachable!(),
                     };
                     let ty = self.type_of(decl_id, env)?;
-                    let llty = llhd::signal_ty(self.emit_type(ty, env)?);
+                    let llty = llhd::signal_ty(self.emit_type(ty)?);
                     let name = format!("{}.{}", port.name, hir.name);
                     trace!("    Signal `{}` of type `{}` / `{}`", name, ty, llty);
                     let port = ModulePort {
@@ -233,7 +233,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
             } else {
                 trace!("    Regular port");
-                let llty = llhd::signal_ty(self.emit_type(ty, env)?);
+                let llty = llhd::signal_ty(self.emit_type(ty)?);
                 let name = port.name.to_string();
                 let mp = ModulePort {
                     port,
@@ -286,23 +286,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut inputs = vec![];
         let mut outputs = vec![];
         for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
-            sig.add_input(llhd::signal_ty(self.emit_type(
-                match id {
-                    AccessedNode::Regular(id) => self.type_of(id, env)?,
-                    AccessedNode::Intf(_, id) => self.type_of(id, env)?,
-                },
-                env,
-            )?));
+            sig.add_input(llhd::signal_ty(self.emit_type(match id {
+                AccessedNode::Regular(id) => self.type_of(id, env)?,
+                AccessedNode::Intf(_, id) => self.type_of(id, env)?,
+            })?));
             inputs.push(id);
         }
         for &id in acc.written.iter() {
-            sig.add_output(llhd::signal_ty(self.emit_type(
-                match id {
-                    AccessedNode::Regular(id) => self.type_of(id, env)?,
-                    AccessedNode::Intf(_, id) => self.type_of(id, env)?,
-                },
-                env,
-            )?));
+            sig.add_output(llhd::signal_ty(self.emit_type(match id {
+                AccessedNode::Regular(id) => self.type_of(id, env)?,
+                AccessedNode::Intf(_, id) => self.type_of(id, env)?,
+            })?));
             outputs.push(id);
         }
         trace!("Process Inputs: {:?}", inputs);
@@ -466,22 +460,18 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a type to an LLHD type (interned).
-    fn emit_type(&mut self, ty: &'gcx UnpackedType<'gcx>, env: ParamEnv) -> Result<llhd::Type> {
+    fn emit_type(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<llhd::Type> {
         if let Some(x) = self.tables.interned_types.get(&ty) {
             x.clone()
         } else {
-            let x = self.emit_type_uninterned(ty, env);
+            let x = self.emit_type_uninterned(ty);
             self.tables.interned_types.insert(ty, x.clone());
             x
         }
     }
 
     /// Map a type to an LLHD type.
-    fn emit_type_uninterned(
-        &mut self,
-        ty: &'gcx UnpackedType<'gcx>,
-        env: ParamEnv,
-    ) -> Result<llhd::Type> {
+    fn emit_type_uninterned(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<llhd::Type> {
         if ty.is_error() {
             return Err(());
         }
@@ -499,14 +489,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 None => panic!("cannot map unsized array `{}` to LLHD", ty),
             };
             let inner = ty.pop_dim(self.cx).unwrap();
-            return Ok(llhd::array_ty(size, self.emit_type(inner, env)?));
+            return Ok(llhd::array_ty(size, self.emit_type(inner)?));
         }
 
         // Handle structs.
         if let Some(strukt) = ty.get_struct() {
             let mut types = vec![];
             for member in &strukt.members {
-                types.push(self.emit_type(member.ty, strukt.legacy_env)?);
+                types.push(self.emit_type(member.ty)?);
             }
             return Ok(llhd::struct_ty(types));
         }
@@ -518,7 +508,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 ty::PackedCore::Error => Ok(llhd::void_ty()),
                 ty::PackedCore::Void => Ok(llhd::void_ty()),
                 ty::PackedCore::IntAtom(ty::IntAtomType::Time) => Ok(llhd::time_ty()),
-                ty::PackedCore::Enum(ref enm) => self.emit_type(enm.base.to_unpacked(self.cx), env),
+                ty::PackedCore::Enum(ref enm) => self.emit_type(enm.base.to_unpacked(self.cx)),
                 _ => unreachable!("emitting `{}` should have been handled above", packed),
             };
         }
@@ -1050,7 +1040,7 @@ where
         let result = self.emit_mir_rvalue_inner(mir);
         match result {
             Ok(result) => {
-                let llty_exp = self.emit_type(mir.ty, mir.env)?;
+                let llty_exp = self.emit_type(mir.ty)?;
                 let llty_act = self.llhd_type(result);
                 assert_span!(
                     llty_exp == llty_act,
@@ -1162,7 +1152,7 @@ where
 
             mir::RvalueKind::ZeroExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let llty = self.emit_type(mir.ty)?;
                 let result = self.emit_zero_for_type(&llty);
                 let value = self.emit_mir_rvalue(value)?;
                 let result = self.builder.ins().ins_slice(result, value, 0, width);
@@ -1172,7 +1162,7 @@ where
 
             mir::RvalueKind::SignExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let llty = self.emit_type(mir.ty)?;
                 let value = self.emit_mir_rvalue(value)?;
                 let sign = self.builder.ins().ext_slice(value, width - 1, 1);
                 let zeros = self.emit_zero_for_type(&llty);
@@ -1310,7 +1300,7 @@ where
 
             mir::RvalueKind::Concat(ref values) => {
                 let mut offset = 0;
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let llty = self.emit_type(mir.ty)?;
                 let mut result = self.emit_zero_for_type(&llty);
                 trace!(
                     "Concatenating {} values into `{}` (as `{}`)",
@@ -1337,7 +1327,7 @@ where
             mir::RvalueKind::Repeat(times, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let value = self.emit_mir_rvalue(value)?;
-                let llty = self.emit_type(mir.ty, mir.env)?;
+                let llty = self.emit_type(mir.ty)?;
                 let mut result = self.emit_zero_for_type(&llty);
                 for i in 0..times {
                     result = self
@@ -1463,8 +1453,8 @@ where
         let result = self.emit_mir_lvalue_inner(mir);
         match result {
             Ok((sig, var)) => {
-                let llty_exp1 = llhd::signal_ty(self.emit_type(mir.ty, mir.env)?);
-                let llty_exp2 = llhd::pointer_ty(self.emit_type(mir.ty, mir.env)?);
+                let llty_exp1 = llhd::signal_ty(self.emit_type(mir.ty)?);
+                let llty_exp2 = llhd::pointer_ty(self.emit_type(mir.ty)?);
                 let llty_act = self.llhd_type(sig);
                 assert_span!(
                     llty_exp1 == llty_act || llty_exp2 == llty_act,
@@ -1477,7 +1467,7 @@ where
                     llty_act
                 );
                 if let Some(var) = var {
-                    let llty_exp = llhd::pointer_ty(self.emit_type(mir.ty, mir.env)?);
+                    let llty_exp = llhd::pointer_ty(self.emit_type(mir.ty)?);
                     let llty_act = self.llhd_type(var);
                     assert_span!(
                         llty_exp == llty_act,
@@ -1867,7 +1857,7 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty, env)?;
+                        let lty = self.emit_type(ty)?;
                         let value = self.builder.ins().ld(repeat_var);
                         let zero = self.emit_zero_for_type(&lty);
                         Some(self.builder.ins().neq(value, zero))
@@ -2017,7 +2007,7 @@ where
                 .unwrap()),
             env,
         );
-        let ty = self.emit_type(ty, env)?;
+        let ty = self.emit_type(ty)?;
         let init = match hir.init {
             Some(expr) => self.emit_rvalue(expr, env)?,
             None => self.emit_zero_for_type(&ty),
