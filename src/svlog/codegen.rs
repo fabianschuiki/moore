@@ -257,8 +257,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         debug!("  Signature: {}", sig);
-        debug!("  Inputs: {:?}", inputs);
-        debug!("  Outputs: {:?}", outputs);
+        trace!("  Inputs: {:?}", inputs);
+        trace!("  Outputs: {:?}", outputs);
 
         Ok(ModuleIntf {
             sig,
