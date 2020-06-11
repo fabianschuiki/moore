@@ -1636,7 +1636,10 @@ impl Display for UnpackedCore<'_> {
             Self::Chandle => write!(f, "chandle"),
             Self::Event => write!(f, "event"),
             Self::Module(x) => write!(f, "{}", x.ast.name),
-            Self::Interface(x) => write!(f, "{}", x.ast.name),
+            Self::Interface(x) => match x.modport {
+                Some(y) => write!(f, "{}.{}", x.ast.name, y.name),
+                None => write!(f, "{}", x.ast.name),
+            },
             Self::Named { name, .. } => write!(f, "{}", name),
             Self::Ref { span, .. } => write!(f, "{}", span.extract()),
         }
