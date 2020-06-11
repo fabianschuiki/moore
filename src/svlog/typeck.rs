@@ -491,7 +491,6 @@ pub(crate) fn packed_type_from_ast<'a>(
                 ast_type: ast,
                 kind: strukt.kind,
                 members: Default::default(),
-                legacy_env: env,
             };
 
             // Populate the members.

@@ -316,9 +316,6 @@ pub struct StructType<'a> {
     pub kind: ast::StructKind,
     /// The list of members.
     pub members: Vec<StructMember<'a>>,
-    /// The param env where this struct was declared, to recover the legacy
-    /// type.
-    pub legacy_env: ParamEnv,
 }
 
 /// A member of a struct type.
