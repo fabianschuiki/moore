@@ -1128,6 +1128,10 @@ fn cast_expr_type_inner<'gcx>(
         if ty.is_strictly_identical(inferred) {
             trace!("  Already identical");
             return inferred.into();
+        } else if ty.to_string() == inferred.to_string() {
+            trace!("  Types look identical, but they are distinct:");
+            trace!("    Inferred: {:?}", inferred.resolve_full());
+            trace!("    Context:  {:?}", ty.resolve_full());
         }
     }
 
