@@ -728,16 +728,6 @@ pub(super) mod queries {
                 use fn resolver::struct_def;
             }
 
-            /// Resolve the field name in a field access expression.
-            ///
-            /// Returns the node id of the corresponding struct definition, the
-            /// index of the field that is actually being accessed, and the node
-            /// id of the field definition.
-            fn resolve_field_access(node_id: NodeId, env: ParamEnv) -> Result<(NodeEnvId, usize, NodeEnvId)> {
-                type ResolveFieldAccessQuery;
-                use fn resolver::resolve_field_access;
-            }
-
             /// Lower an expression to an lvalue in the MIR.
             fn mir_lvalue(
                 expr_id: NodeId,
@@ -781,7 +771,6 @@ pub(super) mod queries {
                 fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
-                fn resolve_field_access() for ResolveFieldAccessQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;
                 fn mir_rvalue() for MirRvalueQuery<'gcx>;
                 fn const_mir_rvalue() for ConstMirRvalueQuery<'gcx>;

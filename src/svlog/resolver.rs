@@ -379,8 +379,12 @@ pub(crate) fn struct_def<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resu
 }
 
 /// Resolve the field name in a field access expression.
-pub(crate) fn resolve_field_access<'gcx>(
-    cx: &impl Context<'gcx>,
+///
+/// Returns the index of the field that is actually being accessed, and the node
+/// id of the field definition.
+#[moore_derive::query]
+pub(crate) fn resolve_field_access<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
 ) -> Result<(NodeEnvId, usize, NodeEnvId)> {
