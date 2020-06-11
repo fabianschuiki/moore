@@ -334,7 +334,7 @@ fn lower_expr_inner<'gcx>(
                 };
                 Ok(builder.build(ty, RvalueKind::IntfSignal(inst, def)))
             } else {
-                let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
+                let (field, _) = cx.resolve_field_access(expr_id, env)?;
                 Ok(builder.build(ty, RvalueKind::Member { value, field }))
             }
         }

@@ -387,7 +387,7 @@ pub(crate) fn resolve_field_access<'a>(
     cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<(NodeEnvId, usize, NodeEnvId)> {
+) -> Result<(usize, NodeEnvId)> {
     let hir = match cx.hir_of(node_id)? {
         HirNode::Expr(x) => x,
         _ => unreachable!(),
@@ -415,11 +415,7 @@ pub(crate) fn resolve_field_access<'a>(
         .iter()
         .position(|member| member.name.value == name.value);
     match index {
-        Some(x) => Ok((
-            strukt.ast.id().env(strukt.legacy_env),
-            x,
-            strukt.members[x].ast_name.id().env(env),
-        )),
+        Some(x) => Ok((x, strukt.members[x].ast_name.id().env(env))),
         None => {
             cx.emit(
                 DiagBuilder2::error(format!("value of type `{}` has no field `{}`", ty, name))

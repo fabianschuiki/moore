@@ -160,7 +160,7 @@ fn try_lower_expr<'gcx>(
                 };
                 return Ok(builder.build(ty, LvalueKind::IntfSignal(inst, def)));
             } else {
-                let (_, field, _) = cx.resolve_field_access(expr_id, env)?;
+                let (field, _) = cx.resolve_field_access(expr_id, env)?;
                 return Ok(builder.build(ty, LvalueKind::Member { value, field }));
             }
         }

@@ -1534,7 +1534,7 @@ fn self_determined_expr_type<'gcx>(
             } else {
                 Some(
                     cx.resolve_field_access(expr.id, env)
-                        .and_then(|(_, _, field_id)| cx.type_of(field_id.id(), env))
+                        .and_then(|(_, field_id)| cx.type_of(field_id.id(), env))
                         .unwrap_or(UnpackedType::make_error()),
                 )
             }
