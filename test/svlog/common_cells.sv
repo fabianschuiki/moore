@@ -30,7 +30,7 @@ module foo;
     // id_queue #(.ID_WIDTH(2), .CAPACITY(3), .data_t(logic [41:0])) i19();
     lfsr_16bit i20();
     lfsr_8bit i21();
-    // lfsr i22();
+    lfsr i22();
     lzc i23();
     max_counter i24();
     mv_filter i25();
