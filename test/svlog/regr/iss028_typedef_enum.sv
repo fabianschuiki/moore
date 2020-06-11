@@ -1,4 +1,5 @@
-// @exclude
+// RUN: moore %s -e typedef_enum
+
 module typedef_enum (
     input logic clk_i,
     input logic rst_ni
