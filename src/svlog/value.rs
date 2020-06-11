@@ -299,10 +299,12 @@ fn const_mir_rvalue_inner<'gcx>(
         | mir::RvalueKind::Truncate(_, value)
         | mir::RvalueKind::ZeroExtend(_, value)
         | mir::RvalueKind::SignExtend(_, value) => {
-            warn!("Cast ignored during constant evaluation: `{}` from `{}` to `{}`",
-                        value.span.extract(),
-                        value.ty,
-                        mir.ty);
+            warn!(
+                "Cast ignored during constant evaluation: `{}` from `{}` to `{}`",
+                value.span.extract(),
+                value.ty,
+                mir.ty
+            );
             let v = cx.const_mir_rvalue(value.into());
             // TODO: This is an incredibly ugly hack.
             cx.intern_value(ValueData {
@@ -352,7 +354,12 @@ fn const_mir_rvalue_inner<'gcx>(
             match arg_val.kind {
                 ValueKind::Int(ref arg_int, ..) => cx.intern_value(make_int(
                     mir.ty,
-                    const_unary_bitwise_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, arg_int),
+                    const_unary_bitwise_int(
+                        cx,
+                        mir.ty.simple_bit_vector(cx, mir.span),
+                        op,
+                        arg_int,
+                    ),
                 )),
                 _ => unreachable!(),
             }
@@ -368,7 +375,13 @@ fn const_mir_rvalue_inner<'gcx>(
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
                     cx.intern_value(make_int(
                         mir.ty,
-                        const_binary_bitwise_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int),
+                        const_binary_bitwise_int(
+                            cx,
+                            mir.ty.simple_bit_vector(cx, mir.span),
+                            op,
+                            lhs_int,
+                            rhs_int,
+                        ),
                     ))
                 }
                 _ => unreachable!(),
@@ -399,7 +412,13 @@ fn const_mir_rvalue_inner<'gcx>(
                 (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
                     cx.intern_value(make_int(
                         mir.ty,
-                        const_binary_arith_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int),
+                        const_binary_arith_int(
+                            cx,
+                            mir.ty.simple_bit_vector(cx, mir.span),
+                            op,
+                            lhs_int,
+                            rhs_int,
+                        ),
                     ))
                 }
                 _ => unreachable!(),
@@ -413,9 +432,18 @@ fn const_mir_rvalue_inner<'gcx>(
                 return cx.intern_value(make_error(mir.ty));
             }
             match (&lhs_val.kind, &rhs_val.kind) {
-                (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => cx.intern_value(
-                    make_int(mir.ty, const_comp_int(cx, mir.ty.simple_bit_vector(cx, mir.span), op, lhs_int, rhs_int)),
-                ),
+                (ValueKind::Int(lhs_int, ..), ValueKind::Int(rhs_int, ..)) => {
+                    cx.intern_value(make_int(
+                        mir.ty,
+                        const_comp_int(
+                            cx,
+                            mir.ty.simple_bit_vector(cx, mir.span),
+                            op,
+                            lhs_int,
+                            rhs_int,
+                        ),
+                    ))
+                }
                 _ => unreachable!(),
             }
         }
@@ -446,7 +474,11 @@ fn const_mir_rvalue_inner<'gcx>(
             cx.intern_value(make_int(mir.ty, result))
         }
 
-        mir::RvalueKind::Assignment { .. } | mir::RvalueKind::Var(_) | mir::RvalueKind::Port(_) | mir::RvalueKind::IntfSignal(..) | mir::RvalueKind::Intf(..) => {
+        mir::RvalueKind::Assignment { .. }
+        | mir::RvalueKind::Var(_)
+        | mir::RvalueKind::Port(_)
+        | mir::RvalueKind::IntfSignal(..)
+        | mir::RvalueKind::Intf(..) => {
             cx.emit(DiagBuilder2::error("value is not constant").span(mir.span));
             cx.intern_value(make_error(mir.ty))
         }
@@ -492,7 +524,14 @@ fn const_mir_rvalue_inner<'gcx>(
                 (ValueKind::Int(value_int, ..), ValueKind::Int(amount_int, ..)) => {
                     cx.intern_value(make_int(
                         mir.ty,
-                        const_shift_int(cx, value.ty.simple_bit_vector(cx, value.span), op, arith, value_int, amount_int),
+                        const_shift_int(
+                            cx,
+                            value.ty.simple_bit_vector(cx, value.span),
+                            op,
+                            arith,
+                            value_int,
+                            amount_int,
+                        ),
                     ))
                 }
                 _ => unreachable!(),
