@@ -182,6 +182,10 @@ impl DiagEmitter for GlobalContext<'_> {
         // If this is anything more than a warning, emit a backtrace in debug
         // builds.
         if sev >= Severity::Warning {
+            trace!("Diagnostic query trace:");
+            for x in self.storage().stack.borrow().iter() {
+                trace!(" - {:?}", x);
+            }
             trace!(
                 "Diagnostic triggered here:\n{:?}",
                 backtrace::Backtrace::new()
