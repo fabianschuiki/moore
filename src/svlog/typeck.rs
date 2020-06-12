@@ -1089,9 +1089,10 @@ fn cast_expr_type_inner<'gcx>(
     env: ParamEnv,
 ) -> CastType<'gcx> {
     trace!(
-        "Computing cast type of `{}` (line {})",
+        "Computing cast type of `{}` (line {}) {:?}",
         expr.span().extract(),
-        expr.span().begin().human_line()
+        expr.span().begin().human_line(),
+        cx.ast_for_id(expr.id),
     );
 
     // Determine the inferred type and type context of the expression.
@@ -2295,14 +2296,18 @@ fn type_context_imposed_by_expr<'gcx>(
         }
 
         // Patterns impose the field types onto their arguments.
-        hir::ExprKind::PositionalPattern(ref nodes)
-        | hir::ExprKind::RepeatPattern(_, ref nodes)
-            if nodes.contains(&onto) =>
-        {
+        hir::ExprKind::PositionalPattern(..) => {
+            type_context_imposed_by_pattern(cx, onto, expr, env)
+        }
+        hir::ExprKind::RepeatPattern(rep, ..) if onto != rep => {
             type_context_imposed_by_pattern(cx, onto, expr, env)
         }
         hir::ExprKind::NamedPattern(ref nodes) => {
-            if nodes.iter().any(|&(_, n)| n == onto) {
+            if nodes.iter().all(|&(n, _)| match n {
+                hir::PatternMapping::Type(n) => n != onto,
+                hir::PatternMapping::Member(n) => n != onto,
+                _ => true,
+            }) {
                 type_context_imposed_by_pattern(cx, onto, expr, env)
             } else {
                 None
@@ -2361,9 +2366,9 @@ fn type_context_imposed_by_pattern<'gcx>(
     if tys.len() == 1 {
         Some(tys.into_iter().next().unwrap().into())
     } else {
-        trace!(
+        warn!(
             "Expression `{}` assigned to multiple fields with distinct types; no context imposed",
-            expr.span().extract()
+            cx.span(onto).extract()
         );
         None
     }

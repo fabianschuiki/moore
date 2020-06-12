@@ -353,7 +353,7 @@ pub(crate) fn canonicalize_ports<'a>(
                     dims: port.packed_dims.to_vec(),
                 },
             ));
-            ty.link_attach(port.ast);
+            ty.link_attach(port.ast, port.ast.order());
             cx.register_ast(ty);
             cx.map_ast_with_parent(AstNode::Type(ty), next_rib);
 

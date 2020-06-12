@@ -46,7 +46,7 @@ pub trait AnyNode<'a>: BasicNode<'a> + AnyNodeData + std::fmt::Display + Send + 
     /// All subnodes inherit the order from their parent. Useful if a node is
     /// generated as part of a later expansion/analysis pass, but needs to hook
     /// into the AST somewhere.
-    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {}
+    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>, order: usize) {}
 
     /// Convert this node reference to a pointer for identity comparisons.
     fn as_ptr(&self) -> *const u8 {
@@ -309,12 +309,12 @@ where
         });
     }
 
-    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {
-        trace!("Linking {:?} as attachment to {:?}", self, parent);
+    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>, order: usize) {
+        trace!("Linking {:?} as child attachment to {:?}", self, parent);
         self.parent.set(Some(parent));
-        self.order.set(parent.order());
+        self.order.set(order);
         self.for_each_child(&mut |node| {
-            node.link_attach(self.as_any());
+            node.link_attach(self.as_any(), order);
         });
     }
 }
@@ -1406,10 +1406,10 @@ impl<'a> AnyNode<'a> for TypeOrExpr<'a> {
         }
     }
 
-    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>) {
+    fn link_attach(&'a self, parent: &'a dyn AnyNode<'a>, order: usize) {
         match self {
-            TypeOrExpr::Type(x) => x.link_attach(parent),
-            TypeOrExpr::Expr(x) => x.link_attach(parent),
+            TypeOrExpr::Type(x) => x.link_attach(parent, order),
+            TypeOrExpr::Expr(x) => x.link_attach(parent, order),
         }
     }
 }

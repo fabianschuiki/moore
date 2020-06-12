@@ -4,7 +4,7 @@
 //! fields.
 
 use crate::crate_prelude::*;
-use crate::{hir::HirNode, value::ValueKind};
+use crate::{ast_map::AstNode, common::arenas::Alloc, hir::HirNode, value::ValueKind};
 use num::cast::ToPrimitive;
 use std::{collections::HashMap, sync::Arc};
 
@@ -86,7 +86,7 @@ pub(crate) fn map_pattern<'a>(
             if let Some(dim) = ty.outermost_dim() {
                 map_named_array_pattern(cx, mapping, ty, dim, expr.span, env)?
             } else if let Some(strukt) = ty.get_struct() {
-                map_named_struct_pattern(cx, mapping, strukt, expr.span, env)?
+                map_named_struct_pattern(cx, expr, mapping, strukt, expr.span, env)?
             } else {
                 cx.emit(
                     DiagBuilder2::error(format!(
@@ -268,6 +268,7 @@ fn map_named_array_pattern<'a>(
 /// Determine the mapping of a named `'{...}` struct pattern.
 fn map_named_struct_pattern<'a>(
     cx: &impl Context<'a>,
+    expr: &'a hir::Expr<'a>,
     mapping: &[(hir::PatternMapping, NodeId)],
     strukt: &'a ty::StructType<'a>,
     span: Span,
@@ -283,7 +284,7 @@ fn map_named_struct_pattern<'a>(
 
     // Disassemble the user's mapping into actual field bindings and defaults.
     let mut failed = false;
-    let mut default: Option<&hir::Expr> = None;
+    let mut default: Option<&ast::Expr> = None;
     let mut type_defaults = HashMap::<&ty::UnpackedType, &hir::Expr>::new();
     let mut values = HashMap::<usize, (PatternField, &hir::Expr)>::new();
 
@@ -373,7 +374,12 @@ fn map_named_struct_pattern<'a>(
                     continue;
                 }
                 None => {
-                    default = Some(to);
+                    default = Some(
+                        cx.ast_for_id(to.id)
+                            .as_all()
+                            .get_expr()
+                            .expect("default must be an expr"),
+                    );
                 }
             },
         }
@@ -410,7 +416,22 @@ fn map_named_struct_pattern<'a>(
             continue;
         };
 
-        values.insert(index, (PatternField::Struct(field), default));
+        // Replicate the default value.
+        let ast = cx
+            .arena()
+            .alloc(ast::Expr::new(default.span, default.data.clone()));
+        ast.link_attach(default.get_parent().unwrap(), default.order());
+        cx.register_ast(ast);
+        cx.map_ast_with_parent(AstNode::Expr(ast), expr.id);
+        trace!("Replicated default {:?} as {:?}", default, ast);
+        let hir = match cx.hir_of_expr(Ref(ast)) {
+            Ok(h) => h,
+            _ => {
+                failed = true;
+                continue;
+            }
+        };
+        values.insert(index, (PatternField::Struct(field), hir));
     }
 
     if failed {

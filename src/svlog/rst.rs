@@ -55,7 +55,7 @@ pub(crate) fn disamb_type_or_expr<'a>(
                                 dims: vec![],
                             },
                         ));
-                        ty.link_attach(expr);
+                        ty.link_attach(expr, expr.order());
                         cx.register_ast(ty);
                         cx.map_ast_with_parent(AstNode::Type(ty), ty.id());
                         Ok(cx.arena().alloc(ast::TypeOrExpr::Type(ty)))
@@ -124,7 +124,7 @@ pub(crate) fn disamb_type_or_expr<'a>(
                                     dims: vec![],
                                 },
                             ));
-                            ty.link_attach(expr);
+                            ty.link_attach(expr, expr.order());
                             cx.register_ast(ty);
                             cx.map_ast_with_parent(AstNode::Type(ty), ty.id());
                             Ok(cx.arena().alloc(ast::TypeOrExpr::Type(ty)))
