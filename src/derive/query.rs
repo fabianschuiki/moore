@@ -158,7 +158,7 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         keys.push(quote! {
             #[doc = #doc]
             #[derive(Clone, PartialEq, Eq, Hash)]
-            pub struct #key_name #key_generics (#(#arg_types),*);
+            pub struct #key_name #key_generics (#(pub #arg_types),*);
 
             impl #key_generics std::fmt::Debug for #key_name #key_generics {
                 fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

@@ -175,15 +175,45 @@ impl<'gcx> GlobalContext<'gcx> {
 }
 
 impl DiagEmitter for GlobalContext<'_> {
-    fn emit(&self, diag: DiagBuilder2) {
+    fn emit(&self, mut diag: DiagBuilder2) {
         let sev = diag.get_severity();
+
+        // Extend the diagnostic with some context information as to where in
+        // the query stack it occurred.
+        if sev >= Severity::Error {
+            for query in self.storage().stack.borrow().iter().rev() {
+                match query {
+                    QueryTag::TypeOfExpr(query) => {
+                        diag = diag
+                            .add_note("Needed to compute the type of the expression:")
+                            .span(query.0.span());
+                    }
+                    QueryTag::CastType(query) => {
+                        diag = diag
+                            .add_note("Needed to compute the implicit type cast of the expression:")
+                            .span(self.ast_for_id(query.0).span());
+                    }
+                    QueryTag::TypeOfIntPort(query) => {
+                        diag = diag
+                            .add_note(format!(
+                                "Needed to compute the type of port `{}`:",
+                                query.0.name
+                            ))
+                            .span(query.0.span);
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        // Emit the diagnostic.
         self.sess.emit(diag);
 
         // If this is anything more than a warning, emit a backtrace in debug
         // builds.
         if sev >= Severity::Warning {
             trace!("Diagnostic query trace:");
-            for x in self.storage().stack.borrow().iter() {
+            for x in self.storage().stack.borrow().iter().rev() {
                 trace!(" - {:?}", x);
             }
             trace!(
