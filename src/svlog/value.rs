@@ -266,6 +266,30 @@ fn const_node<'gcx>(
     }
 }
 
+/// Determine the constant integer value of an MIR rvalue.
+///
+/// Emits a diagnostic if the value is not an integer.
+#[moore_derive::query]
+pub(crate) fn const_mir_rvalue_int<'a>(
+    cx: &impl Context<'a>,
+    mir: Ref<'a, mir::Rvalue<'a>>,
+) -> Result<&'a num::BigInt> {
+    match cx.const_mir_rvalue(mir).kind {
+        ValueKind::Int(ref x, ..) => Ok(x),
+        ValueKind::Error => Err(()),
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{}` is not a constant integer",
+                    mir.span.extract()
+                ))
+                .span(mir.span),
+            );
+            Err(())
+        }
+    }
+}
+
 /// Determine the constant value of an MIR rvalue.
 #[moore_derive::query]
 pub(crate) fn const_mir_rvalue<'a>(
@@ -548,13 +572,71 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
         }
 
         mir::RvalueKind::Index {
-            // value,
-            // base,
-            // length,
+            value,
+            base,
+            length,
             ..
         } => {
-            error!("Offending MIR of the following diagnostic: {:#?}", mir);
-            bug_span!(mir.span, cx, "constant folding of slices not implemented: `{}`", mir.ty);
+            let inner_val = cx.const_mir_rvalue(value.into());
+            if inner_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            let base = match cx.const_mir_rvalue_int(Ref(base)) {
+                Ok(x) => x.to_isize().expect("base out of bounds"),
+                _ => return cx.intern_value(make_error(mir.ty)),
+            };
+            match inner_val.kind {
+                // TODO: This magic should all be replaced by a dedicated
+                // arithmetic module which handles the semantics of SV properly.
+                ValueKind::Int(ref int, ref special_bits, ref x_bits) => {
+                    let length = std::cmp::max(length, 1); // bit-select same as length-1-select
+                    let v = if base < 0 {
+                        (int << (-base) as usize)
+                    } else {
+                        (int >> base as usize)
+                    };
+                    let v = v % (BigInt::one() << length);
+                    let mut new_special_bits = BitVec::from_elem(length, false);
+                    let mut new_x_bits = BitVec::from_elem(length, false);
+                    for i in 0..length as isize {
+                        if i >= base && i < base + length as isize {
+                            new_special_bits.set((i - base) as usize, special_bits[i as usize]);
+                            new_x_bits.set((i - base) as usize, x_bits[i as usize]);
+                        }
+                    }
+                    cx.intern_value(make_int_special(mir.ty, v, new_special_bits, new_x_bits))
+                }
+                ValueKind::StructOrArray(ref values) if length == 0 => {
+                    if base < 0 || base >= values.len() as isize {
+                        cx.type_default_value(mir.ty)
+                    } else {
+                        values[base as usize]
+                    }
+                }
+                ValueKind::StructOrArray(ref values) => {
+                    let mut new_values = Vec::with_capacity(length);
+                    if base < 0 {
+                        let default = cx.type_default_value(mir.ty);
+                        for _ in base..0 {
+                            new_values.push(default);
+                        }
+                    }
+                    let base = std::cmp::max(base, 0) as usize;
+                    if base < values.len() {
+                        for &v in &values[base..] {
+                            new_values.push(v);
+                        }
+                    }
+                    if new_values.len() < length {
+                        let default = cx.type_default_value(mir.ty);
+                        for _ in new_values.len()..length {
+                            new_values.push(default);
+                        }
+                    }
+                    cx.intern_value(make_array(mir.ty, new_values))
+                }
+                _ => unreachable!("const index op on value {:?}", inner_val),
+            }
         }
 
         // Propagate tombstones.
