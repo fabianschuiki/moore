@@ -102,13 +102,11 @@ pub(crate) fn type_of<'a>(
         HirNode::Inst(hir) => Ok(cx.type_of_inst(Ref(hir), env)),
         _ => {
             error!("{:#?}", hir);
-            panic!(
-                "{}",
-                DiagBuilder2::bug(format!(
-                    "type analysis of {} not implemented",
-                    hir.desc_full()
-                ))
-                .span(hir.span())
+            bug_span!(
+                hir.span(),
+                cx,
+                "type analysis of {} not implemented",
+                hir.desc_full()
             )
         }
     }
