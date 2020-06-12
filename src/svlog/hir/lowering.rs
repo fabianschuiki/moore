@@ -27,19 +27,11 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
         AstNode::Module(x) => cx.hir_of_module(x).map(HirNode::Module),
         AstNode::Interface(x) => cx.hir_of_interface(x).map(HirNode::Interface),
         AstNode::Type(ty) => lower_type(cx, node_id, ty),
-        AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty)) => lower_type(cx, node_id, ty),
-        AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr)) => lower_expr(cx, node_id, expr),
-        // AstNode::TypeOrExpr(&ast::TypeOrExpr::Type(ref ty))
-        //     if cx.lowering_hint(node_id) == Some(Hint::Type) =>
-        // {
-        //     lower_type(cx, node_id, ty)
-        // }
-        // AstNode::TypeOrExpr(&ast::TypeOrExpr::Expr(ref expr))
-        //     if cx.lowering_hint(node_id) == Some(Hint::Expr) =>
-        // {
-        //     lower_expr(cx, node_id, expr)
-        // }
-        AstNode::Expr(expr) => lower_expr(cx, node_id, expr),
+        AstNode::TypeOrExpr(x) => match cx.disamb_type_or_expr(Ref(x))? {
+            ast::TypeOrExpr::Type(ty) => lower_type(cx, node_id, ty),
+            ast::TypeOrExpr::Expr(expr) => cx.hir_of_expr(Ref(expr)).map(HirNode::Expr),
+        },
+        AstNode::Expr(expr) => cx.hir_of_expr(Ref(expr)).map(HirNode::Expr),
         AstNode::InstTarget(ast) => {
             let mut named_params = vec![];
             let mut pos_params = vec![];
@@ -884,26 +876,26 @@ fn lower_type<'gcx>(
     Ok(HirNode::Type(cx.arena().alloc_hir(hir)))
 }
 
-fn lower_expr<'gcx>(
-    cx: &impl Context<'gcx>,
-    node_id: NodeId,
-    expr: &'gcx ast::Expr<'gcx>,
-) -> Result<HirNode<'gcx>> {
-    let kind = lower_expr_inner(cx, node_id, expr)?;
+/// Lower an AST expression to HIR.
+#[moore_derive::query]
+pub(crate) fn hir_of_expr<'a>(
+    cx: &impl Context<'a>,
+    Ref(expr): Ref<'a, ast::Expr<'a>>,
+) -> Result<&'a hir::Expr<'a>> {
+    let kind = lower_expr_inner(cx, expr.id(), expr)?;
     let hir = hir::Expr {
-        id: node_id,
+        id: expr.id(),
         span: expr.span,
         kind: kind,
-        dummy: Default::default(),
     };
-    Ok(HirNode::Expr(cx.arena().alloc_hir(hir)))
+    Ok(cx.arena().alloc_hir(hir))
 }
 
 fn lower_expr_inner<'gcx>(
     cx: &impl Context<'gcx>,
     node_id: NodeId,
     expr: &'gcx ast::Expr<'gcx>,
-) -> Result<hir::ExprKind> {
+) -> Result<hir::ExprKind<'gcx>> {
     use crate::syntax::token::{Lit, Op};
     Ok(match expr.data {
         ast::LiteralExpr(Lit::Number(v, None)) => match v.as_str().parse() {
