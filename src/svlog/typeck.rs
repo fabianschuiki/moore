@@ -428,6 +428,28 @@ pub(crate) fn map_to_type<'a>(
     }
 }
 
+/// Map an AST node to the type it represents.
+///
+/// Returns `None` if the given AST node does not evaluate to a type.
+#[moore_derive::query]
+pub(crate) fn map_to_type_or_error<'a>(
+    cx: &impl Context<'a>,
+    ast: Ref<'a, dyn ast::AnyNode<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    match cx.map_to_type(ast, env) {
+        Some(ty) => ty,
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` is not a type", ast.span().extract()))
+                    .span(ast.span()),
+            );
+            error!("Offending node: {:#2?}", ast);
+            UnpackedType::make_error()
+        }
+    }
+}
+
 /// Map a type node in the AST to an packed type.
 ///
 /// This is the first half of type computation, and is concerned with the type
