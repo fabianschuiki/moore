@@ -574,8 +574,7 @@ pub enum BuiltinType {
 pub struct Expr<'a> {
     pub id: NodeId,
     pub span: Span,
-    pub kind: ExprKind,
-    pub(crate) dummy: std::marker::PhantomData<&'a ()>,
+    pub kind: ExprKind<'a>,
 }
 
 impl HasSpan for Expr<'_> {
@@ -611,7 +610,7 @@ impl HasDesc for Expr<'_> {
 
 /// The different forms an expression can take.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExprKind {
+pub enum ExprKind<'a> {
     /// An integer constant literal such as `42` or `'d42` or `32'd42`.
     ///
     /// The `special_bits` mask keeps track of which bits in the number are `x`
@@ -640,7 +639,7 @@ pub enum ExprKind {
     /// An index access such as `a[b]` or `a[b:c]`.
     Index(NodeId, IndexMode),
     /// A builtin function call such as `$clog2(x)`.
-    Builtin(BuiltinCall),
+    Builtin(BuiltinCall<'a>),
     /// A ternary expression such as `a ? b : c`.
     Ternary(NodeId, NodeId, NodeId),
     /// A scope expression such as `foo::bar`.
@@ -814,13 +813,13 @@ pub enum IndexMode {
 
 /// The different builtin function calls that are supported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuiltinCall {
+pub enum BuiltinCall<'a> {
     /// An unsupported builtin. Will yield constant 0.
     Unsupported,
     /// A call to the ceil-log2 function `$clog2(x)`.
     Clog2(NodeId),
     /// A call to the storage size function `$bits(x)`.
-    Bits(NodeId),
+    Bits(&'a ast::TypeOrExpr<'a>),
     /// A call to the convert-to-signed function `$signed(x)`.
     Signed(NodeId),
     /// A call to the convert-to-unsigned function `$unsigned(x)`.

@@ -2096,6 +2096,14 @@ fn parse_expr_suffix<'n>(
 
         // Call: "(" [list_of_arguments] ")"
         OpenDelim(Paren) if precedence <= Precedence::Postfix => {
+            // Special treatment for system tasks with custom syntax. SV is a
+            // horrible language.
+            if let ast::SysIdentExpr(name) = prefix.data {
+                match try_builtin_system_task(p, name, prefix.span)? {
+                    Some(expr) => return parse_expr_suffix(p, expr, precedence),
+                    None => (),
+                }
+            }
             let args = flanked(p, Paren, parse_call_args)?;
             let expr = Expr::new(
                 Span::union(prefix.span, p.last_span()),
@@ -6024,4 +6032,20 @@ fn parse_param_decl<'n>(
 
 fn parse_hname<'n>(p: &mut dyn AbstractParser<'n>, msg: &str) -> ReportedResult<ast::Identifier> {
     parse_identifier(p, msg)
+}
+
+fn try_builtin_system_task<'n>(
+    p: &mut dyn AbstractParser<'n>,
+    name: Spanned<Name>,
+    mut span: Span,
+) -> ReportedResult<Option<Expr<'n>>> {
+    Ok(match name.value.as_str().as_ref() {
+        // size_function ::= "$bits" "(" (expression|data_type) ")"
+        "bits" => {
+            let arg = flanked(p, Paren, |p| parse_type_or_expr(p, &[CloseDelim(Paren)]))?;
+            span.expand(p.last_span());
+            Some(ast::Expr::new(span, ast::BitsExpr { name, arg }))
+        }
+        _ => None,
+    })
 }

@@ -1348,6 +1348,11 @@ pub enum Expr<'a> {
     CastExpr(Type<'a>, Box<Expr<'a>>),
     CastSizeExpr(Box<Expr<'a>>, Box<Expr<'a>>),
     CastSignExpr(Spanned<TypeSign>, Box<Expr<'a>>),
+    /// A `$bits` call.
+    BitsExpr {
+        name: Spanned<Name>,
+        arg: TypeOrExpr<'a>,
+    },
 }
 
 /// An ambiguous node that can either be a type or and expression.

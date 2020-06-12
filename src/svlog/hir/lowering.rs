@@ -1170,7 +1170,6 @@ fn lower_expr_inner<'gcx>(
                 };
                 hir::ExprKind::Builtin(match &*ident.value.as_str() {
                     "clog2" => hir::BuiltinCall::Clog2(map_unary()?),
-                    "bits" => hir::BuiltinCall::Bits(map_unary()?),
                     "signed" => hir::BuiltinCall::Signed(map_unary()?),
                     "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
                     _ => {
@@ -1388,6 +1387,7 @@ fn lower_expr_inner<'gcx>(
                 })
                 .collect(),
         ),
+        ast::BitsExpr { ref arg, .. } => hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)),
         _ => {
             error!("{:#1?}", expr);
             bug_span!(

@@ -250,10 +250,12 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
             }
         }
         ExprKind::Builtin(BuiltinCall::Clog2(arg))
-        | ExprKind::Builtin(BuiltinCall::Bits(arg))
         | ExprKind::Builtin(BuiltinCall::Signed(arg))
         | ExprKind::Builtin(BuiltinCall::Unsigned(arg)) => {
             visitor.visit_node_with_id(arg, false);
+        }
+        ExprKind::Builtin(BuiltinCall::Bits(arg)) => {
+            visitor.visit_node_with_id(arg.id(), false);
         }
         ExprKind::Ternary(cond, true_expr, false_expr) => {
             visitor.visit_node_with_id(cond, false);

@@ -1,5 +1,4 @@
 // RUN: moore %s -e foo
-// IGNORE  see issue #158
 
 module foo;
     parameter int a = 42;
