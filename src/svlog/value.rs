@@ -266,14 +266,12 @@ fn const_node<'gcx>(
     }
 }
 
-pub(crate) fn const_mir_rvalue_query<'gcx>(
-    cx: &impl Context<'gcx>,
-    mir: Ref<'gcx, mir::Rvalue<'gcx>>,
-) -> Value<'gcx> {
-    const_mir_rvalue(cx, *mir)
-}
-
-fn const_mir_rvalue<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>) -> Value<'gcx> {
+/// Determine the constant value of an MIR rvalue.
+#[moore_derive::query]
+pub(crate) fn const_mir_rvalue<'a>(
+    cx: &impl Context<'a>,
+    Ref(mir): Ref<'a, mir::Rvalue<'a>>,
+) -> Value<'a> {
     let v = const_mir_rvalue_inner(cx, mir);
     if cx.sess().has_verbosity(Verbosity::CONSTS) {
         let ext = mir.span.extract();
@@ -283,10 +281,7 @@ fn const_mir_rvalue<'gcx>(cx: &impl Context<'gcx>, mir: &'gcx mir::Rvalue<'gcx>)
     v
 }
 
-fn const_mir_rvalue_inner<'gcx>(
-    cx: &impl Context<'gcx>,
-    mir: &'gcx mir::Rvalue<'gcx>,
-) -> Value<'gcx> {
+fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -> Value<'a> {
     // Propagate MIR tombstones immediately.
     if mir.is_error() {
         return cx.intern_value(make_error(mir.ty));

@@ -270,6 +270,7 @@ mod queries {
         rst::*,
         ty::UnpackedType,
         typeck::*,
+        value::*,
     };
     use std::{
         cell::RefCell,

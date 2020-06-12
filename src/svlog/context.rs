@@ -750,14 +750,6 @@ pub(super) mod queries {
                 type MirRvalueQuery;
                 use fn mir::lower::rvalue::lower_expr;
             }
-
-            /// Determine the constant value of an MIR rvalue.
-            fn const_mir_rvalue(
-                mir: Ref<'a, mir::Rvalue<'a>>
-            ) -> Value<'a> {
-                type ConstMirRvalueQuery;
-                use fn value::const_mir_rvalue_query;
-            }
         }
     }
 
@@ -778,7 +770,6 @@ pub(super) mod queries {
                 fn struct_def() for StructDefQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;
                 fn mir_rvalue() for MirRvalueQuery<'gcx>;
-                fn const_mir_rvalue() for ConstMirRvalueQuery<'gcx>;
             }
         }
     }
