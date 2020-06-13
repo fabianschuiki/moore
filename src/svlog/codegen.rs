@@ -815,26 +815,13 @@ where
                         let mir = match port.kind {
                             ModulePortKind::Port => mir,
                             ModulePortKind::IntfSignal { decl_id, .. } => {
-                                let intf = match mir.kind {
-                                    mir::LvalueKind::Intf(id) => id,
-                                    _ => {
-                                        error!("port {:?} connected to {:?}", port, mir);
-                                        bug_span!(
-                                            mir.span,
-                                            self.cx,
-                                            "intf port `{}` connected to non-intf `{}`",
-                                            port.name,
-                                            mir.ty
-                                        );
-                                    }
-                                };
                                 self.arena().alloc_mir_lvalue(mir::Lvalue {
                                     id: NodeId::alloc(),
                                     origin: mir.origin,
                                     env: mir.env,
                                     span: mir.span,
                                     ty: port.ty,
-                                    kind: mir::LvalueKind::IntfSignal(intf, decl_id),
+                                    kind: mir::LvalueKind::IntfSignal(mir, decl_id),
                                 })
                             }
                         };
@@ -1601,13 +1588,9 @@ where
                 self.shadows.get(&id.into()).cloned(),
             )),
 
-            mir::LvalueKind::IntfSignal(intf, signal) => {
-                let id = AccessedNode::Intf(intf, signal);
-                Ok((
-                    self.emitted_value(id).clone(),
-                    self.shadows.get(&id).cloned(),
-                ))
-            }
+            // Interface signals require special care, because they are emitted
+            // in a transposed fashion.
+            mir::LvalueKind::IntfSignal(value, signal) => self.emit_lvalue_interface(value, signal),
 
             // Member accesses simply look up their inner lvalue and extract the
             // signal or pointer to the respective subfield.
@@ -1627,35 +1610,8 @@ where
                 base,
                 length,
             } => {
-                let (target_real, target_shadow) = self.emit_mir_lvalue(value)?;
-                let base = self.emit_mir_rvalue(base)?;
-                let shifted_real = {
-                    let hidden = self.emit_zero_for_type(&self.llhd_type(target_real));
-                    self.builder.ins().shr(target_real, hidden, base)
-                };
-                let shifted_shadow = target_shadow.map(|target| {
-                    let hidden = self.emit_zero_for_type(&self.llhd_type(target));
-                    self.builder.ins().shr(target, hidden, base)
-                });
-                if value.ty.coalesces_to_llhd_scalar() {
-                    let length = std::cmp::max(1, length);
-                    Ok((
-                        self.builder.ins().ext_slice(shifted_real, 0, length),
-                        shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
-                    ))
-                } else {
-                    if length == 0 {
-                        Ok((
-                            self.builder.ins().ext_field(shifted_real, 0),
-                            shifted_shadow.map(|s| self.builder.ins().ext_field(s, 0)),
-                        ))
-                    } else {
-                        Ok((
-                            self.builder.ins().ext_slice(shifted_real, 0, length),
-                            shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
-                        ))
-                    }
-                }
+                let inner = self.emit_mir_lvalue(value)?;
+                self.emit_lvalue_index(value.ty, inner, base, length)
             }
 
             // Errors from MIR lowering have already been reported. Just abort.
@@ -1668,6 +1624,83 @@ where
                         .span(mir.span)
                         .add_note(format!("{:#?}", mir))
                 );
+            }
+        }
+    }
+
+    /// Emit the code for an MIR lvalue interface.
+    ///
+    /// This is a bit tricky, since we transpose interface arrays to array
+    /// signals, which means from an MIR perspective, an access `a[0][1].x`
+    /// looks rather like `a.x[0][1]` during codegen.
+    fn emit_lvalue_interface(
+        &mut self,
+        mir: &mir::Lvalue<'gcx>,
+        signal: NodeId,
+    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+        match mir.kind {
+            mir::LvalueKind::Intf(intf) => {
+                let id = AccessedNode::Intf(intf, signal);
+                Ok((
+                    self.emitted_value(id).clone(),
+                    self.shadows.get(&id).cloned(),
+                ))
+            }
+
+            mir::LvalueKind::Index {
+                value,
+                base,
+                length,
+            } => {
+                let inner = self.emit_lvalue_interface(value, signal)?;
+                self.emit_lvalue_index(value.ty, inner, base, length)
+            }
+
+            _ => bug_span!(
+                mir.span,
+                self.cx,
+                "found MIR lvalue which cannot appear in a transposed interface signal access: \
+                 {:#?}",
+                mir
+            ),
+        }
+    }
+
+    /// Emit the code for an indexing operation on an already emitted lvalue.
+    fn emit_lvalue_index(
+        &mut self,
+        ty: &'gcx UnpackedType<'gcx>,
+        value: (llhd::ir::Value, Option<llhd::ir::Value>),
+        base: &'gcx mir::Rvalue<'gcx>,
+        length: usize,
+    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+        let (target_real, target_shadow) = value;
+        let base = self.emit_mir_rvalue(base)?;
+        let shifted_real = {
+            let hidden = self.emit_zero_for_type(&self.llhd_type(target_real));
+            self.builder.ins().shr(target_real, hidden, base)
+        };
+        let shifted_shadow = target_shadow.map(|target| {
+            let hidden = self.emit_zero_for_type(&self.llhd_type(target));
+            self.builder.ins().shr(target, hidden, base)
+        });
+        if ty.coalesces_to_llhd_scalar() {
+            let length = std::cmp::max(1, length);
+            Ok((
+                self.builder.ins().ext_slice(shifted_real, 0, length),
+                shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+            ))
+        } else {
+            if length == 0 {
+                Ok((
+                    self.builder.ins().ext_field(shifted_real, 0),
+                    shifted_shadow.map(|s| self.builder.ins().ext_field(s, 0)),
+                ))
+            } else {
+                Ok((
+                    self.builder.ins().ext_slice(shifted_real, 0, length),
+                    shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+                ))
             }
         }
     }

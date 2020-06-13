@@ -140,9 +140,13 @@ where
                 self.table.written.insert(AccessedNode::Regular(id));
                 false
             }
-            mir::LvalueKind::IntfSignal(intf, sig) if self.is_binding_interesting(intf) => {
-                self.table.written.insert(AccessedNode::Intf(intf, sig));
-                false
+            mir::LvalueKind::IntfSignal(intf, sig) => {
+                if let Some(intf) = intf.get_intf() {
+                    if self.is_binding_interesting(intf) {
+                        self.table.written.insert(AccessedNode::Intf(intf, sig));
+                    }
+                }
+                true
             }
             _ => true,
         }

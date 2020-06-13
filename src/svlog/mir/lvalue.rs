@@ -39,6 +39,15 @@ impl<'a> Lvalue<'a> {
     pub fn is_error(&self) -> bool {
         self.ty.is_error() || self.kind.is_error()
     }
+
+    /// Get the `Intf` nested within `Index`, if one exists.
+    pub fn get_intf(&self) -> Option<NodeId> {
+        match self.kind {
+            mir::LvalueKind::Index { value, .. } => value.get_intf(),
+            mir::LvalueKind::Intf(intf) => Some(intf),
+            _ => None,
+        }
+    }
 }
 
 /// The different forms an lvalue expression may take.
@@ -56,8 +65,8 @@ pub enum LvalueKind<'a> {
     Port(NodeId),
     /// A reference to an interface.
     Intf(NodeId),
-    /// A reference to a locally instantiated interface signal.
-    IntfSignal(NodeId, NodeId),
+    /// A reference to an interface's signal.
+    IntfSignal(&'a Lvalue<'a>, NodeId),
     /// A bit- or part-select.
     Index {
         value: &'a Lvalue<'a>,

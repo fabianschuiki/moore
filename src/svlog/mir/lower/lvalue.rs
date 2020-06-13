@@ -101,11 +101,11 @@ fn try_lower_expr<'gcx>(
             let binding = cx.resolve_node(expr_id, env)?;
             return match cx.hir_of(binding)? {
                 HirNode::VarDecl(decl) => Ok(builder.build(ty, LvalueKind::Var(decl.id))),
-                HirNode::IntPort(port) if ty.get_interface().is_some() => {
+                HirNode::IntPort(port) if ty.resolve_full().core.get_interface().is_some() => {
                     Ok(builder.build(ty, LvalueKind::Intf(port.id)))
                 }
                 HirNode::IntPort(port) => Ok(builder.build(ty, LvalueKind::Port(port.id))),
-                HirNode::Inst(inst) if ty.get_interface().is_some() => {
+                HirNode::Inst(inst) if ty.resolve_full().core.get_interface().is_some() => {
                     Ok(builder.build(ty, LvalueKind::Intf(inst.id)))
                 }
                 x => {
@@ -151,13 +151,14 @@ fn try_lower_expr<'gcx>(
             let value = cx.mir_lvalue(target, env);
             if let Some(intf) = target_ty.and_then(|ty| ty.get_interface()) {
                 let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
-                let inst = match value.kind {
-                    LvalueKind::Intf(x) => x,
-                    ref x => unreachable!(
-                        "target {:?} should produce an interface MIR lvalue, but got {:?}",
-                        target, x
-                    ),
-                };
+                // let inst = match value.kind {
+                //     LvalueKind::Intf(x) => x,
+                //     ref x => unreachable!(
+                //         "target {:?} should produce an interface MIR lvalue, but got {:?}",
+                //         target, x
+                //     ),
+                // };
+                let inst = value;
                 return Ok(builder.build(ty, LvalueKind::IntfSignal(inst, def)));
             } else {
                 let (field, _) = cx.resolve_field_access(expr_id, env)?;
