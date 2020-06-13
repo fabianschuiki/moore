@@ -347,14 +347,29 @@ pub(crate) fn map_to_type<'a>(
 ) -> Option<&'a UnpackedType<'a>> {
     match ast.as_all() {
         ast::AllNode::Type(ast) => Some(cx.packed_type_from_ast(Ref(ast), env, None)),
-        ast::AllNode::Interface(ast) => Some(UnpackedType::make(
-            cx,
-            UnpackedCore::Interface(ty::InterfaceType {
-                ast,
-                env: cx.default_param_env(),
-                modport: None,
-            }),
-        )),
+        ast::AllNode::Interface(ast) => {
+            let hir = match cx.hir_of_interface(ast) {
+                Ok(x) => x,
+                _ => return Some(UnpackedType::make_error()),
+            };
+            let env = match cx.param_env(ParamEnvSource::InterfaceInst {
+                interface: Ref(hir),
+                env,
+                pos: &[],
+                named: &[],
+            }) {
+                Ok(x) => x,
+                _ => return Some(UnpackedType::make_error()),
+            };
+            Some(UnpackedType::make(
+                cx,
+                UnpackedCore::Interface(ty::InterfaceType {
+                    ast,
+                    env,
+                    modport: None,
+                }),
+            ))
+        }
         // The following is an ugly hack, and should actually never happen. But
         // as the HIR is implemented at the moment, certain parameter bindings
         // can bind expressions to type parameters.
@@ -1094,6 +1109,7 @@ pub(crate) fn cast_expr_type<'a>(
                     },
                     ty
                 ),
+                CastOp::PickModport => format!("implicitly picking modport `{}`", ty),
             };
             d = d.add_note(msg);
         }
@@ -1162,6 +1178,19 @@ fn cast_expr_type_inner<'gcx>(
         ty: inferred,
         casts: vec![],
     };
+
+    // Cast interfaces to one of their modports.
+    if let TypeContext::Type(context) = context {
+        if let (Some(from), Some(to)) = (inferred.get_interface(), context.get_interface()) {
+            trace!("  Both are interfaces: {:?}", from);
+            trace!("                  and: {:?}", to);
+            if from.ast == to.ast && from.env == to.env {
+                trace!("  Casting `{}` to its modport `{}`", inferred, context);
+                cast.add_cast(CastOp::PickModport, context);
+                return cast;
+            }
+        }
+    }
 
     // Cast the expression to a simple bit vector type.
     let inferred_sbvt = match inferred.get_simple_bit_vector() {
@@ -2477,6 +2506,8 @@ pub enum CastOp {
     Range(ty::Range, bool),
     /// Cast to a different domain.
     Domain(ty::Domain),
+    /// Pick an interface's modport.
+    PickModport,
 }
 
 impl<'a> CastType<'a> {

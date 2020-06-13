@@ -805,13 +805,16 @@ where
                             ModulePortKind::IntfSignal { decl_id, .. } => {
                                 let intf = match mir.kind {
                                     mir::LvalueKind::Intf(id) => id,
-                                    _ => bug_span!(
-                                        mir.span,
-                                        self.cx,
-                                        "intf port `{}` connected to non-intf `{}`",
-                                        port.name,
-                                        mir.ty
-                                    ),
+                                    _ => {
+                                        error!("port {:?} connected to {:?}", port, mir);
+                                        bug_span!(
+                                            mir.span,
+                                            self.cx,
+                                            "intf port `{}` connected to non-intf `{}`",
+                                            port.name,
+                                            mir.ty
+                                        );
+                                    }
                                 };
                                 self.arena().alloc_mir_lvalue(mir::Lvalue {
                                     id: NodeId::alloc(),
@@ -834,13 +837,16 @@ where
                             ModulePortKind::IntfSignal { decl_id, .. } => {
                                 let intf = match mir.kind {
                                     mir::RvalueKind::Intf(id) => id,
-                                    _ => bug_span!(
-                                        mir.span,
-                                        self.cx,
-                                        "intf port `{}` connected to non-intf `{}`",
-                                        port.name,
-                                        mir.ty
-                                    ),
+                                    _ => {
+                                        error!("port {:?} connected to {:?}", port, mir);
+                                        bug_span!(
+                                            mir.span,
+                                            self.cx,
+                                            "intf port `{}` connected to non-intf `{}`",
+                                            port.name,
+                                            mir.ty
+                                        );
+                                    }
                                 };
                                 self.arena().alloc_mir_rvalue(mir::Rvalue {
                                     id: NodeId::alloc(),
