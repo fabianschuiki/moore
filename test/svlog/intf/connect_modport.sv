@@ -16,8 +16,12 @@ interface bar;
     modport out (output data, valid, input ready);
 endinterface
 
-// CHECK: entity @fee (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
+// CHECK: entity @fee.param1 (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
+// CHECK:     drv i1$ %x.ready, %0, %1
+// CHECK:     drv i32$ %y.data, %2, %3
+// CHECK:     drv i1$ %y.valid, %4, %5
 // CHECK: }
 
 // CHECK: entity @foo (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
+// CHECK:     inst @fee.param1 (i32$ %1, i1$ %4, i1$ %7) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid)
 // CHECK: }

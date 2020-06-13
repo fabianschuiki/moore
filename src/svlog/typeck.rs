@@ -351,7 +351,7 @@ pub(crate) fn map_to_type<'a>(
             cx,
             UnpackedCore::Interface(ty::InterfaceType {
                 ast,
-                env,
+                env: cx.default_param_env(),
                 modport: None,
             }),
         )),
