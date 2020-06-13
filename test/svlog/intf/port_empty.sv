@@ -1,6 +1,6 @@
 // RUN: moore %s -e foo -O0
 
-module foo (bar x);
+module foo (bar x, bar y[3:0]);
 endmodule
 
 interface bar;

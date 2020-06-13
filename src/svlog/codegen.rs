@@ -183,7 +183,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             debug!("  Port `{}.{}` has type `{}`", hir.name, port.name, ty);
 
             // Distinguish interfaces and regular ports.
-            if let Some(intf) = ty.get_interface() {
+            if let Some(intf) = ty.core.get_interface() {
                 trace!("    Expanding interface {:?}", intf);
 
                 // If a modport was specified, make a list of directions for
@@ -208,13 +208,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         HirNode::VarDecl(x) => x,
                         _ => unreachable!(),
                     };
-                    let ty = self.type_of(decl_id, env)?;
-                    let llty = llhd::signal_ty(self.emit_type(ty)?);
+                    let mut sig_ty = self.type_of(decl_id, env)?.clone();
+                    sig_ty.dims.extend(&ty.dims);
+                    let sig_ty = sig_ty.intern(self.cx);
+                    let llty = llhd::signal_ty(self.emit_type(sig_ty)?);
                     let name = format!("{}.{}", port.name, hir.name);
-                    trace!("    Signal `{}` of type `{}` / `{}`", name, ty, llty);
+                    trace!("    Signal `{}` of type `{}` / `{}`", name, sig_ty, llty);
                     let port = ModulePort {
                         port,
-                        ty,
+                        ty: sig_ty,
                         name,
                         accnode: AccessedNode::Intf(port.id, decl_id),
                         default: hir.init,

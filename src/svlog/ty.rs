@@ -1265,14 +1265,10 @@ impl<'a> UnpackedType<'a> {
 
     /// If this type is strictly a packed type, convert it.
     pub fn get_packed(&self) -> Option<&'a PackedType<'a>> {
-        match self.core {
-            UnpackedCore::Packed(inner) if self.dims.is_empty() => Some(inner),
-            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. }
-                if self.dims.is_empty() =>
-            {
-                ty.get_packed()
-            }
-            _ => None,
+        if self.dims.is_empty() {
+            self.core.get_packed()
+        } else {
+            None
         }
     }
 
@@ -1451,31 +1447,37 @@ impl<'a> UnpackedType<'a> {
 
     /// Get the underlying struct, or `None` if the type is no struct.
     pub fn get_struct(&self) -> Option<&StructType<'a>> {
-        match self.resolve_full().core {
-            UnpackedCore::Packed(x) if self.dims.is_empty() => x.get_struct(),
-            UnpackedCore::Struct(ref x) if self.dims.is_empty() => Some(x),
-            _ => None,
+        if self.dims.is_empty() {
+            self.resolve_full().core.get_struct()
+        } else {
+            None
         }
     }
 
     /// Get the underlying enum, or `None` if the type is no enum.
     pub fn get_enum(&self) -> Option<&EnumType<'a>> {
-        self.get_packed().and_then(|packed| packed.get_enum())
+        if self.dims.is_empty() {
+            self.resolve_full().core.get_enum()
+        } else {
+            None
+        }
     }
 
     /// Get the underlying module, or `None` if the type is not a module.
     pub fn get_module(&self) -> Option<&ModuleType<'a>> {
-        match self.resolve_full().core {
-            UnpackedCore::Module(ref x) if self.dims.is_empty() => Some(x),
-            _ => None,
+        if self.dims.is_empty() {
+            self.resolve_full().core.get_module()
+        } else {
+            None
         }
     }
 
     /// Get the underlying interface, or `None` if the type is not a interface.
     pub fn get_interface(&self) -> Option<&InterfaceType<'a>> {
-        match self.resolve_full().core {
-            UnpackedCore::Interface(ref x) if self.dims.is_empty() => Some(x),
-            _ => None,
+        if self.dims.is_empty() {
+            self.resolve_full().core.get_interface()
+        } else {
+            None
         }
     }
 
@@ -1588,6 +1590,48 @@ impl<'a> UnpackedCore<'a> {
             (Self::Module(a), Self::Module(b)) => a == b,
             (Self::Interface(a), Self::Interface(b)) => a == b,
             _ => false,
+        }
+    }
+
+    /// If this type is strictly a packed type, convert it.
+    pub fn get_packed(&self) -> Option<&'a PackedType<'a>> {
+        match *self {
+            UnpackedCore::Packed(inner) => Some(inner),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_packed(),
+            _ => None,
+        }
+    }
+
+    /// Get the underlying struct, or `None` if the type is no struct.
+    pub fn get_struct(&self) -> Option<&StructType<'a>> {
+        match *self {
+            UnpackedCore::Packed(x) => x.get_struct(),
+            UnpackedCore::Struct(ref x) => Some(x),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_struct(),
+            _ => None,
+        }
+    }
+
+    /// Get the underlying enum, or `None` if the type is no enum.
+    pub fn get_enum(&self) -> Option<&EnumType<'a>> {
+        self.get_packed().and_then(|packed| packed.get_enum())
+    }
+
+    /// Get the underlying module, or `None` if the type is not a module.
+    pub fn get_module(&self) -> Option<&ModuleType<'a>> {
+        match *self {
+            UnpackedCore::Module(ref x) => Some(x),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_module(),
+            _ => None,
+        }
+    }
+
+    /// Get the underlying interface, or `None` if the type is not a interface.
+    pub fn get_interface(&self) -> Option<&InterfaceType<'a>> {
+        match *self {
+            UnpackedCore::Interface(ref x) => Some(x),
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.get_interface(),
+            _ => None,
         }
     }
 }
