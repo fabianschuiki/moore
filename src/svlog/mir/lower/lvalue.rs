@@ -151,15 +151,7 @@ fn try_lower_expr<'gcx>(
             let value = cx.mir_lvalue(target, env);
             if let Some(intf) = target_ty.and_then(|ty| ty.get_interface()) {
                 let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
-                // let inst = match value.kind {
-                //     LvalueKind::Intf(x) => x,
-                //     ref x => unreachable!(
-                //         "target {:?} should produce an interface MIR lvalue, but got {:?}",
-                //         target, x
-                //     ),
-                // };
-                let inst = value;
-                return Ok(builder.build(ty, LvalueKind::IntfSignal(inst, def)));
+                return Ok(builder.build(ty, LvalueKind::IntfSignal(value, def)));
             } else {
                 let (field, _) = cx.resolve_field_access(expr_id, env)?;
                 return Ok(builder.build(ty, LvalueKind::Member { value, field }));

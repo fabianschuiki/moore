@@ -46,6 +46,15 @@ impl<'a> Rvalue<'a> {
     pub fn is_const(&self) -> bool {
         self.konst
     }
+
+    /// Get the `Intf` nested within `Index`, if one exists.
+    pub fn get_intf(&self) -> Option<NodeId> {
+        match self.kind {
+            mir::RvalueKind::Index { value, .. } => value.get_intf(),
+            mir::RvalueKind::Intf(intf) => Some(intf),
+            _ => None,
+        }
+    }
 }
 
 impl<'a> std::ops::Deref for Rvalue<'a> {
@@ -159,7 +168,7 @@ pub enum RvalueKind<'a> {
     /// A reference to an interface.
     Intf(NodeId),
     /// A reference to a locally instantiated interface signal.
-    IntfSignal(NodeId, NodeId),
+    IntfSignal(&'a Rvalue<'a>, NodeId),
     /// A bit- or part-select.
     Index {
         value: &'a Rvalue<'a>,

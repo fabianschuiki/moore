@@ -844,26 +844,13 @@ where
                         let mir = match port.kind {
                             ModulePortKind::Port => mir,
                             ModulePortKind::IntfSignal { decl_id, .. } => {
-                                let intf = match mir.kind {
-                                    mir::RvalueKind::Intf(id) => id,
-                                    _ => {
-                                        error!("port {:?} connected to {:?}", port, mir);
-                                        bug_span!(
-                                            mir.span,
-                                            self.cx,
-                                            "intf port `{}` connected to non-intf `{}`",
-                                            port.name,
-                                            mir.ty
-                                        );
-                                    }
-                                };
                                 self.arena().alloc_mir_rvalue(mir::Rvalue {
                                     id: NodeId::alloc(),
                                     origin: mir.origin,
                                     env: mir.env,
                                     span: mir.span,
                                     ty: port.ty,
-                                    kind: mir::RvalueKind::IntfSignal(intf, decl_id),
+                                    kind: mir::RvalueKind::IntfSignal(mir, decl_id),
                                     konst: false,
                                 })
                             }
@@ -1170,37 +1157,40 @@ where
 
         match mir.kind {
             mir::RvalueKind::Var(id) => {
-                let value = self
+                let sig = self
                     .shadows
                     .get(&id.into())
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
-                Ok(match *self.llhd_type(value) {
+                Ok(match *self.llhd_type(sig) {
                     llhd::SignalType(_) => {
-                        let value = self.builder.ins().prb(value);
-                        self.builder
-                            .set_name(value, format!("{}", mir.span.extract()));
+                        let value = self.builder.ins().prb(sig);
+                        if let Some(name) = self.builder.get_name(sig) {
+                            self.builder.set_name(value, format!("{}.prb", name));
+                        }
                         value
                     }
                     llhd::PointerType(_) => {
-                        let value = self.builder.ins().ld(value);
-                        self.builder
-                            .set_name(value, format!("{}", mir.span.extract()));
+                        let value = self.builder.ins().ld(sig);
+                        if let Some(name) = self.builder.get_name(sig) {
+                            self.builder.set_name(value, format!("{}.ld", name));
+                        }
                         value
                     }
-                    _ => value,
+                    _ => sig,
                 })
             }
 
             mir::RvalueKind::Port(id) => {
-                let value = self
+                let sig = self
                     .shadows
                     .get(&id.into())
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
-                let value = self.builder.ins().prb(value);
-                self.builder
-                    .set_name(value, format!("{}", mir.span.extract()));
+                let value = self.builder.ins().prb(sig);
+                if let Some(name) = self.builder.get_name(sig) {
+                    self.builder.set_name(value, format!("{}.prb", name));
+                }
                 Ok(value)
             }
 
@@ -1211,18 +1201,9 @@ where
                 Err(())
             }
 
-            mir::RvalueKind::IntfSignal(intf, signal) => {
-                let id = AccessedNode::Intf(intf, signal);
-                let value = self
-                    .shadows
-                    .get(&id)
-                    .cloned()
-                    .unwrap_or_else(|| self.emitted_value(id));
-                let value = self.builder.ins().prb(value);
-                self.builder
-                    .set_name(value, format!("{}", mir.span.extract()));
-                Ok(value)
-            }
+            // Interface signals require special care, because they are emitted
+            // in a transposed fashion.
+            mir::RvalueKind::IntfSignal(value, signal) => self.emit_rvalue_interface(value, signal),
 
             mir::RvalueKind::CastValueDomain { value, .. } => {
                 // TODO(fschuiki): Turn this into an actual `iN` to `lN` cast.
@@ -1299,20 +1280,7 @@ where
                 length,
             } => {
                 let target = self.emit_mir_rvalue(value)?;
-                let base = self.emit_mir_rvalue(base)?;
-                let hidden = self.emit_zero_for_type(&self.llhd_type(target));
-                // TODO(fschuiki): make the above a constant of all `x`.
-                let shifted = self.builder.ins().shr(target, hidden, base);
-                if value.ty.coalesces_to_llhd_scalar() {
-                    let length = std::cmp::max(1, length);
-                    Ok(self.builder.ins().ext_slice(shifted, 0, length))
-                } else {
-                    if length == 0 {
-                        Ok(self.builder.ins().ext_field(shifted, 0))
-                    } else {
-                        Ok(self.builder.ins().ext_slice(shifted, 0, length))
-                    }
-                }
+                self.emit_rvalue_index(value.ty, target, base, length)
             }
 
             mir::RvalueKind::Member { value, field } => {
@@ -1522,6 +1490,74 @@ where
             mir.ty
         );
         self.emit_mir_rvalue(mir)
+    }
+
+    /// Emit the code for an MIR rvalue interface.
+    ///
+    /// This is a bit tricky, since we transpose interface arrays to array
+    /// signals, which means from an MIR perspective, an access `a[0][1].x`
+    /// looks rather like `a.x[0][1]` during codegen.
+    fn emit_rvalue_interface(
+        &mut self,
+        mir: &mir::Rvalue<'gcx>,
+        signal: NodeId,
+    ) -> Result<llhd::ir::Value> {
+        match mir.kind {
+            mir::RvalueKind::Intf(intf) => {
+                let id = AccessedNode::Intf(intf, signal);
+                let sig = self
+                    .shadows
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or_else(|| self.emitted_value(id));
+                let value = self.builder.ins().prb(sig);
+                if let Some(name) = self.builder.get_name(sig) {
+                    self.builder.set_name(value, format!("{}.prb", name));
+                }
+                Ok(value)
+            }
+
+            mir::RvalueKind::Index {
+                value,
+                base,
+                length,
+            } => {
+                let inner = self.emit_rvalue_interface(value, signal)?;
+                self.emit_rvalue_index(value.ty, inner, base, length)
+            }
+
+            _ => bug_span!(
+                mir.span,
+                self.cx,
+                "found MIR rvalue which cannot appear in a transposed interface signal access: \
+                 {:#?}",
+                mir
+            ),
+        }
+    }
+
+    /// Emit the code for an indexing operation on an already emitted rvalue.
+    fn emit_rvalue_index(
+        &mut self,
+        ty: &'gcx UnpackedType<'gcx>,
+        value: llhd::ir::Value,
+        base: &'gcx mir::Rvalue<'gcx>,
+        length: usize,
+    ) -> Result<llhd::ir::Value> {
+        let base = self.emit_mir_rvalue(base)?;
+        let hidden = self.emit_zero_for_type(&self.llhd_type(value));
+        // TODO(fschuiki): make the above a constant of all `x`.
+        let shifted = self.builder.ins().shr(value, hidden, base);
+        if ty.coalesces_to_llhd_scalar() {
+            let length = std::cmp::max(1, length);
+            Ok(self.builder.ins().ext_slice(shifted, 0, length))
+        } else {
+            if length == 0 {
+                Ok(self.builder.ins().ext_field(shifted, 0))
+            } else {
+                Ok(self.builder.ins().ext_slice(shifted, 0, length))
+            }
+        }
     }
 
     /// Emit the code for an MIR lvalue.

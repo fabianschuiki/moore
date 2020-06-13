@@ -14,8 +14,8 @@ interface bar;
 endinterface
 
 // CHECK: proc %foo.initial.41.0 (i32$ %x.data, i1$ %x.valid, i1$ %x.ready) -> (i1$ %z) {
-// CHECK:     %1 = and i1 %x.valid1, %x.ready1
-// CHECK:     %3 = neq i32 %x.data1, %2
+// CHECK:     %1 = and i1 %x.valid.prb, %x.ready.prb
+// CHECK:     %3 = neq i32 %x.data.prb, %2
 // CHECK: }
 
 // CHECK: entity @foo () -> (i32$ %x.data, i1$ %x.valid, i1$ %x.ready) {

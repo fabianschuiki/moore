@@ -18,9 +18,9 @@ interface bar;
 endinterface
 
 // CHECK: proc %foo.initial.84.0 (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
-// CHECK:     drv i32$ %y.data, %x.data1, %1
-// CHECK:     drv i1$ %y.valid, %x.valid1, %2
-// CHECK:     drv i1$ %x.ready, %y.ready1, %3
+// CHECK:     drv i32$ %y.data, %x.data.prb, %1
+// CHECK:     drv i1$ %y.valid, %x.valid.prb, %2
+// CHECK:     drv i1$ %x.ready, %y.ready.prb, %3
 // CHECK: }
 
 // CHECK: entity @foo (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {

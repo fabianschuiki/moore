@@ -16,7 +16,7 @@ interface bar;
 endinterface
 
 // CHECK: entity @foo (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
-// CHECK:     drv i32$ %y.data, %x.data1, %0
-// CHECK:     drv i1$ %y.valid, %x.valid1, %1
-// CHECK:     drv i1$ %x.ready, %y.ready1, %2
+// CHECK:     drv i32$ %y.data, %x.data.prb, %0
+// CHECK:     drv i1$ %y.valid, %x.valid.prb, %1
+// CHECK:     drv i1$ %x.ready, %y.ready.prb, %2
 // CHECK: }

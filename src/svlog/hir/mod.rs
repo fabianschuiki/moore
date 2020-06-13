@@ -160,9 +160,13 @@ where
                 self.table.read.insert(AccessedNode::Regular(id));
                 false
             }
-            mir::RvalueKind::IntfSignal(intf, sig) if self.is_binding_interesting(intf) => {
-                self.table.read.insert(AccessedNode::Intf(intf, sig));
-                false
+            mir::RvalueKind::IntfSignal(intf, sig) => {
+                if let Some(intf) = intf.get_intf() {
+                    if self.is_binding_interesting(intf) {
+                        self.table.read.insert(AccessedNode::Intf(intf, sig));
+                    }
+                }
+                true
             }
             _ => true,
         }
