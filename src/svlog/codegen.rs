@@ -292,14 +292,24 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
             sig.add_input(llhd::signal_ty(self.emit_type(match id {
                 AccessedNode::Regular(id) => self.type_of(id, env)?,
-                AccessedNode::Intf(_, id) => self.type_of(id, env)?,
+                AccessedNode::Intf(intf, id) => {
+                    let mut sig_ty = self.type_of(id, env)?.clone();
+                    let intf_ty = self.type_of(intf, env)?;
+                    sig_ty.dims.extend(&intf_ty.dims);
+                    sig_ty.intern(self.cx)
+                }
             })?));
             inputs.push(id);
         }
         for &id in acc.written.iter() {
             sig.add_output(llhd::signal_ty(self.emit_type(match id {
                 AccessedNode::Regular(id) => self.type_of(id, env)?,
-                AccessedNode::Intf(_, id) => self.type_of(id, env)?,
+                AccessedNode::Intf(intf, id) => {
+                    let mut sig_ty = self.type_of(id, env)?.clone();
+                    let intf_ty = self.type_of(intf, env)?;
+                    sig_ty.dims.extend(&intf_ty.dims);
+                    sig_ty.intern(self.cx)
+                }
             })?));
             outputs.push(id);
         }
