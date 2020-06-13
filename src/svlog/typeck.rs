@@ -120,7 +120,9 @@ pub(crate) fn type_of_int_port<'a>(
     env: ParamEnv,
 ) -> &'a UnpackedType<'a> {
     match port.data {
-        Some(ref data) => cx.packed_type_from_ast(Ref(data.ty), env, None),
+        Some(ref data) => {
+            cx.unpacked_type_from_ast(Ref(data.ty), Ref(data.unpacked_dims), env, None)
+        }
         None => {
             // Resolve the port to a net/var decl in the module, then use
             // that decl's type.
