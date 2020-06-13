@@ -5,9 +5,9 @@ module A (input int a, input int b, output int c);
 endmodule
 
 // CHECK: entity @A (i32$ %a, i32$ %b) -> (i32$ %c) {
-// CHECK:     %a1 = prb i32$ %a
-// CHECK:     %b1 = prb i32$ %b
-// CHECK:     %0 = add i32 %a1, %b1
+// CHECK:     %a.prb = prb i32$ %a
+// CHECK:     %b.prb = prb i32$ %b
+// CHECK:     %0 = add i32 %a.prb, %b.prb
 // CHECK:     %1 = const time 0s 1e
 // CHECK:     drv i32$ %c, %0, %1
 // CHECK: }

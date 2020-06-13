@@ -46,8 +46,8 @@ endmodule
 
 // CHECK: proc %D.initial.56.0 (i1$ %x) -> (i1$ %y) {
 // CHECK: 0:
-// CHECK:     %x1 = prb i1$ %x
-// CHECK:     %1 = not i1 %x1
+// CHECK:     %x.prb = prb i1$ %x
+// CHECK:     %1 = not i1 %x.prb
 // CHECK:     %2 = const time 0s 1e
 // CHECK:     drv i1$ %y, %1, %2
 // CHECK:     halt

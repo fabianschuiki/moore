@@ -67,15 +67,15 @@ module foo;
 
     // Module instances
     bar m0 ();
-    bar m1 [2] ();
-    bar m2 [1:0] ();
-    bar m3 [2][3] ();
+    // bar m1 [2] ();
+    // bar m2 [1:0] ();
+    // bar m3 [2][3] ();
 
     // Interface instances
-    // baz i0 ();
-    // baz i1 [2] ();
-    // baz i2 [1:0] ();
-    // baz i3 [2][3] ();
+    baz i0 ();
+    baz i1 [2] ();
+    baz i2 [1:0] ();
+    baz i3 [2][3] ();
 endmodule
 
 module bar;
