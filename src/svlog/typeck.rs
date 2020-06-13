@@ -322,7 +322,7 @@ pub(crate) fn type_of_inst<'a>(
         Ok(x) => x,
         _ => return UnpackedType::make_error(),
     };
-    UnpackedType::make(
+    let ty = UnpackedType::make(
         cx,
         match details.target.kind {
             InstTarget::Module(ast) => ty::UnpackedCore::Module(ty::ModuleType {
@@ -335,7 +335,8 @@ pub(crate) fn type_of_inst<'a>(
                 modport: None,
             }),
         },
-    )
+    );
+    apply_unpacked_dims(cx, ty, &details.inst.ast.dims, env, details.inst.ast.span())
 }
 
 /// Map an AST node to the type it represents.
@@ -888,31 +889,37 @@ enum PackedOrUnpacked<'a> {
 pub(crate) fn unpacked_type_from_ast<'a>(
     cx: &impl Context<'a>,
     ast_type: Ref<'a, ast::Type<'a>>,
-    ast_dims: Ref<'a, [ast::TypeDim<'a>]>,
+    Ref(ast_dims): Ref<'a, [ast::TypeDim<'a>]>,
     env: ParamEnv,
     implicit_default: Option<ty::PackedCore<'a>>,
 ) -> &'a UnpackedType<'a> {
-    // Map the type itself.
     let ty = cx.packed_type_from_ast(ast_type, env, implicit_default);
+    apply_unpacked_dims(cx, ty, ast_dims, env, ast_type.span())
+}
 
-    // Apply unpacked dimensions.
+/// Apply unpacked dimensions to a type.
+fn apply_unpacked_dims<'a>(
+    cx: &impl Context<'a>,
+    ty: &'a UnpackedType<'a>,
+    ast_dims: &'a [ast::TypeDim<'a>],
+    env: ParamEnv,
+    span: Span,
+) -> &'a UnpackedType<'a> {
+    // Map the dimensions into the type system.
     let mut failed = false;
-    let Ref(ast_dims) = ast_dims;
     let mut dims = vec![];
     for dim in ast_dims {
         match dim {
             ast::TypeDim::Unsized => dims.push(ty::UnpackedDim::Unsized),
-            ast::TypeDim::Expr(size) => {
-                match size_from_bounds_expr(cx, size.id(), env, ast_type.span()) {
-                    Ok(s) => dims.push(ty::UnpackedDim::Array(s)),
-                    Err(()) => {
-                        failed = true;
-                        continue;
-                    }
+            ast::TypeDim::Expr(size) => match size_from_bounds_expr(cx, size.id(), env, span) {
+                Ok(s) => dims.push(ty::UnpackedDim::Array(s)),
+                Err(()) => {
+                    failed = true;
+                    continue;
                 }
-            }
+            },
             ast::TypeDim::Range(lhs, rhs) => {
-                match range_from_bounds_exprs(cx, lhs.id(), rhs.id(), env, ast_type.span()) {
+                match range_from_bounds_exprs(cx, lhs.id(), rhs.id(), env, span) {
                     Ok(r) => dims.push(ty::UnpackedDim::Range(r)),
                     Err(()) => {
                         failed = true;
@@ -921,7 +928,7 @@ pub(crate) fn unpacked_type_from_ast<'a>(
                 }
             }
             ast::TypeDim::Queue(Some(init_size)) => {
-                match size_from_bounds_expr(cx, init_size.id(), env, ast_type.span()) {
+                match size_from_bounds_expr(cx, init_size.id(), env, span) {
                     Ok(s) => dims.push(ty::UnpackedDim::Queue(Some(s))),
                     Err(()) => {
                         failed = true;
