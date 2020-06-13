@@ -235,8 +235,8 @@ fn lower_expr_inner<'gcx>(
             let cond = cx.mir_rvalue(cond, env);
             let true_value = cx.mir_rvalue(true_value, env);
             let false_value = cx.mir_rvalue(false_value, env);
-            assert_type2!(true_value.ty, ty, true_value.span, builder.cx);
-            assert_type2!(false_value.ty, ty, false_value.span, builder.cx);
+            assert_type!(true_value.ty, ty, true_value.span, builder.cx);
+            assert_type!(false_value.ty, ty, false_value.span, builder.cx);
             Ok(builder.build(
                 ty,
                 RvalueKind::Ternary {
@@ -451,7 +451,7 @@ pub(crate) fn compute_indexing<'gcx>(
         hir::IndexMode::Many(ast::RangeMode::RelativeDown, base, delta) => {
             let base = cx.mir_rvalue(base, env);
             let delta_rvalue = cx.mir_rvalue(delta, env);
-            assert_type2!(delta_rvalue.ty, base.ty, delta_rvalue.span, builder.cx);
+            assert_type!(delta_rvalue.ty, base.ty, delta_rvalue.span, builder.cx);
             let base = builder.build(
                 base.ty,
                 RvalueKind::IntBinaryArith {
@@ -499,7 +499,7 @@ fn lower_cast<'gcx>(
     if to.is_error() {
         return builder.error();
     }
-    assert_type2!(
+    assert_type!(
         value.ty,
         to.init,
         value.span,
@@ -570,7 +570,7 @@ fn lower_cast<'gcx>(
     }
 
     // Check that the casts have actually produced the expected output type.
-    assert_type2!(
+    assert_type!(
         value.ty,
         to.ty,
         value.span,
@@ -811,7 +811,7 @@ fn lower_pattern<'a>(
         Ok(x) => x,
         _ => return builder.error(),
     };
-    assert_type2!(ty, map.ty, builder.span, builder.cx);
+    assert_type!(ty, map.ty, builder.span, builder.cx);
 
     // Construct the values.
     let values: Vec<_> = map
@@ -819,7 +819,7 @@ fn lower_pattern<'a>(
         .iter()
         .map(|&(field, expr)| {
             let value = builder.cx.mir_rvalue(expr.id, builder.env);
-            assert_type2!(value.ty, field.ty(builder.cx), value.span, builder.cx);
+            assert_type!(value.ty, field.ty(builder.cx), value.span, builder.cx);
             value
         })
         .collect();
@@ -926,7 +926,7 @@ fn lower_int_unary_arith<'gcx>(
 
     // Check that the operand is of the right type.
     let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
-    assert_type2!(arg.ty, result_ty, builder.span, builder.cx);
+    assert_type!(arg.ty, result_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -969,9 +969,9 @@ fn lower_int_binary_arith<'a>(
 
     // Check that the operands are of the right type.
     let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
-    assert_type2!(lhs.ty, result_ty, builder.span, builder.cx);
+    assert_type!(lhs.ty, result_ty, builder.span, builder.cx);
     if op != hir::BinaryOp::Pow {
-        assert_type2!(rhs.ty, result_ty, builder.span, builder.cx);
+        assert_type!(rhs.ty, result_ty, builder.span, builder.cx);
     }
 
     // Determine the operation.
@@ -1052,8 +1052,8 @@ fn make_int_comparison<'a>(
 ) -> &'a Rvalue<'a> {
     // Check that the operands are of the right type.
     let sbvt = op_ty.simple_bit_vector(builder.cx, builder.span);
-    assert_type2!(lhs.ty, op_ty, builder.span, builder.cx);
-    assert_type2!(rhs.ty, op_ty, builder.span, builder.cx);
+    assert_type!(lhs.ty, op_ty, builder.span, builder.cx);
+    assert_type!(rhs.ty, op_ty, builder.span, builder.cx);
 
     // Assemble the node.
     builder.build(
@@ -1085,7 +1085,7 @@ fn lower_shift<'a>(
 
     // Check that the operands are of the right type.
     let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
-    assert_type2!(value.ty, result_ty, value.span, builder.cx);
+    assert_type!(value.ty, result_ty, value.span, builder.cx);
     assert_span!(
         amount.ty.get_simple_bit_vector().is_some(),
         amount.span,
@@ -1132,7 +1132,7 @@ fn lower_unary_bitwise<'a>(
     }
 
     // Check that the operand is of the right type.
-    assert_type2!(arg.ty, result_ty, arg.span, builder.cx);
+    assert_type!(arg.ty, result_ty, arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1194,8 +1194,8 @@ fn make_binary_bitwise<'a>(
     rhs: &'a Rvalue<'a>,
 ) -> &'a Rvalue<'a> {
     // Check that the operands are of the right type.
-    assert_type2!(lhs.ty, result_ty, lhs.span, builder.cx);
-    assert_type2!(rhs.ty, result_ty, rhs.span, builder.cx);
+    assert_type!(lhs.ty, result_ty, lhs.span, builder.cx);
+    assert_type!(rhs.ty, result_ty, rhs.span, builder.cx);
 
     // Assemble the node.
     let value = builder.build(result_ty, RvalueKind::BinaryBitwise { op, lhs, rhs });
@@ -1226,7 +1226,7 @@ fn lower_unary_logic<'a>(
     }
 
     // Check that the operand is of the right type.
-    assert_type2!(arg.ty, result_ty, arg.span, builder.cx);
+    assert_type!(arg.ty, result_ty, arg.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1259,8 +1259,8 @@ fn lower_binary_logic<'a>(
     }
 
     // Check that the operands are of the right type.
-    assert_type2!(lhs.ty, result_ty, lhs.span, builder.cx);
-    assert_type2!(rhs.ty, result_ty, rhs.span, builder.cx);
+    assert_type!(lhs.ty, result_ty, lhs.span, builder.cx);
+    assert_type!(rhs.ty, result_ty, rhs.span, builder.cx);
 
     // Determine the operation.
     let op = match op {
@@ -1302,7 +1302,7 @@ fn lower_reduction<'a>(
     );
 
     // Check that the operand is of the right type.
-    assert_type2!(arg.ty, op_ty, builder.span, builder.cx);
+    assert_type!(arg.ty, op_ty, builder.span, builder.cx);
 
     // Determine the operation.
     let (op, negate) = match op {
