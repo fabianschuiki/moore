@@ -14,8 +14,8 @@ use num::{BigInt, One, Zero};
 use std::{
     collections::{HashMap, HashSet},
     iter::{once, repeat},
-    ops::Deref,
-    ops::DerefMut,
+    ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 /// A code generator.
@@ -48,7 +48,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 
 #[derive(Default)]
 struct Tables<'gcx> {
-    module_defs: HashMap<NodeEnvId, Result<llhd::ir::UnitId>>,
+    module_defs: HashMap<NodeEnvId, Result<Rc<EmittedModule<'gcx>>>>,
     module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
     interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<llhd::Type>>,
 }
@@ -63,12 +63,16 @@ impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
 
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module(&mut self, id: NodeId) -> Result<llhd::ir::UnitId> {
+    pub fn emit_module(&mut self, id: NodeId) -> Result<Rc<EmittedModule<'gcx>>> {
         self.emit_module_with_env(id, self.default_param_env())
     }
 
     /// Emit the code for a module and all its dependent modules.
-    pub fn emit_module_with_env(&mut self, id: NodeId, env: ParamEnv) -> Result<llhd::ir::UnitId> {
+    pub fn emit_module_with_env(
+        &mut self,
+        id: NodeId,
+        env: ParamEnv,
+    ) -> Result<Rc<EmittedModule<'gcx>>> {
         if let Some(x) = self.tables.module_defs.get(&id.env(env)) {
             return x.clone();
         }
@@ -99,7 +103,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut ent);
         self.tables
             .module_signatures
-            .insert(id.env(env), (name, ports.sig));
+            .insert(id.env(env), (name, ports.sig.clone()));
         let mut values = HashMap::new();
         let mut gen = UnitGenerator {
             gen: self,
@@ -156,8 +160,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 .drv(gen.values[&port.accnode], default_value, zero_time);
         }
 
-        trace!("{}", gen.builder.unit());
-        let result = Ok(self.into.add_unit(ent));
+        let unit = self.into.add_unit(ent);
+        let result = Ok(Rc::new(EmittedModule { unit, ports }));
         self.tables.module_defs.insert(id.env(env), result.clone());
         result
     }
@@ -257,8 +261,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         debug!("  Signature: {}", sig);
-        trace!("  Inputs: {:?}", inputs);
-        trace!("  Outputs: {:?}", outputs);
 
         Ok(ModuleIntf {
             sig,
@@ -732,10 +734,13 @@ where
                 _ => continue,
             };
 
-            // Map external to internal ports.
-            let mut port_mapping_int: HashMap<NodeId, llhd::ir::Value> = HashMap::new();
+            // Emit the instantiated module.
+            let target = self.emit_module_with_env(target_module.id, inst.target.inner_env)?;
+
+            // Map the values associated with the external ports to internal
+            // ports.
+            let mut port_mapping_int: HashMap<NodeId, NodeEnvId> = HashMap::new();
             for port in &target_module.ports_new.ext_pos {
-                // trace!("Checking connection of {:?}", port);
                 let mapping = match inst.ports.find(port.id) {
                     Some(m) => m,
                     None => continue,
@@ -763,16 +768,7 @@ where
                     continue;
                 }
                 let int = &target_module.ports_new.int[expr.port];
-                // trace!("Attaching {:?} to {:?}", mapping, int);
-                let value = match int.dir {
-                    ast::PortDir::Input | ast::PortDir::Ref => {
-                        self.emit_rvalue_mode(mapping.id(), mapping.env(), Mode::Signal)?
-                    }
-                    ast::PortDir::Output | ast::PortDir::Inout => {
-                        self.emit_lvalue(mapping.id(), mapping.env())?
-                    }
-                };
-                if port_mapping_int.insert(int.id, value).is_some() {
+                if port_mapping_int.insert(int.id, mapping).is_some() {
                     self.emit(
                         DiagBuilder2::error(format!(
                             "port `{}` connected multiple times",
@@ -786,40 +782,115 @@ where
 
             // Connect to the actual internal ports emitted as the module's port
             // interface.
-            let mut inputs = Vec::new();
-            let mut outputs = Vec::new();
-            for port in &target_module.ports_new.int {
-                let value = if let Some(&mapping) = port_mapping_int.get(&port.id) {
-                    mapping
+            let mut map_port = |port: &ModulePort<'gcx>, lvalue: bool| {
+                trace!(
+                    "Mapping port `{}` of type `{}` as {}",
+                    port.name,
+                    port.ty,
+                    match lvalue {
+                        true => "lvalue",
+                        false => "rvalue",
+                    }
+                );
+                if let Some(&mapping) = port_mapping_int.get(&port.port.id) {
+                    // Emit the assigned node as rvalue or lvalue, depending on
+                    // the port direction.
+                    if lvalue {
+                        let mir = self.mir_lvalue(mapping.id(), mapping.env());
+                        if mir.is_error() {
+                            return Err(());
+                        }
+                        let mir = match port.kind {
+                            ModulePortKind::Port => mir,
+                            ModulePortKind::IntfSignal { decl_id, .. } => {
+                                let intf = match mir.kind {
+                                    mir::LvalueKind::Intf(id) => id,
+                                    _ => bug_span!(
+                                        mir.span,
+                                        self.cx,
+                                        "intf port `{}` connected to non-intf `{}`",
+                                        port.name,
+                                        mir.ty
+                                    ),
+                                };
+                                self.arena().alloc_mir_lvalue(mir::Lvalue {
+                                    id: NodeId::alloc(),
+                                    origin: mir.origin,
+                                    env: mir.env,
+                                    span: mir.span,
+                                    ty: port.ty,
+                                    kind: mir::LvalueKind::IntfSignal(intf, decl_id),
+                                })
+                            }
+                        };
+                        self.emit_mir_lvalue(mir).map(|(x, _)| x)
+                    } else {
+                        let mir = self.mir_rvalue(mapping.id(), mapping.env());
+                        if mir.is_error() {
+                            return Err(());
+                        }
+                        let mir = match port.kind {
+                            ModulePortKind::Port => mir,
+                            ModulePortKind::IntfSignal { decl_id, .. } => {
+                                let intf = match mir.kind {
+                                    mir::RvalueKind::Intf(id) => id,
+                                    _ => bug_span!(
+                                        mir.span,
+                                        self.cx,
+                                        "intf port `{}` connected to non-intf `{}`",
+                                        port.name,
+                                        mir.ty
+                                    ),
+                                };
+                                self.arena().alloc_mir_rvalue(mir::Rvalue {
+                                    id: NodeId::alloc(),
+                                    origin: mir.origin,
+                                    env: mir.env,
+                                    span: mir.span,
+                                    ty: port.ty,
+                                    kind: mir::RvalueKind::IntfSignal(intf, decl_id),
+                                    konst: false,
+                                })
+                            }
+                        };
+                        self.emit_mir_rvalue_mode(mir, Mode::Signal)
+                    }
                 } else {
-                    let ty = self.type_of_int_port(Ref(port), inst.target.inner_env);
-                    let value = match port.data.as_ref().and_then(|d| d.default) {
+                    // Emit an auxiliary signal with the default value for this
+                    // port or type.
+                    let ty = self.type_of_int_port(Ref(port.port), inst.target.inner_env);
+                    let value = match port.port.data.as_ref().and_then(|d| d.default) {
                         Some(default) => {
                             self.emit_rvalue_mode(default, inst.target.inner_env, Mode::Signal)?
                         }
                         None => {
                             let v = self.type_default_value(ty);
-                            let v = self.emit_const(v, inst.target.inner_env, port.span)?;
+                            let v = self.emit_const(v, inst.target.inner_env, port.port.span)?;
                             self.builder.ins().sig(v)
                         }
                     };
-                    if self.builder.get_name(value).is_none() {
-                        self.builder
-                            .set_name(value, format!("{}.{}.default", inst.inst.name, port.name));
-                    }
-                    value
-                };
-                match port.dir {
-                    ast::PortDir::Input | ast::PortDir::Ref => inputs.push(value),
-                    ast::PortDir::Output | ast::PortDir::Inout => outputs.push(value),
+                    self.builder
+                        .set_name(value, format!("{}.{}.default", inst.inst.name, port.name));
+                    Ok(value)
                 }
-            }
+            };
+            let inputs = target
+                .ports
+                .inputs
+                .iter()
+                .map(|p| map_port(p, false))
+                .collect::<Result<Vec<_>>>()?;
+            let outputs = target
+                .ports
+                .outputs
+                .iter()
+                .map(|p| map_port(p, true))
+                .collect::<Result<Vec<_>>>()?;
 
-            // Emit the instantiated module, and instantiate it.
-            let target = self.emit_module_with_env(target_module.id, inst.target.inner_env)?;
+            // Instantiate the module.
             let ext_unit = self.builder.add_extern(
-                self.into.unit(target).name().clone(),
-                self.into.unit(target).sig().clone(),
+                self.into.unit(target.unit).name().clone(),
+                self.into.unit(target.unit).sig().clone(),
             );
             self.builder.ins().inst(ext_unit, inputs, outputs);
             // TODO: Annotate instance name once LLHD allows that.
@@ -1003,6 +1074,15 @@ where
         mode: Mode,
     ) -> Result<llhd::ir::Value> {
         let mir = self.mir_rvalue(expr_id, env);
+        self.emit_mir_rvalue_mode(mir, mode)
+    }
+
+    /// Emit the code for an MIR rvalue.
+    fn emit_mir_rvalue_mode(
+        &mut self,
+        mir: &'gcx mir::Rvalue<'gcx>,
+        mode: Mode,
+    ) -> Result<llhd::ir::Value> {
         let value = self.emit_mir_rvalue(mir)?;
         let actual_mode = Mode::Value;
 
@@ -1420,12 +1500,6 @@ where
             mir.ty
         );
         self.emit_mir_rvalue(mir)
-    }
-
-    /// Emit the code for an lvalue.
-    fn emit_lvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
-        let mir = self.mir_lvalue(expr_id, env);
-        self.emit_mir_lvalue(mir).map(|(x, _)| x)
     }
 
     /// Emit the code for an MIR lvalue.
@@ -2204,10 +2278,21 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module<'gcx>, env
     }
 }
 
-/// Result of emitting a procedure.
-struct EmittedProcedure {
+/// Result of emitting a module.
+pub struct EmittedModule<'a> {
+    /// The emitted LLHD unit.
     unit: llhd::ir::UnitId,
+    /// The module's ports.
+    ports: ModuleIntf<'a>,
+}
+
+/// Result of emitting a procedure.
+pub struct EmittedProcedure {
+    /// The emitted LLHD unit.
+    unit: llhd::ir::UnitId,
+    /// The nodes used exclusively as rvalues.
     inputs: Vec<AccessedNode>,
+    /// The nodes used as lvalues.
     outputs: Vec<AccessedNode>,
 }
 
