@@ -188,11 +188,6 @@ impl DiagEmitter for GlobalContext<'_> {
                             .add_note("Needed to compute the type of the expression:")
                             .span(query.0.span());
                     }
-                    QueryTag::CastType(query) => {
-                        diag = diag
-                            .add_note("Needed to compute the implicit type cast of the expression:")
-                            .span(self.ast_for_id(query.0).span());
-                    }
                     QueryTag::TypeOfIntPort(query) => {
                         diag = diag
                             .add_note(format!(
