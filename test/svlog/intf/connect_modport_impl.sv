@@ -1,10 +1,14 @@
 // RUN: moore %s -e foo -O0
 
-module foo (bar.in x, bar.out y);
+module foo ();
+    bar x(), y();
 	fee u0(x, y);
 endmodule
 
 module fee (bar.in x, bar.out y);
+    assign y.data = x.data;
+    assign y.valid = x.valid;
+    assign x.ready = y.ready;
 endmodule
 
 interface bar;
@@ -17,11 +21,11 @@ interface bar;
 endinterface
 
 // CHECK: entity @fee.param1 (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
-// CHECK:     drv i1$ %x.ready, %0, %1
-// CHECK:     drv i32$ %y.data, %2, %3
-// CHECK:     drv i1$ %y.valid, %4, %5
+// CHECK:     drv i32$ %y.data, %x.data1, %0
+// CHECK:     drv i1$ %y.valid, %x.valid1, %1
+// CHECK:     drv i1$ %x.ready, %y.ready1, %2
 // CHECK: }
 
-// CHECK: entity @foo (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid) {
+// CHECK: entity @foo () -> () {
 // CHECK:     inst @fee.param1 (i32$ %1, i1$ %4, i1$ %7) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid)
 // CHECK: }
