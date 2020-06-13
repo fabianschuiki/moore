@@ -591,9 +591,9 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
                 ValueKind::Int(ref int, ref special_bits, ref x_bits) => {
                     let length = std::cmp::max(length, 1); // bit-select same as length-1-select
                     let v = if base < 0 {
-                        (int << (-base) as usize)
+                        int << (-base) as usize
                     } else {
-                        (int >> base as usize)
+                        int >> base as usize
                     };
                     let v = v % (BigInt::one() << length);
                     let mut new_special_bits = BitVec::from_elem(length, false);
