@@ -10,6 +10,11 @@ module foo;
     assign x.valid = 1;
     assign y.valid = 1;
 
+    logic [31:0] xd;
+    logic [18:0] yd;
+    assign xd = x.data;
+    assign yd = y.data;
+
     int xwd = $bits(x.data);
     int xwv = $bits(x.valid);
     int ywd = $bits(y.data);

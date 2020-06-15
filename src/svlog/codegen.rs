@@ -128,6 +128,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             gen.values.insert(port.accnode, arg);
         }
 
+        debug!("  Ports:");
+        for (node, value) in gen.values.iter() {
+            debug!(
+                "    {:?} = {:?} (type {})",
+                node,
+                value,
+                gen.llhd_type(*value)
+            );
+        }
+
         // Emit the actual contents of the entity.
         gen.emit_module_block(id, env, &hir.block, &entity_name)?;
 
@@ -323,8 +333,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             sig.add_input(llhd::signal_ty(self.emit_type(match id {
                 AccessedNode::Regular(id) => self.type_of(id, env)?,
                 AccessedNode::Intf(intf, id) => {
-                    let mut sig_ty = self.type_of(id, env)?.clone();
                     let intf_ty = self.type_of(intf, env)?;
+                    let intf_ty_inner = intf_ty.resolve_full().core.get_interface().unwrap();
+                    let mut sig_ty = self.type_of(id, intf_ty_inner.env)?.clone();
                     sig_ty.dims.extend(&intf_ty.dims);
                     sig_ty.intern(self.cx)
                 }
@@ -335,8 +346,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             sig.add_output(llhd::signal_ty(self.emit_type(match id {
                 AccessedNode::Regular(id) => self.type_of(id, env)?,
                 AccessedNode::Intf(intf, id) => {
-                    let mut sig_ty = self.type_of(id, env)?.clone();
                     let intf_ty = self.type_of(intf, env)?;
+                    let intf_ty_inner = intf_ty.resolve_full().core.get_interface().unwrap();
+                    let mut sig_ty = self.type_of(id, intf_ty_inner.env)?.clone();
                     sig_ty.dims.extend(&intf_ty.dims);
                     sig_ty.intern(self.cx)
                 }
@@ -345,6 +357,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
         trace!("Process Inputs: {:?}", inputs);
         trace!("Process Outputs: {:?}", outputs);
+        trace!("Process Signature: {}", sig);
+        trace!("Process Env: {:?}", self.param_env_data(env));
 
         // Create process and entry block.
         let proc_name = format!(
@@ -978,11 +992,11 @@ where
                     }
                     let mir = match port.kind {
                         ModulePortKind::Port => mir,
-                        ModulePortKind::IntfSignal { decl_id, .. } => {
+                        ModulePortKind::IntfSignal { decl_id, env, .. } => {
                             self.arena().alloc_mir_lvalue(mir::Lvalue {
                                 id: NodeId::alloc(),
                                 origin: mir.origin,
-                                env: mir.env,
+                                env,
                                 span: mir.span,
                                 ty: port.ty,
                                 kind: mir::LvalueKind::IntfSignal(mir, decl_id),
@@ -997,11 +1011,11 @@ where
                     }
                     let mir = match port.kind {
                         ModulePortKind::Port => mir,
-                        ModulePortKind::IntfSignal { decl_id, .. } => {
+                        ModulePortKind::IntfSignal { decl_id, env, .. } => {
                             self.arena().alloc_mir_rvalue(mir::Rvalue {
                                 id: NodeId::alloc(),
                                 origin: mir.origin,
-                                env: mir.env,
+                                env,
                                 span: mir.span,
                                 ty: port.ty,
                                 kind: mir::RvalueKind::IntfSignal(mir, decl_id),
@@ -1576,6 +1590,12 @@ where
                     .get(&id)
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
+                debug!(
+                    "{:?} emitted value is {:?} (type {})",
+                    id,
+                    sig,
+                    self.llhd_type(sig)
+                );
                 let value = self.builder.ins().prb(sig);
                 if let Some(name) = self.builder.get_name(sig) {
                     self.builder.set_name(value, format!("{}.prb", name));
