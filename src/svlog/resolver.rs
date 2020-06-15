@@ -548,7 +548,7 @@ pub(crate) fn generated_scope<'a>(
                 gen.add_def(Def {
                     node: DefNode::IntPort(node),
                     name: node.name,
-                    vis: DefVis::LOCAL,
+                    vis: DefVis::LOCAL | DefVis::HIERARCHICAL,
                     may_override: true,
                     ordered: false,
                 });
