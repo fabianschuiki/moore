@@ -1,6 +1,36 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
-//! This crate implements SystemVerilog for the moore compiler.
+//! The SystemVerilog implementation of the moore compiler.
+//!
+//! This crate implements a query-based compiler for the SystemVerilog language.
+//! It strives to be a complete implementation of IEEE 1800-2017, mapping any
+//! input source text to the equivalent LLHD code.
+//!
+//! The implementation uses different representations of the source text for
+//! different parts of the compilation. Such a scheme is necessary due to the
+//! very messy nature of SystemVerilog, with its strange mixture of static and
+//! dynamic typing. Although the compiler uses queries to be able to handle the
+//! more involved and loopy dependencies, the representations form a rough chain
+//! of processing that each construct flows through (albeit each at its own
+//! pace):
+//!
+//! - **AST**: Abstract Syntax Tree emitted by the parser in the `syntax` crate.
+//! - **RST**: Resolved Syntax Tree which has ambiguities in the grammar
+//!   resolved. This is possible by building name resolution scopes and defs on
+//!   the AST representation, and resolving names to disambiguate things in the
+//!   grammar.
+//! - **HIR**: The High-level Intermediate Representation, which does things
+//!   like taking the list of constructs in a module body and separating them
+//!   into lists of declarations, instances, parameters, etc. Also tries to get
+//!   rid of syntactic sugar where appropriate. Type-checking is performed on
+//!   this representation, and `ParamEnv` is used to represent different
+//!   parametrizations of the same HIR module/interface.
+//! - **MIR**: The Medium-level Intermediate Representation, which has all
+//!   implicit casting operations and parametrizations made explicit and fully
+//!   unrolled. At this point most SystemVerilog craziness has been resolved and
+//!   the nodes are crisp and have a clean, fully checked type.
+//! - **LLHD**: The Low-level Hardware Description, emitted as the final step
+//!   during code generation.
 
 #[macro_use]
 extern crate moore_common;
