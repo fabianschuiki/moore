@@ -22,7 +22,7 @@ endmodule
 // CHECK:     drv i32$ %k, %0, %1
 // CHECK: }
 // CHECK:
-// CHECK: entity @A1.param3 () -> (i32$ %k) {
+// CHECK: entity @A1.param4 () -> (i32$ %k) {
 // CHECK:     %0 = const i32 1
 // CHECK:     %1 = const time 0s
 // CHECK:     drv i32$ %k, %0, %1
