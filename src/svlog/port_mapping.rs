@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 /// A port mapping.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct PortMapping<'a>(Vec<(Ref<'a, ExtPort<'a>>, NodeEnvId)>);
+pub struct PortMapping<'a>(pub Vec<(Ref<'a, ExtPort<'a>>, NodeEnvId)>);
 
 impl<'a> PortMapping<'a> {
     /// Find the signal assigned to a port.

@@ -80,6 +80,7 @@ pub struct ParamEnvData<'t> {
     module: Option<NodeId>,
     values: Vec<(NodeId, ParamEnvBinding<Value<'t>>)>,
     types: Vec<(NodeId, ParamEnvBinding<&'t UnpackedType<'t>>)>,
+    intfs: Vec<(NodeId, NodeEnvId)>,
 }
 
 impl<'t> ParamEnvData<'t> {
@@ -94,6 +95,14 @@ impl<'t> ParamEnvData<'t> {
     /// Find the type assigned to a node.
     pub fn find_type(&self, node_id: NodeId) -> Option<ParamEnvBinding<&'t UnpackedType<'t>>> {
         self.types
+            .iter()
+            .find(|&&(id, _)| id == node_id)
+            .map(|&(_, id)| id)
+    }
+
+    /// Find the parametrization of an interface port.
+    pub fn find_interface(&self, node_id: NodeId) -> Option<NodeEnvId> {
+        self.intfs
             .iter()
             .find(|&&(id, _)| id == node_id)
             .map(|&(_, id)| id)
@@ -114,6 +123,11 @@ impl<'t> ParamEnvData<'t> {
     pub fn set_value(&mut self, node_id: NodeId, value: Value<'t>) {
         self.values.retain(|&(n, _)| n != node_id);
         self.values.push((node_id, ParamEnvBinding::Direct(value)));
+    }
+
+    /// Add additional interface parametrizations.
+    pub fn add_interfaces(&mut self, iter: impl IntoIterator<Item = (NodeId, NodeEnvId)>) {
+        self.intfs.extend(iter);
     }
 }
 
@@ -280,6 +294,7 @@ fn param_env_from_instance<'a>(
         module: Some(node.id()),
         types,
         values,
+        intfs: Default::default(),
     });
     cx.add_param_env_context(env, node.id());
     Ok(env)

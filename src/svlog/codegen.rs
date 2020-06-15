@@ -183,7 +183,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             debug!("  Port `{}.{}` has type `{}`", hir.name, port.name, ty);
 
             // Distinguish interfaces and regular ports.
-            if let Some(intf) = ty.core.get_interface() {
+            if let Some(intf) = ty.resolve_full().core.get_interface() {
                 trace!("    Expanding interface {:?}", intf);
 
                 // If a modport was specified, make a list of directions for
@@ -208,7 +208,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         HirNode::VarDecl(x) => x,
                         _ => unreachable!(),
                     };
-                    let mut sig_ty = self.type_of(decl_id, env)?.clone();
+                    let mut sig_ty = self.type_of(decl_id, intf.env)?.clone();
                     sig_ty.dims.extend(&ty.dims);
                     let sig_ty = sig_ty.intern(self.cx);
                     let llty = llhd::signal_ty(self.emit_type(sig_ty)?);
@@ -222,7 +222,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         default: hir.init,
                         kind: ModulePortKind::IntfSignal {
                             intf: intf.ast,
-                            env,
+                            env: intf.env,
                             decl_id,
                         },
                     };
@@ -687,7 +687,7 @@ where
 
             // Compute the array dimensions for the signals.
             // let mut dims = vec![];
-            let inst_ty = self.type_of_inst(Ref(inst.inst), inst.inner_env);
+            let inst_ty = self.type_of_inst(Ref(inst.hir), inst.inner_env);
             let intf_ty = inst_ty.resolve_full().core.get_interface().unwrap();
             trace!(
                 "Interface instance is of type `{}` ({:?})",
@@ -714,14 +714,9 @@ where
                 )?;
                 let value = self.builder.ins().sig(init);
                 self.builder
-                    .set_name(value, format!("{}.{}", inst.inst.name, hir.name));
+                    .set_name(value, format!("{}.{}", inst.hir.name, hir.name));
                 let src = AccessedNode::Intf(inst_id, decl_id);
-                trace!(
-                    "Emitted value for {:?} {}.{}",
-                    src,
-                    inst.inst.name,
-                    hir.name
-                );
+                trace!("Emitted value for {:?} {}.{}", src, inst.hir.name, hir.name);
                 self.values.insert(src, value.into());
             }
         }
@@ -759,7 +754,7 @@ where
             };
 
             // Emit the instantiated module.
-            let target = self.emit_module_with_env(target_module.id, inst.target.inner_env)?;
+            let target = self.emit_module_with_env(target_module.id, inst.inner_env)?;
 
             // Map the values associated with the external ports to internal
             // ports.
@@ -772,7 +767,7 @@ where
                 if port.exprs.len() > 1 {
                     self.emit(
                         DiagBuilder2::bug("port expressions with concatenations not supported")
-                            .span(inst.inst.span())
+                            .span(inst.hir.span())
                             .add_note("Port declared here:")
                             .span(port.span),
                     );
@@ -785,7 +780,7 @@ where
                 if !expr.selects.is_empty() {
                     self.emit(
                         DiagBuilder2::bug("port expressions with selections not supported")
-                            .span(inst.inst.span())
+                            .span(inst.hir.span())
                             .add_note("Port declared here:")
                             .span(port.span),
                     );
@@ -862,19 +857,19 @@ where
                 } else {
                     // Emit an auxiliary signal with the default value for this
                     // port or type.
-                    let ty = self.type_of_int_port(Ref(port.port), inst.target.inner_env);
+                    let ty = self.type_of_int_port(Ref(port.port), inst.inner_env);
                     let value = match port.port.data.as_ref().and_then(|d| d.default) {
                         Some(default) => {
-                            self.emit_rvalue_mode(default, inst.target.inner_env, Mode::Signal)?
+                            self.emit_rvalue_mode(default, inst.inner_env, Mode::Signal)?
                         }
                         None => {
                             let v = self.type_default_value(ty);
-                            let v = self.emit_const(v, inst.target.inner_env, port.port.span)?;
+                            let v = self.emit_const(v, inst.inner_env, port.port.span)?;
                             self.builder.ins().sig(v)
                         }
                     };
                     self.builder
-                        .set_name(value, format!("{}.{}.default", inst.inst.name, port.name));
+                        .set_name(value, format!("{}.{}.default", inst.hir.name, port.name));
                     Ok(value)
                 }
             };
@@ -896,9 +891,9 @@ where
                 self.into.unit(target.unit).name().clone(),
                 self.into.unit(target.unit).sig().clone(),
             );
-            if !inst.inst.ast.dims.is_empty() {
+            if !inst.hir.ast.dims.is_empty() {
                 bug_span!(
-                    inst.inst.ast.span(),
+                    inst.hir.ast.span(),
                     self.cx,
                     "instance arrays of modules not supported"
                 );

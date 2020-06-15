@@ -121,7 +121,40 @@ pub(crate) fn type_of_int_port<'a>(
 ) -> &'a UnpackedType<'a> {
     match port.data {
         Some(ref data) => {
-            cx.unpacked_type_from_ast(Ref(data.ty), Ref(data.unpacked_dims), env, None)
+            // Determine the type of the port.
+            let ty = cx.unpacked_type_from_ast(Ref(data.ty), Ref(data.unpacked_dims), env, None);
+
+            // Check if this is an interface that may be implicitly
+            // parametrized.
+            let intf = match ty.resolve_full().core.get_interface() {
+                Some(x) => x,
+                None => return ty,
+            };
+
+            // Get the node assigned to this port that implicitly
+            // parametrizes it.
+            let assigned = match cx.param_env_data(env).find_interface(port.id) {
+                Some(x) => x,
+                None => return ty,
+            };
+
+            // Check the *self-determined* type of the expression, to avoid
+            // a circular query dependency.
+            let assigned_ty = cx.need_self_determined_type(assigned.id(), assigned.env());
+            let assigned_intf = assigned_ty
+                .resolve_full()
+                .core
+                .get_interface()
+                .expect("must be an intf here");
+            assert_eq!(intf.ast, assigned_intf.ast);
+
+            // Copy the param env over, but make sure to keep any additional
+            // modport we have specified on the port.
+            let mut intf = intf.clone();
+            intf.env = assigned_intf.env;
+            let mut ty = ty.clone();
+            ty.core = intf.into();
+            ty.intern(cx)
         }
         None => {
             // Resolve the port to a net/var decl in the module, then use
@@ -336,7 +369,7 @@ pub(crate) fn type_of_inst<'a>(
             }),
         },
     );
-    apply_unpacked_dims(cx, ty, &details.inst.ast.dims, env, details.inst.ast.span())
+    apply_unpacked_dims(cx, ty, &details.hir.ast.dims, env, details.hir.ast.span())
 }
 
 /// Map an AST node to the type it represents.
