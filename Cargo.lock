@@ -415,15 +415,15 @@ dependencies = [
 
 [[package]]
 name = "moore"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "llhd 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.10.0",
- "moore-derive 0.10.0",
- "moore-svlog 0.10.0",
- "moore-vhdl 0.10.0",
+ "moore-common 0.11.0-dev",
+ "moore-derive 0.11.0-dev",
+ "moore-svlog 0.11.0-dev",
+ "moore-vhdl 0.11.0-dev",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty_env_logger 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.107 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "moore-common"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -442,7 +442,7 @@ dependencies = [
 
 [[package]]
 name = "moore-derive"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
  "heck 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "moore-svlog"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
  "backtrace 0.3.46 (registry+https://github.com/rust-lang/crates.io-index)",
  "bit-vec 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -463,9 +463,9 @@ dependencies = [
  "llhd 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lock_api 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.10.0",
- "moore-derive 0.10.0",
- "moore-svlog-syntax 0.10.0",
+ "moore-common 0.11.0-dev",
+ "moore-derive 0.11.0-dev",
+ "moore-svlog-syntax 0.11.0-dev",
  "num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -476,32 +476,32 @@ dependencies = [
 
 [[package]]
 name = "moore-svlog-syntax"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
  "backtrace 0.3.46 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.10.0",
- "moore-derive 0.10.0",
+ "moore-common 0.11.0-dev",
+ "moore-derive 0.11.0-dev",
  "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "moore-vhdl"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "llhd 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moore-common 0.10.0",
- "moore-vhdl-syntax 0.10.0",
+ "moore-common 0.11.0-dev",
+ "moore-vhdl-syntax 0.11.0-dev",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "moore-vhdl-syntax"
-version = "0.10.0"
+version = "0.11.0-dev"
 dependencies = [
- "moore-common 0.10.0",
+ "moore-common 0.11.0-dev",
  "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
