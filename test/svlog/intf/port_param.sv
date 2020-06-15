@@ -11,6 +11,11 @@ endmodule
 module fee (bar.in z);
     int wd = $bits(z.data);
     int wv = $bits(z.valid);
+
+    initial begin
+        int wd = $bits(z.data);
+        int wv = $bits(z.valid);
+    end
 endmodule
 
 interface bar #(
