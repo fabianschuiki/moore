@@ -37,7 +37,7 @@ interface bar #(
     logic ready;
 endinterface
 
-// CHECK: proc %foo.initial.193.0 () -> () {
+// CHECK: proc %foo.initial.229.0 () -> () {
 // CHECK:     %1 = const i32 32
 // CHECK:     %2 = const i32 1
 // CHECK:     %3 = const i32 19
@@ -45,14 +45,14 @@ endinterface
 // CHECK: }
 
 // CHECK: entity @foo () -> () {
-// CHECK:     %x.data = sig i32 %4
-// CHECK:     %x.valid = sig i1 %5
-// CHECK:     %x.ready = sig i1 %6
-// CHECK:     %y.data = sig i19 %7
-// CHECK:     %y.valid = sig i8 %8
-// CHECK:     %y.ready = sig i1 %9
-// CHECK:     %10 = const i32 9001
-// CHECK:     %12 = const i19 9001
-// CHECK:     %14 = const i1 1
-// CHECK:     %16 = const i8 1
+// CHECK:     %x.data = sig i32 %6
+// CHECK:     %x.valid = sig i1 %7
+// CHECK:     %x.ready = sig i1 %8
+// CHECK:     %y.data = sig i19 %9
+// CHECK:     %y.valid = sig i8 %10
+// CHECK:     %y.ready = sig i1 %11
+// CHECK:     %12 = const i32 9001
+// CHECK:     %14 = const i19 9001
+// CHECK:     %16 = const i1 1
+// CHECK:     %18 = const i8 1
 // CHECK: }
