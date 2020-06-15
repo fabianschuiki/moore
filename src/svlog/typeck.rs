@@ -1607,7 +1607,7 @@ fn self_determined_expr_type<'gcx>(
             if let Some(intf) = target_ty.get_interface() {
                 let def = cx.resolve_hierarchical_or_error(name, intf.ast).ok()?;
                 Some(
-                    cx.type_of(def.node.id(), env)
+                    cx.type_of(def.node.id(), intf.env)
                         .unwrap_or(UnpackedType::make_error()),
                 )
             } else {

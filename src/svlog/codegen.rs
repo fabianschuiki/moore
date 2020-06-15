@@ -688,10 +688,12 @@ where
             // Compute the array dimensions for the signals.
             // let mut dims = vec![];
             let inst_ty = self.type_of_inst(Ref(inst.inst), inst.inner_env);
-            trace!("Interface instance is of type `{}`", inst_ty);
-            for dim in &inst_ty.dims {
-                trace!("Would need to handle {:?}", dim);
-            }
+            let intf_ty = inst_ty.resolve_full().core.get_interface().unwrap();
+            trace!(
+                "Interface instance is of type `{}` ({:?})",
+                inst_ty,
+                intf_ty
+            );
 
             // Expand the interface declarations.
             for &decl_id in &intf_hir.block.decls {
@@ -699,15 +701,15 @@ where
                     HirNode::VarDecl(x) => x,
                     _ => unreachable!(),
                 };
-                let mut ty = self.type_of(decl_id, env)?.clone();
+                let mut ty = self.type_of(decl_id, intf_ty.env)?.clone();
                 ty.dims.extend(&inst_ty.dims);
                 let ty = ty.intern(self.cx);
                 let init = self.emit_const(
                     match hir.init {
-                        Some(expr) => self.constant_value_of(expr, env)?,
+                        Some(expr) => self.constant_value_of(expr, intf_ty.env)?,
                         None => self.type_default_value(ty),
                     },
-                    env,
+                    intf_ty.env,
                     self.span(hir.init.unwrap_or(decl_id)),
                 )?;
                 let value = self.builder.ins().sig(init);
