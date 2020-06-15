@@ -196,6 +196,14 @@ impl DiagEmitter for GlobalContext<'_> {
                             ))
                             .span(query.0.span);
                     }
+                    QueryTag::TypeOfVarDecl(query) => {
+                        diag = diag
+                            .add_note(format!(
+                                "Needed to compute the type of variable `{}`:",
+                                query.0.name
+                            ))
+                            .span(query.0.span);
+                    }
                     _ => (),
                 }
             }
