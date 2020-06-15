@@ -1,7 +1,7 @@
 // RUN: moore %s -e foo -O0
 
 module foo (bar.in x, bar.out y);
-	fee u0(x, y);
+    fee u0(x, y);
 endmodule
 
 module fee (bar.in x, bar.out y);
@@ -11,9 +11,9 @@ module fee (bar.in x, bar.out y);
 endmodule
 
 interface bar;
-	logic [31:0] data;
-	logic valid;
-	logic ready;
+    logic [31:0] data;
+    logic valid;
+    logic ready;
 
     modport in (input data, valid, output ready);
     modport out (output data, valid, input ready);

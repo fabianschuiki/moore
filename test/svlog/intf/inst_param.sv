@@ -12,8 +12,8 @@ module foo;
 endmodule
 
 interface bar #(
-  parameter int N,
-  parameter type T
+    parameter int N,
+    parameter type T
 );
     logic [N-1:0] data;
     T valid;
