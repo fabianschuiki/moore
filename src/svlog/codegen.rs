@@ -5,6 +5,7 @@
 use crate::{
     crate_prelude::*,
     hir::{AccessedNode, HirNode},
+    port_list::PortList,
     resolver::InstTarget,
     ty::UnpackedType,
     value::{Value, ValueKind},
@@ -88,7 +89,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Determine entity type and port names.
-        let ports = self.determine_module_ports(hir, env)?;
+        let ports = self.determine_module_ports(&hir.ports_new.int, env)?;
 
         // Pick an entity name.
         let mut entity_name: String = hir.name.value.into();
@@ -168,19 +169,19 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     fn determine_module_ports(
         &mut self,
-        hir: &'gcx hir::Module<'gcx>,
+        ports: &'gcx [port_list::IntPort<'gcx>],
         env: ParamEnv,
     ) -> Result<ModuleIntf<'gcx>> {
-        debug!("Determining ports of `{}` with {:?}", hir.name, env);
+        debug!("Determining ports with {:?}", env);
         let mut sig = llhd::ir::Signature::new();
         let mut inputs = vec![];
         let mut outputs = vec![];
 
         // Go through the ports and expand each to one or more entity inputs and
         // outputs.
-        for port in &hir.ports_new.int {
+        for port in ports {
             let ty = self.type_of_int_port(Ref(port), env);
-            debug!("  Port `{}.{}` has type `{}`", hir.name, port.name, ty);
+            debug!("  Port `{}` has type `{}`", port.name, ty);
 
             // Distinguish interfaces and regular ports.
             if let Some(intf) = ty.resolve_full().core.get_interface() {
@@ -202,31 +203,24 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
                 trace!("    Modport-derived directions: {:?}", dirs);
 
-                let intf_hir = self.hir_of_interface(intf.ast)?;
-                for &decl_id in &intf_hir.block.decls {
-                    let hir = match self.hir_of(decl_id)? {
-                        HirNode::VarDecl(x) => x,
-                        _ => unreachable!(),
-                    };
-                    let mut sig_ty = self.type_of(decl_id, intf.env)?.clone();
-                    sig_ty.dims.extend(&ty.dims);
-                    let sig_ty = sig_ty.intern(self.cx);
-                    let llty = llhd::signal_ty(self.emit_type(sig_ty)?);
-                    let name = format!("{}.{}", port.name, hir.name);
-                    trace!("    Signal `{}` of type `{}` / `{}`", name, sig_ty, llty);
+                let signals = self.determine_interface_signals(intf, &ty.dims)?;
+                for signal in signals {
+                    let llty = llhd::signal_ty(self.emit_type(signal.ty)?);
+                    let name = format!("{}.{}", port.name, signal.name);
+                    trace!("    Signal `{}` of type `{}` / `{}`", name, signal.ty, llty);
                     let port = ModulePort {
                         port,
-                        ty: sig_ty,
+                        ty: signal.ty,
                         name,
-                        accnode: AccessedNode::Intf(port.id, decl_id),
-                        default: hir.init,
+                        accnode: AccessedNode::Intf(port.id, signal.decl_id),
+                        default: signal.default,
                         kind: ModulePortKind::IntfSignal {
                             intf: intf.ast,
                             env: intf.env,
-                            decl_id,
+                            decl_id: signal.decl_id,
                         },
                     };
-                    match dirs.get(&hir.name.value).copied() {
+                    match dirs.get(&signal.name.value).copied() {
                         Some(ast::PortDir::Input) | Some(ast::PortDir::Ref) => {
                             sig.add_input(llty);
                             inputs.push(port);
@@ -269,6 +263,42 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             inputs,
             outputs,
         })
+    }
+
+    /// Map an interface to a list of signals defined by that interface.
+    fn determine_interface_signals(
+        &mut self,
+        intf: &'gcx ty::InterfaceType<'gcx>,
+        dims: &'gcx [ty::UnpackedDim<'gcx>],
+    ) -> Result<Vec<IntfSignal<'gcx>>> {
+        let port_list = self.canonicalize_ports(intf.ast);
+        let intf_hir = self.hir_of_interface(intf.ast)?;
+
+        let signals = port_list
+            .int
+            .iter()
+            .map(|p| Ok((p.id, p.name, p.data.as_ref().and_then(|d| d.default))))
+            .chain(intf_hir.block.decls.iter().map(|&id| {
+                Ok(match self.hir_of(id)? {
+                    HirNode::VarDecl(x) => (id, x.name, x.init),
+                    _ => unreachable!(),
+                })
+            }));
+
+        let mut result = vec![];
+        for x in signals {
+            let (decl_id, name, default) = x?;
+            let mut sig_ty = self.type_of(decl_id, intf.env)?.clone();
+            sig_ty.dims.extend(dims);
+            let sig_ty = sig_ty.intern(self.cx);
+            result.push(IntfSignal {
+                decl_id,
+                ty: sig_ty,
+                name,
+                default,
+            });
+        }
+        Ok(result)
     }
 
     /// Emit the code for a procedure.
@@ -680,15 +710,14 @@ where
                 _ => unreachable!(),
             };
             let inst = self.inst_details(Ref(inst), env)?;
-            let intf_hir = match inst.target.kind {
-                InstTarget::Interface(x) => self.hir_of_interface(x)?,
-                _ => continue,
-            };
 
             // Compute the array dimensions for the signals.
             // let mut dims = vec![];
             let inst_ty = self.type_of_inst(Ref(inst.hir), inst.inner_env);
-            let intf_ty = inst_ty.resolve_full().core.get_interface().unwrap();
+            let intf_ty = match inst_ty.resolve_full().core.get_interface() {
+                Some(x) => x,
+                None => continue,
+            };
             trace!(
                 "Interface instance is of type `{}` ({:?})",
                 inst_ty,
@@ -696,28 +725,57 @@ where
             );
 
             // Expand the interface declarations.
-            for &decl_id in &intf_hir.block.decls {
-                let hir = match self.hir_of(decl_id)? {
-                    HirNode::VarDecl(x) => x,
-                    _ => unreachable!(),
-                };
-                let mut ty = self.type_of(decl_id, intf_ty.env)?.clone();
-                ty.dims.extend(&inst_ty.dims);
-                let ty = ty.intern(self.cx);
+            let signals = self.determine_interface_signals(intf_ty, &inst_ty.dims)?;
+            let mut signal_lookup = HashMap::new();
+            for signal in signals {
                 let init = self.emit_const(
-                    match hir.init {
+                    match signal.default {
                         Some(expr) => self.constant_value_of(expr, intf_ty.env)?,
-                        None => self.type_default_value(ty),
+                        None => self.type_default_value(signal.ty),
                     },
                     intf_ty.env,
-                    self.span(hir.init.unwrap_or(decl_id)),
+                    self.span(signal.default.unwrap_or(signal.decl_id)),
                 )?;
                 let value = self.builder.ins().sig(init);
                 self.builder
-                    .set_name(value, format!("{}.{}", inst.hir.name, hir.name));
-                let src = AccessedNode::Intf(inst_id, decl_id);
-                trace!("Emitted value for {:?} {}.{}", src, inst.hir.name, hir.name);
+                    .set_name(value, format!("{}.{}", inst.hir.name, signal.name));
+                let src = AccessedNode::Intf(inst_id, signal.decl_id);
+                trace!(
+                    "Emitted value for {:?} {}.{}",
+                    src,
+                    inst.hir.name,
+                    signal.name
+                );
                 self.values.insert(src, value.into());
+                signal_lookup.insert(signal.decl_id, value);
+            }
+
+            // Generate the code for the port assignments.
+            let port_list = self.canonicalize_ports(intf_ty.ast);
+            let ports = self.determine_module_ports(&port_list.int, intf_ty.env)?;
+            let (inputs, outputs) = self.emit_port_connections(
+                port_list,
+                inst.as_ref(),
+                &ports.inputs,
+                &ports.outputs,
+            )?;
+            trace!("Attaching interface inputs {:?}", inputs);
+            trace!("Attaching interface outputs {:?}", outputs);
+            trace!("Signal lookup: {:?}", signal_lookup);
+
+            // Actually wire up the ports.
+            let inputs = inputs.into_iter().zip(ports.inputs.iter());
+            let outputs = outputs.into_iter().zip(ports.outputs.iter());
+            for (assigned, port) in inputs.chain(outputs) {
+                trace!(
+                    "Assign `{}` ({:?}) = {:?}",
+                    port.name,
+                    port.port.id,
+                    assigned
+                );
+                self.builder
+                    .ins()
+                    .con(signal_lookup[&port.port.id], assigned);
             }
         }
 
@@ -756,135 +814,13 @@ where
             // Emit the instantiated module.
             let target = self.emit_module_with_env(target_module.id, inst.inner_env)?;
 
-            // Map the values associated with the external ports to internal
-            // ports.
-            let mut port_mapping_int: HashMap<NodeId, NodeEnvId> = HashMap::new();
-            for port in &target_module.ports_new.ext_pos {
-                let mapping = match inst.ports.find(port.id) {
-                    Some(m) => m,
-                    None => continue,
-                };
-                if port.exprs.len() > 1 {
-                    self.emit(
-                        DiagBuilder2::bug("port expressions with concatenations not supported")
-                            .span(inst.hir.span())
-                            .add_note("Port declared here:")
-                            .span(port.span),
-                    );
-                    continue;
-                }
-                let expr = match port.exprs.iter().next() {
-                    Some(m) => m,
-                    None => continue,
-                };
-                if !expr.selects.is_empty() {
-                    self.emit(
-                        DiagBuilder2::bug("port expressions with selections not supported")
-                            .span(inst.hir.span())
-                            .add_note("Port declared here:")
-                            .span(port.span),
-                    );
-                    continue;
-                }
-                let int = &target_module.ports_new.int[expr.port];
-                if port_mapping_int.insert(int.id, mapping).is_some() {
-                    self.emit(
-                        DiagBuilder2::error(format!(
-                            "port `{}` connected multiple times",
-                            int.name
-                        ))
-                        .span(self.span(mapping.id())),
-                    );
-                }
-            }
-            trace!("Internal Port Mapping: {:?}", port_mapping_int);
-
-            // Connect to the actual internal ports emitted as the module's port
-            // interface.
-            let mut map_port = |port: &ModulePort<'gcx>, lvalue: bool| {
-                trace!(
-                    "Mapping port `{}` of type `{}` as {}",
-                    port.name,
-                    port.ty,
-                    match lvalue {
-                        true => "lvalue",
-                        false => "rvalue",
-                    }
-                );
-                if let Some(&mapping) = port_mapping_int.get(&port.port.id) {
-                    // Emit the assigned node as rvalue or lvalue, depending on
-                    // the port direction.
-                    if lvalue {
-                        let mir = self.mir_lvalue(mapping.id(), mapping.env());
-                        if mir.is_error() {
-                            return Err(());
-                        }
-                        let mir = match port.kind {
-                            ModulePortKind::Port => mir,
-                            ModulePortKind::IntfSignal { decl_id, .. } => {
-                                self.arena().alloc_mir_lvalue(mir::Lvalue {
-                                    id: NodeId::alloc(),
-                                    origin: mir.origin,
-                                    env: mir.env,
-                                    span: mir.span,
-                                    ty: port.ty,
-                                    kind: mir::LvalueKind::IntfSignal(mir, decl_id),
-                                })
-                            }
-                        };
-                        self.emit_mir_lvalue(mir).map(|(x, _)| x)
-                    } else {
-                        let mir = self.mir_rvalue(mapping.id(), mapping.env());
-                        if mir.is_error() {
-                            return Err(());
-                        }
-                        let mir = match port.kind {
-                            ModulePortKind::Port => mir,
-                            ModulePortKind::IntfSignal { decl_id, .. } => {
-                                self.arena().alloc_mir_rvalue(mir::Rvalue {
-                                    id: NodeId::alloc(),
-                                    origin: mir.origin,
-                                    env: mir.env,
-                                    span: mir.span,
-                                    ty: port.ty,
-                                    kind: mir::RvalueKind::IntfSignal(mir, decl_id),
-                                    konst: false,
-                                })
-                            }
-                        };
-                        self.emit_mir_rvalue_mode(mir, Mode::Signal)
-                    }
-                } else {
-                    // Emit an auxiliary signal with the default value for this
-                    // port or type.
-                    let ty = self.type_of_int_port(Ref(port.port), inst.inner_env);
-                    let value = match port.port.data.as_ref().and_then(|d| d.default) {
-                        Some(default) => {
-                            self.emit_rvalue_mode(default, inst.inner_env, Mode::Signal)?
-                        }
-                        None => {
-                            let v = self.type_default_value(ty);
-                            let v = self.emit_const(v, inst.inner_env, port.port.span)?;
-                            self.builder.ins().sig(v)
-                        }
-                    };
-                    self.builder
-                        .set_name(value, format!("{}.{}.default", inst.hir.name, port.name));
-                    Ok(value)
-                }
-            };
-            let inputs = target
-                .ports
-                .inputs
-                .iter()
-                .map(|p| map_port(p, false))
-                .collect::<Result<Vec<_>>>()?;
-            let outputs = target
-                .ports
-                .outputs
-                .iter()
-                .map(|p| map_port(p, true))
-                .collect::<Result<Vec<_>>>()?;
+            // Prepare the port assignments.
+            let (inputs, outputs) = self.emit_port_connections(
+                target_module.ports_new,
+                inst.as_ref(),
+                &target.ports.inputs,
+                &target.ports.outputs,
+            )?;
 
             // Instantiate the module.
             let ext_unit = self.builder.add_extern(
@@ -970,6 +906,139 @@ where
         }
 
         Ok(())
+    }
+
+    /// Emit code for the connections made in a port list.
+    fn emit_port_connections(
+        &mut self,
+        port_list: &PortList<'gcx>,
+        inst: &InstDetails<'gcx>,
+        inputs: &[ModulePort<'gcx>],
+        outputs: &[ModulePort<'gcx>],
+    ) -> Result<(Vec<llhd::ir::Value>, Vec<llhd::ir::Value>)> {
+        // Map the values associated with the external ports to internal
+        // ports.
+        let mut port_mapping_int: HashMap<NodeId, NodeEnvId> = HashMap::new();
+        for port in &port_list.ext_pos {
+            let mapping = match inst.ports.find(port.id) {
+                Some(m) => m,
+                None => continue,
+            };
+            if port.exprs.len() > 1 {
+                self.emit(
+                    DiagBuilder2::bug("port expressions with concatenations not supported")
+                        .span(inst.hir.span())
+                        .add_note("Port declared here:")
+                        .span(port.span),
+                );
+                continue;
+            }
+            let expr = match port.exprs.iter().next() {
+                Some(m) => m,
+                None => continue,
+            };
+            if !expr.selects.is_empty() {
+                self.emit(
+                    DiagBuilder2::bug("port expressions with selections not supported")
+                        .span(inst.hir.span())
+                        .add_note("Port declared here:")
+                        .span(port.span),
+                );
+                continue;
+            }
+            let int = &port_list.int[expr.port];
+            if port_mapping_int.insert(int.id, mapping).is_some() {
+                self.emit(
+                    DiagBuilder2::error(format!("port `{}` connected multiple times", int.name))
+                        .span(self.span(mapping.id())),
+                );
+            }
+        }
+        trace!("Internal Port Mapping: {:?}", port_mapping_int);
+
+        // Connect to the actual internal ports emitted as the module's port
+        // interface.
+        let mut map_port = |port: &ModulePort<'gcx>, lvalue: bool| {
+            trace!(
+                "Mapping port `{}` of type `{}` as {}",
+                port.name,
+                port.ty,
+                match lvalue {
+                    true => "lvalue",
+                    false => "rvalue",
+                }
+            );
+            if let Some(&mapping) = port_mapping_int.get(&port.port.id) {
+                // Emit the assigned node as rvalue or lvalue, depending on
+                // the port direction.
+                if lvalue {
+                    let mir = self.mir_lvalue(mapping.id(), mapping.env());
+                    if mir.is_error() {
+                        return Err(());
+                    }
+                    let mir = match port.kind {
+                        ModulePortKind::Port => mir,
+                        ModulePortKind::IntfSignal { decl_id, .. } => {
+                            self.arena().alloc_mir_lvalue(mir::Lvalue {
+                                id: NodeId::alloc(),
+                                origin: mir.origin,
+                                env: mir.env,
+                                span: mir.span,
+                                ty: port.ty,
+                                kind: mir::LvalueKind::IntfSignal(mir, decl_id),
+                            })
+                        }
+                    };
+                    self.emit_mir_lvalue(mir).map(|(x, _)| x)
+                } else {
+                    let mir = self.mir_rvalue(mapping.id(), mapping.env());
+                    if mir.is_error() {
+                        return Err(());
+                    }
+                    let mir = match port.kind {
+                        ModulePortKind::Port => mir,
+                        ModulePortKind::IntfSignal { decl_id, .. } => {
+                            self.arena().alloc_mir_rvalue(mir::Rvalue {
+                                id: NodeId::alloc(),
+                                origin: mir.origin,
+                                env: mir.env,
+                                span: mir.span,
+                                ty: port.ty,
+                                kind: mir::RvalueKind::IntfSignal(mir, decl_id),
+                                konst: false,
+                            })
+                        }
+                    };
+                    self.emit_mir_rvalue_mode(mir, Mode::Signal)
+                }
+            } else {
+                // Emit an auxiliary signal with the default value for this
+                // port or type.
+                let ty = self.type_of_int_port(Ref(port.port), inst.inner_env);
+                let value = match port.port.data.as_ref().and_then(|d| d.default) {
+                    Some(default) => {
+                        self.emit_rvalue_mode(default, inst.inner_env, Mode::Signal)?
+                    }
+                    None => {
+                        let v = self.type_default_value(ty);
+                        let v = self.emit_const(v, inst.inner_env, port.port.span)?;
+                        self.builder.ins().sig(v)
+                    }
+                };
+                self.builder
+                    .set_name(value, format!("{}.{}.default", inst.hir.name, port.name));
+                Ok(value)
+            }
+        };
+        let inputs = inputs
+            .iter()
+            .map(|p| map_port(p, false))
+            .collect::<Result<Vec<_>>>()?;
+        let outputs = outputs
+            .iter()
+            .map(|p| map_port(p, true))
+            .collect::<Result<Vec<_>>>()?;
+        Ok((inputs, outputs))
     }
 
     /// Map a value to an LLHD constant (interned).
@@ -2437,4 +2506,18 @@ pub enum ModulePortKind<'a> {
         env: ParamEnv,
         decl_id: NodeId,
     },
+}
+
+/// An signal within an interface.
+#[derive(Debug)]
+pub struct IntfSignal<'a> {
+    /// The node that declared this signal. Usually a `VarDecl`, `NetDecl`, or
+    /// `PortDecl`.
+    pub decl_id: NodeId,
+    /// The type of the signal.
+    pub ty: &'a UnpackedType<'a>,
+    /// The name of the signal.
+    pub name: Spanned<Name>,
+    /// The expression assigned as default to the signal.
+    pub default: Option<NodeId>,
 }
