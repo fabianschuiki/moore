@@ -880,14 +880,10 @@ fn lower_type<'gcx>(
 #[moore_derive::query]
 pub(crate) fn hir_of_expr<'a>(
     cx: &impl Context<'a>,
-    Ref(expr): Ref<'a, ast::Expr<'a>>,
+    Ref(ast): Ref<'a, ast::Expr<'a>>,
 ) -> Result<&'a hir::Expr<'a>> {
-    let kind = lower_expr_inner(cx, expr.id(), expr)?;
-    let hir = hir::Expr {
-        id: expr.id(),
-        span: expr.span,
-        kind: kind,
-    };
+    let kind = lower_expr_inner(cx, ast.id(), ast)?;
+    let hir = hir::Expr { ast, kind };
     Ok(cx.arena().alloc_hir(hir))
 }
 

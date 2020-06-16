@@ -572,14 +572,27 @@ pub enum BuiltinType {
 /// An expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Expr<'a> {
-    pub id: NodeId,
-    pub span: Span,
+    /// The AST node.
+    pub ast: &'a ast::Expr<'a>,
+    /// The specific expression data.
     pub kind: ExprKind<'a>,
+}
+
+impl<'a> Deref for Expr<'a> {
+    type Target = &'a ast::Expr<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ast
+    }
 }
 
 impl HasSpan for Expr<'_> {
     fn span(&self) -> Span {
-        self.span
+        self.ast.span()
+    }
+
+    fn human_span(&self) -> Span {
+        self.ast.human_span()
     }
 }
 
