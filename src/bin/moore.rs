@@ -25,7 +25,15 @@ enum Language {
 
 fn main() {
     // Configure the logger.
-    pretty_env_logger::init_custom_env("MOORE_LOG");
+    let mut builder = pretty_env_logger::formatted_builder();
+    builder.parse_filters(
+        std::env::var("MOORE_LOG")
+            .ok()
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("off"),
+    );
+    builder.try_init().unwrap();
 
     // Parse the command-line arguments.
     let matches = App::new(env!("CARGO_PKG_NAME"))
