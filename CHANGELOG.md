@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix emission of shadow variables for read-write variables in processes
 - Fix assignments generating code multiple times
 - Fix `reg` being a proper alias of `logic` (#189)
+- Fix genvar initialization in for-generate (#192)
 
 ## 0.10.0 - 2020-06-15
 ### Added

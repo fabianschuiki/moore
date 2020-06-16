@@ -1,8 +1,7 @@
-// RUN: moore %s -e foo
-// IGNORE  see #192
+// RUN: moore %s -e foo -O0
 
 module foo;
-	genvar i;
-    for (i = 0; i < 4; i = i + 1) begin
+    genvar i;
+    for (i = 1; i < 4; i++) begin
     end
 endmodule

@@ -1491,11 +1491,19 @@ fn alloc_genvar_init<'gcx>(
                 parent_id = id;
             }
         }
+        ast::BlockingAssignStmt {
+            op: ast::AssignOp::Identity,
+            ..
+        } => {
+            let id = cx.map_ast_with_parent(AstNode::Stmt(stmt), parent_id);
+            ids.push(id);
+        }
         _ => {
             cx.emit(
                 DiagBuilder2::error(format!("{:#} is not a valid genvar initialization", stmt))
                     .span(stmt.human_span()),
             );
+            error!("Offending AST is {:#02?}", stmt);
             return Err(());
         }
     }

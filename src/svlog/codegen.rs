@@ -580,10 +580,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     fn execute_genvar_init(&mut self, id: NodeId, env: ParamEnv) -> Result<ParamEnv> {
         let hir = self.hir_of(id)?;
         match hir {
-            HirNode::GenvarDecl(_) => (),
+            HirNode::GenvarDecl(_) => Ok(env),
+            HirNode::Stmt(stmt) => match stmt.kind {
+                hir::StmtKind::Assign {
+                    lhs,
+                    rhs,
+                    kind: hir::AssignKind::Block(ast::AssignOp::Identity),
+                } => {
+                    let target_id = self.resolve_node(lhs, env)?;
+                    let init_value = self.constant_value_of(rhs, env)?;
+                    let mut env_data = self.param_env_data(env).clone();
+                    env_data.set_value(target_id, init_value);
+                    Ok(self.intern_param_env(env_data))
+                }
+                _ => unreachable!(),
+            },
             _ => unreachable!(),
         }
-        Ok(env)
     }
 
     /// Execute the iteration step of a generate loop.
