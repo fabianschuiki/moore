@@ -617,7 +617,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                         .map(|v| value::make_int(current_value.ty, v)),
                         _ => unreachable!(),
                     };
-                    next_value.map(|v| (target_id, v))
+                    next_value.map(|v| (target_id, self.intern_value(v)))
+                }
+                hir::ExprKind::Assign { .. } => {
+                    let mir = self.mir_rvalue(id, env);
+                    match mir.kind {
+                        mir::RvalueKind::Error => return Err(()),
+                        mir::RvalueKind::Assignment { lvalue, rvalue, .. } => {
+                            let target_id = match lvalue.kind {
+                                mir::LvalueKind::Error => return Err(()),
+                                mir::LvalueKind::Genvar(id) => id,
+                                _ => unreachable!(),
+                            };
+                            let next_value = self.const_mir_rvalue(Ref(rvalue));
+                            Some((target_id, next_value))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => None,
             },
@@ -625,7 +641,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
         match next {
             Some((target_id, next_value)) => {
-                env_data.set_value(target_id, self.intern_value(next_value));
+                env_data.set_value(target_id, next_value);
                 return Ok(self.intern_param_env(env_data));
             }
             None => {

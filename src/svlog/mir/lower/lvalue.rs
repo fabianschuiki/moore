@@ -100,6 +100,7 @@ fn try_lower_expr<'gcx>(
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = cx.resolve_node(expr_id, env)?;
             return match cx.hir_of(binding)? {
+                HirNode::GenvarDecl(decl) => Ok(builder.build(ty, LvalueKind::Genvar(decl.id))),
                 HirNode::VarDecl(decl) => Ok(builder.build(ty, LvalueKind::Var(decl.id))),
                 HirNode::IntPort(port) if ty.resolve_full().core.get_interface().is_some() => {
                     Ok(builder.build(ty, LvalueKind::Intf(port.id)))

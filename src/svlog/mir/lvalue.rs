@@ -59,6 +59,8 @@ pub enum LvalueKind<'a> {
     DestructArray(HashMap<usize, &'a Lvalue<'a>>),
     /// Destructor for a struct.
     DestructStruct(Vec<&'a Lvalue<'a>>),
+    /// A reference to a genvar declaration.
+    Genvar(NodeId),
     /// A reference to a variable declaration.
     Var(NodeId),
     /// A reference to a port declaration.
