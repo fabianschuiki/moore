@@ -412,6 +412,8 @@ fn lower_expr_inner<'gcx>(
                 hir.desc_full()
             );
         }
+
+        hir::ExprKind::Assign { op, lhs, rhs } => Ok(lower_assign(&builder, ty, op, lhs, rhs)),
     }
 }
 
@@ -1392,6 +1394,48 @@ fn lower_int_incdec<'gcx>(
             lvalue: lv,
             rvalue: new,
             result,
+        },
+    )
+}
+
+/// Map an assignment operator to MIR.
+fn lower_assign<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    ty: &'a UnpackedType<'a>,
+    op: ast::AssignOp,
+    lhs: &'a ast::Expr<'a>,
+    rhs: &'a ast::Expr<'a>,
+) -> &'a Rvalue<'a> {
+    // Compute the new value.
+    let binop = match op {
+        ast::AssignOp::Identity => None,
+        ast::AssignOp::Add => Some(hir::BinaryOp::Add),
+        ast::AssignOp::Sub => Some(hir::BinaryOp::Sub),
+        ast::AssignOp::Mul => Some(hir::BinaryOp::Mul),
+        ast::AssignOp::Div => Some(hir::BinaryOp::Div),
+        ast::AssignOp::Mod => Some(hir::BinaryOp::Mod),
+        ast::AssignOp::BitAnd => Some(hir::BinaryOp::BitAnd),
+        ast::AssignOp::BitOr => Some(hir::BinaryOp::BitOr),
+        ast::AssignOp::BitXor => Some(hir::BinaryOp::BitXor),
+        ast::AssignOp::LogicShL => Some(hir::BinaryOp::LogicShL),
+        ast::AssignOp::LogicShR => Some(hir::BinaryOp::LogicShR),
+        ast::AssignOp::ArithShL => Some(hir::BinaryOp::ArithShL),
+        ast::AssignOp::ArithShR => Some(hir::BinaryOp::ArithShR),
+    };
+    let rv = if let Some(binop) = binop {
+        lower_binary(builder, ty, binop, lhs.id, rhs.id)
+    } else {
+        builder.cx.mir_rvalue(rhs.id, builder.env)
+    };
+
+    // Assemble the final assignment node.
+    let lv = builder.cx.mir_lvalue(lhs.id, builder.env);
+    builder.build(
+        lv.ty,
+        RvalueKind::Assignment {
+            lvalue: lv,
+            rvalue: rv,
+            result: rv,
         },
     )
 }

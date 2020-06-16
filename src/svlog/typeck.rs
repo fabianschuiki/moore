@@ -1018,7 +1018,8 @@ pub(crate) fn type_of_expr<'a>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
         | hir::ExprKind::Field(..)
-        | hir::ExprKind::Index(..) => cx.need_self_determined_type(expr.id, env),
+        | hir::ExprKind::Index(..)
+        | hir::ExprKind::Assign { .. } => cx.need_self_determined_type(expr.id, env),
 
         // Unsized constants infer their type from the context if possible, and
         // otherwise fall back to a self-determined mode.
@@ -1823,6 +1824,13 @@ fn self_determined_expr_type<'gcx>(
                 .unwrap_or(UnpackedType::make_error()),
         ),
 
+        // Assignment expressions produce the value of the assigned variable as
+        // their own value, which is basically the self-determined type of the
+        // lhs, if available, and otherwise the rhs.
+        hir::ExprKind::Assign { lhs, rhs, .. } => cx
+            .self_determined_type(lhs.id, env)
+            .or_else(|| cx.self_determined_type(rhs.id, env)),
+
         _ => None,
     }
 }
@@ -2418,6 +2426,16 @@ fn type_context_imposed_by_expr<'gcx>(
                 cx.span(target).extract()
             );
             Some(opty.into())
+        }
+
+        hir::ExprKind::Assign { lhs, rhs, .. } => {
+            if lhs.id == onto {
+                cx.self_determined_type(rhs.id, env).map(Into::into)
+            } else if rhs.id == onto {
+                cx.self_determined_type(lhs.id, env).map(Into::into)
+            } else {
+                None
+            }
         }
 
         _ => None,

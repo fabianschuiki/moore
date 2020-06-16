@@ -675,6 +675,12 @@ pub enum ExprKind<'a> {
     Inside(NodeId, Vec<Spanned<InsideRange>>),
     /// A function call such as `foo(a, b, c)`.
     FunctionCall(NodeId, Vec<CallArg>),
+    /// An assignment.
+    Assign {
+        op: ast::AssignOp,
+        lhs: &'a ast::Expr<'a>,
+        rhs: &'a ast::Expr<'a>,
+    },
 }
 
 /// The different unary operators.

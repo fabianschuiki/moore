@@ -1384,6 +1384,15 @@ fn lower_expr_inner<'gcx>(
                 .collect(),
         ),
         ast::BitsExpr { ref arg, .. } => hir::ExprKind::Builtin(hir::BuiltinCall::Bits(arg)),
+        ast::AssignExpr {
+            op,
+            ref lhs,
+            ref rhs,
+        } => hir::ExprKind::Assign {
+            op,
+            lhs: lhs.as_ref(),
+            rhs: rhs.as_ref(),
+        },
         _ => {
             error!("{:#1?}", expr);
             bug_span!(

@@ -324,6 +324,10 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
                 }
             }
         }
+        ExprKind::Assign { lhs, rhs, .. } => {
+            visitor.visit_node_with_id(lhs.id, true);
+            visitor.visit_node_with_id(rhs.id, false);
+        }
     }
 }
 
