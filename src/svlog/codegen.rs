@@ -1141,6 +1141,10 @@ where
                 let inner = self.emit_zero_for_type(ty);
                 self.builder.ins().sig(inner)
             }
+            llhd::PointerType(ref ty) => {
+                let inner = self.emit_zero_for_type(ty);
+                self.builder.ins().var(inner)
+            }
             llhd::ArrayType(l, ref ty) => {
                 let inner = self.emit_zero_for_type(ty);
                 self.builder.ins().array_uniform(l, inner)
