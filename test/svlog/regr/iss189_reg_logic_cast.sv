@@ -1,5 +1,4 @@
 // RUN: moore %s -e foo -e bar
-// IGNORE  see #189
 
 module foo (
     input  wire [1:0] x,

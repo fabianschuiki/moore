@@ -877,7 +877,15 @@ impl<'a> PackedCore<'a> {
         match (self, other) {
             (Self::Error, Self::Error) => true,
             (Self::Void, Self::Void) => true,
-            (Self::IntVec(a), Self::IntVec(b)) => a == b,
+            (Self::IntVec(a), Self::IntVec(b)) => {
+                (match *a {
+                    IntVecType::Reg => IntVecType::Logic,
+                    x => x,
+                }) == (match *b {
+                    IntVecType::Reg => IntVecType::Logic,
+                    x => x,
+                })
+            }
             (Self::IntAtom(a), Self::IntAtom(b)) => a == b,
             (Self::Struct(a), Self::Struct(b)) => a == b,
             (Self::Enum(a), Self::Enum(b)) => a == b,
