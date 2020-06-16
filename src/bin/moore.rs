@@ -463,7 +463,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
             let pass_ctx = PassContext;
             if ctx.sess.opts.opt_level > 0 {
                 llhd::pass::ConstFolding::run_on_module(&pass_ctx, &mut module);
-                llhd::pass::VarToPhiPromotion::run_on_module(&pass_ctx, &mut module);
+                // llhd::pass::VarToPhiPromotion::run_on_module(&pass_ctx, &mut module); // broken in llhd 0.13
                 llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
                 llhd::pass::GlobalCommonSubexprElim::run_on_module(&pass_ctx, &mut module);
                 llhd::pass::InstSimplification::run_on_module(&pass_ctx, &mut module);
