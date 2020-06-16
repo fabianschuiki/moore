@@ -1248,7 +1248,7 @@ where
         }
 
         match mir.kind {
-            mir::RvalueKind::Var(id) => {
+            mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
                 let sig = self
                     .shadows
                     .get(&id.into())
@@ -1271,19 +1271,6 @@ where
                     }
                     _ => sig,
                 })
-            }
-
-            mir::RvalueKind::Port(id) => {
-                let sig = self
-                    .shadows
-                    .get(&id.into())
-                    .cloned()
-                    .unwrap_or_else(|| self.emitted_value(id));
-                let value = self.builder.ins().prb(sig);
-                if let Some(name) = self.builder.get_name(sig) {
-                    self.builder.set_name(value, format!("{}.prb", name));
-                }
-                Ok(value)
             }
 
             mir::RvalueKind::Intf(_) => {
