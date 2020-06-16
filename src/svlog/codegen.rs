@@ -1283,23 +1283,7 @@ where
                     .get(&id.into())
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
-                Ok(match *self.llhd_type(sig) {
-                    llhd::SignalType(_) => {
-                        let value = self.builder.ins().prb(sig);
-                        if let Some(name) = self.builder.get_name(sig) {
-                            self.builder.set_name(value, format!("{}.prb", name));
-                        }
-                        value
-                    }
-                    llhd::PointerType(_) => {
-                        let value = self.builder.ins().ld(sig);
-                        if let Some(name) = self.builder.get_name(sig) {
-                            self.builder.set_name(value, format!("{}.ld", name));
-                        }
-                        value
-                    }
-                    _ => sig,
-                })
+                Ok(self.emit_prb_or_var(sig))
             }
 
             mir::RvalueKind::Intf(_) => {
@@ -1584,6 +1568,26 @@ where
         }
     }
 
+    fn emit_prb_or_var(&mut self, sig: llhd::ir::Value) -> llhd::ir::Value {
+        match *self.llhd_type(sig) {
+            llhd::SignalType(_) => {
+                let value = self.builder.ins().prb(sig);
+                if let Some(name) = self.builder.get_name(sig) {
+                    self.builder.set_name(value, format!("{}.prb", name));
+                }
+                value
+            }
+            llhd::PointerType(_) => {
+                let value = self.builder.ins().ld(sig);
+                if let Some(name) = self.builder.get_name(sig) {
+                    self.builder.set_name(value, format!("{}.ld", name));
+                }
+                value
+            }
+            _ => sig,
+        }
+    }
+
     /// Emit the code for an rvalue converted to a boolean..
     fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         let mir = self.mir_rvalue(expr_id, env);
@@ -1624,11 +1628,7 @@ where
                     sig,
                     self.llhd_type(sig)
                 );
-                let value = self.builder.ins().prb(sig);
-                if let Some(name) = self.builder.get_name(sig) {
-                    self.builder.set_name(value, format!("{}.prb", name));
-                }
-                Ok(value)
+                Ok(self.emit_prb_or_var(sig))
             }
 
             mir::RvalueKind::Index {
