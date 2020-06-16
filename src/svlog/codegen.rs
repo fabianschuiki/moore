@@ -443,8 +443,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Determine which values are both read and written. These require
         // shadow variables to emulate the expected behaviour under blocking
         // assignments.
-        let input_set: HashSet<_> = inputs.iter().cloned().collect();
-        let output_set: HashSet<_> = outputs.iter().cloned().collect();
+        let input_set: HashSet<_> = acc.read.iter().cloned().collect();
+        let output_set: HashSet<_> = acc.written.iter().cloned().collect();
         for &id in input_set.intersection(&output_set) {
             let init = pg.builder.ins().prb(pg.values[&id.into()]);
             let shadow = pg.builder.ins().var(init);
