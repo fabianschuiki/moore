@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 - Fix implementation of assignment expressions (#172, #190)
 - Fix emission of shadow variables for read-write variables in processes
+- Fix assignments generating code multiple times
 
 ## 0.10.0 - 2020-06-15
 ### Added

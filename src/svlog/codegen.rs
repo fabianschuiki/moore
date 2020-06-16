@@ -640,8 +640,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
     /// The MIR lvalues emitted into the unit.
-    #[allow(dead_code)]
-    interned_lvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
+    interned_lvalues: HashMap<NodeId, Result<(llhd::ir::Value, Option<llhd::ir::Value>)>>,
     /// The MIR rvalues emitted into the unit.
     interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
     /// The shadow variables introduced to handle signals which are both read
@@ -686,6 +685,15 @@ where
     fn set_emitted_value(&mut self, src: impl Into<AccessedNode>, value: llhd::ir::Value) {
         let src = src.into();
         self.values.insert(src, value);
+    }
+
+    /// Clear the cached MIR lvalues and rvalues. This should be called before
+    /// or after emitting an expression, and at least for every statement.
+    /// Otherwise MIR codegen might reuse values that have become out-of-date
+    /// due to time passing in between statements.
+    fn flush_mir(&mut self) {
+        self.interned_lvalues.clear();
+        self.interned_rvalues.clear();
     }
 
     /// Emit the code for the contents of a module.
@@ -1196,7 +1204,7 @@ where
             x.clone()
         } else {
             let x = self.emit_mir_rvalue_uninterned(mir);
-            // self.interned_rvalues.insert(mir.id, x.clone());
+            self.interned_rvalues.insert(mir.id, x);
             x
         }
     }
@@ -1651,13 +1659,13 @@ where
         &mut self,
         mir: &mir::Lvalue<'gcx>,
     ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
-        // if let Some(x) = self.interned_lvalues.get(&mir.id) {
-        //     x.clone()
-        // } else {
-        let x = self.emit_mir_lvalue_uninterned(mir);
-        // self.interned_lvalues.insert(mir.id, x.clone());
-        x
-        // }
+        if let Some(x) = self.interned_lvalues.get(&mir.id) {
+            x.clone()
+        } else {
+            let x = self.emit_mir_lvalue_uninterned(mir);
+            self.interned_lvalues.insert(mir.id, x);
+            x
+        }
     }
 
     /// Emit the code for an MIR lvalue.
@@ -1880,6 +1888,7 @@ where
 
     /// Emit the code for a statement.
     fn emit_stmt(&mut self, stmt_id: NodeId, env: ParamEnv) -> Result<()> {
+        self.flush_mir();
         match self.hir_of(stmt_id)? {
             HirNode::Stmt(x) => self.emit_stmt_regular(stmt_id, x, env),
             HirNode::VarDecl(x) => self.emit_stmt_var_decl(stmt_id, x, env),
