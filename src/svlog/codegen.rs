@@ -11,7 +11,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv,
 };
-use num::{BigInt, One, Zero};
+use num::{BigInt, One, ToPrimitive, Zero};
 use std::{
     collections::{HashMap, HashSet},
     iter::{once, repeat},
@@ -1438,19 +1438,61 @@ where
             mir::RvalueKind::IntBinaryArith {
                 op, lhs, rhs, sign, ..
             } => {
-                let lhs = self.emit_mir_rvalue(lhs)?;
-                let rhs = self.emit_mir_rvalue(rhs)?;
+                let lhs_ll = self.emit_mir_rvalue(lhs)?;
+                let rhs_ll = self.emit_mir_rvalue(rhs)?;
                 let signed = sign.is_signed();
                 Ok(match op {
-                    mir::IntBinaryArithOp::Add => self.builder.ins().add(lhs, rhs),
-                    mir::IntBinaryArithOp::Sub => self.builder.ins().sub(lhs, rhs),
-                    mir::IntBinaryArithOp::Mul if signed => self.builder.ins().smul(lhs, rhs),
-                    mir::IntBinaryArithOp::Div if signed => self.builder.ins().sdiv(lhs, rhs),
-                    mir::IntBinaryArithOp::Mod if signed => self.builder.ins().smod(lhs, rhs),
-                    mir::IntBinaryArithOp::Mul => self.builder.ins().umul(lhs, rhs),
-                    mir::IntBinaryArithOp::Div => self.builder.ins().udiv(lhs, rhs),
-                    mir::IntBinaryArithOp::Mod => self.builder.ins().umod(lhs, rhs),
+                    mir::IntBinaryArithOp::Add => self.builder.ins().add(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Sub => self.builder.ins().sub(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mul if signed => self.builder.ins().smul(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Div if signed => self.builder.ins().sdiv(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mod if signed => self.builder.ins().smod(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mul => self.builder.ins().umul(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Div => self.builder.ins().udiv(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mod => self.builder.ins().umod(lhs_ll, rhs_ll),
+
+                    // The `x**y` operator requires special love, because there
+                    // is no direct equivalent for it in LLHD.
                     mir::IntBinaryArithOp::Pow => {
+                        // If the exponent is a constant, we simply unroll.
+                        if rhs.is_const() {
+                            let count = self.const_mir_rvalue_int(Ref(rhs))?;
+                            let mut value = lhs_ll;
+                            for _ in 1..count.to_usize().unwrap() {
+                                value = self.builder.ins().umul(value, lhs_ll);
+                            }
+                            return Ok(value);
+                        }
+
+                        // If the base is a constant power of two, we translate
+                        // `x**y` into `1 << (y * log2(x))`.
+                        if lhs.is_const() {
+                            let base = self.const_mir_rvalue_int(Ref(lhs))?.to_usize();
+                            // `log2(base)`
+                            let lg2 = base.and_then(|base| {
+                                if base.is_power_of_two() {
+                                    Some(base.trailing_zeros())
+                                } else {
+                                    None
+                                }
+                            });
+                            // `y * log2(base)`
+                            let rhs_ll = lg2.map(|lg2| {
+                                let width = self.llhd_type(rhs_ll).len();
+                                let lg2 = self.builder.ins().const_int((width, BigInt::from(lg2)));
+                                self.builder.ins().umul(lg2, rhs_ll)
+                            });
+                            if let Some(rhs_ll) = rhs_ll {
+                                // `1`
+                                let width = self.llhd_type(lhs_ll).len();
+                                let lhs_ll = self.builder.ins().const_int((width, BigInt::one()));
+                                // `1 << (y * log2(base))`
+                                let zeros = self.emit_zero_for_type(&self.llhd_type(lhs_ll));
+                                return Ok(self.builder.ins().shl(lhs_ll, zeros, rhs_ll));
+                            }
+                        }
+
+                        // Otherwise we just complain.
                         self.emit(
                             DiagBuilder2::error("`**` operator on non-constants not supported")
                                 .span(mir.span),
