@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix genvar initialization in for-generate (#192)
 - Fix assignment operators in genvar steps
 - Fix casting between vectors of different directions (#188)
+- Fix precedence issue with dimensions of named types
 
 ## 0.10.0 - 2020-06-15
 ### Added

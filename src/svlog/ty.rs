@@ -579,10 +579,19 @@ impl<'a> PackedType<'a> {
         {
             return inner;
         }
-        let mut out = inner.clone();
-        out.dims.extend(self.dims.iter().cloned());
-        out.sign = self.sign;
-        out.sign_explicit = self.sign_explicit;
+        let out = Self {
+            core: inner.core.clone(),
+            sign: self.sign,
+            sign_explicit: self.sign_explicit,
+            dims: self
+                .dims
+                .iter()
+                .cloned()
+                .chain(inner.dims.iter().cloned())
+                .collect(),
+            resolved: None,
+            resolved_full: None,
+        };
         out.intern(cx)
     }
 
@@ -1243,8 +1252,17 @@ impl<'a> UnpackedType<'a> {
         if self.dims.is_empty() {
             return inner;
         }
-        let mut out = inner.clone();
-        out.dims.extend(self.dims.iter().cloned());
+        let out = Self {
+            core: inner.core.clone(),
+            dims: self
+                .dims
+                .iter()
+                .cloned()
+                .chain(inner.dims.iter().cloned())
+                .collect(),
+            resolved: None,
+            resolved_full: None,
+        };
         out.intern(cx)
     }
 
