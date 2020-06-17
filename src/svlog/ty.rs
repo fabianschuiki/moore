@@ -675,7 +675,23 @@ impl<'a> PackedType<'a> {
         // NOTE: It's important that this does not use resolve_full(), since
         // otherwise the type casting breaks.
         match self.core {
-            PackedCore::IntVec(..) => self.dims.len() == 1,
+            PackedCore::IntVec(..) if self.dims.len() == 1 => match self.dims[0] {
+                PackedDim::Range(Range {
+                    offset: 0,
+                    dir: RangeDir::Down,
+                    ..
+                }) => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Check if this type is a simple integer vector type, like `logic [x:y]`
+    /// or `logic`.
+    pub fn is_integer_vec(&self) -> bool {
+        match self.resolve_full().core {
+            PackedCore::IntVec(..) => self.dims.len() <= 1,
             _ => false,
         }
     }
@@ -710,9 +726,7 @@ impl<'a> PackedType<'a> {
             enm.base.coalesces_to_llhd_scalar()
         } else {
             !self.is_time()
-                && (self.resolve_full().is_simple_bit_vector()
-                    || self.is_integer_atom()
-                    || self.is_single_bit())
+                && (self.is_integer_vec() || self.is_integer_atom() || self.is_single_bit())
         }
     }
 
