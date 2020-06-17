@@ -173,12 +173,13 @@ pub fn make_array<'a>(ty: &'a UnpackedType<'a>, elements: Vec<Value<'a>>) -> Val
 }
 
 /// Determine the constant value of a node.
-pub(crate) fn constant_value_of<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn constant_value_of<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<Value<'gcx>> {
-    let v = const_node(cx, node_id, env);
+) -> Result<Value<'a>> {
+    let v = constant_value_of_inner(cx, node_id, env);
     if cx.sess().has_verbosity(Verbosity::CONSTS) {
         let vp = v
             .as_ref()
@@ -192,11 +193,11 @@ pub(crate) fn constant_value_of<'gcx>(
     v
 }
 
-fn const_node<'gcx>(
-    cx: &impl Context<'gcx>,
+fn constant_value_of_inner<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<Value<'gcx>> {
+) -> Result<Value<'a>> {
     let hir = cx.hir_of(node_id)?;
     match hir {
         HirNode::Expr(expr) => {
@@ -765,7 +766,8 @@ fn const_reduction_int<'gcx>(
 }
 
 /// Check if a node has a constant value.
-pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<bool> {
+#[moore_derive::query]
+pub(crate) fn is_constant<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<bool> {
     let hir = cx.hir_of(node_id)?;
     Ok(match hir {
         HirNode::ValueParam(_) => true,
@@ -776,10 +778,8 @@ pub(crate) fn is_constant<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Res
 }
 
 /// Determine the default value of a type.
-pub(crate) fn type_default_value<'gcx>(
-    cx: &impl Context<'gcx>,
-    ty: &'gcx UnpackedType<'gcx>,
-) -> Value<'gcx> {
+#[moore_derive::query]
+pub(crate) fn type_default_value<'a>(cx: &impl Context<'a>, ty: &'a UnpackedType<'a>) -> Value<'a> {
     let ty_orig = ty;
     let ty = ty.resolve_full();
     debug!("Resolved `{}` to `{}`", ty_orig, ty);

@@ -29,7 +29,6 @@ use crate::{
     hir::{self, HirNode},
     port_list::PortList,
     resolver::{Scope, StructDef},
-    ty::UnpackedType,
     value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, ParamEnvSource, QueryDatabase, QueryStorage,
 };
@@ -742,24 +741,6 @@ pub(super) mod queries {
                 use fn resolver::resolve_node;
             }
 
-            /// Determine the constant value of a node.
-            fn constant_value_of(node_id: NodeId, env: ParamEnv) -> Result<Value<'a>> {
-                type ConstantValueOfQuery;
-                use fn value::constant_value_of;
-            }
-
-            /// Check if a node has a constant value.
-            fn is_constant(node_id: NodeId) -> Result<bool> {
-                type IsConstantQuery;
-                use fn value::is_constant;
-            }
-
-            /// Determine the default value of a type.
-            fn type_default_value(ty: &'a UnpackedType<'a>) -> Value<'a> {
-                type TypeDefaultValueQuery;
-                use fn value::type_default_value;
-            }
-
             /// Obtain the details of a struct definition.
             fn struct_def(node_id: NodeId) -> Result<Arc<StructDef>> {
                 type StructDefQuery;
@@ -796,9 +777,6 @@ pub(super) mod queries {
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
                 fn resolve_downwards() for ResolveDownwardsQuery<'gcx>;
-                fn constant_value_of() for ConstantValueOfQuery<'gcx>;
-                fn is_constant() for IsConstantQuery<'gcx>;
-                fn type_default_value() for TypeDefaultValueQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
                 fn mir_lvalue() for MirLvalueQuery<'gcx>;
