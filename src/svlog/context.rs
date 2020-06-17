@@ -678,8 +678,9 @@ pub trait BaseContext<'gcx>:
 
     /// Compute the constant value of a node and make sure it is an integer.
     fn constant_int_value_of(&self, node_id: NodeId, env: ParamEnv) -> Result<&'gcx num::BigInt> {
-        match self.gcx().constant_value_of(node_id, env)?.kind {
+        match self.gcx().constant_value_of(node_id, env).kind {
             ValueKind::Int(ref x, ..) => Ok(x),
+            ValueKind::Error => Err(()),
             _ => {
                 let hir = self.gcx().hir_of(node_id)?;
                 self.emit(

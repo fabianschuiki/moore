@@ -178,31 +178,26 @@ pub(crate) fn constant_value_of<'a>(
     cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<Value<'a>> {
+) -> Value<'a> {
     let v = constant_value_of_inner(cx, node_id, env);
     if cx.sess().has_verbosity(Verbosity::CONSTS) {
-        let vp = v
-            .as_ref()
-            .map(|v| format!("{}, {}", v.ty, v.kind))
-            .unwrap_or_else(|_| format!("<error>"));
         let span = cx.span(node_id);
         let ext = span.extract();
         let line = span.begin().human_line();
-        println!("{}: const({}) = {}", line, ext, vp);
+        println!("{}: const({}) = {}, {}", line, ext, v.ty, v.kind);
     }
     v
 }
 
-fn constant_value_of_inner<'a>(
-    cx: &impl Context<'a>,
-    node_id: NodeId,
-    env: ParamEnv,
-) -> Result<Value<'a>> {
-    let hir = cx.hir_of(node_id)?;
+fn constant_value_of_inner<'a>(cx: &impl Context<'a>, node_id: NodeId, env: ParamEnv) -> Value<'a> {
+    let hir = match cx.hir_of(node_id) {
+        Ok(x) => x,
+        _ => return cx.intern_value(make_error(UnpackedType::make_error())),
+    };
     match hir {
         HirNode::Expr(expr) => {
             let mir = cx.mir_rvalue(expr.id, env);
-            Ok(cx.const_mir_rvalue(mir.into()))
+            cx.const_mir_rvalue(mir.into())
         }
         HirNode::ValueParam(param) => {
             let env_data = cx.param_env_data(env);
@@ -210,7 +205,7 @@ fn constant_value_of_inner<'a>(
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
                     return cx.constant_value_of(assigned_id.id(), assigned_id.env())
                 }
-                Some(ParamEnvBinding::Direct(v)) => return Ok(v),
+                Some(ParamEnvBinding::Direct(v)) => return v,
                 _ => (),
             }
             if let Some(default) = param.default {
@@ -232,7 +227,7 @@ fn constant_value_of_inner<'a>(
             if contexts.is_empty() {
                 cx.emit(d.span(param.human_span()));
             }
-            Err(())
+            cx.intern_value(make_error(UnpackedType::make_error()))
         }
         HirNode::GenvarDecl(decl) => {
             let env_data = cx.param_env_data(env);
@@ -240,7 +235,7 @@ fn constant_value_of_inner<'a>(
                 Some(ParamEnvBinding::Indirect(assigned_id)) => {
                     return cx.constant_value_of(assigned_id.id(), assigned_id.env())
                 }
-                Some(ParamEnvBinding::Direct(v)) => return Ok(v),
+                Some(ParamEnvBinding::Direct(v)) => return v,
                 _ => (),
             }
             if let Some(init) = decl.init {
@@ -250,20 +245,25 @@ fn constant_value_of_inner<'a>(
                 DiagBuilder2::error(format!("{} not initialized", decl.desc_full()))
                     .span(decl.human_span()),
             );
-            Err(())
+            cx.intern_value(make_error(UnpackedType::make_error()))
         }
-        HirNode::VarDecl(_) => {
+        HirNode::EnumVariant(var) => match var.value {
+            Some(v) => cx.constant_value_of(v, env),
+            None => {
+                let ty = match cx.type_of(node_id, env) {
+                    Ok(x) => x,
+                    _ => return cx.intern_value(make_error(UnpackedType::make_error())),
+                };
+                cx.intern_value(make_int(ty, var.index.into()))
+            }
+        },
+        _ => {
             cx.emit(
                 DiagBuilder2::error(format!("{} has no constant value", hir.desc_full()))
                     .span(hir.human_span()),
             );
-            Err(())
+            cx.intern_value(make_error(UnpackedType::make_error()))
         }
-        HirNode::EnumVariant(var) => match var.value {
-            Some(v) => cx.constant_value_of(v, env),
-            None => Ok(cx.intern_value(make_int(cx.type_of(node_id, env)?, var.index.into()))),
-        },
-        _ => cx.unimp_msg("constant value computation of", &hir),
     }
 }
 

@@ -157,7 +157,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             }
             let default_value = gen.emit_const(
                 if let Some(default) = port.default {
-                    gen.constant_value_of(default, env)?
+                    gen.constant_value_of(default, env)
                 } else {
                     gen.type_default_value(port.ty)
                 },
@@ -588,7 +588,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     kind: hir::AssignKind::Block(ast::AssignOp::Identity),
                 } => {
                     let target_id = self.resolve_node(lhs, env)?;
-                    let init_value = self.constant_value_of(rhs, env)?;
+                    let init_value = self.constant_value_of(rhs, env);
                     let mut env_data = self.param_env_data(env).clone();
                     env_data.set_value(target_id, init_value);
                     Ok(self.intern_param_env(env_data))
@@ -607,7 +607,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             HirNode::Expr(expr) => match expr.kind {
                 hir::ExprKind::Unary(op, target_id) => {
                     let target_id = self.resolve_node(target_id, env)?;
-                    let current_value = self.constant_value_of(target_id, env)?;
+                    let current_value = self.constant_value_of(target_id, env);
                     let next_value = match current_value.kind {
                         ValueKind::Int(ref v, ..) => match op {
                             hir::UnaryOp::PostInc | hir::UnaryOp::PreInc => Some(v + 1),
@@ -742,7 +742,7 @@ where
             let ty = self.type_of(decl_id, env)?;
             let init = self.emit_const(
                 match hir.init {
-                    Some(expr) => self.constant_value_of(expr, env)?,
+                    Some(expr) => self.constant_value_of(expr, env),
                     None => self.type_default_value(ty),
                 },
                 env,
@@ -781,7 +781,7 @@ where
             for signal in signals {
                 let init = self.emit_const(
                     match signal.default {
-                        Some(expr) => self.constant_value_of(expr, intf_ty.env)?,
+                        Some(expr) => self.constant_value_of(expr, intf_ty.env),
                         None => self.type_default_value(signal.ty),
                     },
                     intf_ty.env,
@@ -902,7 +902,7 @@ where
                     ref main_body,
                     ref else_body,
                 } => {
-                    let k = self.constant_value_of(cond, env)?;
+                    let k = self.constant_value_of(cond, env);
                     if k.is_false() {
                         if let Some(else_body) = else_body {
                             self.emit_module_block(id, env, else_body, name_prefix)?;
@@ -921,7 +921,7 @@ where
                     for &i in init {
                         local_env = self.execute_genvar_init(i, local_env)?;
                     }
-                    while self.constant_value_of(cond, local_env)?.is_true() {
+                    while self.constant_value_of(cond, local_env).is_true() {
                         self.emit_module_block(id, local_env, body, name_prefix)?;
                         local_env = self.execute_genvar_step(step, local_env)?;
                     }
@@ -2213,7 +2213,7 @@ where
                     let mut last_check = self.builder.ins().const_int((1, 0));
                     for &way_expr in way_exprs {
                         // Determine the constant value of the label.
-                        let way_const = self.constant_value_of(way_expr, env)?;
+                        let way_const = self.constant_value_of(way_expr, env);
                         let (_, special_bits, x_bits) = match &way_const.kind {
                             ValueKind::Int(v, s, x) => (v, s, x),
                             _ => panic!("case constant evaluates to non-integer"),

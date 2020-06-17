@@ -2635,7 +2635,7 @@ fn size_from_bounds_expr<'a>(
     env: ParamEnv,
     span: Span,
 ) -> Result<usize> {
-    let size = match cx.constant_value_of(expr, env)?.kind {
+    let size = match cx.constant_value_of(expr, env).kind {
         ValueKind::Int(ref int, ..) => int,
         ValueKind::Error => return Err(()),
         _ => {
@@ -2672,7 +2672,7 @@ fn range_from_bounds_exprs<'a>(
     span: Span,
 ) -> Result<ty::Range> {
     let map_bound = |bound: NodeId| -> Result<&num::BigInt> {
-        match cx.constant_value_of(bound, env)?.kind {
+        match cx.constant_value_of(bound, env).kind {
             ValueKind::Int(ref int, ..) => Ok(int),
             ValueKind::Error => Err(()),
             _ => {

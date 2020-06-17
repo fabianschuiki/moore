@@ -168,9 +168,10 @@ fn lower_expr_inner<'gcx>(
             Ok(builder.constant(value::make_int(ty, num::zero())))
         }
         hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(arg)) => {
-            let arg_val = cx.constant_value_of(arg, env)?;
+            let arg_val = cx.constant_value_of(arg, env);
             let arg_int = match arg_val.kind {
                 ValueKind::Int(ref arg, ..) => arg,
+                ValueKind::Error => return Ok(builder.error()),
                 _ => unreachable!(),
             };
             let value = if arg_int <= &BigInt::one() {
@@ -212,7 +213,7 @@ fn lower_expr_inner<'gcx>(
                     Ok(builder.build(ty, RvalueKind::Intf(inst.id)))
                 }
                 HirNode::EnumVariant(..) | HirNode::ValueParam(..) | HirNode::GenvarDecl(..) => {
-                    let k = builder.cx.constant_value_of(binding, env)?;
+                    let k = builder.cx.constant_value_of(binding, env);
                     Ok(builder.build(ty, RvalueKind::Const(k)))
                 }
                 x => {

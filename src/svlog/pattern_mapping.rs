@@ -169,9 +169,10 @@ fn map_named_array_pattern<'a>(
             hir::PatternMapping::Member(member_id) => {
                 // Determine the index for the mapping.
                 let index = match || -> Result<usize> {
-                    let index = cx.constant_value_of(member_id, env)?;
+                    let index = cx.constant_value_of(member_id, env);
                     let index = match &index.kind {
                         ValueKind::Int(i, ..) => i - num::BigInt::from(offset),
+                        ValueKind::Error => return Err(()),
                         _ => {
                             cx.emit(
                                 DiagBuilder2::error("array index must be a constant integer")
