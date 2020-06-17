@@ -690,32 +690,36 @@ impl<'a> PackedType<'a> {
     /// Check if this type is a simple integer vector type, like `logic [x:y]`
     /// or `logic`.
     pub fn is_integer_vec(&self) -> bool {
-        match self.resolve_full().core {
-            PackedCore::IntVec(..) => self.dims.len() <= 1,
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::IntVec(..) => ty.dims.len() <= 1,
             _ => false,
         }
     }
 
     /// Check if this type is an integer atom type, like `int`.
     pub fn is_integer_atom(&self) -> bool {
-        match self.resolve_full().core {
-            PackedCore::IntAtom(..) => self.dims.len() == 0,
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::IntAtom(..) => ty.dims.len() == 0,
             _ => false,
         }
     }
 
     /// Check if this type is a single bit type, like `bit`.
     pub fn is_single_bit(&self) -> bool {
-        match self.resolve_full().core {
-            PackedCore::IntVec(..) => self.dims.len() == 0,
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::IntVec(..) => ty.dims.len() == 0,
             _ => false,
         }
     }
 
     /// Check if this type is the `time` type.
     pub fn is_time(&self) -> bool {
-        match self.resolve_full().core {
-            PackedCore::IntAtom(IntAtomType::Time) => self.dims.len() == 0,
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::IntAtom(IntAtomType::Time) => ty.dims.len() == 0,
             _ => false,
         }
     }
@@ -791,16 +795,18 @@ impl<'a> PackedType<'a> {
 
     /// Get the underlying struct, or `None` if the type is no struct.
     pub fn get_struct(&self) -> Option<&StructType<'a>> {
-        match self.resolve_full().core {
-            PackedCore::Struct(ref x) if self.resolve_full().dims.is_empty() => Some(x),
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::Struct(ref x) if ty.dims.is_empty() => Some(x),
             _ => None,
         }
     }
 
     /// Get the underlying enum, or `None` if the type is no enum.
     pub fn get_enum(&self) -> Option<&EnumType<'a>> {
-        match self.resolve_full().core {
-            PackedCore::Enum(ref x) if self.resolve_full().dims.is_empty() => Some(x),
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::Enum(ref x) if ty.dims.is_empty() => Some(x),
             _ => None,
         }
     }
