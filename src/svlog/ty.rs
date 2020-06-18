@@ -96,7 +96,7 @@ use std::{
 };
 
 /// A packed type.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PackedType<'a> {
     /// The core packed type.
     pub core: PackedCore<'a>,
@@ -223,7 +223,7 @@ pub enum RangeDir {
 }
 
 /// An unpacked type.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UnpackedType<'a> {
     /// The core unpacked type.
     pub core: UnpackedCore<'a>,
@@ -874,6 +874,12 @@ impl Display for PackedType<'_> {
             }
         }
         Ok(())
+    }
+}
+
+impl Debug for PackedType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Display::fmt(self.resolve_full(), f)
     }
 }
 
@@ -1589,6 +1595,12 @@ impl Display for UnpackedType<'_> {
                 Some("$")
             },
         )
+    }
+}
+
+impl Debug for UnpackedType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Display::fmt(self.resolve_full(), f)
     }
 }
 
