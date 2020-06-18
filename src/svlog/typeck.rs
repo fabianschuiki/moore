@@ -1224,7 +1224,10 @@ fn cast_expr_type_inner<'gcx>(
 
     // Cast interfaces to one of their modports.
     if let TypeContext::Type(context) = context {
-        if let (Some(from), Some(to)) = (inferred.get_interface(), context.get_interface()) {
+        if let (Some(from), Some(to)) = (
+            inferred.resolve_full().core.get_interface(),
+            context.resolve_full().core.get_interface(),
+        ) {
             trace!("  Both are interfaces: {:?}", from);
             trace!("                  and: {:?}", to);
             if from.ast == to.ast && from.env == to.env {

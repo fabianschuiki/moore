@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix assignment operators in genvar steps
 - Fix casting between vectors of different directions (#188)
 - Fix precedence issue with dimensions of named types
+- Fix interface arrays not implicitly picking modport
 
 ## 0.10.0 - 2020-06-15
 ### Added
