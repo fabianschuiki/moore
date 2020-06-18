@@ -380,14 +380,14 @@ pub(crate) fn struct_def<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Resu
 
 /// Resolve the field name in a field access expression.
 ///
-/// Returns the index of the field that is actually being accessed, and the node
-/// id of the field definition.
+/// Returns the index of the field that is actually being accessed, and a
+/// reference to the member itself.
 #[moore_derive::query]
 pub(crate) fn resolve_field_access<'a>(
     cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
-) -> Result<(usize, NodeEnvId)> {
+) -> Result<(usize, &'a ty::StructMember<'a>)> {
     let hir = match cx.hir_of(node_id)? {
         HirNode::Expr(x) => x,
         _ => unreachable!(),
@@ -415,7 +415,7 @@ pub(crate) fn resolve_field_access<'a>(
         .iter()
         .position(|member| member.name.value == name.value);
     match index {
-        Some(x) => Ok((x, strukt.members[x].ast_name.id().env(env))),
+        Some(x) => Ok((x, &strukt.members[x])),
         None => {
             cx.emit(
                 DiagBuilder2::error(format!("value of type `{}` has no field `{}`", ty, name))
