@@ -2068,6 +2068,10 @@ pub(crate) fn operation_type<'a>(
             }
         }
 
+        hir::ExprKind::Assign { lhs, rhs, .. } => cx
+            .self_determined_type(lhs.id, env)
+            .or_else(|| cx.self_determined_type(rhs.id, env)),
+
         _ => None,
     }
 }
@@ -2431,15 +2435,8 @@ fn type_context_imposed_by_expr<'gcx>(
             Some(opty.into())
         }
 
-        hir::ExprKind::Assign { lhs, rhs, .. } => {
-            if lhs.id == onto {
-                cx.self_determined_type(rhs.id, env).map(Into::into)
-            } else if rhs.id == onto {
-                cx.self_determined_type(lhs.id, env).map(Into::into)
-            } else {
-                None
-            }
-        }
+        // Assignments impose their operation type as context.
+        hir::ExprKind::Assign { .. } => Some(cx.need_operation_type(expr.id, env).into()),
 
         _ => None,
     }

@@ -35,7 +35,7 @@ module foo;
     max_counter i24();
     mv_filter i25();
     onehot_to_bin i26();
-    // plru_tree i27();
+    plru_tree i27();
     popcount #(.INPUT_WIDTH(16)) i28();
     rr_arb_tree #(.NumIn(4)) i29();
     rstgen_bypass i30();
