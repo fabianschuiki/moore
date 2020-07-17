@@ -5180,6 +5180,7 @@ fn try_drive_strength<'n>(
         p.bump();
         p.require_reported(Comma)?;
         if let Some(b) = as_drive_strength(p.peek(0).0) {
+            p.bump();
             Ok(Some((a, b)))
         } else {
             let q = p.peek(0).1;
