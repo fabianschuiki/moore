@@ -836,6 +836,7 @@ fn lower_type<'gcx>(
         | ast::RealType
         | ast::RealtimeType
         | ast::SpecializedType(..)
+        | ast::ForwardType { .. }
         | ast::ScopedType { .. } => {
             error!("{:#?}", ty);
             bug_span!(

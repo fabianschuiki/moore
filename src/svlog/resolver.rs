@@ -737,16 +737,24 @@ impl<'a, 'c, C: Context<'a>> ScopeGenerator<'a, 'c, C> {
     }
 
     /// Register a definition.
-    pub fn add_def(&mut self, def: Def<'a>) {
+    pub fn add_def(&mut self, mut def: Def<'a>) {
         trace!(" - Adding definition {:?}", def);
 
         // Check that the definition does not collide with a previous one.
         if let Some(existing) = self.scope.defs.get(&def.name.value) {
-            // Do not redefine ports.
             match existing.node {
+                // Do not redefine ports.
                 DefNode::IntPort(_) => return,
-                _ => (),
+                // Handle being allowed to override forward declarations
+                DefNode::Ast(node) => {
+                    if let ast::AllNode::Typedef(ast) = node.as_all() {
+                        if let ast::ForwardType { kind: _ } = ast.ty.kind.data {
+                            def.may_override = true;
+                        }
+                    }
+                }
             };
+
             if !def.may_override {
                 let d = DiagBuilder2::error(format!("`{}` is defined multiple times", def.name))
                     .span(def.name.span)

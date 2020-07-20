@@ -1777,21 +1777,41 @@ fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeK
         (false, TypeSign::None)
     };
 
-    // Parse the struct members.
-    let members = flanked(p, Brace, |p| {
-        repeat_until(p, CloseDelim(Brace), parse_struct_member)
-    })?;
+    if p.peek(0).0 == OpenDelim(Brace) {
+        // Parse the struct members.
+        let members = flanked(p, Brace, |p| {
+            repeat_until(p, CloseDelim(Brace), parse_struct_member)
+        })?;
 
-    span.expand(p.last_span());
-    Ok(ast::StructType(ast::Struct::new(
-        span,
-        ast::StructData {
-            kind: kind,
-            packed: packed,
-            signing: signing,
-            members: members,
-        },
-    )))
+        span.expand(p.last_span());
+        Ok(ast::StructType(ast::Struct::new(
+            span,
+            ast::StructData {
+                kind: kind,
+                packed: packed,
+                signing: signing,
+                members: members,
+            },
+        )))
+    } else {
+        // Handle as forward declaration
+        span.expand(p.last_span());
+        let struct_type = ast::StructType(ast::Struct::new(
+            span,
+            ast::StructData {
+                kind: kind,
+                packed: packed,
+                signing: signing,
+                members: Vec::default()
+            },
+        ));
+
+        let forward_type = ast::ForwardType {
+            kind: Box::new(TypeKind::new(span, struct_type))
+        };
+
+        Ok(forward_type)
+    }
 }
 
 fn parse_struct_member<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<StructMember<'n>> {
@@ -5007,12 +5027,35 @@ impl<'tp, 'n> AbstractParser<'n> for BranchParser<'tp, 'n> {
 fn parse_typedef<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typedef<'n>> {
     let mut span = p.peek(0).1;
     p.require_reported(Keyword(Kw::Typedef))?;
-    let ty = parse_explicit_type(p)?;
-    let name = parse_identifier_name(p, "type name")?;
+
+    // We might be a declaration of the format "typedef x;", in which case we
+    // just store what we know and continue.
+    {
+        let mut bp = BranchParser::new(p);
+        let name = parse_identifier_name(&mut bp, "type name");
+        let semi = bp.require_reported(Semicolon);
+        if let (Ok(name), Ok(semi)) = (name, semi) {
+            bp.commit();
+            span.expand(p.last_span());
+
+            let dims = Vec::default();
+            let ty = Type::new(span, TypeData {
+                kind: TypeKind::new(span, ast::ForwardType {
+                    kind: Box::new(TypeKind::new(span, ImplicitType))
+                }),
+                sign: TypeSign::None,
+                dims: Vec::default()
+            });
+            return Ok(Typedef::new(span, TypedefData { name, ty, dims }));
+        }
+    }
+
+    let mut ty = parse_explicit_type(p)?;
+    let ident_name = parse_identifier_name(p, "type name")?;
     let (dims, _) = parse_optional_dimensions(p)?;
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
-    Ok(Typedef::new(span, TypedefData { name, ty, dims }))
+    Ok(Typedef::new(span, TypedefData { name: ident_name, ty: ty, dims: dims }))
 }
 
 fn parse_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<PortDecl<'n>> {
