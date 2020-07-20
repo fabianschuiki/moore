@@ -760,6 +760,11 @@ pub enum TypeKind<'a> {
         name: Spanned<Name>,
     },
 
+    // Forward declarations
+    ForwardType {
+        kind: Box<TypeKind<'a>>
+    },
+
     // Integer Vector Types
     BitType,
     LogicType,

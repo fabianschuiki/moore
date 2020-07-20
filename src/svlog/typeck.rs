@@ -670,6 +670,13 @@ pub(crate) fn packed_type_from_ast<'a>(
             packed_type_from_def(cx, def, name.span, env)
         }
 
+        // Forward declarations
+        ast::ForwardType { kind: _ } => {
+            // TODO This should likely be a nicer error if we get here because a forward
+            // declaration is not later defined.
+            bug_span!(ast.span(), cx, "type {:#1?} not implemented", ast.kind)
+        }
+
         // Scoped types
         ast::ScopedType {
             ref ty,
