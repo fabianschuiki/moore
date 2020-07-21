@@ -762,7 +762,7 @@ pub enum TypeKind<'a> {
 
     // Forward declarations
     ForwardType {
-        kind: Box<TypeKind<'a>>
+        kind: Box<TypeKind<'a>>,
     },
 
     // Integer Vector Types
