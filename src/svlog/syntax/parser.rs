@@ -5029,9 +5029,13 @@ fn parse_typedef<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typedef<'
     p.require_reported(Keyword(Kw::Typedef))?;
 
     // We might be a declaration of the format "typedef x;", in which case we
-    // just store what we know and continue.
+    // just store what we know and continue. Also handle "typedef enum x;" syntax
+    // here to avoid the enum parsing code, which has to deal with type specifers.
     {
         let mut bp = BranchParser::new(p);
+        if bp.peek(0).0 == Keyword(Kw::Enum) {
+            bp.bump();
+        }
         let name = parse_identifier_name(&mut bp, "type name");
         let semi = bp.require_reported(Semicolon);
         if let (Ok(name), Ok(semi)) = (name, semi) {
