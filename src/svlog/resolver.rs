@@ -755,6 +755,18 @@ impl<'a, 'c, C: Context<'a>> ScopeGenerator<'a, 'c, C> {
                 }
             };
 
+            // We can also have multiple forward declarations of the same name, must
+            // ignore all but the first one here. This also correctly handles the case
+            // where a "forward" declaration actually comes after the definition, which
+            // is apparently not an error in svlog.
+            if let DefNode::Ast(node) = def.node {
+                if let ast::AllNode::Typedef(ast) = node.as_all() {
+                    if let ast::ForwardType { kind: _ } = ast.ty.kind.data {
+                        return;
+                    }
+                }
+            }
+
             if !def.may_override {
                 let d = DiagBuilder2::error(format!("`{}` is defined multiple times", def.name))
                     .span(def.name.span)
