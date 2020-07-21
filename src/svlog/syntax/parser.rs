@@ -1802,12 +1802,12 @@ fn parse_struct_type<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<TypeK
                 kind: kind,
                 packed: packed,
                 signing: signing,
-                members: Vec::default()
+                members: Vec::default(),
             },
         ));
 
         let forward_type = ast::ForwardType {
-            kind: Box::new(TypeKind::new(span, struct_type))
+            kind: Box::new(TypeKind::new(span, struct_type)),
         };
 
         Ok(forward_type)
@@ -5043,13 +5043,19 @@ fn parse_typedef<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typedef<'
             span.expand(p.last_span());
 
             let dims = Vec::default();
-            let ty = Type::new(span, TypeData {
-                kind: TypeKind::new(span, ast::ForwardType {
-                    kind: Box::new(TypeKind::new(span, ImplicitType))
-                }),
-                sign: TypeSign::None,
-                dims: Vec::default()
-            });
+            let ty = Type::new(
+                span,
+                TypeData {
+                    kind: TypeKind::new(
+                        span,
+                        ast::ForwardType {
+                            kind: Box::new(TypeKind::new(span, ImplicitType)),
+                        },
+                    ),
+                    sign: TypeSign::None,
+                    dims: Vec::default(),
+                },
+            );
             return Ok(Typedef::new(span, TypedefData { name, ty, dims }));
         }
     }
@@ -5059,7 +5065,14 @@ fn parse_typedef<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Typedef<'
     let (dims, _) = parse_optional_dimensions(p)?;
     p.require_reported(Semicolon)?;
     span.expand(p.last_span());
-    Ok(Typedef::new(span, TypedefData { name: ident_name, ty: ty, dims: dims }))
+    Ok(Typedef::new(
+        span,
+        TypedefData {
+            name: ident_name,
+            ty: ty,
+            dims: dims,
+        },
+    ))
 }
 
 fn parse_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<PortDecl<'n>> {
