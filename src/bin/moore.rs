@@ -194,6 +194,10 @@ fn score(sess: &Session, matches: &ArgMatches) {
     let mut failed = false;
     let mut asts = Vec::new();
     for filename in matches.values_of("INPUT").unwrap() {
+        if filename.is_empty() {
+            continue;
+        }
+
         // Detect the file type.
         let language = match Path::new(&filename).extension().and_then(|s| s.to_str()) {
             Some("sv") | Some("svh") => Language::SystemVerilog,
@@ -222,7 +226,13 @@ fn score(sess: &Session, matches: &ArgMatches) {
         let sm = source::get_source_manager();
         let source = match sm.open(&filename) {
             Some(s) => s,
-            None => panic!("Unable to open input file '{}'", filename),
+            None => {
+                sess.emit(DiagBuilder2::fatal(format!(
+                    "unable to open `{}`",
+                    filename
+                )));
+                continue;
+            }
         };
 
         // Parse the file.
