@@ -671,7 +671,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The MIR lvalues emitted into the unit.
     interned_lvalues: HashMap<NodeId, Result<(llhd::ir::Value, Option<llhd::ir::Value>)>>,
     /// The MIR rvalues emitted into the unit.
-    interned_rvalues: HashMap<NodeId, Result<llhd::ir::Value>>,
+    interned_rvalues: HashMap<(NodeId, Mode), Result<(llhd::ir::Value, Mode)>>,
     /// The shadow variables introduced to handle signals which are both read
     /// and written in a process.
     shadows: HashMap<AccessedNode, llhd::ir::Value>,
@@ -1208,20 +1208,30 @@ where
     }
 
     /// Emit the code for an MIR rvalue.
+    fn emit_mir_rvalue(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+        self.emit_mir_rvalue_mode(mir, Mode::Value)
+    }
+
+    /// Emit the code for an MIR rvalue.
     fn emit_mir_rvalue_mode(
         &mut self,
         mir: &'gcx mir::Rvalue<'gcx>,
         mode: Mode,
     ) -> Result<llhd::ir::Value> {
-        let value = self.emit_mir_rvalue(mir)?;
-        let actual_mode = Mode::Value;
+        let (value, actual_mode) = if let Some(x) = self.interned_rvalues.get(&(mir.id, mode)) {
+            x.clone()?
+        } else {
+            let x = self.emit_mir_rvalue_uninterned(mir, mode);
+            self.interned_rvalues.insert((mir.id, mode), x);
+            x?
+        };
 
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {
                 let ty = self.llhd_type(value);
                 let init = self.emit_zero_for_type(&ty);
                 let sig = self.builder.ins().sig(init);
-                let delay = llhd::value::TimeValue::new(num::zero(), 0, 1);
+                let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
                 let delay_const = self.builder.ins().const_time(delay);
                 self.builder.ins().drv(sig, value, delay_const);
                 Ok(sig)
@@ -1232,24 +1242,17 @@ where
     }
 
     /// Emit the code for an MIR rvalue.
-    fn emit_mir_rvalue(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
-        if let Some(x) = self.interned_rvalues.get(&mir.id) {
-            x.clone()
-        } else {
-            let x = self.emit_mir_rvalue_uninterned(mir);
-            self.interned_rvalues.insert(mir.id, x);
-            x
-        }
-    }
-
-    /// Emit the code for an MIR rvalue.
+    ///
+    /// Wrapper around `emit_mir_rvalue_inner` that asserts the LLHD type of the
+    /// result matches expectations.
     fn emit_mir_rvalue_uninterned(
         &mut self,
         mir: &'gcx mir::Rvalue<'gcx>,
-    ) -> Result<llhd::ir::Value> {
-        let result = self.emit_mir_rvalue_inner(mir);
+        mode_hint: Mode,
+    ) -> Result<(llhd::ir::Value, Mode)> {
+        let result = self.emit_mir_rvalue_inner(mir, mode_hint);
         match result {
-            Ok(result) => {
+            Ok((result, _)) => {
                 let llty_exp = self.emit_type(mir.ty)?;
                 let llty_act = self.llhd_type(result);
                 assert_span!(
@@ -1269,21 +1272,38 @@ where
     }
 
     /// Emit the code for an MIR rvalue.
-    fn emit_mir_rvalue_inner(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+    ///
+    /// The `mode_hint` parameter provides a hint if the caller ultimately wants
+    /// the result to be a signal or a value. For example, port connections to
+    /// an instance would set the hint to `Mode::Signal`, while a binary expr
+    /// would set it to `Mode::Value`. The function is free to ignore the hint,
+    /// but will provide the actual mode it produced as part of the return
+    /// value.
+    fn emit_mir_rvalue_inner(
+        &mut self,
+        mir: &'gcx mir::Rvalue<'gcx>,
+        mode_hint: Mode,
+    ) -> Result<(llhd::ir::Value, Mode)> {
         // If the value is a constant, emit the fully folded constant value.
         if mir.is_const() {
             let value = self.const_mir_rvalue(mir.into());
-            return self.emit_const(value, mir.env, mir.span);
+            return self
+                .emit_const(value, mir.env, mir.span)
+                .map(|v| (v, Mode::Value));
         }
 
-        match mir.kind {
+        let value = match mir.kind {
             mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
                 let sig = self
                     .shadows
                     .get(&id.into())
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
-                Ok(self.emit_prb_or_var(sig))
+                if mode_hint == Mode::Signal && self.llhd_type(sig).is_signal() {
+                    return Ok((sig, Mode::Signal));
+                } else {
+                    Ok(self.emit_prb_or_var(sig))
+                }
             }
 
             mir::RvalueKind::Intf(_) => {
@@ -1461,7 +1481,7 @@ where
                             for _ in 1..count.to_usize().unwrap() {
                                 value = self.builder.ins().umul(value, lhs_ll);
                             }
-                            return Ok(value);
+                            return Ok((value, Mode::Value));
                         }
 
                         // If the base is a constant power of two, we translate
@@ -1488,7 +1508,10 @@ where
                                 let lhs_ll = self.builder.ins().const_int((width, BigInt::one()));
                                 // `1 << (y * log2(base))`
                                 let zeros = self.emit_zero_for_type(&self.llhd_type(lhs_ll));
-                                return Ok(self.builder.ins().shl(lhs_ll, zeros, rhs_ll));
+                                return Ok((
+                                    self.builder.ins().shl(lhs_ll, zeros, rhs_ll),
+                                    Mode::Value,
+                                ));
                             }
                         }
 
@@ -1607,7 +1630,9 @@ where
             }
 
             mir::RvalueKind::Error => Err(()),
-        }
+        };
+
+        value.map(|v| (v, Mode::Value))
     }
 
     fn emit_prb_or_var(&mut self, sig: llhd::ir::Value) -> llhd::ir::Value {
@@ -2463,7 +2488,7 @@ where
 /// Upon code emission, rvalues may be emitted either as direct values,
 /// pointers, or signals. This enum is used to communicate the intent to the
 /// corresopnding functions.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 enum Mode {
     Value,
     // Pointer,
