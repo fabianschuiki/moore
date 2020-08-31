@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - Add support for `x**y` with power-of-two `x` or constant `y` (#193)
 
+### Changed
+- Make unsupported system task an error (#206)
+
 ### Fixed
 - Fix implementation of assignment expressions (#172, #190)
 - Fix emission of shadow variables for read-write variables in processes

@@ -1171,7 +1171,7 @@ fn lower_expr_inner<'gcx>(
                     "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
                     _ => {
                         cx.emit(
-                            DiagBuilder2::warning(format!("`${}` not supported; ignored", ident))
+                            DiagBuilder2::error(format!("unknown system task `${}`", ident))
                                 .span(expr.human_span()),
                         );
                         hir::BuiltinCall::Unsupported
