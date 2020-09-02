@@ -1252,8 +1252,12 @@ where
     ) -> Result<(llhd::ir::Value, Mode)> {
         let result = self.emit_mir_rvalue_inner(mir, mode_hint);
         match result {
-            Ok((result, _)) => {
+            Ok((result, actual_mode)) => {
                 let llty_exp = self.emit_type(mir.ty)?;
+                let llty_exp = match actual_mode {
+                    Mode::Value => llty_exp,
+                    Mode::Signal => llhd::signal_ty(llty_exp),
+                };
                 let llty_act = self.llhd_type(result);
                 assert_span!(
                     llty_exp == llty_act,
