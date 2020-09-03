@@ -1169,6 +1169,16 @@ fn lower_expr_inner<'gcx>(
                     "clog2" => hir::BuiltinCall::Clog2(map_unary()?),
                     "signed" => hir::BuiltinCall::Signed(map_unary()?),
                     "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
+                    "display" | "info" | "warning" | "error" | "fatal" => {
+                        cx.emit(
+                            DiagBuilder2::warning(format!(
+                                "unsupported: system task `${}`; ignored",
+                                ident
+                            ))
+                            .span(expr.human_span()),
+                        );
+                        hir::BuiltinCall::Unsupported
+                    }
                     _ => {
                         cx.emit(
                             DiagBuilder2::error(format!("unknown system task `${}`", ident))
