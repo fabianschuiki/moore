@@ -1165,6 +1165,26 @@ fn lower_expr_inner<'gcx>(
                 };
                 let map_unary_id =
                     || Ok(cx.map_ast_with_parent(AstNode::Expr(map_unary()?), node_id));
+                let map_array_dim = |func| match args.as_slice() {
+                    [ast::CallArg {
+                        expr: Some(ref arg),
+                        ..
+                    }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, None)),
+                    [ast::CallArg {
+                        expr: Some(ref arg),
+                        ..
+                    }, ast::CallArg {
+                        expr: Some(ref dim),
+                        ..
+                    }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, Some(dim))),
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error(format!("`{}` takes one or two arguments", ident))
+                                .span(expr.human_span()),
+                        );
+                        Err(())
+                    }
+                };
                 hir::ExprKind::Builtin(match &*ident.value.as_str() {
                     "clog2" => hir::BuiltinCall::Clog2(map_unary_id()?),
                     "signed" => hir::BuiltinCall::Signed(map_unary_id()?),
@@ -1173,6 +1193,12 @@ fn lower_expr_inner<'gcx>(
                     "onehot" => hir::BuiltinCall::OneHot(map_unary()?),
                     "onehot0" => hir::BuiltinCall::OneHot0(map_unary()?),
                     "isunknown" => hir::BuiltinCall::IsUnknown(map_unary()?),
+                    "left" => map_array_dim(hir::ArrayDim::Left)?,
+                    "right" => map_array_dim(hir::ArrayDim::Right)?,
+                    "low" => map_array_dim(hir::ArrayDim::Low)?,
+                    "high" => map_array_dim(hir::ArrayDim::High)?,
+                    "increment" => map_array_dim(hir::ArrayDim::Increment)?,
+                    "size" => map_array_dim(hir::ArrayDim::Size)?,
                     "display" | "info" | "warning" | "error" | "fatal" => {
                         cx.emit(
                             DiagBuilder2::warning(format!(

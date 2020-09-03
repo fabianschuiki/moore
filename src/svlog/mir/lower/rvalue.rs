@@ -209,6 +209,64 @@ fn lower_expr_inner<'gcx>(
             // Since we currently don't emit logic types, this is always zero.
             Ok(builder.constant(value::make_int(ty, num::zero())))
         }
+        hir::ExprKind::Builtin(hir::BuiltinCall::ArrayDim(func, arg, dim)) => {
+            // Decide which dimension to inspect.
+            let dim = match dim {
+                Some(dim) => match cx.constant_value_of(dim.id(), env).kind {
+                    ValueKind::Int(ref v, ..) => v.to_usize().unwrap(),
+                    ValueKind::Error => return Ok(builder.error()),
+                    _ => unreachable!(),
+                },
+                None => 1,
+            };
+
+            // Get the fully resolved type of the argument.
+            let arg_ty = cx.type_of_expr(Ref(cx.hir_of_expr(Ref(arg))?), env);
+            if arg_ty.is_error() {
+                return Err(());
+            }
+
+            // Extract the dimension of interest.
+            let ty_dim = match arg_ty.dims().nth(dim - 1) {
+                Some(x) => x,
+                None => {
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "value of type `{}` does not have a dimension {}",
+                            arg_ty, dim,
+                        ))
+                        .span(hir.span())
+                        .add_note(format!(
+                            "Argument type `{}` has {} dimension(s)",
+                            arg_ty.resolve_full(),
+                            arg_ty.dims().count()
+                        ))
+                        .span(arg.span()),
+                    );
+                    return Err(());
+                }
+            };
+
+            // Extract the information requested by the array dim function.
+            let value = match ty_dim {
+                ty::Dim::Packed(ty::PackedDim::Unsized)
+                | ty::Dim::Unpacked(ty::UnpackedDim::Unsized)
+                | ty::Dim::Unpacked(ty::UnpackedDim::Array(_))
+                | ty::Dim::Unpacked(ty::UnpackedDim::Assoc(_))
+                | ty::Dim::Unpacked(ty::UnpackedDim::Queue(_)) => 0,
+                ty::Dim::Packed(ty::PackedDim::Range(r))
+                | ty::Dim::Unpacked(ty::UnpackedDim::Range(r)) => match func {
+                    hir::ArrayDim::Left => r.left(),
+                    hir::ArrayDim::Right => r.right(),
+                    hir::ArrayDim::Low => r.low(),
+                    hir::ArrayDim::High => r.high(),
+                    hir::ArrayDim::Increment => r.increment(),
+                    hir::ArrayDim::Size => r.size as isize,
+                },
+            };
+
+            Ok(builder.constant(value::make_int(ty, value.into())))
+        }
 
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = builder.cx.resolve_node(expr_id, env)?;

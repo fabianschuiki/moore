@@ -260,6 +260,12 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         | ExprKind::Builtin(BuiltinCall::IsUnknown(arg)) => {
             visitor.visit_node_with_id(arg.id(), false);
         }
+        ExprKind::Builtin(BuiltinCall::ArrayDim(_, arg, dim)) => {
+            visitor.visit_node_with_id(arg.id(), false);
+            if let Some(dim) = dim {
+                visitor.visit_node_with_id(dim.id(), false);
+            }
+        }
         ExprKind::Builtin(BuiltinCall::Bits(arg)) => {
             visitor.visit_node_with_id(arg.id(), false);
         }

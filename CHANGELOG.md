@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Added
 - Add support for `x**y` with power-of-two `x` or constant `y` (#193)
-- Add limited support for `$countones`, `$onehot`, `$onehot0`, `$isunknown`
+- Add limited support for `$countones`, `$onehot`, `$onehot0`, `$isunknown`, `$left`, `$right`, `$low`, `$high`, `$increment`, `$size` (#204)
 
 ### Changed
 - Make unsupported system task an error (#206)

@@ -851,6 +851,25 @@ pub enum BuiltinCall<'a> {
     OneHot0(&'a ast::Expr<'a>),
     /// A call to the `$isunknown(x)` function.
     IsUnknown(&'a ast::Expr<'a>),
+    /// A call to one of the array dimension functions.
+    ArrayDim(ArrayDim, &'a ast::Expr<'a>, Option<&'a ast::Expr<'a>>),
+}
+
+/// The different builtin array dimension function calls that are supported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArrayDim {
+    /// The `$left` function.
+    Left,
+    /// The `$right` function.
+    Right,
+    /// The `$low` function.
+    Low,
+    /// The `$high` function.
+    High,
+    /// The `$increment` function.
+    Increment,
+    /// The `$size` function.
+    Size,
 }
 
 /// A variable or net declaration.

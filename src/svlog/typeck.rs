@@ -1028,6 +1028,7 @@ pub(crate) fn type_of_expr<'a>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot0(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::IsUnknown(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::ArrayDim(..))
         | hir::ExprKind::Field(..)
         | hir::ExprKind::Index(..)
         | hir::ExprKind::Assign { .. } => cx.need_self_determined_type(expr.id, env),
@@ -1646,7 +1647,8 @@ fn self_determined_expr_type<'gcx>(
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::CountOnes(_)) => {
+        | hir::ExprKind::Builtin(hir::BuiltinCall::CountOnes(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::ArrayDim(..)) => {
             Some(PackedType::make(cx, ty::IntAtomType::Int).to_unpacked(cx))
         }
 

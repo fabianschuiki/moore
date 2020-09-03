@@ -1137,6 +1137,40 @@ impl Range {
             offset: 0,
         }
     }
+
+    /// The `$left` dimension.
+    pub fn left(self) -> isize {
+        match self.dir {
+            RangeDir::Up => self.low(),
+            RangeDir::Down => self.high(),
+        }
+    }
+
+    /// The `$right` dimension.
+    pub fn right(self) -> isize {
+        match self.dir {
+            RangeDir::Up => self.high(),
+            RangeDir::Down => self.low(),
+        }
+    }
+
+    /// The `$low` dimension.
+    pub fn low(self) -> isize {
+        self.offset
+    }
+
+    /// The `$high` dimension.
+    pub fn high(self) -> isize {
+        self.offset + self.size as isize - 1
+    }
+
+    /// The `$increment` dimension.
+    pub fn increment(self) -> isize {
+        match self.dir {
+            RangeDir::Up => 1,
+            RangeDir::Down => -1,
+        }
+    }
 }
 
 impl Display for Range {
@@ -1417,6 +1451,7 @@ impl<'a> UnpackedType<'a> {
     /// For example, produces `[3:0], [7:0]` for `bit [3:0][7:0] $ [1][2]`.
     pub fn packed_dims(&self) -> impl Iterator<Item = PackedDim> + 'a {
         self.resolve_full()
+            .core
             .get_packed()
             .into_iter()
             .flat_map(|p| p.dims.iter().cloned())
