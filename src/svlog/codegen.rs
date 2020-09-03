@@ -764,7 +764,7 @@ where
 
             // Compute the array dimensions for the signals.
             // let mut dims = vec![];
-            let inst_ty = self.type_of_inst(Ref(inst.hir), inst.inner_env);
+            let inst_ty = self.type_of_inst(Ref(inst.hir), env);
             let intf_ty = match inst_ty.resolve_full().core.get_interface() {
                 Some(x) => x,
                 None => continue,
