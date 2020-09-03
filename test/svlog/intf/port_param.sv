@@ -30,9 +30,9 @@ interface bar #(
     modport out (output data, valid, input ready);
 endinterface
 
-// CHECK: entity @fee.param7 (i32$ %z.data, i1$ %z.valid) -> (i1$ %z.ready) {
+// CHECK: entity @fee.param5 (i32$ %z.data, i1$ %z.valid) -> (i1$ %z.ready) {
 // CHECK: }
-// CHECK: entity @fee.param9 (i19$ %z.data, i8$ %z.valid) -> (i1$ %z.ready) {
+// CHECK: entity @fee.param6 (i19$ %z.data, i8$ %z.valid) -> (i1$ %z.ready) {
 // CHECK: }
 // CHECK: entity @foo () -> () {
 // CHECK: }

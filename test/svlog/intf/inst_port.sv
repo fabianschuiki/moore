@@ -17,6 +17,6 @@ endinterface
 // CHECK:     %x.data = sig i32 %2
 // CHECK:     %x.valid = sig i1 %3
 // CHECK:     %x.ready = sig i1 %4
-// CHECK:     con i1$ %x.clk, %6
+// CHECK:     con i1$ %x.clk, %clk
 // CHECK:     con i1$ %x.clk_out, %clk_out
 // CHECK: }
