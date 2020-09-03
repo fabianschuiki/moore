@@ -74,8 +74,10 @@ pub(crate) fn inst_details<'a>(
         target.kind.as_any().as_all().get_ported().unwrap(),
         target.outer_env,
         target.inner_env,
+        Ref(inst),
         &inst.pos_ports,
         &inst.named_ports,
+        inst.has_wildcard_port,
     )?;
 
     // Derive additional parametrization for the interface ports of the
