@@ -1323,18 +1323,18 @@ where
 
             mir::RvalueKind::CastValueDomain { value, .. } => {
                 // TODO(fschuiki): Turn this into an actual `iN` to `lN` cast.
-                self.emit_mir_rvalue(value)
+                return self.emit_mir_rvalue_inner(value, mode_hint);
             }
 
             mir::RvalueKind::Transmute(value) => {
                 // Transmute is a simple no-op.
-                self.emit_mir_rvalue(value)
+                return self.emit_mir_rvalue_inner(value, mode_hint);
             }
 
             mir::RvalueKind::CastSign(_, value) => {
                 // Sign conversions are no-ops in LLHD since they merely
                 // influence the type system.
-                self.emit_mir_rvalue(value)
+                return self.emit_mir_rvalue_inner(value, mode_hint);
             }
 
             mir::RvalueKind::CastToBool(value) => {
