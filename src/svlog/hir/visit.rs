@@ -254,6 +254,12 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
         | ExprKind::Builtin(BuiltinCall::Unsigned(arg)) => {
             visitor.visit_node_with_id(arg, false);
         }
+        ExprKind::Builtin(BuiltinCall::CountOnes(arg))
+        | ExprKind::Builtin(BuiltinCall::OneHot(arg))
+        | ExprKind::Builtin(BuiltinCall::OneHot0(arg))
+        | ExprKind::Builtin(BuiltinCall::IsUnknown(arg)) => {
+            visitor.visit_node_with_id(arg.id(), false);
+        }
         ExprKind::Builtin(BuiltinCall::Bits(arg)) => {
             visitor.visit_node_with_id(arg.id(), false);
         }

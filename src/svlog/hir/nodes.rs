@@ -843,6 +843,14 @@ pub enum BuiltinCall<'a> {
     Signed(NodeId),
     /// A call to the convert-to-unsigned function `$unsigned(x)`.
     Unsigned(NodeId),
+    /// A call to the `$countones(x)` function.
+    CountOnes(&'a ast::Expr<'a>),
+    /// A call to the `$onehot(x)` function.
+    OneHot(&'a ast::Expr<'a>),
+    /// A call to the `$onehot0(x)` function.
+    OneHot0(&'a ast::Expr<'a>),
+    /// A call to the `$isunknown(x)` function.
+    IsUnknown(&'a ast::Expr<'a>),
 }
 
 /// A variable or net declaration.

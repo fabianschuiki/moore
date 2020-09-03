@@ -200,6 +200,15 @@ fn lower_expr_inner<'gcx>(
                 }
             }
         }
+        hir::ExprKind::Builtin(hir::BuiltinCall::CountOnes(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot0(_)) => {
+            bug_span!(span, cx, "unsupported system function {:?}", hir.kind)
+        }
+        hir::ExprKind::Builtin(hir::BuiltinCall::IsUnknown(_)) => {
+            // Since we currently don't emit logic types, this is always zero.
+            Ok(builder.constant(value::make_int(ty, num::zero())))
+        }
 
         hir::ExprKind::Ident(..) | hir::ExprKind::Scope(..) => {
             let binding = builder.cx.resolve_node(expr_id, env)?;

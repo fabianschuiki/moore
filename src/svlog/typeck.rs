@@ -1010,7 +1010,7 @@ pub(crate) fn type_of_expr<'a>(
 ) -> &'a UnpackedType<'a> {
     let Ref(expr) = expr;
     match expr.kind {
-        // These expressions are have a fully self-determined type.
+        // These expressions have a fully self-determined type.
         hir::ExprKind::IntConst { .. }
         | hir::ExprKind::TimeConst(..)
         | hir::ExprKind::StringConst(..)
@@ -1024,6 +1024,10 @@ pub(crate) fn type_of_expr<'a>(
         | hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
         | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::CountOnes(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot0(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::IsUnknown(_))
         | hir::ExprKind::Field(..)
         | hir::ExprKind::Index(..)
         | hir::ExprKind::Assign { .. } => cx.need_self_determined_type(expr.id, env),
@@ -1641,8 +1645,16 @@ fn self_determined_expr_type<'gcx>(
         // Most builtin functions evaluate to the integer type.
         hir::ExprKind::Builtin(hir::BuiltinCall::Unsupported)
         | hir::ExprKind::Builtin(hir::BuiltinCall::Clog2(_))
-        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_)) => {
+        | hir::ExprKind::Builtin(hir::BuiltinCall::Bits(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::CountOnes(_)) => {
             Some(PackedType::make(cx, ty::IntAtomType::Int).to_unpacked(cx))
+        }
+
+        // These builtin functions evaluate to the bit type.
+        hir::ExprKind::Builtin(hir::BuiltinCall::OneHot(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::OneHot0(_))
+        | hir::ExprKind::Builtin(hir::BuiltinCall::IsUnknown(_)) => {
+            Some(PackedType::make(cx, ty::IntVecType::Bit).to_unpacked(cx))
         }
 
         // Member field accesses resolve to the type of the member.

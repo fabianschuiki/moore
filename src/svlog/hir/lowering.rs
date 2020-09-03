@@ -1150,25 +1150,29 @@ fn lower_expr_inner<'gcx>(
         }
         ast::CallExpr(ref callee, ref args) => match callee.data {
             ast::SysIdentExpr(ident) => {
-                let map_unary = || {
-                    Ok(match args.as_slice() {
-                        [ast::CallArg {
-                            expr: Some(ref arg),
-                            ..
-                        }] => cx.map_ast_with_parent(AstNode::Expr(arg), node_id),
-                        _ => {
-                            cx.emit(
-                                DiagBuilder2::error(format!("`{}` takes one argument", ident))
-                                    .span(expr.human_span()),
-                            );
-                            return Err(());
-                        }
-                    })
+                let map_unary = || match args.as_slice() {
+                    [ast::CallArg {
+                        expr: Some(ref arg),
+                        ..
+                    }] => Ok(arg),
+                    _ => {
+                        cx.emit(
+                            DiagBuilder2::error(format!("`{}` takes one argument", ident))
+                                .span(expr.human_span()),
+                        );
+                        Err(())
+                    }
                 };
+                let map_unary_id =
+                    || Ok(cx.map_ast_with_parent(AstNode::Expr(map_unary()?), node_id));
                 hir::ExprKind::Builtin(match &*ident.value.as_str() {
-                    "clog2" => hir::BuiltinCall::Clog2(map_unary()?),
-                    "signed" => hir::BuiltinCall::Signed(map_unary()?),
-                    "unsigned" => hir::BuiltinCall::Unsigned(map_unary()?),
+                    "clog2" => hir::BuiltinCall::Clog2(map_unary_id()?),
+                    "signed" => hir::BuiltinCall::Signed(map_unary_id()?),
+                    "unsigned" => hir::BuiltinCall::Unsigned(map_unary_id()?),
+                    "countones" => hir::BuiltinCall::CountOnes(map_unary()?),
+                    "onehot" => hir::BuiltinCall::OneHot(map_unary()?),
+                    "onehot0" => hir::BuiltinCall::OneHot0(map_unary()?),
+                    "isunknown" => hir::BuiltinCall::IsUnknown(map_unary()?),
                     "display" | "info" | "warning" | "error" | "fatal" => {
                         cx.emit(
                             DiagBuilder2::warning(format!(
