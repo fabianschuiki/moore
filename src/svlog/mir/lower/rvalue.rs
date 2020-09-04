@@ -434,9 +434,9 @@ fn lower_expr_inner<'gcx>(
                         let expr_rv = cx.mir_rvalue(expr, env);
                         make_int_comparison(
                             &builder.with(expr),
-                            IntCompOp::Eq,
                             out_ty,
                             comp_ty,
+                            IntCompOp::Eq,
                             lhs,
                             expr_rv,
                         )
@@ -447,17 +447,17 @@ fn lower_expr_inner<'gcx>(
                         let hi_rv = cx.mir_rvalue(hi, env);
                         let lo_chk = make_int_comparison(
                             &builder.with(lo),
-                            IntCompOp::Geq,
                             out_ty,
                             comp_ty,
+                            IntCompOp::Geq,
                             lhs,
                             lo_rv,
                         );
                         let hi_chk = make_int_comparison(
                             &builder.with(hi),
-                            IntCompOp::Leq,
                             out_ty,
                             comp_ty,
+                            IntCompOp::Leq,
                             lhs,
                             hi_rv,
                         );
@@ -1124,15 +1124,15 @@ fn lower_int_comparison<'a>(
     };
 
     // Assemble the node.
-    make_int_comparison(builder, op, result_ty, op_ty, lhs, rhs)
+    make_int_comparison(builder, result_ty, op_ty, op, lhs, rhs)
 }
 
 /// Map an integer comparison operator to MIR.
 fn make_int_comparison<'a>(
     builder: &Builder<'_, impl Context<'a>>,
-    op: IntCompOp,
     result_ty: &'a UnpackedType<'a>,
     op_ty: &'a UnpackedType<'a>,
+    op: IntCompOp,
     lhs: &'a Rvalue<'a>,
     rhs: &'a Rvalue<'a>,
 ) -> &'a Rvalue<'a> {
