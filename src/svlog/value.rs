@@ -780,9 +780,7 @@ pub(crate) fn is_constant<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<
 /// Determine the default value of a type.
 #[moore_derive::query]
 pub(crate) fn type_default_value<'a>(cx: &impl Context<'a>, ty: &'a UnpackedType<'a>) -> Value<'a> {
-    let ty_orig = ty;
     let ty = ty.resolve_full();
-    debug!("Resolved `{}` to `{}`", ty_orig, ty);
     if ty.is_error() {
         return cx.intern_value(ValueData {
             ty: UnpackedType::make_error(),

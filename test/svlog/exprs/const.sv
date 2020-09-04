@@ -17,7 +17,6 @@ module foo;
     // CHECK: %0 = const i32 4294967254
     bar #(~a) i2();
     // CHECK: %0 = const i32 4294967253
-    // TODO: Fix these to i32 once #141 lands.
     bar #(!a) i3();
     bar #(!z) i4();
     // CHECK: %0 = const i32 0
@@ -73,7 +72,6 @@ module foo;
     // CHECK: %0 = const i32 6
     bar #(a ** c) i28();
     // CHECK: %0 = const i32 74088
-    // TODO: Fix these to i32 once #141 lands.
     bar #(a == a) i29();
     bar #(a == b) i30();
     // CHECK: %0 = const i32 1
