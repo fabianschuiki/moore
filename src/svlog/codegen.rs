@@ -1639,6 +1639,12 @@ where
                 "codegen for string packing/unpacking not implemented"
             ),
 
+            mir::RvalueKind::StringComp { .. } => bug_span!(
+                mir.span,
+                self.cx,
+                "runtime string comparisons not implemented"
+            ),
+
             mir::RvalueKind::Error => Err(()),
         };
 

@@ -721,6 +721,20 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
             cx.intern_value(make_string(mir.ty, bytes))
         }
 
+        mir::RvalueKind::StringComp { op, lhs, rhs, .. } => {
+            let lhs_val = cx.const_mir_rvalue(lhs.into());
+            let rhs_val = cx.const_mir_rvalue(rhs.into());
+            if lhs_val.is_error() || rhs_val.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            match (&lhs_val.kind, &rhs_val.kind) {
+                (ValueKind::String(lhs_string), ValueKind::String(rhs_string)) => cx.intern_value(
+                    make_int(mir.ty, const_comp_string(cx, op, lhs_string, rhs_string)),
+                ),
+                _ => unreachable!(),
+            }
+        }
+
         // Propagate tombstones.
         mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
     }
@@ -843,6 +857,19 @@ fn const_reduction_int<'gcx>(
             .sum::<u32>()
             .is_odd() as usize)
             .into(),
+    }
+}
+
+/// Perform a constant comparison of two string values.
+fn const_comp_string<'gcx>(
+    _cx: &impl Context<'gcx>,
+    op: mir::StringCompOp,
+    lhs: &[u8],
+    rhs: &[u8],
+) -> BigInt {
+    match op {
+        mir::StringCompOp::Eq => ((lhs == rhs) as usize).into(),
+        mir::StringCompOp::Neq => ((lhs != rhs) as usize).into(),
     }
 }
 

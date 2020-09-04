@@ -146,7 +146,10 @@ fn lower_expr_inner<'gcx>(
         }
         hir::ExprKind::TimeConst(ref k) => Ok(builder.constant(value::make_time(k.clone()))),
         hir::ExprKind::StringConst(string) => Ok(builder.constant(value::make_int(
-            // TODO(fschuiki): Actually assemble a real string here!
+            // TODO: This could use `value::make_string` to build a string
+            // value, and then resort to the conversion function there to map
+            // the string to the packed vector. Also, escape codes should be
+            // handled here.
             ty::PackedType::make_dims(
                 cx,
                 ty::IntVecType::Bit,
@@ -972,7 +975,14 @@ fn lower_binary<'gcx>(
         | hir::BinaryOp::Lt
         | hir::BinaryOp::Leq
         | hir::BinaryOp::Gt
-        | hir::BinaryOp::Geq => lower_int_comparison(builder, ty, op, lhs, rhs),
+        | hir::BinaryOp::Geq => {
+            let op_ty = builder.cx.need_operation_type(builder.expr, builder.env);
+            if op_ty.is_string() {
+                lower_string_comparison(builder, ty, op_ty, op, lhs, rhs)
+            } else {
+                lower_int_comparison(builder, ty, op_ty, op, lhs, rhs)
+            }
+        }
         hir::BinaryOp::LogicShL
         | hir::BinaryOp::LogicShR
         | hir::BinaryOp::ArithShL
@@ -1085,17 +1095,15 @@ fn lower_int_binary_arith<'a>(
 fn lower_int_comparison<'a>(
     builder: &Builder<'_, impl Context<'a>>,
     result_ty: &'a UnpackedType<'a>,
+    op_ty: &'a UnpackedType<'a>,
     op: hir::BinaryOp,
     lhs: NodeId,
     rhs: NodeId,
 ) -> &'a Rvalue<'a> {
-    // Determine the operation type of the comparison.
-    let ty = builder.cx.need_operation_type(builder.expr, builder.env);
-
     // Lower the operands.
     let lhs = builder.cx.mir_rvalue(lhs, builder.env);
     let rhs = builder.cx.mir_rvalue(rhs, builder.env);
-    if lhs.is_error() || rhs.is_error() || ty.is_error() {
+    if lhs.is_error() || rhs.is_error() || op_ty.is_error() {
         return builder.error();
     }
 
@@ -1116,7 +1124,7 @@ fn lower_int_comparison<'a>(
     };
 
     // Assemble the node.
-    make_int_comparison(builder, op, result_ty, ty, lhs, rhs)
+    make_int_comparison(builder, op, result_ty, op_ty, lhs, rhs)
 }
 
 /// Map an integer comparison operator to MIR.
@@ -1144,6 +1152,42 @@ fn make_int_comparison<'a>(
             rhs,
         },
     )
+}
+
+/// Map a string comparison operator to MIR.
+fn lower_string_comparison<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
+    op_ty: &'a UnpackedType<'a>,
+    op: hir::BinaryOp,
+    lhs: NodeId,
+    rhs: NodeId,
+) -> &'a Rvalue<'a> {
+    // Lower the operands.
+    let lhs = builder.cx.mir_rvalue(lhs, builder.env);
+    let rhs = builder.cx.mir_rvalue(rhs, builder.env);
+    if lhs.is_error() || rhs.is_error() || op_ty.is_error() {
+        return builder.error();
+    }
+
+    // Determine the operation.
+    let op = match op {
+        hir::BinaryOp::Eq => StringCompOp::Eq,
+        hir::BinaryOp::Neq => StringCompOp::Neq,
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not a string binary comparison operator",
+            op
+        ),
+    };
+
+    // Check that the operands are of the right type.
+    assert_type!(lhs.ty, op_ty, builder.span, builder.cx);
+    assert_type!(rhs.ty, op_ty, builder.span, builder.cx);
+
+    // Assemble the node.
+    builder.build(result_ty, RvalueKind::StringComp { op, lhs, rhs })
 }
 
 /// Map an integer shift operator to MIR.

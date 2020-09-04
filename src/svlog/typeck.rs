@@ -2006,7 +2006,13 @@ pub(crate) fn operation_type<'a>(
                 | hir::BinaryOp::Geq => {
                     let tlhs = cx.self_determined_type(lhs, env);
                     let trhs = cx.self_determined_type(rhs, env);
-                    unify_operator_types(cx, env, tlhs.into_iter().chain(trhs.into_iter()))
+                    if tlhs.map(|t| t.is_string()).unwrap_or(false)
+                        && trhs.map(|t| t.is_string()).unwrap_or(false)
+                    {
+                        tlhs
+                    } else {
+                        unify_operator_types(cx, env, tlhs.into_iter().chain(trhs.into_iter()))
+                    }
                 }
 
                 // The boolean logic operators simply operate on bits.
@@ -2027,13 +2033,16 @@ pub(crate) fn operation_type<'a>(
             };
             if ty.is_none() {
                 cx.emit(
-                    DiagBuilder2::error(format!("type of {} cannot be inferred", expr.desc_full()))
-                        .span(expr.human_span())
-                        .add_note(
-                            "Neither of the operands has a self-determined type, and the type \
-                             cannot be inferred from the context.",
-                        )
-                        .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
+                    DiagBuilder2::error(format!(
+                        "operation type of {} cannot be inferred",
+                        expr.desc_full()
+                    ))
+                    .span(expr.human_span())
+                    .add_note(
+                        "Neither of the operands has a self-determined type, and the type cannot \
+                         be inferred from the context.",
+                    )
+                    .add_note(format!("Try a cast: `T'({})`", expr.span().extract())),
                 );
                 Some(UnpackedType::make_error())
             } else {

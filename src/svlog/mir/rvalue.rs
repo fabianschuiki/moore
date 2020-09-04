@@ -209,6 +209,12 @@ pub enum RvalueKind<'a> {
     PackString(&'a Rvalue<'a>),
     /// Unpack a string value from a fixed-size packed bit vector.
     UnpackString(&'a Rvalue<'a>),
+    /// A string comparison operator.
+    StringComp {
+        op: StringCompOp,
+        lhs: &'a Rvalue<'a>,
+        rhs: &'a Rvalue<'a>,
+    },
     /// An error occurred during lowering.
     Error,
 }
@@ -244,7 +250,8 @@ impl<'a> RvalueKind<'a> {
             | RvalueKind::Reduction { arg, .. } => arg.is_const(),
             RvalueKind::BinaryBitwise { lhs, rhs, .. }
             | RvalueKind::IntBinaryArith { lhs, rhs, .. }
-            | RvalueKind::IntComp { lhs, rhs, .. } => lhs.is_const() && rhs.is_const(),
+            | RvalueKind::IntComp { lhs, rhs, .. }
+            | RvalueKind::StringComp { lhs, rhs, .. } => lhs.is_const() && rhs.is_const(),
             RvalueKind::Concat(values) => values.iter().all(|v| v.is_const()),
             RvalueKind::Var(_) => false,
             RvalueKind::Port(_) => false,
@@ -314,6 +321,15 @@ pub enum IntCompOp {
     Leq,
     Gt,
     Geq,
+}
+
+/// The string comparison operators.
+#[moore_derive::visit_without_foreach]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum StringCompOp {
+    Eq,
+    Neq,
 }
 
 /// The shift operators.

@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add limited support for `$countones`, `$onehot`, `$onehot0`, `$isunknown`, `$left`, `$right`, `$low`, `$high`, `$increment`, `$size` (#204)
 - Add emission of string literals (#205)
 - Add constant casts between `string` and bit vectors (#205)
+- Add constant string equality comparison (#205)
 
 ### Changed
 - Make unsupported system task an error (#206)
