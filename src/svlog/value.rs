@@ -324,6 +324,27 @@ pub(crate) fn const_mir_rvalue_int<'a>(
     }
 }
 
+/// Determine the constant string value of an MIR rvalue.
+///
+/// Emits a diagnostic if the value is not a string.
+#[moore_derive::query]
+pub(crate) fn const_mir_rvalue_string<'a>(
+    cx: &impl Context<'a>,
+    mir: Ref<'a, mir::Rvalue<'a>>,
+) -> Result<&'a Vec<u8>> {
+    match cx.const_mir_rvalue(mir).kind {
+        ValueKind::String(ref x) => Ok(x),
+        ValueKind::Error => Err(()),
+        _ => {
+            cx.emit(
+                DiagBuilder2::error(format!("`{}` is not a constant string", mir.span.extract()))
+                    .span(mir.span),
+            );
+            Err(())
+        }
+    }
+}
+
 /// Determine the constant value of an MIR rvalue.
 #[moore_derive::query]
 pub(crate) fn const_mir_rvalue<'a>(
@@ -674,11 +695,13 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
         }
 
         // Pack a string into a vector.
-        mir::RvalueKind::PackString(value) => bug_span!(
-            value.span,
-            cx,
-            "constant packing string to bit vectors not supported"
-        ),
+        mir::RvalueKind::PackString(value) => match cx.const_mir_rvalue_string(value.into()) {
+            Ok(v) => cx.intern_value(make_int(
+                mir.ty,
+                BigInt::from_bytes_be(num::bigint::Sign::Plus, v),
+            )),
+            Err(()) => cx.intern_value(make_error(mir.ty)),
+        },
 
         // Unpack a string from a vector.
         mir::RvalueKind::UnpackString(value) => {

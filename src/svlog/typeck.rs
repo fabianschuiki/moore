@@ -1252,6 +1252,17 @@ fn cast_expr_type_inner<'gcx>(
         }
     }
 
+    // Cast strings to SBVTs.
+    let inferred = match context.ty().get_simple_bit_vector() {
+        Some(context_sbvt) if inferred.is_string() => {
+            let ty = context_sbvt.forget().to_unpacked(cx);
+            trace!("  Packing string as SBVT ({})", ty);
+            cast.add_cast(CastOp::PackString, ty);
+            ty
+        }
+        _ => inferred,
+    };
+
     // Cast the expression to a simple bit vector type.
     let inferred_sbvt = match inferred.get_simple_bit_vector() {
         Some(ty) => {
@@ -1296,7 +1307,7 @@ fn cast_expr_type_inner<'gcx>(
 
     // Cast the SBVT to a string.
     if context.is_string() {
-        trace!("  Casting to string ({})", context);
+        trace!("  Unpacking string from SBVT ({})", context);
         cast.add_cast(CastOp::UnpackString, context);
         return cast;
     }
