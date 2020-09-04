@@ -1165,6 +1165,8 @@ pub(crate) fn cast_expr_type<'a>(
                     ty
                 ),
                 CastOp::PickModport => format!("implicitly picking modport `{}`", ty),
+                CastOp::PackString => format!("pack as string `{}`", ty),
+                CastOp::UnpackString => format!("unpack string as `{}`", ty),
             };
             d = d.add_note(msg);
         }
@@ -1291,6 +1293,13 @@ fn cast_expr_type_inner<'gcx>(
         }
         TypeContext::Type(ty) => ty,
     };
+
+    // Cast the SBVT to a string.
+    if context.is_string() {
+        trace!("  Casting to string ({})", context);
+        cast.add_cast(CastOp::UnpackString, context);
+        return cast;
+    }
 
     // Cast the context type to an SBVT.
     let context_sbvt = match context.get_simple_bit_vector() {
@@ -2589,6 +2598,10 @@ pub enum CastOp {
     Domain(ty::Domain),
     /// Pick an interface's modport.
     PickModport,
+    /// Pack a string into an SBVT.
+    PackString,
+    /// Unpack a string from an SBVT.
+    UnpackString,
 }
 
 impl<'a> CastType<'a> {

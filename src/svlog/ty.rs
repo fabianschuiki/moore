@@ -1425,6 +1425,11 @@ impl<'a> UnpackedType<'a> {
             .unwrap_or(false)
     }
 
+    /// Check if this type is a string, like `string`.
+    pub fn is_string(&self) -> bool {
+        self.dims.is_empty() && self.resolve_full().core == UnpackedCore::String
+    }
+
     /// Check if this type will coalesce to a scalar type in LLHD, like `i42`.
     pub fn coalesces_to_llhd_scalar(&self) -> bool {
         self.get_packed()

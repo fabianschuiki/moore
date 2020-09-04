@@ -1633,6 +1633,12 @@ where
                 self.emit_mir_rvalue(result)
             }
 
+            mir::RvalueKind::PackString(value) | mir::RvalueKind::UnpackString(value) => bug_span!(
+                value.span,
+                self.cx,
+                "codegen for string packing/unpacking not implemented"
+            ),
+
             mir::RvalueKind::Error => Err(()),
         };
 

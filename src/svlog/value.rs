@@ -640,6 +640,20 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
             }
         }
 
+        // Pack a string into a vector.
+        mir::RvalueKind::PackString(value) => bug_span!(
+            value.span,
+            cx,
+            "constant packing string to bit vectors not supported"
+        ),
+
+        // Unpack a string from a vector.
+        mir::RvalueKind::UnpackString(value) => bug_span!(
+            value.span,
+            cx,
+            "constant unpacking string from bit vectors not supported"
+        ),
+
         // Propagate tombstones.
         mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
     }

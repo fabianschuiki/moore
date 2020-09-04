@@ -628,6 +628,16 @@ fn lower_cast<'gcx>(
             CastOp::PickModport => {
                 value = builder.build(to, value.kind.clone());
             }
+            CastOp::PackString => {
+                assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
+                assert_span!(value.ty.is_string(), value.span, builder.cx);
+                value = builder.build(to, RvalueKind::PackString(value));
+            }
+            CastOp::UnpackString => {
+                assert_span!(to.is_string(), value.span, builder.cx);
+                assert_span!(value.ty.is_simple_bit_vector(), value.span, builder.cx);
+                value = builder.build(to, RvalueKind::UnpackString(value));
+            }
         }
         if !value.ty.is_identical(to) {
             error!(

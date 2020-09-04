@@ -205,6 +205,10 @@ pub enum RvalueKind<'a> {
         /// the rvalue, but may be different (e.g. for the `i++` or `i--`).
         result: &'a Rvalue<'a>,
     },
+    /// Pack a string value into a fixed-size packed bit vector.
+    PackString(&'a Rvalue<'a>),
+    /// Unpack a string value from a fixed-size packed bit vector.
+    UnpackString(&'a Rvalue<'a>),
     /// An error occurred during lowering.
     Error,
 }
@@ -229,7 +233,9 @@ impl<'a> RvalueKind<'a> {
             | RvalueKind::ZeroExtend(_, value)
             | RvalueKind::SignExtend(_, value)
             | RvalueKind::Repeat(_, value)
-            | RvalueKind::Member { value, .. } => value.is_const(),
+            | RvalueKind::Member { value, .. }
+            | RvalueKind::PackString(value)
+            | RvalueKind::UnpackString(value) => value.is_const(),
             RvalueKind::ConstructArray(values) => values.values().all(|v| v.is_const()),
             RvalueKind::ConstructStruct(values) => values.iter().all(|v| v.is_const()),
             RvalueKind::Const(_) => true,
