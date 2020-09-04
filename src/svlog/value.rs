@@ -51,6 +51,7 @@ impl<'t> ValueData<'t> {
             ValueKind::Int(ref v, ..) => v.is_zero(),
             ValueKind::Time(ref v) => v.is_zero(),
             ValueKind::StructOrArray(_) => false,
+            ValueKind::String(ref v) => v.is_empty(),
             ValueKind::Error => true,
         }
     }
@@ -61,6 +62,12 @@ impl<'t> ValueData<'t> {
             ValueKind::Int(ref v, ..) => Some(v),
             _ => None,
         }
+    }
+}
+
+impl std::fmt::Display for ValueData<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.kind)
     }
 }
 
@@ -78,6 +85,12 @@ pub enum ValueKind<'t> {
     Time(BigRational),
     /// A struct.
     StructOrArray(Vec<Value<'t>>),
+    /// A string.
+    ///
+    /// Note that we use a raw `u8` array, instead of Rust's `String` type. This
+    /// is due to `String` guaranteeing that the encoded byte sequence is valid
+    /// UTF8, which SystemVerilog does not guarantee.
+    String(Vec<u8>),
     /// An error occurred during value computation.
     Error,
 }
@@ -100,6 +113,17 @@ impl std::fmt::Display for ValueKind<'_> {
             ValueKind::Time(v) => write!(f, "{}", v),
             ValueKind::StructOrArray(v) => {
                 write!(f, "{{ {} }}", v.iter().map(|v| &v.kind).format(", "))
+            }
+            ValueKind::String(v) => {
+                write!(f, "\"")?;
+                for &b in v {
+                    if (b as char).is_ascii() {
+                        write!(f, "{}", b as char)?;
+                    } else {
+                        write!(f, "\\x{:02x}", b)?;
+                    }
+                }
+                write!(f, "\"")
             }
             ValueKind::Error => write!(f, "<error>"),
         }
@@ -158,7 +182,7 @@ pub fn make_time<'a>(value: BigRational) -> ValueData<'a> {
 pub fn make_struct<'a>(ty: &'a UnpackedType<'a>, fields: Vec<Value<'a>>) -> ValueData<'a> {
     assert!(ty.dims().next().is_none() && ty.get_struct().is_some());
     ValueData {
-        ty: ty,
+        ty,
         kind: ValueKind::StructOrArray(fields),
     }
 }
@@ -167,8 +191,17 @@ pub fn make_struct<'a>(ty: &'a UnpackedType<'a>, fields: Vec<Value<'a>>) -> Valu
 pub fn make_array<'a>(ty: &'a UnpackedType<'a>, elements: Vec<Value<'a>>) -> ValueData<'a> {
     assert!(!ty.dims().next().is_none());
     ValueData {
-        ty: ty,
+        ty,
         kind: ValueKind::StructOrArray(elements),
+    }
+}
+
+/// Create a new string value.
+pub fn make_string<'a>(ty: &'a UnpackedType<'a>, bytes: Vec<u8>) -> ValueData<'a> {
+    assert!(ty.is_string());
+    ValueData {
+        ty,
+        kind: ValueKind::String(bytes),
     }
 }
 
@@ -648,11 +681,22 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
         ),
 
         // Unpack a string from a vector.
-        mir::RvalueKind::UnpackString(value) => bug_span!(
-            value.span,
-            cx,
-            "constant unpacking string from bit vectors not supported"
-        ),
+        mir::RvalueKind::UnpackString(value) => {
+            let mut konst = match cx.const_mir_rvalue_int(value.into()) {
+                Ok(v) => v.clone(),
+                Err(()) => return cx.intern_value(make_error(mir.ty)),
+            };
+            let mut bytes = vec![];
+            while !konst.is_zero() {
+                let byte = (&konst & BigInt::from(0xFF)).to_usize().unwrap() as u8;
+                if byte != 0 {
+                    bytes.push(byte);
+                }
+                konst >>= 8;
+            }
+            bytes.reverse();
+            cx.intern_value(make_string(mir.ty, bytes))
+        }
 
         // Propagate tombstones.
         mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),
