@@ -145,22 +145,24 @@ fn lower_expr_inner<'gcx>(
             bug_span!(span, cx, "unsized const with weird '{}' char", c)
         }
         hir::ExprKind::TimeConst(ref k) => Ok(builder.constant(value::make_time(k.clone()))),
-        hir::ExprKind::StringConst(_) => Ok(builder.constant(value::make_array(
+        hir::ExprKind::StringConst(string) => Ok(builder.constant(value::make_int(
             // TODO(fschuiki): Actually assemble a real string here!
             ty::PackedType::make_dims(
                 cx,
-                ty::IntAtomType::Byte,
+                ty::IntVecType::Bit,
                 vec![ty::PackedDim::Range(ty::Range {
-                    size: 1,
+                    size: string.value.as_str().len() * 8,
                     dir: ty::RangeDir::Down,
                     offset: 0,
                 })],
             )
             .to_unpacked(cx),
-            vec![cx.intern_value(value::make_int(
-                UnpackedType::make(cx, ty::PackedType::make(cx, ty::IntAtomType::Byte)),
-                num::zero(),
-            ))],
+            string
+                .value
+                .as_str()
+                .as_bytes()
+                .iter()
+                .fold(num::zero(), |v, &b| v << 8 | BigInt::from(b)),
         ))),
 
         // Built-in function calls

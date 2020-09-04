@@ -1504,13 +1504,13 @@ fn self_determined_expr_type<'gcx>(
         // Time constants are of time type.
         hir::ExprKind::TimeConst(_) => Some(UnpackedType::make_time()),
 
-        // String literals are of string type.
-        hir::ExprKind::StringConst(_) => Some(
+        // String literals behave like a packed array containing the characters.
+        hir::ExprKind::StringConst(string) => Some(
             ty::PackedType::make_dims(
                 cx,
-                ty::IntAtomType::Byte,
+                ty::IntVecType::Bit,
                 vec![ty::PackedDim::Range(ty::Range {
-                    size: 1,
+                    size: string.value.as_str().len() * 8,
                     dir: ty::RangeDir::Down,
                     offset: 0,
                 })],
