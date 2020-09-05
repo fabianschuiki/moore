@@ -740,15 +740,7 @@ where
                 _ => unreachable!(),
             };
             let ty = self.type_of(decl_id, env)?;
-            let init = self.emit_const(
-                match hir.init {
-                    Some(expr) => self.constant_value_of(expr, env),
-                    None => self.type_default_value(ty),
-                },
-                env,
-                self.span(hir.init.unwrap_or(decl_id)),
-            )?;
-            let value = self.builder.ins().sig(init);
+            let value = self.emit_varnet_decl(decl_id, ty, env, hir.init)?;
             self.builder.set_name(value, hir.name.value.into());
             self.values.insert(decl_id.into(), value.into());
         }
@@ -779,15 +771,8 @@ where
             let signals = self.determine_interface_signals(intf_ty, &inst_ty.dims)?;
             let mut signal_lookup = HashMap::new();
             for signal in signals {
-                let init = self.emit_const(
-                    match signal.default {
-                        Some(expr) => self.constant_value_of(expr, intf_ty.env),
-                        None => self.type_default_value(signal.ty),
-                    },
-                    intf_ty.env,
-                    self.span(signal.default.unwrap_or(signal.decl_id)),
-                )?;
-                let value = self.builder.ins().sig(init);
+                let value =
+                    self.emit_varnet_decl(signal.decl_id, signal.ty, intf_ty.env, signal.default)?;
                 self.builder
                     .set_name(value, format!("{}.{}", inst.hir.name, signal.name));
                 let src = AccessedNode::Intf(inst_id, signal.decl_id);
@@ -2503,6 +2488,48 @@ where
         for (&id, &shadow) in &self.shadows {
             let value = self.builder.ins().prb(self.values[&id.into()]);
             self.builder.ins().st(shadow, value);
+        }
+    }
+
+    /// Emit the code for a variable or net declaration.
+    fn emit_varnet_decl(
+        &mut self,
+        decl_id: NodeId,
+        ty: &'gcx UnpackedType<'gcx>,
+        env: ParamEnv,
+        default: Option<NodeId>,
+    ) -> Result<llhd::ir::Value> {
+        // Check if this is a variable or a net declaration.
+        let is_var = match self.hir_of(decl_id)? {
+            HirNode::VarDecl(x) => x.kind.is_var(),
+            HirNode::IntPort(x) => x.kind.is_var(),
+            x => unreachable!("emit_varnet_decl on HIR {:?}", x),
+        };
+
+        // Differentiate between variable and net declarations, which have
+        // slightly different semantics regarding their initial value.
+        if is_var {
+            // For variables we require that the initial value is a
+            // constant.
+            let init = self.emit_const(
+                match default {
+                    Some(expr) => self.constant_value_of(expr, env),
+                    None => self.type_default_value(ty),
+                },
+                env,
+                self.span(default.unwrap_or(decl_id)),
+            )?;
+            Ok(self.builder.ins().sig(init))
+        } else {
+            // For nets we simply emit the initial value as a signal, then
+            // short-circuit it with the net declaration.
+            let zero = self.emit_const(self.type_default_value(ty), env, self.span(decl_id))?;
+            let net = self.builder.ins().sig(zero);
+            if let Some(default) = default {
+                let init = self.emit_rvalue_mode(default, env, Mode::Signal)?;
+                self.builder.ins().con(net, init);
+            }
+            Ok(net)
         }
     }
 }
