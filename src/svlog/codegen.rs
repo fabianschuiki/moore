@@ -1319,7 +1319,9 @@ where
 
             // Interface signals require special care, because they are emitted
             // in a transposed fashion.
-            mir::RvalueKind::IntfSignal(value, signal) => self.emit_rvalue_interface(value, signal),
+            mir::RvalueKind::IntfSignal(value, signal) => {
+                return self.emit_rvalue_interface(value, signal, mode_hint);
+            }
 
             mir::RvalueKind::CastValueDomain { value, .. } => {
                 // TODO(fschuiki): Turn this into an actual `iN` to `lN` cast.
@@ -1696,7 +1698,8 @@ where
         &mut self,
         mir: &mir::Rvalue<'gcx>,
         signal: NodeId,
-    ) -> Result<llhd::ir::Value> {
+        mode_hint: Mode,
+    ) -> Result<(llhd::ir::Value, Mode)> {
         match mir.kind {
             mir::RvalueKind::Intf(intf) => {
                 let id = AccessedNode::Intf(intf, signal);
@@ -1711,7 +1714,11 @@ where
                     sig,
                     self.llhd_type(sig)
                 );
-                Ok(self.emit_prb_or_var(sig))
+                if mode_hint == Mode::Signal && self.llhd_type(sig).is_signal() {
+                    Ok((sig, Mode::Signal))
+                } else {
+                    Ok((self.emit_prb_or_var(sig), Mode::Value))
+                }
             }
 
             mir::RvalueKind::Index {
@@ -1719,8 +1726,9 @@ where
                 base,
                 length,
             } => {
-                let inner = self.emit_rvalue_interface(value, signal)?;
+                let (inner, actual_mode) = self.emit_rvalue_interface(value, signal, mode_hint)?;
                 self.emit_rvalue_index(value.ty, inner, base, length)
+                    .map(|v| (v, actual_mode))
             }
 
             _ => bug_span!(
