@@ -6,5 +6,4 @@ endmodule
 // CHECK: entity @foo () -> () {
 // CHECK:     %0 = const i1 0
 // CHECK:     %bar = sig i1 %0
-// CHECK:     halt
 // CHECK: }
