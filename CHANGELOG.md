@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 - Make unsupported system task an error (#206)
+- Update `llhd` to 0.14
 
 ### Fixed
 - Fix implementation of assignment expressions (#172, #190)
