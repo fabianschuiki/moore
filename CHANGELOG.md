@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix struct member access not honoring parameters
 - Ignore empty file names (e.g. `""`) rather than emitting a warning
 - Omit superfluous prb/drv for trivial signal connections in instances (#205)
+- Fix modport selection on interface instances (#199)
 
 ## 0.10.0 - 2020-06-15
 ### Added

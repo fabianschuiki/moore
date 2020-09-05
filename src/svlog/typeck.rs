@@ -34,6 +34,7 @@ use crate::{
     hir::HirNode,
     port_list,
     resolver::{DefNode, InstTarget},
+    syntax::ast::BasicNode,
     ty::{
         Domain, IntAtomType, IntVecType, PackedCore, PackedType, RealType, SbvType, Sign,
         UnpackedCore, UnpackedType,
@@ -1684,10 +1685,39 @@ fn self_determined_expr_type<'gcx>(
             let target_ty = cx.self_determined_type(target, env)?;
             if let Some(intf) = target_ty.get_interface() {
                 let def = cx.resolve_hierarchical_or_error(name, intf.ast).ok()?;
-                Some(
-                    cx.type_of(def.node.id(), intf.env)
-                        .unwrap_or(UnpackedType::make_error()),
-                )
+                // If we are selecting a modport, just modify the type of the
+                // expression and let the implicit casting logic take care of
+                // the rest.
+                if let Some(modport) = def.node.as_all().get_modport_name() {
+                    debug!("Interface access selected modport {:?}", modport);
+                    if intf.modport.is_some() {
+                        cx.emit(
+                            DiagBuilder2::error(format!(
+                                "value of type `{}` already has a modport; cannot change to {}",
+                                target_ty, modport
+                            ))
+                            .span(cx.span(target))
+                            .add_note(format!(
+                                "`{}` refers to a modport in interface `{}` defined here:",
+                                name, intf.ast.name,
+                            ))
+                            .span(modport.span()),
+                        );
+                        Some(UnpackedType::make_error())
+                    } else {
+                        // Package up a new interface type with the modport annotated.
+                        let new_intf = ty::InterfaceType {
+                            modport: Some(modport),
+                            ..*intf
+                        };
+                        Some(UnpackedType::make(cx, UnpackedCore::Interface(new_intf)))
+                    }
+                } else {
+                    Some(
+                        cx.type_of(def.node.id(), intf.env)
+                            .unwrap_or(UnpackedType::make_error()),
+                    )
+                }
             } else {
                 Some(
                     cx.resolve_field_access(expr.id, env)

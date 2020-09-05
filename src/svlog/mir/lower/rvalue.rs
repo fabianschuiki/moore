@@ -6,6 +6,7 @@ use crate::crate_prelude::*;
 use crate::{
     hir::HirNode,
     mir::rvalue::*,
+    syntax::ast::BasicNode,
     ty::{SbvType, UnpackedType},
     typeck::{CastOp, CastType},
     value::{self, ValueData, ValueKind},
@@ -396,8 +397,13 @@ fn lower_expr_inner<'gcx>(
             let target_ty = cx.self_determined_type(target, env);
             let value = cx.mir_rvalue(target, env);
             if let Some(intf) = target_ty.and_then(|ty| ty.get_interface()) {
-                let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
-                Ok(builder.build(ty, RvalueKind::IntfSignal(value, def)))
+                let def = cx.resolve_hierarchical_or_error(name, intf.ast)?;
+                // Distinguish `intf.modport` and `intf.signal`.
+                if def.node.as_all().is_modport_name() {
+                    Ok(builder.build(ty, value.kind.clone()))
+                } else {
+                    Ok(builder.build(ty, RvalueKind::IntfSignal(value, def.node.id())))
+                }
             } else {
                 let (field, _) = cx.resolve_field_access(expr_id, env)?;
                 Ok(builder.build(ty, RvalueKind::Member { value, field }))

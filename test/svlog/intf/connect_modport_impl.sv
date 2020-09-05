@@ -27,5 +27,5 @@ endinterface
 // CHECK: }
 
 // CHECK: entity @foo () -> () {
-// CHECK:     inst @fee.param3 (i32$ %7, i1$ %10, i1$ %13) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid)
+// CHECK:     inst @fee.param3 (i32$ %x.data, i1$ %x.valid, i1$ %y.ready) -> (i1$ %x.ready, i32$ %y.data, i1$ %y.valid)
 // CHECK: }

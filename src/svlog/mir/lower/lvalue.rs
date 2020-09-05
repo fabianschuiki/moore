@@ -6,6 +6,7 @@ use crate::crate_prelude::*;
 use crate::{
     hir::HirNode,
     mir::{lower::rvalue::compute_indexing, lvalue::*},
+    syntax::ast::BasicNode,
     ty::UnpackedType,
     ParamEnv,
 };
@@ -151,8 +152,13 @@ fn try_lower_expr<'gcx>(
             let target_ty = cx.self_determined_type(target, env);
             let value = cx.mir_lvalue(target, env);
             if let Some(intf) = target_ty.and_then(|ty| ty.get_interface()) {
-                let def = cx.resolve_hierarchical_or_error(name, intf.ast)?.node.id();
-                return Ok(builder.build(ty, LvalueKind::IntfSignal(value, def)));
+                let def = cx.resolve_hierarchical_or_error(name, intf.ast)?;
+                // Distinguish `intf.modport` and `intf.signal`.
+                if def.node.as_all().is_modport_name() {
+                    return Ok(builder.build(ty, value.kind.clone()));
+                } else {
+                    return Ok(builder.build(ty, LvalueKind::IntfSignal(value, def.node.id())));
+                }
             } else {
                 let (field, _) = cx.resolve_field_access(expr_id, env)?;
                 return Ok(builder.build(ty, LvalueKind::Member { value, field }));
