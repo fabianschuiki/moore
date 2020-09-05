@@ -154,7 +154,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     .init
                     .as_ref()
                     .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id)),
-                kind: hir::VarKind::Var,
+                kind: ast::VarKind::Var,
             };
             Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
         }
@@ -169,7 +169,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     .init
                     .as_ref()
                     .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id)),
-                kind: hir::VarKind::Net {
+                kind: ast::VarKind::Net {
                     ty: decl.net_type,
                     kind: decl.kind,
                 },
@@ -464,7 +464,7 @@ pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<H
                     .init
                     .as_ref()
                     .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), ty)),
-                kind: hir::VarKind::Var,
+                kind: ast::VarKind::Var,
             };
             Ok(HirNode::VarDecl(cx.arena().alloc_hir(hir)))
         }

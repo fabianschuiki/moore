@@ -934,7 +934,7 @@ pub enum Port<'a> {
     },
     Named {
         dir: Option<PortDir>,
-        kind: Option<PortKind>,
+        kind: Option<VarKind>,
         ty: Type<'a>,
         #[name]
         name: Spanned<Name>,
@@ -971,23 +971,56 @@ impl HasDesc for Port<'_> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortDecl<'a> {
     pub dir: PortDir,
-    pub kind: Option<PortKind>,
+    pub kind: Option<VarKind>,
     pub ty: Type<'a>,
     pub names: Vec<VarDeclName<'a>>,
 }
 
+/// Whether a declaration is a variable or a net.
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum PortKind {
-    Net(NetType),
+pub enum VarKind {
+    /// A variable declaration.
     Var,
+    /// A net declaration.
+    Net {
+        /// The net type, such as `wire` or `trireg`.
+        ty: NetType,
+        /// Additional `vectored` or `scalared` specifier.
+        kind: NetKind,
+    },
 }
 
-impl std::fmt::Display for PortKind {
+impl VarKind {
+    /// Check if this is a variable declaration.
+    pub fn is_var(&self) -> bool {
+        match self {
+            Self::Var => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this is a net declaration.
+    pub fn is_net(&self) -> bool {
+        match self {
+            Self::Net { .. } => true,
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for VarKind {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            PortKind::Net(nt) => write!(f, "{}", nt),
-            PortKind::Var => write!(f, "var"),
+            Self::Net { ty, kind } => {
+                write!(f, "{}", ty)?;
+                match kind {
+                    NetKind::Vectored => write!(f, " vectored"),
+                    NetKind::Scalared => write!(f, " scalared"),
+                    NetKind::None => Ok(()),
+                }
+            }
+            Self::Var => write!(f, "var"),
         }
     }
 }

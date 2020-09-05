@@ -64,7 +64,7 @@ pub struct IntPort<'a> {
     /// Direction of the port.
     pub dir: ast::PortDir,
     /// Kind of the port.
-    pub kind: ast::PortKind,
+    pub kind: ast::VarKind,
     /// Additional port details. Omitted if this is an explicitly-named ANSI
     /// port, and the port details must be inferred from declarations inside the
     /// node.
@@ -299,28 +299,34 @@ pub(crate) fn canonicalize_ports<'a>(
 
         // Determine the port kind.
         let kind = port.kind.unwrap_or_else(|| match port.dir {
-            ast::PortDir::Input | ast::PortDir::Inout => ast::PortKind::Net(default_net_type),
+            ast::PortDir::Input | ast::PortDir::Inout => ast::VarKind::Net {
+                ty: default_net_type,
+                kind: ast::NetKind::None,
+            },
             ast::PortDir::Output => {
                 if port.ty.data == ast::ImplicitType {
-                    ast::PortKind::Net(default_net_type)
+                    ast::VarKind::Net {
+                        ty: default_net_type,
+                        kind: ast::NetKind::None,
+                    }
                 } else {
-                    ast::PortKind::Var
+                    ast::VarKind::Var
                 }
             }
-            ast::PortDir::Ref => ast::PortKind::Var,
+            ast::PortDir::Ref => ast::VarKind::Var,
         });
 
         // Verify that `inout` ports are of net kind, and `ref` ports are of var
         // kind.
         match (port.dir, kind) {
-            (ast::PortDir::Inout, ast::PortKind::Var) => cx.emit(
+            (ast::PortDir::Inout, ast::VarKind::Var) => cx.emit(
                 DiagBuilder2::error(format!(
                     "inout port `{}` must be a net; but is declared as variable",
                     port.name
                 ))
                 .span(port.name.span),
             ),
-            (ast::PortDir::Ref, ast::PortKind::Net(_)) => cx.emit(
+            (ast::PortDir::Ref, ast::VarKind::Net { .. }) => cx.emit(
                 DiagBuilder2::error(format!(
                     "ref port `{}` must be a variable; but is declared as net",
                     port.name
@@ -430,7 +436,7 @@ fn lower_node_ports_ansi<'a>(
     // details over to the next port. Initialize with the default mandated by
     // the standard.
     let mut carry_dir = ast::PortDir::Inout;
-    let mut carry_kind: Option<ast::PortKind> = None;
+    let mut carry_kind: Option<ast::VarKind> = None;
     let mut carry_ty = Cow::Owned(ast::TypeKind::new(
         first_span.begin().into(),
         ast::LogicType,
@@ -768,7 +774,7 @@ fn lower_node_ports_nonansi<'a>(
                     // TODO: Pretty sure that this can never happen, since a port
                     // which already provides this information is considered
                     // complete.
-                    if port.kind.is_some() && port.kind != Some(ast::PortKind::Var) {
+                    if port.kind.is_some() && port.kind != Some(ast::VarKind::Var) {
                         cx.emit(
                             DiagBuilder2::error(format!(
                                 "net port `{}` redeclared as variable",
@@ -779,7 +785,7 @@ fn lower_node_ports_nonansi<'a>(
                             .span(port.span),
                         );
                     }
-                    port.kind = Some(ast::PortKind::Var);
+                    port.kind = Some(ast::VarKind::Var);
                     (
                         vd.1.name_span,
                         &vd.0.ty.kind,
@@ -793,7 +799,7 @@ fn lower_node_ports_nonansi<'a>(
                     // TODO: Pretty sure that this can never happen, since a port
                     // which already provides this information is considered
                     // complete.
-                    if port.kind.is_some() && port.kind == Some(ast::PortKind::Var) {
+                    if port.kind.is_some() && port.kind == Some(ast::VarKind::Var) {
                         cx.emit(
                             DiagBuilder2::error(format!(
                                 "variable port `{}` redeclared as net",
@@ -804,7 +810,10 @@ fn lower_node_ports_nonansi<'a>(
                             .span(port.span),
                         );
                     }
-                    port.kind = Some(ast::PortKind::Net(nd.0.net_type));
+                    port.kind = Some(ast::VarKind::Net {
+                        ty: nd.0.net_type,
+                        kind: ast::NetKind::None,
+                    });
                     (
                         nd.1.name_span,
                         &nd.0.ty.kind,
@@ -1083,7 +1092,7 @@ struct PartialPort<'a> {
     /// The AST node from which we derived this port.
     ast: &'a dyn ast::AnyNode<'a>,
     dir: ast::PortDir,
-    kind: Option<ast::PortKind>,
+    kind: Option<ast::VarKind>,
     sign: ast::TypeSign,
     ty: Cow<'a, ast::TypeKind<'a>>,
     ty_span: Option<Span>,

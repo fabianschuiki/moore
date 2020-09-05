@@ -3042,12 +3042,15 @@ fn parse_named_port<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ast::P
     // "var" keyword, or nothing at all.
     let kind = {
         let tkn = p.peek(0).0;
-        if let Some(net) = as_net_type(tkn) {
+        if let Some(ty) = as_net_type(tkn) {
             p.bump();
-            Some(ast::PortKind::Net(net))
+            Some(ast::VarKind::Net {
+                ty,
+                kind: ast::NetKind::None,
+            })
         } else if tkn == Keyword(Kw::Var) {
             p.bump();
-            Some(ast::PortKind::Var)
+            Some(ast::VarKind::Var)
         } else {
             None
         }
@@ -5094,11 +5097,14 @@ fn parse_port_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<PortDec
     };
 
     // Consume the optional net type or "var" keyword.
-    let kind = if let Some(nt) = as_net_type(p.peek(0).0) {
+    let kind = if let Some(ty) = as_net_type(p.peek(0).0) {
         p.bump();
-        Some(PortKind::Net(nt))
+        Some(VarKind::Net {
+            ty,
+            kind: NetKind::None,
+        })
     } else if p.try_eat(Keyword(Kw::Var)) {
-        Some(PortKind::Var)
+        Some(VarKind::Var)
     } else {
         None
     };

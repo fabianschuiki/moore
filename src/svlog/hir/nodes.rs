@@ -883,7 +883,7 @@ pub struct VarDecl {
     /// Initial value
     pub init: Option<NodeId>,
     /// Variable or net-specific data
-    pub kind: VarKind,
+    pub kind: ast::VarKind,
 }
 
 impl HasSpan for VarDecl {
@@ -899,31 +899,17 @@ impl HasSpan for VarDecl {
 impl HasDesc for VarDecl {
     fn desc(&self) -> &'static str {
         match self.kind {
-            VarKind::Var => "variable declaration",
-            VarKind::Net { .. } => "net declaration",
+            ast::VarKind::Var => "variable declaration",
+            ast::VarKind::Net { .. } => "net declaration",
         }
     }
 
     fn desc_full(&self) -> String {
         match self.kind {
-            VarKind::Var => format!("variable `{}`", self.name.value),
-            VarKind::Net { .. } => format!("net `{}`", self.name.value),
+            ast::VarKind::Var => format!("variable `{}`", self.name.value),
+            ast::VarKind::Net { .. } => format!("net `{}`", self.name.value),
         }
     }
-}
-
-/// Variable or net-specific data.
-#[derive(Debug, PartialEq, Eq)]
-pub enum VarKind {
-    /// A variable declaration.
-    Var,
-    /// A net declaration.
-    Net {
-        /// The net type, such as `wire` or `trireg`.
-        ty: ast::NetType,
-        /// Additional `vectored` or `scalared` specifier.
-        kind: ast::NetKind,
-    },
 }
 
 /// A procedure.
