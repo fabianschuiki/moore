@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Omit superfluous prb/drv for trivial signal connections in instances (#205)
 - Fix modport selection on interface instances (#199)
 - Fix wire declarations requiring default assignment to be constant (#198)
+- Fix `@(...)` statements not re-sampling signals after `wait` (#197)
 
 ## 0.10.0 - 2020-06-15
 ### Added

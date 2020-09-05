@@ -471,6 +471,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     .collect();
                 pg.builder.ins().wait(body_blk, trigger_on);
                 pg.builder.append_to(body_blk);
+                pg.flush_mir(); // ensure we don't reuse earlier expr probe
                 pg.emit_shadow_update();
                 check_blk
             }
@@ -485,6 +486,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 pg.builder.set_name(endtimes, "endtimes".to_string());
                 pg.builder.ins().wait_time(body_blk, endtimes, vec![]);
                 pg.builder.append_to(body_blk);
+                pg.flush_mir(); // ensure we don't reuse earlier expr probe
                 pg.emit_shadow_update();
                 entry_blk // This block is ignored for final blocks
             }
@@ -2082,6 +2084,7 @@ where
                 let duration = self.emit_rvalue(expr_id, env)?.into();
                 self.builder.ins().wait_time(resume_blk, duration, vec![]);
                 self.builder.append_to(resume_blk);
+                self.flush_mir(); // ensure we don't reuse earlier expr probe
                 self.emit_shadow_update();
                 self.emit_stmt(stmt, env)?;
             }
@@ -2116,6 +2119,7 @@ where
                 }
                 self.builder.ins().wait(check_blk, trigger_on);
                 self.builder.append_to(check_blk);
+                self.flush_mir(); // ensure we don't reuse earlier expr probe
                 self.emit_shadow_update();
 
                 // Check if any of the events happened and produce a single bit
@@ -2169,6 +2173,7 @@ where
                 }
                 self.builder.ins().wait(trigger_blk, trigger_on);
                 self.builder.append_to(trigger_blk);
+                self.flush_mir(); // ensure we don't reuse earlier expr probe
                 self.emit_shadow_update();
 
                 // Emit the actual statement.
