@@ -1,6 +1,6 @@
 [package]
 name = "moore"
-version = "0.11.0"
+version = "0.12.0-dev"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
@@ -15,10 +15,10 @@ travis-ci = { repository = "fabianschuiki/moore", branch = "master" }
 [workspace]
 
 [dependencies]
-moore-common = { path = "src/common", version = "0.11.0" }
-moore-derive = { path = "src/derive", version = "0.11.0" }
-moore-svlog = { path = "src/svlog", version = "0.11.0" }
-moore-vhdl = { path = "src/vhdl", version = "0.11.0" }
+moore-common = { path = "src/common", version = "0.12.0-dev" }
+moore-derive = { path = "src/derive", version = "0.12.0-dev" }
+moore-svlog = { path = "src/svlog", version = "0.12.0-dev" }
+moore-vhdl = { path = "src/vhdl", version = "0.12.0-dev" }
 clap = "2"
 llhd = "0.14.1"
 num = "0.1"
