@@ -1852,16 +1852,20 @@ where
                 self.emit_lvalue_index(value.ty, inner, base, length)
             }
 
+            mir::LvalueKind::Repeat(..) | mir::LvalueKind::Concat(..) => {
+                bug_span!(
+                    mir.span,
+                    self.cx,
+                    "mir lvalue should have been simplified by its parent assignment; {:#?}",
+                    mir
+                );
+            }
+
             // Errors from MIR lowering have already been reported. Just abort.
             mir::LvalueKind::Error => Err(()),
 
             _ => {
-                unimplemented!(
-                    "{}",
-                    DiagBuilder2::bug("codegen for mir lvalue")
-                        .span(mir.span)
-                        .add_note(format!("{:#?}", mir))
-                );
+                bug_span!(mir.span, self.cx, "codegen for mir lvalue {:#?}", mir);
             }
         }
     }

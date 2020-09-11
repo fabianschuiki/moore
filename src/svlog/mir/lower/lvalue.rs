@@ -7,9 +7,10 @@ use crate::{
     hir::HirNode,
     mir::{lower::rvalue::compute_indexing, lvalue::*},
     syntax::ast::BasicNode,
-    ty::UnpackedType,
+    ty::{SbvType, UnpackedType},
     ParamEnv,
 };
+use num::ToPrimitive;
 
 /// An internal builder for lvalue lowering.
 struct Builder<'a, C> {
@@ -163,6 +164,48 @@ fn try_lower_expr<'gcx>(
                 let (field, _) = cx.resolve_field_access(expr_id, env)?;
                 return Ok(builder.build(ty, LvalueKind::Member { value, field }));
             }
+        }
+
+        hir::ExprKind::Concat(repeat, ref exprs) => {
+            // Compute the SBVT for each expression and lower it to MIR,
+            // implicitly casting to the SBVT.
+            let exprs = exprs
+                .iter()
+                .map(|&expr| {
+                    let value = builder.cx.mir_lvalue(expr, env);
+                    assert_span!(value.ty.coalesces_to_llhd_scalar(), value.span, builder.cx);
+                    Ok((value.ty.get_bit_size().unwrap(), value))
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            // Compute the result type of the concatenation.
+            let final_ty = builder.cx.need_self_determined_type(hir.id, env);
+            if final_ty.is_error() {
+                return Err(());
+            }
+            let domain = final_ty.domain();
+            let concat_width = exprs.iter().map(|(w, _)| w).sum();
+            let concat_ty =
+                SbvType::new(domain, ty::Sign::Unsigned, concat_width).to_unpacked(builder.cx);
+
+            // Assemble the concatenation.
+            let concat = builder.build(
+                concat_ty,
+                LvalueKind::Concat(exprs.into_iter().map(|(_, v)| v).collect()),
+            );
+
+            // If a repetition is present, apply that.
+            let repeat = if let Some(repeat) = repeat {
+                let count = builder
+                    .cx
+                    .constant_int_value_of(repeat, env)?
+                    .to_usize()
+                    .unwrap();
+                builder.build(final_ty, LvalueKind::Repeat(count, concat))
+            } else {
+                concat
+            };
+            return Ok(repeat);
         }
 
         _ => (),

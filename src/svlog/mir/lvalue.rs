@@ -77,6 +77,16 @@ pub enum LvalueKind<'a> {
     },
     /// A struct field access.
     Member { value: &'a Lvalue<'a>, field: usize },
+    /// Concatenate multiple values.
+    ///
+    /// The values are cast to and treated as packed bit vectors, and the result
+    /// is yet another packed bit vector.
+    Concat(Vec<&'a Lvalue<'a>>),
+    /// Repeat a value multiple times.
+    ///
+    /// The value is cast to and treated as a packed bit vector, and the result
+    /// is yet another packed bit vector.
+    Repeat(usize, &'a Lvalue<'a>),
     /// An error occurred during lowering.
     Error,
 }
