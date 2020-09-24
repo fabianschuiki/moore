@@ -46,6 +46,8 @@ Moore is developed in this repository, but is separated into the following crate
 
 Some useful commands when working on moore:
 
+    git submodule init
+    git submodule update
     cargo check
     cargo test --all
     cargo run -- foo.sv -e foo
