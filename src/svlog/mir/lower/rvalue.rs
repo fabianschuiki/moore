@@ -1061,13 +1061,6 @@ fn lower_int_binary_arith<'a>(
         return builder.error();
     }
 
-    // Check that the operands are of the right type.
-    let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
-    assert_type!(lhs.ty, result_ty, builder.span, builder.cx);
-    if op != hir::BinaryOp::Pow {
-        assert_type!(rhs.ty, result_ty, builder.span, builder.cx);
-    }
-
     // Determine the operation.
     let op = match op {
         hir::BinaryOp::Add => IntBinaryArithOp::Add,
@@ -1083,6 +1076,25 @@ fn lower_int_binary_arith<'a>(
             op
         ),
     };
+
+    // Assemble the node.
+    make_int_binary_arith(builder, result_ty, op, lhs, rhs)
+}
+
+/// Map an integer binary arithmetic operator to MIR.
+pub fn make_int_binary_arith<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
+    op: IntBinaryArithOp,
+    lhs: &'a Rvalue<'a>,
+    rhs: &'a Rvalue<'a>,
+) -> &'a Rvalue<'a> {
+    // Check that the operands are of the right type.
+    let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
+    assert_type!(lhs.ty, result_ty, builder.span, builder.cx);
+    if op != IntBinaryArithOp::Pow {
+        assert_type!(rhs.ty, result_ty, builder.span, builder.cx);
+    }
 
     // Assemble the node.
     builder.build(
@@ -1211,6 +1223,33 @@ fn lower_shift<'a>(
         return builder.error();
     }
 
+    // Determine the operation.
+    let (op, arith) = match op {
+        hir::BinaryOp::LogicShL => (ShiftOp::Left, false),
+        hir::BinaryOp::LogicShR => (ShiftOp::Right, false),
+        hir::BinaryOp::ArithShL => (ShiftOp::Left, true),
+        hir::BinaryOp::ArithShR => (ShiftOp::Right, true),
+        _ => bug_span!(
+            builder.span,
+            builder.cx,
+            "{:?} is not an integer shift operator",
+            op
+        ),
+    };
+
+    // Assemble the node.
+    make_shift(builder, result_ty, op, arith, value, amount)
+}
+
+/// Map an integer shift operator to MIR.
+pub fn make_shift<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    result_ty: &'a UnpackedType<'a>,
+    op: ShiftOp,
+    arith: bool,
+    value: &'a Rvalue<'a>,
+    amount: &'a Rvalue<'a>,
+) -> &'a Rvalue<'a> {
     // Check that the operands are of the right type.
     let sbvt = result_ty.simple_bit_vector(builder.cx, builder.span);
     assert_type!(value.ty, result_ty, value.span, builder.cx);
@@ -1220,19 +1259,8 @@ fn lower_shift<'a>(
         builder.cx
     );
 
-    // Determine the operation.
-    let (op, arith) = match op {
-        hir::BinaryOp::LogicShL => (ShiftOp::Left, false),
-        hir::BinaryOp::LogicShR => (ShiftOp::Right, false),
-        hir::BinaryOp::ArithShL => (ShiftOp::Left, sbvt.is_signed()),
-        hir::BinaryOp::ArithShR => (ShiftOp::Right, sbvt.is_signed()),
-        _ => bug_span!(
-            builder.span,
-            builder.cx,
-            "{:?} is not an integer shift operator",
-            op
-        ),
-    };
+    // Determine the sign of the operation.
+    let arith = arith && sbvt.is_signed();
 
     // Assemble the node.
     builder.build(
@@ -1313,7 +1341,7 @@ fn lower_binary_bitwise<'a>(
 }
 
 /// Map a bitwise binary operator to MIR.
-fn make_binary_bitwise<'a>(
+pub fn make_binary_bitwise<'a>(
     builder: &Builder<'_, impl Context<'a>>,
     result_ty: &'a UnpackedType<'a>,
     op: BinaryBitwiseOp,
