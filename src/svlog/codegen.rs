@@ -1947,35 +1947,6 @@ where
         }
     }
 
-    /// Emit a binary shift operator.
-    fn emit_shift_operator(
-        &mut self,
-        dir: ShiftDir,
-        arith: bool,
-        lhs: llhd::ir::Value,
-        rhs: llhd::ir::Value,
-    ) -> llhd::ir::Value {
-        let ty = self.builder.value_type(lhs);
-        let width = if ty.is_signal() {
-            ty.unwrap_signal().unwrap_int()
-        } else {
-            ty.unwrap_int()
-        };
-        let zeros = self.builder.ins().const_int((width, 0));
-        let hidden = if arith && dir == ShiftDir::Right {
-            let ones = self.builder.ins().not(zeros);
-            let sign = self.builder.ins().ext_slice(lhs, width - 1, 1);
-            let array = self.builder.ins().array(vec![zeros, ones]);
-            self.builder.ins().mux(array, sign)
-        } else {
-            zeros
-        };
-        match dir {
-            ShiftDir::Left => self.builder.ins().shl(lhs, hidden, rhs),
-            ShiftDir::Right => self.builder.ins().shr(lhs, hidden, rhs),
-        }
-    }
-
     /// Add a nameless block.
     fn add_nameless_block(&mut self) -> llhd::ir::Block {
         self.builder.block()
@@ -2017,65 +1988,50 @@ where
                 }
             }
             hir::StmtKind::Assign { lhs, rhs, kind } => {
+                // Map the assignment to an MIR node.
                 let assign_mir =
                     self.mir_assignment_of_procedural_stmt(stmt_id, lhs, rhs, env, hir.span, kind);
                 debug!("Procedural assignment: {:#?}", assign_mir);
 
-                let lhs_mir = self.mir_lvalue(lhs, env);
-                let rhs_mir = self.mir_rvalue(rhs, env);
-                if lhs_mir.is_error() || rhs_mir.is_error() {
-                    return Err(());
-                }
-                assert_type!(rhs_mir.ty, lhs_mir.ty, rhs_mir.span, self.cx);
-                let lhs_lv = self.emit_mir_lvalue(lhs_mir)?;
-                let rhs_rv = self.emit_mir_rvalue(rhs_mir)?;
+                // Simplify the assignment to eliminate concatenations on the
+                // left-hand side.
+                let simplified = self.mir_simplify_assignment(Ref(assign_mir));
+                debug!("Simplified to: {:#?}", simplified);
 
-                match kind {
-                    hir::AssignKind::Block(ast::AssignOp::Identity) => {
-                        self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
+                // Check for sanity.
+                for &assign in &simplified {
+                    assert_type!(assign.rhs.ty, assign.lhs.ty, assign.rhs.span, self.cx);
+                    if assign.is_error() {
+                        return Err(());
                     }
-                    hir::AssignKind::Block(op) => {
-                        let lhs_rv = self.emit_rvalue(lhs, env)?;
-                        let value = match op {
-                            ast::AssignOp::Identity => unreachable!(),
-                            ast::AssignOp::Add => self.builder.ins().add(lhs_rv, rhs_rv),
-                            ast::AssignOp::Sub => self.builder.ins().sub(lhs_rv, rhs_rv),
-                            ast::AssignOp::Mul => self.builder.ins().umul(lhs_rv, rhs_rv),
-                            ast::AssignOp::Div => self.builder.ins().udiv(lhs_rv, rhs_rv),
-                            ast::AssignOp::Mod => self.builder.ins().umod(lhs_rv, rhs_rv),
-                            ast::AssignOp::BitAnd => self.builder.ins().and(lhs_rv, rhs_rv),
-                            ast::AssignOp::BitOr => self.builder.ins().or(lhs_rv, rhs_rv),
-                            ast::AssignOp::BitXor => self.builder.ins().xor(lhs_rv, rhs_rv),
-                            ast::AssignOp::LogicShL => {
-                                self.emit_shift_operator(ShiftDir::Left, false, lhs_rv, rhs_rv)
-                            }
-                            ast::AssignOp::LogicShR => {
-                                self.emit_shift_operator(ShiftDir::Right, false, lhs_rv, rhs_rv)
-                            }
-                            ast::AssignOp::ArithShL => {
-                                self.emit_shift_operator(ShiftDir::Left, true, lhs_rv, rhs_rv)
-                            }
-                            ast::AssignOp::ArithShR => {
-                                self.emit_shift_operator(ShiftDir::Right, true, lhs_rv, rhs_rv)
-                            }
-                        };
-                        self.emit_blocking_assign_llhd(lhs_lv, value)?;
+                }
+
+                // Emit the appropriate assignments based on the assignment
+                // kind.
+                match kind {
+                    hir::AssignKind::Block(_) => {
+                        for &assign in &simplified {
+                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
+                            self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
+                        }
                     }
                     hir::AssignKind::Nonblock => {
                         let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
                         let delay_const = self.builder.ins().const_time(delay);
-                        self.builder.ins().drv(lhs_lv.0, rhs_rv, delay_const);
+                        for &assign in &simplified {
+                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
+                            self.builder.ins().drv(lhs_lv.0, rhs_rv, delay_const);
+                        }
                     }
                     hir::AssignKind::NonblockDelay(delay) => {
                         let delay = self.emit_rvalue(delay, env)?;
-                        self.builder.ins().drv(lhs_lv.0, rhs_rv, delay);
-                    }
-                    _ => {
-                        error!("{:#?}", hir);
-                        return self.unimp_msg(
-                            format!("code generation for assignment {:?} in", kind),
-                            hir,
-                        );
+                        for &assign in &simplified {
+                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
+                            self.builder.ins().drv(lhs_lv.0, rhs_rv, delay);
+                        }
                     }
                 }
             }
@@ -2563,13 +2519,6 @@ enum Mode {
 //     Or,
 //     Xor,
 // }
-
-/// Directions of the shift operation.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum ShiftDir {
-    Left,
-    Right,
-}
 
 /// Emit a detailed description of a module's ports.
 ///
