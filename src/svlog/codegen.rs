@@ -1999,12 +1999,7 @@ where
     }
 
     /// Emit the code for a statement, given its HIR.
-    fn emit_stmt_regular(
-        &mut self,
-        _stmt_id: NodeId,
-        hir: &hir::Stmt,
-        env: ParamEnv,
-    ) -> Result<()> {
+    fn emit_stmt_regular(&mut self, stmt_id: NodeId, hir: &hir::Stmt, env: ParamEnv) -> Result<()> {
         debug!("Emit stmt `{}`", {
             let s = hir.span.extract();
             if s.len() > 40 {
@@ -2022,6 +2017,10 @@ where
                 }
             }
             hir::StmtKind::Assign { lhs, rhs, kind } => {
+                let assign_mir =
+                    self.mir_assignment_of_procedural_stmt(stmt_id, lhs, rhs, env, hir.span, kind);
+                debug!("Procedural assignment: {:#?}", assign_mir);
+
                 let lhs_mir = self.mir_lvalue(lhs, env);
                 let rhs_mir = self.mir_rvalue(rhs, env);
                 if lhs_mir.is_error() || rhs_mir.is_error() {
