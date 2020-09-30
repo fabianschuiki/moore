@@ -7,7 +7,8 @@ use crate::{
     mir::{
         assign::*,
         lower,
-        rvalue::{BinaryBitwiseOp, IntBinaryArithOp, ShiftOp},
+        lvalue::{Lvalue, LvalueKind},
+        rvalue::{BinaryBitwiseOp, IntBinaryArithOp, Rvalue, ShiftOp},
     },
     ParamEnv,
 };
@@ -105,4 +106,43 @@ enum AssignOp {
     Arith(IntBinaryArithOp),
     Bitwise(BinaryBitwiseOp),
     Shift(ShiftOp, bool),
+}
+
+/// Simplify an MIR assignment to potentially multiple simple MIR assignments.
+///
+/// This eliminates assignments to compound `Lvalue` objects, for example
+/// concatenations, and replaces them with multiple assignments to each of the
+/// individual concatenation fields.
+#[moore_derive::query]
+pub(crate) fn mir_simplify_assignment<'a>(
+    cx: &impl Context<'a>,
+    Ref(assign): Ref<'a, mir::Assignment<'a>>,
+) -> Vec<&'a mir::Assignment<'a>> {
+    let mut v = vec![];
+    simplify(cx, assign, assign.lhs, assign.rhs, &mut v);
+    v
+}
+
+/// Inner function called recursively to simplify assignments.
+fn simplify<'a>(
+    cx: &impl Context<'a>,
+    root: &'a Assignment<'a>,
+    lhs: &'a Lvalue<'a>,
+    rhs: &'a Rvalue<'a>,
+    into: &mut Vec<&'a Assignment<'a>>,
+) {
+    trace!("Simplifying {:#?} = {:#?}", lhs, rhs);
+    match lhs.kind {
+        LvalueKind::Concat(ref values) if values.len() == 1 => {
+            let mut a = root.clone();
+            a.lhs = values[0];
+            into.push(cx.arena().alloc_mir_assignment(a));
+        }
+        LvalueKind::Concat(ref values) => {
+            bug_span!(root.span, cx, "assignment to concatenation not implemented");
+        }
+        _ => {
+            into.push(root);
+        }
+    }
 }
