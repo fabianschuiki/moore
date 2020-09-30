@@ -272,6 +272,7 @@ pub struct GlobalArenas<'t> {
     values: TypedArena<ValueData<'t>>,
     mir_lvalue: TypedArena<mir::Lvalue<'t>>,
     mir_rvalue: TypedArena<mir::Rvalue<'t>>,
+    mir_assignment: TypedArena<mir::Assignment<'t>>,
     ast_roots: TypedArena<ast::Root<'t>>,
     /// Additional AST types generated during HIR lowering.
     ast_types: TypedArena<ast::Type<'t>>,
@@ -319,6 +320,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate an MIR rvalue.
     pub fn alloc_mir_rvalue(&'t self, mir: mir::Rvalue<'t>) -> &'t mir::Rvalue<'t> {
         self.mir_rvalue.alloc(mir)
+    }
+
+    /// Allocate an MIR assignment.
+    pub fn alloc_mir_assignment(&'t self, mir: mir::Assignment<'t>) -> &'t mir::Assignment<'t> {
+        self.mir_assignment.alloc(mir)
     }
 
     /// Allocate an AST root.

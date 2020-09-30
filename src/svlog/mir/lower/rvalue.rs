@@ -16,11 +16,15 @@ use num::{BigInt, One, Signed, ToPrimitive, Zero};
 use std::{cmp::max, collections::HashMap};
 
 /// An internal builder for rvalue lowering.
-struct Builder<'a, C> {
-    cx: &'a C,
-    span: Span,
-    expr: NodeId,
-    env: ParamEnv,
+pub struct Builder<'a, C> {
+    /// The context to lower into.
+    pub cx: &'a C,
+    /// The span of the expression being lowered.
+    pub span: Span,
+    /// The expression being lowered.
+    pub expr: NodeId,
+    /// The parametrization of the expression being lowered.
+    pub env: ParamEnv,
 }
 
 impl<'a, C: Context<'a>> Builder<'_, C> {

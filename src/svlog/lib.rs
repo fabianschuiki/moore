@@ -267,6 +267,7 @@ mod queries {
         hir::lowering::*,
         hir::{accessed_nodes, AccessTable},
         inst_details::*,
+        mir::lower::assign::mir_assignment_of_procedural_stmt,
         param_env::*,
         pattern_mapping::*,
         port_list::{self, *},

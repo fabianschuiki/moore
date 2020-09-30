@@ -7,10 +7,12 @@
 
 #![deny(missing_docs)]
 
+mod assign;
 pub mod lower;
 mod lvalue;
 mod rvalue;
 
+pub use assign::*;
 pub use lvalue::*;
 pub use rvalue::*;
 
