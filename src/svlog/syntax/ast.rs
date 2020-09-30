@@ -1247,7 +1247,7 @@ pub enum TimingControl<'a> {
 }
 
 #[moore_derive::visit]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssignOp {
     Identity,
     Add,

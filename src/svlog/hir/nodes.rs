@@ -1020,7 +1020,7 @@ pub enum StmtKind {
 }
 
 /// The different forms an assignment can take.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssignKind {
     /// A blocking assignment.
     Block(ast::AssignOp),
