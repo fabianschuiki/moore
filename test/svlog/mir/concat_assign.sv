@@ -4,6 +4,7 @@ module foo;
     logic [7:0] a;
     logic [3:0] b;
     logic [11:0] c;
+    logic [1:0][3:0] d;
     initial begin
         {a} = 8'd42;
         // CHECK: %1 = const i8 42
@@ -25,5 +26,6 @@ module foo;
         // CHECK: drv i2$ %10, %11, %2
         // CHECK: %12 = exts i2$, i8$ %a, 0, 2
         // CHECK: drv i2$ %12, %11, %2
+        // {d} = 8'd42; // BROKEN until #208 lands
     end
 endmodule
