@@ -8,7 +8,7 @@ use crate::{
         assign::*,
         lower,
         lvalue::{Lvalue, LvalueKind},
-        rvalue::{BinaryBitwiseOp, IntBinaryArithOp, Rvalue, ShiftOp},
+        rvalue::{BinaryBitwiseOp, IntBinaryArithOp, Rvalue, RvalueKind, ShiftOp},
     },
     ParamEnv,
 };
@@ -139,7 +139,43 @@ fn simplify<'a>(
             into.push(cx.arena().alloc_mir_assignment(a));
         }
         LvalueKind::Concat(ref values) => {
-            bug_span!(root.span, cx, "assignment to concatenation not implemented");
+            let mut base = 0;
+            for value in values.iter().rev() {
+                // The value must be of a simple bit vector type, as enforced
+                // by the casting logic.
+                let sbvt = value.ty.simple_bit_vector(cx, value.span);
+                trace!(
+                    "- Splitting subassignment to `{}` ({}) at {}",
+                    value.span.extract(),
+                    sbvt,
+                    base
+                );
+
+                // Slice the relevant part of the assignment out from the RHS.
+                let builder = lower::rvalue::Builder {
+                    cx,
+                    span: rhs.span,
+                    expr: rhs.id,
+                    env: rhs.env,
+                };
+                let base_rv = builder.constant_u32(base as u32);
+                let index = builder.build(
+                    sbvt.to_unpacked(cx),
+                    RvalueKind::Index {
+                        value: rhs,
+                        base: base_rv,
+                        length: sbvt.size,
+                    },
+                );
+
+                // Formulate a new assignment.
+                let mut a = root.clone();
+                a.lhs = value;
+                a.rhs = index;
+                into.push(cx.arena().alloc_mir_assignment(a));
+
+                base += sbvt.size;
+            }
         }
         _ => {
             into.push(root);

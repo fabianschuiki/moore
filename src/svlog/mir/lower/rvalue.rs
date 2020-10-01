@@ -39,7 +39,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     }
 
     /// Intern an MIR node.
-    fn build(&self, ty: &'a UnpackedType<'a>, kind: RvalueKind<'a>) -> &'a Rvalue<'a> {
+    pub fn build(&self, ty: &'a UnpackedType<'a>, kind: RvalueKind<'a>) -> &'a Rvalue<'a> {
         self.cx.arena().alloc_mir_rvalue(Rvalue {
             id: self.cx.alloc_id(self.span),
             origin: self.expr,
@@ -62,6 +62,15 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     /// Create a constant node.
     fn constant(&self, value: ValueData<'a>) -> &'a Rvalue<'a> {
         self.build(value.ty, RvalueKind::Const(self.cx.intern_value(value)))
+    }
+
+    /// Create an unsigned 32 bit constant node.
+    pub fn constant_u32(&self, value: u32) -> &'a Rvalue<'a> {
+        let ty = SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(self.cx);
+        self.build(
+            ty,
+            RvalueKind::Const(self.cx.intern_value(value::make_int(ty, value.into()))),
+        )
     }
 }
 
@@ -869,12 +878,7 @@ fn unpack_array<'a>(
     // Unpack each element.
     let mut unpacked_elements = HashMap::new();
     for i in 0..length {
-        let ty =
-            SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
-        let base = builder.build(
-            ty,
-            RvalueKind::Const(builder.cx.intern_value(value::make_int(ty, (i * w).into()))),
-        );
+        let base = builder.constant_u32((i * w) as u32);
         let elem = builder.build(
             sbvt.to_unpacked(builder.cx),
             RvalueKind::Index {
