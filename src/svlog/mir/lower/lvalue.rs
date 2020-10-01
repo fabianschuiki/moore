@@ -5,7 +5,11 @@
 use crate::crate_prelude::*;
 use crate::{
     hir::HirNode,
-    mir::{lower::rvalue::compute_indexing, lvalue::*},
+    mir::{
+        lower,
+        lower::rvalue::{adjust_indexing, compute_indexing},
+        lvalue::*,
+    },
     syntax::ast::BasicNode,
     ty::{SbvType, UnpackedType},
     ParamEnv,
@@ -137,6 +141,18 @@ fn try_lower_expr<'gcx>(
                 "cannot index into `{}`; should be handled by typeck",
                 target.ty
             );
+
+            // Offset the indexing base by the dimension base, e.g. for accesses
+            // such as `x[1]` into `logic [2:1] x`, which essentially accesses
+            // element 0.
+            let target_dim = target.ty.dims().next().unwrap();
+            let rvalue_builder = lower::rvalue::Builder {
+                cx,
+                span: base.span,
+                expr: base.id,
+                env: base.env,
+            };
+            let base = adjust_indexing(&rvalue_builder, base, target_dim);
 
             // Build the cast lvalue.
             return Ok(builder.build(

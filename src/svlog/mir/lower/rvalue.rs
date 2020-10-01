@@ -395,6 +395,12 @@ fn lower_expr_inner<'gcx>(
                 target.ty
             );
 
+            // Offset the indexing base by the dimension base, e.g. for accesses
+            // such as `x[1]` into `logic [2:1] x`, which essentially accesses
+            // element 0.
+            let target_dim = target.ty.dims().next().unwrap();
+            let base = adjust_indexing(builder, base, target_dim);
+
             // Build the cast rvalue.
             Ok(builder.build(
                 ty,
@@ -571,6 +577,56 @@ pub(crate) fn compute_indexing<'gcx>(
             (base, length)
         }
     })
+}
+
+/// Compute the index adjustment necessary to index into an array dimension that
+/// may start at a non-zero offset.
+///
+/// This function accounts for indexes such as `x[1]` into `logic [8:1] x`,
+/// which essentially is accessing bit 0 of the 8-bit array `x`.
+pub(crate) fn adjust_indexing<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    base: &'a Rvalue<'a>,
+    target_dim: ty::Dim<'a>,
+) -> &'a Rvalue<'a> {
+    match target_dim {
+        // Non-part-select dimensions don't need any shift.
+        ty::Dim::Packed(ty::PackedDim::Unsized)
+        | ty::Dim::Unpacked(ty::UnpackedDim::Unsized)
+        | ty::Dim::Unpacked(ty::UnpackedDim::Array(_))
+        | ty::Dim::Unpacked(ty::UnpackedDim::Assoc(_))
+        | ty::Dim::Unpacked(ty::UnpackedDim::Queue(_)) => base,
+
+        // Part-selects with a zero offset don't need any shift.
+        ty::Dim::Packed(ty::PackedDim::Range(r)) | ty::Dim::Unpacked(ty::UnpackedDim::Range(r))
+            if r.offset.is_zero() =>
+        {
+            base
+        }
+
+        // Part-selects with a non-zero offset need the indexed location
+        // to be shifted by that offset.
+        ty::Dim::Packed(ty::PackedDim::Range(r)) | ty::Dim::Unpacked(ty::UnpackedDim::Range(r)) => {
+            let offset = builder.build(
+                base.ty,
+                RvalueKind::Const(
+                    builder
+                        .cx
+                        .intern_value(value::make_int(base.ty, r.offset.into())),
+                ),
+            );
+            builder.build(
+                base.ty,
+                RvalueKind::IntBinaryArith {
+                    op: IntBinaryArithOp::Sub,
+                    sign: ty::Sign::Signed,
+                    domain: ty::Domain::TwoValued,
+                    lhs: base,
+                    rhs: offset,
+                },
+            )
+        }
+    }
 }
 
 /// Generate the nodes necessary for a cast operation.
