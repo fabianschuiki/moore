@@ -1294,7 +1294,12 @@ fn cast_expr_type_inner<'gcx>(
         trace!("  Aborting due to error");
         return cast;
     }
-    trace!("  Mapped `{}` to SBVT `{}`", inferred, inferred_sbvt);
+    trace!(
+        "  Mapped `{}` (`{}`) to SBVT `{}`",
+        inferred,
+        inferred.resolve_full(),
+        inferred_sbvt
+    );
 
     // Cast the SBVT to a boolean.
     let context = match context {
@@ -1329,7 +1334,12 @@ fn cast_expr_type_inner<'gcx>(
             return ty::UnpackedType::make_error().into();
         }
     };
-    trace!("  Mapped `{}` to SBVT `{}`", context, context_sbvt);
+    trace!(
+        "  Mapped `{}` (`{}`) to SBVT `{}`",
+        context,
+        context.resolve_full(),
+        context_sbvt
+    );
 
     // Change size.
     //
