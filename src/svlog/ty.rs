@@ -902,8 +902,8 @@ impl<'a> PackedCore<'a> {
             Self::IntAtom(x) => x.default_sign(),
             Self::Struct(_) => Sign::Unsigned,
             Self::Enum(_) => Sign::Unsigned,
-            Self::Named { .. } => Sign::Unsigned,
-            Self::Ref { .. } => Sign::Unsigned,
+            Self::Named { ty, .. } => ty.sign,
+            Self::Ref { ty, .. } => ty.sign,
         }
     }
 
