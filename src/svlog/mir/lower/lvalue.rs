@@ -12,6 +12,7 @@ use crate::{
     },
     syntax::ast::BasicNode,
     ty::{SbvType, UnpackedType},
+    typeck::{CastOp, CastType},
     ParamEnv,
 };
 use num::ToPrimitive;
@@ -58,11 +59,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
 }
 
 /// Lower an expression to an lvalue in the MIR.
-pub fn lower_expr<'gcx>(
-    cx: &impl Context<'gcx>,
-    expr_id: NodeId,
-    env: ParamEnv,
-) -> &'gcx Lvalue<'gcx> {
+pub fn lower_expr<'a>(cx: &impl Context<'a>, expr_id: NodeId, env: ParamEnv) -> &'a Lvalue<'a> {
     let span = cx.span(expr_id);
     let builder = Builder {
         cx,
@@ -70,19 +67,6 @@ pub fn lower_expr<'gcx>(
         expr: expr_id,
         env,
     };
-    try_lower_expr(&builder, expr_id).unwrap_or_else(|_| builder.error())
-}
-
-/// Lower an expression to an lvalue in the MIR.
-///
-/// May return an error if any of the database queries break.
-fn try_lower_expr<'gcx>(
-    builder: &Builder<'_, impl Context<'gcx>>,
-    expr_id: NodeId,
-) -> Result<&'gcx Lvalue<'gcx>> {
-    let cx = builder.cx;
-    let span = builder.span;
-    let env = builder.env;
 
     // Try to extract the expr HIR for this node. Handle a few special cases
     // where the node is not technically an expression, but can be used as a
@@ -90,13 +74,44 @@ fn try_lower_expr<'gcx>(
     let hir = match cx.hir_of(expr_id) {
         Ok(HirNode::Expr(x)) => x,
         Ok(x) => bug_span!(span, cx, "no lvalue for {:?}", x),
-        Err(_) => return Ok(builder.error()),
+        Err(_) => return builder.error(),
     };
 
-    // Determine the expression type.
-    let ty = cx.type_of_expr(Ref(hir), env);
+    // Determine the cast type.
+    let cast = cx.cast_type(expr_id, env).unwrap();
+
+    // Lower the expression.
+    let lvalue = lower_expr_inner(&builder, hir, cast.init).unwrap_or_else(|_| builder.error());
+    if lvalue.is_error() {
+        return lvalue;
+    }
+    assert_span!(
+        lvalue.ty.is_identical(cast.init),
+        hir.span,
+        cx,
+        "lvalue lowering produced type `{}`, expected `{}`",
+        lvalue.ty,
+        cast.init
+    );
+
+    // Lower the casts.
+    lower_cast(&builder, lvalue, cast)
+}
+
+/// Lower an expression to an rvalue in the MIR.
+///
+/// May return an error if any of the database queries break.
+fn lower_expr_inner<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    hir: &'a hir::Expr<'a>,
+    ty: &'a UnpackedType<'a>,
+) -> Result<&'a Lvalue<'a>> {
+    let expr_id = hir.id;
+    let cx = builder.cx;
+    let span = cx.span(expr_id);
+    let env = builder.env;
     if ty.is_error() {
-        return Ok(builder.error());
+        return Err(());
     }
 
     // Match on the various forms.
@@ -189,7 +204,13 @@ fn try_lower_expr<'gcx>(
                 .iter()
                 .map(|&expr| {
                     let value = builder.cx.mir_lvalue(expr, env);
-                    assert_span!(value.ty.coalesces_to_llhd_scalar(), value.span, builder.cx);
+                    assert_span!(
+                        value.ty.coalesces_to_llhd_scalar(),
+                        value.span,
+                        builder.cx,
+                        "type `{}` does not coalesce to LLHD scalar",
+                        value.ty
+                    );
                     Ok((value.ty.get_bit_size().unwrap(), value))
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -232,4 +253,72 @@ fn try_lower_expr<'gcx>(
     error!("{:#?}", hir);
     cx.emit(DiagBuilder2::error(format!("{} cannot be assigned to", hir.desc_full())).span(span));
     Err(())
+}
+
+/// Generate the nodes necessary for a cast operation.
+fn lower_cast<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    mut value: &'a Lvalue<'a>,
+    to: CastType<'a>,
+) -> &'a Lvalue<'a> {
+    // Don't bother with errors.
+    if value.is_error() {
+        return value;
+    }
+    if to.is_error() {
+        return builder.error();
+    }
+    assert_type!(
+        value.ty,
+        to.init,
+        value.span,
+        builder.cx,
+        "lvalue type `{}` does not match initial type of cast `{}`",
+        value.ty,
+        to
+    );
+    trace!(
+        "Lowering cast to `{}` from `{}` of `{}` (line {})",
+        to,
+        value.ty,
+        value.span.extract(),
+        value.span.begin().human_line()
+    );
+
+    // Lower each cast individually.
+    for &(op, to) in &to.casts {
+        debug!("- {:?} from `{}` to `{}`", op, value.ty, to);
+        match op {
+            CastOp::PickModport => {
+                value = builder.build(to, value.kind.clone());
+            }
+            _ => {
+                bug_span!(
+                    value.span,
+                    builder.cx,
+                    "lvalue lowering of cast to `{}` not yet supported: {:?}",
+                    to,
+                    op
+                );
+            }
+        }
+        if !value.ty.is_identical(to) {
+            error!(
+                "Cast {:?} should have produced `{}`, but value is `{}`",
+                op, to, value.ty
+            );
+        }
+    }
+
+    // Check that the casts have actually produced the expected output type.
+    assert_type!(
+        value.ty,
+        to.ty,
+        value.span,
+        builder.cx,
+        "lvalue type `{}` does not match final cast type `{}` after lower_cast",
+        value.ty,
+        to.ty
+    );
+    value
 }
