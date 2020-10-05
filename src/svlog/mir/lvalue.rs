@@ -14,7 +14,6 @@ use crate::{
     ty::UnpackedType,
     ParamEnv,
 };
-use std::collections::HashMap;
 
 /// An lvalue expression.
 #[moore_derive::visit_without_foreach]
@@ -56,7 +55,7 @@ impl<'a> Lvalue<'a> {
 #[allow(missing_docs)]
 pub enum LvalueKind<'a> {
     /// Destructor for an array.
-    DestructArray(HashMap<usize, &'a Lvalue<'a>>),
+    DestructArray(Vec<&'a Lvalue<'a>>),
     /// Destructor for a struct.
     DestructStruct(Vec<&'a Lvalue<'a>>),
     /// A reference to a genvar declaration.
