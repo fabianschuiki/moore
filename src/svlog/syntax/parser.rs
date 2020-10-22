@@ -6158,8 +6158,8 @@ type GotoFnRec = fn();
 // Include the auto-generated parser.
 include!("grammar.rs");
 
-pub fn pargen_parse(input: Lexer) -> Result<(), ()> {
-    let mut p = Parser::new(input);
+pub fn pargen_parse<'n>(input: Lexer, arena: &'n ast::Arena<'n>) -> Result<(), ()> {
+    let mut p = Parser::new(input, arena);
     let mut ctx = Context::default();
     ctx.push_state((action_s0, unsafe {
         std::mem::transmute(goto_s0 as *const GotoFn)

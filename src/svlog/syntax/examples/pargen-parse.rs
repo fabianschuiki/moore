@@ -4,7 +4,7 @@ extern crate log;
 use anyhow::{anyhow, bail, Result};
 use clap::{App, Arg};
 use moore_common::source::get_source_manager;
-use moore_svlog_syntax::{lexer::Lexer, parser::pargen_parse, preproc::Preprocessor};
+use moore_svlog_syntax::{ast::Arena, lexer::Lexer, parser::pargen_parse, preproc::Preprocessor};
 
 fn main() -> Result<()> {
     let matches = App::new("pargen-parse")
@@ -22,6 +22,7 @@ fn main() -> Result<()> {
         .format_timestamp(None)
         .init();
 
+    let arena = Arena::default();
     let mut failed = false;
     for input in matches.values_of("INPUT").into_iter().flatten() {
         info!("Parsing `{}`", input);
@@ -32,7 +33,7 @@ fn main() -> Result<()> {
         };
         let preproc = Preprocessor::new(source, &[], &[]);
         let lexer = Lexer::new(preproc);
-        match pargen_parse(lexer) {
+        match pargen_parse(lexer, &arena) {
             Ok(ast) => debug!("{:#?}", ast),
             Err(()) => failed = true,
         }
