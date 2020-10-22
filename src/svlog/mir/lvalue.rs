@@ -54,6 +54,9 @@ impl<'a> Lvalue<'a> {
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(missing_docs)]
 pub enum LvalueKind<'a> {
+    /// A type cast which does not incur any operation. For example, going from
+    /// `bit [31:0]` to `int`, or vice versa.
+    Transmute(&'a Lvalue<'a>),
     /// Destructor for an array.
     DestructArray(Vec<&'a Lvalue<'a>>),
     /// Destructor for a struct.

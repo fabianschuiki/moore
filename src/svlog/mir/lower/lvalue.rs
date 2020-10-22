@@ -9,6 +9,7 @@ use crate::{
         lower,
         lower::rvalue::{adjust_indexing, compute_indexing},
         lvalue::*,
+        rvalue::RvalueKind,
     },
     syntax::ast::BasicNode,
     ty::{SbvType, UnpackedType},
@@ -289,6 +290,10 @@ fn lower_cast<'a>(
     for &(op, to) in &to.casts {
         debug!("- {:?} from `{}` to `{}`", op, value.ty, to);
         match op {
+            CastOp::PackSBVT => {
+                assert_span!(to.is_simple_bit_vector(), value.span, builder.cx);
+                value = pack_simple_bit_vector(builder, value);
+            }
             CastOp::PickModport => {
                 value = builder.build(to, value.kind.clone());
             }
@@ -321,4 +326,117 @@ fn lower_cast<'a>(
         to.ty
     );
     value
+}
+
+/// Generate the nodes necessary to pack a value to its corresponding simple bit
+/// vector type.
+fn pack_simple_bit_vector<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Lvalue<'a>,
+) -> &'a Lvalue<'a> {
+    if value.is_error() {
+        return value;
+    }
+    let to = value
+        .ty
+        .simple_bit_vector(builder.cx, value.span)
+        .forget()
+        .to_unpacked(builder.cx);
+    if value.ty.coalesces_to_llhd_scalar() {
+        builder.build(to, LvalueKind::Transmute(value))
+    } else if let Some(dim) = value.ty.outermost_dim() {
+        pack_array(builder, value, dim, to)
+    } else if let Some(strukt) = value.ty.get_struct() {
+        pack_struct(builder, value, strukt, to)
+    } else {
+        bug_span!(
+            value.span,
+            builder.cx,
+            "cannot pack a `{}` as SBVT",
+            value.ty
+        );
+    }
+}
+
+/// Pack a struct as a simple bit vector.
+fn pack_struct<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Lvalue<'a>,
+    strukt: &'a ty::StructType<'a>,
+    to: &'a UnpackedType<'a>,
+) -> &'a Lvalue<'a> {
+    // Pack each of the fields.
+    let mut packed_fields = vec![];
+    for (i, field) in strukt.members.iter().enumerate() {
+        let field_value = builder.build(field.ty, LvalueKind::Member { value, field: i });
+        let field_value = pack_simple_bit_vector(builder, field_value);
+        packed_fields.push(field_value);
+    }
+
+    // Concatenate the fields.
+    builder.build(to, LvalueKind::Concat(packed_fields))
+}
+
+/// Pack an array as a simple bit vector.
+fn pack_array<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    value: &'a Lvalue<'a>,
+    dim: ty::Dim<'a>,
+    to: &'a UnpackedType<'a>,
+) -> &'a Lvalue<'a> {
+    // Determine the length of the array.
+    let length = match dim.get_size() {
+        Some(x) => x,
+        None => bug_span!(
+            builder.span,
+            builder.cx,
+            "pack array with invalid input dimension `{}`",
+            dim
+        ),
+    };
+
+    // Determine the element type.
+    let elem_ty = value.ty.pop_dim(builder.cx).unwrap();
+
+    // Catch the trivial case where the core type now is just an integer bit
+    // vector type, which is already in the right form.
+    if elem_ty.dims().next().is_none() {
+        if let Some(ty::PackedCore::IntVec(_)) = elem_ty.get_packed().map(|x| &x.core) {
+            return builder.build(to, LvalueKind::Transmute(value));
+        }
+    }
+
+    // Cast each element.
+    let mut packed_elements = vec![];
+    let int_ty =
+        SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
+    for i in 0..length {
+        let rvalue_builder = lower::rvalue::Builder {
+            cx: builder.cx,
+            span: builder.span,
+            expr: builder.expr,
+            env: builder.env,
+        };
+        let i = rvalue_builder.build(
+            int_ty,
+            RvalueKind::Const(
+                rvalue_builder
+                    .cx
+                    .intern_value(value::make_int(int_ty, i.into())),
+            ),
+        );
+        let elem = builder.build(
+            elem_ty,
+            LvalueKind::Index {
+                value,
+                base: i,
+                length: 0,
+            },
+        );
+        let elem = pack_simple_bit_vector(builder, elem);
+        packed_elements.push(elem);
+    }
+
+    // Concatenate the elements.
+    builder.build(to, LvalueKind::Concat(packed_elements))
 }
