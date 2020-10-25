@@ -20,7 +20,7 @@ use std::fmt::Write;
 
 /// An rvalue expression.
 #[moore_derive::visit_without_foreach]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Rvalue<'a> {
     /// A unique id.
     pub id: NodeId,
@@ -64,6 +64,12 @@ impl<'a> std::ops::Deref for Rvalue<'a> {
 
     fn deref(&self) -> &RvalueKind<'a> {
         &self.kind
+    }
+}
+
+impl<'a> std::fmt::Debug for Rvalue<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.print(f)
     }
 }
 

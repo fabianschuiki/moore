@@ -131,7 +131,7 @@ fn simplify<'a>(
     rhs: &'a Rvalue<'a>,
     into: &mut Vec<&'a Assignment<'a>>,
 ) {
-    trace!("Simplifying {:#?} = {:#?}", lhs, rhs);
+    trace!("Simplifying {:?}", root);
     match lhs.kind {
         LvalueKind::Transmute(value) => simplify(cx, root, value, rhs, into),
         LvalueKind::Concat(ref values) if values.len() == 1 => {

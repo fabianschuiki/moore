@@ -21,7 +21,7 @@ use std::fmt::Write;
 
 /// An assignment of an `Rvalue` to an `Lvalue`.
 #[moore_derive::visit_without_foreach]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Assignment<'a> {
     /// The expression or statement which spawned this assignment.
     pub id: NodeId,
@@ -41,6 +41,12 @@ impl<'a> Assignment<'a> {
     /// Check whether the assignment represents a lowering error tombstone.
     pub fn is_error(&self) -> bool {
         self.lhs.is_error() || self.rhs.is_error()
+    }
+}
+
+impl<'a> std::fmt::Debug for Assignment<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.print(f)
     }
 }
 
