@@ -26,6 +26,16 @@ module foo;
         // CHECK: drv i2$ %10, %11, %2
         // CHECK: %12 = exts i2$, i8$ %a, 0, 2
         // CHECK: drv i2$ %12, %11, %2
-        // {d} = 8'd42; // BROKEN until #208 lands
+        {d} = 8'd42;
+        // CHECK: %13 = const i32 1
+        // CHECK: %14 = const i4 0
+        // CHECK: %15 = [2 x i4 %14]
+        // CHECK: %16 = sig [2 x i4] %15
+        // CHECK: %17 = shr [2 x i4]$ %d, [2 x i4]$ %16, i32 %13
+        // CHECK: %18 = extf i4$, [2 x i4]$ %17, 0
+        // CHECK: drv i4$ %18, %3, %2
+        // CHECK: %19 = extf i4$, [2 x i4]$ %d, 0
+        // CHECK: %20 = const i4 2
+        // CHECK: drv i4$ %19, %20, %2
     end
 endmodule

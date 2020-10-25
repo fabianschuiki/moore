@@ -133,10 +133,12 @@ fn simplify<'a>(
 ) {
     trace!("Simplifying {:#?} = {:#?}", lhs, rhs);
     match lhs.kind {
+        LvalueKind::Transmute(value) => simplify(cx, root, value, rhs, into),
         LvalueKind::Concat(ref values) if values.len() == 1 => {
             let mut a = root.clone();
             a.lhs = values[0];
-            into.push(cx.arena().alloc_mir_assignment(a));
+            let a = cx.arena().alloc_mir_assignment(a);
+            simplify(cx, a, a.lhs, a.rhs, into);
         }
         LvalueKind::Concat(ref values) => {
             let mut base = 0;
@@ -172,7 +174,8 @@ fn simplify<'a>(
                 let mut a = root.clone();
                 a.lhs = value;
                 a.rhs = index;
-                into.push(cx.arena().alloc_mir_assignment(a));
+                let a = cx.arena().alloc_mir_assignment(a);
+                simplify(cx, a, a.lhs, a.rhs, into);
 
                 base += sbvt.size;
             }

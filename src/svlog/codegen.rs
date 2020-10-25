@@ -1818,6 +1818,9 @@ where
         mir: &mir::Lvalue<'gcx>,
     ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
         match mir.kind {
+            // Transmutes are no-ops in code generation.
+            mir::LvalueKind::Transmute(value) => self.emit_mir_lvalue(value),
+
             // Variables and ports trivially return their declaration value.
             // This is either the `var` or `sig` instruction which introduced
             // them.
@@ -1865,7 +1868,12 @@ where
             mir::LvalueKind::Error => Err(()),
 
             _ => {
-                bug_span!(mir.span, self.cx, "codegen for mir lvalue {:#?}", mir);
+                bug_span!(
+                    mir.span,
+                    self.cx,
+                    "codegen not implemented for mir lvalue {:#?}",
+                    mir
+                );
             }
         }
     }
