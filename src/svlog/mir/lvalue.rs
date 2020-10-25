@@ -8,16 +8,18 @@
 use crate::crate_prelude::*;
 use crate::{
     mir::{
+        print::{Context, Print},
         rvalue::Rvalue,
         visit::{AcceptVisitor, Visitor, WalkVisitor},
     },
     ty::UnpackedType,
     ParamEnv,
 };
+use std::fmt::Write;
 
 /// An lvalue expression.
 #[moore_derive::visit_without_foreach]
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Lvalue<'a> {
     /// A unique id.
     pub id: NodeId,
@@ -46,6 +48,77 @@ impl<'a> Lvalue<'a> {
             mir::LvalueKind::Intf(intf) => Some(intf),
             _ => None,
         }
+    }
+}
+
+impl<'a> std::fmt::Debug for Lvalue<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.print(f)
+    }
+}
+
+impl<'a> Print for Lvalue<'a> {
+    fn print_context(
+        &self,
+        outer: &mut impl Write,
+        inner: &mut impl Write,
+        ctx: &mut Context,
+    ) -> std::fmt::Result {
+        write!(inner, "Lvalue ")?;
+        match self.kind {
+            LvalueKind::Transmute(v) => write!(inner, "Transmute({})", ctx.print(outer, v))?,
+            LvalueKind::DestructArray(ref args) => write!(
+                inner,
+                "DestructArray({})",
+                ctx.print_comma_separated(outer, args),
+            )?,
+            LvalueKind::DestructStruct(ref args) => write!(
+                inner,
+                "DestructStruct({})",
+                ctx.print_comma_separated(outer, args),
+            )?,
+            LvalueKind::Genvar(arg) => write!(inner, "Genvar({:?})", arg)?,
+            LvalueKind::Var(arg) => write!(inner, "Var({:?})", arg)?,
+            LvalueKind::Port(arg) => write!(inner, "Port({:?})", arg)?,
+            LvalueKind::Intf(arg) => write!(inner, "Intf({:?})", arg)?,
+            LvalueKind::IntfSignal(arg, sig) => {
+                write!(inner, "IntfSignal({}, {:?})", ctx.print(outer, arg), sig)?
+            }
+            LvalueKind::Index {
+                value,
+                base,
+                length,
+            } => {
+                if length == 0 {
+                    write!(
+                        inner,
+                        "{}[{}]",
+                        ctx.print(outer, value),
+                        ctx.print(outer, base),
+                    )?
+                } else {
+                    write!(
+                        inner,
+                        "{}[{}+:{}]",
+                        ctx.print(outer, value),
+                        ctx.print(outer, base),
+                        length,
+                    )?
+                }
+            }
+            LvalueKind::Member { value, field } => {
+                write!(inner, "{}.{}", ctx.print(outer, value), field)?
+            }
+            LvalueKind::Concat(ref args) => {
+                write!(inner, "Concat({})", ctx.print_comma_separated(outer, args))?
+            }
+            LvalueKind::Repeat(num, arg) => {
+                write!(inner, "Repeat({} x {})", num, ctx.print(outer, arg))?
+            }
+            LvalueKind::Error => write!(inner, "<error>")?,
+        }
+        write!(inner, " : {}", self.ty)?;
+        Ok(())
     }
 }
 

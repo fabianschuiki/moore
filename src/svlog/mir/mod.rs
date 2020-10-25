@@ -16,6 +16,7 @@ pub use assign::*;
 pub use lvalue::*;
 pub use rvalue::*;
 
+mod print;
 mod visit;
 
 pub use visit::*;

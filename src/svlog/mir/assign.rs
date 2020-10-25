@@ -10,12 +10,14 @@ use crate::crate_prelude::*;
 use crate::{
     mir::{
         lvalue::Lvalue,
+        print::{Context, Print},
         rvalue::Rvalue,
         visit::{AcceptVisitor, Visitor, WalkVisitor},
     },
     ty::UnpackedType,
     ParamEnv,
 };
+use std::fmt::Write;
 
 /// An assignment of an `Rvalue` to an `Lvalue`.
 #[moore_derive::visit_without_foreach]
@@ -39,5 +41,22 @@ impl<'a> Assignment<'a> {
     /// Check whether the assignment represents a lowering error tombstone.
     pub fn is_error(&self) -> bool {
         self.lhs.is_error() || self.rhs.is_error()
+    }
+}
+
+impl<'a> Print for Assignment<'a> {
+    fn print_context(
+        &self,
+        outer: &mut impl Write,
+        inner: &mut impl Write,
+        ctx: &mut Context,
+    ) -> std::fmt::Result {
+        write!(
+            inner,
+            "Assign {} = {} : {}",
+            ctx.print(outer, self.lhs),
+            ctx.print(outer, self.rhs),
+            self.ty
+        )
     }
 }

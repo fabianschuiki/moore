@@ -9,12 +9,14 @@ use crate::crate_prelude::*;
 use crate::{
     mir::{
         lvalue::Lvalue,
+        print::{Context, Print},
         visit::{AcceptVisitor, Visitor, WalkVisitor},
     },
     ty::{Domain, Sign, UnpackedType},
     ParamEnv,
 };
 use std::collections::HashMap;
+use std::fmt::Write;
 
 /// An rvalue expression.
 #[moore_derive::visit_without_foreach]
@@ -62,6 +64,189 @@ impl<'a> std::ops::Deref for Rvalue<'a> {
 
     fn deref(&self) -> &RvalueKind<'a> {
         &self.kind
+    }
+}
+
+impl<'a> Print for Rvalue<'a> {
+    fn print_context(
+        &self,
+        outer: &mut impl Write,
+        inner: &mut impl Write,
+        ctx: &mut Context,
+    ) -> std::fmt::Result {
+        write!(inner, "Rvalue ")?;
+        match self.kind {
+            RvalueKind::CastValueDomain { value, .. } => {
+                write!(inner, "CastValueDomain({})", ctx.print(outer, value))?
+            }
+            RvalueKind::Transmute(v) => write!(inner, "Transmute({})", ctx.print(outer, v))?,
+            RvalueKind::CastSign(sign, arg) => {
+                write!(inner, "CastSign({}, {})", sign, ctx.print(outer, arg))?
+            }
+            RvalueKind::CastToBool(arg) => write!(inner, "CastToBool({})", ctx.print(outer, arg))?,
+            RvalueKind::Truncate(size, arg) => {
+                write!(inner, "Truncate({}, {})", size, ctx.print(outer, arg))?
+            }
+            RvalueKind::ZeroExtend(size, arg) => {
+                write!(inner, "ZeroExtend({}, {})", size, ctx.print(outer, arg))?
+            }
+            RvalueKind::SignExtend(size, arg) => {
+                write!(inner, "SignExtend({}, {})", size, ctx.print(outer, arg))?
+            }
+            RvalueKind::ConstructArray(ref args) => write!(
+                inner,
+                "ConstructArray({})",
+                ctx.print_comma_separated(outer, args.iter().map(|(_idx, v)| v)),
+            )?,
+            RvalueKind::ConstructStruct(ref args) => write!(
+                inner,
+                "ConstructStruct({})",
+                ctx.print_comma_separated(outer, args),
+            )?,
+            RvalueKind::Const(arg) => write!(inner, "{}", arg)?,
+            RvalueKind::UnaryBitwise { op, arg } => {
+                write!(inner, "UnaryBitwise {:?} {}", op, ctx.print(outer, arg))?
+            }
+            RvalueKind::BinaryBitwise { op, lhs, rhs } => write!(
+                inner,
+                "BinaryBitwise {} {:?} {}",
+                ctx.print(outer, lhs),
+                op,
+                ctx.print(outer, rhs)
+            )?,
+            RvalueKind::IntUnaryArith {
+                op,
+                sign,
+                domain,
+                arg,
+            } => write!(
+                inner,
+                "IntUnaryArith {:?} {} ({:?}, {:?})",
+                op,
+                ctx.print(outer, arg),
+                sign,
+                domain
+            )?,
+            RvalueKind::IntBinaryArith {
+                op,
+                sign,
+                domain,
+                lhs,
+                rhs,
+            } => write!(
+                inner,
+                "IntBinaryArith {} {:?} {} ({:?}, {:?})",
+                ctx.print(outer, lhs),
+                op,
+                ctx.print(outer, rhs),
+                sign,
+                domain
+            )?,
+            RvalueKind::IntComp {
+                op,
+                sign,
+                domain,
+                lhs,
+                rhs,
+            } => write!(
+                inner,
+                "IntComp {} {:?} {} ({:?}, {:?})",
+                ctx.print(outer, lhs),
+                op,
+                ctx.print(outer, rhs),
+                sign,
+                domain
+            )?,
+            RvalueKind::Concat(ref args) => {
+                write!(inner, "Concat({})", ctx.print_comma_separated(outer, args))?
+            }
+            RvalueKind::Repeat(num, arg) => {
+                write!(inner, "Repeat({} x {})", num, ctx.print(outer, arg))?
+            }
+            RvalueKind::Var(arg) => write!(inner, "Var({:?})", arg)?,
+            RvalueKind::Port(arg) => write!(inner, "Port({:?})", arg)?,
+            RvalueKind::Intf(arg) => write!(inner, "Intf({:?})", arg)?,
+            RvalueKind::IntfSignal(arg, sig) => {
+                write!(inner, "IntfSignal({}, {:?})", ctx.print(outer, arg), sig)?
+            }
+            RvalueKind::Index {
+                value,
+                base,
+                length,
+            } => {
+                if length == 0 {
+                    write!(
+                        inner,
+                        "{}[{}]",
+                        ctx.print(outer, value),
+                        ctx.print(outer, base)
+                    )?
+                } else {
+                    write!(
+                        inner,
+                        "{}[{}+:{}]",
+                        ctx.print(outer, value),
+                        ctx.print(outer, base),
+                        length,
+                    )?
+                }
+            }
+            RvalueKind::Member { value, field } => {
+                write!(inner, "{}.{}", ctx.print(outer, value), field)?
+            }
+            RvalueKind::Ternary {
+                cond,
+                true_value,
+                false_value,
+            } => write!(
+                inner,
+                "{} ? {} : {}",
+                ctx.print(outer, cond),
+                ctx.print(outer, true_value),
+                ctx.print(outer, false_value)
+            )?,
+            RvalueKind::Shift {
+                op,
+                arith,
+                value,
+                amount,
+            } => write!(
+                inner,
+                "Shift {:?} {} {} by {}",
+                op,
+                if arith { "arith" } else { "logic" },
+                ctx.print(outer, value),
+                ctx.print(outer, amount)
+            )?,
+            RvalueKind::Reduction { op, arg } => {
+                write!(inner, "Reduce({:?}, {})", op, ctx.print(outer, arg))?
+            }
+            RvalueKind::Assignment {
+                lvalue,
+                rvalue,
+                result,
+            } => write!(
+                inner,
+                "{}, {{ {} = {} }}",
+                ctx.print(outer, result),
+                ctx.print(outer, lvalue),
+                ctx.print(outer, rvalue)
+            )?,
+            RvalueKind::PackString(arg) => write!(inner, "PackString({})", ctx.print(outer, arg))?,
+            RvalueKind::UnpackString(arg) => {
+                write!(inner, "UnpackString({})", ctx.print(outer, arg))?
+            }
+            RvalueKind::StringComp { op, lhs, rhs } => write!(
+                inner,
+                "StringComp {} {:?} {}",
+                ctx.print(outer, lhs),
+                op,
+                ctx.print(outer, rhs)
+            )?,
+            RvalueKind::Error => write!(inner, "<error>")?,
+        }
+        write!(inner, " : {}", self.ty)?;
+        Ok(())
     }
 }
 
