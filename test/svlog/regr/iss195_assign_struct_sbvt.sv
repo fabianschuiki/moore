@@ -1,5 +1,4 @@
 // RUN: moore %s -e foo
-// IGNORE  see #195
 
 module foo;
 	struct packed {

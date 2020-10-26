@@ -180,6 +180,71 @@ fn simplify<'a>(
                 base += sbvt.size;
             }
         }
+        LvalueKind::Index {
+            value,
+            base,
+            length,
+        } => match value.kind {
+            // If we index into a concatenation, we simply add the (shifted)
+            // index to each concatenated value, and emit an individual
+            // assignment for each.
+            LvalueKind::Concat(ref values) => {
+                trace!("Refactoring index into concatenation:\n{:?}", lhs);
+                let mut shift = 0;
+                for value in values.iter().rev() {
+                    // The value must be of a simple bit vector type, as enforced
+                    // by the casting logic.
+                    let sbvt = value.ty.simple_bit_vector(cx, value.span);
+
+                    // Compute the shifted assignment index.
+                    let rbuilder = lower::rvalue::Builder {
+                        cx,
+                        span: value.span,
+                        expr: value.id,
+                        env: value.env,
+                    };
+                    let shift_rv = rbuilder.constant_u32(shift as u32);
+                    let base_shifted = rbuilder.build(
+                        base.ty,
+                        RvalueKind::IntBinaryArith {
+                            op: IntBinaryArithOp::Sub,
+                            domain: base.ty.domain(),
+                            sign: base.ty.sign(),
+                            lhs: base,
+                            rhs: shift_rv,
+                        },
+                    );
+
+                    // Add a slice around this concatenated value.
+                    let lbuilder = lower::lvalue::Builder {
+                        cx,
+                        span: value.span,
+                        expr: value.id,
+                        env: value.env,
+                    };
+                    let index = lbuilder.build(
+                        lhs.ty,
+                        LvalueKind::Index {
+                            value,
+                            base: base_shifted,
+                            length,
+                        },
+                    );
+
+                    // Formulate a new assignment.
+                    let mut a = root.clone();
+                    a.lhs = index;
+                    a.rhs = rhs;
+                    let a = cx.arena().alloc_mir_assignment(a);
+                    simplify(cx, a, a.lhs, a.rhs, into);
+
+                    shift += sbvt.size;
+                }
+            }
+            _ => {
+                into.push(root);
+            }
+        },
         _ => {
             into.push(root);
         }
