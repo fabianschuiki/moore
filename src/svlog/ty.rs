@@ -656,6 +656,11 @@ impl<'a> PackedType<'a> {
         }
     }
 
+    /// Get the sign for this type.
+    pub fn sign(&self) -> Sign {
+        self.sign
+    }
+
     /// Compute the size of this type in bits.
     ///
     /// Returns `None` if one of the type's dimensions is `[]`.
@@ -1371,6 +1376,22 @@ impl<'a> UnpackedType<'a> {
             | UnpackedCore::Event
             | UnpackedCore::Module { .. }
             | UnpackedCore::Interface { .. } => Domain::TwoValued,
+        }
+    }
+
+    /// Get the sign for this type.
+    pub fn sign(&self) -> Sign {
+        match &self.core {
+            UnpackedCore::Packed(x) => x.sign(),
+            UnpackedCore::Struct(_) => Sign::Unsigned, // TODO(fschuiki): This is probably an error
+            UnpackedCore::Named { ty, .. } | UnpackedCore::Ref { ty, .. } => ty.sign(),
+            UnpackedCore::Error
+            | UnpackedCore::Real(_)
+            | UnpackedCore::String
+            | UnpackedCore::Chandle
+            | UnpackedCore::Event
+            | UnpackedCore::Module { .. }
+            | UnpackedCore::Interface { .. } => Sign::Unsigned,
         }
     }
 
