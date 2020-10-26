@@ -29,7 +29,7 @@ pub struct Builder<'a, C> {
 
 impl<'a, C: Context<'a>> Builder<'_, C> {
     /// Create a new builder for a different node.
-    fn with(&self, expr: NodeId) -> Self {
+    pub fn with(&self, expr: NodeId) -> Self {
         Builder {
             cx: self.cx,
             span: self.cx.span(expr),
@@ -55,12 +55,12 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     ///
     /// This is usually called when something goes wrong during MIR construction
     /// and a marker node is needed to indicate that part of the MIR is invalid.
-    fn error(&self) -> &'a Rvalue<'a> {
+    pub fn error(&self) -> &'a Rvalue<'a> {
         self.build(UnpackedType::make_error(), RvalueKind::Error)
     }
 
     /// Create a constant node.
-    fn constant(&self, value: ValueData<'a>) -> &'a Rvalue<'a> {
+    pub fn constant(&self, value: ValueData<'a>) -> &'a Rvalue<'a> {
         self.build(value.ty, RvalueKind::Const(self.cx.intern_value(value)))
     }
 

@@ -19,17 +19,21 @@ use crate::{
 use num::ToPrimitive;
 
 /// An internal builder for lvalue lowering.
-struct Builder<'a, C> {
-    cx: &'a C,
-    span: Span,
-    expr: NodeId,
-    env: ParamEnv,
+pub struct Builder<'a, C> {
+    /// The context to lower into.
+    pub cx: &'a C,
+    /// The span of the expression being lowered.
+    pub span: Span,
+    /// The expression being lowered.
+    pub expr: NodeId,
+    /// The parametrization of the expression being lowered.
+    pub env: ParamEnv,
 }
 
 impl<'a, C: Context<'a>> Builder<'_, C> {
     /// Create a new builder for a different node.
     #[allow(dead_code)]
-    fn with(&self, expr: NodeId) -> Self {
+    pub fn with(&self, expr: NodeId) -> Self {
         Builder {
             cx: self.cx,
             span: self.cx.span(expr),
@@ -39,7 +43,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     }
 
     /// Intern an MIR node.
-    fn build(&self, ty: &'a UnpackedType<'a>, kind: LvalueKind<'a>) -> &'a Lvalue<'a> {
+    pub fn build(&self, ty: &'a UnpackedType<'a>, kind: LvalueKind<'a>) -> &'a Lvalue<'a> {
         self.cx.arena().alloc_mir_lvalue(Lvalue {
             id: self.cx.alloc_id(self.span),
             origin: self.expr,
@@ -54,7 +58,7 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
     ///
     /// This is usually called when something goes wrong during MIR construction
     /// and a marker node is needed to indicate that part of the MIR is invalid.
-    fn error(&self) -> &'a Lvalue<'a> {
+    pub fn error(&self) -> &'a Lvalue<'a> {
         self.build(UnpackedType::make_error(), LvalueKind::Error)
     }
 }
