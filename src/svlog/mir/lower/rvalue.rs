@@ -820,7 +820,7 @@ fn pack_array<'a>(
     let mut packed_elements = vec![];
     let int_ty =
         SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
-    for i in 0..length {
+    for i in (0..length).rev() {
         let i = builder.build(
             int_ty,
             RvalueKind::Const(builder.cx.intern_value(value::make_int(int_ty, i.into()))),
@@ -933,7 +933,7 @@ fn unpack_array<'a>(
 
     // Unpack each element.
     let mut unpacked_elements = HashMap::new();
-    for i in 0..length {
+    for i in (0..length).rev() {
         let base = builder.constant_u32((i * w) as u32);
         let elem = builder.build(
             sbvt.to_unpacked(builder.cx),

@@ -155,7 +155,9 @@ pub enum LvalueKind<'a> {
     /// Concatenate multiple values.
     ///
     /// The values are cast to and treated as packed bit vectors, and the result
-    /// is yet another packed bit vector.
+    /// is yet another packed bit vector. The lowest index corresponds to the
+    /// left-most item in the concatenation, which is at the MSB end of the
+    /// final packed bit vector.
     Concat(Vec<&'a Lvalue<'a>>),
     /// Repeat a value multiple times.
     ///

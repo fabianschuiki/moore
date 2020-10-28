@@ -414,7 +414,7 @@ fn pack_array<'a>(
     let mut packed_elements = vec![];
     let int_ty =
         SbvType::new(ty::Domain::TwoValued, ty::Sign::Unsigned, 32).to_unpacked(builder.cx);
-    for i in 0..length {
+    for i in (0..length).rev() {
         let rvalue_builder = lower::rvalue::Builder {
             cx: builder.cx,
             span: builder.span,
