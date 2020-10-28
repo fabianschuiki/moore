@@ -51,8 +51,8 @@ endinterface
 // CHECK:     %y.data = sig i19 %9
 // CHECK:     %y.valid = sig i8 %10
 // CHECK:     %y.ready = sig i1 %11
-// CHECK:     %12 = const i32 9001
-// CHECK:     %14 = const i19 9001
-// CHECK:     %16 = const i1 1
-// CHECK:     %18 = const i8 1
+// CHECK:     %13 = const i32 9001
+// CHECK:     %15 = const i19 9001
+// CHECK:     %17 = const i1 1
+// CHECK:     %19 = const i8 1
 // CHECK: }

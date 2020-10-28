@@ -17,9 +17,9 @@ interface bar;
 endinterface
 
 // CHECK: entity @fee.param3 () -> (i32$ %x.data, i1$ %x.valid, i1$ %x.ready) {
-// CHECK:     drv i32$ %x.data, %0, %1
-// CHECK:     drv i1$ %x.valid, %2, %3
-// CHECK:     drv i1$ %x.ready, %4, %5
+// CHECK:     drv i32$ %x.data, %1, %0
+// CHECK:     drv i1$ %x.valid, %3, %2
+// CHECK:     drv i1$ %x.ready, %5, %4
 // CHECK: }
 
 // CHECK: entity @foo () -> (i32$ %x.data, i1$ %x.valid, i1$ %x.ready) {

@@ -14,6 +14,6 @@ interface bar;
 endinterface
 
 // CHECK: entity @foo () -> (i32$ %x.data, i1$ %x.valid, i1$ %x.ready, [1 x [2 x i32]]$ %y.data, [1 x [2 x i1]]$ %y.valid, [1 x [2 x i1]]$ %y.ready) {
-// CHECK:     %3 = and i1 %x.valid.prb, %x.ready.prb
-// CHECK:     %5 = neq i32 %x.data.prb, %4
+// CHECK:     %4 = and i1 %x.valid.prb, %x.ready.prb
+// CHECK:     %6 = neq i32 %x.data.prb, %5
 // CHECK: }

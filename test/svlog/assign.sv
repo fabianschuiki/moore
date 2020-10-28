@@ -5,11 +5,11 @@ module A (input int a, input int b, output int c);
 endmodule
 
 // CHECK: entity @A (i32$ %a, i32$ %b) -> (i32$ %c) {
+// CHECK:     %0 = const time 0s 1e
 // CHECK:     %a.prb = prb i32$ %a
 // CHECK:     %b.prb = prb i32$ %b
-// CHECK:     %0 = add i32 %a.prb, %b.prb
-// CHECK:     %1 = const time 0s 1e
-// CHECK:     drv i32$ %c, %0, %1
+// CHECK:     %1 = add i32 %a.prb, %b.prb
+// CHECK:     drv i32$ %c, %1, %0
 // CHECK: }
 
 module B;

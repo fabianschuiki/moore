@@ -16,6 +16,6 @@ endinterface
 // CHECK:     %x.data = sig i32 %1
 // CHECK:     %x.valid = sig i1 %2
 // CHECK:     %x.ready = sig i1 %3
-// CHECK:     %4 = and i1 %x.valid.prb, %x.ready.prb
-// CHECK:     %6 = neq i32 %x.data.prb, %5
+// CHECK:     %5 = and i1 %x.valid.prb, %x.ready.prb
+// CHECK:     %7 = neq i32 %x.data.prb, %6
 // CHECK: }
