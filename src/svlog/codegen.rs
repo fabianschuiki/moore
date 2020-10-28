@@ -823,17 +823,32 @@ where
                 HirNode::Assign(x) => x,
                 _ => unreachable!(),
             };
-            let lhs = self.mir_lvalue(hir.lhs, env);
-            let rhs = self.mir_rvalue(hir.rhs, env);
-            if lhs.is_error() || rhs.is_error() {
-                continue;
+
+            // Map the assignment to an MIR node.
+            let assign_mir = self.mir_assignment_from_concurrent(Ref(hir), env);
+            debug!("Concurrent assignment: {:#?}", assign_mir);
+
+            // Simplify the assignment to eliminate concatenations on the
+            // left-hand side.
+            let simplified = self.mir_simplify_assignment(Ref(assign_mir));
+            debug!("Simplified to: {:#?}", simplified);
+
+            // Check for sanity.
+            for &assign in &simplified {
+                assert_type!(assign.rhs.ty, assign.lhs.ty, assign.rhs.span, self.cx);
+                if assign.is_error() {
+                    return Err(());
+                }
             }
-            assert_type!(rhs.ty, lhs.ty, rhs.span, self.cx);
-            let lhs = self.emit_mir_lvalue(lhs)?.0;
-            let rhs = self.emit_mir_rvalue(rhs)?;
-            let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
-            let one_epsilon = self.builder.ins().const_time(one_epsilon);
-            self.builder.ins().drv(lhs, rhs, one_epsilon);
+
+            // Emit the assignments.
+            let delay = llhd::value::TimeValue::new(num::zero(), 0, 1);
+            let delay = self.builder.ins().const_time(delay);
+            for &assign in &simplified {
+                let lhs = self.emit_mir_lvalue(assign.lhs)?;
+                let rhs = self.emit_mir_rvalue(assign.rhs)?;
+                self.builder.ins().drv(lhs.0, rhs, delay);
+            }
         }
 
         // Emit module instantiations.
@@ -1998,7 +2013,7 @@ where
             hir::StmtKind::Assign { lhs, rhs, kind } => {
                 // Map the assignment to an MIR node.
                 let assign_mir =
-                    self.mir_assignment_of_procedural_stmt(stmt_id, lhs, rhs, env, hir.span, kind);
+                    self.mir_assignment_from_procedural(stmt_id, lhs, rhs, env, hir.span, kind);
                 debug!("Procedural assignment: {:#?}", assign_mir);
 
                 // Simplify the assignment to eliminate concatenations on the

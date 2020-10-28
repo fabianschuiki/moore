@@ -15,13 +15,13 @@ use crate::{
 
 /// Lower a procedural assign statement.
 #[moore_derive::query]
-pub(crate) fn mir_assignment_of_procedural_stmt<'a>(
+pub(crate) fn mir_assignment_from_procedural<'a>(
     cx: &impl Context<'a>,
     origin: NodeId,
     lhs: NodeId,
     rhs: NodeId,
     env: ParamEnv,
-    span: Span,
+    span: Span, // TODO(fschuiki): Get this from `origin` to not pollute query key
     kind: hir::AssignKind,
 ) -> &'a mir::Assignment<'a> {
     let lhs_mir_lv = cx.mir_lvalue(lhs, env);
@@ -106,6 +106,25 @@ enum AssignOp {
     Arith(IntBinaryArithOp),
     Bitwise(BinaryBitwiseOp),
     Shift(ShiftOp, bool),
+}
+
+/// Lower a concurrent assign statement.
+#[moore_derive::query]
+pub(crate) fn mir_assignment_from_concurrent<'a>(
+    cx: &impl Context<'a>,
+    Ref(assign): Ref<'a, hir::Assign>,
+    env: ParamEnv,
+) -> &'a mir::Assignment<'a> {
+    let lhs_mir = cx.mir_lvalue(assign.lhs, env);
+    let rhs_mir = cx.mir_rvalue(assign.rhs, env);
+    cx.arena().alloc_mir_assignment(Assignment {
+        id: assign.id,
+        env,
+        span: assign.span,
+        ty: lhs_mir.ty,
+        lhs: lhs_mir,
+        rhs: rhs_mir,
+    })
 }
 
 /// Simplify an MIR assignment to potentially multiple simple MIR assignments.
