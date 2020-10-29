@@ -965,7 +965,13 @@ impl<'a, C: Context<'a>> ast::Visitor<'a> for ScopeGenerator<'a, '_, C> {
     }
 
     fn pre_visit_subroutine_port(&mut self, node: &'a ast::SubroutinePort<'a>) -> bool {
-        if let Some(ref name) = node.name {
+        // TODO(fschuiki): This one is nasty. The unique case is simple, because
+        // we know that the name we see is *actually* the name of the port. In
+        // the ambiguous case however, we have to first find out which one of
+        // the possibilities is correct (i.e. the type-only or name-only one),
+        // before deciding whether to add a definition here. If we don't do
+        // this, we might shadow a legitimate type name with the port.
+        if let ast::Ambiguous::Unique((ref _ty, Some(ref name))) = node.ty_name {
             self.add_def(Def {
                 node: DefNode::Ast(node),
                 name: name.name,

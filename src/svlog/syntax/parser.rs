@@ -3285,7 +3285,7 @@ fn parse_subroutine_prototype_tail<'n>(
                 let ty = parse_implicit_type(p)?;
                 Ok((ty, tail(p)?))
             });
-            let (ty, name) = pp.finish(p, "explicit or implicit type")?;
+            let ty_name = pp.finish_ambiguous(p, "explicit or implicit type")?;
 
             // The `tail` function handles everything that follows the data type. To
             // ensure that the ports are parsed correctly, the function must fail if
@@ -3330,7 +3330,7 @@ fn parse_subroutine_prototype_tail<'n>(
             span.expand(p.last_span());
             Ok(SubroutinePort::new(
                 span,
-                SubroutinePortData { dir, var, ty, name },
+                SubroutinePortData { dir, var, ty_name },
             ))
         })
     })?
@@ -4840,24 +4840,29 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
         self.branches.push((name.to_owned(), Box::new(func), true));
     }
 
-    pub fn finish(self, p: &mut dyn AbstractParser<'n>, msg: &str) -> ReportedResult<R> {
-        let (tkn, q) = p.peek(0);
-        // p.add_diag(DiagBuilder2::note(format!("Trying as {:?}", self.branches.iter().map(|&(ref x,_)| x).collect::<Vec<_>>())).span(q));
-
-        // Create a separate speculative parser for each branch.
+    fn finish_prolog(
+        self,
+        p: &mut dyn AbstractParser<'n>,
+        msg: &str,
+    ) -> (
+        Vec<(String, usize, Vec<DiagBuilder2>, R, Span)>,
+        Vec<(String, usize, usize, Vec<DiagBuilder2>)>,
+    ) {
+        let q = p.peek(0).1;
         let mut results = Vec::new();
         let mut matched = Vec::new();
         for (name, mut func, greedy) in self.branches {
-            // p.add_diag(DiagBuilder2::note(format!("Trying as {}", name)).span(q));
             let mut bp = BranchParser::new(p);
             match func(&mut bp) {
                 Ok(x) => {
                     if greedy {
-                        bp.commit();
-                        return Ok(x);
-                    } else {
-                        let sp = bp.last_span();
-                        results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
+                        results.clear();
+                        matched.clear();
+                    }
+                    let sp = bp.last_span();
+                    results.push((name, bp.consumed, bp.diagnostics, x, Span::union(q, sp)));
+                    if greedy {
+                        break;
                     }
                 }
                 Err(_) => matched.push((
@@ -4868,7 +4873,17 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
                 )),
             }
         }
+        (results, matched)
+    }
 
+    fn finish_epilog(
+        p: &mut dyn AbstractParser<'n>,
+        msg: &str,
+        tkn: Token,
+        q: Span,
+        mut results: Vec<(String, usize, Vec<DiagBuilder2>, R, Span)>,
+        mut matched: Vec<(String, usize, usize, Vec<DiagBuilder2>)>,
+    ) -> ReportedResult<R> {
         if results.len() > 1 {
             let mut names = String::new();
             names.push_str(&results[0].0);
@@ -4929,21 +4944,37 @@ impl<'a, 'n, R: Clone> ParallelParser<'a, 'n, R> {
                 p.bump();
             }
             Err(())
-
-            // if errors.is_empty() {
-            //  Err(())
-            // } else {
-            //  for (n, _, m) in errors {
-            //      if num_errors > 1 {
-            //          p.add_diag(DiagBuilder2::note(format!("Assuming this is a {}", n)).span(q));
-            //      }
-            //      for d in m {
-            //          p.add_diag(d);
-            //      }
-            //  }
-            //  Err(())
-            // }
         }
+    }
+
+    pub fn finish_ambiguous(
+        self,
+        p: &mut dyn AbstractParser<'n>,
+        msg: &str,
+    ) -> ReportedResult<ast::Ambiguous<R>> {
+        let (tkn, span) = p.peek(0);
+        let (mut results, mut matched) = self.finish_prolog(p, msg);
+
+        // Handle the special case where we have multiple parsers that match the
+        // exact same token sequence.
+        if results.len() > 1 && results.iter().all(|x| x.1 == results[0].1) {
+            for _ in 0..results[0].1 {
+                p.bump();
+            }
+            Ok(ast::Ambiguous::Ambiguous(
+                results.into_iter().map(|x| x.3).collect(),
+            ))
+        }
+        // Otherwise we handle this just like any other ambiguity.
+        else {
+            Self::finish_epilog(p, msg, tkn, span, results, matched).map(ast::Ambiguous::Unique)
+        }
+    }
+
+    pub fn finish(self, p: &mut dyn AbstractParser<'n>, msg: &str) -> ReportedResult<R> {
+        let (tkn, span) = p.peek(0);
+        let (mut results, mut matched) = self.finish_prolog(p, msg);
+        Self::finish_epilog(p, msg, tkn, span, results, matched)
     }
 }
 

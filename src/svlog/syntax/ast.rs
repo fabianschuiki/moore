@@ -600,6 +600,37 @@ pub type PackageDecl<'a> = Package<'a>;
 #[deprecated(note = "use ast::Modport instead")]
 pub type ModportDecl<'a> = Modport<'a>;
 
+/// A parsing result which may be ambiguous.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Ambiguous<R> {
+    Unique(R),
+    Ambiguous(Vec<R>),
+}
+
+impl<'a, R> WalkVisitor<'a> for Ambiguous<R>
+where
+    R: WalkVisitor<'a>,
+{
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
+        match self {
+            Self::Unique(x) => x.walk(visitor),
+            Self::Ambiguous(x) => x.walk(visitor),
+        }
+    }
+}
+
+impl<'a, R> ForEachNode<'a> for Ambiguous<R>
+where
+    R: ForEachNode<'a>,
+{
+    fn for_each_node(&'a self, each: &mut dyn FnMut(&'a dyn AnyNode<'a>)) {
+        match self {
+            Self::Unique(x) => x.for_each_node(each),
+            Self::Ambiguous(x) => x.for_each_node(each),
+        }
+    }
+}
+
 /// All things being compiled.
 #[moore_derive::node]
 #[indefinite("root")]
@@ -1723,8 +1754,7 @@ pub enum SubroutineKind {
 pub struct SubroutinePort<'a> {
     pub dir: Option<SubroutinePortDir>,
     pub var: bool,
-    pub ty: Type<'a>,
-    pub name: Option<SubroutinePortName<'a>>,
+    pub ty_name: Ambiguous<(Type<'a>, Option<SubroutinePortName<'a>>)>,
 }
 
 #[moore_derive::visit]
