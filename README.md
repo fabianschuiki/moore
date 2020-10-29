@@ -4,6 +4,7 @@
 [![Released API docs](https://docs.rs/moore/badge.svg)](https://docs.rs/moore)
 [![Crates.io](https://img.shields.io/crates/v/moore.svg)](https://crates.io/crates/moore)
 ![Crates.io](https://img.shields.io/crates/l/moore)
+[![dependency status](https://deps.rs/repo/github/fabianschuiki/moore/status.svg)](https://deps.rs/repo/github/fabianschuiki/moore)
 
 Moore is a compiler for hardware description languages that outputs [llhd] assembly, with a focus on usability, clear error reporting, and completeness. Its goal is to act as a frontend for hardware design tools such as synthesizers, linters, or logical equivalence checkers.
 
