@@ -147,3 +147,50 @@ pub(crate) fn disamb_type_or_expr<'a>(
         ast::TypeOrExpr::Type(_ty) => Ok(ast),
     }
 }
+
+/// Resolve the type/name ambiguity in a subroutine port.
+#[moore_derive::query]
+pub(crate) fn resolve_subroutine_port_ty_name<'a>(
+    cx: &impl Context<'a>,
+    Ref(node): Ref<'a, ast::SubroutinePort<'a>>,
+) -> &'a (ast::Type<'a>, Option<ast::SubroutinePortName<'a>>) {
+    let xs = match &node.ty_name {
+        ast::Ambiguous::Unique(x) => return x,
+        ast::Ambiguous::Ambiguous(xs) => xs,
+    };
+    debug!("Resolving ambiguity in {:1?}", node);
+
+    // Let's first try to resolve type names.
+    for x in xs {
+        let name = match x.0.kind.data {
+            ast::NamedType(x) => x,
+            _ => continue,
+        };
+        trace!(" - Trying type name {}", name);
+        let binding = match cx
+            .resolve_local(name.value, cx.scope_location(node), false)
+            .unwrap_or(None)
+        {
+            Some(x) => x,
+            None => continue,
+        };
+        trace!(" - Resolved to {:?}", binding);
+        match cx.disamb_kind(Ref(&binding.node)) {
+            Kind::Type => {
+                trace!(" - Resolved as {:?}", x);
+                return x;
+            }
+            _ => continue,
+        }
+    }
+
+    // If we arrive here, named types did not match. Return whatever is left.
+    for x in xs {
+        if x.1.is_some() {
+            trace!(" - Resolved as {:?}", x);
+            return x;
+        }
+    }
+
+    bug_span!(node.span, cx, "unable to resolve ambiguity");
+}

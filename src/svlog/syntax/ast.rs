@@ -1748,6 +1748,13 @@ pub enum SubroutineKind {
 }
 
 /// A function or task port.
+///
+/// Since the grammar allows for both omitting the type and omitting the port
+/// name (the latter only if the subroutine has no body, i.e. is a prototype),
+/// there is an ambiguity when just a name is provided: `foo` may be a port with
+/// implicit type, if `foo` is not a defined type or the subroutine is not a
+/// prototype, or `foo` may be a port of type `foo` without a name, if `foo` is
+/// a defined type.
 #[moore_derive::node]
 #[indefinite("subroutine port")]
 #[derive(Debug, Clone, PartialEq, Eq)]

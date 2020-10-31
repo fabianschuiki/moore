@@ -1448,6 +1448,18 @@ where
             _ => true,
         }
     }
+
+    /// Override for `SubroutinePort`s in order to resolve ambiguity.
+    // TODO(fschuik): This functionality should go into a `rst::Visitor`.
+    fn pre_visit_subroutine_port(&mut self, node: &'a ast::SubroutinePort<'a>) -> bool {
+        use ast::WalkVisitor;
+        node.dir.walk(self);
+        node.var.walk(self);
+        self.cx
+            .resolve_subroutine_port_ty_name(Ref(node))
+            .walk(self);
+        false
+    }
 }
 
 /// Any AST node that can be instantiated.
