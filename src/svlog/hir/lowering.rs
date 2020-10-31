@@ -954,7 +954,7 @@ fn lower_expr_inner<'gcx>(
             };
 
             // Parse the size and verify the number fits.
-            let size_needed = parsed.bits();
+            let size_needed = parsed.bits() as usize;
             let size = match maybe_size {
                 Some(size) => match size.as_str().parse() {
                     Ok(s) => s,

@@ -566,9 +566,12 @@ pub(crate) fn compute_indexing<'gcx>(
             let lhs_int = cx.constant_int_value_of(lhs, env)?;
             let rhs_int = cx.constant_int_value_of(rhs, env)?;
             let base = std::cmp::min(lhs_int, rhs_int).clone();
-            let base_ty =
-                SbvType::new(ty::Domain::TwoValued, ty::Sign::Signed, max(base.bits(), 1))
-                    .to_unpacked(builder.cx);
+            let base_ty = SbvType::new(
+                ty::Domain::TwoValued,
+                ty::Sign::Signed,
+                max(base.bits() as usize, 1),
+            )
+            .to_unpacked(builder.cx);
             let base = cx.intern_value(value::make_int(base_ty, base));
             let base = builder.build(base_ty, RvalueKind::Const(base));
             let length = ((lhs_int - rhs_int).abs() + BigInt::one())
