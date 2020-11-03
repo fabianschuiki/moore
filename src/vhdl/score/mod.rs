@@ -90,14 +90,16 @@ pub struct ScoreBoard<'ast, 'ctx> {
     /// A table of architecture per entity and library.
     arch_table: RefCell<HashMap<LibRef, &'ctx ArchTable>>,
     /// The LLHD module into which code is emitted.
-    pub llmod: RefCell<llhd::Module>,
+    pub llmod: RefCell<llhd::ir::Module>,
     /// A table of LLHD declarations (i.e. prototypes). These are useful for
     /// example when an entity needs so be instantiated, for which only the
     /// signature of the entity is required, but not its full definition with
     /// its interior.
-    lldecl_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
+    lldecl_table: RefCell<HashMap<NodeId, llhd::ir::Value>>,
     /// A table of LLHD definitions.
-    lldef_table: RefCell<HashMap<NodeId, llhd::ValueRef>>,
+    lldef_table: RefCell<HashMap<NodeId, llhd::ir::Value>>,
+    /// A table of LLHD definitions.
+    llunit_table: RefCell<HashMap<NodeId, llhd::ir::UnitId>>,
     /// A table of types.
     pub ty_table: RefCell<HashMap<NodeId, &'ctx Ty>>,
     /// A table of scopes.
@@ -126,9 +128,10 @@ impl<'ast, 'ctx> ScoreBoard<'ast, 'ctx> {
             hir_table: RefCell::new(HirTable::new()),
             def_table: RefCell::new(HashMap::new()),
             arch_table: RefCell::new(HashMap::new()),
-            llmod: RefCell::new(llhd::Module::new()),
+            llmod: RefCell::new(llhd::ir::Module::new()),
             lldecl_table: RefCell::new(HashMap::new()),
             lldef_table: RefCell::new(HashMap::new()),
+            llunit_table: RefCell::new(HashMap::new()),
             ty_table: RefCell::new(HashMap::new()),
             scope_table: RefCell::new(HashMap::new()),
             const_table: RefCell::new(HashMap::new()),
@@ -345,7 +348,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         Ok(node)
     }
 
-    pub fn lldecl<I>(&self, id: I) -> Result<llhd::ValueRef>
+    pub fn lldecl<I>(&self, id: I) -> Result<llhd::ir::Value>
     where
         I: 'ctx + Copy + Debug + Into<NodeId>,
         ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, DeclValueRef>,
@@ -375,7 +378,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         Ok(node)
     }
 
-    pub fn lldef<I>(&self, id: I) -> Result<llhd::ValueRef>
+    pub fn lldef<I>(&self, id: I) -> Result<llhd::ir::Value>
     where
         I: 'ctx + Copy + Debug + Into<NodeId>,
         ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, DefValueRef>,
@@ -393,6 +396,33 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
         if self
             .sb
             .lldef_table
+            .borrow_mut()
+            .insert(id.into(), node.clone())
+            .is_some()
+        {
+            panic!("node should not exist");
+        }
+        Ok(node)
+    }
+
+    pub fn llunit<I>(&self, id: I) -> Result<llhd::ir::UnitId>
+    where
+        I: 'ctx + Copy + Debug + Into<NodeId>,
+        ScoreContext<'lazy, 'sb, 'ast, 'ctx>: NodeMaker<I, llhd::ir::UnitId>,
+    {
+        if let Some(node) = self.sb.llunit_table.borrow().get(&id.into()).cloned() {
+            return Ok(node);
+        }
+        if self.sess.opts.trace_scoreboard {
+            debugln!("[SB][VHDL] make llunit for {:?}", id);
+        }
+        let node = self.make(id)?;
+        if self.sess.opts.trace_scoreboard {
+            debugln!("[SB][VHDL] llunit for {:?} is {:?}", id, node);
+        }
+        if self
+            .sb
+            .llunit_table
             .borrow_mut()
             .insert(id.into(), node.clone())
             .is_some()
@@ -579,9 +609,9 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
 // scoreboard's implementations of the NodeMaker trait whether we're building a
 // declaration or definition.
 #[derive(Debug, Clone)]
-pub struct DeclValueRef(pub llhd::ValueRef);
+pub struct DeclValueRef(pub llhd::ir::Value);
 #[derive(Debug, Clone)]
-pub struct DefValueRef(pub llhd::ValueRef);
+pub struct DefValueRef(pub llhd::ir::Value);
 
 // Library lowering to HIR.
 impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<LibRef, &'ctx hir::Lib>
@@ -933,10 +963,10 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DeclValueRef>
 }
 
 // Generate the definition for an architecture.
-impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef>
+impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, llhd::ir::UnitId>
     for ScoreContext<'lazy, 'sb, 'ast, 'ctx>
 {
-    fn make(&self, id: ArchRef) -> Result<DefValueRef> {
+    fn make(&self, id: ArchRef) -> Result<llhd::ir::UnitId> {
         // Type check the entire library where the architecture is defined in.
         let typeck_ctx = TypeckContext::new(self);
         typeck_ctx.typeck(self.ast(id).0); // typeck the entire library
@@ -955,6 +985,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef>
         let mut out_tys = Vec::new();
         let mut in_names = Vec::new();
         let mut out_names = Vec::new();
+        let mut sig = llhd::ir::Signature::new();
         for &port in &entity.ports {
             let hir = self.hir(port)?;
             let ty = self.map_type(self.ty(hir.ty)?)?;
@@ -963,6 +994,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef>
                 hir::IntfSignalMode::In
                 | hir::IntfSignalMode::Inout
                 | hir::IntfSignalMode::Linkage => {
+                    sig.add_input(ty.clone());
                     in_tys.push(ty.clone());
                     in_names.push(hir.name.value);
                 }
@@ -972,41 +1004,44 @@ impl<'lazy, 'sb, 'ast, 'ctx> NodeMaker<ArchRef, DefValueRef>
                 hir::IntfSignalMode::Out
                 | hir::IntfSignalMode::Inout
                 | hir::IntfSignalMode::Buffer => {
+                    sig.add_output(ty.clone());
                     out_tys.push(ty.clone());
                     out_names.push(hir.name.value);
                 }
                 _ => (),
             }
         }
-        let ty = llhd::entity_ty(in_tys, out_tys);
 
         // Create a new entity into which we will generate all the code.
         let name = format!("{}_{}", entity.name.value, hir.name.value);
-        let mut entity = llhd::Entity::new(name, ty);
+        let mut entity = llhd::ir::UnitData::new(
+            llhd::ir::UnitKind::Entity,
+            llhd::ir::UnitName::Global(name),
+            sig,
+        );
+        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut entity);
 
         // Assign names to the arguments. This is merely cosmetic, but makes the
         // emitted LLHD easier to read.
-        for (arg, &name) in entity.inputs_mut().iter_mut().zip(in_names.iter()) {
-            arg.set_name(name.as_str().to_owned());
+        for (arg, &name) in builder.input_args().zip(in_names.iter()) {
+            builder.set_name(arg, name.as_str().to_string());
         }
-        for (arg, &name) in entity.outputs_mut().iter_mut().zip(out_names.iter()) {
-            arg.set_name(name.as_str().to_owned());
+        for (arg, &name) in builder.output_args().zip(out_names.iter()) {
+            builder.set_name(arg, name.as_str().to_string());
         }
 
         // Generate the code for the declarations in the architecture.
         for &decl_id in &hir.decls {
-            self.codegen(decl_id, &mut entity)?;
+            self.codegen(decl_id, &mut builder)?;
         }
 
         // Generate the code for the statements in the architecture.
         for &stmt_id in &hir.stmts {
-            self.codegen(stmt_id, &mut entity)?;
+            self.codegen(stmt_id, &mut builder)?;
         }
 
         // Add the entity to the module and return a reference to it.
-        Ok(DefValueRef(
-            self.sb.llmod.borrow_mut().add_entity(entity).into(),
-        ))
+        Ok(self.sb.llmod.borrow_mut().add_unit(entity))
     }
 }
 

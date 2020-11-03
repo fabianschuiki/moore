@@ -443,7 +443,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Elaborate::VhdlEntity(_entity, arch) => {
             // let decl = ctx.vhdl.lldecl(arch);
             // println!("Architecture declared as {:?}", decl);
-            let def = ctx.vhdl().lldef(arch)?;
+            let def = ctx.vhdl().llunit(arch)?;
             eprintln!("Architecture declared as {:?}", def);
         }
         Elaborate::VhdlPkg(pkg) => {

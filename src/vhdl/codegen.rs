@@ -57,7 +57,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                 if diff.is_negative() {
                     llhd::void_ty()
                 } else {
-                    llhd::int_ty(diff.bits())
+                    llhd::int_ty(diff.bits() as usize)
                 }
             }
             Ty::Enum(ref ty) => {
@@ -145,17 +145,21 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     }
 
     /// Map a constant value to the LLHD counterpart.
-    pub fn map_const(&self, konst: &Const) -> Result<llhd::ValueRef> {
+    pub fn map_const(
+        &self,
+        builder: &mut llhd::ir::UnitBuilder,
+        konst: &Const,
+    ) -> Result<llhd::ir::Value> {
         Ok(match *konst {
             // TODO: Map this to llhd::const_void once available.
-            Const::Null => llhd::const_int(0, 0.into()),
-            Const::Int(ref k) => llhd::const_int(999, k.value.clone()),
+            Const::Null => builder.ins().const_int((0, 0)),
+            Const::Int(ref k) => builder.ins().const_int((999, k.value.clone())),
             Const::Enum(ref k) => {
                 let size = match self.lazy_hir(k.decl)?.data.as_ref().unwrap().value {
                     hir::TypeData::Enum(ref lits) => lits.len(),
                     _ => unreachable!(),
                 };
-                llhd::const_int(size, k.index.into())
+                builder.ins().const_int((size, k.index))
             }
             Const::Float(ref _k) => panic!("cannot map float constant"),
             Const::IntRange(_) | Const::FloatRange(_) => panic!("cannot map range constant"),
@@ -164,7 +168,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
     }
 }
 
-impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::ir::UnitBuilder<'_> => {
     match id {
         DeclInBlockRef::Subprog(id)     => self.codegen(id, &mut ()),
         DeclInBlockRef::SubprogBody(id) => self.codegen(id, &mut ()),
@@ -189,15 +193,15 @@ impl_codegen!(self, id: DeclInBlockRef, ctx: &mut llhd::Entity => {
     }
 });
 
-impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ConstDeclRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: VarDeclRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: VarDeclRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::ir::UnitBuilder<'_> => {
     // Determine the type of the signal.
     let hir = self.lazy_hir(id)?;
     let ty = self.lazy_typeval(id)?;
@@ -212,19 +216,21 @@ impl_codegen!(self, id: SignalDeclRef, ctx: &mut llhd::Entity => {
 
     debugln!("signal {:?}, type {:?}, init {:?}", id, ty, init);
     // Create the signal instance.
-    let inst = llhd::Inst::new(
-        Some(hir.name.value.into()),
-        llhd::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
-    );
-    ctx.add_inst(inst, llhd::InstPosition::End);
+    // let inst = llhd::Inst::new(
+    //     Some(hir.name.value.into()),
+    //     llhd::SignalInst(self.map_type(ty)?, Some(self.map_const(init)?))
+    // );
+    // ctx.add_inst(inst, llhd::InstPosition::End);
+    let k = self.map_const(ctx, init)?;
+    ctx.ins().sig(k);
     Ok(())
 });
 
-impl_codegen!(self, id: FileDeclRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: FileDeclRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: ConcStmtRef, ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ConcStmtRef, ctx: &mut llhd::ir::UnitBuilder<'_> => {
     match id {
         ConcStmtRef::Block(id)         => self.codegen(id, ctx),
         ConcStmtRef::Process(id)       => self.codegen(id, ctx),
@@ -238,72 +244,79 @@ impl_codegen!(self, id: ConcStmtRef, ctx: &mut llhd::Entity => {
     }
 });
 
-impl_codegen!(self, id: BlockStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: BlockStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ProcessStmtRef, ctx: &mut llhd::ir::UnitBuilder<'_> => {
     let hir = self.hir(id)?;
     let name = match hir.label {
         Some(n) => format!("{}_{}", ctx.name(), n.value),
         None => format!("{}_proc", ctx.name()),
     };
+    let name = llhd::ir::UnitName::Global(name);
     debugln!("generating process `{}`", name);
     // TODO: Check which signals are actually read and written.
-    let ty = llhd::entity_ty(vec![], vec![]);
-    let mut prok = llhd::Process::new(name, ty.clone());
+    // let ty = llhd::entity_ty(vec![], vec![]);
+    let sig = llhd::ir::Signature::new();
+    let mut prok = llhd::ir::UnitData::new(llhd::ir::UnitKind::Process, name.clone(), sig.clone());
+    // let mut prok = llhd::Process::new(name, ty.clone());
+    let mut prok_builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
     // TODO: define the process as a local name
     // TOOD: codegen declarations
     // TOOD: codegen statements
-    {
-        let body = prok.body_mut();
-        let entry_blk = body.add_block(llhd::Block::new(Some("entry".into())), llhd::BlockPosition::End);
-        let mut builder = InstBuilder::new(body, entry_blk);
-        for &stmt in &hir.stmts {
-            self.codegen(stmt, &mut builder)?;
-        }
+    let entry_bb = prok_builder.named_block("entry");
+    prok_builder.append_to(entry_bb);
+    for &stmt in &hir.stmts {
+        self.codegen(stmt, &mut prok_builder)?;
     }
     // TODO: codegen wait statements implied by sensitivity list
-    let prok_ref = self.sb.llmod.borrow_mut().add_process(prok);
+
     // TODO: wire instantiation with signals in the process' port.
-    ctx.add_inst(
-        llhd::Inst::new(hir.label.map(|l| l.value.into()), llhd::InstKind::InstanceInst(
-            ty, prok_ref.into(), vec![], vec![]
-        )),
-        llhd::InstPosition::End
+    let ext_unit = ctx.add_extern(
+        prok_builder.name().clone(),
+        prok_builder.sig().clone(),
     );
+    ctx.ins().inst(ext_unit, vec![], vec![]);
+    self.sb.llmod.borrow_mut().add_unit(prok);
+    // ctx.add_inst(
+    //     llhd::Inst::new(hir.label.map(|l| l.value.into()), llhd::InstKind::InstanceInst(
+    //         ty, prok_ref.into(), vec![], vec![]
+    //     )),
+    //     llhd::InstPosition::End
+    // );
     Ok(())
 });
 
-impl_codegen!(self, id: ConcCallStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ConcCallStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: ConcAssertStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ConcAssertStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: ConcSigAssignStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ConcSigAssignStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: CompInstStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: CompInstStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: ForGenStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: ForGenStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: IfGenStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: IfGenStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: CaseGenStmtRef, _ctx: &mut llhd::Entity => {
+impl_codegen!(self, id: CaseGenStmtRef, _ctx: &mut llhd::ir::UnitBuilder<'_> => {
     unimp!(self, id);
 });
 
-impl_codegen!(self, id: SeqStmtRef, _ctx: &'a mut InstBuilder<'a> => {
+impl_codegen!(self, id: SeqStmtRef, _ctx: &'a mut llhd::ir::UnitBuilder<'a> => {
     unimp!(self, id);
 });
 
@@ -335,35 +348,35 @@ impl_codegen!(self, id: CompDeclRef, _ctx: &mut () => {
     unimp!(self, id);
 });
 
-/// An helper to build sequences of instructions.
-pub struct InstBuilder<'ctx> {
-    pub body: &'ctx mut llhd::SeqBody,
-    pub block: llhd::BlockRef,
-}
+// /// An helper to build sequences of instructions.
+// pub struct InstBuilder<'ctx> {
+//     pub body: &'ctx mut llhd::SeqBody,
+//     pub block: llhd::BlockRef,
+// }
 
-impl<'ctx> InstBuilder<'ctx> {
-    /// Create a new instruction builder.
-    pub fn new(body: &'ctx mut llhd::SeqBody, block: llhd::BlockRef) -> InstBuilder<'ctx> {
-        InstBuilder {
-            body: body,
-            block: block,
-        }
-    }
+// impl<'ctx> InstBuilder<'ctx> {
+//     /// Create a new instruction builder.
+//     pub fn new(body: &'ctx mut llhd::SeqBody, block: llhd::BlockRef) -> InstBuilder<'ctx> {
+//         InstBuilder {
+//             body: body,
+//             block: block,
+//         }
+//     }
 
-    /// Add a new instruction.
-    pub fn add_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
-        self.body
-            .add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
-    }
+//     /// Add a new instruction.
+//     pub fn add_inst(&mut self, inst: llhd::Inst) -> llhd::InstRef {
+//         self.body
+//             .add_inst(inst, llhd::InstPosition::BlockEnd(self.block))
+//     }
 
-    /// Add a new block.
-    pub fn add_block(&mut self, block: llhd::Block) -> llhd::BlockRef {
-        self.body
-            .add_block(block, llhd::BlockPosition::After(self.block))
-    }
+//     /// Add a new block.
+//     pub fn add_block(&mut self, block: llhd::Block) -> llhd::BlockRef {
+//         self.body
+//             .add_block(block, llhd::BlockPosition::After(self.block))
+//     }
 
-    /// Change the block at the end of which instructions will be added.
-    pub fn set_block(&mut self, block: llhd::BlockRef) {
-        self.block = block
-    }
-}
+//     /// Change the block at the end of which instructions will be added.
+//     pub fn set_block(&mut self, block: llhd::BlockRef) {
+//         self.block = block
+//     }
+// }
