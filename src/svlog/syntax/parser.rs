@@ -3255,7 +3255,7 @@ fn parse_subroutine_prototype<'n>(
 
 fn parse_subroutine_prototype_tail<'n>(
     p: &mut dyn AbstractParser<'n>,
-) -> ReportedResult<(Spanned<Name>, Vec<SubroutinePort<'n>>)> {
+) -> ReportedResult<(Spanned<Name>, Option<Vec<SubroutinePort<'n>>>)> {
     // Consume the subroutine name, or "new".
     // TODO: Make this accept the full `[interface_identifier "." | class_scope] tf_identifier`.
     let name = if p.try_eat(Keyword(Kw::New)) {
@@ -3333,8 +3333,7 @@ fn parse_subroutine_prototype_tail<'n>(
                 SubroutinePortData { dir, var, ty_name },
             ))
         })
-    })?
-    .unwrap_or(Vec::new());
+    })?;
 
     // Wrap things up.
     p.require_reported(Semicolon)?;
@@ -3405,13 +3404,15 @@ fn parse_subroutine_item<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<S
 
         // Wrap things up.
         span.expand(p.last_span());
-        return Ok(SubroutineItem::PortDecl(SubroutinePortDecl {
-            span: span,
-            dir: dir,
-            var: var,
-            ty: ty,
-            names: names,
-        }));
+        return Ok(SubroutineItem::PortDecl(SubroutinePortDecl::new(
+            span,
+            SubroutinePortDeclData {
+                dir,
+                var,
+                ty,
+                names,
+            },
+        )));
     }
 
     // Otherwise simply treat this as a statement.

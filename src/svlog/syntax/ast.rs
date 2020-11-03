@@ -1732,11 +1732,17 @@ pub struct SubroutineDecl<'a> {
 #[indefinite("subroutine prototype")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePrototype<'a> {
+    /// Whether this is a function or a task.
     pub kind: SubroutineKind,
+    /// The default lifetime of the subroutine.
     pub lifetime: Option<Lifetime>,
+    /// The name of the subroutine.
     #[name]
     pub name: Spanned<Name>,
-    pub args: Vec<SubroutinePort<'a>>,
+    /// The arguments of the function or task. `None` if no parentheses have
+    /// been provided; `Some(vec![...])` otherwise.
+    pub args: Option<Vec<SubroutinePort<'a>>>,
+    /// The return type.
     pub retty: Option<Type<'a>>,
 }
 
@@ -1759,8 +1765,11 @@ pub enum SubroutineKind {
 #[indefinite("subroutine port")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePort<'a> {
+    /// The direction of the port, if provided.
     pub dir: Option<SubroutinePortDir>,
+    /// Whether an explicit `var` keyword was present.
     pub var: bool,
+    /// The type and/or name of the port.
     pub ty_name: Ambiguous<(Type<'a>, Option<SubroutinePortName<'a>>)>,
 }
 
@@ -1779,13 +1788,18 @@ pub enum SubroutineItem<'a> {
     Stmt(Stmt<'a>),
 }
 
-#[moore_derive::visit]
+/// A function or task port declaration located in the body.
+#[moore_derive::node]
+#[indefinite("subroutine port")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortDecl<'a> {
-    pub span: Span,
+    /// The direction of the port.
     pub dir: SubroutinePortDir,
+    /// Whether an explicit `var` keyword was present.
     pub var: bool,
+    /// The port type.
     pub ty: Type<'a>,
+    /// The port name declarations.
     pub names: Vec<VarDeclName<'a>>,
 }
 
@@ -1797,6 +1811,18 @@ pub enum SubroutinePortDir {
     Inout,
     Ref,
     ConstRef,
+}
+
+impl std::fmt::Display for SubroutinePortDir {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Input => write!(f, "input"),
+            Self::Output => write!(f, "output"),
+            Self::Inout => write!(f, "inout"),
+            Self::Ref => write!(f, "ref"),
+            Self::ConstRef => write!(f, "const ref"),
+        }
+    }
 }
 
 /// A net declaration.
