@@ -108,12 +108,15 @@ macro_rules! assert_type {
 mod ast_map;
 mod codegen;
 mod context;
+#[warn(missing_docs)]
+pub mod func_args;
 pub mod hir;
 mod inst_details;
 pub mod mir;
 mod param_env;
 #[warn(missing_docs)]
 pub mod pattern_mapping;
+#[warn(missing_docs)]
 pub mod port_list;
 mod port_mapping;
 pub mod resolver;
@@ -258,6 +261,7 @@ mod queries {
     use crate::crate_prelude::*;
     #[allow(deprecated)]
     use crate::{
+        func_args::*,
         hir::lowering::*,
         hir::{accessed_nodes, AccessTable, HirNode},
         inst_details::*,
@@ -271,7 +275,7 @@ mod queries {
         },
         param_env::*,
         pattern_mapping::*,
-        port_list::{self, *},
+        port_list::*,
         port_mapping::*,
         resolver::*,
         rst::*,

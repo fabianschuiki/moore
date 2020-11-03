@@ -92,5 +92,6 @@ bitflags! {
         const PORTS         = 1 << 6;
         const CONSTS        = 1 << 7;
         const INSTS         = 1 << 8;
+        const FUNC_ARGS     = 1 << 9;
     }
 }

@@ -25,6 +25,7 @@ use crate::{
     ast::{self, Visitor},
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
+    func_args::FuncArgList,
     hir::{self, HirNode},
     port_list::PortList,
     resolver::Scope,
@@ -284,6 +285,7 @@ pub struct GlobalArenas<'t> {
     ast_exprs: TypedArena<ast::Expr<'t>>,
     /// The underlying storage for type operations.
     type_storage: ty::TypeStorage<'t>,
+    func_arg_lists: TypedArena<FuncArgList<'t>>,
 }
 
 impl<'t> GlobalArenas<'t> {
@@ -344,6 +346,11 @@ impl<'t> GlobalArenas<'t> {
     /// Allocate an AST expression.
     pub fn alloc_ast_expr(&'t self, ast: ast::Expr<'t>) -> &'t ast::Expr {
         self.ast_exprs.alloc(ast)
+    }
+
+    /// Allocate a func arg list.
+    pub fn alloc_func_arg_list(&'t self, func_arg_list: FuncArgList<'t>) -> &'t FuncArgList<'t> {
+        self.func_arg_lists.alloc(func_arg_list)
     }
 }
 

@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - Add `--output` option to optionally specify output file
 - Add `--format` option to optionally specify output format (LLHD or MLIR)
+- Add `-Vfunc-args` verbosity option
 
 ### Changed
 - Update VHDL crate to same `llhd` version as SystemVerilog

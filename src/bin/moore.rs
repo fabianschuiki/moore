@@ -14,7 +14,7 @@ use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
 use moore::source::Span;
-use moore::svlog::{hir::Visitor as _, QueryDatabase as _};
+use moore::svlog::{ast::AcceptVisitor as _, hir::Visitor as _, QueryDatabase as _};
 use moore::*;
 use std::path::Path;
 
@@ -64,6 +64,7 @@ fn main() {
                     "ports",
                     "consts",
                     "insts",
+                    "func-args",
                 ])
                 .global(true),
         )
@@ -180,6 +181,7 @@ fn main() {
             "ports" => Verbosity::PORTS,
             "consts" => Verbosity::CONSTS,
             "insts" => Verbosity::INSTS,
+            "func-args" => Verbosity::FUNC_ARGS,
             _ => unreachable!(),
         };
     }
@@ -337,6 +339,17 @@ fn score(sess: &Session, matches: &ArgMatches) {
             svlog: &svlog_sb,
         };
         let lib_id = ctx.add_library(lib, &asts);
+
+        // Emit the function argument canonicalization details if requested.
+        for root in ctx.svlog.roots() {
+            if ctx.sess.has_verbosity(Verbosity::FUNC_ARGS) {
+                root.accept(&mut svlog::func_args::FuncArgsVerbosityVisitor::new(
+                    ctx.svlog,
+                ));
+            }
+        }
+
+        // Elaborate what has been requested by the user.
         if let Some(names) = matches.values_of("elaborate") {
             debug!("lib_id = {:?}", lib_id);
             debug!("{:?}", sb);
