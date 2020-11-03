@@ -11,6 +11,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::rc::Rc;
@@ -309,12 +310,11 @@ impl SourceFile for DiskSourceFile {
     }
 
     fn get_content(&self) -> Rc<dyn SourceContent> {
-        use memmap::Protection;
         let is_none = self.content.borrow().is_none();
         if is_none {
-            let c = Rc::new(DiskSourceContent(
-                Mmap::open_path(Path::new(&*self.filename), Protection::Read).unwrap(),
-            ));
+            let c = Rc::new(DiskSourceContent(unsafe {
+                Mmap::map(&File::open(&*self.filename).unwrap()).unwrap()
+            }));
             *self.content.borrow_mut() = Some(c.clone());
             c
         } else {
@@ -326,40 +326,26 @@ impl SourceFile for DiskSourceFile {
 impl SourceContent for DiskSourceContent {
     fn iter(&self) -> Box<CharIter> {
         use std::str;
-        Box::new(
-            str::from_utf8(unsafe { self.0.as_slice() })
-                .unwrap()
-                .char_indices(),
-        )
+        Box::new(str::from_utf8(&self.0[..]).unwrap().char_indices())
     }
 
     fn iter_from(&self, offset: usize) -> Box<CharIter> {
         use std::str;
-        Box::new(
-            str::from_utf8(unsafe { &self.0.as_slice()[offset..] })
-                .unwrap()
-                .char_indices(),
-        )
+        Box::new(str::from_utf8(&self.0[offset..]).unwrap().char_indices())
     }
 
     fn extract(&self, begin: usize, end: usize) -> String {
         use std::str;
-        str::from_utf8(unsafe { &self.0.as_slice()[begin..end] })
-            .unwrap()
-            .to_string()
+        str::from_utf8(&self.0[begin..end]).unwrap().to_string()
     }
 
     fn extract_iter(&self, begin: usize, end: usize) -> Box<CharIter> {
         use std::str;
-        Box::new(
-            str::from_utf8(unsafe { &self.0.as_slice()[begin..end] })
-                .unwrap()
-                .char_indices(),
-        )
+        Box::new(str::from_utf8(&self.0[begin..end]).unwrap().char_indices())
     }
 
     fn bytes(&self) -> &[u8] {
-        unsafe { self.0.as_slice() }
+        &self.0[..]
     }
 }
 
