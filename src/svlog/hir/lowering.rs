@@ -1235,9 +1235,9 @@ fn lower_expr_inner<'gcx>(
             _ => {
                 error!("{:#?}", callee);
                 cx.emit(
-                    DiagBuilder2::warning(format!(
+                    DiagBuilder2::error(format!(
                         "`{}` is not something that can be called",
-                        expr.span().extract()
+                        callee.span().extract()
                     ))
                     .span(expr.human_span()),
                 );
