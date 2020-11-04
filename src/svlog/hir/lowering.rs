@@ -1159,91 +1159,7 @@ fn lower_expr_inner<'gcx>(
             // };
             hir::ExprKind::Index(indexee, mode)
         }
-        ast::CallExpr(ref callee, ref args) => match callee.data {
-            ast::SysIdentExpr(ident) => {
-                let map_unary = || match args.as_slice() {
-                    [ast::CallArg {
-                        expr: Some(ref arg),
-                        ..
-                    }] => Ok(arg),
-                    _ => {
-                        cx.emit(
-                            DiagBuilder2::error(format!("`{}` takes one argument", ident))
-                                .span(expr.human_span()),
-                        );
-                        Err(())
-                    }
-                };
-                let map_unary_id =
-                    || Ok(cx.map_ast_with_parent(AstNode::Expr(map_unary()?), node_id));
-                let map_array_dim = |func| match args.as_slice() {
-                    [ast::CallArg {
-                        expr: Some(ref arg),
-                        ..
-                    }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, None)),
-                    [ast::CallArg {
-                        expr: Some(ref arg),
-                        ..
-                    }, ast::CallArg {
-                        expr: Some(ref dim),
-                        ..
-                    }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, Some(dim))),
-                    _ => {
-                        cx.emit(
-                            DiagBuilder2::error(format!("`{}` takes one or two arguments", ident))
-                                .span(expr.human_span()),
-                        );
-                        Err(())
-                    }
-                };
-                hir::ExprKind::Builtin(match &*ident.value.as_str() {
-                    "clog2" => hir::BuiltinCall::Clog2(map_unary_id()?),
-                    "signed" => hir::BuiltinCall::Signed(map_unary_id()?),
-                    "unsigned" => hir::BuiltinCall::Unsigned(map_unary_id()?),
-                    "countones" => hir::BuiltinCall::CountOnes(map_unary()?),
-                    "onehot" => hir::BuiltinCall::OneHot(map_unary()?),
-                    "onehot0" => hir::BuiltinCall::OneHot0(map_unary()?),
-                    "isunknown" => hir::BuiltinCall::IsUnknown(map_unary()?),
-                    "left" => map_array_dim(hir::ArrayDim::Left)?,
-                    "right" => map_array_dim(hir::ArrayDim::Right)?,
-                    "low" => map_array_dim(hir::ArrayDim::Low)?,
-                    "high" => map_array_dim(hir::ArrayDim::High)?,
-                    "increment" => map_array_dim(hir::ArrayDim::Increment)?,
-                    "size" => map_array_dim(hir::ArrayDim::Size)?,
-                    _ => {
-                        cx.emit(
-                            DiagBuilder2::warning(format!(
-                                "unsupported: system task `${}`; ignored",
-                                ident
-                            ))
-                            .span(expr.human_span()),
-                        );
-                        hir::BuiltinCall::Unsupported
-                    }
-                })
-            }
-            ast::IdentExpr(name) => {
-                let target =
-                    cx.resolve_upwards_or_error(name, cx.parent_node_id(node_id).unwrap())?;
-                hir::ExprKind::FunctionCall(
-                    target,
-                    args.iter()
-                        .map(|arg| lower_call_arg(cx, arg, node_id))
-                        .collect(),
-                )
-            }
-            _ => {
-                error!("{:#?}", callee);
-                cx.emit(
-                    DiagBuilder2::error(format!(
-                        "`{}` is not something that can be called",
-                        callee.span().extract()
-                    ))
-                    .span(expr.human_span()),
-                );
-                return Err(());
-            }
-        },
+        ast::CallExpr(ref callee, ref args) => lower_call(cx, expr, callee, args)?,
         ast::TernaryExpr {
             ref cond,
             ref true_expr,
@@ -1702,6 +1618,100 @@ pub(crate) fn lower_index_mode<'gcx>(
         ),
         _ => hir::IndexMode::One(cx.map_ast_with_parent(AstNode::Expr(index), parent)),
     }
+}
+
+/// Lower a function or method call.
+fn lower_call<'a>(
+    cx: &impl Context<'a>,
+    expr: &'a ast::Expr<'a>,
+    callee: &'a ast::Expr<'a>,
+    args: &'a [ast::CallArg<'a>],
+) -> Result<hir::ExprKind<'a>> {
+    Ok(match callee.data {
+        ast::SysIdentExpr(ident) => {
+            let map_unary = || match args {
+                [ast::CallArg {
+                    expr: Some(ref arg),
+                    ..
+                }] => Ok(arg),
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("`{}` takes one argument", ident))
+                            .span(expr.human_span()),
+                    );
+                    Err(())
+                }
+            };
+            let map_unary_id =
+                || Ok(cx.map_ast_with_parent(AstNode::Expr(map_unary()?), expr.id()));
+            let map_array_dim = |func| match args {
+                [ast::CallArg {
+                    expr: Some(ref arg),
+                    ..
+                }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, None)),
+                [ast::CallArg {
+                    expr: Some(ref arg),
+                    ..
+                }, ast::CallArg {
+                    expr: Some(ref dim),
+                    ..
+                }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, Some(dim))),
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::error(format!("`{}` takes one or two arguments", ident))
+                            .span(expr.human_span()),
+                    );
+                    Err(())
+                }
+            };
+            hir::ExprKind::Builtin(match &*ident.value.as_str() {
+                "clog2" => hir::BuiltinCall::Clog2(map_unary_id()?),
+                "signed" => hir::BuiltinCall::Signed(map_unary_id()?),
+                "unsigned" => hir::BuiltinCall::Unsigned(map_unary_id()?),
+                "countones" => hir::BuiltinCall::CountOnes(map_unary()?),
+                "onehot" => hir::BuiltinCall::OneHot(map_unary()?),
+                "onehot0" => hir::BuiltinCall::OneHot0(map_unary()?),
+                "isunknown" => hir::BuiltinCall::IsUnknown(map_unary()?),
+                "left" => map_array_dim(hir::ArrayDim::Left)?,
+                "right" => map_array_dim(hir::ArrayDim::Right)?,
+                "low" => map_array_dim(hir::ArrayDim::Low)?,
+                "high" => map_array_dim(hir::ArrayDim::High)?,
+                "increment" => map_array_dim(hir::ArrayDim::Increment)?,
+                "size" => map_array_dim(hir::ArrayDim::Size)?,
+                _ => {
+                    cx.emit(
+                        DiagBuilder2::warning(format!(
+                            "unsupported: system task `${}`; ignored",
+                            ident
+                        ))
+                        .span(expr.human_span()),
+                    );
+                    hir::BuiltinCall::Unsupported
+                }
+            })
+        }
+        ast::IdentExpr(name) => {
+            let target =
+                cx.resolve_upwards_or_error(name, cx.parent_node_id(expr.id()).unwrap())?;
+            hir::ExprKind::FunctionCall(
+                target,
+                args.iter()
+                    .map(|arg| lower_call_arg(cx, arg, expr.id()))
+                    .collect(),
+            )
+        }
+        _ => {
+            error!("{:#?}", callee);
+            cx.emit(
+                DiagBuilder2::error(format!(
+                    "`{}` is not something that can be called",
+                    callee.span().extract()
+                ))
+                .span(expr.human_span()),
+            );
+            return Err(());
+        }
+    })
 }
 
 /// Lower a function or method call argument to HIR.
