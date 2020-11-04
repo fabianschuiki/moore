@@ -674,7 +674,7 @@ pub enum ExprKind<'a> {
     /// An inside expression such as `a inside {b, c}`.
     Inside(NodeId, Vec<Spanned<InsideRange>>),
     /// A function call such as `foo(a, b, c)`.
-    FunctionCall(NodeId, Vec<CallArg>),
+    FunctionCall(&'a ast::SubroutineDecl<'a>, Vec<CallArg>),
     /// An assignment.
     Assign {
         op: ast::AssignOp,

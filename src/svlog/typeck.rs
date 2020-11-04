@@ -1906,24 +1906,15 @@ fn self_determined_expr_type<'gcx>(
         }
 
         // Function calls resolve to the function's return type.
-        hir::ExprKind::FunctionCall(target, _) => Some(
-            cx.hir_of(target)
-                .and_then(|hir| {
-                    let hir = match hir {
-                        HirNode::Subroutine(s) => s,
-                        _ => unreachable!(),
-                    };
-                    match hir.retty {
-                        Some(retty_id) => Ok(cx.packed_type_from_ast(
-                            Ref(cx.ast_for_id(retty_id).as_all().get_type().unwrap()),
-                            env,
-                            None,
-                        )),
-                        None => Ok(UnpackedType::make_void()),
-                    }
-                })
-                .unwrap_or(UnpackedType::make_error()),
-        ),
+        hir::ExprKind::FunctionCall(target, _) => Some(match &target.prototype.retty {
+            Some(ty) => cx.packed_type_from_ast(Ref(ty), env, Some(IntVecType::Logic.into())),
+            None => {
+                cx.emit(
+                    DiagBuilder2::error(format!("no return type: {}", target)).span(expr.span()),
+                );
+                UnpackedType::make_error()
+            }
+        }),
 
         // Assignment expressions produce the value of the assigned variable as
         // their own value, which is basically the self-determined type of the

@@ -1723,6 +1723,7 @@ pub enum ConstraintItemData<'a> {
 #[indefinite("subroutine declaration")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutineDecl<'a> {
+    #[forward]
     pub prototype: SubroutinePrototype<'a>,
     pub items: Vec<SubroutineItem<'a>>,
 }

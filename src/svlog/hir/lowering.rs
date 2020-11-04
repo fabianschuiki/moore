@@ -3,7 +3,7 @@
 //! Lowering of AST nodes to HIR nodes.
 
 use crate::crate_prelude::*;
-use crate::{ast_map::AstNode, hir::HirNode};
+use crate::{ast_map::AstNode, hir::HirNode, resolver::DefNode};
 use bit_vec::BitVec;
 use num::BigInt;
 
@@ -1691,8 +1691,37 @@ fn lower_call<'a>(
             })
         }
         ast::IdentExpr(name) => {
-            let target =
-                cx.resolve_upwards_or_error(name, cx.parent_node_id(expr.id()).unwrap())?;
+            // Resolve the function name and make sure it's something we can
+            // call.
+            let def = cx.resolve_local_or_error(name, cx.scope_location(expr), false)?;
+            let target = match def.node {
+                DefNode::Ast(ast) => match ast.as_all() {
+                    ast::AllNode::SubroutineDecl(x) => Some(x),
+                    _ => None,
+                },
+                DefNode::IntPort(..) => None,
+            };
+
+            // Complain if it's something we can't call.
+            let target = match target {
+                Some(x) => x,
+                None => {
+                    error!("{:#?}", target);
+                    cx.emit(
+                        DiagBuilder2::error(format!(
+                            "uncallable: {} is not a function/task",
+                            def.node
+                        ))
+                        .span(name.span())
+                        .add_note(format!("`{}` defined here:", def.name))
+                        .span(def.name.span),
+                    );
+                    return Err(());
+                }
+            };
+            debug!("Call to `{}` resolved to {}", name, target);
+
+            // Package the call up.
             hir::ExprKind::FunctionCall(
                 target,
                 args.iter()
