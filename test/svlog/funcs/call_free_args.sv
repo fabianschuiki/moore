@@ -1,4 +1,5 @@
 // RUN: moore %s -e foo
+// IGNORE  part of #168
 
 function int bar(int a, int b);
     return a + b;

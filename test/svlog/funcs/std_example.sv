@@ -1,5 +1,5 @@
 // RUN: moore %s
-// Function declaration examples from IEEE 1800-2012 section 13.4
+// Function declaration examples from IEEE 1800-2017 section 13.4
 
 function logic [15:0] myfunc1(int x, int y);
 endfunction
