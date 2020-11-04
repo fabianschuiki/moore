@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 - Fix equality and inequality comparisons of non-integer types
 - Fix parser ambiguity for function arguments
+- Fix parsing of empty call arguments (#213)
 
 ## 0.13.2 - 2021-11-11
 ### Fixed
@@ -52,7 +53,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 - Fix procedural assignments to concatenations, e.g. `{a,b} = c` (#185)
 - Fix bit-/part-selects into ranges with non-zero offse, e.g. `x[1]` into `logic [8:1] x` (#194)
-- Fix parsing of empty call arguments (#213)
 
 ### Removed
 - Remove the inlined salsa crate

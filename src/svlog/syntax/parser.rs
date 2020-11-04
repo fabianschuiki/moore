@@ -4229,12 +4229,9 @@ fn as_edge_ident(tkn: Token) -> EdgeIdent {
 
 fn parse_call_args<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Vec<CallArg<'n>>> {
     let mut v = Vec::new();
-    if p.peek(0).0 == CloseDelim(Paren) {
-        return Ok(v);
-    }
-    loop {
+    while p.peek(0).0 != CloseDelim(Paren) {
         match p.peek(0) {
-            (Comma, sp) => v.push(CallArg {
+            (Comma, sp) | (CloseDelim(Paren), sp) => v.push(CallArg {
                 span: sp,
                 name_span: sp,
                 name: None,
@@ -4273,14 +4270,8 @@ fn parse_call_args<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Vec<Cal
         }
 
         match p.peek(0) {
-            (Comma, sp) => {
-                p.bump();
-                if p.try_eat(CloseDelim(Paren)) {
-                    p.add_diag(DiagBuilder2::warning("superfluous trailing comma").span(sp));
-                    break;
-                }
-            }
-            (CloseDelim(Paren), _) => break,
+            (Comma, sp) => p.bump(),
+            (CloseDelim(Paren), _) => (),
             (_, sp) => {
                 p.add_diag(DiagBuilder2::error("expected , or ) after call argument").span(sp));
                 return Err(());
