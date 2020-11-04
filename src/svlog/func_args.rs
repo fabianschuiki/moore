@@ -62,7 +62,7 @@ pub(crate) fn canonicalize_func_args<'a>(
     node: &'a ast::SubroutineDecl<'a>,
 ) -> &'a FuncArgList<'a> {
     debug!("Building port list of {:?}", node);
-    let mut next_rib = node.id(); // TODO(fschuiki): Remove once NodeIds no longer needed
+    let next_rib = node.id(); // TODO(fschuiki): Remove once NodeIds no longer needed
 
     // If an argument list has been provided (`foo(...);`), use that to gather
     // the list of arguments. If not (`foo;`), scan the function body for
