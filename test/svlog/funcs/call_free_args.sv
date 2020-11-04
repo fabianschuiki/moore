@@ -5,5 +5,5 @@ function int bar(int a, int b);
 endfunction
 
 module foo (output int z);
-    assign z = bar(20, 22);
+    initial z = bar(20, 22);
 endmodule
