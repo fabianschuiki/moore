@@ -329,10 +329,10 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
                 }
             }
         }
-        ExprKind::FunctionCall(_, ref args) => {
-            for &arg in args {
-                if let Some(expr) = arg.expr {
-                    visitor.visit_node_with_id(expr, false);
+        ExprKind::FunctionCall(_, args) => {
+            for arg in args {
+                if let Some(ref expr) = arg.expr {
+                    visitor.visit_node_with_id(expr.id(), false);
                 }
             }
         }

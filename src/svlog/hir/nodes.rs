@@ -669,7 +669,7 @@ pub enum ExprKind<'a> {
     /// An inside expression such as `a inside {b, c}`.
     Inside(NodeId, Vec<Spanned<InsideRange>>),
     /// A function call such as `foo(a, b, c)`.
-    FunctionCall(&'a ast::SubroutineDecl<'a>, Vec<CallArg>),
+    FunctionCall(&'a ast::SubroutineDecl<'a>, &'a [ast::CallArg<'a>]),
     /// An assignment.
     Assign {
         op: ast::AssignOp,
@@ -1285,15 +1285,4 @@ pub enum PatternMapping {
 pub enum InsideRange {
     Single(NodeId),
     Range(NodeId, NodeId),
-}
-
-/// An argument to a function or method call.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CallArg {
-    /// Span of the entire argument.
-    pub span: Span,
-    /// Optional argument name.
-    pub name: Option<Spanned<Name>>,
-    /// Value assigned to this argument.
-    pub expr: Option<NodeId>,
 }

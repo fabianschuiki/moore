@@ -1724,12 +1724,7 @@ fn lower_call<'a>(
             debug!("Call to `{}` resolved to {}", name, target);
 
             // Package the call up.
-            hir::ExprKind::FunctionCall(
-                target,
-                args.iter()
-                    .map(|arg| lower_call_arg(cx, arg, expr.id()))
-                    .collect(),
-            )
+            hir::ExprKind::FunctionCall(target, args)
         }
         _ => {
             error!("{:#?}", callee);
@@ -1743,20 +1738,4 @@ fn lower_call<'a>(
             return Err(());
         }
     })
-}
-
-/// Lower a function or method call argument to HIR.
-fn lower_call_arg<'gcx>(
-    cx: &impl Context<'gcx>,
-    ast: &'gcx ast::CallArg<'gcx>,
-    parent: NodeId,
-) -> hir::CallArg {
-    hir::CallArg {
-        span: ast.span,
-        name: ast.name,
-        expr: ast
-            .expr
-            .as_ref()
-            .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), parent)),
-    }
 }
