@@ -230,20 +230,28 @@ where
                 "Call to subroutine `{}` has the following argument mapping:",
                 target.prototype.name
             ));
-        d = d.add_note(format!("{:#?}", mapping));
-        // for arg in &list.args {
-        //     let name = match arg.name {
-        //         Some(name) => format!(" {}", name),
-        //         None => format!(""),
-        //     };
-        //     let ty = self.cx.unpacked_type_from_ast(
-        //         Ref(arg.ty),
-        //         Ref(arg.unpacked_dims),
-        //         self.cx.default_param_env(),
-        //         None,
-        //     );
-        //     d = d.add_note(format!("{} {}{}", arg.dir, ty, name));
-        // }
+        // d = d.add_note(format!("{:#?}", mapping));
+        for m in &mapping.args {
+            let name = match m.decl.name {
+                Some(name) => format!(" {}", name),
+                None => format!(""),
+            };
+            let ty = self.cx.unpacked_type_from_ast(
+                Ref(m.decl.ty),
+                Ref(m.decl.unpacked_dims),
+                m.env,
+                None,
+            );
+            let value = format!(
+                "{} {}",
+                m.expr.span().extract(),
+                match m.call {
+                    CallArgSource::Call(..) => "(call)",
+                    CallArgSource::Default(..) => "(default)",
+                }
+            );
+            d = d.add_note(format!("{} {}{} = {}", m.decl.dir, ty, name, value));
+        }
         self.cx.emit(d);
         true
     }

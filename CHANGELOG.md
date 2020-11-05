@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add `circt` and `circt-sys` crates
 - Add `--format=mlir-native` option to use CIRCT for output emission
 - Add implicit cast from integer to time types
+- Add `-Vfunc-args` and `-Vcall-args` verbosity option
 
 ### Changed
 - Migrate code generation to use CIRCT in parallel to LLHD crate
@@ -43,7 +44,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 - Add `--output` option to optionally specify output file
 - Add `--format` option to optionally specify output format (LLHD or MLIR)
-- Add `-Vfunc-args` verbosity option
 
 ### Changed
 - Update VHDL crate to same `llhd` version as SystemVerilog
