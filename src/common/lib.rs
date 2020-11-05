@@ -93,5 +93,6 @@ bitflags! {
         const CONSTS        = 1 << 7;
         const INSTS         = 1 << 8;
         const FUNC_ARGS     = 1 << 9;
+        const CALL_ARGS     = 1 << 10;
     }
 }

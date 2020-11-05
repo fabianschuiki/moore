@@ -106,6 +106,8 @@ macro_rules! assert_type {
 }
 
 mod ast_map;
+#[warn(missing_docs)]
+pub mod call_mapping;
 mod codegen;
 mod context;
 #[warn(missing_docs)]
@@ -261,6 +263,7 @@ mod queries {
     use crate::crate_prelude::*;
     #[allow(deprecated)]
     use crate::{
+        call_mapping::*,
         func_args::*,
         hir::lowering::*,
         hir::{accessed_nodes, AccessTable, HirNode},
