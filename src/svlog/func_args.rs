@@ -59,7 +59,7 @@ pub struct FuncArg<'a> {
 #[moore_derive::query]
 pub(crate) fn canonicalize_func_args<'a>(
     cx: &impl Context<'a>,
-    node: &'a ast::SubroutineDecl<'a>,
+    Ref(node): Ref<'a, ast::SubroutineDecl<'a>>,
 ) -> &'a FuncArgList<'a> {
     debug!("Building port list of {:?}", node);
     let next_rib = node.id(); // TODO(fschuiki): Remove once NodeIds no longer needed
@@ -264,7 +264,7 @@ pub struct FuncArgsVerbosityVisitor<'cx, C> {
 }
 
 impl<'cx, C> FuncArgsVerbosityVisitor<'cx, C> {
-    /// Create a new name resolution visitor.
+    /// Create a new visitor.
     pub fn new(cx: &'cx C) -> Self {
         FuncArgsVerbosityVisitor { cx }
     }
@@ -276,7 +276,7 @@ where
     'a: 'cx,
 {
     fn pre_visit_subroutine_decl(&mut self, node: &'a ast::SubroutineDecl<'a>) -> bool {
-        let list = self.cx.canonicalize_func_args(node);
+        let list = self.cx.canonicalize_func_args(Ref(node));
         let mut d = DiagBuilder2::note("canonicalized subroutine arguments")
             .span(node.span())
             .add_note(format!(
