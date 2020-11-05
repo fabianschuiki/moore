@@ -1545,12 +1545,15 @@ pub struct Identifier {
     pub name: Name,
 }
 
-#[moore_derive::visit]
+/// An argument to a a function or task call.
+#[moore_derive::node]
+#[indefinite("call argument")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg<'a> {
-    pub span: Span,
-    pub name_span: Span,
-    pub name: Option<Name>,
+    /// An optional name of the argument, e.g. `.foo(x)` instead of just `x`.
+    pub name: Option<Spanned<Name>>,
+    /// An optional value to assign to the argument. Omitting this causes the
+    /// call to use the default argument in the function/task declaration.
     pub expr: Option<Expr<'a>>,
 }
 

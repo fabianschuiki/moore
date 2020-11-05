@@ -1617,7 +1617,11 @@ fn lower_call<'a>(
         ast::SysIdentExpr(ident) => {
             let map_unary = || match args {
                 [ast::CallArg {
-                    expr: Some(ref arg),
+                    data:
+                        ast::CallArgData {
+                            expr: Some(ref arg),
+                            ..
+                        },
                     ..
                 }] => Ok(arg),
                 _ => {
@@ -1632,14 +1636,26 @@ fn lower_call<'a>(
                 || Ok(cx.map_ast_with_parent(AstNode::Expr(map_unary()?), expr.id()));
             let map_array_dim = |func| match args {
                 [ast::CallArg {
-                    expr: Some(ref arg),
+                    data:
+                        ast::CallArgData {
+                            expr: Some(ref arg),
+                            ..
+                        },
                     ..
                 }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, None)),
                 [ast::CallArg {
-                    expr: Some(ref arg),
+                    data:
+                        ast::CallArgData {
+                            expr: Some(ref arg),
+                            ..
+                        },
                     ..
                 }, ast::CallArg {
-                    expr: Some(ref dim),
+                    data:
+                        ast::CallArgData {
+                            expr: Some(ref dim),
+                            ..
+                        },
                     ..
                 }] => Ok(hir::BuiltinCall::ArrayDim(func, arg, Some(dim))),
                 _ => {
@@ -1737,7 +1753,7 @@ fn lower_call_arg<'gcx>(
 ) -> hir::CallArg {
     hir::CallArg {
         span: ast.span,
-        name: ast.name.map(|n| Spanned::new(n, ast.name_span)),
+        name: ast.name,
         expr: ast
             .expr
             .as_ref()
