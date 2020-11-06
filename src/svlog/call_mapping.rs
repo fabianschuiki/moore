@@ -10,15 +10,38 @@ use crate::func_args::{FuncArg, FuncArgList};
 use std::{collections::HashMap, sync::Arc};
 
 /// A mapping of call arguments to function/task declaration arguments.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug)]
 pub struct CallMapping<'a> {
+    /// The span of the call.
+    pub span: Span,
     /// The mapping from declaration arguments to call arguments.
     pub args: Vec<CallArgMapping<'a>>,
+    /// Set if the mapping is incomplete due to an error.
+    error: bool,
+}
+
+impl<'a> CallMapping<'a> {
+    /// Create a new tombstone mapping.
+    pub fn error(span: Span) -> Self {
+        Self {
+            span,
+            args: Default::default(),
+            error: true,
+        }
+    }
+
+    /// Is this a tombstone?
+    pub fn is_error(&self) -> bool {
+        self.error
+    }
 }
 
 /// A mapping of a single call argument to a function/task declaration argument.
 #[derive(Debug, Clone, Copy)]
 pub struct CallArgMapping<'a> {
+    /// A representative span of this argument. Either at the call site, or if
+    /// omitted, the default at the declaration site.
+    pub span: Span,
     /// The argument in the function/task declaration.
     pub decl: &'a FuncArg<'a>,
     /// The source of the argument in the call.
@@ -46,7 +69,7 @@ pub(crate) fn call_mapping<'a>(
     Ref(decl_args): Ref<'a, FuncArgList<'a>>,
     Ref(call_args): Ref<'a, [ast::CallArg<'a>]>,
     call_span: Span,
-) -> Result<Arc<CallMapping<'a>>> {
+) -> Arc<CallMapping<'a>> {
     debug!("Computing argument mapping");
 
     // Ensure that the call does not have more arguments than the declaration.
@@ -60,7 +83,7 @@ pub(crate) fn call_mapping<'a>(
             ))
             .span(call_span),
         );
-        return Err(());
+        return Arc::new(CallMapping::error(call_span));
     }
 
     // Build a lookup table of declaration argument names.
@@ -73,6 +96,7 @@ pub(crate) fn call_mapping<'a>(
 
     // Process call arguments and match them.
     let mut seen_named = false;
+    let mut failed = false;
     let mut partial_mapping = HashMap::<Ref<FuncArg>, &ast::CallArg>::new();
 
     for (decl_arg, call_arg) in decl_args.args.iter().zip(call_args.iter()) {
@@ -94,7 +118,8 @@ pub(crate) fn call_mapping<'a>(
                             ))
                             .span(decl_args.func.span()),
                     );
-                    return Err(());
+                    failed = true;
+                    continue;
                 }
             }
             None if seen_named => {
@@ -106,7 +131,8 @@ pub(crate) fn call_mapping<'a>(
                              named arguments.",
                         ),
                 );
-                return Err(());
+                failed = true;
+                continue;
             }
             None => decl_arg,
         };
@@ -131,10 +157,14 @@ pub(crate) fn call_mapping<'a>(
     }
     trace!("Mapping before assigning defaults: {:#?}", partial_mapping);
 
+    // Abort here if we had any failures thus far.
+    if failed {
+        return Arc::new(CallMapping::error(call_span));
+    }
+
     // Make a canonical with one entry for each declaration argument, and
     // populate default values.
     let mut mapping = vec![];
-    let mut failed = false;
 
     for decl_arg in &decl_args.args {
         // Establish the assigned value, either as explicitly provided in the
@@ -145,6 +175,10 @@ pub(crate) fn call_mapping<'a>(
                 None => None,
             },
             None => None,
+        };
+        let span = match src {
+            Some((_, call_arg)) => call_arg.span(),
+            None => decl_arg.span,
         };
         let (expr, src) = match src {
             Some((expr, call_arg)) => (expr, CallArgSource::Call(call_arg)),
@@ -171,6 +205,7 @@ pub(crate) fn call_mapping<'a>(
 
         // Assemble the data struct.
         let arg = CallArgMapping {
+            span,
             decl: decl_arg,
             call: src,
             expr,
@@ -180,11 +215,11 @@ pub(crate) fn call_mapping<'a>(
     }
 
     // Assemble the final struct.
-    if failed {
-        Err(())
-    } else {
-        Ok(Arc::new(CallMapping { args: mapping }))
-    }
+    Arc::new(CallMapping {
+        span: call_span,
+        args: mapping,
+        error: failed,
+    })
 }
 
 /// A visitor that emits diagnostics for the mapping of a call's arguments to
@@ -219,10 +254,10 @@ where
         // Canonicalize the target's function arguments and establish the
         // mapping to the call arguments.
         let decl_args = self.cx.canonicalize_func_args(Ref(target));
-        let mapping = match self.cx.call_mapping(Ref(decl_args), Ref(args), node.span()) {
-            Ok(x) => x,
-            Err(()) => return true,
-        };
+        let mapping = self.cx.call_mapping(Ref(decl_args), Ref(args), node.span());
+        if mapping.is_error() {
+            return true;
+        }
 
         let mut d = DiagBuilder2::note("call argument mapping")
             .span(node.span())
@@ -230,7 +265,6 @@ where
                 "Call to subroutine `{}` has the following argument mapping:",
                 target.prototype.name
             ));
-        // d = d.add_note(format!("{:#?}", mapping));
         for m in &mapping.args {
             let name = match m.decl.name {
                 Some(name) => format!(" {}", name),
