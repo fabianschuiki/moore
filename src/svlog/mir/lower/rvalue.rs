@@ -4,8 +4,9 @@
 
 use crate::crate_prelude::*;
 use crate::{
+    call_mapping::CallArgSource,
     hir::HirNode,
-    mir::rvalue::*,
+    mir::{lvalue::Lvalue, rvalue::*},
     syntax::ast::BasicNode,
     ty::{SbvType, UnpackedType},
     typeck::{CastOp, CastType},
@@ -503,13 +504,8 @@ fn lower_expr_inner<'gcx>(
             Ok(check)
         }
 
-        hir::ExprKind::FunctionCall(..) => {
-            bug_span!(
-                span,
-                cx,
-                "lowering of {} to mir not yet supported",
-                hir.desc_full()
-            );
+        hir::ExprKind::FunctionCall(target, args) => {
+            Ok(lower_function_call(&builder, target, args))
         }
 
         hir::ExprKind::Assign { op, lhs, rhs } => Ok(lower_assign(&builder, ty, op, lhs, rhs)),
@@ -1676,4 +1672,79 @@ fn lower_assign<'a>(
             result: rv,
         },
     )
+}
+
+/// Lower a function call.
+fn lower_function_call<'a>(
+    builder: &Builder<'_, impl Context<'a>>,
+    target: &'a ast::SubroutineDecl<'a>,
+    call_args: &'a [ast::CallArg<'a>],
+) -> &'a Rvalue<'a> {
+    trace!("Lowering call `{}`", builder.span.extract());
+    let cx = builder.cx;
+    let decl_args = cx.canonicalize_func_args(Ref(target));
+    let mapping = cx.call_mapping(Ref(decl_args), Ref(call_args), builder.span);
+    if mapping.is_error() {
+        return builder.error();
+    }
+
+    // Decide how we are going to pass values in and out of the called function.
+    // This must match how the function code generator will eventually emit the
+    // function in
+    let mut inputs = vec![];
+    let mut outputs = vec![];
+    for arg in &mapping.args {
+        trace!("Lowering call argument `{}`", arg.span.extract());
+        match arg.decl.dir {
+            ast::SubroutinePortDir::Input => {
+                inputs.push(CallInput::ByValue(cx.mir_rvalue(arg.expr.id(), arg.env)))
+            }
+            // Output arguments with a default value have no place to copy
+            // the data out to after the call.
+            ast::SubroutinePortDir::Output => match arg.call {
+                CallArgSource::Call(..) => {
+                    outputs.push(Some(cx.mir_lvalue(arg.expr.id(), arg.env)))
+                }
+                CallArgSource::Default(..) => outputs.push(None),
+            },
+            ast::SubroutinePortDir::Inout => {
+                inputs.push(CallInput::ByValue(cx.mir_rvalue(arg.expr.id(), arg.env)));
+                // Output arguments with a default value have no place to
+                // copy the data out to after the call.
+                match arg.call {
+                    CallArgSource::Call(..) => {
+                        outputs.push(Some(cx.mir_lvalue(arg.expr.id(), arg.env)))
+                    }
+                    CallArgSource::Default(..) => outputs.push(None),
+                }
+            }
+            ast::SubroutinePortDir::Ref | ast::SubroutinePortDir::ConstRef => {
+                inputs.push(CallInput::ByRef(cx.mir_lvalue(arg.expr.id(), arg.env)));
+            }
+        }
+    }
+
+    trace!("Call input args:");
+    for input in &inputs {
+        trace!("  - {:?}", input);
+    }
+    trace!("Call output args:");
+    for output in &outputs {
+        trace!("  - {:?}", output);
+    }
+
+    bug_span!(
+        builder.span,
+        cx,
+        "lowering of function calls to mir not yet supported",
+    );
+}
+
+/// A call input argument.
+#[derive(Debug)]
+pub enum CallInput<'a> {
+    /// The argument is passed by value.
+    ByValue(&'a Rvalue<'a>),
+    /// The argument is passed by reference.
+    ByRef(&'a Lvalue<'a>),
 }
