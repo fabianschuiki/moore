@@ -1723,6 +1723,11 @@ fn lower_call<'a>(
             };
             debug!("Call to `{}` resolved to {}", name, target);
 
+            // TODO(fschuiki): Get rid of this at some point.
+            for arg in args {
+                cx.map_ast_with_parent(AstNode::CallArg(arg), expr.id());
+            }
+
             // Package the call up.
             hir::ExprKind::FunctionCall(target, args)
         }

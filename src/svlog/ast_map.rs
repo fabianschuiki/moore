@@ -103,6 +103,8 @@ pub enum AstNode<'ast> {
     SubroutineDecl(&'ast ast::SubroutineDecl<'ast>),
     /// An interface.
     Interface(&'ast ast::Interface<'ast>),
+    /// A call argument.
+    CallArg(&'ast ast::CallArg<'ast>),
 }
 
 impl<'a> AstNode<'a> {
@@ -135,6 +137,7 @@ impl<'a> AstNode<'a> {
             AstNode::Import(x) => Some(x),
             AstNode::SubroutineDecl(x) => Some(x),
             AstNode::Interface(x) => Some(x),
+            AstNode::CallArg(x) => Some(x),
             _ => None,
         }
     }
@@ -192,6 +195,7 @@ impl<'a> AstNode<'a> {
             AllNode::ImportItem(x) => Box::new(Some(AstNode::Import(x)).into_iter()),
             AllNode::SubroutineDecl(x) => Box::new(Some(AstNode::SubroutineDecl(x)).into_iter()),
             AllNode::Interface(x) => Box::new(Some(AstNode::Interface(x)).into_iter()),
+            AllNode::CallArg(x) => Box::new(Some(AstNode::CallArg(x)).into_iter()),
             _ => Box::new(None.into_iter()),
         }
     }
@@ -226,6 +230,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Import(x) => x.span(),
             AstNode::SubroutineDecl(x) => x.span(),
             AstNode::Interface(x) => x.span(),
+            AstNode::CallArg(x) => x.span(),
         }
     }
 
@@ -257,6 +262,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::Import(x) => x.human_span(),
             AstNode::SubroutineDecl(x) => x.human_span(),
             AstNode::Interface(x) => x.human_span(),
+            AstNode::CallArg(x) => x.human_span(),
         }
     }
 }
@@ -291,6 +297,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Import(x) => "import",
             AstNode::SubroutineDecl(x) => "subroutine declaration",
             AstNode::Interface(x) => "interface",
+            AstNode::CallArg(x) => "call argument",
         }
     }
 
@@ -322,6 +329,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::Import(x) => x.to_definite_string(),
             AstNode::SubroutineDecl(x) => x.to_definite_string(),
             AstNode::Interface(x) => x.to_definite_string(),
+            AstNode::CallArg(x) => x.to_definite_string(),
         }
     }
 }
