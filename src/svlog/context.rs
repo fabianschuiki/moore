@@ -741,24 +741,6 @@ pub(super) mod queries {
                 type StructDefQuery;
                 use fn resolver::struct_def;
             }
-
-            /// Lower an expression to an lvalue in the MIR.
-            fn mir_lvalue(
-                expr_id: NodeId,
-                env: ParamEnv,
-            ) -> &'a mir::Lvalue<'a> {
-                type MirLvalueQuery;
-                use fn mir::lower::lvalue::lower_expr;
-            }
-
-            /// Lower an expression to an rvalue in the MIR.
-            fn mir_rvalue(
-                expr_id: NodeId,
-                env: ParamEnv,
-            ) -> &'a mir::Rvalue<'a> {
-                type MirRvalueQuery;
-                use fn mir::lower::rvalue::lower_expr;
-            }
         }
     }
 
@@ -772,8 +754,6 @@ pub(super) mod queries {
                 fn resolve_downwards() for ResolveDownwardsQuery<'gcx>;
                 fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
-                fn mir_lvalue() for MirLvalueQuery<'gcx>;
-                fn mir_rvalue() for MirRvalueQuery<'gcx>;
             }
         }
     }

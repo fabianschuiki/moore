@@ -75,11 +75,12 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
 }
 
 /// Lower an expression to an rvalue in the MIR.
-pub fn lower_expr<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub fn mir_rvalue<'a>(
+    cx: &impl Context<'a>,
     expr_id: NodeId,
     env: ParamEnv,
-) -> &'gcx Rvalue<'gcx> {
+) -> &'a mir::Rvalue<'a> {
     let span = cx.span(expr_id);
     let builder = Builder {
         cx,

@@ -64,7 +64,12 @@ impl<'a, C: Context<'a>> Builder<'_, C> {
 }
 
 /// Lower an expression to an lvalue in the MIR.
-pub fn lower_expr<'a>(cx: &impl Context<'a>, expr_id: NodeId, env: ParamEnv) -> &'a Lvalue<'a> {
+#[moore_derive::query]
+pub fn mir_lvalue<'a>(
+    cx: &impl Context<'a>,
+    expr_id: NodeId,
+    env: ParamEnv,
+) -> &'a mir::Lvalue<'a> {
     let span = cx.span(expr_id);
     let builder = Builder {
         cx,
