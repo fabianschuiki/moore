@@ -265,7 +265,7 @@ mod queries {
     #[allow(deprecated)]
     use crate::{
         hir::lowering::*,
-        hir::{accessed_nodes, AccessTable},
+        hir::{accessed_nodes, AccessTable, HirNode},
         inst_details::*,
         mir::lower::assign::{
             mir_assignment_from_concurrent, mir_assignment_from_procedural, mir_simplify_assignment,

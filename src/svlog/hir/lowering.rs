@@ -16,7 +16,9 @@ pub enum Hint {
     Expr,
 }
 
-pub(crate) fn hir_of<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<HirNode<'gcx>> {
+/// Lower an AST node to HIR.
+#[moore_derive::query]
+pub(crate) fn hir_of<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<HirNode<'a>> {
     if let Some(hir) = cx.get_interned_hir(node_id) {
         return Ok(hir);
     }

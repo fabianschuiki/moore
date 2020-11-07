@@ -13,7 +13,6 @@ pub(crate) mod lowering;
 mod nodes;
 mod visit;
 
-pub(crate) use self::lowering::hir_of;
 pub use self::lowering::Hint;
 pub use self::nodes::*;
 pub use self::visit::*;

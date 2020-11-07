@@ -5,10 +5,10 @@
 //! This module defines the [`Visitor`] trait that allows the HIR tree graph to
 //! be visited.
 
-use super::{nodes::*, HirNode};
+use crate::crate_prelude::*;
 use crate::{
-    ast::AnyNode as _,
     common::{name::Name, source::Spanned, NodeId},
+    hir::{nodes::*, HirNode},
     Context,
 };
 

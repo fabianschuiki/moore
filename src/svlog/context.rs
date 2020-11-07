@@ -706,12 +706,6 @@ pub(super) mod queries {
     query_group! {
         /// A collection of compiler queries.
         pub trait Context<'a>: BaseContext<'a> {
-            /// Lower an AST node to HIR.
-            fn hir_of(node_id: NodeId) -> Result<HirNode<'a>> {
-                type HirOfQuery;
-                use fn hir::hir_of;
-            }
-
             /// Determine the local rib that applies to a node.
             fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
                 type LocalRibQuery;
@@ -772,7 +766,6 @@ pub(super) mod queries {
         /// The query result storage embedded in the global context.
         pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
             impl Context<'gcx> {
-                fn hir_of() for HirOfQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
