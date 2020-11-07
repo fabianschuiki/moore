@@ -187,190 +187,7 @@ pub(crate) fn hir_of<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<HirNo
             };
             Ok(HirNode::Proc(cx.arena().alloc_hir(hir)))
         }
-        AstNode::Stmt(stmt) => {
-            let kind = match stmt.kind {
-                ast::NullStmt => hir::StmtKind::Null,
-                ast::SequentialBlock(ref stmts) => {
-                    let mut next_rib = node_id;
-                    hir::StmtKind::Block(
-                        stmts
-                            .iter()
-                            .map(|stmt| {
-                                let id = cx.map_ast_with_parent(AstNode::Stmt(stmt), next_rib);
-                                next_rib = id;
-                                id
-                            })
-                            .collect(),
-                    )
-                }
-                ast::BlockingAssignStmt {
-                    ref lhs,
-                    ref rhs,
-                    op,
-                } => hir::StmtKind::Assign {
-                    lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
-                    rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
-                    kind: hir::AssignKind::Block(op),
-                },
-                ast::TimedStmt(ref control, ref inner_stmt) => {
-                    let control = match *control {
-                        ast::TimingControl::Delay(ref dc) => hir::TimingControl::Delay(
-                            cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
-                        ),
-                        ast::TimingControl::Event(ref ec) => match ec.data {
-                            ast::EventControlData::Implicit => hir::TimingControl::ImplicitEvent,
-                            ast::EventControlData::Expr(ref expr) => {
-                                hir::TimingControl::ExplicitEvent(
-                                    cx.map_ast_with_parent(AstNode::EventExpr(expr), node_id),
-                                )
-                            }
-                        },
-                        _ => {
-                            debug!("{:#?}", stmt);
-                            bug_span!(
-                                stmt.span(),
-                                cx,
-                                "lowering of timing control {} to hir not implemented",
-                                stmt
-                            );
-                        }
-                    };
-                    hir::StmtKind::Timed {
-                        control,
-                        stmt: cx.map_ast_with_parent(AstNode::Stmt(inner_stmt), node_id),
-                    }
-                }
-                ast::IfStmt {
-                    ref cond,
-                    ref main_stmt,
-                    ref else_stmt,
-                    ..
-                } => hir::StmtKind::If {
-                    cond: cx.map_ast_with_parent(AstNode::Expr(cond), node_id),
-                    main_stmt: cx.map_ast_with_parent(AstNode::Stmt(main_stmt), node_id),
-                    else_stmt: else_stmt
-                        .as_ref()
-                        .map(|else_stmt| cx.map_ast_with_parent(AstNode::Stmt(else_stmt), node_id)),
-                },
-                ast::ExprStmt(ref expr) => {
-                    hir::StmtKind::Expr(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
-                }
-                ast::ForeverStmt(ref body) => hir::StmtKind::Loop {
-                    kind: hir::LoopKind::Forever,
-                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
-                },
-                ast::RepeatStmt(ref count, ref body) => hir::StmtKind::Loop {
-                    kind: hir::LoopKind::Repeat(
-                        cx.map_ast_with_parent(AstNode::Expr(count), node_id),
-                    ),
-                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
-                },
-                ast::WhileStmt(ref cond, ref body) => hir::StmtKind::Loop {
-                    kind: hir::LoopKind::While(
-                        cx.map_ast_with_parent(AstNode::Expr(cond), node_id),
-                    ),
-                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
-                },
-                ast::DoStmt(ref body, ref cond) => hir::StmtKind::Loop {
-                    kind: hir::LoopKind::Do(cx.map_ast_with_parent(AstNode::Expr(cond), node_id)),
-                    body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
-                },
-                ast::ForStmt(ref init, ref cond, ref step, ref body) => {
-                    let init = cx.map_ast_with_parent(AstNode::Stmt(init), node_id);
-                    let cond = cx.map_ast_with_parent(AstNode::Expr(cond), init);
-                    let step = cx.map_ast_with_parent(AstNode::Expr(step), init);
-                    hir::StmtKind::Loop {
-                        kind: hir::LoopKind::For(init, cond, step),
-                        body: cx.map_ast_with_parent(AstNode::Stmt(body), init),
-                    }
-                }
-                ast::VarDeclStmt(ref decls) => {
-                    let mut stmts = vec![];
-                    let parent = cx.parent_node_id(node_id).unwrap();
-                    let rib = alloc_var_decl(cx, decls, parent, &mut stmts);
-                    hir::StmtKind::InlineGroup { stmts, rib }
-                }
-                ast::NonblockingAssignStmt {
-                    ref lhs,
-                    ref rhs,
-                    ref delay,
-                    ..
-                } => hir::StmtKind::Assign {
-                    lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
-                    rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
-                    kind: match *delay {
-                        Some(ref dc) => hir::AssignKind::NonblockDelay(
-                            cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
-                        ),
-                        None => hir::AssignKind::Nonblock,
-                    },
-                },
-                ast::CaseStmt {
-                    ref expr,
-                    mode: ast::CaseMode::Normal,
-                    ref items,
-                    kind,
-                    ..
-                } => {
-                    let expr = cx.map_ast_with_parent(AstNode::Expr(expr), node_id);
-                    let mut ways = vec![];
-                    let mut default = None;
-                    for item in items {
-                        match *item {
-                            ast::CaseItem::Default(ref stmt) => {
-                                if default.is_none() {
-                                    default =
-                                        Some(cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id));
-                                } else {
-                                    cx.emit(
-                                        DiagBuilder2::error("multiple default cases")
-                                            .span(stmt.human_span()),
-                                    );
-                                }
-                            }
-                            ast::CaseItem::Expr(ref exprs, ref stmt) => ways.push((
-                                exprs
-                                    .iter()
-                                    .map(|expr| {
-                                        cx.map_ast_with_parent(AstNode::Expr(expr), node_id)
-                                    })
-                                    .collect(),
-                                cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id),
-                            )),
-                        }
-                    }
-                    hir::StmtKind::Case {
-                        expr,
-                        ways,
-                        default,
-                        kind,
-                    }
-                }
-                ast::AssertionStmt { .. } => {
-                    cx.emit(
-                        DiagBuilder2::warning("unsupported: immediate assertion; ignored")
-                            .span(stmt.human_span()),
-                    );
-                    hir::StmtKind::Null
-                }
-                _ => {
-                    error!("{:#?}", stmt);
-                    bug_span!(
-                        stmt.span(),
-                        cx,
-                        "lowering of {:?} to hir not implemented",
-                        stmt
-                    );
-                }
-            };
-            let hir = hir::Stmt {
-                id: node_id,
-                label: stmt.label.map(|n| Spanned::new(n, stmt.span)), // this is horrible...
-                span: stmt.span,
-                kind: kind,
-            };
-            Ok(HirNode::Stmt(cx.arena().alloc_hir(hir)))
-        }
+        AstNode::Stmt(stmt) => cx.hir_of_stmt(Ref(stmt)).map(HirNode::Stmt),
         AstNode::EventExpr(expr) => {
             let mut events = vec![];
             lower_event_expr(cx, expr, node_id, &mut events, &mut vec![])?;
@@ -1347,6 +1164,192 @@ fn lower_expr_inner<'gcx>(
                 cx,
                 "lowering of {:?} to hir not implemented",
                 expr
+            );
+        }
+    })
+}
+
+/// Lower an AST statement to HIR.
+#[moore_derive::query]
+pub(crate) fn hir_of_stmt<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, ast::Stmt<'a>>,
+) -> Result<&'a hir::Stmt> {
+    let kind = lower_stmt_inner(cx, ast)?;
+    let hir = hir::Stmt {
+        id: ast.id(),
+        label: ast.label.map(|n| Spanned::new(n, ast.span)), // this is horrible...
+        span: ast.span,
+        kind: kind,
+    };
+    Ok(cx.arena().alloc_hir(hir))
+}
+
+fn lower_stmt_inner<'a>(cx: &impl Context<'a>, stmt: &'a ast::Stmt<'a>) -> Result<hir::StmtKind> {
+    let node_id = stmt.id();
+    Ok(match stmt.kind {
+        ast::NullStmt => hir::StmtKind::Null,
+        ast::SequentialBlock(ref stmts) => {
+            let mut next_rib = node_id;
+            hir::StmtKind::Block(
+                stmts
+                    .iter()
+                    .map(|stmt| {
+                        let id = cx.map_ast_with_parent(AstNode::Stmt(stmt), next_rib);
+                        next_rib = id;
+                        id
+                    })
+                    .collect(),
+            )
+        }
+        ast::BlockingAssignStmt {
+            ref lhs,
+            ref rhs,
+            op,
+        } => hir::StmtKind::Assign {
+            lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+            rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+            kind: hir::AssignKind::Block(op),
+        },
+        ast::TimedStmt(ref control, ref inner_stmt) => {
+            let control = match *control {
+                ast::TimingControl::Delay(ref dc) => hir::TimingControl::Delay(
+                    cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
+                ),
+                ast::TimingControl::Event(ref ec) => match ec.data {
+                    ast::EventControlData::Implicit => hir::TimingControl::ImplicitEvent,
+                    ast::EventControlData::Expr(ref expr) => hir::TimingControl::ExplicitEvent(
+                        cx.map_ast_with_parent(AstNode::EventExpr(expr), node_id),
+                    ),
+                },
+                _ => {
+                    debug!("{:#?}", stmt);
+                    bug_span!(
+                        stmt.span(),
+                        cx,
+                        "lowering of timing control {} to hir not implemented",
+                        stmt
+                    );
+                }
+            };
+            hir::StmtKind::Timed {
+                control,
+                stmt: cx.map_ast_with_parent(AstNode::Stmt(inner_stmt), node_id),
+            }
+        }
+        ast::IfStmt {
+            ref cond,
+            ref main_stmt,
+            ref else_stmt,
+            ..
+        } => hir::StmtKind::If {
+            cond: cx.map_ast_with_parent(AstNode::Expr(cond), node_id),
+            main_stmt: cx.map_ast_with_parent(AstNode::Stmt(main_stmt), node_id),
+            else_stmt: else_stmt
+                .as_ref()
+                .map(|else_stmt| cx.map_ast_with_parent(AstNode::Stmt(else_stmt), node_id)),
+        },
+        ast::ExprStmt(ref expr) => {
+            hir::StmtKind::Expr(cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
+        }
+        ast::ForeverStmt(ref body) => hir::StmtKind::Loop {
+            kind: hir::LoopKind::Forever,
+            body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+        },
+        ast::RepeatStmt(ref count, ref body) => hir::StmtKind::Loop {
+            kind: hir::LoopKind::Repeat(cx.map_ast_with_parent(AstNode::Expr(count), node_id)),
+            body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+        },
+        ast::WhileStmt(ref cond, ref body) => hir::StmtKind::Loop {
+            kind: hir::LoopKind::While(cx.map_ast_with_parent(AstNode::Expr(cond), node_id)),
+            body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+        },
+        ast::DoStmt(ref body, ref cond) => hir::StmtKind::Loop {
+            kind: hir::LoopKind::Do(cx.map_ast_with_parent(AstNode::Expr(cond), node_id)),
+            body: cx.map_ast_with_parent(AstNode::Stmt(body), node_id),
+        },
+        ast::ForStmt(ref init, ref cond, ref step, ref body) => {
+            let init = cx.map_ast_with_parent(AstNode::Stmt(init), node_id);
+            let cond = cx.map_ast_with_parent(AstNode::Expr(cond), init);
+            let step = cx.map_ast_with_parent(AstNode::Expr(step), init);
+            hir::StmtKind::Loop {
+                kind: hir::LoopKind::For(init, cond, step),
+                body: cx.map_ast_with_parent(AstNode::Stmt(body), init),
+            }
+        }
+        ast::VarDeclStmt(ref decls) => {
+            let mut stmts = vec![];
+            let parent = cx.parent_node_id(node_id).unwrap();
+            let rib = alloc_var_decl(cx, decls, parent, &mut stmts);
+            hir::StmtKind::InlineGroup { stmts, rib }
+        }
+        ast::NonblockingAssignStmt {
+            ref lhs,
+            ref rhs,
+            ref delay,
+            ..
+        } => hir::StmtKind::Assign {
+            lhs: cx.map_ast_with_parent(AstNode::Expr(lhs), node_id),
+            rhs: cx.map_ast_with_parent(AstNode::Expr(rhs), node_id),
+            kind: match *delay {
+                Some(ref dc) => hir::AssignKind::NonblockDelay(
+                    cx.map_ast_with_parent(AstNode::Expr(&dc.expr), node_id),
+                ),
+                None => hir::AssignKind::Nonblock,
+            },
+        },
+        ast::CaseStmt {
+            ref expr,
+            mode: ast::CaseMode::Normal,
+            ref items,
+            kind,
+            ..
+        } => {
+            let expr = cx.map_ast_with_parent(AstNode::Expr(expr), node_id);
+            let mut ways = vec![];
+            let mut default = None;
+            for item in items {
+                match *item {
+                    ast::CaseItem::Default(ref stmt) => {
+                        if default.is_none() {
+                            default = Some(cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id));
+                        } else {
+                            cx.emit(
+                                DiagBuilder2::error("multiple default cases")
+                                    .span(stmt.human_span()),
+                            );
+                        }
+                    }
+                    ast::CaseItem::Expr(ref exprs, ref stmt) => ways.push((
+                        exprs
+                            .iter()
+                            .map(|expr| cx.map_ast_with_parent(AstNode::Expr(expr), node_id))
+                            .collect(),
+                        cx.map_ast_with_parent(AstNode::Stmt(stmt), node_id),
+                    )),
+                }
+            }
+            hir::StmtKind::Case {
+                expr,
+                ways,
+                default,
+                kind,
+            }
+        }
+        ast::AssertionStmt { .. } => {
+            cx.emit(
+                DiagBuilder2::warning("unsupported: immediate assertion; ignored")
+                    .span(stmt.human_span()),
+            );
+            hir::StmtKind::Null
+        }
+        _ => {
+            error!("{:#?}", stmt);
+            bug_span!(
+                stmt.span(),
+                cx,
+                "lowering of {:?} to hir not implemented",
+                stmt
             );
         }
     })

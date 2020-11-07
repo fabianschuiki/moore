@@ -2229,13 +2229,36 @@ pub(crate) fn type_context<'a>(
     Ref(onto): Ref<'a, ast::Expr<'a>>,
     env: ParamEnv,
 ) -> Option<TypeContext<'a>> {
+    let parent = onto.get_parent().unwrap();
+
+    // NEW: Handle query based on parent AST.
+    match parent.as_all() {
+        ast::AllNode::Expr(parent) => {
+            return type_context_imposed_by_expr(
+                cx,
+                onto.id(),
+                cx.hir_of_expr(Ref(parent)).ok()?,
+                env,
+            )
+        }
+        ast::AllNode::Stmt(parent) => {
+            return type_context_imposed_by_stmt(
+                cx,
+                onto.id(),
+                cx.hir_of_stmt(Ref(parent)).ok()?,
+                env,
+            )
+        }
+        _ => (),
+    }
+
+    // OLD: Handle query based on parent HIR.
     let onto = onto.id();
-    let hir_id = cx.parent_node_id(onto).unwrap();
-    let hir = match cx.hir_of(hir_id) {
+    let parent_hir = match cx.hir_of(parent.id()) {
         Ok(x) => x,
         Err(()) => return None,
     };
-    match hir {
+    match parent_hir {
         HirNode::Expr(e) => type_context_imposed_by_expr(cx, onto, e, env),
         HirNode::Stmt(s) => type_context_imposed_by_stmt(cx, onto, s, env),
         HirNode::Assign(a) => {
@@ -2257,7 +2280,7 @@ pub(crate) fn type_context<'a>(
             let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
             if !ty.is_implicit() || v.kind != ast::VarKind::Var {
                 Some(
-                    cx.type_of(hir_id, env)
+                    cx.type_of(parent.id(), env)
                         .unwrap_or(UnpackedType::make_error())
                         .into(),
                 )
@@ -2269,7 +2292,7 @@ pub(crate) fn type_context<'a>(
             let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
             if !ty.is_implicit() {
                 Some(
-                    cx.type_of(hir_id, env)
+                    cx.type_of(parent.id(), env)
                         .unwrap_or(UnpackedType::make_error())
                         .into(),
                 )
