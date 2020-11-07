@@ -493,19 +493,25 @@ pub trait Context<'gcx>: DiagEmitter + QueryDatabase<'gcx> + ty::HasTypeStorage<
             Some(node) => return Ok(node),
             None => (),
         }
-        if let Some(&span) = self.gcx().node_id_to_span.borrow().get(&node_id) {
-            self.emit(
-                DiagBuilder2::bug(format!("no ast node for `{}` in the map", span.extract()))
-                    .span(span),
-            );
-            error!("Offending node: {:?}", node_id);
-        } else {
-            self.emit(DiagBuilder2::bug(format!(
-                "no ast node for {:?} in the map",
-                node_id
-            )));
-        }
-        panic!("Other map contains: {:?}", other);
+        self.emit(
+            DiagBuilder2::bug(format!(
+                "no ast node for `{}` in the map",
+                other.span().extract()
+            ))
+            .span(other.span())
+            .add_note(format!("Offending node: {:#1?}", other))
+            .add_note(format!("Required here:\n{:?}", {
+                let v: Vec<_> = backtrace::Backtrace::new()
+                    .frames()
+                    .iter()
+                    .cloned()
+                    .skip(1)
+                    .take(8)
+                    .collect();
+                backtrace::Backtrace::from(v)
+            })),
+        );
+        panic!("no ast node");
     }
 
     /// Register an `ast::AnyNode` for later retrieval by ID.
