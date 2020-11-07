@@ -844,16 +844,18 @@ impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
         }
 
         // Report the type context.
-        if let Some(ty) = self.0.type_context(id, self.1) {
-            println!(
-                "{}: type_context({}) = {}",
-                line,
-                ext,
-                match ty {
-                    svlog::typeck::TypeContext::Type(ty) => format!("{}", ty),
-                    svlog::typeck::TypeContext::Bool => "<bool>".to_string(),
-                }
-            );
+        if let Some(expr) = self.0.ast_for_id(id).as_all().get_expr() {
+            if let Some(ty) = self.0.type_context(svlog::Ref(expr), self.1) {
+                println!(
+                    "{}: type_context({}) = {}",
+                    line,
+                    ext,
+                    match ty {
+                        svlog::typeck::TypeContext::Type(ty) => format!("{}", ty),
+                        svlog::typeck::TypeContext::Bool => "<bool>".to_string(),
+                    }
+                );
+            }
         }
     }
 }

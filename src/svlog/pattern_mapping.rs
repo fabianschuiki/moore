@@ -54,7 +54,7 @@ pub(crate) fn map_pattern<'a>(
     env: ParamEnv,
 ) -> Result<Arc<PatternMapping<'a>>> {
     // First determine the type the pattern will have.
-    let ty = cx.need_type_context(expr.id, env);
+    let ty = cx.need_type_context(Ref(expr), env);
     if ty.is_error() {
         return Err(());
     }

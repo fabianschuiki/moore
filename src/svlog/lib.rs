@@ -173,7 +173,7 @@ mod crate_prelude {
 /// This reference is useful when querying the compiler database for information
 /// about a node. It compares the reference *by pointer address*, thus allowing
 /// for pessimistic compiler queries.
-pub struct Ref<'a, T: 'a + ?Sized>(&'a T);
+pub struct Ref<'a, T: 'a + ?Sized>(pub &'a T);
 
 impl<'a, T: ?Sized> Copy for Ref<'a, T> {}
 
