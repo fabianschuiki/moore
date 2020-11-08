@@ -1759,6 +1759,8 @@ pub enum SubroutineKind {
 
 /// A function or task port.
 ///
+/// This is the `inout logic [7:0]` part in `inout logic [7:0] x[3]`.
+///
 /// Since the grammar allows for both omitting the type and omitting the port
 /// name (the latter only if the subroutine has no body, i.e. is a prototype),
 /// there is an ambiguity when just a name is provided: `foo` may be a port with
@@ -1777,11 +1779,17 @@ pub struct SubroutinePort<'a> {
     pub ty_name: Ambiguous<(Type<'a>, Option<SubroutinePortName<'a>>)>,
 }
 
+/// A single name of a function or task port.
+///
+/// This is the `x[3]` part in `inout logic [7:0] x[3]`.
 #[moore_derive::visit]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubroutinePortName<'a> {
+    /// The name of the port.
     pub name: Spanned<Name>,
+    /// The unpacked dimensions of the port.
     pub dims: Vec<TypeDim<'a>>,
+    /// The optional default value of the port.
     pub expr: Option<Expr<'a>>,
 }
 

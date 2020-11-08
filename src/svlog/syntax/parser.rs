@@ -3306,11 +3306,7 @@ fn parse_subroutine_prototype_tail<'n>(
                         None
                     };
 
-                    Some(SubroutinePortName {
-                        name: name,
-                        dims: dims,
-                        expr: expr,
-                    })
+                    Some(SubroutinePortName { name, dims, expr })
                 } else {
                     None
                 };
