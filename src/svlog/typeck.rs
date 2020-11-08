@@ -390,6 +390,39 @@ pub(crate) fn type_of_inst<'a>(
     apply_unpacked_dims(cx, ty, &details.hir.ast.dims, env, details.hir.ast.span())
 }
 
+/// Determine the type of a subroutine port.
+#[moore_derive::query]
+pub(crate) fn type_of_subroutine_port<'a>(
+    cx: &impl Context<'a>,
+    ast: &'a ast::SubroutinePort<'a>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    // Get parent port and subroutine decl.
+    let prototype = ast
+        .get_parent()
+        .unwrap()
+        .as_all()
+        .get_subroutine_prototype()
+        .expect("parent not a SubroutinePrototype");
+    let decl = prototype
+        .get_parent()
+        .unwrap()
+        .as_all()
+        .get_subroutine_decl()
+        .expect("parent not a SubroutineDecl");
+
+    // Find the canonicalized version of this subroutine port.
+    let func_args = cx.canonicalize_func_args(Ref(decl));
+    let arg = func_args
+        .args
+        .iter()
+        .find(|a| a.ast.as_ptr() == ast.as_ptr())
+        .expect("no corresponding canonicalized arg");
+
+    // Package everything up in a type.
+    cx.unpacked_type_from_ast(Ref(arg.ty), Ref(arg.unpacked_dims), env, None)
+}
+
 /// Map an AST node to the type it represents.
 ///
 /// Returns `None` if the given AST node does not evaluate to a type.
@@ -2248,6 +2281,9 @@ pub(crate) fn type_context<'a>(
                 cx.hir_of_stmt(Ref(parent)).ok()?,
                 env,
             )
+        }
+        ast::AllNode::SubroutinePort(port) => {
+            return Some(cx.type_of_subroutine_port(port, env).into());
         }
         _ => (),
     }
