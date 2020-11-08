@@ -303,6 +303,7 @@ pub(crate) fn hir_of<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<HirNo
             Ok(HirNode::EnumVariant(cx.arena().alloc_hir(hir)))
         }
         AstNode::Import(import) => unreachable!("import should never be lowered: {:#?}", import),
+        AstNode::CallArg(x) => Ok(HirNode::CallArg(x)),
         AstNode::Any(ast) => match ast.as_all() {
             ast::AllNode::SubroutinePort(x) => Ok(HirNode::SubroutinePort(x)),
             _ => {

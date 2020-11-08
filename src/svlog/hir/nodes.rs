@@ -34,6 +34,7 @@ pub enum HirNode<'a> {
     Package(&'a Package),
     EnumVariant(&'a EnumVariant),
     SubroutinePort(&'a ast::SubroutinePort<'a>),
+    CallArg(&'a ast::CallArg<'a>),
 }
 
 impl<'hir> HasSpan for HirNode<'hir> {
@@ -60,6 +61,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Package(x) => x.span(),
             HirNode::EnumVariant(x) => x.span(),
             HirNode::SubroutinePort(x) => x.span(),
+            HirNode::CallArg(x) => x.span(),
         }
     }
 
@@ -86,6 +88,7 @@ impl<'hir> HasSpan for HirNode<'hir> {
             HirNode::Package(x) => x.human_span(),
             HirNode::EnumVariant(x) => x.human_span(),
             HirNode::SubroutinePort(x) => x.human_span(),
+            HirNode::CallArg(x) => x.human_span(),
         }
     }
 }
@@ -114,6 +117,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Package(x) => x.desc(),
             HirNode::EnumVariant(x) => x.desc(),
             HirNode::SubroutinePort(..) => "subroutine port",
+            HirNode::CallArg(..) => "call argument",
         }
     }
 
@@ -140,6 +144,7 @@ impl<'hir> HasDesc for HirNode<'hir> {
             HirNode::Package(x) => x.desc_full(),
             HirNode::EnumVariant(x) => x.desc_full(),
             HirNode::SubroutinePort(x) => x.to_string(),
+            HirNode::CallArg(x) => x.to_string(),
         }
     }
 }
