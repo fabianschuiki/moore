@@ -304,6 +304,7 @@ pub(crate) fn hir_of<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<HirNo
         }
         AstNode::Import(import) => unreachable!("import should never be lowered: {:#?}", import),
         AstNode::Any(ast) => match ast.as_all() {
+            ast::AllNode::SubroutinePort(x) => Ok(HirNode::SubroutinePort(x)),
             _ => {
                 error!("{:#?}", ast);
                 bug_span!(ast.span(), cx, "lowering of {} to hir not implemented", ast);
