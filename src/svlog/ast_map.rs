@@ -105,6 +105,10 @@ pub enum AstNode<'ast> {
     Interface(&'ast ast::Interface<'ast>),
     /// A call argument.
     CallArg(&'ast ast::CallArg<'ast>),
+    /// Any other AST node. **Note:** This is the way to go. All of the above
+    /// shall disappear step-by-step, until we are left with a trivial `AstNode`
+    /// which can then me removed entirely.
+    Any(&'ast dyn ast::AnyNode<'ast>),
 }
 
 impl<'a> AstNode<'a> {
@@ -138,6 +142,7 @@ impl<'a> AstNode<'a> {
             AstNode::SubroutineDecl(x) => Some(x),
             AstNode::Interface(x) => Some(x),
             AstNode::CallArg(x) => Some(x),
+            AstNode::Any(x) => Some(x),
             _ => None,
         }
     }
@@ -196,7 +201,7 @@ impl<'a> AstNode<'a> {
             AllNode::SubroutineDecl(x) => Box::new(Some(AstNode::SubroutineDecl(x)).into_iter()),
             AllNode::Interface(x) => Box::new(Some(AstNode::Interface(x)).into_iter()),
             AllNode::CallArg(x) => Box::new(Some(AstNode::CallArg(x)).into_iter()),
-            _ => Box::new(None.into_iter()),
+            x => Box::new(Some(AstNode::Any(x.as_any())).into_iter()),
         }
     }
 }
@@ -231,6 +236,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::SubroutineDecl(x) => x.span(),
             AstNode::Interface(x) => x.span(),
             AstNode::CallArg(x) => x.span(),
+            AstNode::Any(x) => x.span(),
         }
     }
 
@@ -263,6 +269,7 @@ impl<'ast> HasSpan for AstNode<'ast> {
             AstNode::SubroutineDecl(x) => x.human_span(),
             AstNode::Interface(x) => x.human_span(),
             AstNode::CallArg(x) => x.human_span(),
+            AstNode::Any(x) => x.human_span(),
         }
     }
 }
@@ -298,6 +305,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::SubroutineDecl(x) => "subroutine declaration",
             AstNode::Interface(x) => "interface",
             AstNode::CallArg(x) => "call argument",
+            AstNode::Any(x) => "<AST node>",
         }
     }
 
@@ -330,6 +338,7 @@ impl<'ast> HasDesc for AstNode<'ast> {
             AstNode::SubroutineDecl(x) => x.to_definite_string(),
             AstNode::Interface(x) => x.to_definite_string(),
             AstNode::CallArg(x) => x.to_definite_string(),
+            AstNode::Any(x) => x.to_string(),
         }
     }
 }

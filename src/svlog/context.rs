@@ -725,6 +725,9 @@ impl<'a, 'b> ast::Visitor<'a> for AstMapRegistrator<'a, 'b> {
         self.cx.gcx().ast_map2.borrow_mut().insert(node.id(), node);
 
         for n in AstNode::from_all(node.as_all()) {
+            if let AstNode::Any(_) = n {
+                continue;
+            }
             let parent = n.get_any().unwrap().get_parent().unwrap();
             let parent = if let Some(kind) = parent.as_all().get_type_kind() {
                 kind.get_parent().unwrap()

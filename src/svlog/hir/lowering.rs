@@ -303,9 +303,20 @@ pub(crate) fn hir_of<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<HirNo
             Ok(HirNode::EnumVariant(cx.arena().alloc_hir(hir)))
         }
         AstNode::Import(import) => unreachable!("import should never be lowered: {:#?}", import),
+        AstNode::Any(ast) => match ast.as_all() {
+            _ => {
+                error!("{:#?}", ast);
+                bug_span!(ast.span(), cx, "lowering of {} to hir not implemented", ast);
+            }
+        },
         _ => {
             error!("{:#?}", ast);
-            cx.unimp_msg("lowering of", &ast)
+            bug_span!(
+                ast.span(),
+                cx,
+                "lowering of {} to hir not implemented",
+                ast.desc_full()
+            );
         }
     }
 }
