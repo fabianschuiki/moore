@@ -256,6 +256,11 @@ impl<'a> Print for Rvalue<'a> {
                 op,
                 ctx.print(outer, rhs)
             )?,
+            RvalueKind::Call {
+                target,
+                ref inputs,
+                ref outputs,
+            } => write!(inner, "Call {} {:?} {:?}", target, inputs, outputs)?,
             RvalueKind::Error => write!(inner, "<error>")?,
         }
         write!(inner, " : {}", self.ty)?;
@@ -416,6 +421,14 @@ pub enum RvalueKind<'a> {
     },
     /// Convert an integer to a time value by applying the currently active timescale.
     ApplyTimescale(&'a Rvalue<'a>, BigRational),
+    /// A function or task call.
+    Call {
+        /// The called function.
+        #[dont_visit]
+        target: &'a ast::SubroutineDecl<'a>,
+        inputs: Vec<CallInput<'a>>,
+        outputs: Vec<Option<&'a Lvalue<'a>>>,
+    },
     /// An error occurred during lowering.
     Error,
 }
@@ -468,6 +481,9 @@ impl<'a> RvalueKind<'a> {
             } => cond.is_const() && true_value.is_const() && false_value.is_const(),
             RvalueKind::Shift { value, amount, .. } => value.is_const() && amount.is_const(),
             RvalueKind::Assignment { .. } => false,
+            // TODO(fschuiki): This is wrong; function calls *may* be constant
+            // under certain circumstances.
+            RvalueKind::Call { .. } => false,
             RvalueKind::Error => true,
         }
     }
@@ -541,4 +557,14 @@ pub enum StringCompOp {
 pub enum ShiftOp {
     Left,
     Right,
+}
+
+/// A call input argument.
+#[moore_derive::visit_without_foreach]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallInput<'a> {
+    /// The argument is passed by value.
+    ByValue(&'a Rvalue<'a>),
+    /// The argument is passed by reference.
+    ByRef(&'a Lvalue<'a>),
 }

@@ -6,7 +6,7 @@ use crate::crate_prelude::*;
 use crate::{
     call_mapping::CallArgSource,
     hir::HirNode,
-    mir::{lvalue::Lvalue, rvalue::*},
+    mir::rvalue::*,
     syntax::ast::BasicNode,
     ty::{SbvType, UnpackedType},
     typeck::{CastOp, CastType},
@@ -505,7 +505,7 @@ fn lower_expr_inner<'gcx>(
         }
 
         hir::ExprKind::FunctionCall(target, args) => {
-            Ok(lower_function_call(&builder, target, args))
+            Ok(lower_function_call(&builder, ty, target, args))
         }
 
         hir::ExprKind::Assign { op, lhs, rhs } => Ok(lower_assign(&builder, ty, op, lhs, rhs)),
@@ -1677,6 +1677,7 @@ fn lower_assign<'a>(
 /// Lower a function call.
 fn lower_function_call<'a>(
     builder: &Builder<'_, impl Context<'a>>,
+    retty: &'a UnpackedType<'a>,
     target: &'a ast::SubroutineDecl<'a>,
     call_args: &'a [ast::CallArg<'a>],
 ) -> &'a Rvalue<'a> {
@@ -1734,18 +1735,18 @@ fn lower_function_call<'a>(
         trace!("  - {:?}", output);
     }
 
-    bug_span!(
-        builder.span,
-        cx,
-        "lowering of function calls to mir not yet supported",
-    );
-}
+    // TODO(fschuiki): Build the call, and then dissect the returned struct
+    // and create `Assignment` nodes to the `Some(..)` entries in `outputs`.
+    // Then extract the actual return type and produce that as the result of the
+    // function.
 
-/// A call input argument.
-#[derive(Debug)]
-pub enum CallInput<'a> {
-    /// The argument is passed by value.
-    ByValue(&'a Rvalue<'a>),
-    /// The argument is passed by reference.
-    ByRef(&'a Lvalue<'a>),
+    // Package things up into a call.
+    builder.build(
+        retty, // TODO(fschuiki): This should be an aggregate with the retty and the inout/output arguments.
+        RvalueKind::Call {
+            target,
+            inputs,
+            outputs,
+        },
+    )
 }

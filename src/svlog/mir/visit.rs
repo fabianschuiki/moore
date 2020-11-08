@@ -47,6 +47,14 @@ impl<'a, T: WalkVisitor<'a>> WalkVisitor<'a> for Vec<T> {
     }
 }
 
+impl<'a, T: WalkVisitor<'a>> WalkVisitor<'a> for Option<T> {
+    fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
+        for x in self {
+            x.walk(visitor);
+        }
+    }
+}
+
 impl<'a, K, T: WalkVisitor<'a>> WalkVisitor<'a> for HashMap<K, T> {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
         for x in self.values() {
