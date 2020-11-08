@@ -1,7 +1,7 @@
 // Copyright (c) 2016-2020 Fabian Schuiki
 
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote};
 use syn::DeriveInput;
 
 pub(crate) fn accept_visitor(input: TokenStream, with_foreach: bool) -> TokenStream {
@@ -79,9 +79,7 @@ pub(crate) fn accept_visitor(input: TokenStream, with_foreach: bool) -> TokenStr
 
 /// Check if a field has the `#[dont_visit]` attribute.
 fn has_dont_visit(attrs: &[syn::Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|attr| attr.to_token_stream().to_string() == "# [dont_visit]")
+    attrs.iter().any(|attr| attr.path.is_ident("dont_visit"))
 }
 
 /// Generate the code to visit fields in a struct-like item.
