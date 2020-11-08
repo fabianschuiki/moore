@@ -30,6 +30,7 @@
 
 use crate::crate_prelude::*;
 use crate::{
+    call_mapping::CallArgSource,
     common::arenas::Alloc,
     hir::HirNode,
     port_list,
@@ -421,6 +422,19 @@ pub(crate) fn type_of_subroutine_port<'a>(
 
     // Package everything up in a type.
     cx.unpacked_type_from_ast(Ref(arg.ty), Ref(arg.unpacked_dims), env, None)
+}
+
+/// Determine the type of a function argument.
+#[moore_derive::query]
+pub(crate) fn type_of_func_arg<'a>(
+    cx: &impl Context<'a>,
+    arg: Ref<'a, func_args::FuncArg<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    match arg.ast.as_all() {
+        ast::AllNode::SubroutinePort(port) => cx.type_of_subroutine_port(port, env),
+        _ => bug_span!(arg.span, cx, "unsupported func arg decl {:#?}", arg.ast),
+    }
 }
 
 /// Map an AST node to the type it represents.
@@ -2284,6 +2298,27 @@ pub(crate) fn type_context<'a>(
         }
         ast::AllNode::SubroutinePort(port) => {
             return Some(cx.type_of_subroutine_port(port, env).into());
+        }
+        ast::AllNode::CallArg(arg) => {
+            let call = arg.get_parent().unwrap().as_all().get_expr().unwrap();
+            let call = cx.hir_of_expr(Ref(call)).ok()?;
+            let (target, call_args) = match &call.kind {
+                hir::ExprKind::FunctionCall(target, args) => (target, args),
+                _ => bug_span!(
+                    arg.span(),
+                    cx,
+                    "call arg parent must be a call, got {:#?}",
+                    call
+                ),
+            };
+            // TODO(fschuiki): This should rather be some `call_details` query.
+            let decl_args = cx.canonicalize_func_args(Ref(target));
+            let mapping = cx.call_mapping(Ref(decl_args), Ref(call_args), call.span);
+            let mapped_arg = mapping
+                .args
+                .iter()
+                .find(|x| x.call == CallArgSource::Call(arg))?;
+            return Some(cx.type_of_func_arg(Ref(mapped_arg.decl), env).into());
         }
         _ => (),
     }

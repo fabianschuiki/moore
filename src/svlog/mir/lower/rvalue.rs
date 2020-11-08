@@ -1682,6 +1682,7 @@ fn lower_function_call<'a>(
 ) -> &'a Rvalue<'a> {
     trace!("Lowering call `{}`", builder.span.extract());
     let cx = builder.cx;
+    // TODO(fschuiki): This should rather be some `call_details` query.
     let decl_args = cx.canonicalize_func_args(Ref(target));
     let mapping = cx.call_mapping(Ref(decl_args), Ref(call_args), builder.span);
     if mapping.is_error() {
