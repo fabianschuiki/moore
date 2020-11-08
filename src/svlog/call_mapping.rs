@@ -62,6 +62,26 @@ pub enum CallArgSource<'a> {
     Default(&'a ast::Expr<'a>),
 }
 
+impl Eq for CallArgSource<'_> {}
+impl PartialEq for CallArgSource<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (*self, *other) {
+            (Self::Call(a), Self::Call(b)) => std::ptr::eq(a, b),
+            (Self::Default(a), Self::Default(b)) => std::ptr::eq(a, b),
+            _ => false,
+        }
+    }
+}
+
+impl std::hash::Hash for CallArgSource<'_> {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        match *self {
+            Self::Call(x) => std::ptr::hash(x, h),
+            Self::Default(x) => std::ptr::hash(x, h),
+        }
+    }
+}
+
 /// Map the arguments of a call to the arguments of the callee declaration.
 #[moore_derive::query]
 pub(crate) fn call_mapping<'a>(
