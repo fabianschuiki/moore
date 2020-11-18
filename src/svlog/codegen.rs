@@ -1867,7 +1867,25 @@ where
                 "runtime int-to-time conversion not implemented"
             ),
 
-            mir::RvalueKind::Call { .. } => bug_span!(mir.span, self.cx, "calls not implemented"),
+            mir::RvalueKind::Call {
+                bare,
+                result,
+                ref post_assigns,
+            } => {
+                self.emit_mir_rvalue(bare)?;
+                for pa in post_assigns {
+                    let simplified = self.mir_simplify_assignment(Ref(pa));
+                    for assign in simplified {
+                        let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                        let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
+                        self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
+                    }
+                }
+                self.emit_mir_rvalue(result)
+            }
+            mir::RvalueKind::BareCall { .. } => {
+                bug_span!(mir.span, self.cx, "calls not implemented")
+            }
 
             // Propagate tombstones.
             mir::RvalueKind::Error => return Err(()),

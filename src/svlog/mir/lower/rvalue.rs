@@ -1735,18 +1735,32 @@ fn lower_function_call<'a>(
         trace!("  - {:?}", output);
     }
 
-    // TODO(fschuiki): Build the call, and then dissect the returned struct
-    // and create `Assignment` nodes to the `Some(..)` entries in `outputs`.
-    // Then extract the actual return type and produce that as the result of the
-    // function.
+    // Construct the compound return type.
+    let bare_retty = retty; // TODO(fschuiki): Implement this!
+
+    // Build the bare call that will produce an aggregate result of the actual
+    // return value, and the output arguments.
+    let bare = builder.build(
+        bare_retty, // TODO(fschuiki): This should be an aggregate with the retty and the inout/output arguments.
+        RvalueKind::BareCall {
+            target,
+            args: inputs,
+        },
+    );
+
+    // TODO(fschuiki): Dissect the returned struct and create `Assignment` nodes
+    // to the `Some(..)` entries in `outputs`. Then extract the actual return
+    // type and produce that as the result of the function.
+    let result = bare; // TODO(fschuiki): This should be a field in the bare aggregate
+    let post_assigns = vec![]; // TODO(fschuiki): This should be assignments!
 
     // Package things up into a call.
     builder.build(
-        retty, // TODO(fschuiki): This should be an aggregate with the retty and the inout/output arguments.
+        retty,
         RvalueKind::Call {
-            target,
-            inputs,
-            outputs,
+            bare,
+            result,
+            post_assigns,
         },
     )
 }

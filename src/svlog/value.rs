@@ -747,7 +747,9 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
         }
 
         // TODO(fschuiki): Fix this once we support constant function calls.
-        mir::RvalueKind::Call { .. } => cx.intern_value(make_error(mir.ty)),
+        mir::RvalueKind::Call { .. } | mir::RvalueKind::BareCall { .. } => {
+            cx.intern_value(make_error(mir.ty))
+        }
 
         // Propagate tombstones.
         mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),

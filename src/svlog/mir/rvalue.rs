@@ -8,6 +8,7 @@
 use crate::crate_prelude::*;
 use crate::{
     mir::{
+        assign::Assignment,
         lvalue::Lvalue,
         print::{Context, Print},
         visit::{AcceptVisitor, Visitor, WalkVisitor},
@@ -257,10 +258,21 @@ impl<'a> Print for Rvalue<'a> {
                 ctx.print(outer, rhs)
             )?,
             RvalueKind::Call {
+                result,
+                ref post_assigns,
+                ..
+            } => {
+                for pa in post_assigns {
+                    ctx.print(outer, pa);
+                }
+                write!(inner, "{}", ctx.print(outer, result))?;
+            }
+            RvalueKind::BareCall { target, ref args } => write!(
+                inner,
+                "Call {} ({})",
                 target,
-                ref inputs,
-                ref outputs,
-            } => write!(inner, "Call {} {:?} {:?}", target, inputs, outputs)?,
+                ctx.print_comma_separated(outer, args),
+            )?,
             RvalueKind::Error => write!(inner, "<error>")?,
         }
         write!(inner, " : {}", self.ty)?;
@@ -423,11 +435,20 @@ pub enum RvalueKind<'a> {
     ApplyTimescale(&'a Rvalue<'a>, BigRational),
     /// A function or task call.
     Call {
+        /// The bare call.
+        bare: &'a Rvalue<'a>,
+        /// The returned value.
+        result: &'a Rvalue<'a>,
+        /// The post-call assignments for output and inout arguments.
+        post_assigns: Vec<&'a Assignment<'a>>,
+    },
+    /// The core operation of a function or task call.
+    BareCall {
         /// The called function.
         #[dont_visit]
         target: &'a ast::SubroutineDecl<'a>,
-        inputs: Vec<CallInput<'a>>,
-        outputs: Vec<Option<&'a Lvalue<'a>>>,
+        /// The call arguments.
+        args: Vec<CallInput<'a>>,
     },
     /// An error occurred during lowering.
     Error,
@@ -483,7 +504,7 @@ impl<'a> RvalueKind<'a> {
             RvalueKind::Assignment { .. } => false,
             // TODO(fschuiki): This is wrong; function calls *may* be constant
             // under certain circumstances.
-            RvalueKind::Call { .. } => false,
+            RvalueKind::Call { .. } | RvalueKind::BareCall { .. } => false,
             RvalueKind::Error => true,
         }
     }
@@ -567,4 +588,18 @@ pub enum CallInput<'a> {
     ByValue(&'a Rvalue<'a>),
     /// The argument is passed by reference.
     ByRef(&'a Lvalue<'a>),
+}
+
+impl<'a> Print for CallInput<'a> {
+    fn print_context(
+        &self,
+        outer: &mut impl Write,
+        inner: &mut impl Write,
+        ctx: &mut Context,
+    ) -> std::fmt::Result {
+        match self {
+            Self::ByValue(x) => x.print_context(outer, inner, ctx),
+            Self::ByRef(x) => x.print_context(outer, inner, ctx),
+        }
+    }
 }
