@@ -270,7 +270,7 @@ impl<'a> Print for Rvalue<'a> {
             RvalueKind::BareCall { target, ref args } => write!(
                 inner,
                 "Call {} ({})",
-                target,
+                target.prototype.name,
                 ctx.print_comma_separated(outer, args),
             )?,
             RvalueKind::Error => write!(inner, "<error>")?,

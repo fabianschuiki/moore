@@ -684,6 +684,15 @@ impl<'a> PackedType<'a> {
         Some(size)
     }
 
+    /// Check if this is a void type.
+    pub fn is_void(&self) -> bool {
+        let ty = self.resolve_full();
+        match ty.core {
+            PackedCore::Void => ty.dims.is_empty(),
+            _ => false,
+        }
+    }
+
     /// Check if this type is trivially a SBVT.
     pub fn is_simple_bit_vector(&self) -> bool {
         // NOTE: It's important that this does not use resolve_full(), since
@@ -1423,6 +1432,11 @@ impl<'a> UnpackedType<'a> {
             }
         }
         Some(size)
+    }
+
+    /// Check if this is a void type.
+    pub fn is_void(&self) -> bool {
+        self.get_packed().map(|ty| ty.is_void()).unwrap_or(false)
     }
 
     /// Check if this type is trivially a SBVT.

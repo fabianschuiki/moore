@@ -66,6 +66,7 @@ struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<Rc<EmittedModule<'gcx>>>>,
     module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
     interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<HybridType>>,
+    function_defs: HashMap<NodeEnvId, Result<Rc<EmittedFunction>>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -354,7 +355,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Emit the code for a procedure.
-    fn emit_procedure(
+    pub fn emit_procedure(
         &mut self,
         id: NodeId,
         env: ParamEnv,
@@ -764,6 +765,47 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 Err(())
             }
         }
+    }
+
+    /// Emit the code for a function or task.
+    pub fn emit_function(&mut self, id: NodeId, env: ParamEnv) -> Result<Rc<EmittedFunction>> {
+        if let Some(x) = self.tables.function_defs.get(&id.env(env)) {
+            return x.clone();
+        }
+
+        let ast = self.ast_for_id(id).as_all().get_subroutine_decl().unwrap();
+
+        // Create process and entry block.
+        let mut sig = llhd::ir::Signature::new();
+        sig.set_return_type(llhd::void_ty());
+        let mut func = llhd::ir::UnitData::new(
+            llhd::ir::UnitKind::Function,
+            llhd::ir::UnitName::Local(ast.prototype.name.to_string()),
+            sig,
+        );
+        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut func);
+
+        // Create a unit generator that we will use to populate the function
+        // with instructions.
+        let mut gen = UnitGenerator {
+            gen: self,
+            builder: &mut builder,
+            values: &mut Default::default(),
+            interned_consts: Default::default(),
+            interned_lvalues: Default::default(),
+            interned_rvalues: Default::default(),
+            shadows: Default::default(),
+        };
+        let entry_blk = gen.add_nameless_block();
+        gen.builder.append_to(entry_blk);
+        gen.builder.ins().ret();
+
+        // Add the function to the LLHD module and return a handle.
+        let x = Ok(Rc::new(EmittedFunction {
+            unit: self.into.add_unit(func),
+        }));
+        self.tables.function_defs.insert(id.env(env), x.clone());
+        x
     }
 }
 
@@ -1883,8 +1925,29 @@ where
                 }
                 self.emit_mir_rvalue(result)
             }
-            mir::RvalueKind::BareCall { .. } => {
-                bug_span!(mir.span, self.cx, "calls not implemented")
+            mir::RvalueKind::BareCall { target, ref args } => {
+                assert_span!(
+                    mir.ty.is_void(),
+                    mir.span,
+                    self.cx,
+                    "non-void calls not implemented"
+                );
+                assert_span!(
+                    args.is_empty(),
+                    mir.span,
+                    self.cx,
+                    "calls with arguments not implemented"
+                );
+                let func_env = self.default_param_env();
+                let func = self.emit_function(target.id(), func_env)?;
+                let ext_unit = self.builder.add_extern(
+                    self.into.unit(func.unit).name().clone(),
+                    self.into.unit(func.unit).sig().clone(),
+                );
+                let call = self.builder.ins().call(ext_unit, vec![]);
+                // TODO(fschuiki): We actually need a void value placeholder.
+                // Ok(self.builder.inst_result(call))
+                Ok(self.builder.ins().const_time(llhd::TimeValue::zero()))
             }
 
             // Propagate tombstones.
@@ -3306,6 +3369,12 @@ pub struct EmittedProcedure {
     inputs: Vec<AccessedNode>,
     /// The nodes used as lvalues.
     outputs: Vec<AccessedNode>,
+}
+
+/// Result of emitting a function.
+pub struct EmittedFunction {
+    /// The emitted LLHD unit.
+    unit: llhd::ir::UnitId,
 }
 
 /// A module's port interface.
