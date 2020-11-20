@@ -1,5 +1,4 @@
 // RUN: moore %s -e foo
-// IGNORE  part of #168
 
 function void bar;
 endfunction
@@ -7,3 +6,8 @@ endfunction
 module foo;
     initial bar();
 endmodule
+
+// CHECK:      func %bar () void {
+// CHECK-NEXT: 0:
+// CHECK-NEXT:     ret
+// CHECK-NEXT: }

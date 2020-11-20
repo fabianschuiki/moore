@@ -1944,10 +1944,7 @@ where
                     self.into.unit(func.unit).name().clone(),
                     self.into.unit(func.unit).sig().clone(),
                 );
-                let call = self.builder.ins().call(ext_unit, vec![]);
-                // TODO(fschuiki): We actually need a void value placeholder.
-                // Ok(self.builder.inst_result(call))
-                Ok(self.builder.ins().const_time(llhd::TimeValue::zero()))
+                Ok(self.builder.ins().call(ext_unit, vec![]))
             }
 
             // Propagate tombstones.
