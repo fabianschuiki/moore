@@ -217,7 +217,6 @@ pub(crate) fn type_of_port_decl<'a>(
     type_of_varlike(cx, ast_decl, &ast_decl.ty, ast, &ast.dims, env)
 }
 
-
 /// Determine the type of a variable declaration.
 #[moore_derive::query]
 pub(crate) fn type_of_var_decl<'a>(
