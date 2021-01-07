@@ -59,6 +59,7 @@ pub(crate) fn type_of<'a>(
             ast::AllNode::VarDecl(..) => return Ok(cx.type_of_var_decl(Ref(name), env)),
             ast::AllNode::NetDecl(..) => return Ok(cx.type_of_net_decl(Ref(name), env)),
             ast::AllNode::StructMember(..) => return Ok(cx.type_of_struct_member(Ref(name), env)),
+            ast::AllNode::PortDecl(..) => return Ok(cx.type_of_port_decl(Ref(name), env)),
             x => bug_span!(ast.span(), cx, "VarDeclName with weird parent {:?}", x),
         },
         ast::AllNode::ParamValueDecl(x) => return Ok(cx.type_of_value_param(Ref(x), env)),
@@ -199,6 +200,23 @@ pub(crate) fn type_of_ext_port<'a>(
         );
     }
 }
+
+/// Determine the type of a port declaration.
+#[moore_derive::query]
+pub(crate) fn type_of_port_decl<'a>(
+    cx: &impl Context<'a>,
+    Ref(ast): Ref<'a, ast::VarDeclName<'a>>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    let ast_decl = ast
+        .get_parent()
+        .unwrap()
+        .as_all()
+        .get_port_decl()
+        .expect("parent not a PortDecl");
+    type_of_varlike(cx, ast_decl, &ast_decl.ty, ast, &ast.dims, env)
+}
+
 
 /// Determine the type of a variable declaration.
 #[moore_derive::query]
