@@ -706,36 +706,6 @@ pub(super) mod queries {
     query_group! {
         /// A collection of compiler queries.
         pub trait Context<'a>: BaseContext<'a> {
-            /// Determine the local rib that applies to a node.
-            fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
-                type LocalRibQuery;
-                use fn resolver::local_rib;
-            }
-
-            /// Determine the hierarchical rib of a node.
-            fn hierarchical_rib(node_id: NodeId) -> Result<&'a Rib> {
-                type HierarchicalRibQuery;
-                use fn resolver::hierarchical_rib;
-            }
-
-            /// Resolve a name upwards through the ribs.
-            fn resolve_upwards(name: Name, start_at: NodeId) -> Result<Option<NodeId>> {
-                type ResolveUpwardsQuery;
-                use fn resolver::resolve_upwards;
-            }
-
-            /// Resolve a name downwards through the ribs.
-            fn resolve_downwards(name: Name, start_at: NodeId) -> Result<Option<NodeId>> {
-                type ResolveDownwardsQuery;
-                use fn resolver::resolve_downwards;
-            }
-
-            /// Resolve a node to its target.
-            fn resolve_node(node_id: NodeId, env: ParamEnv) -> Result<NodeId> {
-                type ResolveNodeQuery;
-                use fn resolver::resolve_node;
-            }
-
             /// Obtain the details of a struct definition.
             fn struct_def(node_id: NodeId) -> Result<Arc<StructDef>> {
                 type StructDefQuery;
@@ -748,11 +718,6 @@ pub(super) mod queries {
         /// The query result storage embedded in the global context.
         pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
             impl Context<'gcx> {
-                fn local_rib() for LocalRibQuery<'gcx>;
-                fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
-                fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;
-                fn resolve_downwards() for ResolveDownwardsQuery<'gcx>;
-                fn resolve_node() for ResolveNodeQuery<'gcx>;
                 fn struct_def() for StructDefQuery<'gcx>;
             }
         }

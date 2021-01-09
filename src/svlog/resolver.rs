@@ -85,7 +85,8 @@ impl RibKind {
 ///
 /// This will return either the rib the node itself generates, or the next rib
 /// up the hierarchy.
-pub(crate) fn local_rib<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<&'gcx Rib> {
+#[moore_derive::query]
+pub(crate) fn local_rib<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<&'a Rib> {
     let ast = cx.ast_of(node_id)?;
     trace!("local_rib for {} ({:?})", ast.desc_full(), node_id);
     let mut parent = None;
@@ -214,10 +215,8 @@ fn local_rib_kind_for_type<'gcx>(cx: &impl Context<'gcx>, kind: &hir::TypeKind) 
 /// Determine the hierarchical rib of a node.
 ///
 /// This will return a rib containing the hierarchical names exposed by a node.
-pub(crate) fn hierarchical_rib<'gcx>(
-    cx: &impl Context<'gcx>,
-    node_id: NodeId,
-) -> Result<&'gcx Rib> {
+#[moore_derive::query]
+pub(crate) fn hierarchical_rib<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<&'a Rib> {
     let hir = cx.hir_of(node_id)?;
     let mut names = HashMap::new();
     let mut rib_id = match hir {
@@ -251,8 +250,9 @@ pub(crate) fn hierarchical_rib<'gcx>(
 /// Resolve a name upwards through the ribs.
 ///
 /// This is equivalent to performing regular scoped namespace lookup.
-pub(crate) fn resolve_upwards<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn resolve_upwards<'a>(
+    cx: &impl Context<'a>,
     name: Name,
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
@@ -274,8 +274,9 @@ pub(crate) fn resolve_upwards<'gcx>(
 /// Resolve a name downwards.
 ///
 /// This is equivalent to performing a hierarchical name lookup.
-pub(crate) fn resolve_downwards<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn resolve_downwards<'a>(
+    cx: &impl Context<'a>,
     name: Name,
     start_at: NodeId,
 ) -> Result<Option<NodeId>> {
@@ -294,8 +295,9 @@ pub(crate) fn resolve_downwards<'gcx>(
 }
 
 /// Resolve a node to its target.
-pub(crate) fn resolve_node<'gcx>(
-    cx: &impl Context<'gcx>,
+#[moore_derive::query]
+pub(crate) fn resolve_node<'a>(
+    cx: &impl Context<'a>,
     node_id: NodeId,
     env: ParamEnv,
 ) -> Result<NodeId> {
@@ -346,7 +348,8 @@ pub struct StructField {
 }
 
 /// Obtain the details of a struct definition.
-pub(crate) fn struct_def<'gcx>(cx: &impl Context<'gcx>, node_id: NodeId) -> Result<Arc<StructDef>> {
+#[moore_derive::query]
+pub(crate) fn struct_def<'a>(cx: &impl Context<'a>, node_id: NodeId) -> Result<Arc<StructDef>> {
     let hir = cx.hir_of(node_id)?;
     let struct_fields = match hir {
         HirNode::Type(hir::Type {
