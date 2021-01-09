@@ -1,6 +1,3 @@
-[submodule "src/svlog/salsa"]
-	path = src/svlog/salsa
-	url = https://github.com/fabianschuiki/salsa
 [submodule "test/third-party/common_cells"]
 	path = test/third-party/common_cells
 	url = https://github.com/pulp-platform/common_cells.git

@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix procedural assignments to concatenations, e.g. `{a,b} = c` (#185)
 - Fix bit-/part-selects into ranges with non-zero offse, e.g. `x[1]` into `logic [8:1] x` (#194)
 
+### Removed
+- Remove the inlined salsa crate
+
 ## 0.11.0 - 2020-09-05
 ### Added
 - Add support for `x**y` with power-of-two `x` or constant `y` (#193)
