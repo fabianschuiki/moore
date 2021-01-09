@@ -21,21 +21,19 @@
 //! ```
 
 use crate::crate_prelude::*;
-use crate::salsa; // TODO(fschuiki): Remove this once salsa is regular dep again
 use crate::{
     ast::{self, Visitor},
     ast_map::{AstMap, AstNode},
     common::{arenas::Alloc, arenas::TypedArena, Session},
     hir::{self, HirNode},
     port_list::PortList,
-    resolver::{Scope, StructDef},
+    resolver::Scope,
     value::{Value, ValueData, ValueKind},
     ParamEnv, ParamEnvData, QueryDatabase, QueryStorage,
 };
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashMap, HashSet},
-    sync::Arc,
 };
 
 /// The central data structure of the compiler. It stores references to various
@@ -46,8 +44,6 @@ pub struct GlobalContext<'gcx> {
     pub sess: &'gcx Session,
     /// The arena that owns all references.
     pub arena: &'gcx GlobalArenas<'gcx>,
-    /// The underlying runtime for the query system.
-    runtime: salsa::Runtime<GlobalContext<'gcx>>,
     /// The underlying storage for the new query system.
     storage: QueryStorage<'gcx>,
     /// The mapping of node IDs to abstract syntax tree nodes.
@@ -74,7 +70,6 @@ impl<'gcx> GlobalContext<'gcx> {
         GlobalContext {
             sess,
             arena,
-            runtime: Default::default(),
             storage: Default::default(),
             ast_map: Default::default(),
             ast_map2: Default::default(),
@@ -226,13 +221,7 @@ impl DiagEmitter for GlobalContext<'_> {
     }
 }
 
-impl<'gcx> salsa::Database for GlobalContext<'gcx> {
-    fn salsa_runtime(&self) -> &salsa::Runtime<Self> {
-        &self.runtime
-    }
-}
-
-impl<'gcx> BaseContext<'gcx> for GlobalContext<'gcx> {
+impl<'gcx> Context<'gcx> for GlobalContext<'gcx> {
     fn gcx(&self) -> &GlobalContext<'gcx> {
         self
     }
@@ -372,9 +361,7 @@ pub struct GlobalTables<'t> {
 /// This trait represents the context within which most compiler operations take
 /// place. It is implemented by [`GlobalContext`] and also provides access to
 /// the global context via the `gcx()` method.
-pub trait BaseContext<'gcx>:
-    salsa::Database + DiagEmitter + QueryDatabase<'gcx> + ty::HasTypeStorage<'gcx>
-{
+pub trait Context<'gcx>: DiagEmitter + QueryDatabase<'gcx> + ty::HasTypeStorage<'gcx> {
     /// Get the global context.
     fn gcx(&self) -> &GlobalContext<'gcx>;
 
@@ -698,33 +685,6 @@ pub trait BaseContext<'gcx>:
         }
     }
 }
-
-/// The queries implemented by the compiler.
-pub(super) mod queries {
-    use super::*;
-
-    query_group! {
-        /// A collection of compiler queries.
-        pub trait Context<'a>: BaseContext<'a> {
-            /// Obtain the details of a struct definition.
-            fn struct_def(node_id: NodeId) -> Result<Arc<StructDef>> {
-                type StructDefQuery;
-                use fn resolver::struct_def;
-            }
-        }
-    }
-
-    database_storage! {
-        /// The query result storage embedded in the global context.
-        pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
-            impl Context<'gcx> {
-                fn struct_def() for StructDefQuery<'gcx>;
-            }
-        }
-    }
-}
-
-pub use self::queries::Context;
 
 /// An ugly hack to get the new AST nodes to hook into the ID-based AST lookup
 /// during the transition phase.

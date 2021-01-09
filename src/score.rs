@@ -12,7 +12,7 @@ use crate::common::score::{GenericContext, NodeMaker, NodeRef, Result};
 use crate::common::source::Spanned;
 use crate::common::NodeId;
 use crate::common::Session;
-use crate::svlog::{self, ast as svlog_ast, BaseContext};
+use crate::svlog::{self, ast as svlog_ast, Context};
 use crate::vhdl;
 use crate::vhdl::syntax::ast as vhdl_ast;
 use std;

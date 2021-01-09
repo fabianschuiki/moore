@@ -457,7 +457,7 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
         Elaborate::Svlog(m) => {
             // Emit the detailed type analysis if requested.
             if ctx.sess.has_verbosity(Verbosity::TYPES) {
-                use svlog::BaseContext;
+                use svlog::Context;
                 TypeVerbosityVisitor(ctx.svlog, ctx.svlog.default_param_env())
                     .visit_node_with_id(m, false);
             }
@@ -573,7 +573,7 @@ impl<'a, 'gcx> svlog::hir::Visitor<'gcx> for TypeVerbosityVisitor<'a, 'gcx> {
 
 impl<'a, 'gcx> TypeVerbosityVisitor<'a, 'gcx> {
     fn print(&mut self, id: NodeId) {
-        use svlog::BaseContext;
+        use svlog::Context;
         let span = self.0.span(id);
         let ext = span.extract();
         let line = span.begin().human_line();

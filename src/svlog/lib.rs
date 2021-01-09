@@ -162,7 +162,7 @@ mod crate_prelude {
             util::{HasDesc, HasSpan},
             NodeId, SessionContext, Verbosity,
         },
-        context::{BaseContext, Context, GlobalContext},
+        context::{Context, GlobalContext},
         hir, mir, param_env, port_mapping,
         resolver::{Rib, RibKind},
         ty, typeck, value, IntoNodeEnvId, NodeEnvId, Ref, *,
