@@ -132,6 +132,21 @@ fn main() {
                 .number_of_values(1),
         )
         .arg(
+            Arg::with_name("output")
+                .short("o")
+                .long("output")
+                .help("Output file (`-` for stdout)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("output-format")
+                .short("f")
+                .long("format")
+                .help("Output format")
+                .takes_value(true)
+                .possible_values(&["llhd", "mlir"]),
+        )
+        .arg(
             Arg::with_name("INPUT")
                 .help("The input files to compile")
                 .multiple(true)
@@ -318,7 +333,7 @@ fn score(sess: &Session, matches: &ArgMatches) {
             debug!("lib_id = {:?}", lib_id);
             debug!("{:?}", sb);
             for name in names {
-                match elaborate_name(&ctx, lib_id, name) {
+                match elaborate_name(matches, &ctx, lib_id, name) {
                     Ok(_) => (),
                     Err(_) => failed = true,
                 };
@@ -347,7 +362,12 @@ fn score(sess: &Session, matches: &ArgMatches) {
 
 /// Resolve an entity/module specificaiton of the form `[lib.]entity[.arch]` for
 /// elaboration.
-fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -> Result<(), ()> {
+fn elaborate_name(
+    matches: &ArgMatches,
+    ctx: &ScoreContext,
+    lib_id: score::LibRef,
+    input_name: &str,
+) -> Result<(), ()> {
     let (lib, name, arch) = parse_elaborate_name(input_name)?;
     debug!(
         "parsed `{}` into (lib: {:?}, name: {:?}, arch: {:?})",
@@ -479,9 +499,74 @@ fn elaborate_name(ctx: &ScoreContext, lib_id: score::LibRef, input_name: &str) -
                 llhd::pass::InstSimplification::run_on_module(&pass_ctx, &mut module);
                 llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
             }
-            llhd::assembly::write_module(&mut std::io::stdout().lock(), &module);
+
+            // Decide what format to use for the output.
+            emit_output(matches, ctx, &module)?;
         }
     }
+    Ok(())
+}
+
+#[derive(Debug)]
+enum OutputFormat {
+    Llhd,
+    Mlir,
+}
+
+fn emit_output(
+    matches: &ArgMatches,
+    ctx: &ScoreContext,
+    module: &llhd::ir::Module,
+) -> Result<(), ()> {
+    // Check if the user has provided an explicit output format.
+    let fmt = match matches.value_of("output-format") {
+        Some("llhd") => Some(OutputFormat::Llhd),
+        Some("mlir") => Some(OutputFormat::Mlir),
+        Some(x) => {
+            ctx.sess.emit(DiagBuilder2::fatal(format!(
+                "unknown output format: `{}`",
+                x
+            )));
+            return Err(());
+        }
+        _ => None,
+    };
+
+    // Check if the output format can be inferred from the output file suffix.
+    let fmt = fmt.or_else(|| {
+        match matches
+            .value_of("output")
+            .and_then(|x| Path::new(x).extension())
+            .and_then(|x| x.to_str())
+        {
+            Some("llhd") => Some(OutputFormat::Llhd),
+            Some("mlir") => Some(OutputFormat::Mlir),
+            _ => None,
+        }
+    });
+
+    // Otherwise fall back to the LLHD default output format.
+    let fmt = fmt.unwrap_or(OutputFormat::Llhd);
+    debug!("Using {:?} output format", fmt);
+
+    // Open the output.
+    let stdout = std::io::stdout();
+    let output: Box<dyn std::io::Write> = match matches.value_of("output") {
+        Some("-") | None => Box::new(stdout.lock()),
+        Some(x) => Box::new(std::fs::File::create(x).map_err(|e| {
+            ctx.sess.emit(
+                DiagBuilder2::fatal(format!("unable to create file: `{}`", x))
+                    .add_note(format!("{}", e)),
+            );
+            ()
+        })?),
+    };
+
+    // Emit the appropriate output.
+    match fmt {
+        OutputFormat::Llhd => llhd::assembly::write_module(output, &module),
+        OutputFormat::Mlir => llhd::mlir::write_module(output, &module),
+    };
     Ok(())
 }
 
