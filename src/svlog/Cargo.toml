@@ -34,7 +34,7 @@ rustc-hash = "1.0"
 parking_lot = "0.11.0"
 lock_api = "0.4.2"
 indexmap = "1.0.1"
-smallvec = "0.6.5"
+smallvec = "1"
 
 [dev-dependencies]
 simple_logger = "1"
