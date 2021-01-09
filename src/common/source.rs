@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! A global source file table that assigns an opaque ID to each processed
 //! source file. This helps keeping the source location lean and allow for

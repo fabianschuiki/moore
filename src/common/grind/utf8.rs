@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! A UTF8 parser that keeps track of the index and size of the characters it
 //! emits. This parser does not generate any errors, but rather replaces invalid

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2016-2020 Fabian Schuiki
+# Copyright (c) 2016-2021 Fabian Schuiki
 # This script runs the source files in tests through the compiler.
 
 set -e

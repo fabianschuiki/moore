@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! A list of ports on a node, with ANSI/non-ANSI styles resolved.
 //!

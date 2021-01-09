@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 use crate::lexer::categorizer::Category;
 use moore_common::errors::DiagBuilder2;

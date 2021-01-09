@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! Defines all tokens that may result from performing lexical analysis on a
 //! SystemVerilog source file. This module is inspired heavily by the tokens

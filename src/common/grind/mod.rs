@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! This module provides an abstraction similar to iterators. Elements are
 //! produced in one direction, while errors bubble backwards until they are

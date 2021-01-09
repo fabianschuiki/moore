@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! This crate contains the fundamental utilities used to by the rest of the
 //! moore compiler.

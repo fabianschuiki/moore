@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2020 Fabian Schuiki
+// Copyright (c) 2016-2021 Fabian Schuiki
 
 //! This module implements an abstract syntax tree for VHDL. It is emitted by
 //! the parser.
