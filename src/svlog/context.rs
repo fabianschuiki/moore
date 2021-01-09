@@ -30,7 +30,7 @@ use crate::{
     port_list::PortList,
     resolver::{Scope, StructDef},
     value::{Value, ValueData, ValueKind},
-    ParamEnv, ParamEnvData, ParamEnvSource, QueryDatabase, QueryStorage,
+    ParamEnv, ParamEnvData, QueryDatabase, QueryStorage,
 };
 use std::{
     cell::RefCell,
@@ -712,12 +712,6 @@ pub(super) mod queries {
                 use fn hir::hir_of;
             }
 
-            /// Compute the parameter bindings for an instantiation.
-            fn param_env(src: ParamEnvSource<'a>) -> Result<ParamEnv> {
-                type ParamEnvQuery;
-                use fn param_env::compute;
-            }
-
             /// Determine the local rib that applies to a node.
             fn local_rib(node_id: NodeId) -> Result<&'a Rib> {
                 type LocalRibQuery;
@@ -779,7 +773,6 @@ pub(super) mod queries {
         pub struct GlobalStorage<'gcx> for GlobalContext<'gcx> {
             impl Context<'gcx> {
                 fn hir_of() for HirOfQuery<'gcx>;
-                fn param_env() for ParamEnvQuery<'gcx>;
                 fn local_rib() for LocalRibQuery<'gcx>;
                 fn hierarchical_rib() for HierarchicalRibQuery<'gcx>;
                 fn resolve_upwards() for ResolveUpwardsQuery<'gcx>;

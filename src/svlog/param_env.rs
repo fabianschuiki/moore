@@ -157,10 +157,9 @@ pub enum ParamEnvSource<'hir> {
     },
 }
 
-pub(crate) fn compute<'gcx>(
-    cx: &impl Context<'gcx>,
-    src: ParamEnvSource<'gcx>,
-) -> Result<ParamEnv> {
+/// Compute the parameter bindings for an instantiation.
+#[moore_derive::query]
+pub(crate) fn param_env<'a>(cx: &impl Context<'a>, src: ParamEnvSource<'a>) -> Result<ParamEnv> {
     match src {
         ParamEnvSource::ModuleInst {
             module,
