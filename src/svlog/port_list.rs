@@ -462,15 +462,26 @@ fn lower_node_ports_ansi<'a>(
                 expr,
             } => {
                 // If no direction has been provided, use the one carried over
-                // from the previous port.
-                let dir = dir.unwrap_or(carry_dir);
+                // from the previous port. Explicitly specifying a direction
+                // clears the carried kind, type, sign, and packed dimensions to
+                // their defaults.
+                let dir = match *dir {
+                    Some(dir) => {
+                        carry_kind = None;
+                        carry_ty = Cow::Owned(ast::TypeKind::new(port.span(), ast::LogicType));
+                        carry_sign = ast::TypeSign::None;
+                        carry_packed_dims = &[];
+                        dir
+                    }
+                    None => carry_dir,
+                };
 
                 // If no port kind has been provided, use the one carried over
                 // from the previous port.
                 let kind = kind.or(carry_kind);
 
                 // If no port type has been provided, use the one carried over
-                //  from the previous port.
+                // from the previous port.
                 let (ty, sign, packed_dims, ty_span) = if ty.kind.data == ast::ImplicitType
                     && ty.sign == ast::TypeSign::None
                     && ty.dims.is_empty()
