@@ -696,7 +696,6 @@ pub struct Package<'a> {
     pub lifetime: Lifetime,
     #[name]
     pub name: Spanned<Name>,
-    pub timeunits: Timeunit,
     pub items: Vec<Item<'a>>,
 }
 

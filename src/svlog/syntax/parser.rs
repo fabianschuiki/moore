@@ -888,7 +888,6 @@ fn parse_module_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Modul
         // Eat the module name.
         let (name, name_sp) = p.eat_ident("module name")?;
 
-        // TODO: Parse package import declarations.
         // Eat the optional package import declarations.
         let mut imports = vec![];
         while p.peek(0).0 == Keyword(Kw::Import) {
@@ -966,12 +965,6 @@ fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pack
         let (name, name_span) = p.eat_ident("package name")?;
         p.require_reported(Semicolon)?;
 
-        // TODO: Parse the optional timeunits declaration.
-        let timeunits = Timeunit {
-            unit: None,
-            prec: None,
-        };
-
         // Parse the package items.
         let mut items = Vec::new();
         while !p.is_fatal() && p.peek(0).0 != Keyword(Kw::Endpackage) && p.peek(0).0 != Eof {
@@ -987,7 +980,6 @@ fn parse_package_decl<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<Pack
             PackageData {
                 lifetime: lifetime,
                 name: Spanned::new(name, name_span),
-                timeunits: timeunits,
                 items: items,
             },
         ))
