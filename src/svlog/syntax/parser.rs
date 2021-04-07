@@ -1051,6 +1051,9 @@ fn parse_item_data<'n>(p: &mut dyn AbstractParser<'n>) -> ReportedResult<ItemDat
         Keyword(Kw::Import) if strlit_follows => return parse_dpi_decl(p).map(ItemData::DpiDecl),
         Keyword(Kw::Export) => return parse_dpi_decl(p).map(ItemData::DpiDecl),
         Keyword(Kw::Import) => return parse_import_decl(p).map(|x| ItemData::ImportDecl(x)),
+        Keyword(Kw::Timeunit) | Keyword(Kw::Timeprecision) => {
+            return parse_time_units(p).map(ItemData::Timeunit)
+        }
 
         // Structured procedures as per IEEE 1800-2009 section 9.2
         Keyword(Kw::Initial) => {

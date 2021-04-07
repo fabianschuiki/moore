@@ -724,7 +724,8 @@ fn lower_module_block<'gcx>(
             // The remaining items don't need an HIR representation.
             ast::ItemData::DpiDecl(..)
             | ast::ItemData::GenvarDecl(..)
-            | ast::ItemData::GenerateRegion(..) => (),
+            | ast::ItemData::GenerateRegion(..)
+            | ast::ItemData::Timeunit(..) => (),
         }
     }
     Ok(hir::ModuleBlock {

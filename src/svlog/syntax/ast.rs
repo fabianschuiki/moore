@@ -655,6 +655,7 @@ pub enum Item<'a> {
     NetDecl(NetDecl<'a>),
     VarDecl(#[forward] VarDecl<'a>),
     Inst(Inst<'a>),
+    Timeunit(Timeunit),
 }
 
 /// A module.
