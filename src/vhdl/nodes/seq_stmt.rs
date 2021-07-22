@@ -228,7 +228,7 @@ impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> AddContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
                 disc: &'ast ast::Expr,
                 exprs: Vec<(&'ast ast::Expr, &'ast Spanned<Vec<ast::Expr>>)>,
             },
-        };
+        }
         let (target, kind) = match stmt.data {
             ast::AssignStmt {
                 ref target,

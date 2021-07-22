@@ -407,7 +407,7 @@ fn elaborate_name(
         VhdlEntity(vhdl::score::EntityRef, vhdl::score::ArchRef),
         VhdlPkg(vhdl::score::PkgDeclRef),
         Svlog(NodeId), // TODO: handle svlog case
-    };
+    }
     let defs = ctx.defs(lib.into())?;
     let elab = match defs.get(&name) {
         Some(&score::Def::Vhdl(vhdl::score::Def::Entity(entity))) => {

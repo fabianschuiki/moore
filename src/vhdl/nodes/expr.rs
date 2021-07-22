@@ -434,7 +434,7 @@ pub fn typeval_record_aggregate<'sbc, 'lazy: 'sbc, 'sb: 'lazy, 'ast: 'sb, 'ctx: 
         Pos(usize),
         Named(usize),
         Others,
-    };
+    }
     let mut mapping = HashMap::<usize, FieldIndex>::new();
     let mut occupied = HashMap::<Name, Span>::new();
     for (index, &pos) in hir.positional.iter().enumerate() {
