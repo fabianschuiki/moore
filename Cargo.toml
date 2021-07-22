@@ -19,6 +19,7 @@ moore-common = { path = "src/common", version = "0.13.2" }
 moore-derive = { path = "src/derive", version = "0.13.2" }
 moore-svlog = { path = "src/svlog", version = "0.13.2" }
 moore-vhdl = { path = "src/vhdl", version = "0.13.2" }
+circt-sys = { path = "circt-sys" }
 clap = "2"
 llhd = "0.16"
 # llhd = { git = "https://github.com/fabianschuiki/llhd" }
