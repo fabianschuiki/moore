@@ -1,6 +1,6 @@
 [package]
 name = "moore-common"
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 

@@ -1,6 +1,6 @@
 [package]
 name = "moore-vhdl"
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Fabian Schuiki <fschuiki@iis.ee.ethz.ch>"]
 edition = "2018"
 
@@ -12,8 +12,8 @@ license = "Apache-2.0 OR MIT"
 path = "lib.rs"
 
 [dependencies]
-moore-common = { path = "../common", version = "0.12.0" }
-moore-vhdl-syntax = { path = "syntax", version = "0.12.0" }
+moore-common = { path = "../common", version = "0.12.1" }
+moore-vhdl-syntax = { path = "syntax", version = "0.12.1" }
 lazy_static = "1.4"
 llhd = "0.15"
 # llhd = { git = "https://github.com/fabianschuiki/llhd" }
