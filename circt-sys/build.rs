@@ -28,13 +28,29 @@ fn main() {
         println!("cargo:rustc-link-search=native={}", name.display());
     }
     for name in &[
+        "CIRCTCAPIComb",
         "CIRCTCAPIHW",
+        "CIRCTCAPISV",
+        "CIRCTCAPISeq",
+        "CIRCTComb",
         "CIRCTHW",
-        "MLIRCAPIIR",
-        "MLIRIR",
-        "MLIRSupport",
+        "CIRCTSV",
+        "CIRCTSeq",
         "LLVMCore",
         "LLVMSupport",
+        "MLIRAnalysis",
+        "MLIRCAPIIR",
+        "MLIRIR",
+        "MLIRPDL",
+        "MLIRPDLInterp",
+        "MLIRPDLToPDLInterp",
+        "MLIRPass",
+        "MLIRRewrite",
+        "MLIRSideEffectInterfaces",
+        "MLIRSupport",
+        "MLIRTransformUtils",
+        "MLIRTransforms",
+        "MLIRTranslation",
     ] {
         println!("cargo:rustc-link-lib=static={}", name);
     }
