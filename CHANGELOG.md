@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Fixed
 - Fix ports with explicit direction carrying over previous port type data (#224)
+- Fix generate regions being ignored during code generation (#228)
 
 ## 0.12.0 - 2021-01-09
 ### Added
