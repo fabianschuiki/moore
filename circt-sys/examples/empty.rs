@@ -7,12 +7,15 @@ fn main() {
 
 unsafe fn magic() {
     let cx = mlirContextCreate();
+    mlirDialectHandleLoadDialect(mlirGetDialectHandle__std__(), cx);
     mlirDialectHandleLoadDialect(mlirGetDialectHandle__hw__(), cx);
+    mlirDialectHandleRegisterDialect(mlirGetDialectHandle__std__(), cx);
+    mlirDialectHandleRegisterDialect(mlirGetDialectHandle__hw__(), cx);
 
     // Create a root MLIR `ModuleOp`.
     let module = {
         let mut module = mlirOperationStateGet(
-            mlirStringRefCreateFromStr("module"),
+            mlirStringRefCreateFromStr("builtin.module"),
             mlirLocationUnknownGet(cx),
         );
         let region = mlirRegionCreate();
