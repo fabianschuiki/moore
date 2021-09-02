@@ -11,6 +11,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv,
 };
+use circt::{prelude::*, sys::*};
 use num::{BigInt, One, ToPrimitive, Zero};
 use std::{
     collections::{HashMap, HashSet},
@@ -27,16 +28,19 @@ pub struct CodeGenerator<'gcx, C> {
     cx: C,
     /// The LLHD module to be populated.
     into: llhd::ir::Module,
+    /// THe MLIR module to be populated.
+    into_mlir: circt::std::ModuleOp,
     /// Tables holding mappings and interned values.
     tables: Tables<'gcx>,
 }
 
 impl<'gcx, C> CodeGenerator<'gcx, C> {
     /// Create a new code generator.
-    pub fn new(cx: C) -> Self {
+    pub fn new(cx: C, into_mlir: circt::std::ModuleOp) -> Self {
         CodeGenerator {
             cx,
             into: llhd::ir::Module::new(),
+            into_mlir,
             tables: Default::default(),
         }
     }
@@ -97,6 +101,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             entity_name.push_str(&format!(".param{}", env.0));
         }
         let name = llhd::ir::UnitName::Global(entity_name.clone());
+
+        // Create MLIR entity.
+        let mlir_cx = self.into_mlir.context();
+        let entity_op = circt::llhd::EntityOpBuilder::with_unknown_location(mlir_cx)
+            .name(&entity_name)
+            .build();
+        unsafe {
+            mlirBlockInsertOwnedOperationBefore(
+                mlirRegionGetFirstBlock(mlirOperationGetRegion(self.into_mlir.raw_operation(), 0)),
+                MlirOperation {
+                    ptr: std::ptr::null_mut(),
+                },
+                entity_op.raw_operation(),
+            )
+        };
 
         // Create entity.
         let mut ent =

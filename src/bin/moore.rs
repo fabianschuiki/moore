@@ -5,6 +5,7 @@
 #[macro_use]
 extern crate log;
 
+use circt::{mlir, prelude::*};
 use clap::{App, Arg, ArgMatches};
 use llhd;
 use llhd::opt::{Pass, PassContext};
@@ -144,7 +145,7 @@ fn main() {
                 .long("format")
                 .help("Output format")
                 .takes_value(true)
-                .possible_values(&["llhd", "mlir"]),
+                .possible_values(&["llhd", "mlir", "mlir-native"]),
         )
         .arg(
             Arg::with_name("INPUT")
@@ -487,7 +488,15 @@ fn elaborate_name(
                 svlog::InstVerbosityVisitor::new(ctx.svlog).visit_node_with_id(m, false);
             }
 
-            let mut cg = svlog::CodeGenerator::new(ctx.svlog);
+            let mlir_cx = mlir::OwnedContext::new();
+            mlir_cx.load_dialect(circt::hw::dialect());
+            mlir_cx.load_dialect(circt::comb::dialect());
+            mlir_cx.load_dialect(circt::llhd::dialect());
+            mlir_cx.load_dialect(circt::seq::dialect());
+
+            let mlir_module = circt::std::ModuleOp::new(*mlir_cx);
+
+            let mut cg = svlog::CodeGenerator::new(ctx.svlog, mlir_module);
             cg.emit_module(m)?;
             let mut module = cg.finalize();
             let pass_ctx = PassContext;
@@ -501,7 +510,10 @@ fn elaborate_name(
             }
 
             // Decide what format to use for the output.
-            emit_output(matches, ctx, &module)?;
+            match matches.value_of("output-format") {
+                Some("mlir-native") => mlir_module.dump(),
+                _ => emit_output(matches, ctx, &module)?,
+            }
         }
     }
     Ok(())
