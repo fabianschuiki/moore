@@ -1,5 +1,6 @@
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/HW.h"
+#include "circt-c/Dialect/LLHD.h"
 #include "circt-c/Dialect/Seq.h"
 #include "mlir-c/AffineExpr.h"
 #include "mlir-c/AffineMap.h"
