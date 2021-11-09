@@ -17,7 +17,7 @@ path = "lib.rs"
 moore-common = { path = "../common", version = "0.12.1" }
 moore-derive = { path = "../derive", version = "0.12.1" }
 moore-svlog-syntax = { path = "syntax", version = "0.12.1" }
-llhd = "0.15"
+llhd = "0.16"
 # llhd = { git = "https://github.com/fabianschuiki/llhd" }
 log = "0.4"
 num = "0.3"

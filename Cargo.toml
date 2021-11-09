@@ -20,7 +20,7 @@ moore-derive = { path = "src/derive", version = "0.12.1" }
 moore-svlog = { path = "src/svlog", version = "0.12.1" }
 moore-vhdl = { path = "src/vhdl", version = "0.12.1" }
 clap = "2"
-llhd = "0.15"
+llhd = "0.16"
 # llhd = { git = "https://github.com/fabianschuiki/llhd" }
 num = "0.3"
 serde = "1"
