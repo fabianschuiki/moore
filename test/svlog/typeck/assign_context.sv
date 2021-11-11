@@ -1,4 +1,4 @@
-// RUN: moore %s -e a0 -e a1 -e a2 -e a3 -Vtypes -O0
+// RUN: moore %s -e a0 -e a1 -e a2 -e a3 -e a5 -Vtypes -O0
 module a0;
     logic [3:0] a;
     logic [8:0] b;
@@ -91,4 +91,8 @@ module a4;
     end
 
     foo #(.N(32'd42)) i_foo (.A(32'd42));
+endmodule
+
+module a5;
+  wire [1:0][2:0] x = '{3'h0, 3'h0};
 endmodule

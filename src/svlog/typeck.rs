@@ -2263,7 +2263,7 @@ pub(crate) fn type_context<'a>(
         },
         HirNode::VarDecl(v) if v.init == Some(onto) => {
             let ty = cx.ast_for_id(v.ty).as_all().get_type().unwrap();
-            if !ty.is_implicit() {
+            if !ty.is_implicit() || v.kind != ast::VarKind::Var {
                 Some(
                     cx.type_of(hir_id, env)
                         .unwrap_or(UnpackedType::make_error())
