@@ -1987,13 +1987,7 @@ pub(crate) fn operation_type<'a>(
             let ty = match op {
                 // Most operators operate on the maximum bitwidth given by their
                 // argument (self-determined type) and the type context.
-                hir::UnaryOp::RedAnd
-                | hir::UnaryOp::RedOr
-                | hir::UnaryOp::RedXor
-                | hir::UnaryOp::RedNand
-                | hir::UnaryOp::RedNor
-                | hir::UnaryOp::RedXnor
-                | hir::UnaryOp::Neg
+                hir::UnaryOp::Neg
                 | hir::UnaryOp::Pos
                 | hir::UnaryOp::BitNot
                 | hir::UnaryOp::PreInc
@@ -2004,6 +1998,14 @@ pub(crate) fn operation_type<'a>(
                     let targ = cx.self_determined_type(arg, env);
                     unify_operator_types(cx, env, tc.into_iter().chain(targ.into_iter()))
                 }
+
+                // Reductions simply operate on their argument type.
+                hir::UnaryOp::RedAnd
+                | hir::UnaryOp::RedOr
+                | hir::UnaryOp::RedXor
+                | hir::UnaryOp::RedNand
+                | hir::UnaryOp::RedNor
+                | hir::UnaryOp::RedXnor => cx.self_determined_type(arg, env),
 
                 // Handle the self-determined cases.
                 hir::UnaryOp::LogicNot => Some(UnpackedType::make_logic()),

@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## Unreleased
 ### Fixed
 - Fix MLIR output test case
+- Fix operation type of reductions not being equal to the argument type
 
 ## 0.13.0 - 2021-11-09
 ### Changed
