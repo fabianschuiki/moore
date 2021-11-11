@@ -7,8 +7,8 @@ endmodule
 // CHECK: llhd.proc @foo.initial.15.0() -> (%x: !llhd.sig<i32> ) {
 // CHECK:     br ^0
 // CHECK: ^0:
-// CHECK:     %1 = llhd.const 42 : i32
-// CHECK:     %2 = llhd.const #llhd.time<0s, 0d, 1e> : !llhd.time
+// CHECK:     %1 = hw.constant 42 : i32
+// CHECK:     %2 = llhd.constant_time #llhd.time<0s, 0d, 1e>
 // CHECK:     llhd.drv %x, %1 after %2 : !llhd.sig<i32>
 // CHECK:     llhd.halt
 // CHECK: }
