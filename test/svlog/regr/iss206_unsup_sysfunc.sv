@@ -1,7 +1,6 @@
 // RUN: moore %s -e foo
-// FAIL
 
 module foo;
     initial $bar();
-    // CHECK-ERR: error: unknown system task `$bar`
+    // CHECK-ERR: warning: unsupported: system task `$bar`; ignored
 endmodule

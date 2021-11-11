@@ -1210,20 +1210,13 @@ fn lower_expr_inner<'gcx>(
                     "high" => map_array_dim(hir::ArrayDim::High)?,
                     "increment" => map_array_dim(hir::ArrayDim::Increment)?,
                     "size" => map_array_dim(hir::ArrayDim::Size)?,
-                    "display" | "info" | "warning" | "error" | "fatal" => {
+                    _ => {
                         cx.emit(
                             DiagBuilder2::warning(format!(
                                 "unsupported: system task `${}`; ignored",
                                 ident
                             ))
                             .span(expr.human_span()),
-                        );
-                        hir::BuiltinCall::Unsupported
-                    }
-                    _ => {
-                        cx.emit(
-                            DiagBuilder2::error(format!("unknown system task `${}`", ident))
-                                .span(expr.human_span()),
                         );
                         hir::BuiltinCall::Unsupported
                     }
