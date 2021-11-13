@@ -18,7 +18,7 @@ moore-common = { path = "../common", version = "0.13.2" }
 moore-derive = { path = "../derive", version = "0.13.2" }
 moore-svlog-syntax = { path = "syntax", version = "0.13.2" }
 llhd = "0.16"
-circt = { path = "../../circt" }
+circt = { path = "../circt" }
 # llhd = { git = "https://github.com/fabianschuiki/llhd" }
 log = "0.4"
 num = "0.3"
