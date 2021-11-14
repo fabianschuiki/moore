@@ -1,3 +1,6 @@
 [submodule "test/third-party/common_cells"]
 	path = test/third-party/common_cells
 	url = https://github.com/pulp-platform/common_cells.git
+[submodule "circt"]
+	path = circt
+	url = git@github.com:fabianschuiki/circt.git
