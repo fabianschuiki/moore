@@ -1,6 +1,7 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
 //! This module implements LLHD code generation.
+#![allow(unreachable_code)]
 
 use crate::{
     crate_prelude::*,
@@ -128,6 +129,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 entity_op.raw_operation(),
             )
         };
+        mlir_builder.set_insertion_point_to_start(entity_op.block());
 
         // Create entity.
         let mut ent =
@@ -142,6 +144,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             gen: self,
             builder: &mut builder,
             values: &mut values,
+            mlir_builder: &mut mlir_builder,
             mlir_values: &mut mlir_values,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
@@ -470,6 +473,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create a mapping from read/written nodes to process parameters.
         let mut values = HashMap::new();
+        let mut mlir_builder = mlir::Builder::new(self.mcx);
+        mlir_builder.set_loc(span_to_loc(self.mcx, hir.span()));
         let mut mlir_values = HashMap::new();
         for (&id, arg) in inputs
             .iter()
@@ -482,6 +487,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             gen: self,
             builder: &mut builder,
             values: &mut values,
+            mlir_builder: &mut mlir_builder,
             mlir_values: &mut mlir_values,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
@@ -744,10 +750,12 @@ struct UnitGenerator<'a, 'gcx, C> {
     builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
     values: &'a mut HashMap<AccessedNode, llhd::ir::Value>,
+    /// The MLIR builder which is used to create new operations.
+    mlir_builder: &'a mut mlir::Builder,
     /// The emitted MLIR values for various nodes.
     mlir_values: &'a mut HashMap<AccessedNode, mlir::Value>,
     /// The constant values emitted into the unit.
-    interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
+    interned_consts: HashMap<Value<'gcx>, Result<(llhd::ir::Value, mlir::Value)>>,
     /// The MIR lvalues emitted into the unit.
     interned_lvalues: HashMap<NodeId, Result<(llhd::ir::Value, Option<llhd::ir::Value>)>>,
     /// The MIR rvalues emitted into the unit.
@@ -821,8 +829,9 @@ where
             };
             let ty = self.type_of(decl_id, env)?;
             let value = self.emit_varnet_decl(decl_id, ty, env, hir.init)?;
-            self.builder.set_name(value, hir.name.value.into());
-            self.values.insert(decl_id.into(), value.into());
+            self.builder.set_name(value.0, hir.name.value.into());
+            self.values.insert(decl_id.into(), (value.0).into());
+            self.mlir_values.insert(decl_id.into(), value.1);
         }
 
         // Emit interface instances.
@@ -854,7 +863,7 @@ where
                 let value =
                     self.emit_varnet_decl(signal.decl_id, signal.ty, intf_ty.env, signal.default)?;
                 self.builder
-                    .set_name(value, format!("{}.{}", inst.hir.name, signal.name));
+                    .set_name(value.0, format!("{}.{}", inst.hir.name, signal.name));
                 let src = AccessedNode::Intf(inst_id, signal.decl_id);
                 trace!(
                     "Emitted value for {:?} {}.{}",
@@ -862,7 +871,8 @@ where
                     inst.hir.name,
                     signal.name
                 );
-                self.values.insert(src, value.into());
+                self.values.insert(src, (value.0).into());
+                self.mlir_values.insert(src, value.1);
                 signal_lookup.insert(signal.decl_id, value);
             }
 
@@ -891,7 +901,7 @@ where
                 );
                 self.builder
                     .ins()
-                    .con(signal_lookup[&port.port.id], assigned);
+                    .con(signal_lookup[&port.port.id].0, assigned);
             }
         }
 
@@ -1179,10 +1189,21 @@ where
         env: ParamEnv,
         span: Span,
     ) -> Result<llhd::ir::Value> {
+        self.emit_const_both(value, env, span).map(|x| x.0)
+    }
+
+    /// Map a value to an LLHD constant (interned).
+    fn emit_const_both(
+        &mut self,
+        value: Value<'gcx>,
+        env: ParamEnv,
+        span: Span,
+    ) -> Result<(llhd::ir::Value, mlir::Value)> {
         if let Some(x) = self.interned_consts.get(value) {
             x.clone()
         } else {
             let x = self.emit_const_uninterned(value, env, span);
+            debug!("Emitted constant {:?}", x);
             // self.interned_consts.insert(value, x.clone());
             x
         }
@@ -1194,32 +1215,43 @@ where
         value: Value<'gcx>,
         env: ParamEnv,
         span: Span,
-    ) -> Result<llhd::ir::Value> {
+    ) -> Result<(llhd::ir::Value, mlir::Value)> {
         if value.ty.is_error() {
             return Err(());
         }
         match value.kind {
             ValueKind::Int(ref k, ..) => {
                 let size = value.ty.simple_bit_vector(self.cx, span).size;
-                Ok(self.builder.ins().const_int((size, k.clone())))
+                Ok((
+                    self.builder.ins().const_int((size, k.clone())),
+                    circt::hw::ConstantOp::new(self.mlir_builder, size, k.clone()).into(),
+                ))
             }
-            ValueKind::Time(ref k) => Ok(self
-                .builder
-                .ins()
-                .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0))),
+            ValueKind::Time(ref k) => Ok((
+                self.builder
+                    .ins()
+                    .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0)),
+                todo!("mlir const time value"),
+            )),
             ValueKind::StructOrArray(ref v) => {
                 if let Some(_dim) = value.ty.outermost_dim() {
                     let fields: Result<Vec<_>> = v
                         .iter()
                         .map(|v| self.emit_const(v, env, span).map(Into::into))
                         .collect();
-                    Ok(self.builder.ins().array(fields?))
+                    Ok((
+                        self.builder.ins().array(fields?),
+                        todo!("mlir constant array"),
+                    ))
                 } else if let Some(_strukt) = value.ty.get_struct() {
                     let fields: Result<Vec<_>> = v
                         .iter()
                         .map(|v| self.emit_const(v, env, span).map(Into::into))
                         .collect();
-                    Ok(self.builder.ins().strukt(fields?))
+                    Ok((
+                        self.builder.ins().strukt(fields?),
+                        todo!("mlir constant struct"),
+                    ))
                 } else {
                     panic!(
                         "invalid type `{}` for const struct/array value {:#?}",
@@ -2563,11 +2595,11 @@ where
         ty: &'gcx UnpackedType<'gcx>,
         env: ParamEnv,
         default: Option<NodeId>,
-    ) -> Result<llhd::ir::Value> {
+    ) -> Result<(llhd::ir::Value, mlir::Value)> {
         // Check if this is a variable or a net declaration.
-        let is_var = match self.hir_of(decl_id)? {
-            HirNode::VarDecl(x) => x.kind.is_var(),
-            HirNode::IntPort(x) => x.kind.is_var(),
+        let (is_var, name) = match self.hir_of(decl_id)? {
+            HirNode::VarDecl(x) => (x.kind.is_var(), x.name.value.as_str()),
+            HirNode::IntPort(x) => (x.kind.is_var(), x.name.value.as_str()),
             x => unreachable!("emit_varnet_decl on HIR {:?}", x),
         };
 
@@ -2576,7 +2608,7 @@ where
         if is_var {
             // For variables we require that the initial value is a
             // constant.
-            let init = self.emit_const(
+            let init = self.emit_const_both(
                 match default {
                     Some(expr) => self.constant_value_of(expr, env),
                     None => self.type_default_value(ty),
@@ -2584,15 +2616,22 @@ where
                 env,
                 self.span(default.unwrap_or(decl_id)),
             )?;
-            Ok(self.builder.ins().sig(init))
+            Ok((
+                self.builder.ins().sig(init.0),
+                circt::llhd::SigOp::new(self.mlir_builder, &name, init.1).into(),
+            ))
         } else {
             // For nets we simply emit the initial value as a signal, then
             // short-circuit it with the net declaration.
-            let zero = self.emit_const(self.type_default_value(ty), env, self.span(decl_id))?;
-            let net = self.builder.ins().sig(zero);
+            let zero =
+                self.emit_const_both(self.type_default_value(ty), env, self.span(decl_id))?;
+            let net = (
+                self.builder.ins().sig(zero.0),
+                circt::llhd::SigOp::new(self.mlir_builder, &name, zero.1).into(),
+            );
             if let Some(default) = default {
                 let init = self.emit_rvalue_mode(default, env, Mode::Signal)?;
-                self.builder.ins().con(net, init);
+                self.builder.ins().con(net.0, init);
             }
             Ok(net)
         }

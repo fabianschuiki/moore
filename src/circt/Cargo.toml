@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 circt-sys = { path = "../circt-sys" }
+num = "0.3"

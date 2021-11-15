@@ -10,7 +10,7 @@ from lit.llvm import llvm_config
 config.name = "Moore"
 config.test_format = lit.formats.ShTest(True)
 config.suffixes = [".v", ".sv", ".vhd", ".vhdl", ".mlir", ".llhd"]
-config.excludes = ["third-party", "svlog", "vhdl"]
+config.excludes = ["third-party", "svlog", "vhdl", "cli"]
 config.test_exec_root = "/tmp/moore-lit"
 
 subprocess.check_output(["cargo", "build"])

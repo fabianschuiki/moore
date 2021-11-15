@@ -33,3 +33,16 @@ pub fn get_struct_type(
         .collect();
     Type::from_raw(unsafe { hwStructTypeGet(cx.raw(), raw_fields.len() as _, raw_fields.as_ptr()) })
 }
+
+def_operation_single_result!(ConstantOp, "hw.constant");
+
+impl ConstantOp {
+    /// Create a new constant value.
+    pub fn new(builder: &mut Builder, width: usize, value: BigInt) -> ConstantOp {
+        builder.build_with(|builder, state| {
+            let ty = get_integer_type(builder.cx, width);
+            state.add_attribute("value", get_integer_attr(ty, value.to_i64().unwrap()));
+            state.add_result(ty);
+        })
+    }
+}

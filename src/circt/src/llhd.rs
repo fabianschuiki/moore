@@ -30,15 +30,8 @@ pub fn pointer_type_element(ty: Type) -> Type {
     Type::from_raw(unsafe { llhdPointerTypeGetElementType(ty.raw()) })
 }
 
-/// An LLHD entity.
-#[derive(Clone, Copy)]
-pub struct EntityOp(MlirOperation);
-
-impl OperationExt for EntityOp {
-    fn raw_operation(&self) -> MlirOperation {
-        self.0
-    }
-}
+def_operation!(EntityOp, "llhd.entity");
+def_operation_single_result!(SigOp, "llhd.sig");
 
 impl EntityOp {
     /// Get the body region of this entity.
@@ -114,7 +107,8 @@ impl<'a> EntityOpBuilder<'a> {
 
     pub fn build(&mut self) -> EntityOp {
         let cx = self.builder.cx;
-        let mut state = mlir::OperationState::new("llhd.entity", self.builder.loc.raw());
+        let mut state =
+            mlir::OperationState::new(EntityOp::operation_name(), self.builder.loc.raw());
         let types: Vec<MlirType> = self
             .inputs
             .iter()
@@ -156,6 +150,17 @@ impl<'a> EntityOpBuilder<'a> {
             mlirOperationStateAddOwnedRegions(state.raw_mut(), 1, [region].as_ptr());
         }
 
-        EntityOp(state.build().raw_operation())
+        state.build()
+    }
+}
+
+impl SigOp {
+    /// Create a new signal.
+    pub fn new(builder: &mut Builder, name: &str, init: Value) -> SigOp {
+        builder.build_with(|builder, state| {
+            state.add_operand(init);
+            state.add_attribute("name", get_string_attr(builder.cx, name));
+            state.add_result(get_signal_type(init.ty()));
+        })
     }
 }

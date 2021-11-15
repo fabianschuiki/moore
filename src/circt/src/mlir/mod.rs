@@ -1,12 +1,14 @@
 use circt_sys::*;
 use std::convert::TryInto;
 
+pub mod attr;
 pub mod builder;
 pub mod context;
 pub mod loc;
 pub mod ty;
 pub mod value;
 
+pub use attr::*;
 pub use builder::*;
 pub use context::*;
 pub use loc::*;
@@ -51,16 +53,22 @@ impl DialectHandle {
 }
 
 /// A trait implemented by anything that wraps an MLIR operation.
-pub trait OperationExt {
-    fn raw_operation(&self) -> MlirOperation;
+pub trait OperationExt: WrapRaw<RawType = MlirOperation> {
+    /// Return the full operation name, like `builtin.module`.
+    fn operation_name() -> &'static str;
+
+    /// Get the underlying C API operation.
+    fn raw_operation(&self) -> MlirOperation {
+        self.raw()
+    }
 
     fn operation(&self) -> Operation {
-        Operation(self.raw_operation())
+        Operation(self.raw())
     }
 
     /// Print the operation to stderr.
     fn dump(&self) {
-        unsafe { mlirOperationDump(self.raw_operation()) };
+        unsafe { mlirOperationDump(self.raw()) };
     }
 
     /// Print the operation to anything that implements `std::io::Write`.
@@ -89,7 +97,7 @@ pub trait OperationExt {
                 mlirOpPrintingFlagsEnableDebugInfo(flags, false);
             }
             mlirOperationPrintWithFlags(
-                self.raw_operation(),
+                self.raw(),
                 flags,
                 Some(callback::<T>),
                 (&mut &mut to) as *const _ as *mut _,
@@ -100,14 +108,17 @@ pub trait OperationExt {
 
     /// Return the MLIR context for this operation.
     fn context(&self) -> Context {
-        unsafe { Context::from_raw(mlirOperationGetContext(self.raw_operation())) }
+        unsafe { Context::from_raw(mlirOperationGetContext(self.raw())) }
+    }
+
+    /// Return the block this operation is in.
+    fn block(&self) -> MlirBlock {
+        unsafe { mlirOperationGetBlock(self.raw()) }
     }
 
     /// Return an attribute of the operation.
     fn attr(&self, name: &str) -> MlirAttribute {
-        unsafe {
-            mlirOperationGetAttributeByName(self.raw_operation(), mlirStringRefCreateFromStr(name))
-        }
+        unsafe { mlirOperationGetAttributeByName(self.raw(), mlirStringRefCreateFromStr(name)) }
     }
 
     /// Return an attribute of the operation as an `i64`.
@@ -134,13 +145,29 @@ pub trait OperationExt {
     fn attr_usize(&self, name: &str) -> usize {
         self.get_attr_usize(name).unwrap()
     }
+
+    /// Get one of the results of the operation.
+    fn result(&self, index: usize) -> Value {
+        Value::from_raw(unsafe { mlirOperationGetResult(self.raw(), index as _) })
+    }
 }
 
+#[derive(Clone, Copy)]
 pub struct Operation(MlirOperation);
 
-impl OperationExt for Operation {
-    fn raw_operation(&self) -> MlirOperation {
+impl WrapRaw for Operation {
+    type RawType = MlirOperation;
+    fn from_raw(raw: MlirOperation) -> Self {
+        Self(raw)
+    }
+    fn raw(&self) -> MlirOperation {
         self.0
+    }
+}
+
+impl OperationExt for Operation {
+    fn operation_name() -> &'static str {
+        panic!("unspecific operation")
     }
 }
 
@@ -163,19 +190,29 @@ impl OperationState {
         &mut self.0
     }
 
-    pub fn build(mut self) -> Operation {
-        unsafe { Operation(mlirOperationCreate(self.raw_mut())) }
+    /// Add an operand to the operation.
+    pub fn add_operand(&mut self, value: Value) {
+        unsafe { mlirOperationStateAddOperands(self.raw_mut(), 1, [value.raw()].as_ptr()) }
     }
-}
 
-/// Create a new integer type of a given width.
-pub fn get_integer_type(cx: Context, bitwidth: usize) -> Type {
-    Type::from_raw(unsafe { mlirIntegerTypeGet(cx.raw(), bitwidth as _) })
-}
+    /// Add an attribute to the operation.
+    pub fn add_attribute(&mut self, name: &str, attr: Attribute) {
+        self.add_attributes(&[attr.named(name)]);
+    }
 
-/// Return the width of an integer type.
-pub fn integer_type_width(ty: Type) -> usize {
-    unsafe { mlirIntegerTypeGetWidth(ty.raw()) as _ }
+    /// Add multiple attributes to the operation.
+    pub fn add_attributes(&mut self, attrs: &[MlirNamedAttribute]) {
+        unsafe { mlirOperationStateAddAttributes(self.raw_mut(), attrs.len() as _, attrs.as_ptr()) }
+    }
+
+    /// Add a result to the operation.
+    pub fn add_result(&mut self, ty: Type) {
+        unsafe { mlirOperationStateAddResults(self.raw_mut(), 1, [ty.raw()].as_ptr()) }
+    }
+
+    pub fn build<Op: OperationExt>(mut self) -> Op {
+        unsafe { Op::from_raw(mlirOperationCreate(self.raw_mut())) }
+    }
 }
 
 /// Helper function to feed the output of an MLIR `*Print()` function into an

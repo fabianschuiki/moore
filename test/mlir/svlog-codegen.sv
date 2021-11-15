@@ -6,10 +6,15 @@
 // CHECK-SAME:  ) -> (
 // CHECK-SAME:    [[ARG_Y:%.+]]: !llhd.sig<i2>
 // CHECK-SAME:  ) {
-// CHECK-NEXT:  }
 module Foo (
     input bit x,
     output bit [1:0] y,
     input bit [2:0] z
 );
+    // Declarations
+    bit a = 0;
+    wire bit b = a;
+    // CHECK: [[DECL_A:%.+]] = llhd.sig "a" %false : i1
+    // CHECK: [[DECL_B:%.+]] = llhd.sig "b" {{.+}} : i1
 endmodule
+// CHECK: }
