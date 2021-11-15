@@ -494,7 +494,7 @@ fn elaborate_name(
             mlir_cx.load_dialect(circt::llhd::dialect());
             mlir_cx.load_dialect(circt::seq::dialect());
 
-            let mlir_module = circt::std::ModuleOp::new(*mlir_cx);
+            let mlir_module = circt::ModuleOp::new(*mlir_cx);
 
             let mut cg = svlog::CodeGenerator::new(ctx.svlog, mlir_module);
             cg.emit_module(m)?;
@@ -527,7 +527,7 @@ fn emit_output(
     matches: &ArgMatches,
     ctx: &ScoreContext,
     module: &llhd::ir::Module,
-    mlir_module: circt::std::ModuleOp,
+    mlir_module: circt::ModuleOp,
 ) -> Result<(), ()> {
     // Check if the user has provided an explicit output format.
     let fmt = match matches.value_of("output-format") {

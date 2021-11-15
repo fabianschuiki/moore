@@ -29,14 +29,14 @@ pub struct CodeGenerator<'gcx, C> {
     /// The LLHD module to be populated.
     into: llhd::ir::Module,
     /// THe MLIR module to be populated.
-    into_mlir: circt::std::ModuleOp,
+    into_mlir: circt::ModuleOp,
     /// Tables holding mappings and interned values.
     tables: Tables<'gcx>,
 }
 
 impl<'gcx, C> CodeGenerator<'gcx, C> {
     /// Create a new code generator.
-    pub fn new(cx: C, into_mlir: circt::std::ModuleOp) -> Self {
+    pub fn new(cx: C, into_mlir: circt::ModuleOp) -> Self {
         CodeGenerator {
             cx,
             into: llhd::ir::Module::new(),
