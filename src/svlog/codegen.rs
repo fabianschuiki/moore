@@ -22,6 +22,9 @@ use std::{
     rc::Rc,
 };
 
+pub type HybridValue = (llhd::ir::Value, mlir::Value);
+pub type HybridType = (llhd::Type, mlir::Type);
+
 /// A code generator.
 ///
 /// Use this struct to emit LLHD code for nodes in a [`Context`].
@@ -60,7 +63,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<Rc<EmittedModule<'gcx>>>>,
     module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
-    interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<(llhd::Type, mlir::Type)>>,
+    interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<HybridType>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -139,13 +142,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             .module_signatures
             .insert(id.env(env), (name, ports.sig.clone()));
         let mut values = HashMap::new();
-        let mut mlir_values = HashMap::new();
         let mut gen = UnitGenerator {
             gen: self,
             builder: &mut builder,
             values: &mut values,
             mlir_builder: &mut mlir_builder,
-            mlir_values: &mut mlir_values,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
@@ -156,16 +157,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         for (index, port) in ports.inputs.iter().enumerate() {
             let arg = gen.builder.input_arg(index);
             gen.builder.set_name(arg, port.name.clone());
-            gen.values.insert(port.accnode, arg);
-            gen.mlir_values
-                .insert(port.accnode, entity_op.input_port(index));
+            gen.values
+                .insert(port.accnode, (arg, entity_op.input_port(index)));
         }
         for (index, port) in ports.outputs.iter().enumerate() {
             let arg = gen.builder.output_arg(index);
             gen.builder.set_name(arg, port.name.clone());
-            gen.values.insert(port.accnode, arg);
-            gen.mlir_values
-                .insert(port.accnode, entity_op.output_port(index));
+            gen.values
+                .insert(port.accnode, (arg, entity_op.output_port(index)));
         }
 
         debug!("  Ports:");
@@ -174,12 +173,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 "    {:?} = {:?} (type {})",
                 node,
                 value,
-                gen.llhd_type(*value)
+                gen.llhd_type(value.0),
             );
-        }
-        debug!("  MLIR Ports:");
-        for (node, value) in gen.mlir_values.iter() {
-            debug!("    {:?} = {}", node, value);
         }
 
         // Emit the actual contents of the entity.
@@ -187,7 +182,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Assign default values to undriven output ports.
         for port in ports.outputs.iter() {
-            let value = gen.values[&port.accnode];
+            // TODO: Emit these in the MLIR output
+            let value = gen.values[&port.accnode].0;
             let driven = gen
                 .builder
                 .all_insts()
@@ -210,9 +206,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             )?;
             let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
             let zero_time = gen.builder.ins().const_time(zero_time);
-            gen.builder
-                .ins()
-                .drv(gen.values[&port.accnode], default_value, zero_time);
+            gen.builder.ins().drv(value, default_value, zero_time);
         }
 
         let unit = self.into.add_unit(ent);
@@ -472,23 +466,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         // Create a mapping from read/written nodes to process parameters.
-        let mut values = HashMap::new();
+        let mut values = HashMap::<_, HybridValue>::new();
         let mut mlir_builder = mlir::Builder::new(self.mcx);
         mlir_builder.set_loc(span_to_loc(self.mcx, hir.span()));
-        let mut mlir_values = HashMap::new();
         for (&id, arg) in inputs
             .iter()
             .zip(builder.input_args())
             .chain(outputs.iter().zip(builder.output_args()))
         {
-            values.insert(id.into(), arg);
+            values.insert(id.into(), (arg, todo!("mlir for process input {:?}", arg)));
         }
         let mut pg = UnitGenerator {
             gen: self,
             builder: &mut builder,
             values: &mut values,
             mlir_builder: &mut mlir_builder,
-            mlir_values: &mut mlir_values,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
@@ -503,14 +495,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let input_set: HashSet<_> = acc.read.iter().cloned().collect();
         let output_set: HashSet<_> = acc.written.iter().cloned().collect();
         for &id in input_set.intersection(&output_set) {
-            let init = pg.builder.ins().prb(pg.values[&id.into()]);
-            let shadow = pg.builder.ins().var(init);
+            let value = pg.values[&id.into()];
+            let init = (
+                pg.builder.ins().prb(value.0),
+                circt::llhd::ProbeOp::new(pg.mlir_builder, value.1).into(),
+            );
+            let shadow = (
+                pg.builder.ins().var(init.0),
+                circt::llhd::VariableOp::new(pg.mlir_builder, init.1).into(),
+            );
             if let Some(name) = pg
                 .builder
-                .get_name(pg.values[&id.into()])
+                .get_name(value.0)
                 .map(|name| format!("{}.shadow", name))
             {
-                pg.builder.set_name(shadow, name);
+                pg.builder.set_name(shadow.0, name);
             }
             pg.shadows.insert(id.into(), shadow);
         }
@@ -582,7 +581,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a type to an LLHD type (interned).
-    fn emit_type_both(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<(llhd::Type, mlir::Type)> {
+    fn emit_type_both(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<HybridType> {
         if let Some(x) = self.tables.interned_types.get(&ty) {
             x.clone()
         } else {
@@ -593,10 +592,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a type to an LLHD type.
-    fn emit_type_uninterned(
-        &mut self,
-        ty: &'gcx UnpackedType<'gcx>,
-    ) -> Result<(llhd::Type, mlir::Type)> {
+    fn emit_type_uninterned(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<HybridType> {
         if ty.is_error() {
             return Err(());
         }
@@ -749,20 +745,18 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The builder into which instructions are emitted.
     builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
-    values: &'a mut HashMap<AccessedNode, llhd::ir::Value>,
+    values: &'a mut HashMap<AccessedNode, HybridValue>,
     /// The MLIR builder which is used to create new operations.
     mlir_builder: &'a mut mlir::Builder,
-    /// The emitted MLIR values for various nodes.
-    mlir_values: &'a mut HashMap<AccessedNode, mlir::Value>,
     /// The constant values emitted into the unit.
-    interned_consts: HashMap<Value<'gcx>, Result<(llhd::ir::Value, mlir::Value)>>,
+    interned_consts: HashMap<Value<'gcx>, Result<HybridValue>>,
     /// The MIR lvalues emitted into the unit.
     interned_lvalues: HashMap<NodeId, Result<(llhd::ir::Value, Option<llhd::ir::Value>)>>,
     /// The MIR rvalues emitted into the unit.
-    interned_rvalues: HashMap<(NodeId, Mode), Result<(llhd::ir::Value, Mode)>>,
+    interned_rvalues: HashMap<(NodeId, Mode), Result<(HybridValue, Mode)>>,
     /// The shadow variables introduced to handle signals which are both read
     /// and written in a process.
-    shadows: HashMap<AccessedNode, llhd::ir::Value>,
+    shadows: HashMap<AccessedNode, HybridValue>,
 }
 
 impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
@@ -784,6 +778,10 @@ where
     C: Context<'gcx> + 'b,
 {
     fn emitted_value(&self, src: impl Into<AccessedNode>) -> llhd::ir::Value {
+        self.emitted_value_both(src).0
+    }
+
+    fn emitted_value_both(&self, src: impl Into<AccessedNode>) -> HybridValue {
         let src = src.into();
         match self.values.get(&src) {
             Some(&v) => v,
@@ -800,6 +798,10 @@ where
     }
 
     fn set_emitted_value(&mut self, src: impl Into<AccessedNode>, value: llhd::ir::Value) {
+        self.set_emitted_value_both(src, (value, todo!("mlir for emitted value")));
+    }
+
+    fn set_emitted_value_both(&mut self, src: impl Into<AccessedNode>, value: HybridValue) {
         let src = src.into();
         self.values.insert(src, value);
     }
@@ -830,8 +832,7 @@ where
             let ty = self.type_of(decl_id, env)?;
             let value = self.emit_varnet_decl(decl_id, ty, env, hir.init)?;
             self.builder.set_name(value.0, hir.name.value.into());
-            self.values.insert(decl_id.into(), (value.0).into());
-            self.mlir_values.insert(decl_id.into(), value.1);
+            self.values.insert(decl_id.into(), value);
         }
 
         // Emit interface instances.
@@ -871,8 +872,7 @@ where
                     inst.hir.name,
                     signal.name
                 );
-                self.values.insert(src, (value.0).into());
-                self.mlir_values.insert(src, value.1);
+                self.values.insert(src, value);
                 signal_lookup.insert(signal.decl_id, value);
             }
 
@@ -1024,7 +1024,7 @@ where
         for &proc_id in &hir.procs {
             let prok = self.emit_procedure(proc_id, env, name_prefix)?;
             let lookup_value = |&id: &AccessedNode| match self.values.get(&id) {
-                Some(v) => v.clone(),
+                Some(v) => v.0.clone(),
                 None => {
                     self.emit(
                         DiagBuilder2::bug(format!(
@@ -1130,7 +1130,8 @@ where
                             })
                         }
                     };
-                    self.emit_mir_lvalue(mir).map(|(x, _)| x)
+                    self.emit_mir_lvalue(mir)
+                        .map(|(x, _)| -> HybridValue { (x, todo!("mlir for mir lvalue")) })
                 } else {
                     let mir = self.mir_rvalue(mapping.id(), mapping.env());
                     if mir.is_error() {
@@ -1162,22 +1163,25 @@ where
                     }
                     None => {
                         let v = self.type_default_value(ty);
-                        let v = self.emit_const(v, inst.inner_env, port.port.span)?;
-                        self.builder.ins().sig(v)
+                        let v = self.emit_const_both(v, inst.inner_env, port.port.span)?;
+                        (
+                            self.builder.ins().sig(v.0),
+                            circt::llhd::SignalOp::new(self.mlir_builder, "", v.1).into(),
+                        )
                     }
                 };
                 self.builder
-                    .set_name(value, format!("{}.{}.default", inst.hir.name, port.name));
+                    .set_name(value.0, format!("{}.{}.default", inst.hir.name, port.name));
                 Ok(value)
             }
         };
         let inputs = inputs
             .iter()
-            .map(|p| map_port(p, false))
+            .map(|p| map_port(p, false).map(|x| x.0))
             .collect::<Result<Vec<_>>>()?;
         let outputs = outputs
             .iter()
-            .map(|p| map_port(p, true))
+            .map(|p| map_port(p, true).map(|x| x.0))
             .collect::<Result<Vec<_>>>()?;
         Ok((inputs, outputs))
     }
@@ -1198,7 +1202,7 @@ where
         value: Value<'gcx>,
         env: ParamEnv,
         span: Span,
-    ) -> Result<(llhd::ir::Value, mlir::Value)> {
+    ) -> Result<HybridValue> {
         if let Some(x) = self.interned_consts.get(value) {
             x.clone()
         } else {
@@ -1215,7 +1219,7 @@ where
         value: Value<'gcx>,
         env: ParamEnv,
         span: Span,
-    ) -> Result<(llhd::ir::Value, mlir::Value)> {
+    ) -> Result<HybridValue> {
         if value.ty.is_error() {
             return Err(());
         }
@@ -1306,6 +1310,7 @@ where
     /// Emit the code for an rvalue.
     fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
         self.emit_rvalue_mode(expr_id, env, Mode::Value)
+            .map(|x| x.0)
     }
 
     /// Emit the code for an rvalue.
@@ -1314,13 +1319,18 @@ where
         expr_id: NodeId,
         env: ParamEnv,
         mode: Mode,
-    ) -> Result<llhd::ir::Value> {
+    ) -> Result<HybridValue> {
         let mir = self.mir_rvalue(expr_id, env);
         self.emit_mir_rvalue_mode(mir, mode)
     }
 
     /// Emit the code for an MIR rvalue.
     fn emit_mir_rvalue(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
+        self.emit_mir_rvalue_both(mir).map(|x| x.0)
+    }
+
+    /// Emit the code for an MIR rvalue.
+    fn emit_mir_rvalue_both(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<HybridValue> {
         self.emit_mir_rvalue_mode(mir, Mode::Value)
     }
 
@@ -1329,7 +1339,7 @@ where
         &mut self,
         mir: &'gcx mir::Rvalue<'gcx>,
         mode: Mode,
-    ) -> Result<llhd::ir::Value> {
+    ) -> Result<HybridValue> {
         let (value, actual_mode) = if let Some(x) = self.interned_rvalues.get(&(mir.id, mode)) {
             x.clone()?
         } else {
@@ -1340,13 +1350,13 @@ where
 
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {
-                let ty = self.llhd_type(value);
+                let ty = self.llhd_type(value.0);
                 let init = self.emit_zero_for_type(&ty);
                 let sig = self.builder.ins().sig(init);
                 let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
                 let delay_const = self.builder.ins().const_time(delay);
-                self.builder.ins().drv(sig, value, delay_const);
-                Ok(sig)
+                self.builder.ins().drv(sig, value.0, delay_const);
+                Ok((sig, todo!("mlir signal spill")))
             }
             (Mode::Value, Mode::Signal) => unreachable!(),
             _ => Ok(value),
@@ -1361,7 +1371,7 @@ where
         &mut self,
         mir: &'gcx mir::Rvalue<'gcx>,
         mode_hint: Mode,
-    ) -> Result<(llhd::ir::Value, Mode)> {
+    ) -> Result<(HybridValue, Mode)> {
         let result = self.emit_mir_rvalue_inner(mir, mode_hint);
         match result {
             Ok((result, actual_mode)) => {
@@ -1370,7 +1380,7 @@ where
                     Mode::Value => llty_exp,
                     Mode::Signal => llhd::signal_ty(llty_exp),
                 };
-                let llty_act = self.llhd_type(result);
+                let llty_act = self.llhd_type(result.0);
                 assert_span!(
                     llty_exp == llty_act,
                     mir.span,
@@ -1399,12 +1409,12 @@ where
         &mut self,
         mir: &'gcx mir::Rvalue<'gcx>,
         mode_hint: Mode,
-    ) -> Result<(llhd::ir::Value, Mode)> {
+    ) -> Result<(HybridValue, Mode)> {
         // If the value is a constant, emit the fully folded constant value.
         if mir.is_const() {
             let value = self.const_mir_rvalue(mir.into());
             return self
-                .emit_const(value, mir.env, mir.span)
+                .emit_const_both(value, mir.env, mir.span)
                 .map(|v| (v, Mode::Value));
         }
 
@@ -1414,11 +1424,11 @@ where
                     .shadows
                     .get(&id.into())
                     .cloned()
-                    .unwrap_or_else(|| self.emitted_value(id));
-                if mode_hint == Mode::Signal && self.llhd_type(sig).is_signal() {
+                    .unwrap_or_else(|| self.emitted_value_both(id));
+                if mode_hint == Mode::Signal && self.llhd_type(sig.0).is_signal() {
                     return Ok((sig, Mode::Signal));
                 } else {
-                    Ok(self.emit_prb_or_var(sig))
+                    Ok(self.emit_prb_or_var(sig).0)
                 }
             }
 
@@ -1599,7 +1609,7 @@ where
                             for _ in 1..count.to_usize().unwrap() {
                                 value = self.builder.ins().umul(value, lhs_ll);
                             }
-                            return Ok((value, Mode::Value));
+                            return Ok(((value, todo!("mlir const pow")), Mode::Value));
                         }
 
                         // If the base is a constant power of two, we translate
@@ -1627,7 +1637,10 @@ where
                                 // `1 << (y * log2(base))`
                                 let zeros = self.emit_zero_for_type(&self.llhd_type(lhs_ll));
                                 return Ok((
-                                    self.builder.ins().shl(lhs_ll, zeros, rhs_ll),
+                                    (
+                                        self.builder.ins().shl(lhs_ll, zeros, rhs_ll),
+                                        todo!("mlir dynamic pow"),
+                                    ),
                                     Mode::Value,
                                 ));
                             }
@@ -1762,22 +1775,28 @@ where
             mir::RvalueKind::Error => Err(()),
         };
 
-        value.map(|v| (v, Mode::Value))
+        value.map(|v| ((v, todo!("mlir for value") as mlir::Value), Mode::Value))
     }
 
-    fn emit_prb_or_var(&mut self, sig: llhd::ir::Value) -> llhd::ir::Value {
-        match *self.llhd_type(sig) {
+    fn emit_prb_or_var(&mut self, sig: HybridValue) -> HybridValue {
+        match *self.llhd_type(sig.0) {
             llhd::SignalType(_) => {
-                let value = self.builder.ins().prb(sig);
-                if let Some(name) = self.builder.get_name(sig) {
-                    self.builder.set_name(value, format!("{}.prb", name));
+                let value = (
+                    self.builder.ins().prb(sig.0),
+                    circt::llhd::ProbeOp::new(self.mlir_builder, sig.1).into(),
+                );
+                if let Some(name) = self.builder.get_name(sig.0) {
+                    self.builder.set_name(value.0, format!("{}.prb", name));
                 }
                 value
             }
             llhd::PointerType(_) => {
-                let value = self.builder.ins().ld(sig);
-                if let Some(name) = self.builder.get_name(sig) {
-                    self.builder.set_name(value, format!("{}.ld", name));
+                let value = (
+                    self.builder.ins().ld(sig.0),
+                    circt::llhd::LoadOp::new(self.mlir_builder, sig.1).into(),
+                );
+                if let Some(name) = self.builder.get_name(sig.0) {
+                    self.builder.set_name(value.0, format!("{}.ld", name));
                 }
                 value
             }
@@ -1811,7 +1830,7 @@ where
         mir: &mir::Rvalue<'gcx>,
         signal: NodeId,
         mode_hint: Mode,
-    ) -> Result<(llhd::ir::Value, Mode)> {
+    ) -> Result<(HybridValue, Mode)> {
         match mir.kind {
             mir::RvalueKind::Intf(intf) => {
                 let id = AccessedNode::Intf(intf, signal);
@@ -1819,14 +1838,14 @@ where
                     .shadows
                     .get(&id)
                     .cloned()
-                    .unwrap_or_else(|| self.emitted_value(id));
+                    .unwrap_or_else(|| self.emitted_value_both(id));
                 debug!(
                     "{:?} emitted value is {:?} (type {})",
                     id,
                     sig,
-                    self.llhd_type(sig)
+                    self.llhd_type(sig.0)
                 );
-                if mode_hint == Mode::Signal && self.llhd_type(sig).is_signal() {
+                if mode_hint == Mode::Signal && self.llhd_type(sig.0).is_signal() {
                     Ok((sig, Mode::Signal))
                 } else {
                     Ok((self.emit_prb_or_var(sig), Mode::Value))
@@ -1839,8 +1858,8 @@ where
                 length,
             } => {
                 let (inner, actual_mode) = self.emit_rvalue_interface(value, signal, mode_hint)?;
-                self.emit_rvalue_index(value.ty, inner, base, length)
-                    .map(|v| (v, actual_mode))
+                self.emit_rvalue_index(value.ty, inner.0, base, length)
+                    .map(|v| ((v, todo!("mlir rvalue index") as mlir::Value), actual_mode))
             }
 
             _ => bug_span!(
@@ -1951,7 +1970,7 @@ where
             // them.
             mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => Ok((
                 self.emitted_value(id).clone(),
-                self.shadows.get(&id.into()).cloned(),
+                self.shadows.get(&id.into()).cloned().map(|x| x.0),
             )),
 
             // Interface signals require special care, because they are emitted
@@ -2018,7 +2037,7 @@ where
                 let id = AccessedNode::Intf(intf, signal);
                 Ok((
                     self.emitted_value(id).clone(),
-                    self.shadows.get(&id).cloned(),
+                    self.shadows.get(&id).cloned().map(|x| x.0),
                 ))
             }
 
@@ -2583,8 +2602,13 @@ where
     /// Emit the code to update the shadow variables of signals.
     fn emit_shadow_update(&mut self) {
         for (&id, &shadow) in &self.shadows {
-            let value = self.builder.ins().prb(self.values[&id.into()]);
-            self.builder.ins().st(shadow, value);
+            let value = self.values[&id.into()];
+            let value = (
+                self.builder.ins().prb(value.0),
+                circt::llhd::ProbeOp::new(self.mlir_builder, value.1).into(),
+            );
+            self.builder.ins().st(shadow.0, value.0);
+            circt::llhd::StoreOp::new(self.mlir_builder, shadow.1, value.1);
         }
     }
 
@@ -2595,7 +2619,7 @@ where
         ty: &'gcx UnpackedType<'gcx>,
         env: ParamEnv,
         default: Option<NodeId>,
-    ) -> Result<(llhd::ir::Value, mlir::Value)> {
+    ) -> Result<HybridValue> {
         // Check if this is a variable or a net declaration.
         let (is_var, name) = match self.hir_of(decl_id)? {
             HirNode::VarDecl(x) => (x.kind.is_var(), x.name.value.as_str()),
@@ -2618,7 +2642,7 @@ where
             )?;
             Ok((
                 self.builder.ins().sig(init.0),
-                circt::llhd::SigOp::new(self.mlir_builder, &name, init.1).into(),
+                circt::llhd::SignalOp::new(self.mlir_builder, &name, init.1).into(),
             ))
         } else {
             // For nets we simply emit the initial value as a signal, then
@@ -2627,11 +2651,12 @@ where
                 self.emit_const_both(self.type_default_value(ty), env, self.span(decl_id))?;
             let net = (
                 self.builder.ins().sig(zero.0),
-                circt::llhd::SigOp::new(self.mlir_builder, &name, zero.1).into(),
+                circt::llhd::SignalOp::new(self.mlir_builder, &name, zero.1).into(),
             );
             if let Some(default) = default {
                 let init = self.emit_rvalue_mode(default, env, Mode::Signal)?;
-                self.builder.ins().con(net.0, init);
+                self.builder.ins().con(net.0, init.0);
+                circt::llhd::ConnectOp::new(self.mlir_builder, net.1, init.1);
             }
             Ok(net)
         }
@@ -2798,6 +2823,6 @@ fn span_to_loc(cx: mlir::Context, span: Span) -> mlir::Location {
 ///
 /// This is a convenience function that process old LLHD types and the newer
 /// MLIR types in parallel.
-fn signal_ty(ty: (llhd::Type, mlir::Type)) -> (llhd::Type, mlir::Type) {
+fn signal_ty(ty: HybridType) -> HybridType {
     (llhd::signal_ty(ty.0), circt::llhd::get_signal_type(ty.1))
 }

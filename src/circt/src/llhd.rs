@@ -31,7 +31,6 @@ pub fn pointer_type_element(ty: Type) -> Type {
 }
 
 def_operation!(EntityOp, "llhd.entity");
-def_operation_single_result!(SigOp, "llhd.sig");
 
 impl EntityOp {
     /// Get the body region of this entity.
@@ -154,13 +153,72 @@ impl<'a> EntityOpBuilder<'a> {
     }
 }
 
-impl SigOp {
+def_operation_single_result!(SignalOp, "llhd.sig");
+def_operation_single_result!(VariableOp, "llhd.var");
+def_operation!(ConnectOp, "llhd.con");
+def_operation_single_result!(ProbeOp, "llhd.prb");
+def_operation_single_result!(LoadOp, "llhd.ld");
+def_operation!(StoreOp, "llhd.st");
+
+impl SignalOp {
     /// Create a new signal.
-    pub fn new(builder: &mut Builder, name: &str, init: Value) -> SigOp {
+    pub fn new(builder: &mut Builder, name: &str, init: Value) -> Self {
         builder.build_with(|builder, state| {
             state.add_operand(init);
             state.add_attribute("name", get_string_attr(builder.cx, name));
             state.add_result(get_signal_type(init.ty()));
+        })
+    }
+}
+
+impl VariableOp {
+    /// Create a new variable.
+    pub fn new(builder: &mut Builder, init: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(init);
+            state.add_result(get_signal_type(init.ty()));
+        })
+    }
+}
+
+impl ConnectOp {
+    /// Create a new signal connection.
+    pub fn new(builder: &mut Builder, sig1: Value, sig2: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(sig1);
+            state.add_operand(sig2);
+        })
+    }
+}
+
+impl ProbeOp {
+    /// Probe a signal.
+    pub fn new(builder: &mut Builder, sig: Value) -> Self {
+        builder.build_with(|_, state| {
+            let ty = signal_type_element(sig.ty());
+            state.add_operand(sig);
+            state.add_result(ty);
+        })
+    }
+}
+
+impl LoadOp {
+    /// Load the value of a variable.
+    pub fn new(builder: &mut Builder, var: Value) -> Self {
+        builder.build_with(|_, state| {
+            let ty = pointer_type_element(var.ty());
+            state.add_operand(var);
+            state.add_result(ty);
+        })
+    }
+}
+
+impl StoreOp {
+    /// Store a value to a variable.
+    pub fn new(builder: &mut Builder, var: Value, value: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(var);
+            state.add_operand(value);
         })
     }
 }

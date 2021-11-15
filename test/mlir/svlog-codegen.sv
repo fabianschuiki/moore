@@ -16,5 +16,6 @@ module Foo (
     wire bit b = a;
     // CHECK: [[DECL_A:%.+]] = llhd.sig "a" %false : i1
     // CHECK: [[DECL_B:%.+]] = llhd.sig "b" {{.+}} : i1
+    // CHECK: llhd.con [[DECL_B]], [[DECL_A]] : !llhd.sig<i1>
 endmodule
 // CHECK: }
