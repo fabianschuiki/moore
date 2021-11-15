@@ -13,5 +13,11 @@ pub mod sys {
 }
 
 pub mod prelude {
-    pub use crate::mlir::OperationExt as _;
+    pub use crate::mlir::{OperationExt as _, WrapRaw as _};
+}
+
+mod crate_prelude {
+    pub use crate::mlir::{Builder, Context, Location, OperationExt, WrapRaw};
+    pub use crate::prelude::*;
+    pub use crate::sys::*;
 }

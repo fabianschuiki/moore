@@ -1,5 +1,11 @@
 use circt_sys::*;
 
+pub mod builder;
+pub mod loc;
+
+pub use builder::Builder;
+pub use loc::Location;
+
 pub struct Owned<T: IntoOwned>(T);
 
 pub trait IntoOwned {
@@ -17,6 +23,15 @@ impl<T: IntoOwned> std::ops::Deref for Owned<T> {
     fn deref(&self) -> &T {
         &self.0
     }
+}
+
+/// Common facilities for types that wrap an underlying raw MLIR C pointer.
+pub trait WrapRaw {
+    type RawType;
+    /// Wrap an existing raw MLIR C pointer.
+    fn from_raw(raw: Self::RawType) -> Self;
+    /// Get the underlying raw MLIR C pointer.
+    fn raw(&self) -> Self::RawType;
 }
 
 #[derive(Copy, Clone)]
@@ -75,7 +90,7 @@ pub trait OperationExt {
     }
 
     /// Print the operation to anything that implements `std::io::Write`.
-    fn print<T: std::io::Write>(&self, mut to: T) {
+    fn print<T: std::io::Write>(&self, mut to: T, with_debug_info: bool) {
         /// Helper callback function that interprets its `user_data` field as a
         /// reference to a reference to something that implements `Write`. The
         /// double reference is required to ensure we're not trying to pass a
@@ -95,11 +110,17 @@ pub trait OperationExt {
         // Print the operation through the above callback, which basically just
         // forwards the chunks to the Rust-native `Write` implementation.
         unsafe {
-            mlirOperationPrint(
+            let flags = mlirOpPrintingFlagsCreate();
+            if with_debug_info {
+                mlirOpPrintingFlagsEnableDebugInfo(flags, false);
+            }
+            mlirOperationPrintWithFlags(
                 self.raw_operation(),
+                flags,
                 Some(callback::<T>),
                 (&mut &mut to) as *const _ as *mut _,
-            )
+            );
+            mlirOpPrintingFlagsDestroy(flags);
         }
     }
 
