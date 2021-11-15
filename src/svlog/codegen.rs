@@ -154,11 +154,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let arg = gen.builder.input_arg(index);
             gen.builder.set_name(arg, port.name.clone());
             gen.values.insert(port.accnode, arg);
+            gen.mlir_values
+                .insert(port.accnode, entity_op.input_port(index));
         }
         for (index, port) in ports.outputs.iter().enumerate() {
             let arg = gen.builder.output_arg(index);
             gen.builder.set_name(arg, port.name.clone());
             gen.values.insert(port.accnode, arg);
+            gen.mlir_values
+                .insert(port.accnode, entity_op.output_port(index));
         }
 
         debug!("  Ports:");
@@ -169,6 +173,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 value,
                 gen.llhd_type(*value)
             );
+        }
+        debug!("  MLIR Ports:");
+        for (node, value) in gen.mlir_values.iter() {
+            debug!("    {:?} = {}", node, value);
         }
 
         // Emit the actual contents of the entity.
@@ -737,7 +745,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The emitted LLHD values for various nodes.
     values: &'a mut HashMap<AccessedNode, llhd::ir::Value>,
     /// The emitted MLIR values for various nodes.
-    mlir_values: &'a mut HashMap<AccessedNode, circt::sys::MlirValue>,
+    mlir_values: &'a mut HashMap<AccessedNode, mlir::Value>,
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
     /// The MIR lvalues emitted into the unit.

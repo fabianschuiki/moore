@@ -1,14 +1,17 @@
 use circt_sys::*;
+use std::convert::TryInto;
 
 pub mod builder;
 pub mod context;
 pub mod loc;
 pub mod ty;
+pub mod value;
 
 pub use builder::*;
 pub use context::*;
 pub use loc::*;
 pub use ty::*;
+pub use value::*;
 
 pub struct Owned<T: IntoOwned>(T);
 
@@ -95,8 +98,41 @@ pub trait OperationExt {
         }
     }
 
+    /// Return the MLIR context for this operation.
     fn context(&self) -> Context {
         unsafe { Context::from_raw(mlirOperationGetContext(self.raw_operation())) }
+    }
+
+    /// Return an attribute of the operation.
+    fn attr(&self, name: &str) -> MlirAttribute {
+        unsafe {
+            mlirOperationGetAttributeByName(self.raw_operation(), mlirStringRefCreateFromStr(name))
+        }
+    }
+
+    /// Return an attribute of the operation as an `i64`.
+    fn get_attr_i64(&self, name: &str) -> Option<i64> {
+        let attr = self.attr(name);
+        if attr.ptr.is_null() {
+            None
+        } else {
+            unsafe { Some(mlirIntegerAttrGetValueInt(attr)) }
+        }
+    }
+
+    /// Return an attribute of the operation as a `i64`.
+    fn attr_i64(&self, name: &str) -> i64 {
+        self.get_attr_i64(name).unwrap()
+    }
+
+    /// Return an attribute of the operation as a `usize`.
+    fn get_attr_usize(&self, name: &str) -> Option<usize> {
+        self.get_attr_i64(name).and_then(|x| x.try_into().ok())
+    }
+
+    /// Return an attribute of the operation as a `usize`.
+    fn attr_usize(&self, name: &str) -> usize {
+        self.get_attr_usize(name).unwrap()
     }
 }
 
@@ -140,4 +176,18 @@ pub fn get_integer_type(cx: Context, bitwidth: usize) -> Type {
 /// Return the width of an integer type.
 pub fn integer_type_width(ty: Type) -> usize {
     unsafe { mlirIntegerTypeGetWidth(ty.raw()) as _ }
+}
+
+/// Helper function to feed the output of an MLIR `*Print()` function into an
+/// `std::fmt::Formatter`.
+unsafe extern "C" fn print_formatter_callback(string: MlirStringRef, to: *mut std::ffi::c_void) {
+    let to: &mut std::fmt::Formatter = std::mem::transmute(to);
+    to.write_str(
+        std::str::from_utf8(std::slice::from_raw_parts(
+            string.data as *const _,
+            string.length as usize,
+        ))
+        .expect("utf8 string"),
+    )
+    .unwrap();
 }

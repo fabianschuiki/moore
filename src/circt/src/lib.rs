@@ -18,7 +18,8 @@ pub mod prelude {
 
 mod crate_prelude {
     pub use crate::mlir::{
-        Builder, Context, DialectHandle, IntoOwned, Location, OperationExt, Owned, Type, WrapRaw,
+        Builder, Context, DialectHandle, IntoOwned, Location, OperationExt, Owned, Type, Value,
+        WrapRaw,
     };
     pub use crate::prelude::*;
     pub use crate::sys::*;
