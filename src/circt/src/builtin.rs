@@ -1,20 +1,12 @@
 use crate::crate_prelude::*;
 
-/// An MLIR module.
-#[derive(Clone, Copy)]
-pub struct ModuleOp(MlirOperation);
-
-impl OperationExt for ModuleOp {
-    fn raw_operation(&self) -> MlirOperation {
-        self.0
-    }
-}
+def_operation!(ModuleOp, "builtin.module");
 
 impl ModuleOp {
     pub fn new(cx: Context) -> Self {
         unsafe {
             let mut state = mlirOperationStateGet(
-                mlirStringRefCreateFromStr("builtin.module"),
+                mlirStringRefCreateFromStr(Self::operation_name()),
                 mlirLocationUnknownGet(cx.raw()),
             );
             let region = mlirRegionCreate();

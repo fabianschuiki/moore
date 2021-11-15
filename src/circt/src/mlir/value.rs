@@ -9,6 +9,13 @@ use std::fmt::{Debug, Display};
 #[derive(Clone, Copy)]
 pub struct Value(MlirValue);
 
+impl Value {
+    /// Return the type of this value.
+    pub fn ty(&self) -> Type {
+        Type::from_raw(unsafe { mlirValueGetType(self.raw()) })
+    }
+}
+
 impl WrapRaw for Value {
     type RawType = MlirValue;
     fn from_raw(raw: MlirValue) -> Self {

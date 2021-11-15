@@ -20,6 +20,11 @@ impl Context {
             mlirDialectHandleRegisterDialect(dialect.0, self.0);
         }
     }
+
+    /// Get an interned identifier.
+    pub fn get_identifier(&self, ident: &str) -> MlirIdentifier {
+        unsafe { mlirIdentifierGet(self.raw(), mlirStringRefCreateFromStr(ident)) }
+    }
 }
 
 impl WrapRaw for Context {
