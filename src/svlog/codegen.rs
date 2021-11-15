@@ -182,20 +182,19 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Assign default values to undriven output ports.
         for port in ports.outputs.iter() {
-            // TODO: Emit these in the MLIR output
-            let value = gen.values[&port.accnode].0;
+            let value = gen.values[&port.accnode];
             let driven = gen
                 .builder
                 .all_insts()
                 .any(|inst| match gen.builder[inst].opcode() {
-                    llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value,
-                    llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value),
+                    llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value.0,
+                    llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value.0),
                     _ => false,
                 });
             if driven {
                 continue;
             }
-            let default_value = gen.emit_const(
+            let default_value = gen.emit_const_both(
                 if let Some(default) = port.default {
                     gen.constant_value_of(default, env)
                 } else {
@@ -206,7 +205,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             )?;
             let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
             let zero_time = gen.builder.ins().const_time(zero_time);
-            gen.builder.ins().drv(value, default_value, zero_time);
+            gen.builder.ins().drv(value.0, default_value.0, zero_time);
+            let zero_time = circt::llhd::ConstantTimeOp::with_delta(gen.mlir_builder, 1).into();
+            circt::llhd::DriveOp::new(gen.mlir_builder, value.1, default_value.1, zero_time);
         }
 
         let unit = self.into.add_unit(ent);

@@ -57,5 +57,5 @@ mod crate_prelude {
     pub use crate::mlir::*;
     pub use crate::prelude::*;
     pub use crate::sys::*;
-    pub use num::{BigInt, ToPrimitive};
+    pub use num::{BigInt, BigRational, One, ToPrimitive, Zero};
 }

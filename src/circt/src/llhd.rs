@@ -30,6 +30,27 @@ pub fn pointer_type_element(ty: Type) -> Type {
     Type::from_raw(unsafe { llhdPointerTypeGetElementType(ty.raw()) })
 }
 
+/// Create a new integer attribute.
+pub fn get_time_attr(
+    cx: Context,
+    seconds: &BigRational,
+    delta: usize,
+    epsilon: usize,
+) -> Attribute {
+    // TODO: This is super hacky. We need a better way to capture the arbitrary
+    // time granularity.
+    let ps = (seconds * BigInt::from(10).pow(12)).to_u64().unwrap();
+    Attribute::from_raw(unsafe {
+        llhdTimeAttrGet(
+            cx.raw(),
+            mlirStringRefCreateFromStr("ps"),
+            ps,
+            delta as _,
+            epsilon as _,
+        )
+    })
+}
+
 def_operation!(EntityOp, "llhd.entity");
 
 impl EntityOp {
@@ -153,12 +174,39 @@ impl<'a> EntityOpBuilder<'a> {
     }
 }
 
+def_operation_single_result!(ConstantTimeOp, "llhd.constant_time");
 def_operation_single_result!(SignalOp, "llhd.sig");
 def_operation_single_result!(VariableOp, "llhd.var");
 def_operation!(ConnectOp, "llhd.con");
 def_operation_single_result!(ProbeOp, "llhd.prb");
+def_operation!(DriveOp, "llhd.drv");
 def_operation_single_result!(LoadOp, "llhd.ld");
 def_operation!(StoreOp, "llhd.st");
+
+impl ConstantTimeOp {
+    /// Create a new constant time value.
+    pub fn new(builder: &mut Builder, seconds: &BigRational, delta: usize, epsilon: usize) -> Self {
+        builder.build_with(|builder, state| {
+            state.add_attribute("value", get_time_attr(builder.cx, seconds, delta, epsilon));
+            state.add_result(get_time_type(builder.cx));
+        })
+    }
+
+    /// Create a new seconds time value.
+    pub fn with_seconds(builder: &mut Builder, seconds: &BigRational) -> Self {
+        Self::new(builder, seconds, 0, 0)
+    }
+
+    /// Create a new delta time value.
+    pub fn with_delta(builder: &mut Builder, delta: usize) -> Self {
+        Self::new(builder, &BigRational::zero(), delta, 0)
+    }
+
+    /// Create a new epsilon time value.
+    pub fn with_epsilon(builder: &mut Builder, epsilon: usize) -> Self {
+        Self::new(builder, &BigRational::zero(), 0, epsilon)
+    }
+}
 
 impl SignalOp {
     /// Create a new signal.
@@ -198,6 +246,17 @@ impl ProbeOp {
             let ty = signal_type_element(sig.ty());
             state.add_operand(sig);
             state.add_result(ty);
+        })
+    }
+}
+
+impl DriveOp {
+    /// Drive a value onto a signal.
+    pub fn new(builder: &mut Builder, sig: Value, value: Value, delay: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(sig);
+            state.add_operand(value);
+            state.add_operand(delay);
         })
     }
 }
