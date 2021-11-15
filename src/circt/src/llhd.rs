@@ -1,4 +1,5 @@
-use crate::mlir::{self, Context, DialectHandle, OperationExt};
+use crate::crate_prelude::*;
+use crate::mlir::{self, DialectHandle};
 use circt_sys::*;
 
 pub fn dialect() -> DialectHandle {
@@ -16,18 +17,13 @@ impl OperationExt for EntityOp {
 }
 
 pub struct EntityOpBuilder<'a> {
-    cx: Context,
-    loc: MlirLocation,
+    builder: &'a mut Builder,
     name: &'a str,
 }
 
 impl<'a> EntityOpBuilder<'a> {
-    pub fn new(cx: Context, loc: MlirLocation) -> Self {
-        Self { cx, loc, name: "" }
-    }
-
-    pub fn with_unknown_location(cx: Context) -> Self {
-        Self::new(cx, unsafe { mlirLocationUnknownGet(cx.raw()) })
+    pub fn new(builder: &'a mut Builder) -> Self {
+        Self { builder, name: "" }
     }
 
     pub fn name(&mut self, name: &'a str) -> &mut Self {
@@ -36,8 +32,8 @@ impl<'a> EntityOpBuilder<'a> {
     }
 
     pub fn build(&mut self) -> EntityOp {
-        let cx = self.cx;
-        let mut state = mlir::OperationState::new("llhd.entity", self.loc);
+        let cx = self.builder.cx;
+        let mut state = mlir::OperationState::new("llhd.entity", self.builder.loc.raw());
 
         unsafe {
             let sym_name_ident =
@@ -76,13 +72,3 @@ impl<'a> EntityOpBuilder<'a> {
         EntityOp(state.build().raw_operation())
     }
 }
-
-// void EntityOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
-//   assert(operands.size() == 0u && "mismatched number of parameters");
-//   odsState.addOperands(operands);
-//   odsState.addAttributes(attributes);
-//   for (unsigned i = 0; i != 1; ++i)
-//     (void)odsState.addRegion();
-//   assert(resultTypes.size() == 0u && "mismatched number of return types");
-//   odsState.addTypes(resultTypes);
-// }

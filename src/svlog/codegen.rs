@@ -11,6 +11,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv,
 };
+use circt::mlir;
 use circt::{prelude::*, sys::*};
 use num::{BigInt, One, ToPrimitive, Zero};
 use std::{
@@ -104,7 +105,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create MLIR entity.
         let mlir_cx = self.into_mlir.context();
-        let entity_op = circt::llhd::EntityOpBuilder::with_unknown_location(mlir_cx)
+        let mut mlir_builder = mlir::Builder::new(mlir_cx);
+        mlir_builder.set_loc(span_to_loc(mlir_cx, hir.span()));
+        let entity_op = circt::llhd::EntityOpBuilder::new(&mut mlir_builder)
             .name(&entity_name)
             .build();
         unsafe {
@@ -2686,4 +2689,10 @@ pub struct IntfSignal<'a> {
     pub name: Spanned<Name>,
     /// The expression assigned as default to the signal.
     pub default: Option<NodeId>,
+}
+
+/// Convert a `Span` to a corresponding MLIR location.
+fn span_to_loc(cx: mlir::Context, span: Span) -> mlir::Location {
+    let l = span.begin();
+    mlir::Location::file_line_col(cx, &l.source.get_path(), l.human_line(), l.human_column())
 }

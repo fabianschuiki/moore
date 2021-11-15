@@ -148,6 +148,12 @@ fn main() {
                 .possible_values(&["llhd", "mlir", "mlir-native"]),
         )
         .arg(
+            Arg::with_name("debug-info")
+                .short("g")
+                .long("debug-info")
+                .help("Emit location information as part of the output"),
+        )
+        .arg(
             Arg::with_name("INPUT")
                 .help("The input files to compile")
                 .multiple(true)
@@ -578,7 +584,7 @@ fn emit_output(
     match fmt {
         OutputFormat::Llhd => llhd::assembly::write_module(output, &module),
         OutputFormat::Mlir => llhd::mlir::write_module(output, &module),
-        OutputFormat::MlirNative => mlir_module.print(output),
+        OutputFormat::MlirNative => mlir_module.print(output, matches.is_present("debug-info")),
     };
     Ok(())
 }
