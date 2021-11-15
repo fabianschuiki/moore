@@ -1,9 +1,33 @@
 use crate::crate_prelude::*;
-use crate::mlir::{self, DialectHandle};
-use circt_sys::*;
+use crate::mlir::{self};
 
 pub fn dialect() -> DialectHandle {
     DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__llhd__() })
+}
+
+/// Create a new time type.
+pub fn get_time_type(cx: Context) -> Type {
+    Type::from_raw(unsafe { llhdTimeTypeGet(cx.raw()) })
+}
+
+/// Create a new signal type.
+pub fn get_signal_type(element: Type) -> Type {
+    Type::from_raw(unsafe { llhdSignalTypeGet(element.raw()) })
+}
+
+/// Create a new pointer type.
+pub fn get_pointer_type(element: Type) -> Type {
+    Type::from_raw(unsafe { llhdSignalTypeGet(element.raw()) })
+}
+
+/// Get the element type of signal type.
+pub fn signal_type_element(ty: Type) -> Type {
+    Type::from_raw(unsafe { llhdSignalTypeGetElementType(ty.raw()) })
+}
+
+/// Get the element type of pointer type.
+pub fn pointer_type_element(ty: Type) -> Type {
+    Type::from_raw(unsafe { llhdPointerTypeGetElementType(ty.raw()) })
 }
 
 /// An LLHD entity.
@@ -19,8 +43,8 @@ impl OperationExt for EntityOp {
 pub struct EntityOpBuilder<'a> {
     builder: &'a mut Builder,
     name: &'a str,
-    inputs: Vec<MlirType>,
-    outputs: Vec<MlirType>,
+    inputs: Vec<(&'a str, Type)>,
+    outputs: Vec<(&'a str, Type)>,
 }
 
 impl<'a> EntityOpBuilder<'a> {
@@ -40,16 +64,14 @@ impl<'a> EntityOpBuilder<'a> {
     }
 
     /// Add an input port.
-    pub fn add_input(&mut self) -> &mut Self {
-        self.inputs
-            .push(unsafe { mlirIntegerTypeGet(self.builder.cx.raw(), 42) });
+    pub fn add_input(&mut self, name: &'a str, ty: Type) -> &mut Self {
+        self.inputs.push((name, ty));
         self
     }
 
     /// Add an output port.
-    pub fn add_output(&mut self) -> &mut Self {
-        self.outputs
-            .push(unsafe { mlirIntegerTypeGet(self.builder.cx.raw(), 43) });
+    pub fn add_output(&mut self, name: &'a str, ty: Type) -> &mut Self {
+        self.outputs.push((name, ty));
         self
     }
 
@@ -60,7 +82,7 @@ impl<'a> EntityOpBuilder<'a> {
             .inputs
             .iter()
             .chain(self.outputs.iter())
-            .copied()
+            .map(|(_, ty)| ty.raw())
             .collect();
 
         unsafe {
