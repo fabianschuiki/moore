@@ -69,8 +69,38 @@ pub trait OperationExt {
         Operation(self.raw_operation())
     }
 
+    /// Print the operation to stderr.
     fn dump(&self) {
         unsafe { mlirOperationDump(self.raw_operation()) };
+    }
+
+    /// Print the operation to anything that implements `std::io::Write`.
+    fn print<T: std::io::Write>(&self, mut to: T) {
+        /// Helper callback function that interprets its `user_data` field as a
+        /// reference to a reference to something that implements `Write`. The
+        /// double reference is required to ensure we're not trying to pass a
+        /// fat pointer (e.g. for `T = &dyn Write`) to the C callback.
+        unsafe extern "C" fn callback<T: std::io::Write>(
+            string: MlirStringRef,
+            to: *mut std::ffi::c_void,
+        ) {
+            let to: &mut &mut T = std::mem::transmute(to);
+            to.write(std::slice::from_raw_parts(
+                string.data as *const _,
+                string.length as usize,
+            ))
+            .unwrap();
+        }
+
+        // Print the operation through the above callback, which basically just
+        // forwards the chunks to the Rust-native `Write` implementation.
+        unsafe {
+            mlirOperationPrint(
+                self.raw_operation(),
+                Some(callback::<T>),
+                (&mut &mut to) as *const _ as *mut _,
+            )
+        }
     }
 
     fn context(&self) -> Context {

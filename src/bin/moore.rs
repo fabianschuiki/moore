@@ -510,10 +510,7 @@ fn elaborate_name(
             }
 
             // Decide what format to use for the output.
-            match matches.value_of("output-format") {
-                Some("mlir-native") => mlir_module.dump(),
-                _ => emit_output(matches, ctx, &module)?,
-            }
+            emit_output(matches, ctx, &module, mlir_module)?
         }
     }
     Ok(())
@@ -523,17 +520,20 @@ fn elaborate_name(
 enum OutputFormat {
     Llhd,
     Mlir,
+    MlirNative,
 }
 
 fn emit_output(
     matches: &ArgMatches,
     ctx: &ScoreContext,
     module: &llhd::ir::Module,
+    mlir_module: circt::std::ModuleOp,
 ) -> Result<(), ()> {
     // Check if the user has provided an explicit output format.
     let fmt = match matches.value_of("output-format") {
         Some("llhd") => Some(OutputFormat::Llhd),
         Some("mlir") => Some(OutputFormat::Mlir),
+        Some("mlir-native") => Some(OutputFormat::MlirNative),
         Some(x) => {
             ctx.sess.emit(DiagBuilder2::fatal(format!(
                 "unknown output format: `{}`",
@@ -578,6 +578,7 @@ fn emit_output(
     match fmt {
         OutputFormat::Llhd => llhd::assembly::write_module(output, &module),
         OutputFormat::Mlir => llhd::mlir::write_module(output, &module),
+        OutputFormat::MlirNative => mlir_module.print(output),
     };
     Ok(())
 }
