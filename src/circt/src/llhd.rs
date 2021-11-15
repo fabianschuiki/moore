@@ -40,6 +40,43 @@ impl OperationExt for EntityOp {
     }
 }
 
+impl EntityOp {
+    /// Get the body region of this entity.
+    pub fn region(&self) -> MlirRegion {
+        unsafe { mlirOperationGetRegion(self.raw_operation(), 0) }
+    }
+
+    /// Get the body block of this entity.
+    pub fn block(&self) -> MlirBlock {
+        unsafe { mlirRegionGetFirstBlock(self.region()) }
+    }
+
+    /// Get the number of input ports.
+    pub fn num_inputs(&self) -> usize {
+        self.attr_usize("ins")
+    }
+
+    /// Get the number of output ports.
+    pub fn num_outputs(&self) -> usize {
+        unsafe { mlirBlockGetNumArguments(self.block()) as usize - self.num_inputs() }
+    }
+
+    /// Get an input port by index.
+    pub fn input_port(&self, index: usize) -> Value {
+        unsafe { Value::from_raw(mlirBlockGetArgument(self.block(), index as _)) }
+    }
+
+    /// Get an input port by index.
+    pub fn output_port(&self, index: usize) -> Value {
+        unsafe {
+            Value::from_raw(mlirBlockGetArgument(
+                self.block(),
+                (index + self.num_inputs()) as _,
+            ))
+        }
+    }
+}
+
 pub struct EntityOpBuilder<'a> {
     builder: &'a mut Builder,
     name: &'a str,

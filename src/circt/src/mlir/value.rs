@@ -1,28 +1,28 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
-//! An MLIR type.
+//! An MLIR value.
 
 use crate::crate_prelude::*;
 use std::fmt::{Debug, Display};
 
-/// An MLIR type.
+/// An MLIR value.
 #[derive(Clone, Copy)]
-pub struct Type(MlirType);
+pub struct Value(MlirValue);
 
-impl WrapRaw for Type {
-    type RawType = MlirType;
-    fn from_raw(raw: MlirType) -> Self {
+impl WrapRaw for Value {
+    type RawType = MlirValue;
+    fn from_raw(raw: MlirValue) -> Self {
         Self(raw)
     }
-    fn raw(&self) -> MlirType {
+    fn raw(&self) -> MlirValue {
         self.0
     }
 }
 
-impl Display for Type {
+impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         unsafe {
-            mlirTypePrint(
+            mlirValuePrint(
                 self.raw(),
                 Some(super::print_formatter_callback),
                 f as *const _ as *mut _,
@@ -32,7 +32,7 @@ impl Display for Type {
     }
 }
 
-impl Debug for Type {
+impl Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self)
     }
