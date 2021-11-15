@@ -112,13 +112,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         mlir_builder.set_loc(span_to_loc(mlir_cx, hir.span()));
         let mut entity_op = circt::llhd::EntityOpBuilder::new(&mut mlir_builder);
         entity_op.name(&entity_name);
-        for _ in ports.inputs.iter() {
-            // TODO: This needs an actual type!
-            entity_op.add_input();
+        for port in ports.inputs.iter() {
+            entity_op.add_input(&port.name, port.mty);
         }
-        for _ in ports.outputs.iter() {
-            // TODO: This needs an actual type!
-            entity_op.add_output();
+        for port in ports.outputs.iter() {
+            entity_op.add_output(&port.name, port.mty);
         }
         let entity_op = entity_op.build();
         unsafe {
@@ -250,12 +248,19 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
                 let signals = self.determine_interface_signals(intf, &ty.dims)?;
                 for signal in signals {
-                    let llty = llhd::signal_ty(self.emit_type(signal.ty)?);
+                    let (llty, mty) = signal_ty(self.emit_type_both(signal.ty)?);
                     let name = format!("{}.{}", port.name, signal.name);
-                    trace!("    Signal `{}` of type `{}` / `{}`", name, signal.ty, llty);
+                    trace!(
+                        "    Signal `{}` of type `{}` / `{}` / `{}`",
+                        name,
+                        signal.ty,
+                        llty,
+                        mty
+                    );
                     let port = ModulePort {
                         port,
                         ty: signal.ty,
+                        mty,
                         name,
                         accnode: AccessedNode::Intf(port.id, signal.decl_id),
                         default: signal.default,
@@ -278,11 +283,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 }
             } else {
                 trace!("    Regular port");
-                let llty = llhd::signal_ty(self.emit_type(ty)?);
+                let (llty, mty) = signal_ty(self.emit_type_both(ty)?);
                 let name = port.name.to_string();
                 let mp = ModulePort {
                     port,
                     ty,
+                    mty,
                     name,
                     accnode: AccessedNode::Regular(port.id),
                     default: port.data.as_ref().and_then(|pd| pd.default),
@@ -627,10 +633,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     llhd::void_ty(),
                     circt::hw::get_struct_type(self.mcx, Option::<(String, mlir::Type)>::None),
                 )),
-                ty::PackedCore::IntAtom(ty::IntAtomType::Time) =>
-                {
-                    #[allow(unreachable_code)]
-                    Ok((llhd::time_ty(), todo!("add LLHD time type")))
+                ty::PackedCore::IntAtom(ty::IntAtomType::Time) => {
+                    Ok((llhd::time_ty(), circt::llhd::get_time_type(self.mcx)))
                 }
                 ty::PackedCore::Enum(ref enm) => self.emit_type_both(enm.base.to_unpacked(self.cx)),
                 _ => unreachable!("emitting `{}` should have been handled above", packed),
@@ -2698,6 +2702,8 @@ pub struct ModulePort<'a> {
     pub port: &'a port_list::IntPort<'a>,
     /// The type of the port.
     pub ty: &'a UnpackedType<'a>,
+    /// The lowered MLIR type.
+    pub mty: mlir::Type,
     /// The preferred name in the LLHD IR.
     pub name: String,
     /// The corresponding `AccessedNode` specifier.
@@ -2739,4 +2745,12 @@ pub struct IntfSignal<'a> {
 fn span_to_loc(cx: mlir::Context, span: Span) -> mlir::Location {
     let l = span.begin();
     mlir::Location::file_line_col(cx, &l.source.get_path(), l.human_line(), l.human_column())
+}
+
+/// Make a type a signal type.
+///
+/// This is a convenience function that process old LLHD types and the newer
+/// MLIR types in parallel.
+fn signal_ty(ty: (llhd::Type, mlir::Type)) -> (llhd::Type, mlir::Type) {
+    (llhd::signal_ty(ty.0), circt::llhd::get_signal_type(ty.1))
 }
