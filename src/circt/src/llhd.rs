@@ -19,21 +19,49 @@ impl OperationExt for EntityOp {
 pub struct EntityOpBuilder<'a> {
     builder: &'a mut Builder,
     name: &'a str,
+    inputs: Vec<MlirType>,
+    outputs: Vec<MlirType>,
 }
 
 impl<'a> EntityOpBuilder<'a> {
     pub fn new(builder: &'a mut Builder) -> Self {
-        Self { builder, name: "" }
+        Self {
+            builder,
+            name: "",
+            inputs: vec![],
+            outputs: vec![],
+        }
     }
 
+    /// Set the entity name.
     pub fn name(&mut self, name: &'a str) -> &mut Self {
         self.name = name;
+        self
+    }
+
+    /// Add an input port.
+    pub fn add_input(&mut self) -> &mut Self {
+        self.inputs
+            .push(unsafe { mlirIntegerTypeGet(self.builder.cx.raw(), 42) });
+        self
+    }
+
+    /// Add an output port.
+    pub fn add_output(&mut self) -> &mut Self {
+        self.outputs
+            .push(unsafe { mlirIntegerTypeGet(self.builder.cx.raw(), 43) });
         self
     }
 
     pub fn build(&mut self) -> EntityOp {
         let cx = self.builder.cx;
         let mut state = mlir::OperationState::new("llhd.entity", self.builder.loc.raw());
+        let types: Vec<MlirType> = self
+            .inputs
+            .iter()
+            .chain(self.outputs.iter())
+            .copied()
+            .collect();
 
         unsafe {
             let sym_name_ident =
@@ -47,8 +75,8 @@ impl<'a> EntityOpBuilder<'a> {
                 type_ident,
                 mlirTypeAttrGet(mlirFunctionTypeGet(
                     cx.raw(),
-                    0,
-                    std::ptr::null(),
+                    types.len() as _,
+                    types.as_ptr(),
                     0,
                     std::ptr::null(),
                 )),
@@ -56,7 +84,7 @@ impl<'a> EntityOpBuilder<'a> {
             let ins_ident = mlirIdentifierGet(cx.raw(), mlirStringRefCreateFromStr("ins"));
             let ins_attr = mlirNamedAttributeGet(
                 ins_ident,
-                mlirIntegerAttrGet(mlirIntegerTypeGet(cx.raw(), 64), 0),
+                mlirIntegerAttrGet(mlirIntegerTypeGet(cx.raw(), 64), self.inputs.len() as _),
             );
             mlirOperationStateAddAttributes(
                 state.raw_mut(),
@@ -65,7 +93,7 @@ impl<'a> EntityOpBuilder<'a> {
             );
 
             let region = mlirRegionCreate();
-            mlirRegionAppendOwnedBlock(region, mlirBlockCreate(0, std::ptr::null()));
+            mlirRegionAppendOwnedBlock(region, mlirBlockCreate(types.len() as _, types.as_ptr()));
             mlirOperationStateAddOwnedRegions(state.raw_mut(), 1, [region].as_ptr());
         }
 

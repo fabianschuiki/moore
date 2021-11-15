@@ -1,14 +1,15 @@
-// RUN: moore -e Empty -e Inputs --format=mlir-native %s | FileCheck %s
+// RUN: moore -e Foo --format=mlir-native %s | FileCheck %s
 
-// CHECK-LABEL: llhd.entity @Empty () -> () {
+// CHECK-LABEL: llhd.entity @Foo (
+// CHECK-SAME:    [[ARG_X:%.+]]: !llhd.sig<i1>,
+// CHECK-SAME:    [[ARG_Z:%.+]]: !llhd.sig<i3>
+// CHECK-SAME:  ) -> (
+// CHECK-SAME:    [[ARG_Y:%.+]]: !llhd.sig<i2>
+// CHECK-SAME:  ) {
 // CHECK-NEXT:  }
-module Empty;
-endmodule
-
-// CHECK-LABEL: llhd.entity @Inputs (%x: !llhd.sig<i1>, %y: !llhd.sig<i3>) -> () {
-// CHECK-NEXT:  }
-module Inputs(
+module Foo (
     input bit x,
-    input bit [2:0] y
+    output bit [1:0] y,
+    input bit [2:0] z
 );
 endmodule

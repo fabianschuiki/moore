@@ -130,6 +130,12 @@ impl Into<String> for RcStr {
     }
 }
 
+impl AsRef<str> for RcStr {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
 /// A lookup table of names. Internalizes strings either in a case sensitive or
 /// case insensitive way. Allows for bidirectional lookup, i.e. by string or by
 /// assigned name.

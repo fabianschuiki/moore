@@ -1,5 +1,4 @@
-use crate::mlir::{Context, OperationExt};
-use circt_sys::*;
+use crate::crate_prelude::*;
 
 /// An MLIR module.
 #[derive(Clone, Copy)]
