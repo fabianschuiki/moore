@@ -27,6 +27,8 @@ use std::{
 pub struct CodeGenerator<'gcx, C> {
     /// The compilation context.
     cx: C,
+    /// The MLIR compilation context.
+    mcx: mlir::Context,
     /// The LLHD module to be populated.
     into: llhd::ir::Module,
     /// THe MLIR module to be populated.
@@ -40,6 +42,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
     pub fn new(cx: C, into_mlir: circt::ModuleOp) -> Self {
         CodeGenerator {
             cx,
+            mcx: into_mlir.context(),
             into: llhd::ir::Module::new(),
             into_mlir,
             tables: Default::default(),
@@ -56,7 +59,7 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
 struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<Rc<EmittedModule<'gcx>>>>,
     module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
-    interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<llhd::Type>>,
+    interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<(llhd::Type, mlir::Type)>>,
 }
 
 impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
@@ -107,9 +110,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mlir_cx = self.into_mlir.context();
         let mut mlir_builder = mlir::Builder::new(mlir_cx);
         mlir_builder.set_loc(span_to_loc(mlir_cx, hir.span()));
-        let entity_op = circt::llhd::EntityOpBuilder::new(&mut mlir_builder)
-            .name(&entity_name)
-            .build();
+        let mut entity_op = circt::llhd::EntityOpBuilder::new(&mut mlir_builder);
+        entity_op.name(&entity_name);
+        for _ in ports.inputs.iter() {
+            // TODO: This needs an actual type!
+            entity_op.add_input();
+        }
+        for _ in ports.outputs.iter() {
+            // TODO: This needs an actual type!
+            entity_op.add_output();
+        }
+        let entity_op = entity_op.build();
         unsafe {
             mlirBlockInsertOwnedOperationBefore(
                 mlirRegionGetFirstBlock(mlirOperationGetRegion(self.into_mlir.raw_operation(), 0)),
@@ -128,10 +139,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             .module_signatures
             .insert(id.env(env), (name, ports.sig.clone()));
         let mut values = HashMap::new();
+        let mut mlir_values = HashMap::new();
         let mut gen = UnitGenerator {
             gen: self,
             builder: &mut builder,
             values: &mut values,
+            mlir_values: &mut mlir_values,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
@@ -443,6 +456,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create a mapping from read/written nodes to process parameters.
         let mut values = HashMap::new();
+        let mut mlir_values = HashMap::new();
         for (&id, arg) in inputs
             .iter()
             .zip(builder.input_args())
@@ -454,6 +468,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             gen: self,
             builder: &mut builder,
             values: &mut values,
+            mlir_values: &mut mlir_values,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
@@ -543,6 +558,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
     /// Map a type to an LLHD type (interned).
     fn emit_type(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<llhd::Type> {
+        self.emit_type_both(ty).map(|x| x.0)
+    }
+
+    /// Map a type to an LLHD type (interned).
+    fn emit_type_both(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<(llhd::Type, mlir::Type)> {
         if let Some(x) = self.tables.interned_types.get(&ty) {
             x.clone()
         } else {
@@ -553,7 +573,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 
     /// Map a type to an LLHD type.
-    fn emit_type_uninterned(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<llhd::Type> {
+    fn emit_type_uninterned(
+        &mut self,
+        ty: &'gcx UnpackedType<'gcx>,
+    ) -> Result<(llhd::Type, mlir::Type)> {
         if ty.is_error() {
             return Err(());
         }
@@ -561,7 +584,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Handle things that coalesce easily to scalars.
         if ty.coalesces_to_llhd_scalar() {
-            return Ok(llhd::int_ty(ty.get_bit_size().unwrap()));
+            let bits = ty.get_bit_size().unwrap();
+            return Ok((llhd::int_ty(bits), mlir::get_integer_type(self.mcx, bits)));
         }
 
         // Handle arrays.
@@ -571,26 +595,44 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 None => panic!("cannot map unsized array `{}` to LLHD", ty),
             };
             let inner = ty.pop_dim(self.cx).unwrap();
-            return Ok(llhd::array_ty(size, self.emit_type(inner)?));
+            let (llty, mty) = self.emit_type_both(inner)?;
+            return Ok((
+                llhd::array_ty(size, llty),
+                circt::hw::get_array_type(mty, size),
+            ));
         }
 
         // Handle structs.
         if let Some(strukt) = ty.get_struct() {
             let mut types = vec![];
+            let mut mtypes: Vec<(crate::common::name::RcStr, mlir::Type)> = vec![];
             for member in &strukt.members {
-                types.push(self.emit_type(member.ty)?);
+                let (llty, mty) = self.emit_type_both(member.ty)?;
+                types.push(llty);
+                mtypes.push((member.name.value.as_str(), mty));
             }
-            return Ok(llhd::struct_ty(types));
+            return Ok((
+                llhd::struct_ty(types),
+                circt::hw::get_struct_type(self.mcx, mtypes),
+            ));
         }
 
         // Handle packed types.
         if let Some(packed) = ty.get_packed() {
             let packed = packed.resolve_full();
             return match packed.core {
-                ty::PackedCore::Error => Ok(llhd::void_ty()),
-                ty::PackedCore::Void => Ok(llhd::void_ty()),
-                ty::PackedCore::IntAtom(ty::IntAtomType::Time) => Ok(llhd::time_ty()),
-                ty::PackedCore::Enum(ref enm) => self.emit_type(enm.base.to_unpacked(self.cx)),
+                // CAVEAT: We just use an empty HW dialect struct type as a
+                // stand-in for an error or void type.
+                ty::PackedCore::Void | ty::PackedCore::Error => Ok((
+                    llhd::void_ty(),
+                    circt::hw::get_struct_type(self.mcx, Option::<(String, mlir::Type)>::None),
+                )),
+                ty::PackedCore::IntAtom(ty::IntAtomType::Time) =>
+                {
+                    #[allow(unreachable_code)]
+                    Ok((llhd::time_ty(), todo!("add LLHD time type")))
+                }
+                ty::PackedCore::Enum(ref enm) => self.emit_type_both(enm.base.to_unpacked(self.cx)),
                 _ => unreachable!("emitting `{}` should have been handled above", packed),
             };
         }
@@ -690,6 +732,8 @@ struct UnitGenerator<'a, 'gcx, C> {
     builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
     values: &'a mut HashMap<AccessedNode, llhd::ir::Value>,
+    /// The emitted MLIR values for various nodes.
+    mlir_values: &'a mut HashMap<AccessedNode, circt::sys::MlirValue>,
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<llhd::ir::Value>>,
     /// The MIR lvalues emitted into the unit.

@@ -1,10 +1,14 @@
 use circt_sys::*;
 
 pub mod builder;
+pub mod context;
 pub mod loc;
+pub mod ty;
 
-pub use builder::Builder;
-pub use loc::Location;
+pub use builder::*;
+pub use context::*;
+pub use loc::*;
+pub use ty::*;
 
 pub struct Owned<T: IntoOwned>(T);
 
@@ -32,39 +36,6 @@ pub trait WrapRaw {
     fn from_raw(raw: Self::RawType) -> Self;
     /// Get the underlying raw MLIR C pointer.
     fn raw(&self) -> Self::RawType;
-}
-
-#[derive(Copy, Clone)]
-pub struct Context(MlirContext);
-pub type OwnedContext = Owned<Context>;
-
-impl Context {
-    pub fn from_raw(raw: MlirContext) -> Self {
-        Self(raw)
-    }
-
-    pub fn raw(&self) -> MlirContext {
-        self.0
-    }
-
-    pub fn load_dialect(&self, dialect: DialectHandle) {
-        unsafe {
-            mlirDialectHandleLoadDialect(dialect.0, self.0);
-            mlirDialectHandleRegisterDialect(dialect.0, self.0);
-        }
-    }
-}
-
-impl Owned<Context> {
-    pub fn new() -> Self {
-        Self(Context::from_raw(unsafe { mlirContextCreate() }))
-    }
-}
-
-impl IntoOwned for Context {
-    fn destroy(&mut self) {
-        unsafe { mlirContextDestroy(self.0) }
-    }
 }
 
 #[derive(Copy, Clone)]
@@ -159,4 +130,14 @@ impl OperationState {
     pub fn build(mut self) -> Operation {
         unsafe { Operation(mlirOperationCreate(self.raw_mut())) }
     }
+}
+
+/// Create a new integer type of a given width.
+pub fn get_integer_type(cx: Context, bitwidth: usize) -> Type {
+    Type::from_raw(unsafe { mlirIntegerTypeGet(cx.raw(), bitwidth as _) })
+}
+
+/// Return the width of an integer type.
+pub fn integer_type_width(ty: Type) -> usize {
+    unsafe { mlirIntegerTypeGetWidth(ty.raw()) as _ }
 }
