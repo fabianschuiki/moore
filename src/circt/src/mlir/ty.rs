@@ -54,3 +54,52 @@ pub fn get_integer_type(cx: Context, bitwidth: usize) -> Type {
 pub fn integer_type_width(ty: Type) -> usize {
     unsafe { mlirIntegerTypeGetWidth(ty.raw()) as _ }
 }
+
+/// Create a new function type.
+pub fn get_function_type(
+    cx: Context,
+    inputs: impl IntoIterator<Item = Type>,
+    results: impl IntoIterator<Item = Type>,
+) -> Type {
+    let inputs: Vec<MlirType> = inputs.into_iter().map(|x| x.raw()).collect();
+    let results: Vec<MlirType> = results.into_iter().map(|x| x.raw()).collect();
+    Type::from_raw(unsafe {
+        mlirFunctionTypeGet(
+            cx.raw(),
+            inputs.len() as _,
+            inputs.as_ptr(),
+            results.len() as _,
+            results.as_ptr(),
+        )
+    })
+}
+
+/// Return the number of inputs of a function type.
+pub fn function_type_num_inputs(ty: Type) -> usize {
+    unsafe { mlirFunctionTypeGetNumInputs(ty.raw()) as _ }
+}
+
+/// Return the number of results of a function type.
+pub fn function_type_num_results(ty: Type) -> usize {
+    unsafe { mlirFunctionTypeGetNumResults(ty.raw()) as _ }
+}
+
+/// Return an input of a function type.
+pub fn function_type_input(ty: Type, index: usize) -> Type {
+    Type::from_raw(unsafe { mlirFunctionTypeGetInput(ty.raw(), index as _) })
+}
+
+/// Return a result of a function type.
+pub fn function_type_result(ty: Type, index: usize) -> Type {
+    Type::from_raw(unsafe { mlirFunctionTypeGetResult(ty.raw(), index as _) })
+}
+
+/// Return the inputs of a function type.
+pub fn function_type_inputs(ty: Type) -> impl Iterator<Item = Type> {
+    (0..function_type_num_inputs(ty)).map(move |i| function_type_input(ty, i))
+}
+
+/// Return the results of a function type.
+pub fn function_type_results(ty: Type) -> impl Iterator<Item = Type> {
+    (0..function_type_num_results(ty)).map(move |i| function_type_result(ty, i))
+}

@@ -59,3 +59,8 @@ pub fn get_integer_attr(ty: Type, value: i64) -> Attribute {
 pub fn get_string_attr(cx: Context, value: &str) -> Attribute {
     Attribute::from_raw(unsafe { mlirStringAttrGet(cx.raw(), mlirStringRefCreateFromStr(value)) })
 }
+
+/// Create a new type attribute.
+pub fn get_type_attr(value: Type) -> Attribute {
+    Attribute::from_raw(unsafe { mlirTypeAttrGet(value.raw()) })
+}

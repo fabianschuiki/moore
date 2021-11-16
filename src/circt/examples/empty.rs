@@ -1,3 +1,5 @@
+// Copyright (c) 2016-2021 Fabian Schuiki
+
 use circt::{prelude::*, *};
 
 fn main() {

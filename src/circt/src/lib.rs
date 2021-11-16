@@ -1,3 +1,5 @@
+// Copyright (c) 2016-2021 Fabian Schuiki
+
 /// Define an operation.
 macro_rules! def_operation {
     ($name:ident, $operation_name:expr) => {
@@ -50,7 +52,10 @@ pub mod sys {
 }
 
 pub mod prelude {
-    pub use crate::mlir::{OperationExt as _, WrapRaw as _};
+    pub use crate::llhd::EntityLike as _;
+    pub use crate::mlir::{
+        OperationExt as _, SingleBlockOp as _, SingleRegionOp as _, WrapRaw as _,
+    };
 }
 
 mod crate_prelude {
