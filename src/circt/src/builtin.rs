@@ -1,8 +1,11 @@
+// Copyright (c) 2016-2021 Fabian Schuiki
+
 use crate::crate_prelude::*;
 
 def_operation!(ModuleOp, "builtin.module");
 
 impl ModuleOp {
+    /// Create a new module.
     pub fn new(cx: Context) -> Self {
         unsafe {
             let mut state = mlirOperationStateGet(
@@ -16,3 +19,6 @@ impl ModuleOp {
         }
     }
 }
+
+impl SingleRegionOp for ModuleOp {}
+impl SingleBlockOp for ModuleOp {}

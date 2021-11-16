@@ -1,5 +1,6 @@
+// Copyright (c) 2016-2021 Fabian Schuiki
+
 use crate::crate_prelude::*;
-use crate::mlir::{self};
 
 pub fn dialect() -> DialectHandle {
     DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__llhd__() })
@@ -52,65 +53,78 @@ pub fn get_time_attr(
 }
 
 def_operation!(EntityOp, "llhd.entity");
+def_operation!(ProcessOp, "llhd.proc");
 
-impl EntityOp {
-    /// Get the body region of this entity.
-    pub fn region(&self) -> MlirRegion {
-        unsafe { mlirOperationGetRegion(self.raw_operation(), 0) }
-    }
-
-    /// Get the body block of this entity.
-    pub fn block(&self) -> MlirBlock {
-        unsafe { mlirRegionGetFirstBlock(self.region()) }
+pub trait EntityLike: SingleBlockOp {
+    /// Get the number of ports.
+    fn num_ports(&self) -> usize {
+        unsafe { mlirBlockGetNumArguments(self.block()) as usize }
     }
 
     /// Get the number of input ports.
-    pub fn num_inputs(&self) -> usize {
+    fn num_inputs(&self) -> usize {
         self.attr_usize("ins")
     }
 
     /// Get the number of output ports.
-    pub fn num_outputs(&self) -> usize {
-        unsafe { mlirBlockGetNumArguments(self.block()) as usize - self.num_inputs() }
+    fn num_outputs(&self) -> usize {
+        self.num_ports() - self.num_inputs()
     }
 
-    /// Get an input port by index.
-    pub fn input_port(&self, index: usize) -> Value {
+    /// Get a port by index.
+    fn port(&self, index: usize) -> Value {
         unsafe { Value::from_raw(mlirBlockGetArgument(self.block(), index as _)) }
     }
 
     /// Get an input port by index.
-    pub fn output_port(&self, index: usize) -> Value {
-        unsafe {
-            Value::from_raw(mlirBlockGetArgument(
-                self.block(),
-                (index + self.num_inputs()) as _,
-            ))
-        }
+    fn input(&self, index: usize) -> Value {
+        assert!(index < self.num_inputs());
+        self.port(index)
+    }
+
+    /// Get an input port by index.
+    fn output(&self, index: usize) -> Value {
+        assert!(index < self.num_outputs());
+        self.port(index + self.num_inputs())
+    }
+
+    /// Get an iterator over all ports.
+    fn ports(&self) -> Box<dyn Iterator<Item = Value> + '_> {
+        Box::new((0..self.num_ports()).map(move |i| self.port(i)))
+    }
+
+    /// Get an iterator over the input ports.
+    fn input_ports(&self) -> Box<dyn Iterator<Item = Value> + '_> {
+        Box::new((0..self.num_inputs()).map(move |i| self.input(i)))
+    }
+
+    /// Get an iterator over the output ports.
+    fn output_ports(&self) -> Box<dyn Iterator<Item = Value> + '_> {
+        Box::new((0..self.num_outputs()).map(move |i| self.output(i)))
     }
 }
 
-pub struct EntityOpBuilder<'a> {
-    builder: &'a mut Builder,
+impl SingleRegionOp for EntityOp {}
+impl SingleBlockOp for EntityOp {}
+impl EntityLike for EntityOp {}
+
+impl SingleRegionOp for ProcessOp {}
+impl SingleBlockOp for ProcessOp {}
+impl EntityLike for ProcessOp {}
+
+pub struct EntityLikeBuilder<'a> {
     name: &'a str,
     inputs: Vec<(&'a str, Type)>,
     outputs: Vec<(&'a str, Type)>,
 }
 
-impl<'a> EntityOpBuilder<'a> {
-    pub fn new(builder: &'a mut Builder) -> Self {
+impl<'a> EntityLikeBuilder<'a> {
+    pub fn new(name: &'a str) -> Self {
         Self {
-            builder,
-            name: "",
+            name,
             inputs: vec![],
             outputs: vec![],
         }
-    }
-
-    /// Set the entity name.
-    pub fn name(&mut self, name: &'a str) -> &mut Self {
-        self.name = name;
-        self
     }
 
     /// Add an input port.
@@ -125,52 +139,44 @@ impl<'a> EntityOpBuilder<'a> {
         self
     }
 
-    pub fn build(&mut self) -> EntityOp {
-        let cx = self.builder.cx;
-        let mut state =
-            mlir::OperationState::new(EntityOp::operation_name(), self.builder.loc.raw());
-        let types: Vec<MlirType> = self
-            .inputs
-            .iter()
-            .chain(self.outputs.iter())
-            .map(|(_, ty)| ty.raw())
-            .collect();
+    /// Build an entity.
+    pub fn build_entity(&mut self, builder: &mut Builder) -> EntityOp {
+        self.build(builder)
+    }
 
-        unsafe {
-            let sym_name_ident =
-                mlirIdentifierGet(cx.raw(), mlirStringRefCreateFromStr("sym_name"));
-            let sym_name_attr = mlirNamedAttributeGet(
-                sym_name_ident,
-                mlirStringAttrGet(cx.raw(), mlirStringRefCreateFromStr(self.name)),
+    /// Build a process.
+    pub fn build_process(&mut self, builder: &mut Builder) -> ProcessOp {
+        self.build(builder)
+    }
+
+    fn build<Op: EntityLike>(&mut self, builder: &mut Builder) -> Op {
+        builder.build_with(|builder, state| {
+            let types = self
+                .inputs
+                .iter()
+                .chain(self.outputs.iter())
+                .map(|(_, ty)| *ty);
+            let mlir_types: Vec<MlirType> = types.clone().map(|x| x.raw()).collect();
+
+            state.add_attribute("sym_name", get_string_attr(builder.cx, self.name));
+            state.add_attribute(
+                "type",
+                get_type_attr(get_function_type(builder.cx, types, None)),
             );
-            let type_ident = mlirIdentifierGet(cx.raw(), mlirStringRefCreateFromStr("type"));
-            let type_attr = mlirNamedAttributeGet(
-                type_ident,
-                mlirTypeAttrGet(mlirFunctionTypeGet(
-                    cx.raw(),
-                    types.len() as _,
-                    types.as_ptr(),
-                    0,
-                    std::ptr::null(),
-                )),
-            );
-            let ins_ident = mlirIdentifierGet(cx.raw(), mlirStringRefCreateFromStr("ins"));
-            let ins_attr = mlirNamedAttributeGet(
-                ins_ident,
-                mlirIntegerAttrGet(mlirIntegerTypeGet(cx.raw(), 64), self.inputs.len() as _),
-            );
-            mlirOperationStateAddAttributes(
-                state.raw_mut(),
-                3,
-                [sym_name_attr, type_attr, ins_attr].as_ptr(),
+            state.add_attribute(
+                "ins",
+                get_integer_attr(get_integer_type(builder.cx, 64), self.inputs.len() as _),
             );
 
-            let region = mlirRegionCreate();
-            mlirRegionAppendOwnedBlock(region, mlirBlockCreate(types.len() as _, types.as_ptr()));
-            mlirOperationStateAddOwnedRegions(state.raw_mut(), 1, [region].as_ptr());
-        }
-
-        state.build()
+            unsafe {
+                let region = mlirRegionCreate();
+                mlirRegionAppendOwnedBlock(
+                    region,
+                    mlirBlockCreate(mlir_types.len() as _, mlir_types.as_ptr()),
+                );
+                mlirOperationStateAddOwnedRegions(state.raw_mut(), 1, [region].as_ptr());
+            }
+        })
     }
 }
 

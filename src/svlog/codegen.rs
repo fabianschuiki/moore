@@ -13,7 +13,7 @@ use crate::{
     ParamEnv,
 };
 use circt::mlir;
-use circt::{prelude::*, sys::*};
+use circt::prelude::*;
 use num::{BigInt, One, ToPrimitive, Zero};
 use std::{
     collections::{HashMap, HashSet},
@@ -114,24 +114,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mlir_cx = self.into_mlir.context();
         let mut mlir_builder = mlir::Builder::new(mlir_cx);
         mlir_builder.set_loc(span_to_loc(mlir_cx, hir.span()));
-        let mut entity_op = circt::llhd::EntityOpBuilder::new(&mut mlir_builder);
-        entity_op.name(&entity_name);
+        mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
+        let mut entity_op = circt::llhd::EntityLikeBuilder::new(&entity_name);
         for port in ports.inputs.iter() {
             entity_op.add_input(&port.name, port.mty);
         }
         for port in ports.outputs.iter() {
             entity_op.add_output(&port.name, port.mty);
         }
-        let entity_op = entity_op.build();
-        unsafe {
-            mlirBlockInsertOwnedOperationBefore(
-                mlirRegionGetFirstBlock(mlirOperationGetRegion(self.into_mlir.raw_operation(), 0)),
-                MlirOperation {
-                    ptr: std::ptr::null_mut(),
-                },
-                entity_op.raw_operation(),
-            )
-        };
+        let entity_op = entity_op.build_entity(&mut mlir_builder);
         mlir_builder.set_insertion_point_to_start(entity_op.block());
 
         // Create entity.
@@ -158,13 +149,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let arg = gen.builder.input_arg(index);
             gen.builder.set_name(arg, port.name.clone());
             gen.values
-                .insert(port.accnode, (arg, entity_op.input_port(index)));
+                .insert(port.accnode, (arg, entity_op.input(index)));
         }
         for (index, port) in ports.outputs.iter().enumerate() {
             let arg = gen.builder.output_arg(index);
             gen.builder.set_name(arg, port.name.clone());
             gen.values
-                .insert(port.accnode, (arg, entity_op.output_port(index)));
+                .insert(port.accnode, (arg, entity_op.output(index)));
         }
 
         debug!("  Ports:");
@@ -376,8 +367,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut sig = llhd::ir::Signature::new();
         let mut inputs = vec![];
         let mut outputs = vec![];
+        let mut mlir_inputs = vec![];
+        let mut mlir_outputs = vec![];
         for &id in acc.read.iter().filter(|id| !acc.written.contains(id)) {
-            sig.add_input(llhd::signal_ty(self.emit_type(match id {
+            let ty = self.emit_type_both(match id {
                 AccessedNode::Regular(id) => self.type_of(id, env)?,
                 AccessedNode::Intf(intf, id) => {
                     let intf_ty = self.type_of(intf, env)?;
@@ -386,11 +379,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     sig_ty.dims.extend(&intf_ty.dims);
                     sig_ty.intern(self.cx)
                 }
-            })?));
+            })?;
+            sig.add_input(llhd::signal_ty(ty.0));
+            mlir_inputs.push(ty.1);
             inputs.push(id);
         }
         for &id in acc.written.iter() {
-            sig.add_output(llhd::signal_ty(self.emit_type(match id {
+            let ty = self.emit_type_both(match id {
                 AccessedNode::Regular(id) => self.type_of(id, env)?,
                 AccessedNode::Intf(intf, id) => {
                     let intf_ty = self.type_of(intf, env)?;
@@ -399,12 +394,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     sig_ty.dims.extend(&intf_ty.dims);
                     sig_ty.intern(self.cx)
                 }
-            })?));
+            })?;
+            sig.add_output(llhd::signal_ty(ty.0));
+            mlir_outputs.push(ty.1);
             outputs.push(id);
         }
         trace!("Process Inputs: {:?}", inputs);
         trace!("Process Outputs: {:?}", outputs);
         trace!("Process Signature: {}", sig);
+        trace!("Process MLIR Inputs: {:?}", mlir_inputs);
+        trace!("Process MLIR Outputs: {:?}", mlir_outputs);
         trace!("Process Env: {:?}", self.param_env_data(env));
 
         // Create process and entry block.
@@ -424,7 +423,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         );
         let mut prok = llhd::ir::UnitData::new(
             llhd::ir::UnitKind::Process,
-            llhd::ir::UnitName::Local(proc_name),
+            llhd::ir::UnitName::Local(proc_name.clone()),
             sig,
         );
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
@@ -466,16 +465,31 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             }
         }
 
-        // Create a mapping from read/written nodes to process parameters.
-        let mut values = HashMap::<_, HybridValue>::new();
+        // Create MLIR process.
         let mut mlir_builder = mlir::Builder::new(self.mcx);
         mlir_builder.set_loc(span_to_loc(self.mcx, hir.span()));
-        for (&id, arg) in inputs
+        mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
+
+        let mut proc_op = circt::llhd::EntityLikeBuilder::new(&proc_name);
+        for ty in mlir_inputs {
+            proc_op.add_input("", circt::llhd::get_signal_type(ty));
+        }
+        for ty in mlir_outputs {
+            proc_op.add_output("", circt::llhd::get_signal_type(ty));
+        }
+        let proc_op = proc_op.build_process(&mut mlir_builder);
+        mlir_builder.set_insertion_point_to_start(proc_op.block());
+
+        // Create a mapping from read/written nodes to process parameters.
+        let mut values = HashMap::<_, HybridValue>::new();
+        mlir_builder.set_loc(span_to_loc(self.mcx, hir.span()));
+        for ((&id, arg), mlir_port) in inputs
             .iter()
             .zip(builder.input_args())
             .chain(outputs.iter().zip(builder.output_args()))
+            .zip(proc_op.ports())
         {
-            values.insert(id.into(), (arg, todo!("mlir for process input {:?}", arg)));
+            values.insert(id.into(), (arg, mlir_port));
         }
         let mut pg = UnitGenerator {
             gen: self,

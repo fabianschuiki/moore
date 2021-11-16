@@ -1,3 +1,5 @@
+// Copyright (c) 2016-2021 Fabian Schuiki
+
 use circt_sys::*;
 use std::convert::TryInto;
 
@@ -35,7 +37,7 @@ impl<T: IntoOwned> std::ops::Deref for Owned<T> {
 }
 
 /// Common facilities for types that wrap an underlying raw MLIR C pointer.
-pub trait WrapRaw {
+pub trait WrapRaw: Copy {
     type RawType;
     /// Wrap an existing raw MLIR C pointer.
     fn from_raw(raw: Self::RawType) -> Self;
@@ -111,8 +113,8 @@ pub trait OperationExt: WrapRaw<RawType = MlirOperation> {
         unsafe { Context::from_raw(mlirOperationGetContext(self.raw())) }
     }
 
-    /// Return the block this operation is in.
-    fn block(&self) -> MlirBlock {
+    /// Return the parent block this operation is in.
+    fn parent_block(&self) -> MlirBlock {
         unsafe { mlirOperationGetBlock(self.raw()) }
     }
 
@@ -149,6 +151,22 @@ pub trait OperationExt: WrapRaw<RawType = MlirOperation> {
     /// Get one of the results of the operation.
     fn result(&self, index: usize) -> Value {
         Value::from_raw(unsafe { mlirOperationGetResult(self.raw(), index as _) })
+    }
+}
+
+/// An operation that has a single region.
+pub trait SingleRegionOp: OperationExt {
+    /// Get the single body region of this operation.
+    fn region(&self) -> MlirRegion {
+        unsafe { mlirOperationGetRegion(self.raw(), 0) }
+    }
+}
+
+/// An operation that has a single block in a single region.
+pub trait SingleBlockOp: SingleRegionOp {
+    /// Get the single body block of this operation.
+    fn block(&self) -> MlirBlock {
+        unsafe { mlirRegionGetFirstBlock(self.region()) }
     }
 }
 

@@ -51,13 +51,13 @@ impl Builder {
 
     /// Set the insertion point to before an operation.
     pub fn set_insertion_point_before(&mut self, op: impl OperationExt) {
-        self.insert_block = Some(op.block());
+        self.insert_block = Some(op.parent_block());
         self.insert_point = InsertPoint::Before(op.raw());
     }
 
     /// Set the insertion point to after an operation.
     pub fn set_insertion_point_after(&mut self, op: impl OperationExt) {
-        self.insert_block = Some(op.block());
+        self.insert_block = Some(op.parent_block());
         self.insert_point = InsertPoint::After(op.raw());
     }
 

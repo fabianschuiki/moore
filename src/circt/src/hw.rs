@@ -1,3 +1,5 @@
+// Copyright (c) 2016-2021 Fabian Schuiki
+
 use crate::crate_prelude::*;
 
 pub fn dialect() -> DialectHandle {
