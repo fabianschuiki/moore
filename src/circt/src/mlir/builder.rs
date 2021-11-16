@@ -93,6 +93,16 @@ impl Builder {
         self.insert(op);
         op
     }
+
+    /// Create a new block after the current one.
+    pub fn add_block(&mut self) -> MlirBlock {
+        let block = self.insert_block.expect("insertion block not set");
+        unsafe {
+            let new_block = mlirBlockCreate(0, [].as_ptr());
+            mlirRegionInsertOwnedBlockAfter(mlirBlockGetParentRegion(block), block, new_block);
+            new_block
+        }
+    }
 }
 
 enum InsertPoint {

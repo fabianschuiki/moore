@@ -14,7 +14,7 @@ use crate::{
 };
 use circt::mlir;
 use circt::prelude::*;
-use num::{BigInt, One, ToPrimitive, Zero};
+use num::{BigInt, FromPrimitive, One, ToPrimitive, Zero};
 use std::{
     collections::{HashMap, HashSet},
     iter::{once, repeat},
@@ -478,7 +478,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             proc_op.add_output("", circt::llhd::get_signal_type(ty));
         }
         let proc_op = proc_op.build_process(&mut mlir_builder);
-        mlir_builder.set_insertion_point_to_start(proc_op.block());
+        mlir_builder.set_insertion_point_to_start(proc_op.first_block());
 
         // Create a mapping from read/written nodes to process parameters.
         let mut values = HashMap::<_, HybridValue>::new();
@@ -532,36 +532,63 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Emit prologue and determine which basic block to jump back to.
         let head_blk = match hir.kind {
             ast::ProcedureKind::AlwaysComb | ast::ProcedureKind::AlwaysLatch => {
-                let body_blk = pg.add_named_block("body");
-                let check_blk = pg.add_named_block("check");
-                pg.builder.ins().br(body_blk);
-                pg.builder.append_to(check_blk);
+                let body_blk = (pg.add_named_block("body"), pg.mlir_builder.add_block());
+                let check_blk = (pg.add_named_block("check"), pg.mlir_builder.add_block());
+                pg.builder.ins().br(body_blk.0);
+                pg.builder.append_to(check_blk.0);
+                circt::std::BranchOp::new(pg.mlir_builder, body_blk.1);
+                pg.mlir_builder.set_insertion_point_to_end(check_blk.1);
                 let trigger_on = inputs
                     .iter()
-                    .map(|id| pg.emitted_value(*id).clone())
+                    .map(|id| pg.emitted_value_both(*id).0.clone())
                     .collect();
-                pg.builder.ins().wait(body_blk, trigger_on);
-                pg.builder.append_to(body_blk);
+                pg.builder.ins().wait(body_blk.0, trigger_on);
+                pg.builder.append_to(body_blk.0);
+                circt::llhd::WaitOp::new(
+                    pg.mlir_builder,
+                    body_blk.1,
+                    inputs
+                        .iter()
+                        .map(|id| pg.emitted_value_both(*id).1)
+                        .collect::<Vec<_>>(),
+                    None,
+                );
+                pg.mlir_builder.set_insertion_point_to_end(body_blk.1);
                 pg.flush_mir(); // ensure we don't reuse earlier expr probe
                 pg.emit_shadow_update();
-                check_blk
+                Some(check_blk)
             }
             ast::ProcedureKind::Final => {
                 // TODO(fschuiki): Replace this with a cleverer way to implement a trigger-on-end.
-                let body_blk = pg.add_named_block("body");
+                let body_blk = (pg.add_named_block("body"), pg.mlir_builder.add_block());
                 let endtimes = pg.builder.ins().const_time(llhd::value::TimeValue::new(
                     "9001".parse().unwrap(),
                     0,
                     0,
                 ));
                 pg.builder.set_name(endtimes, "endtimes".to_string());
-                pg.builder.ins().wait_time(body_blk, endtimes, vec![]);
-                pg.builder.append_to(body_blk);
+                pg.builder.ins().wait_time(body_blk.0, endtimes, vec![]);
+                pg.builder.append_to(body_blk.0);
+                let endtimes = circt::llhd::ConstantTimeOp::with_seconds(
+                    pg.mlir_builder,
+                    &BigInt::from_i64(std::i64::MAX / 1_000_000_000_000)
+                        .unwrap()
+                        .into(),
+                )
+                .into();
+                circt::llhd::WaitOp::new(pg.mlir_builder, body_blk.1, None, Some(endtimes));
+                pg.mlir_builder.set_insertion_point_to_start(body_blk.1);
                 pg.flush_mir(); // ensure we don't reuse earlier expr probe
                 pg.emit_shadow_update();
-                entry_blk // This block is ignored for final blocks
+                None
             }
-            _ => entry_blk,
+            ast::ProcedureKind::Initial => None,
+            _ => {
+                let mlir_entry_blk = pg.mlir_builder.add_block();
+                circt::std::BranchOp::new(pg.mlir_builder, mlir_entry_blk);
+                pg.mlir_builder.set_insertion_point_to_end(mlir_entry_blk);
+                Some((entry_blk, mlir_entry_blk))
+            }
         };
 
         // Emit the main statement.
@@ -569,17 +596,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Emit epilogue.
         match hir.kind {
-            ast::ProcedureKind::Initial => {
+            ast::ProcedureKind::Initial | ast::ProcedureKind::Final => {
                 pg.builder.ins().halt();
+                circt::llhd::HaltOp::new(pg.mlir_builder);
             }
             ast::ProcedureKind::Always
             | ast::ProcedureKind::AlwaysComb
             | ast::ProcedureKind::AlwaysLatch
             | ast::ProcedureKind::AlwaysFf => {
-                pg.builder.ins().br(head_blk);
-            }
-            ast::ProcedureKind::Final => {
-                pg.builder.ins().halt();
+                pg.builder.ins().br(head_blk.unwrap().0);
+                circt::std::BranchOp::new(pg.mlir_builder, head_blk.unwrap().1);
             }
         }
 

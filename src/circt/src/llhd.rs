@@ -55,10 +55,10 @@ pub fn get_time_attr(
 def_operation!(EntityOp, "llhd.entity");
 def_operation!(ProcessOp, "llhd.proc");
 
-pub trait EntityLike: SingleBlockOp {
+pub trait EntityLike: SingleRegionOp {
     /// Get the number of ports.
     fn num_ports(&self) -> usize {
-        unsafe { mlirBlockGetNumArguments(self.block()) as usize }
+        unsafe { mlirBlockGetNumArguments(self.first_block()) as usize }
     }
 
     /// Get the number of input ports.
@@ -73,7 +73,7 @@ pub trait EntityLike: SingleBlockOp {
 
     /// Get a port by index.
     fn port(&self, index: usize) -> Value {
-        unsafe { Value::from_raw(mlirBlockGetArgument(self.block(), index as _)) }
+        unsafe { Value::from_raw(mlirBlockGetArgument(self.first_block(), index as _)) }
     }
 
     /// Get an input port by index.
@@ -109,7 +109,6 @@ impl SingleBlockOp for EntityOp {}
 impl EntityLike for EntityOp {}
 
 impl SingleRegionOp for ProcessOp {}
-impl SingleBlockOp for ProcessOp {}
 impl EntityLike for ProcessOp {}
 
 pub struct EntityLikeBuilder<'a> {
@@ -174,7 +173,7 @@ impl<'a> EntityLikeBuilder<'a> {
                     region,
                     mlirBlockCreate(mlir_types.len() as _, mlir_types.as_ptr()),
                 );
-                mlirOperationStateAddOwnedRegions(state.raw_mut(), 1, [region].as_ptr());
+                state.add_region(region);
             }
         })
     }
@@ -188,6 +187,8 @@ def_operation_single_result!(ProbeOp, "llhd.prb");
 def_operation!(DriveOp, "llhd.drv");
 def_operation_single_result!(LoadOp, "llhd.ld");
 def_operation!(StoreOp, "llhd.st");
+def_operation!(HaltOp, "llhd.halt");
+def_operation!(WaitOp, "llhd.wait");
 
 impl ConstantTimeOp {
     /// Create a new constant time value.
@@ -284,6 +285,43 @@ impl StoreOp {
         builder.build_with(|_, state| {
             state.add_operand(var);
             state.add_operand(value);
+        })
+    }
+}
+
+impl HaltOp {
+    /// Create a new halt operation.
+    pub fn new(builder: &mut Builder) -> Self {
+        builder.build_with(|_, _| {})
+    }
+}
+
+impl WaitOp {
+    /// Create a new wait operation.
+    pub fn new(
+        builder: &mut Builder,
+        dest: MlirBlock,
+        observed: impl IntoIterator<Item = Value>,
+        time: Option<Value>,
+    ) -> Self {
+        builder.build_with(|builder, state| {
+            let observed: Vec<MlirValue> = observed.into_iter().map(|x| x.raw()).collect();
+            state.add_successor(dest);
+            state.add_operands(&observed);
+            if let Some(time) = time {
+                state.add_operand(time);
+            }
+            let vector_ty = unsafe {
+                mlirVectorTypeGet(1, [3].as_ptr(), get_integer_type(builder.cx, 32).raw())
+            };
+            let vector_attr = Attribute::from_raw(unsafe {
+                mlirDenseElementsAttrInt32Get(
+                    vector_ty,
+                    3,
+                    [observed.len() as _, time.is_some() as _, 0].as_ptr(),
+                )
+            });
+            state.add_attribute("operand_segment_sizes", vector_attr);
         })
     }
 }
