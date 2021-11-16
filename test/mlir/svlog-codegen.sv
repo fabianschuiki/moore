@@ -26,6 +26,19 @@ module Foo (
   // CHECK: [[DECL_B:%.+]] = llhd.sig "b" {{.+}} : i1
   // CHECK: llhd.con [[DECL_B]], [[DECL_A]] : !llhd.sig<i1>
 
+
+  //===--------------------------------------------------------------------===//
+  // Procedures
+  //===--------------------------------------------------------------------===//
+
+  initial;
+  final;
+  always;
+  always_comb;
+  always_latch;
+  always_ff;
+  // initial x = y;
+
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time
@@ -34,18 +47,44 @@ module Foo (
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time
   // CHECK-NEXT: llhd.drv [[ARG_UNDRIVEN_OUTPUT1]], [[TMP]] after [[TIME]] : !llhd.sig<i5>
 
-
-  //===--------------------------------------------------------------------===//
-  // Procedures
-  //===--------------------------------------------------------------------===//
-
-  initial;
-  // initial x = y;
-
 endmodule
 // CHECK: }
 
-// CHECK-LABEL: llhd.proc @Foo.initial{{[^(]+}}(
-// CHECK-SAME:  ) -> (
-// CHECK-SAME:  ) {
-// CHECK: }
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: llhd.proc @Foo.final.
+// CHECK-NEXT:    [[TMP:%.+]] = llhd.constant_time
+// CHECK-NEXT:    llhd.wait for [[TMP]], [[BB:\^.+]]
+// CHECK-NEXT:  [[BB]]:
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: llhd.proc @Foo.always.
+// CHECK-NEXT:    br [[BB:\^.+]]
+// CHECK-NEXT:  [[BB]]:
+// CHECK-NEXT:    br [[BB]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: llhd.proc @Foo.always_comb.
+// CHECK-NEXT:    br [[BB2:\^.+]]
+// CHECK-NEXT:  [[BB1:\^[^:]+]]:
+// CHECK-NEXT:    llhd.wait [[BB2]]
+// CHECK-NEXT:  [[BB2]]:
+// CHECK-NEXT:    br [[BB1]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: llhd.proc @Foo.always_latch.
+// CHECK-NEXT:    br [[BB2:\^.+]]
+// CHECK-NEXT:  [[BB1:\^[^:]+]]:
+// CHECK-NEXT:    llhd.wait [[BB2]]
+// CHECK-NEXT:  [[BB2]]:
+// CHECK-NEXT:    br [[BB1]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: llhd.proc @Foo.always_ff.
+// CHECK-NEXT:    br [[BB:\^.+]]
+// CHECK-NEXT:  [[BB]]:
+// CHECK-NEXT:    br [[BB]]
+// CHECK-NEXT:  }

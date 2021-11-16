@@ -495,6 +495,7 @@ fn elaborate_name(
             }
 
             let mlir_cx = mlir::OwnedContext::new();
+            mlir_cx.load_dialect(circt::std::dialect());
             mlir_cx.load_dialect(circt::hw::dialect());
             mlir_cx.load_dialect(circt::comb::dialect());
             mlir_cx.load_dialect(circt::llhd::dialect());

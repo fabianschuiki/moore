@@ -160,6 +160,11 @@ pub trait SingleRegionOp: OperationExt {
     fn region(&self) -> MlirRegion {
         unsafe { mlirOperationGetRegion(self.raw(), 0) }
     }
+
+    /// Get the first block in the body region.
+    fn first_block(&self) -> MlirBlock {
+        unsafe { mlirRegionGetFirstBlock(self.region()) }
+    }
 }
 
 /// An operation that has a single block in a single region.
@@ -208,9 +213,24 @@ impl OperationState {
         &mut self.0
     }
 
+    /// Add a result to the operation.
+    pub fn add_result(&mut self, ty: Type) {
+        self.add_results(&[ty.raw()])
+    }
+
+    /// Add multiple results to the operation.
+    pub fn add_results(&mut self, types: &[MlirType]) {
+        unsafe { mlirOperationStateAddResults(self.raw_mut(), types.len() as _, types.as_ptr()) }
+    }
+
     /// Add an operand to the operation.
     pub fn add_operand(&mut self, value: Value) {
-        unsafe { mlirOperationStateAddOperands(self.raw_mut(), 1, [value.raw()].as_ptr()) }
+        self.add_operands(&[value.raw()])
+    }
+
+    /// Add multiple operands to the operation.
+    pub fn add_operands(&mut self, values: &[MlirValue]) {
+        unsafe { mlirOperationStateAddOperands(self.raw_mut(), values.len() as _, values.as_ptr()) }
     }
 
     /// Add an attribute to the operation.
@@ -223,9 +243,28 @@ impl OperationState {
         unsafe { mlirOperationStateAddAttributes(self.raw_mut(), attrs.len() as _, attrs.as_ptr()) }
     }
 
-    /// Add a result to the operation.
-    pub fn add_result(&mut self, ty: Type) {
-        unsafe { mlirOperationStateAddResults(self.raw_mut(), 1, [ty.raw()].as_ptr()) }
+    /// Add a successor to the operation.
+    pub fn add_successor(&mut self, block: MlirBlock) {
+        self.add_successors(&[block]);
+    }
+
+    /// Add multiple successors to the operation.
+    pub fn add_successors(&mut self, blocks: &[MlirBlock]) {
+        unsafe {
+            mlirOperationStateAddSuccessors(self.raw_mut(), blocks.len() as _, blocks.as_ptr())
+        }
+    }
+
+    /// Add a region to the operation.
+    pub fn add_region(&mut self, region: MlirRegion) {
+        self.add_regions(&[region])
+    }
+
+    /// Add multiple regions to the operation.
+    pub fn add_regions(&mut self, regions: &[MlirRegion]) {
+        unsafe {
+            mlirOperationStateAddOwnedRegions(self.raw_mut(), regions.len() as _, regions.as_ptr())
+        }
     }
 
     pub fn build<Op: OperationExt>(mut self) -> Op {
