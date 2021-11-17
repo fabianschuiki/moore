@@ -3,4 +3,4 @@
 	url = https://github.com/pulp-platform/common_cells.git
 [submodule "circt"]
 	path = circt
-	url = git@github.com:fabianschuiki/circt.git
+	url = https://github.com/fabianschuiki/circt.git
