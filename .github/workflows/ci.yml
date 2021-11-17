@@ -3,67 +3,119 @@ on: [push, pull_request]
 name: CI
 
 jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        name: "source checkout"
-      - uses: actions-rs/toolchain@v1
-        name: "toolchain installation"
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        name: "cargo check"
-        with:
-          command: check
-
   lints:
     name: Lints
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-        name: "source checkout"
-      - uses: actions-rs/toolchain@v1
-        name: "toolchain installation"
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
           components: rustfmt, clippy
 
-      - uses: actions-rs/cargo@v1
-        name: "cargo fmt"
+      - name: Run rustfmt
+        uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
 
-      - uses: actions-rs/cargo@v1
-        name: "cargo clippy"
-        continue-on-error: true  # TODO: Remove once we have fixed the mall
+      - name: Run clippy
+        uses: actions-rs/cargo@v1
+        continue-on-error: true  # TODO: Remove once we have fixed them all
         with:
           command: clippy
 
-  test:
-    name: Tests
+  check:
+    name: Checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-        name: "source checkout"
+      - name: Checkout sources
+        uses: actions/checkout@v2
         with:
           submodules: recursive
-      - uses: actions-rs/toolchain@v1
-        name: "toolchain installation"
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        name: "cargo test"
+          components: rustfmt, clippy
+
+      - name: Configure Environment
+        id: env
+        run: |
+          echo "CIRCT_SYS_CIRCT_DIR=$GITHUB_WORKSPACE/circt" >> $GITHUB_ENV
+          echo "::set-output name=circt-hash::$(git rev-parse @:./circt)"
+          echo "::set-output name=llvm-hash::$(cd circt && git rev-parse @:./llvm)"
+
+      # Fetch LLVM from the cache if possible, otherwise rebuild it.
+      - name: Fetch LLVM from cache
+        id: cache-llvm
+        uses: martijnhols/actions-cache/restore@v3
+        with:
+          path: circt/llvm/build
+          key: ${{ runner.os }}-llvm-${{ hashFiles('.github/build-llvm.sh') }}-${{ steps.env.outputs.llvm-hash }}
+
+      - name: Rebuild LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: .github/build-llvm.sh
+
+      - name: Upload LLVM to cache
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        uses: martijnhols/actions-cache/save@v3
+        with:
+          path: circt/llvm/build
+          key: ${{ steps.cache-llvm.outputs.primary-key }}
+
+      # Fetch CIRCT from the cache if possible, otherwise rebuild it.
+      - name: Fetch CIRCT from cache
+        id: cache-circt
+        uses: martijnhols/actions-cache/restore@v3
+        with:
+          path: circt/build
+          key: ${{ runner.os }}-circt-${{ hashFiles('.github/build-circt.sh') }}-${{ steps.env.outputs.circt-hash }}
+
+      - name: Rebuild CIRCT
+        if: steps.cache-circt.outputs.cache-hit != 'true'
+        run: .github/build-circt.sh
+
+      - name: Upload CIRCT to cache
+        if: steps.cache-circt.outputs.cache-hit != 'true'
+        uses: martijnhols/actions-cache/save@v3
+        with:
+          path: circt/build
+          key: ${{ steps.cache-circt.outputs.primary-key }}
+
+      # Run the quick check build.
+      - name: Run "cargo check"
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --all
+
+      # Run the regular build.
+      - name: Run "cargo build"
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      # Run the unit tests.
+      - name: Run "cargo test"
+        uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all
-      - run: python3 scripts/test.py --debug --verbose
-        name: "regression tests"
+
+      # Run the tests.
+      - name: Run lit tests
+        run: circt/llvm/build/bin/llvm-lit test -v
+      - name: Run regression tests (old)
+        run: env TERM=xterm-color test/run.sh
+      - name: Run regression tests (new)
+        run: python3 scripts/test.py --debug --verbose
