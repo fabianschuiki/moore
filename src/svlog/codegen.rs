@@ -12,6 +12,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv,
 };
+use circt::comb::CmpPred;
 use circt::mlir;
 use circt::prelude::*;
 use num::{BigInt, FromPrimitive, One, ToPrimitive, Zero};
@@ -1269,7 +1270,7 @@ where
                 let size = value.ty.simple_bit_vector(self.cx, span).size;
                 Ok((
                     self.builder.ins().const_int((size, k.clone())),
-                    circt::hw::ConstantOp::new(self.mlir_builder, size, k.clone()).into(),
+                    circt::hw::ConstantOp::new(self.mlir_builder, size, k).into(),
                 ))
             }
             ValueKind::Time(ref k) => Ok((
@@ -1341,6 +1342,49 @@ where
             }
             _ => panic!("no zero-value for type {}", ty),
         }
+    }
+
+    /// Emit the zero value for an MLIR type.
+    fn emit_zero_for_type_mlir(&mut self, ty: mlir::Type) -> mlir::Value {
+        if circt::hw::is_array_type(ty) {
+            let inner = self.emit_zero_for_type_mlir(circt::hw::array_type_element(ty));
+            circt::hw::ArrayCreateOp::new(
+                self.mlir_builder,
+                ty,
+                (0..circt::hw::array_type_size(ty)).map(|_| inner),
+            )
+            .into()
+        } else if circt::hw::is_struct_type(ty) {
+            let inner: Vec<_> = circt::hw::struct_type_fields(ty)
+                .map(|(_, ty)| self.emit_zero_for_type_mlir(ty))
+                .collect();
+            circt::hw::StructCreateOp::new(self.mlir_builder, ty, inner).into()
+        } else if circt::llhd::is_pointer_type(ty) {
+            let inner = self.emit_zero_for_type_mlir(circt::llhd::pointer_type_element(ty));
+            circt::llhd::VariableOp::new(self.mlir_builder, inner).into()
+        } else if circt::llhd::is_signal_type(ty) {
+            let inner = self.emit_zero_for_type_mlir(circt::llhd::signal_type_element(ty));
+            circt::llhd::SignalOp::new(self.mlir_builder, "", inner).into()
+        } else if circt::llhd::is_time_type(ty) {
+            circt::llhd::ConstantTimeOp::with_delta(self.mlir_builder, 0).into()
+        } else if mlir::is_integer_type(ty) {
+            circt::hw::ConstantOp::new(
+                self.mlir_builder,
+                mlir::integer_type_width(ty),
+                &BigInt::zero(),
+            )
+            .into()
+        } else {
+            panic!("no zero value for type {}", ty)
+        }
+    }
+
+    /// Emit the zero value for a type.
+    fn emit_zero_for_type_both(&mut self, ty: HybridType) -> HybridValue {
+        (
+            self.emit_zero_for_type(&ty.0),
+            self.emit_zero_for_type_mlir(ty.1),
+        )
     }
 
     /// Get the type of an LLHD value.
@@ -1459,7 +1503,7 @@ where
                 .map(|v| (v, Mode::Value));
         }
 
-        let value = match mir.kind {
+        let value: HybridValue = match mir.kind {
             mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
                 let sig = self
                     .shadows
@@ -1469,7 +1513,7 @@ where
                 if mode_hint == Mode::Signal && self.llhd_type(sig.0).is_signal() {
                     return Ok((sig, Mode::Signal));
                 } else {
-                    Ok(self.emit_prb_or_var(sig).0)
+                    self.emit_prb_or_var(sig)
                 }
             }
 
@@ -1477,7 +1521,7 @@ where
                 self.emit(
                     DiagBuilder2::error("interface cannot be used in an expression").span(mir.span),
                 );
-                Err(())
+                return Err(());
             }
 
             // Interface signals require special care, because they are emitted
@@ -1503,142 +1547,133 @@ where
             }
 
             mir::RvalueKind::CastToBool(value) => {
-                let value = self.emit_mir_rvalue(value)?;
-                let ty = self.llhd_type(value);
-                let zero = self.emit_zero_for_type(&ty);
-                Ok(self.builder.ins().neq(value, zero))
+                let value = self.emit_mir_rvalue_both(value)?;
+                let ty = self.llhd_type(value.0);
+                let zero = self.emit_zero_for_type_both((ty, value.1.ty()));
+                self.mk_cmp(CmpPred::Neq, value, zero)
             }
 
             mir::RvalueKind::Truncate(target_width, value) => {
-                let llvalue = self.emit_mir_rvalue(value)?;
-                Ok(self.builder.ins().ext_slice(llvalue, 0, target_width))
+                let llvalue = self.emit_mir_rvalue_both(value)?;
+                self.mk_ext_slice(llvalue, 0, target_width)
             }
 
             mir::RvalueKind::ZeroExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let llty = self.emit_type(mir.ty)?;
-                let result = self.emit_zero_for_type(&llty);
-                let value = self.emit_mir_rvalue(value)?;
-                let result = self.builder.ins().ins_slice(result, value, 0, width);
-                self.builder.set_name(result, "zext".to_string());
-                Ok(result)
+                let llty = self.emit_type_both(mir.ty)?;
+                let result = self.emit_zero_for_type_both(llty);
+                let value = self.emit_mir_rvalue_both(value)?;
+                let result = self.mk_ins_slice(result, value, 0, width);
+                self.builder.set_name(result.0, "zext".to_string());
+                result
             }
 
             mir::RvalueKind::SignExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let llty = self.emit_type(mir.ty)?;
-                let value = self.emit_mir_rvalue(value)?;
-                let sign = self.builder.ins().ext_slice(value, width - 1, 1);
-                let zeros = self.emit_zero_for_type(&llty);
-                let ones = self.builder.ins().not(zeros);
-                let mux = self.builder.ins().array(vec![zeros, ones]);
-                let mux = self.builder.ins().mux(mux, sign);
-                let result = self.builder.ins().ins_slice(mux, value, 0, width);
-                self.builder.set_name(result, "sext".to_string());
-                Ok(result)
+                let llty = self.emit_type_both(mir.ty)?;
+                let value = self.emit_mir_rvalue_both(value)?;
+                let sign = self.mk_ext_slice(value, width - 1, 1);
+                let zeros = self.emit_zero_for_type_both(llty);
+                let ones = self.mk_not(zeros);
+                let mux = self.mk_mux(sign, ones, zeros);
+                let result = self.mk_ins_slice(mux, value, 0, width);
+                self.builder.set_name(result.0, "sext".to_string());
+                result
             }
 
             mir::RvalueKind::ConstructArray(ref indices) => {
-                let llvalue = (0..indices.len())
-                    .map(|i| self.emit_mir_rvalue(indices[&i]))
+                let values = (0..indices.len())
+                    .map(|i| self.emit_mir_rvalue_both(indices[&i]))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(self.builder.ins().array(llvalue))
+                let llty = self.emit_type_both(mir.ty)?;
+                self.mk_array(llty, &values)
             }
 
             mir::RvalueKind::ConstructStruct(ref members) => {
                 let members = members
                     .iter()
-                    .map(|&v| self.emit_mir_rvalue(v))
+                    .map(|&v| self.emit_mir_rvalue_both(v))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(self.builder.ins().strukt(members))
+                let llty = self.emit_type_both(mir.ty)?;
+                self.mk_struct(llty, &members)
             }
 
-            mir::RvalueKind::Const(k) => self.emit_const(k, mir.env, mir.span),
+            mir::RvalueKind::Const(k) => self.emit_const_both(k, mir.env, mir.span)?,
 
             mir::RvalueKind::Index {
                 value,
                 base,
                 length,
             } => {
-                let target = self.emit_mir_rvalue(value)?;
-                self.emit_rvalue_index(value.ty, target, base, length)
+                let target = self.emit_mir_rvalue_both(value)?;
+                self.emit_rvalue_index(value.ty, target, base, length)?
             }
 
             mir::RvalueKind::Member { value, field } => {
-                let target = self.emit_mir_rvalue(value)?;
-                let value = self.builder.ins().ext_field(target, field);
-                // let name = format!(
-                //     "{}.{}",
-                //     self.builder
-                //
-                //         .get_name(target)
-                //         .map(String::from)
-                //         .unwrap_or_else(|| "struct".into()),
-                //     field
-                // );
-                // self.builder.set_name(value, name);
-                Ok(value)
+                let target = self.emit_mir_rvalue_both(value)?;
+                let value = self.mk_ext_field(target, field);
+                value
             }
 
             mir::RvalueKind::UnaryBitwise { op, arg } => {
-                let arg = self.emit_mir_rvalue(arg)?;
-                Ok(match op {
-                    mir::UnaryBitwiseOp::Not => self.builder.ins().not(arg),
-                })
+                let arg = self.emit_mir_rvalue_both(arg)?;
+                match op {
+                    mir::UnaryBitwiseOp::Not => self.mk_not(arg),
+                }
             }
 
             mir::RvalueKind::BinaryBitwise { op, lhs, rhs } => {
-                let lhs = self.emit_mir_rvalue(lhs)?;
-                let rhs = self.emit_mir_rvalue(rhs)?;
-                Ok(match op {
-                    mir::BinaryBitwiseOp::And => self.builder.ins().and(lhs, rhs),
-                    mir::BinaryBitwiseOp::Or => self.builder.ins().or(lhs, rhs),
-                    mir::BinaryBitwiseOp::Xor => self.builder.ins().xor(lhs, rhs),
-                })
+                let lhs = self.emit_mir_rvalue_both(lhs)?;
+                let rhs = self.emit_mir_rvalue_both(rhs)?;
+                match op {
+                    mir::BinaryBitwiseOp::And => self.mk_and(lhs, rhs),
+                    mir::BinaryBitwiseOp::Or => self.mk_or(lhs, rhs),
+                    mir::BinaryBitwiseOp::Xor => self.mk_xor(lhs, rhs),
+                }
             }
 
             mir::RvalueKind::IntComp {
                 op, lhs, rhs, sign, ..
             } => {
-                let lhs = self.emit_mir_rvalue(lhs)?;
-                let rhs = self.emit_mir_rvalue(rhs)?;
+                let lhs = self.emit_mir_rvalue_both(lhs)?;
+                let rhs = self.emit_mir_rvalue_both(rhs)?;
                 let signed = sign.is_signed();
-                Ok(match op {
-                    mir::IntCompOp::Eq => self.builder.ins().eq(lhs, rhs),
-                    mir::IntCompOp::Neq => self.builder.ins().neq(lhs, rhs),
-                    mir::IntCompOp::Lt if signed => self.builder.ins().slt(lhs, rhs),
-                    mir::IntCompOp::Leq if signed => self.builder.ins().sle(lhs, rhs),
-                    mir::IntCompOp::Gt if signed => self.builder.ins().sgt(lhs, rhs),
-                    mir::IntCompOp::Geq if signed => self.builder.ins().sge(lhs, rhs),
-                    mir::IntCompOp::Lt => self.builder.ins().ult(lhs, rhs),
-                    mir::IntCompOp::Leq => self.builder.ins().ule(lhs, rhs),
-                    mir::IntCompOp::Gt => self.builder.ins().ugt(lhs, rhs),
-                    mir::IntCompOp::Geq => self.builder.ins().uge(lhs, rhs),
-                })
+                match op {
+                    mir::IntCompOp::Eq => self.mk_cmp(CmpPred::Eq, lhs, rhs),
+                    mir::IntCompOp::Neq => self.mk_cmp(CmpPred::Neq, lhs, rhs),
+                    mir::IntCompOp::Lt if signed => self.mk_cmp(CmpPred::Slt, lhs, rhs),
+                    mir::IntCompOp::Leq if signed => self.mk_cmp(CmpPred::Sle, lhs, rhs),
+                    mir::IntCompOp::Gt if signed => self.mk_cmp(CmpPred::Sgt, lhs, rhs),
+                    mir::IntCompOp::Geq if signed => self.mk_cmp(CmpPred::Sge, lhs, rhs),
+                    mir::IntCompOp::Lt => self.mk_cmp(CmpPred::Ult, lhs, rhs),
+                    mir::IntCompOp::Leq => self.mk_cmp(CmpPred::Ule, lhs, rhs),
+                    mir::IntCompOp::Gt => self.mk_cmp(CmpPred::Ugt, lhs, rhs),
+                    mir::IntCompOp::Geq => self.mk_cmp(CmpPred::Uge, lhs, rhs),
+                }
             }
 
             mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
-                let arg = self.emit_mir_rvalue(arg)?;
-                Ok(match op {
-                    mir::IntUnaryArithOp::Neg => self.builder.ins().neg(arg),
-                })
+                let arg = self.emit_mir_rvalue_both(arg)?;
+                match op {
+                    mir::IntUnaryArithOp::Neg => self.mk_neg(arg),
+                }
             }
 
             mir::RvalueKind::IntBinaryArith {
                 op, lhs, rhs, sign, ..
             } => {
-                let lhs_ll = self.emit_mir_rvalue(lhs)?;
-                let rhs_ll = self.emit_mir_rvalue(rhs)?;
+                let lhs_ll = self.emit_mir_rvalue_both(lhs)?;
+                let rhs_ll = self.emit_mir_rvalue_both(rhs)?;
                 let signed = sign.is_signed();
-                Ok(match op {
-                    mir::IntBinaryArithOp::Add => self.builder.ins().add(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Sub => self.builder.ins().sub(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Mul if signed => self.builder.ins().smul(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Div if signed => self.builder.ins().sdiv(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Mod if signed => self.builder.ins().smod(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Mul => self.builder.ins().umul(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Div => self.builder.ins().udiv(lhs_ll, rhs_ll),
-                    mir::IntBinaryArithOp::Mod => self.builder.ins().umod(lhs_ll, rhs_ll),
+                match op {
+                    mir::IntBinaryArithOp::Add => self.mk_add(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Sub => self.mk_sub(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mul if signed => self.mk_smul(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Div if signed => self.mk_sdiv(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mod if signed => self.mk_smod(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mul => self.mk_umul(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Div => self.mk_udiv(lhs_ll, rhs_ll),
+                    mir::IntBinaryArithOp::Mod => self.mk_umod(lhs_ll, rhs_ll),
 
                     // The `x**y` operator requires special love, because there
                     // is no direct equivalent for it in LLHD.
@@ -1648,9 +1683,9 @@ where
                             let count = self.const_mir_rvalue_int(Ref(rhs))?;
                             let mut value = lhs_ll;
                             for _ in 1..count.to_usize().unwrap() {
-                                value = self.builder.ins().umul(value, lhs_ll);
+                                value = self.mk_umul(value, lhs_ll);
                             }
-                            return Ok(((value, todo!("mlir const pow")), Mode::Value));
+                            return Ok((value, Mode::Value));
                         }
 
                         // If the base is a constant power of two, we translate
@@ -1667,23 +1702,20 @@ where
                             });
                             // `y * log2(base)`
                             let rhs_ll = lg2.map(|lg2| {
-                                let width = self.llhd_type(rhs_ll).len();
-                                let lg2 = self.builder.ins().const_int((width, BigInt::from(lg2)));
-                                self.builder.ins().umul(lg2, rhs_ll)
+                                let width = self.llhd_type(rhs_ll.0).len();
+                                let lg2 = self.mk_const_int(width, &BigInt::from(lg2));
+                                self.mk_umul(lg2, rhs_ll)
                             });
                             if let Some(rhs_ll) = rhs_ll {
                                 // `1`
-                                let width = self.llhd_type(lhs_ll).len();
-                                let lhs_ll = self.builder.ins().const_int((width, BigInt::one()));
+                                let width = self.llhd_type(lhs_ll.0).len();
+                                let lhs_ll = self.mk_const_int(width, &BigInt::one());
                                 // `1 << (y * log2(base))`
-                                let zeros = self.emit_zero_for_type(&self.llhd_type(lhs_ll));
-                                return Ok((
-                                    (
-                                        self.builder.ins().shl(lhs_ll, zeros, rhs_ll),
-                                        todo!("mlir dynamic pow"),
-                                    ),
-                                    Mode::Value,
+                                let zeros = self.emit_zero_for_type_both((
+                                    self.llhd_type(lhs_ll.0),
+                                    lhs_ll.1.ty(),
                                 ));
+                                return Ok((self.mk_shl(lhs_ll, zeros, rhs_ll), Mode::Value));
                             }
                         }
 
@@ -1694,48 +1726,45 @@ where
                         );
                         return Err(());
                     }
-                })
+                }
             }
 
             mir::RvalueKind::Concat(ref values) => {
                 let mut offset = 0;
-                let llty = self.emit_type(mir.ty)?;
-                let mut result = self.emit_zero_for_type(&llty);
+                let llty = self.emit_type_both(mir.ty)?;
                 trace!(
-                    "Concatenating {} values into `{}` (as `{}`)",
+                    "Concatenating {} values into `{}` (as {:?})",
                     values.len(),
                     mir.ty,
                     llty
                 );
+                let mut result = self.emit_zero_for_type_both(llty);
                 for value in values.iter().rev() {
                     let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                    let llval = self.emit_mir_rvalue(value)?;
+                    let llval = self.emit_mir_rvalue_both(value)?;
                     trace!(
                         " - Value has width {}, type `{}`, in LLHD `{}`",
                         width,
                         value.ty,
-                        self.llhd_type(llval)
+                        self.llhd_type(llval.0)
                     );
-                    result = self.builder.ins().ins_slice(result, llval, offset, width);
+                    result = self.mk_ins_slice(result, llval, offset, width);
                     offset += width;
                 }
-                self.builder.set_name(result, "concat".to_string());
-                Ok(result)
+                self.builder.set_name(result.0, "concat".to_string());
+                result
             }
 
             mir::RvalueKind::Repeat(times, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let value = self.emit_mir_rvalue(value)?;
-                let llty = self.emit_type(mir.ty)?;
-                let mut result = self.emit_zero_for_type(&llty);
+                let value = self.emit_mir_rvalue_both(value)?;
+                let llty = self.emit_type_both(mir.ty)?;
+                let mut result = self.emit_zero_for_type_both(llty);
                 for i in 0..times {
-                    result = self
-                        .builder
-                        .ins()
-                        .ins_slice(result, value, i * width, width);
+                    result = self.mk_ins_slice(result, value, i * width, width);
                 }
-                self.builder.set_name(result, "repeat".to_string());
-                Ok(result)
+                self.builder.set_name(result.0, "repeat".to_string());
+                result
             }
 
             mir::RvalueKind::Shift {
@@ -1744,25 +1773,21 @@ where
                 value,
                 amount,
             } => {
-                let value = self.emit_mir_rvalue(value)?;
-                let amount = self.emit_mir_rvalue(amount)?;
-                let value_ty = self.builder.unit().value_type(value);
-                let hidden = self.emit_zero_for_type(&value_ty);
+                let value = self.emit_mir_rvalue_both(value)?;
+                let amount = self.emit_mir_rvalue_both(amount)?;
+                let value_ty = self.builder.unit().value_type(value.0);
+                let hidden = self.emit_zero_for_type_both((value_ty.clone(), value.1.ty()));
                 let hidden = if arith && op == mir::ShiftOp::Right {
-                    let ones = self.builder.ins().not(hidden);
-                    let sign = self
-                        .builder
-                        .ins()
-                        .ext_slice(value, value_ty.unwrap_int() - 1, 1);
-                    let mux = self.builder.ins().array(vec![hidden, ones]);
-                    self.builder.ins().mux(mux, sign)
+                    let ones = self.mk_not(hidden);
+                    let sign = self.mk_ext_slice(value, value_ty.unwrap_int() - 1, 1);
+                    self.mk_mux(sign, ones, hidden)
                 } else {
                     hidden
                 };
-                Ok(match op {
-                    mir::ShiftOp::Left => self.builder.ins().shl(value, hidden, amount),
-                    mir::ShiftOp::Right => self.builder.ins().shr(value, hidden, amount),
-                })
+                match op {
+                    mir::ShiftOp::Left => self.mk_shl(value, hidden, amount),
+                    mir::ShiftOp::Right => self.mk_shr(value, hidden, amount),
+                }
             }
 
             mir::RvalueKind::Ternary {
@@ -1770,26 +1795,25 @@ where
                 true_value,
                 false_value,
             } => {
-                let cond = self.emit_mir_rvalue(cond)?;
-                let true_value = self.emit_mir_rvalue(true_value)?;
-                let false_value = self.emit_mir_rvalue(false_value)?;
-                let array = self.builder.ins().array(vec![false_value, true_value]);
-                Ok(self.builder.ins().mux(array, cond))
+                let cond = self.emit_mir_rvalue_both(cond)?;
+                let true_value = self.emit_mir_rvalue_both(true_value)?;
+                let false_value = self.emit_mir_rvalue_both(false_value)?;
+                self.mk_mux(cond, true_value, false_value)
             }
 
             mir::RvalueKind::Reduction { op, arg } => {
                 let width = arg.ty.simple_bit_vector(self.cx, arg.span).size;
-                let arg = self.emit_mir_rvalue(arg)?;
-                let mut value = self.builder.ins().ext_slice(arg, 0, 1);
+                let arg = self.emit_mir_rvalue_both(arg)?;
+                let mut value = self.mk_ext_slice(arg, 0, 1);
                 for i in 1..width {
-                    let bit = self.builder.ins().ext_slice(arg, i, 1);
+                    let bit = self.mk_ext_slice(arg, i, 1);
                     value = match op {
-                        mir::BinaryBitwiseOp::And => self.builder.ins().and(value, bit),
-                        mir::BinaryBitwiseOp::Or => self.builder.ins().or(value, bit),
-                        mir::BinaryBitwiseOp::Xor => self.builder.ins().xor(value, bit),
+                        mir::BinaryBitwiseOp::And => self.mk_and(value, bit),
+                        mir::BinaryBitwiseOp::Or => self.mk_or(value, bit),
+                        mir::BinaryBitwiseOp::Xor => self.mk_xor(value, bit),
                     };
                 }
-                Ok(value)
+                value
             }
 
             mir::RvalueKind::Assignment {
@@ -1798,7 +1822,7 @@ where
                 result,
             } => {
                 self.emit_mir_blocking_assign(lvalue, rvalue)?;
-                self.emit_mir_rvalue(result)
+                self.emit_mir_rvalue_both(result)?
             }
 
             mir::RvalueKind::PackString(value) | mir::RvalueKind::UnpackString(value) => bug_span!(
@@ -1813,10 +1837,10 @@ where
                 "runtime string comparisons not implemented"
             ),
 
-            mir::RvalueKind::Error => Err(()),
+            mir::RvalueKind::Error => return Err(()),
         };
 
-        value.map(|v| ((v, todo!("mlir for value") as mlir::Value), Mode::Value))
+        Ok((value, Mode::Value))
     }
 
     fn emit_prb_or_var(&mut self, sig: HybridValue) -> HybridValue {
@@ -1899,8 +1923,8 @@ where
                 length,
             } => {
                 let (inner, actual_mode) = self.emit_rvalue_interface(value, signal, mode_hint)?;
-                self.emit_rvalue_index(value.ty, inner.0, base, length)
-                    .map(|v| ((v, todo!("mlir rvalue index") as mlir::Value), actual_mode))
+                self.emit_rvalue_index(value.ty, inner, base, length)
+                    .map(|v| (v, actual_mode))
             }
 
             _ => bug_span!(
@@ -1917,22 +1941,22 @@ where
     fn emit_rvalue_index(
         &mut self,
         ty: &'gcx UnpackedType<'gcx>,
-        value: llhd::ir::Value,
+        value: HybridValue,
         base: &'gcx mir::Rvalue<'gcx>,
         length: usize,
-    ) -> Result<llhd::ir::Value> {
-        let base = self.emit_mir_rvalue(base)?;
-        let hidden = self.emit_zero_for_type(&self.llhd_type(value));
+    ) -> Result<HybridValue> {
+        let base = self.emit_mir_rvalue_both(base)?;
+        let hidden = self.emit_zero_for_type_both((self.llhd_type(value.0), base.1.ty()));
         // TODO(fschuiki): make the above a constant of all `x`.
-        let shifted = self.builder.ins().shr(value, hidden, base);
+        let shifted = self.mk_shr(value, hidden, base);
         if ty.coalesces_to_llhd_scalar() {
             let length = std::cmp::max(1, length);
-            Ok(self.builder.ins().ext_slice(shifted, 0, length))
+            Ok(self.mk_ext_slice(shifted, 0, length))
         } else {
             if length == 0 {
-                Ok(self.builder.ins().ext_field(shifted, 0))
+                Ok(self.mk_ext_field(shifted, 0))
             } else {
-                Ok(self.builder.ins().ext_slice(shifted, 0, length))
+                Ok(self.mk_ext_slice(shifted, 0, length))
             }
         }
     }
@@ -2701,6 +2725,325 @@ where
             }
             Ok(net)
         }
+    }
+
+    fn mk_ext_slice(&mut self, arg: HybridValue, offset: usize, length: usize) -> HybridValue {
+        (
+            self.builder.ins().ext_slice(arg.0, offset, length),
+            if mlir::is_integer_type(arg.1.ty()) {
+                circt::comb::ExtractOp::with_sizes(self.mlir_builder, arg.1, offset, length).into()
+            } else {
+                if let Some(sig_ty) = circt::llhd::get_signal_type_element(arg.1.ty()) {
+                    if mlir::is_integer_type(sig_ty) {
+                        circt::llhd::SigExtractOp::with_const_offset(
+                            self.mlir_builder,
+                            arg.1,
+                            offset,
+                            length,
+                        )
+                        .into()
+                    } else {
+                        circt::llhd::SigArraySliceOp::with_const_offset(
+                            self.mlir_builder,
+                            arg.1,
+                            offset,
+                            length,
+                        )
+                        .into()
+                    }
+                } else {
+                    circt::hw::ArraySliceOp::with_const_offset(
+                        self.mlir_builder,
+                        arg.1,
+                        offset,
+                        length,
+                    )
+                    .into()
+                }
+            },
+        )
+    }
+
+    fn mk_ins_slice_mlir(
+        &mut self,
+        into: mlir::Value,
+        value: mlir::Value,
+        offset: usize,
+        length: usize,
+    ) -> mlir::Value {
+        let is_int = mlir::is_integer_type(into.ty());
+        let len = match is_int {
+            true => mlir::integer_type_width(into.ty()),
+            false => circt::hw::array_type_size(into.ty()),
+        };
+        let mut concats = vec![];
+        if offset > 0 {
+            let ext = match is_int {
+                true => {
+                    circt::comb::ExtractOp::with_sizes(self.mlir_builder, into, 0, offset).into()
+                }
+                false => {
+                    circt::hw::ArraySliceOp::with_const_offset(self.mlir_builder, into, 0, offset)
+                        .into()
+                }
+            };
+            concats.push(ext);
+        }
+        concats.push(value);
+        if offset + length < len {
+            let rest = len - offset - length;
+            let ext = match is_int {
+                true => circt::comb::ExtractOp::with_sizes(
+                    self.mlir_builder,
+                    into,
+                    offset + length,
+                    rest,
+                )
+                .into(),
+                false => circt::hw::ArraySliceOp::with_const_offset(
+                    self.mlir_builder,
+                    into,
+                    offset + length,
+                    rest,
+                )
+                .into(),
+            };
+            concats.push(ext);
+        }
+        match is_int {
+            true => circt::comb::ConcatOp::new(self.mlir_builder, concats).into(),
+            false => circt::hw::ArrayConcatOp::new(self.mlir_builder, concats).into(),
+        }
+    }
+
+    fn mk_ins_slice(
+        &mut self,
+        into: HybridValue,
+        value: HybridValue,
+        offset: usize,
+        length: usize,
+    ) -> HybridValue {
+        (
+            self.builder
+                .ins()
+                .ins_slice(into.0, value.0, offset, length),
+            self.mk_ins_slice_mlir(into.1, value.1, offset, length),
+        )
+    }
+
+    fn mk_ext_field(&mut self, arg: HybridValue, offset: usize) -> HybridValue {
+        let mlir = if circt::hw::is_array_type(arg.1.ty()) {
+            circt::hw::ArrayGetOp::with_const_offset(self.mlir_builder, arg.1, offset).into()
+        } else if circt::hw::is_struct_type(arg.1.ty()) {
+            circt::hw::StructExtractOp::new(self.mlir_builder, arg.1, offset).into()
+        } else {
+            let sig_ty = circt::llhd::signal_type_element(arg.1.ty());
+            if circt::hw::is_array_type(sig_ty) {
+                circt::llhd::SigArrayGetOp::with_const_offset(self.mlir_builder, arg.1, offset)
+                    .into()
+            } else if circt::hw::is_struct_type(sig_ty) {
+                circt::llhd::SigStructExtractOp::new(self.mlir_builder, arg.1, offset).into()
+            } else {
+                panic!("unsupported type");
+            }
+        };
+        (self.builder.ins().ext_field(arg.0, offset), mlir)
+    }
+
+    #[allow(dead_code)]
+    fn mk_ins_field(
+        &mut self,
+        into: HybridValue,
+        value: HybridValue,
+        offset: usize,
+    ) -> HybridValue {
+        let mlir = if circt::hw::is_struct_type(into.1.ty()) {
+            circt::hw::StructInjectOp::new(self.mlir_builder, into.1, value.1, offset).into()
+        } else {
+            let value = circt::hw::ArrayCreateOp::new(
+                self.mlir_builder,
+                circt::hw::get_array_type(value.1.ty(), 1),
+                vec![value.1],
+            )
+            .into();
+            self.mk_ins_slice_mlir(into.1, value, offset, 1)
+        };
+        (self.builder.ins().ins_field(into.0, value.0, offset), mlir)
+    }
+
+    fn mk_not(&mut self, arg: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().not(arg.0),
+            circt::llhd::NotOp::new(self.mlir_builder, arg.1).into(),
+        )
+    }
+
+    fn mk_neg(&mut self, arg: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().neg(arg.0),
+            circt::llhd::NegOp::new(self.mlir_builder, arg.1).into(),
+        )
+    }
+
+    fn mk_and(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().and(lhs.0, rhs.0),
+            circt::comb::AndOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_or(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().or(lhs.0, rhs.0),
+            circt::comb::OrOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_xor(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().xor(lhs.0, rhs.0),
+            circt::comb::XorOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_mux(
+        &mut self,
+        cond: HybridValue,
+        true_value: HybridValue,
+        false_value: HybridValue,
+    ) -> HybridValue {
+        let array = self.builder.ins().array(vec![false_value.0, true_value.0]);
+        (
+            self.builder.ins().mux(array, cond.0),
+            circt::comb::MuxOp::new(self.mlir_builder, cond.1, true_value.1, false_value.1).into(),
+        )
+    }
+
+    fn mk_shl(
+        &mut self,
+        value: HybridValue,
+        hidden: HybridValue,
+        amount: HybridValue,
+    ) -> HybridValue {
+        (
+            self.builder.ins().shl(value.0, hidden.0, amount.0),
+            circt::llhd::ShlOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
+        )
+    }
+
+    fn mk_shr(
+        &mut self,
+        value: HybridValue,
+        hidden: HybridValue,
+        amount: HybridValue,
+    ) -> HybridValue {
+        (
+            self.builder.ins().shr(value.0, hidden.0, amount.0),
+            circt::llhd::ShrOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
+        )
+    }
+
+    fn mk_add(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().add(lhs.0, rhs.0),
+            circt::comb::AddOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_sub(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().sub(lhs.0, rhs.0),
+            circt::comb::SubOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_smul(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().smul(lhs.0, rhs.0),
+            circt::comb::MulOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_umul(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().umul(lhs.0, rhs.0),
+            circt::comb::MulOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_sdiv(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().sdiv(lhs.0, rhs.0),
+            circt::comb::DivSOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_udiv(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().udiv(lhs.0, rhs.0),
+            circt::comb::DivUOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_smod(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().smod(lhs.0, rhs.0),
+            circt::comb::ModSOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_umod(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().umod(lhs.0, rhs.0),
+            circt::comb::ModUOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_const_int(&mut self, width: usize, value: &BigInt) -> HybridValue {
+        (
+            self.builder.ins().const_int((width, value.clone())),
+            circt::hw::ConstantOp::new(self.mlir_builder, width, value).into(),
+        )
+    }
+
+    fn mk_cmp(&mut self, pred: CmpPred, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+        let mut ins = self.builder.ins();
+        let old = match pred {
+            CmpPred::Eq => ins.eq(lhs.0, rhs.0),
+            CmpPred::Neq => ins.neq(lhs.0, rhs.0),
+            CmpPred::Slt => ins.slt(lhs.0, rhs.0),
+            CmpPred::Sle => ins.sle(lhs.0, rhs.0),
+            CmpPred::Sgt => ins.sgt(lhs.0, rhs.0),
+            CmpPred::Sge => ins.sge(lhs.0, rhs.0),
+            CmpPred::Ult => ins.ult(lhs.0, rhs.0),
+            CmpPred::Ule => ins.ule(lhs.0, rhs.0),
+            CmpPred::Ugt => ins.ugt(lhs.0, rhs.0),
+            CmpPred::Uge => ins.uge(lhs.0, rhs.0),
+        };
+        (
+            old,
+            circt::comb::ICmpOp::new(self.mlir_builder, pred, lhs.1, rhs.1).into(),
+        )
+    }
+
+    fn mk_array(&mut self, ty: HybridType, elements: &[HybridValue]) -> HybridValue {
+        (
+            self.builder
+                .ins()
+                .array(elements.iter().map(|v| v.0.clone()).collect()),
+            circt::hw::ArrayCreateOp::new(self.mlir_builder, ty.1, elements.iter().map(|v| v.1))
+                .into(),
+        )
+    }
+
+    fn mk_struct(&mut self, ty: HybridType, elements: &[HybridValue]) -> HybridValue {
+        (
+            self.builder
+                .ins()
+                .strukt(elements.iter().map(|v| v.0.clone()).collect()),
+            circt::hw::StructCreateOp::new(self.mlir_builder, ty.1, elements.iter().map(|v| v.1))
+                .into(),
+        )
     }
 }
 

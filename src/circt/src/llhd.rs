@@ -1,9 +1,25 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
 use crate::crate_prelude::*;
+use crate::hw::{array_type_element, get_array_type, struct_type_field};
 
 pub fn dialect() -> DialectHandle {
     DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__llhd__() })
+}
+
+/// Check if a type is an LLHD time type.
+pub fn is_time_type(ty: Type) -> bool {
+    unsafe { llhdTypeIsATimeType(ty.raw()) }
+}
+
+/// Check if a type is an LLHD signal type.
+pub fn is_signal_type(ty: Type) -> bool {
+    unsafe { llhdTypeIsASignalType(ty.raw()) }
+}
+
+/// Check if a type is an LLHD pointer type.
+pub fn is_pointer_type(ty: Type) -> bool {
+    unsafe { llhdTypeIsAPointerType(ty.raw()) }
 }
 
 /// Create a new time type.
@@ -21,12 +37,20 @@ pub fn get_pointer_type(element: Type) -> Type {
     Type::from_raw(unsafe { llhdSignalTypeGet(element.raw()) })
 }
 
-/// Get the element type of signal type.
+/// Get the element type of a signal type.
 pub fn signal_type_element(ty: Type) -> Type {
     Type::from_raw(unsafe { llhdSignalTypeGetElementType(ty.raw()) })
 }
 
-/// Get the element type of pointer type.
+/// Get the element type of a type if it is a signal type.
+pub fn get_signal_type_element(ty: Type) -> Option<Type> {
+    match is_signal_type(ty) {
+        true => Some(signal_type_element(ty)),
+        false => None,
+    }
+}
+
+/// Get the element type of a pointer type.
 pub fn pointer_type_element(ty: Type) -> Type {
     Type::from_raw(unsafe { llhdPointerTypeGetElementType(ty.raw()) })
 }
@@ -189,6 +213,14 @@ def_operation_single_result!(LoadOp, "llhd.ld");
 def_operation!(StoreOp, "llhd.st");
 def_operation!(HaltOp, "llhd.halt");
 def_operation!(WaitOp, "llhd.wait");
+def_simple_unary_operation!(NotOp, "llhd.not");
+def_simple_unary_operation!(NegOp, "llhd.neg");
+def_operation_single_result!(ShlOp, "llhd.shl");
+def_operation_single_result!(ShrOp, "llhd.shr");
+def_operation_single_result!(SigArrayGetOp, "llhd.sig.array_get");
+def_binary_operation_explicit_result!(SigArraySliceOp, "llhd.sig.array_slice");
+def_binary_operation_explicit_result!(SigExtractOp, "llhd.sig.extract");
+def_operation_single_result!(SigStructExtractOp, "llhd.sig.struct_extract");
 
 impl ConstantTimeOp {
     /// Create a new constant time value.
@@ -322,6 +354,100 @@ impl WaitOp {
                 )
             });
             state.add_attribute("operand_segment_sizes", vector_attr);
+        })
+    }
+}
+
+impl ShlOp {
+    /// Shift a value to the left.
+    pub fn new(builder: &mut Builder, value: Value, hidden: Value, amount: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(value);
+            state.add_operand(hidden);
+            state.add_operand(amount);
+            state.add_result(value.ty());
+        })
+    }
+}
+
+impl ShrOp {
+    /// Shift a value to the right.
+    pub fn new(builder: &mut Builder, value: Value, hidden: Value, amount: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(value);
+            state.add_operand(hidden);
+            state.add_operand(amount);
+            state.add_result(value.ty());
+        })
+    }
+}
+
+impl SigExtractOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        Self::new(
+            builder,
+            get_signal_type(get_integer_type(builder.cx, length)),
+            value,
+            offset,
+        )
+    }
+
+    pub fn with_const_offset(
+        builder: &mut Builder,
+        value: Value,
+        offset: usize,
+        length: usize,
+    ) -> Self {
+        let offset = crate::hw::ConstantOp::new(builder, 64, &offset.into()).into();
+        Self::with_sizes(builder, value, offset, length)
+    }
+}
+
+impl SigArraySliceOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        Self::new(
+            builder,
+            get_signal_type(get_array_type(array_type_element(value.ty()), length)),
+            value,
+            offset,
+        )
+    }
+
+    pub fn with_const_offset(
+        builder: &mut Builder,
+        value: Value,
+        offset: usize,
+        length: usize,
+    ) -> Self {
+        let offset = crate::hw::ConstantOp::new(builder, 64, &offset.into()).into();
+        Self::with_sizes(builder, value, offset, length)
+    }
+}
+
+impl SigArrayGetOp {
+    pub fn new(builder: &mut Builder, value: Value, offset: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(value);
+            state.add_operand(offset);
+            state.add_result(get_signal_type(array_type_element(signal_type_element(
+                value.ty(),
+            ))));
+        })
+    }
+
+    pub fn with_const_offset(builder: &mut Builder, value: Value, offset: usize) -> Self {
+        let offset = crate::hw::ConstantOp::new(builder, 64, &offset.into()).into();
+        Self::new(builder, value, offset)
+    }
+}
+
+impl SigStructExtractOp {
+    pub fn new(builder: &mut Builder, value: Value, offset: usize) -> Self {
+        builder.build_with(|builder, state| {
+            state.add_operand(value);
+            let (field_name, field_ty) = struct_type_field(signal_type_element(value.ty()), offset);
+            state.add_attribute("field", get_string_attr(builder.cx, &field_name));
+            state.add_result(get_signal_type(field_ty));
         })
     }
 }

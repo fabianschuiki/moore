@@ -266,7 +266,8 @@ if args.TEST:
 else:
     suffices = ["sv", "v", "vhd"]
     third_party = test_dir/"third-party"
-    globs = [[p for p in test_dir.glob("**/*."+suffix) if third_party not in p.parents] for suffix in suffices]
+    mlir = test_dir/"mlir"
+    globs = [[p for p in test_dir.glob("**/*."+suffix) if third_party not in p.parents and mlir not in p.parents] for suffix in suffices]
     tests = [TestCase(p.relative_to(test_dir), p) for p in sorted(itertools.chain(*globs))]
 sys.stdout.write("running {} tests\n".format(len(tests)))
 
