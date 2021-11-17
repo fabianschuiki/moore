@@ -45,6 +45,11 @@ impl Debug for Type {
     }
 }
 
+/// Check if a type is an MLIR integer type.
+pub fn is_integer_type(ty: Type) -> bool {
+    unsafe { mlirTypeIsAInteger(ty.raw()) }
+}
+
 /// Create a new integer type of a given width.
 pub fn get_integer_type(cx: Context, bitwidth: usize) -> Type {
     Type::from_raw(unsafe { mlirIntegerTypeGet(cx.raw(), bitwidth as _) })

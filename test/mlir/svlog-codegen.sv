@@ -37,7 +37,8 @@ module Foo (
   always_comb;
   always_latch;
   always_ff;
-  // initial x = y;
+
+  initial y = x;
 
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4

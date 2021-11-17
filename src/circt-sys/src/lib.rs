@@ -14,7 +14,7 @@ pub unsafe fn mlirStringRefCreateFromStr(s: impl AsRef<str>) -> MlirStringRef {
     }
 }
 
-pub unsafe fn mlirStringRefToStr<R>(s: MlirStringRef, f: impl Fn(&str) -> R) -> R {
+pub unsafe fn mlirStringRefToStr<'a, R>(s: MlirStringRef, f: impl Fn(&'a str) -> R + 'a) -> R {
     f(std::str::from_utf8(std::slice::from_raw_parts(
         s.data as *const _,
         s.length as usize,

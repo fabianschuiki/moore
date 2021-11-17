@@ -37,6 +37,57 @@ macro_rules! def_operation_single_result {
     };
 }
 
+/// Define a unary operation with the result type inherited from the operand.
+macro_rules! def_simple_unary_operation {
+    ($name:ident, $operation_name:expr) => {
+        def_operation_single_result!($name, $operation_name);
+
+        impl $name {
+            pub fn new(builder: &mut Builder, arg: Value) -> Self {
+                builder.build_with(|_, state| {
+                    state.add_operand(arg);
+                    state.add_result(arg.ty());
+                })
+            }
+        }
+    };
+}
+
+/// Define a binary operation with the result type inherited from the first
+/// operand.
+macro_rules! def_simple_binary_operation {
+    ($name:ident, $operation_name:expr) => {
+        def_operation_single_result!($name, $operation_name);
+
+        impl $name {
+            pub fn new(builder: &mut Builder, lhs: Value, rhs: Value) -> Self {
+                builder.build_with(|_, state| {
+                    state.add_operand(lhs);
+                    state.add_operand(rhs);
+                    state.add_result(lhs.ty());
+                })
+            }
+        }
+    };
+}
+
+/// Define a binary operation with an explicit result type.
+macro_rules! def_binary_operation_explicit_result {
+    ($name:ident, $operation_name:expr) => {
+        def_operation_single_result!($name, $operation_name);
+
+        impl $name {
+            pub fn new(builder: &mut Builder, ty: Type, lhs: Value, rhs: Value) -> Self {
+                builder.build_with(|_, state| {
+                    state.add_operand(lhs);
+                    state.add_operand(rhs);
+                    state.add_result(ty);
+                })
+            }
+        }
+    };
+}
+
 pub mod builtin;
 pub mod comb;
 pub mod hw;
