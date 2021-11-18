@@ -2916,17 +2916,22 @@ where
     }
 
     fn mk_not(&mut self, arg: HybridValue) -> HybridValue {
-        (
-            self.builder.ins().not(arg.0),
-            circt::llhd::NotOp::new(self.mlir_builder, arg.1).into(),
-        )
+        (self.builder.ins().not(arg.0), {
+            let ones = circt::hw::ConstantOp::new(
+                self.mlir_builder,
+                mlir::integer_type_width(arg.1.ty()),
+                &(-1).into(),
+            )
+            .into();
+            circt::comb::XorOp::new(self.mlir_builder, ones, arg.1).into()
+        })
     }
 
     fn mk_neg(&mut self, arg: HybridValue) -> HybridValue {
-        (
-            self.builder.ins().neg(arg.0),
-            circt::llhd::NegOp::new(self.mlir_builder, arg.1).into(),
-        )
+        (self.builder.ins().neg(arg.0), {
+            let zero = self.emit_zero_for_type_mlir(arg.1.ty());
+            circt::comb::SubOp::new(self.mlir_builder, zero, arg.1).into()
+        })
     }
 
     fn mk_and(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
