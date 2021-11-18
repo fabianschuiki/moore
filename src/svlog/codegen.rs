@@ -793,7 +793,7 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The constant values emitted into the unit.
     interned_consts: HashMap<Value<'gcx>, Result<HybridValue>>,
     /// The MIR lvalues emitted into the unit.
-    interned_lvalues: HashMap<NodeId, Result<(llhd::ir::Value, Option<llhd::ir::Value>)>>,
+    interned_lvalues: HashMap<NodeId, Result<(HybridValue, Option<HybridValue>)>>,
     /// The MIR rvalues emitted into the unit.
     interned_rvalues: HashMap<(NodeId, Mode), Result<(HybridValue, Mode)>>,
     /// The shadow variables introduced to handle signals which are both read
@@ -839,11 +839,7 @@ where
         }
     }
 
-    fn set_emitted_value(&mut self, src: impl Into<AccessedNode>, value: llhd::ir::Value) {
-        self.set_emitted_value_both(src, (value, todo!("mlir for emitted value")));
-    }
-
-    fn set_emitted_value_both(&mut self, src: impl Into<AccessedNode>, value: HybridValue) {
+    fn set_emitted_value(&mut self, src: impl Into<AccessedNode>, value: HybridValue) {
         let src = src.into();
         self.values.insert(src, value);
     }
@@ -1172,8 +1168,7 @@ where
                             })
                         }
                     };
-                    self.emit_mir_lvalue(mir)
-                        .map(|(x, _)| -> HybridValue { (x, todo!("mlir for mir lvalue")) })
+                    self.emit_mir_lvalue_both(mir).map(|x| x.0)
                 } else {
                     let mir = self.mir_rvalue(mapping.id(), mapping.env());
                     if mir.is_error() {
@@ -1394,8 +1389,12 @@ where
 
     /// Emit the code for an rvalue.
     fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
+        self.emit_rvalue_both(expr_id, env).map(|x| x.0)
+    }
+
+    /// Emit the code for an rvalue.
+    fn emit_rvalue_both(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
         self.emit_rvalue_mode(expr_id, env, Mode::Value)
-            .map(|x| x.0)
     }
 
     /// Emit the code for an rvalue.
@@ -1435,13 +1434,19 @@ where
 
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {
-                let ty = self.llhd_type(value.0);
-                let init = self.emit_zero_for_type(&ty);
-                let sig = self.builder.ins().sig(init);
+                let ty = (self.llhd_type(value.0), value.1.ty());
+                let init = self.emit_zero_for_type_both(ty);
+                let sig = (
+                    self.builder.ins().sig(init.0),
+                    circt::llhd::SignalOp::new(self.mlir_builder, "", init.1).into(),
+                );
                 let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
                 let delay_const = self.builder.ins().const_time(delay);
-                self.builder.ins().drv(sig, value.0, delay_const);
-                Ok((sig, todo!("mlir signal spill")))
+                self.builder.ins().drv(sig.0, value.0, delay_const);
+                let delay_const =
+                    circt::llhd::ConstantTimeOp::with_delta(self.mlir_builder, 1).into();
+                circt::llhd::DriveOp::new(self.mlir_builder, sig.1, value.1, delay_const);
+                Ok(sig)
             }
             (Mode::Value, Mode::Signal) => unreachable!(),
             _ => Ok(value),
@@ -1966,6 +1971,15 @@ where
         &mut self,
         mir: &mir::Lvalue<'gcx>,
     ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+        self.emit_mir_lvalue_both(mir)
+            .map(|(x, y)| (x.0, y.map(|y| y.0)))
+    }
+
+    /// Emit the code for an MIR lvalue.
+    fn emit_mir_lvalue_both(
+        &mut self,
+        mir: &mir::Lvalue<'gcx>,
+    ) -> Result<(HybridValue, Option<HybridValue>)> {
         if let Some(x) = self.interned_lvalues.get(&mir.id) {
             x.clone()
         } else {
@@ -1982,13 +1996,13 @@ where
     fn emit_mir_lvalue_uninterned(
         &mut self,
         mir: &mir::Lvalue<'gcx>,
-    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+    ) -> Result<(HybridValue, Option<HybridValue>)> {
         let result = self.emit_mir_lvalue_inner(mir);
         match result {
             Ok((sig, var)) => {
                 let llty_exp1 = llhd::signal_ty(self.emit_type(mir.ty)?);
                 let llty_exp2 = llhd::pointer_ty(self.emit_type(mir.ty)?);
-                let llty_act = self.llhd_type(sig);
+                let llty_act = self.llhd_type(sig.0);
                 assert_span!(
                     llty_exp1 == llty_act || llty_exp2 == llty_act,
                     mir.span,
@@ -2001,7 +2015,7 @@ where
                 );
                 if let Some(var) = var {
                     let llty_exp = llhd::pointer_ty(self.emit_type(mir.ty)?);
-                    let llty_act = self.llhd_type(var);
+                    let llty_act = self.llhd_type(var.0);
                     assert_span!(
                         llty_exp == llty_act,
                         mir.span,
@@ -2025,17 +2039,17 @@ where
     fn emit_mir_lvalue_inner(
         &mut self,
         mir: &mir::Lvalue<'gcx>,
-    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+    ) -> Result<(HybridValue, Option<HybridValue>)> {
         match mir.kind {
             // Transmutes are no-ops in code generation.
-            mir::LvalueKind::Transmute(value) => self.emit_mir_lvalue(value),
+            mir::LvalueKind::Transmute(value) => self.emit_mir_lvalue_both(value),
 
             // Variables and ports trivially return their declaration value.
             // This is either the `var` or `sig` instruction which introduced
             // them.
             mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => Ok((
-                self.emitted_value(id).clone(),
-                self.shadows.get(&id.into()).cloned().map(|x| x.0),
+                self.emitted_value_both(id).clone(),
+                self.shadows.get(&id.into()).cloned(),
             )),
 
             // Interface signals require special care, because they are emitted
@@ -2045,11 +2059,9 @@ where
             // Member accesses simply look up their inner lvalue and extract the
             // signal or pointer to the respective subfield.
             mir::LvalueKind::Member { value, field } => {
-                let target = self.emit_mir_lvalue(value)?;
-                let value_real = self.builder.ins().ext_field(target.0, field);
-                let value_shadow = target
-                    .1
-                    .map(|target| self.builder.ins().ext_field(target, field));
+                let target = self.emit_mir_lvalue_both(value)?;
+                let value_real = self.mk_ext_field(target.0, field);
+                let value_shadow = target.1.map(|target| self.mk_ext_field(target, field));
                 Ok((value_real, value_shadow))
             }
 
@@ -2060,7 +2072,7 @@ where
                 base,
                 length,
             } => {
-                let inner = self.emit_mir_lvalue(value)?;
+                let inner = self.emit_mir_lvalue_both(value)?;
                 self.emit_lvalue_index(value.ty, inner, base, length)
             }
 
@@ -2096,13 +2108,13 @@ where
         &mut self,
         mir: &mir::Lvalue<'gcx>,
         signal: NodeId,
-    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+    ) -> Result<(HybridValue, Option<HybridValue>)> {
         match mir.kind {
             mir::LvalueKind::Intf(intf) => {
                 let id = AccessedNode::Intf(intf, signal);
                 Ok((
-                    self.emitted_value(id).clone(),
-                    self.shadows.get(&id).cloned().map(|x| x.0),
+                    self.emitted_value_both(id).clone(),
+                    self.shadows.get(&id).cloned(),
                 ))
             }
 
@@ -2129,36 +2141,37 @@ where
     fn emit_lvalue_index(
         &mut self,
         ty: &'gcx UnpackedType<'gcx>,
-        value: (llhd::ir::Value, Option<llhd::ir::Value>),
+        value: (HybridValue, Option<HybridValue>),
         base: &'gcx mir::Rvalue<'gcx>,
         length: usize,
-    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
+    ) -> Result<(HybridValue, Option<HybridValue>)> {
         let (target_real, target_shadow) = value;
-        let base = self.emit_mir_rvalue(base)?;
+        let base = self.emit_mir_rvalue_both(base)?;
         let shifted_real = {
-            let hidden = self.emit_zero_for_type(&self.llhd_type(target_real));
-            self.builder.ins().shr(target_real, hidden, base)
+            let hidden =
+                self.emit_zero_for_type_both((self.llhd_type(target_real.0), target_real.1.ty()));
+            self.mk_shr(target_real, hidden, base)
         };
         let shifted_shadow = target_shadow.map(|target| {
-            let hidden = self.emit_zero_for_type(&self.llhd_type(target));
-            self.builder.ins().shr(target, hidden, base)
+            let hidden = self.emit_zero_for_type_both((self.llhd_type(target.0), target.1.ty()));
+            self.mk_shr(target, hidden, base)
         });
         if ty.coalesces_to_llhd_scalar() {
             let length = std::cmp::max(1, length);
             Ok((
-                self.builder.ins().ext_slice(shifted_real, 0, length),
-                shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+                self.mk_ext_slice(shifted_real, 0, length),
+                shifted_shadow.map(|s| self.mk_ext_slice(s, 0, length)),
             ))
         } else {
             if length == 0 {
                 Ok((
-                    self.builder.ins().ext_field(shifted_real, 0),
-                    shifted_shadow.map(|s| self.builder.ins().ext_field(s, 0)),
+                    self.mk_ext_field(shifted_real, 0),
+                    shifted_shadow.map(|s| self.mk_ext_field(s, 0)),
                 ))
             } else {
                 Ok((
-                    self.builder.ins().ext_slice(shifted_real, 0, length),
-                    shifted_shadow.map(|s| self.builder.ins().ext_slice(s, 0, length)),
+                    self.mk_ext_slice(shifted_real, 0, length),
+                    shifted_shadow.map(|s| self.mk_ext_slice(s, 0, length)),
                 ))
             }
         }
@@ -2557,13 +2570,16 @@ where
                 .unwrap()),
             env,
         );
-        let ty = self.emit_type(ty)?;
+        let ty = self.emit_type_both(ty)?;
         let init = match hir.init {
-            Some(expr) => self.emit_rvalue(expr, env)?,
-            None => self.emit_zero_for_type(&ty),
+            Some(expr) => self.emit_rvalue_both(expr, env)?,
+            None => self.emit_zero_for_type_both(ty),
         };
-        let value = self.builder.ins().var(init);
-        self.builder.set_name(value, hir.name.value.to_string());
+        let value = (
+            self.builder.ins().var(init.0),
+            circt::llhd::VariableOp::new(self.mlir_builder, init.1).into(),
+        );
+        self.builder.set_name(value.0, hir.name.value.to_string());
         self.set_emitted_value(decl_id, value);
         Ok(())
     }
@@ -2733,8 +2749,8 @@ where
             if mlir::is_integer_type(arg.1.ty()) {
                 circt::comb::ExtractOp::with_sizes(self.mlir_builder, arg.1, offset, length).into()
             } else {
-                if let Some(sig_ty) = circt::llhd::get_signal_type_element(arg.1.ty()) {
-                    if mlir::is_integer_type(sig_ty) {
+                if let Some(ty) = circt::llhd::get_signal_type_element(arg.1.ty()) {
+                    if mlir::is_integer_type(ty) {
                         circt::llhd::SigExtractOp::with_const_offset(
                             self.mlir_builder,
                             arg.1,
@@ -2744,6 +2760,24 @@ where
                         .into()
                     } else {
                         circt::llhd::SigArraySliceOp::with_const_offset(
+                            self.mlir_builder,
+                            arg.1,
+                            offset,
+                            length,
+                        )
+                        .into()
+                    }
+                } else if let Some(ty) = circt::llhd::get_pointer_type_element(arg.1.ty()) {
+                    if mlir::is_integer_type(ty) {
+                        circt::llhd::PtrExtractOp::with_const_offset(
+                            self.mlir_builder,
+                            arg.1,
+                            offset,
+                            length,
+                        )
+                        .into()
+                    } else {
+                        circt::llhd::PtrArraySliceOp::with_const_offset(
                             self.mlir_builder,
                             arg.1,
                             offset,
@@ -2836,16 +2870,26 @@ where
             circt::hw::ArrayGetOp::with_const_offset(self.mlir_builder, arg.1, offset).into()
         } else if circt::hw::is_struct_type(arg.1.ty()) {
             circt::hw::StructExtractOp::new(self.mlir_builder, arg.1, offset).into()
-        } else {
-            let sig_ty = circt::llhd::signal_type_element(arg.1.ty());
-            if circt::hw::is_array_type(sig_ty) {
+        } else if let Some(ty) = circt::llhd::get_signal_type_element(arg.1.ty()) {
+            if circt::hw::is_array_type(ty) {
                 circt::llhd::SigArrayGetOp::with_const_offset(self.mlir_builder, arg.1, offset)
                     .into()
-            } else if circt::hw::is_struct_type(sig_ty) {
+            } else if circt::hw::is_struct_type(ty) {
                 circt::llhd::SigStructExtractOp::new(self.mlir_builder, arg.1, offset).into()
             } else {
-                panic!("unsupported type");
+                panic!("unsupported type {}", ty);
             }
+        } else if let Some(ty) = circt::llhd::get_pointer_type_element(arg.1.ty()) {
+            if circt::hw::is_array_type(ty) {
+                circt::llhd::PtrArrayGetOp::with_const_offset(self.mlir_builder, arg.1, offset)
+                    .into()
+            } else if circt::hw::is_struct_type(ty) {
+                circt::llhd::PtrStructExtractOp::new(self.mlir_builder, arg.1, offset).into()
+            } else {
+                panic!("unsupported type {}", ty);
+            }
+        } else {
+            panic!("unsupported type {}", arg.1.ty());
         };
         (self.builder.ins().ext_field(arg.0, offset), mlir)
     }

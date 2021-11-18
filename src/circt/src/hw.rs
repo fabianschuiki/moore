@@ -79,7 +79,7 @@ impl ConstantOp {
     pub fn new(builder: &mut Builder, width: usize, value: &BigInt) -> ConstantOp {
         builder.build_with(|builder, state| {
             let ty = get_integer_type(builder.cx, width);
-            state.add_attribute("value", get_integer_attr(ty, value.to_i64().unwrap()));
+            state.add_attribute("value", get_integer_attr_big(ty, value));
             state.add_result(ty);
         })
     }

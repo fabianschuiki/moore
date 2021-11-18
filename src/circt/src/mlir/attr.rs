@@ -51,6 +51,17 @@ impl Debug for Attribute {
 }
 
 /// Create a new integer attribute.
+pub fn get_integer_attr_big(ty: Type, value: &BigInt) -> Attribute {
+    if let Some(small_value) = value.to_i64() {
+        get_integer_attr(ty, small_value)
+    } else {
+        Attribute::from_raw(unsafe {
+            mlirIntegerAttrGetFromString(ty.raw(), mlirStringRefCreateFromStr(&value.to_string()))
+        })
+    }
+}
+
+/// Create a new integer attribute from an i64 value.
 pub fn get_integer_attr(ty: Type, value: i64) -> Attribute {
     Attribute::from_raw(unsafe { mlirIntegerAttrGet(ty.raw(), value) })
 }
