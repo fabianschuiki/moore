@@ -1277,26 +1277,26 @@ where
                 self.builder
                     .ins()
                     .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0)),
-                todo!("mlir const time value"),
+                circt::llhd::ConstantTimeOp::with_seconds(self.mlir_builder, k).into(),
             )),
             ValueKind::StructOrArray(ref v) => {
+                let ty = self.emit_type_both(value.ty)?;
+                let mut ll_fields = vec![];
+                let mut mlir_fields = vec![];
+                for field in v {
+                    let field = self.emit_const_both(field, env, span)?;
+                    ll_fields.push(field.0);
+                    mlir_fields.push(field.1);
+                }
                 if let Some(_dim) = value.ty.outermost_dim() {
-                    let fields: Result<Vec<_>> = v
-                        .iter()
-                        .map(|v| self.emit_const(v, env, span).map(Into::into))
-                        .collect();
                     Ok((
-                        self.builder.ins().array(fields?),
-                        todo!("mlir constant array"),
+                        self.builder.ins().array(ll_fields),
+                        circt::hw::ArrayCreateOp::new(self.mlir_builder, ty.1, mlir_fields).into(),
                     ))
                 } else if let Some(_strukt) = value.ty.get_struct() {
-                    let fields: Result<Vec<_>> = v
-                        .iter()
-                        .map(|v| self.emit_const(v, env, span).map(Into::into))
-                        .collect();
                     Ok((
-                        self.builder.ins().strukt(fields?),
-                        todo!("mlir constant struct"),
+                        self.builder.ins().strukt(ll_fields),
+                        circt::hw::StructCreateOp::new(self.mlir_builder, ty.1, mlir_fields).into(),
                     ))
                 } else {
                     panic!(
