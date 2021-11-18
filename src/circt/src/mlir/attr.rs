@@ -75,3 +75,10 @@ pub fn get_string_attr(cx: Context, value: &str) -> Attribute {
 pub fn get_type_attr(value: Type) -> Attribute {
     Attribute::from_raw(unsafe { mlirTypeAttrGet(value.raw()) })
 }
+
+/// Create a new flat symbol reference attribute.
+pub fn get_flat_symbol_ref_attr(cx: Context, symbol: &str) -> Attribute {
+    Attribute::from_raw(unsafe {
+        mlirFlatSymbolRefAttrGet(cx.raw(), mlirStringRefCreateFromStr(symbol))
+    })
+}

@@ -26,6 +26,9 @@ module Foo (
   // CHECK: [[DECL_B:%.+]] = llhd.sig "b" {{.+}} : i1
   // CHECK: llhd.con [[DECL_B]], [[DECL_A]] : !llhd.sig<i1>
 
+  Bar bar();
+  // CHECK: llhd.inst "bar" @Bar
+
   //===--------------------------------------------------------------------===//
   // Procedures
   //===--------------------------------------------------------------------===//
@@ -36,11 +39,18 @@ module Foo (
   always_comb;
   always_latch;
   always_ff;
+  // CHECK: llhd.inst "" @Foo.initial.
+  // CHECK-NEXT: llhd.inst "" @Foo.final.
+  // CHECK-NEXT: llhd.inst "" @Foo.always.
+  // CHECK-NEXT: llhd.inst "" @Foo.always_comb.
+  // CHECK-NEXT: llhd.inst "" @Foo.always_latch.
+  // CHECK-NEXT: llhd.inst "" @Foo.always_ff.
 
   //===--------------------------------------------------------------------===//
   // Statements and Expressions
   //===--------------------------------------------------------------------===//
 
+  // CHECK: llhd.inst "" @Foo.initial.
   initial begin
     -z;
     ~z;
@@ -54,6 +64,11 @@ module Foo (
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time
   // CHECK-NEXT: llhd.drv [[ARG_UNDRIVEN_OUTPUT1]], [[TMP]] after [[TIME]] : !llhd.sig<i5>
 
+endmodule
+// CHECK: }
+
+// CHECK-LABEL: llhd.entity @Bar
+module Bar;
 endmodule
 // CHECK: }
 

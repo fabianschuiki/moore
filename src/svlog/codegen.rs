@@ -203,7 +203,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         let unit = self.into.add_unit(ent);
-        let result = Ok(Rc::new(EmittedModule { unit, ports }));
+        let result = Ok(Rc::new(EmittedModule {
+            unit,
+            mlir_symbol: entity_name.clone(),
+            ports,
+        }));
         self.tables.module_defs.insert(id.env(env), result.clone());
         result
     }
@@ -612,6 +616,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         Ok(EmittedProcedure {
             unit: self.into.add_unit(prok),
+            mlir_symbol: proc_name.clone(),
             inputs,
             outputs,
         })
@@ -937,9 +942,9 @@ where
                     port.port.id,
                     assigned
                 );
-                self.builder
-                    .ins()
-                    .con(signal_lookup[&port.port.id].0, assigned);
+                let sig = signal_lookup[&port.port.id];
+                self.builder.ins().con(sig.0, assigned.0);
+                circt::llhd::ConnectOp::new(self.mlir_builder, sig.1, assigned.1);
             }
         }
 
@@ -969,11 +974,15 @@ where
 
             // Emit the assignments.
             let delay = llhd::value::TimeValue::new(num::zero(), 0, 1);
-            let delay = self.builder.ins().const_time(delay);
+            let delay = (
+                self.builder.ins().const_time(delay),
+                circt::llhd::ConstantTimeOp::with_epsilon(self.mlir_builder, 1).into(),
+            );
             for &assign in &simplified {
-                let lhs = self.emit_mir_lvalue(assign.lhs)?;
-                let rhs = self.emit_mir_rvalue(assign.rhs)?;
-                self.builder.ins().drv(lhs.0, rhs, delay);
+                let lhs = self.emit_mir_lvalue_both(assign.lhs)?;
+                let rhs = self.emit_mir_rvalue_both(assign.rhs)?;
+                self.builder.ins().drv(lhs.0 .0, rhs.0, delay.0);
+                circt::llhd::DriveOp::new(self.mlir_builder, lhs.0 .1, rhs.1, delay.1);
             }
         }
 
@@ -1013,8 +1022,18 @@ where
                     "instance arrays of modules not supported"
                 );
             }
-            self.builder.ins().inst(ext_unit, inputs, outputs);
-            // TODO: Annotate instance name once LLHD allows that.
+            self.builder.ins().inst(
+                ext_unit,
+                inputs.iter().map(|x| x.0).collect(),
+                outputs.iter().map(|x| x.0).collect(),
+            );
+            circt::llhd::InstanceOp::new(
+                self.mlir_builder,
+                &inst.hir.name.value.to_string(),
+                &target.mlir_symbol,
+                inputs.iter().map(|x| x.1),
+                outputs.iter().map(|x| x.1),
+            );
         }
 
         // Emit generate blocks.
@@ -1062,7 +1081,7 @@ where
         for &proc_id in &hir.procs {
             let prok = self.emit_procedure(proc_id, env, name_prefix)?;
             let lookup_value = |&id: &AccessedNode| match self.values.get(&id) {
-                Some(v) => v.0.clone(),
+                Some(v) => v.clone(),
                 None => {
                     self.emit(
                         DiagBuilder2::bug(format!(
@@ -1075,13 +1094,24 @@ where
                     panic!("no value emitted for {:?}", id);
                 }
             };
-            let inputs = prok.inputs.iter().map(lookup_value).collect();
-            let outputs = prok.outputs.iter().map(lookup_value).collect();
+            let inputs: Vec<_> = prok.inputs.iter().map(lookup_value).collect();
+            let outputs: Vec<_> = prok.outputs.iter().map(lookup_value).collect();
             let ext_unit = self.builder.add_extern(
                 self.into.unit(prok.unit).name().clone(),
                 self.into.unit(prok.unit).sig().clone(),
             );
-            self.builder.ins().inst(ext_unit, inputs, outputs);
+            self.builder.ins().inst(
+                ext_unit,
+                inputs.iter().map(|x| x.0).collect(),
+                outputs.iter().map(|x| x.0).collect(),
+            );
+            circt::llhd::InstanceOp::new(
+                self.mlir_builder,
+                "",
+                &prok.mlir_symbol,
+                inputs.iter().map(|x| x.1),
+                outputs.iter().map(|x| x.1),
+            );
         }
 
         Ok(())
@@ -1094,7 +1124,7 @@ where
         inst: &InstDetails<'gcx>,
         inputs: &[ModulePort<'gcx>],
         outputs: &[ModulePort<'gcx>],
-    ) -> Result<(Vec<llhd::ir::Value>, Vec<llhd::ir::Value>)> {
+    ) -> Result<(Vec<HybridValue>, Vec<HybridValue>)> {
         // Map the values associated with the external ports to internal
         // ports.
         let mut port_mapping_int: HashMap<NodeId, NodeEnvId> = HashMap::new();
@@ -1214,11 +1244,11 @@ where
         };
         let inputs = inputs
             .iter()
-            .map(|p| map_port(p, false).map(|x| x.0))
+            .map(|p| map_port(p, false))
             .collect::<Result<Vec<_>>>()?;
         let outputs = outputs
             .iter()
-            .map(|p| map_port(p, true).map(|x| x.0))
+            .map(|p| map_port(p, true))
             .collect::<Result<Vec<_>>>()?;
         Ok((inputs, outputs))
     }
@@ -3174,6 +3204,8 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module<'gcx>, env
 pub struct EmittedModule<'a> {
     /// The emitted LLHD unit.
     unit: llhd::ir::UnitId,
+    /// The emitted MLIR symbol name.
+    mlir_symbol: String,
     /// The module's ports.
     ports: ModuleIntf<'a>,
 }
@@ -3182,6 +3214,8 @@ pub struct EmittedModule<'a> {
 pub struct EmittedProcedure {
     /// The emitted LLHD unit.
     unit: llhd::ir::UnitId,
+    /// The emitted MLIR symbol name.
+    mlir_symbol: String,
     /// The nodes used exclusively as rvalues.
     inputs: Vec<AccessedNode>,
     /// The nodes used as lvalues.
