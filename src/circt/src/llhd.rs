@@ -86,6 +86,7 @@ pub fn get_time_attr(
 
 def_operation!(EntityOp, "llhd.entity");
 def_operation!(ProcessOp, "llhd.proc");
+def_operation!(InstanceOp, "llhd.inst");
 
 pub trait EntityLike: SingleRegionOp {
     /// Get the number of ports.
@@ -207,6 +208,31 @@ impl<'a> EntityLikeBuilder<'a> {
                 );
                 state.add_region(region);
             }
+        })
+    }
+}
+
+impl InstanceOp {
+    pub fn new(
+        builder: &mut Builder,
+        name: &str,
+        module: &str,
+        inputs: impl IntoIterator<Item = Value>,
+        outputs: impl IntoIterator<Item = Value>,
+    ) -> Self {
+        builder.build_with(|builder, state| {
+            let num_inputs = inputs.into_iter().map(|v| state.add_operand(v)).count();
+            let num_outputs = outputs.into_iter().map(|v| state.add_operand(v)).count();
+            let vector_attr = Attribute::from_raw(unsafe {
+                mlirDenseElementsAttrInt32Get(
+                    mlirVectorTypeGet(1, [2].as_ptr(), get_integer_type(builder.cx, 32).raw()),
+                    2,
+                    [num_inputs as _, num_outputs as _].as_ptr(),
+                )
+            });
+            state.add_attribute("operand_segment_sizes", vector_attr);
+            state.add_attribute("name", get_string_attr(builder.cx, name));
+            state.add_attribute("callee", get_flat_symbol_ref_attr(builder.cx, module));
         })
     }
 }
