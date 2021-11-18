@@ -1,3 +1,4 @@
+#pragma once
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/LLHD.h"
@@ -25,3 +26,16 @@
 #include "mlir-c/Registration.h"
 #include "mlir-c/Support.h"
 #include "mlir-c/Transforms.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Creates an integer attribute of the given type by parsing the given string
+/// into an integer value.
+MLIR_CAPI_EXPORTED MlirAttribute
+mlirIntegerAttrGetFromString(MlirType type, MlirStringRef value);
+
+#ifdef __cplusplus
+}
+#endif

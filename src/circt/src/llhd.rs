@@ -34,7 +34,7 @@ pub fn get_signal_type(element: Type) -> Type {
 
 /// Create a new pointer type.
 pub fn get_pointer_type(element: Type) -> Type {
-    Type::from_raw(unsafe { llhdSignalTypeGet(element.raw()) })
+    Type::from_raw(unsafe { llhdPointerTypeGet(element.raw()) })
 }
 
 /// Get the element type of a signal type.
@@ -53,6 +53,14 @@ pub fn get_signal_type_element(ty: Type) -> Option<Type> {
 /// Get the element type of a pointer type.
 pub fn pointer_type_element(ty: Type) -> Type {
     Type::from_raw(unsafe { llhdPointerTypeGetElementType(ty.raw()) })
+}
+
+/// Get the element type of a type if it is a pointer type.
+pub fn get_pointer_type_element(ty: Type) -> Option<Type> {
+    match is_pointer_type(ty) {
+        true => Some(pointer_type_element(ty)),
+        false => None,
+    }
 }
 
 /// Create a new integer attribute.
@@ -218,9 +226,13 @@ def_simple_unary_operation!(NegOp, "llhd.neg");
 def_operation_single_result!(ShlOp, "llhd.shl");
 def_operation_single_result!(ShrOp, "llhd.shr");
 def_operation_single_result!(SigArrayGetOp, "llhd.sig.array_get");
+def_operation_single_result!(PtrArrayGetOp, "llhd.ptr.array_get");
 def_binary_operation_explicit_result!(SigArraySliceOp, "llhd.sig.array_slice");
+def_binary_operation_explicit_result!(PtrArraySliceOp, "llhd.ptr.array_slice");
 def_binary_operation_explicit_result!(SigExtractOp, "llhd.sig.extract");
+def_binary_operation_explicit_result!(PtrExtractOp, "llhd.ptr.extract");
 def_operation_single_result!(SigStructExtractOp, "llhd.sig.struct_extract");
+def_operation_single_result!(PtrStructExtractOp, "llhd.ptr.struct_extract");
 
 impl ConstantTimeOp {
     /// Create a new constant time value.
@@ -263,7 +275,7 @@ impl VariableOp {
     pub fn new(builder: &mut Builder, init: Value) -> Self {
         builder.build_with(|_, state| {
             state.add_operand(init);
-            state.add_result(get_signal_type(init.ty()));
+            state.add_result(get_pointer_type(init.ty()));
         })
     }
 }
@@ -403,11 +415,59 @@ impl SigExtractOp {
     }
 }
 
+impl PtrExtractOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        Self::new(
+            builder,
+            get_pointer_type(get_integer_type(builder.cx, length)),
+            value,
+            offset,
+        )
+    }
+
+    pub fn with_const_offset(
+        builder: &mut Builder,
+        value: Value,
+        offset: usize,
+        length: usize,
+    ) -> Self {
+        let offset = crate::hw::ConstantOp::new(builder, 64, &offset.into()).into();
+        Self::with_sizes(builder, value, offset, length)
+    }
+}
+
 impl SigArraySliceOp {
     pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
         Self::new(
             builder,
-            get_signal_type(get_array_type(array_type_element(value.ty()), length)),
+            get_signal_type(get_array_type(
+                array_type_element(signal_type_element(value.ty())),
+                length,
+            )),
+            value,
+            offset,
+        )
+    }
+
+    pub fn with_const_offset(
+        builder: &mut Builder,
+        value: Value,
+        offset: usize,
+        length: usize,
+    ) -> Self {
+        let offset = crate::hw::ConstantOp::new(builder, 64, &offset.into()).into();
+        Self::with_sizes(builder, value, offset, length)
+    }
+}
+
+impl PtrArraySliceOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        Self::new(
+            builder,
+            get_pointer_type(get_array_type(
+                array_type_element(pointer_type_element(value.ty())),
+                length,
+            )),
             value,
             offset,
         )
@@ -441,6 +501,23 @@ impl SigArrayGetOp {
     }
 }
 
+impl PtrArrayGetOp {
+    pub fn new(builder: &mut Builder, value: Value, offset: Value) -> Self {
+        builder.build_with(|_, state| {
+            state.add_operand(value);
+            state.add_operand(offset);
+            state.add_result(get_pointer_type(array_type_element(pointer_type_element(
+                value.ty(),
+            ))));
+        })
+    }
+
+    pub fn with_const_offset(builder: &mut Builder, value: Value, offset: usize) -> Self {
+        let offset = crate::hw::ConstantOp::new(builder, 64, &offset.into()).into();
+        Self::new(builder, value, offset)
+    }
+}
+
 impl SigStructExtractOp {
     pub fn new(builder: &mut Builder, value: Value, offset: usize) -> Self {
         builder.build_with(|builder, state| {
@@ -448,6 +525,18 @@ impl SigStructExtractOp {
             let (field_name, field_ty) = struct_type_field(signal_type_element(value.ty()), offset);
             state.add_attribute("field", get_string_attr(builder.cx, &field_name));
             state.add_result(get_signal_type(field_ty));
+        })
+    }
+}
+
+impl PtrStructExtractOp {
+    pub fn new(builder: &mut Builder, value: Value, offset: usize) -> Self {
+        builder.build_with(|builder, state| {
+            state.add_operand(value);
+            let (field_name, field_ty) =
+                struct_type_field(pointer_type_element(value.ty()), offset);
+            state.add_attribute("field", get_string_attr(builder.cx, &field_name));
+            state.add_result(get_pointer_type(field_ty));
         })
     }
 }

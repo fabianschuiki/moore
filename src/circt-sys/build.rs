@@ -78,27 +78,26 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib={}", name);
     }
 
+    // Make a list of include directories.
+    let include_dirs = vec![
+        circt_dir.join("include").display().to_string(),
+        circt_build_dir.join("include").display().to_string(),
+        llvm_dir.join("llvm/include").display().to_string(),
+        llvm_dir.join("mlir/include").display().to_string(),
+        llvm_build_dir.join("include").display().to_string(),
+        llvm_build_dir
+            .join("tools/mlir/include")
+            .display()
+            .to_string(),
+    ];
+
     // Bindings
     println!("cargo:rerun-if-changed=wrapper.h");
-    let bindings = bindgen::Builder::default()
-        .header("wrapper.h")
-        .clang_arg("-I")
-        .clang_arg(circt_dir.join("include").display().to_string())
-        .clang_arg("-I")
-        .clang_arg(circt_build_dir.join("include").display().to_string())
-        .clang_arg("-I")
-        .clang_arg(llvm_dir.join("llvm/include").display().to_string())
-        .clang_arg("-I")
-        .clang_arg(llvm_dir.join("mlir/include").display().to_string())
-        .clang_arg("-I")
-        .clang_arg(llvm_build_dir.join("include").display().to_string())
-        .clang_arg("-I")
-        .clang_arg(
-            llvm_build_dir
-                .join("tools/mlir/include")
-                .display()
-                .to_string(),
-        )
+    let mut bindings = bindgen::Builder::default().header("wrapper.h");
+    for dir in &include_dirs {
+        bindings = bindings.clang_arg("-I").clang_arg(dir);
+    }
+    let bindings = bindings
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
@@ -108,4 +107,14 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+
+    // Additional wrapper code
+    println!("cargo:rerun-if-changed=wrapper.cpp");
+    cc::Build::new()
+        .cpp(true)
+        .file("wrapper.cpp")
+        .includes(&include_dirs)
+        .warnings(false)
+        .extra_warnings(false)
+        .compile("circt-sys-wrapper");
 }
