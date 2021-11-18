@@ -26,7 +26,6 @@ module Foo (
   // CHECK: [[DECL_B:%.+]] = llhd.sig "b" {{.+}} : i1
   // CHECK: llhd.con [[DECL_B]], [[DECL_A]] : !llhd.sig<i1>
 
-
   //===--------------------------------------------------------------------===//
   // Procedures
   //===--------------------------------------------------------------------===//
@@ -38,7 +37,14 @@ module Foo (
   always_latch;
   always_ff;
 
-  initial y = x;
+  //===--------------------------------------------------------------------===//
+  // Statements and Expressions
+  //===--------------------------------------------------------------------===//
+
+  initial begin
+    -z;
+    ~z;
+  end
 
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
@@ -88,4 +94,14 @@ endmodule
 // CHECK-NEXT:    br [[BB:\^.+]]
 // CHECK-NEXT:  [[BB]]:
 // CHECK-NEXT:    br [[BB]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK:         [[PRB:%.+]] = llhd.prb
+// CHECK-NEXT:    [[ZERO:%.+]] = hw.constant 0 : i3
+// CHECK-NEXT:    comb.sub [[ZERO]], [[PRB]]
+// CHECK:         [[PRB:%.+]] = llhd.prb
+// CHECK-NEXT:    [[ONES:%.+]] = hw.constant -1 : i3
+// CHECK-NEXT:    comb.xor [[ONES]], [[PRB]]
+// CHECK:         llhd.halt
 // CHECK-NEXT:  }
