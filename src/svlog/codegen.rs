@@ -25,6 +25,7 @@ use std::{
 
 pub type HybridValue = (llhd::ir::Value, mlir::Value);
 pub type HybridType = (llhd::Type, mlir::Type);
+pub type HybridBlock = (llhd::ir::Block, mlir::Block);
 
 /// A code generator.
 ///
@@ -1905,7 +1906,7 @@ where
     }
 
     /// Emit the code for an rvalue converted to a boolean..
-    fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
+    fn emit_rvalue_bool_both(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
         let mir = self.mir_rvalue(expr_id, env);
         assert_span!(
             mir.ty
@@ -1917,7 +1918,11 @@ where
             "value of type `{}` should be a bool",
             mir.ty
         );
-        self.emit_mir_rvalue(mir)
+        self.emit_mir_rvalue_both(mir)
+    }
+
+    fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
+        self.emit_rvalue_bool_both(expr_id, env).map(|x| x.0)
     }
 
     /// Emit the code for an MIR rvalue interface.
@@ -2399,27 +2404,27 @@ where
                 self.emit_stmt(stmt, env)?;
             }
             hir::StmtKind::Expr(expr_id) => {
-                self.emit_rvalue(expr_id, env)?;
+                self.emit_rvalue_both(expr_id, env)?;
             }
             hir::StmtKind::If {
                 cond,
                 main_stmt,
                 else_stmt,
             } => {
-                let main_blk = self.add_named_block("if_true");
-                let else_blk = self.add_named_block("if_false");
-                let cond = self.emit_rvalue_bool(cond, env)?;
-                self.builder.ins().br_cond(cond, else_blk, main_blk);
-                let final_blk = self.add_named_block("if_exit");
-                self.builder.append_to(main_blk);
+                let main_blk = self.mk_block(Some("if_true"));
+                let else_blk = self.mk_block(Some("if_false"));
+                let cond = self.emit_rvalue_bool_both(cond, env)?;
+                self.mk_cond_br(cond, main_blk, else_blk);
+                let final_blk = self.mk_block(Some("if_exit"));
+                self.append_to(main_blk);
                 self.emit_stmt(main_stmt, env)?;
-                self.builder.ins().br(final_blk);
-                self.builder.append_to(else_blk);
+                self.mk_br(final_blk);
+                self.append_to(else_blk);
                 if let Some(else_stmt) = else_stmt {
                     self.emit_stmt(else_stmt, env)?;
                 };
-                self.builder.ins().br(final_blk);
-                self.builder.append_to(final_blk);
+                self.mk_br(final_blk);
+                self.append_to(final_blk);
             }
             hir::StmtKind::Loop { kind, body } => {
                 let body_blk = self.add_named_block("loop_body");
@@ -2771,6 +2776,31 @@ where
             }
             Ok(net)
         }
+    }
+
+    fn mk_block(&mut self, name: Option<&str>) -> HybridBlock {
+        let bb = self.builder.block();
+        if let Some(name) = name {
+            self.builder.set_block_name(bb, name.into());
+        }
+        (bb, self.mlir_builder.add_block())
+    }
+
+    fn mk_br(&mut self, target: HybridBlock) {
+        self.builder.ins().br(target.0);
+        circt::std::BranchOp::new(self.mlir_builder, target.1);
+    }
+
+    fn mk_cond_br(&mut self, cond: HybridValue, true_block: HybridBlock, false_block: HybridBlock) {
+        self.builder
+            .ins()
+            .br_cond(cond.0, false_block.0, true_block.0);
+        circt::std::CondBranchOp::new(self.mlir_builder, cond.1, true_block.1, false_block.1);
+    }
+
+    fn append_to(&mut self, block: HybridBlock) {
+        self.builder.append_to(block.0);
+        self.mlir_builder.set_insertion_point_to_end(block.1);
     }
 
     fn mk_ext_slice(&mut self, arg: HybridValue, offset: usize, length: usize) -> HybridValue {
