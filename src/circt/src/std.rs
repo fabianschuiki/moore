@@ -26,10 +26,17 @@ impl CondBranchOp {
         true_dest: MlirBlock,
         false_dest: MlirBlock,
     ) -> Self {
-        builder.build_with(|_, state| {
+        builder.build_with(|builder, state| {
             state.add_operand(condition);
             state.add_successor(true_dest);
             state.add_successor(false_dest);
+            let vector_ty = unsafe {
+                mlirVectorTypeGet(1, [2].as_ptr(), get_integer_type(builder.cx, 32).raw())
+            };
+            let vector_attr = Attribute::from_raw(unsafe {
+                mlirDenseElementsAttrInt32Get(vector_ty, 2, [0, 0].as_ptr())
+            });
+            state.add_attribute("operand_segment_sizes", vector_attr);
         })
     }
 }

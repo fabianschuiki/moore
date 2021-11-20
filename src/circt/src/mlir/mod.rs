@@ -285,3 +285,6 @@ unsafe extern "C" fn print_formatter_callback(string: MlirStringRef, to: *mut st
     )
     .unwrap();
 }
+
+pub use crate::sys::MlirBlock as Block;
+pub use crate::sys::MlirRegion as Region;

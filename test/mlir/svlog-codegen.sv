@@ -54,6 +54,7 @@ module Foo (
   initial begin
     -z;
     ~z;
+    if (x) begin end else begin end
   end
 
   // Undriven outputs are driven with a default value.
@@ -91,18 +92,18 @@ endmodule
 
 // CHECK-LABEL: llhd.proc @Foo.always_comb.
 // CHECK-NEXT:    br [[BB2:\^.+]]
-// CHECK-NEXT:  [[BB1:\^[^:]+]]:
-// CHECK-NEXT:    llhd.wait [[BB2]]
 // CHECK-NEXT:  [[BB2]]:
-// CHECK-NEXT:    br [[BB1]]
+// CHECK-NEXT:    br [[BB1:\^.+]]
+// CHECK-NEXT:  [[BB1]]:
+// CHECK-NEXT:    llhd.wait [[BB2]]
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: llhd.proc @Foo.always_latch.
 // CHECK-NEXT:    br [[BB2:\^.+]]
-// CHECK-NEXT:  [[BB1:\^[^:]+]]:
-// CHECK-NEXT:    llhd.wait [[BB2]]
 // CHECK-NEXT:  [[BB2]]:
-// CHECK-NEXT:    br [[BB1]]
+// CHECK-NEXT:    br [[BB1:\^.+]]
+// CHECK-NEXT:  [[BB1]]:
+// CHECK-NEXT:    llhd.wait [[BB2]]
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: llhd.proc @Foo.always_ff.
@@ -112,11 +113,25 @@ endmodule
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: llhd.proc @Foo.initial.
+
 // CHECK:         [[PRB:%.+]] = llhd.prb
 // CHECK-NEXT:    [[ZERO:%.+]] = hw.constant 0 : i3
 // CHECK-NEXT:    comb.sub [[ZERO]], [[PRB]]
+
 // CHECK:         [[PRB:%.+]] = llhd.prb
 // CHECK-NEXT:    [[ONES:%.+]] = hw.constant -1 : i3
 // CHECK-NEXT:    comb.xor [[ONES]], [[PRB]]
-// CHECK:         llhd.halt
+
+// If-Then-Else
+// CHECK:         [[PRB:%.+]] = llhd.prb
+// CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:    [[CMP:%.+]] = comb.icmp ne [[PRB]], [[FALSE]]
+// CHECK-NEXT:    cond_br [[CMP]], [[IF_TRUE:\^.+]], [[IF_FALSE:\^.+]]
+// CHECK-NEXT:  [[IF_TRUE]]:
+// CHECK-NEXT:    br [[IF_EXIT:\^.+]]
+// CHECK-NEXT:  [[IF_FALSE]]:
+// CHECK-NEXT:    br [[IF_EXIT:\^.+]]
+// CHECK-NEXT:  [[IF_EXIT]]:
+// CHECK-NEXT:    llhd.halt
+
 // CHECK-NEXT:  }
