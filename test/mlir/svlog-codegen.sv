@@ -70,6 +70,10 @@ module Foo (
 
   initial #1ns 42;
   initial @* begin x; c; end
+  initial case (c)
+    42: 9001;
+    default: 1337;
+  endcase;
 
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
@@ -271,4 +275,20 @@ endmodule
 // CHECK-NEXT:    llhd.prb [[X:%.+]] :
 // CHECK-NEXT:    llhd.prb [[C:%.+]] :
 // CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `case` statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    [[TMP:%.+]] = llhd.prb
+// CHECK-NEXT:    [[VALUE:%.+]] = hw.constant 42
+// CHECK-NEXT:    [[CMP:%.+]] = comb.icmp eq [[TMP]], [[VALUE]]
+// CHECK-NEXT:    cond_br [[CMP]], [[CASE_42:\^.+]], [[NOT_CASE_42:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT:\^[^:]+]]:
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  [[CASE_42]]:
+// CHECK-NEXT:    hw.constant 9001
+// CHECK-NEXT:    br [[BB_EXIT]]
+// CHECK-NEXT:  [[NOT_CASE_42]]:
+// CHECK-NEXT:    hw.constant 1337
+// CHECK-NEXT:    br [[BB_EXIT]]
 // CHECK-NEXT:  }

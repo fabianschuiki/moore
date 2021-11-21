@@ -2476,10 +2476,10 @@ where
                 default,
                 kind,
             } => {
-                let expr = self.emit_rvalue(expr, env)?;
-                let final_blk = self.add_named_block("case_exit");
+                let expr = self.emit_rvalue_both(expr, env)?;
+                let final_blk = self.mk_block(Some("case_exit"));
                 for &(ref way_exprs, stmt) in ways {
-                    let mut last_check = self.builder.ins().const_int((1, 0));
+                    let mut last_check = None;
                     for &way_expr in way_exprs {
                         // Determine the constant value of the label.
                         let way_const = self.constant_value_of(way_expr, env);
@@ -2487,8 +2487,8 @@ where
                             ValueKind::Int(v, s, x) => (v, s, x),
                             _ => panic!("case constant evaluates to non-integer"),
                         };
-                        let way_expr = self.emit_const(way_const, env, self.span(way_expr))?;
-                        let way_width = self.llhd_type(way_expr).unwrap_int();
+                        let way_expr = self.emit_const_both(way_const, env, self.span(way_expr))?;
+                        let way_width = self.llhd_type(way_expr.0).unwrap_int();
 
                         // Generate the comparison mask based on the case kind.
                         let mask = match kind {
@@ -2513,37 +2513,37 @@ where
                                     mask |= BigInt::one();
                                 }
                             }
-                            self.builder.ins().const_int((way_width, mask))
+                            self.mk_const_int(way_width, &mask)
                         });
 
                         // Filter the comparison values through the mask.
                         let (lhs, rhs) = match mask {
-                            Some(mask) => (
-                                self.builder.ins().and(expr, mask),
-                                self.builder.ins().and(way_expr, mask),
-                            ),
+                            Some(mask) => (self.mk_and(expr, mask), self.mk_and(way_expr, mask)),
                             None => (expr, way_expr),
                         };
 
                         // Perform the comparison and branch.
-                        let check = self.builder.ins().eq(lhs, rhs);
-                        last_check = self.builder.ins().or(last_check, check);
+                        let check = self.mk_cmp(CmpPred::Eq, lhs, rhs);
+                        last_check = Some(match last_check {
+                            Some(last_check) => self.mk_or(last_check, check),
+                            None => check,
+                        });
                     }
-                    let taken_blk = self.add_named_block("case_body");
-                    let untaken_blk = self.add_nameless_block();
-                    self.builder
-                        .ins()
-                        .br_cond(last_check, untaken_blk, taken_blk);
-                    self.builder.append_to(taken_blk);
-                    self.emit_stmt(stmt, env)?;
-                    self.builder.ins().br(final_blk);
-                    self.builder.append_to(untaken_blk);
+                    if let Some(last_check) = last_check {
+                        let taken_blk = self.mk_block(Some("case_body"));
+                        let untaken_blk = self.mk_block(None);
+                        self.mk_cond_br(last_check, taken_blk, untaken_blk);
+                        self.append_to(taken_blk);
+                        self.emit_stmt(stmt, env)?;
+                        self.mk_br(final_blk);
+                        self.append_to(untaken_blk);
+                    }
                 }
                 if let Some(default) = default {
                     self.emit_stmt(default, env)?;
                 }
-                self.builder.ins().br(final_blk);
-                self.builder.append_to(final_blk);
+                self.mk_br(final_blk);
+                self.append_to(final_blk);
             }
 
             _ => {
