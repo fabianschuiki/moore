@@ -196,11 +196,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 env,
                 port.port.span(),
             )?;
-            let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
-            let zero_time = (
-                gen.builder.ins().const_time(zero_time),
-                circt::llhd::ConstantTimeOp::with_delta(gen.mlir_builder, 1).into(),
-            );
+            let zero_time = gen.mk_const_time(&num::zero(), 1, 0);
             gen.mk_drv(value, default_value, zero_time);
         }
 
@@ -969,11 +965,7 @@ where
             }
 
             // Emit the assignments.
-            let delay = llhd::value::TimeValue::new(num::zero(), 0, 1);
-            let delay = (
-                self.builder.ins().const_time(delay),
-                circt::llhd::ConstantTimeOp::with_epsilon(self.mlir_builder, 1).into(),
-            );
+            let delay = self.mk_const_time(&num::zero(), 0, 1);
             for &assign in &simplified {
                 let lhs = self.emit_mir_lvalue_both(assign.lhs)?;
                 let rhs = self.emit_mir_rvalue_both(assign.rhs)?;
@@ -1465,12 +1457,8 @@ where
                     self.builder.ins().sig(init.0),
                     circt::llhd::SignalOp::new(self.mlir_builder, "", init.1).into(),
                 );
-                let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
-                let delay_const = self.builder.ins().const_time(delay);
-                self.builder.ins().drv(sig.0, value.0, delay_const);
-                let delay_const =
-                    circt::llhd::ConstantTimeOp::with_delta(self.mlir_builder, 1).into();
-                circt::llhd::DriveOp::new(self.mlir_builder, sig.1, value.1, delay_const);
+                let delay = self.mk_const_time(&num::zero(), 1, 0);
+                self.mk_drv(sig, value, delay);
                 Ok(sig)
             }
             (Mode::Value, Mode::Signal) => unreachable!(),
@@ -2264,26 +2252,25 @@ where
                 match kind {
                     hir::AssignKind::Block(_) => {
                         for &assign in &simplified {
-                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
-                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
+                            let lhs_lv = self.emit_mir_lvalue_both(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue_both(assign.rhs)?;
                             self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
                         }
                     }
                     hir::AssignKind::Nonblock => {
-                        let delay = llhd::value::TimeValue::new(num::zero(), 1, 0);
-                        let delay_const = self.builder.ins().const_time(delay);
+                        let delay = self.mk_const_time(&num::zero(), 1, 0);
                         for &assign in &simplified {
-                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
-                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
-                            self.builder.ins().drv(lhs_lv.0, rhs_rv, delay_const);
+                            let lhs_lv = self.emit_mir_lvalue_both(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue_both(assign.rhs)?;
+                            self.mk_drv(lhs_lv.0, rhs_rv, delay);
                         }
                     }
                     hir::AssignKind::NonblockDelay(delay) => {
-                        let delay = self.emit_rvalue(delay, env)?;
+                        let delay = self.emit_rvalue_both(delay, env)?;
                         for &assign in &simplified {
-                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
-                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
-                            self.builder.ins().drv(lhs_lv.0, rhs_rv, delay);
+                            let lhs_lv = self.emit_mir_lvalue_both(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue_both(assign.rhs)?;
+                            self.mk_drv(lhs_lv.0, rhs_rv, delay);
                         }
                     }
                 }
@@ -2660,39 +2647,28 @@ where
         lvalue: &'gcx mir::Lvalue<'gcx>,
         rvalue: &'gcx mir::Rvalue<'gcx>,
     ) -> Result<()> {
-        let lv = self.emit_mir_lvalue(lvalue)?;
-        let rv = self.emit_mir_rvalue(rvalue)?;
+        let lv = self.emit_mir_lvalue_both(lvalue)?;
+        let rv = self.emit_mir_rvalue_both(rvalue)?;
         self.emit_blocking_assign_llhd(lv, rv)
     }
 
     /// Emit a blocking assignment to a variable or signal.
     fn emit_blocking_assign_llhd(
         &mut self,
-        lvalue: (llhd::ir::Value, Option<llhd::ir::Value>),
-        rvalue: llhd::ir::Value,
+        lvalue: (HybridValue, Option<HybridValue>),
+        rvalue: HybridValue,
     ) -> Result<()> {
-        let mut assign = |lvalue| {
-            let lty = self.llhd_type(lvalue);
-            match *lty {
-                llhd::SignalType(..) => {
-                    let one_epsilon = llhd::value::TimeValue::new(num::zero(), 0, 1);
-                    let one_epsilon = self.builder.ins().const_time(one_epsilon);
-                    self.builder.ins().drv(lvalue, rvalue, one_epsilon);
-                    // // Emit a wait statement to allow for the assignment to take
-                    // // effect.
-                    // let blk = self.add_nameless_block();
-                    // self.builder.ins().wait_time(blk, one_epsilon, vec![]);
-                    // self.builder.append_to(blk);
-                }
-                llhd::PointerType(..) => {
-                    self.builder.ins().st(lvalue, rvalue);
-                }
-                ref t => panic!("value of type `{}` cannot be driven", t),
-            }
-        };
-        assign(lvalue.0);
+        let ty = lvalue.0 .1.ty();
+        if circt::llhd::is_signal_type(ty) {
+            let delay = self.mk_const_time(&num::zero(), 0, 1);
+            self.mk_drv(lvalue.0, rvalue, delay);
+        } else if circt::llhd::is_pointer_type(ty) {
+            self.mk_st(lvalue.0, rvalue);
+        } else {
+            panic!("value of type `{}1 cannot be assigned to", ty);
+        }
         if let Some(lv) = lvalue.1 {
-            assign(lv);
+            self.mk_st(lv, rvalue);
         }
         Ok(())
     }
@@ -3090,6 +3066,22 @@ where
         (
             self.builder.ins().const_int((width, value.clone())),
             circt::hw::ConstantOp::new(self.mlir_builder, width, value).into(),
+        )
+    }
+
+    fn mk_const_time(
+        &mut self,
+        seconds: &num::rational::Ratio<BigInt>,
+        delta: usize,
+        epsilon: usize,
+    ) -> HybridValue {
+        (
+            self.builder.ins().const_time(llhd::value::TimeValue::new(
+                seconds.clone(),
+                delta,
+                epsilon,
+            )),
+            circt::llhd::ConstantTimeOp::new(self.mlir_builder, seconds, delta, epsilon).into(),
         )
     }
 
