@@ -50,17 +50,23 @@ module Foo (
   // Statements and Expressions
   //===--------------------------------------------------------------------===//
 
-  // CHECK: llhd.inst "" @Foo.initial.
   initial begin
     -z;
     ~z;
   end
+
   initial if (x) begin end else begin end;
+
   initial repeat (10);
   initial while (x);
   initial do; while (x);
   initial for (; x; 42);
   initial forever 42;
+
+  int c;
+  initial begin c = 42; c; end
+  initial begin c <= 42; c; end
+  initial begin c <= #1ns 42; c; end
 
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
@@ -207,5 +213,41 @@ endmodule
 // CHECK-NEXT:    {{%.+}} = hw.constant 42
 // CHECK-NEXT:    br [[BB_BODY:\^.+]]
 // CHECK-NEXT:  {{\^[^:]+}}:
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `c = 42` assignment
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    [[TMP:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    [[SHADOW:%.+]] = llhd.var [[TMP]]
+// CHECK-NEXT:    [[VALUE:%.+]] = hw.constant 42
+// CHECK-NEXT:    [[DELAY:%.+]] = llhd.constant_time #llhd.time<0ps, 0d, 1e>
+// CHECK-NEXT:    llhd.drv [[SIG]], [[VALUE]] after [[DELAY]]
+// CHECK-NEXT:    llhd.store [[SHADOW]], [[VALUE]]
+// CHECK-NEXT:    llhd.load [[SHADOW]]
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `c <= 42` assignment
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    [[TMP:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    [[SHADOW:%.+]] = llhd.var [[TMP]]
+// CHECK-NEXT:    [[DELAY:%.+]] = llhd.constant_time #llhd.time<0ps, 1d, 0e>
+// CHECK-NEXT:    [[VALUE:%.+]] = hw.constant 42
+// CHECK-NEXT:    llhd.drv [[SIG]], [[VALUE]] after [[DELAY]]
+// CHECK-NOT:     llhd.store [[SHADOW]], [[VALUE]]
+// CHECK-NEXT:    llhd.load [[SHADOW]]
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `c <= #1ns 42` assignment
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    [[TMP:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    [[SHADOW:%.+]] = llhd.var [[TMP]]
+// CHECK-NEXT:    [[DELAY:%.+]] = llhd.constant_time #llhd.time<1000ps, 0d, 0e>
+// CHECK-NEXT:    [[VALUE:%.+]] = hw.constant 42
+// CHECK-NEXT:    llhd.drv [[SIG]], [[VALUE]] after [[DELAY]]
+// CHECK-NOT:     llhd.store [[SHADOW]], [[VALUE]]
+// CHECK-NEXT:    llhd.load [[SHADOW]]
 // CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }
