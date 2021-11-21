@@ -2279,10 +2279,13 @@ where
                 control: hir::TimingControl::Delay(expr_id),
                 stmt,
             } => {
-                let resume_blk = self.add_nameless_block();
-                let duration = self.emit_rvalue(expr_id, env)?.into();
-                self.builder.ins().wait_time(resume_blk, duration, vec![]);
-                self.builder.append_to(resume_blk);
+                let resume_blk = self.mk_block(None);
+                let duration = self.emit_rvalue_both(expr_id, env)?;
+                self.builder
+                    .ins()
+                    .wait_time(resume_blk.0, duration.0, vec![]);
+                circt::llhd::WaitOp::new(self.mlir_builder, resume_blk.1, vec![], Some(duration.1));
+                self.append_to(resume_blk);
                 self.flush_mir(); // ensure we don't reuse earlier expr probe
                 self.emit_shadow_update();
                 self.emit_stmt(stmt, env)?;
