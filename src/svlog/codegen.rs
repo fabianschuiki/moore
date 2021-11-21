@@ -529,52 +529,40 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Emit prologue and determine which basic block to jump back to.
         let head_blk = match hir.kind {
             ast::ProcedureKind::AlwaysComb | ast::ProcedureKind::AlwaysLatch => {
-                let body_blk = (pg.add_named_block("body"), pg.mlir_builder.add_block());
-                let check_blk = (pg.add_named_block("check"), pg.mlir_builder.add_block());
-                pg.builder.ins().br(body_blk.0);
-                pg.builder.append_to(check_blk.0);
-                circt::std::BranchOp::new(pg.mlir_builder, body_blk.1);
-                pg.mlir_builder.set_insertion_point_to_end(check_blk.1);
-                let trigger_on = inputs
+                let body_blk = pg.mk_block(Some("body"));
+                let check_blk = pg.mk_block(Some("check"));
+                pg.mk_br(body_blk);
+                pg.append_to(check_blk);
+                let trigger_on: Vec<_> = inputs
                     .iter()
-                    .map(|id| pg.emitted_value_both(*id).0.clone())
+                    .map(|&id| pg.emitted_value_both(id).clone())
                     .collect();
-                pg.builder.ins().wait(body_blk.0, trigger_on);
-                pg.builder.append_to(body_blk.0);
-                circt::llhd::WaitOp::new(
-                    pg.mlir_builder,
-                    body_blk.1,
-                    inputs
-                        .iter()
-                        .map(|id| pg.emitted_value_both(*id).1)
-                        .collect::<Vec<_>>(),
-                    None,
-                );
-                pg.mlir_builder.set_insertion_point_to_end(body_blk.1);
+                pg.mk_wait(body_blk, trigger_on, None);
+                pg.append_to(body_blk);
                 pg.flush_mir(); // ensure we don't reuse earlier expr probe
                 pg.emit_shadow_update();
                 Some(check_blk)
             }
             ast::ProcedureKind::Final => {
                 // TODO(fschuiki): Replace this with a cleverer way to implement a trigger-on-end.
-                let body_blk = (pg.add_named_block("body"), pg.mlir_builder.add_block());
-                let endtimes = pg.builder.ins().const_time(llhd::value::TimeValue::new(
-                    "9001".parse().unwrap(),
-                    0,
-                    0,
-                ));
-                pg.builder.set_name(endtimes, "endtimes".to_string());
-                pg.builder.ins().wait_time(body_blk.0, endtimes, vec![]);
-                pg.builder.append_to(body_blk.0);
-                let endtimes = circt::llhd::ConstantTimeOp::with_seconds(
-                    pg.mlir_builder,
-                    &BigInt::from_i64(std::i64::MAX / 1_000_000_000_000)
-                        .unwrap()
-                        .into(),
-                )
-                .into();
-                circt::llhd::WaitOp::new(pg.mlir_builder, body_blk.1, None, Some(endtimes));
-                pg.mlir_builder.set_insertion_point_to_start(body_blk.1);
+                let body_blk = pg.mk_block(Some("body"));
+                let endtimes = (
+                    pg.builder.ins().const_time(llhd::TimeValue::new(
+                        "9001".parse().unwrap(),
+                        0,
+                        0,
+                    )),
+                    circt::llhd::ConstantTimeOp::with_seconds(
+                        pg.mlir_builder,
+                        &BigInt::from_i64(std::i64::MAX / 1_000_000_000_000)
+                            .unwrap()
+                            .into(),
+                    )
+                    .into(),
+                );
+                pg.builder.set_name(endtimes.0, "endtimes".to_string());
+                pg.mk_wait(body_blk, None, Some(endtimes));
+                pg.append_to(body_blk);
                 pg.flush_mir(); // ensure we don't reuse earlier expr probe
                 pg.emit_shadow_update();
                 None
