@@ -68,6 +68,8 @@ module Foo (
   initial begin c <= 42; c; end
   initial begin c <= #1ns 42; c; end
 
+  initial #1ns 42;
+
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time
@@ -249,5 +251,14 @@ endmodule
 // CHECK-NEXT:    llhd.drv [[SIG]], [[VALUE]] after [[DELAY]]
 // CHECK-NOT:     llhd.store [[SHADOW]], [[VALUE]]
 // CHECK-NEXT:    llhd.load [[SHADOW]]
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `#1ns 42` wait statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    [[DELAY:%.+]] = llhd.constant_time #llhd.time<1000ps, 0d, 0e>
+// CHECK-NEXT:    llhd.wait for [[DELAY]], [[BB:\^.+]]
+// CHECK-NEXT:  [[BB]]:
+// CHECK-NEXT:    hw.constant 42
 // CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }
