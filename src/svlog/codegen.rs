@@ -197,10 +197,11 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 port.port.span(),
             )?;
             let zero_time = llhd::value::TimeValue::new(num::zero(), 0, 0);
-            let zero_time = gen.builder.ins().const_time(zero_time);
-            gen.builder.ins().drv(value.0, default_value.0, zero_time);
-            let zero_time = circt::llhd::ConstantTimeOp::with_delta(gen.mlir_builder, 1).into();
-            circt::llhd::DriveOp::new(gen.mlir_builder, value.1, default_value.1, zero_time);
+            let zero_time = (
+                gen.builder.ins().const_time(zero_time),
+                circt::llhd::ConstantTimeOp::with_delta(gen.mlir_builder, 1).into(),
+            );
+            gen.mk_drv(value, default_value, zero_time);
         }
 
         let unit = self.into.add_unit(ent);
@@ -517,14 +518,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let output_set: HashSet<_> = acc.written.iter().cloned().collect();
         for &id in input_set.intersection(&output_set) {
             let value = pg.values[&id.into()];
-            let init = (
-                pg.builder.ins().prb(value.0),
-                circt::llhd::ProbeOp::new(pg.mlir_builder, value.1).into(),
-            );
-            let shadow = (
-                pg.builder.ins().var(init.0),
-                circt::llhd::VariableOp::new(pg.mlir_builder, init.1).into(),
-            );
+            let init = pg.mk_prb(value);
+            let shadow = pg.mk_var(init);
             if let Some(name) = pg
                 .builder
                 .get_name(value.0)
@@ -982,8 +977,7 @@ where
             for &assign in &simplified {
                 let lhs = self.emit_mir_lvalue_both(assign.lhs)?;
                 let rhs = self.emit_mir_rvalue_both(assign.rhs)?;
-                self.builder.ins().drv(lhs.0 .0, rhs.0, delay.0);
-                circt::llhd::DriveOp::new(self.mlir_builder, lhs.0 .1, rhs.1, delay.1);
+                self.mk_drv(lhs.0, rhs, delay);
             }
         }
 
@@ -1882,20 +1876,14 @@ where
     fn emit_prb_or_var(&mut self, sig: HybridValue) -> HybridValue {
         match *self.llhd_type(sig.0) {
             llhd::SignalType(_) => {
-                let value = (
-                    self.builder.ins().prb(sig.0),
-                    circt::llhd::ProbeOp::new(self.mlir_builder, sig.1).into(),
-                );
+                let value = self.mk_prb(sig);
                 if let Some(name) = self.builder.get_name(sig.0) {
                     self.builder.set_name(value.0, format!("{}.prb", name));
                 }
                 value
             }
             llhd::PointerType(_) => {
-                let value = (
-                    self.builder.ins().ld(sig.0),
-                    circt::llhd::LoadOp::new(self.mlir_builder, sig.1).into(),
-                );
+                let value = self.mk_ld(sig);
                 if let Some(name) = self.builder.get_name(sig.0) {
                     self.builder.set_name(value.0, format!("{}.ld", name));
                 }
@@ -2427,17 +2415,17 @@ where
                 self.append_to(final_blk);
             }
             hir::StmtKind::Loop { kind, body } => {
-                let body_blk = self.add_named_block("loop_body");
-                let exit_blk = self.add_named_block("loop_exit");
+                let body_blk = self.mk_block(Some("loop_body"));
+                let exit_blk = self.mk_block(Some("loop_exit"));
 
                 // Emit the loop initialization.
                 let repeat_var = match kind {
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(count) => {
                         let ty = self.type_of(count, env)?;
-                        let count = self.emit_rvalue(count, env)?;
-                        let var = self.builder.ins().var(count);
-                        self.builder.set_name(var, "loop_count".to_string());
+                        let count = self.emit_rvalue_both(count, env)?;
+                        let var = self.mk_var(count);
+                        self.builder.set_name(var.0, "loop_count".to_string());
                         Some((var, ty))
                     }
                     hir::LoopKind::While(_) => None,
@@ -2449,25 +2437,25 @@ where
                 };
 
                 // Emit the loop prologue.
-                self.builder.ins().br(body_blk);
-                self.builder.append_to(body_blk);
+                self.mk_br(body_blk);
+                self.append_to(body_blk);
                 let enter_cond = match kind {
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type(ty)?;
-                        let value = self.builder.ins().ld(repeat_var);
-                        let zero = self.emit_zero_for_type(&lty);
-                        Some(self.builder.ins().neq(value, zero))
+                        let lty = self.emit_type_both(ty)?;
+                        let value = self.mk_ld(repeat_var);
+                        let zero = self.emit_zero_for_type_both(lty);
+                        Some(self.mk_cmp(CmpPred::Neq, value, zero))
                     }
-                    hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool(cond, env)?),
+                    hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool_both(cond, env)?),
                     hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool(cond, env)?),
+                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool_both(cond, env)?),
                 };
                 if let Some(enter_cond) = enter_cond {
-                    let entry_blk = self.add_named_block("loop_continue");
-                    self.builder.ins().br_cond(enter_cond, exit_blk, entry_blk);
-                    self.builder.append_to(entry_blk);
+                    let entry_blk = self.mk_block(Some("loop_continue"));
+                    self.mk_cond_br(enter_cond, entry_blk, exit_blk);
+                    self.append_to(entry_blk);
                 }
 
                 // Emit the loop body.
@@ -2478,27 +2466,24 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(_) => {
                         let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let value = self.builder.ins().ld(repeat_var);
-                        let one = self
-                            .builder
-                            .ins()
-                            .const_int((ty.get_bit_size().unwrap(), 0));
-                        let value = self.builder.ins().sub(value, one);
-                        self.builder.ins().st(repeat_var, value);
+                        let value = self.mk_ld(repeat_var);
+                        let one = self.mk_const_int(ty.get_bit_size().unwrap(), &BigInt::one());
+                        let value = self.mk_sub(value, one);
+                        self.mk_st(repeat_var, value);
                         None
                     }
                     hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool(cond, env)?),
+                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool_both(cond, env)?),
                     hir::LoopKind::For(_, _, step) => {
-                        self.emit_rvalue(step, env)?;
+                        self.emit_rvalue_both(step, env)?;
                         None
                     }
                 };
                 match continue_cond {
-                    Some(cond) => self.builder.ins().br_cond(cond, exit_blk, body_blk),
-                    None => self.builder.ins().br(body_blk),
+                    Some(cond) => self.mk_cond_br(cond, body_blk, exit_blk),
+                    None => self.mk_br(body_blk),
                 };
-                self.builder.append_to(exit_blk);
+                self.append_to(exit_blk);
             }
             hir::StmtKind::InlineGroup { ref stmts, .. } => {
                 for &stmt in stmts {
@@ -2610,10 +2595,7 @@ where
             Some(expr) => self.emit_rvalue_both(expr, env)?,
             None => self.emit_zero_for_type_both(ty),
         };
-        let value = (
-            self.builder.ins().var(init.0),
-            circt::llhd::VariableOp::new(self.mlir_builder, init.1).into(),
-        );
+        let value = self.mk_var(init);
         self.builder.set_name(value.0, hir.name.value.to_string());
         self.set_emitted_value(decl_id, value);
         Ok(())
@@ -2717,14 +2699,10 @@ where
 
     /// Emit the code to update the shadow variables of signals.
     fn emit_shadow_update(&mut self) {
-        for (&id, &shadow) in &self.shadows {
+        for (id, shadow) in self.shadows.clone() {
             let value = self.values[&id.into()];
-            let value = (
-                self.builder.ins().prb(value.0),
-                circt::llhd::ProbeOp::new(self.mlir_builder, value.1).into(),
-            );
-            self.builder.ins().st(shadow.0, value.0);
-            circt::llhd::StoreOp::new(self.mlir_builder, shadow.1, value.1);
+            let value = self.mk_prb(value);
+            self.mk_st(shadow, value);
         }
     }
 
@@ -3153,6 +3131,41 @@ where
             circt::hw::StructCreateOp::new(self.mlir_builder, ty.1, elements.iter().map(|v| v.1))
                 .into(),
         )
+    }
+
+    fn mk_prb(&mut self, value: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().prb(value.0),
+            circt::llhd::ProbeOp::new(self.mlir_builder, value.1).into(),
+        )
+    }
+
+    fn mk_drv(&mut self, lhs: HybridValue, rhs: HybridValue, delay: HybridValue) {
+        (
+            self.builder.ins().drv(lhs.0, rhs.0, delay.0),
+            circt::llhd::DriveOp::new(self.mlir_builder, lhs.1, rhs.1, delay.1),
+        );
+    }
+
+    fn mk_var(&mut self, init: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().var(init.0),
+            circt::llhd::VariableOp::new(self.mlir_builder, init.1).into(),
+        )
+    }
+
+    fn mk_ld(&mut self, var: HybridValue) -> HybridValue {
+        (
+            self.builder.ins().ld(var.0),
+            circt::llhd::LoadOp::new(self.mlir_builder, var.1).into(),
+        )
+    }
+
+    fn mk_st(&mut self, var: HybridValue, value: HybridValue) {
+        (
+            self.builder.ins().st(var.0, value.0),
+            circt::llhd::StoreOp::new(self.mlir_builder, var.1, value.1),
+        );
     }
 }
 
