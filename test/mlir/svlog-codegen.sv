@@ -75,6 +75,12 @@ module Foo (
     default: 1337;
   endcase;
 
+  initial @(x) 42; // implicit edge
+  initial @(edge x) 42; // pos or neg edge
+  initial @(posedge x) 42; // pos edge
+  initial @(negedge x) 42; // neg edge
+  initial @(x iff a) 42;
+
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time
@@ -291,4 +297,95 @@ endmodule
 // CHECK-NEXT:  [[NOT_CASE_42]]:
 // CHECK-NEXT:    hw.constant 1337
 // CHECK-NEXT:    br [[BB_EXIT]]
+// CHECK-NEXT:  }
+
+// `@(x)` event control statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    br [[BB_INIT:\^.+]]
+// CHECK-NEXT:  [[BB_INIT]]:
+// CHECK-NEXT:    [[PRB_BEFORE:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    llhd.wait ([[SIG]] : !llhd.sig<i1>), [[BB_CHECK:\^.+]]
+// CHECK-NEXT:  [[BB_CHECK]]:
+// CHECK-NEXT:    [[PRB_AFTER:%.+]] = llhd.prb [[SIG]]
+// CHECK-NEXT:    [[COND:%.+]] = comb.icmp ne [[PRB_BEFORE]], [[PRB_AFTER]]
+// CHECK-NEXT:    cond_br [[COND]], [[BB_INIT]], [[BB_EXIT:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    hw.constant 42
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `@(edge x)` event control statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    br [[BB_INIT:\^.+]]
+// CHECK-NEXT:  [[BB_INIT]]:
+// CHECK-NEXT:    [[PRB_BEFORE:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    llhd.wait ([[SIG]] : !llhd.sig<i1>), [[BB_CHECK:\^.+]]
+// CHECK-NEXT:  [[BB_CHECK]]:
+// CHECK-NEXT:    [[PRB_AFTER:%.+]] = llhd.prb [[SIG]]
+// CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:    [[CMP_A:%.+]] = comb.icmp eq [[PRB_BEFORE]], [[FALSE]]
+// CHECK-NEXT:    [[CMP_B:%.+]] = comb.icmp ne [[PRB_AFTER]], [[FALSE]]
+// CHECK-NEXT:    [[COND_A:%.+]] = comb.and [[CMP_A]], [[CMP_B]]
+// CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:    [[CMP_A:%.+]] = comb.icmp ne [[PRB_BEFORE]], [[FALSE]]
+// CHECK-NEXT:    [[CMP_B:%.+]] = comb.icmp eq [[PRB_AFTER]], [[FALSE]]
+// CHECK-NEXT:    [[COND_B:%.+]] = comb.and [[CMP_A]], [[CMP_B]]
+// CHECK-NEXT:    [[COND:%.+]] = comb.or [[COND_A]], [[COND_B]]
+// CHECK-NEXT:    cond_br [[COND]], [[BB_INIT]], [[BB_EXIT:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    hw.constant 42
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `@(posedge x)` event control statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    br [[BB_INIT:\^.+]]
+// CHECK-NEXT:  [[BB_INIT]]:
+// CHECK-NEXT:    [[PRB_BEFORE:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    llhd.wait ([[SIG]] : !llhd.sig<i1>), [[BB_CHECK:\^.+]]
+// CHECK-NEXT:  [[BB_CHECK]]:
+// CHECK-NEXT:    [[PRB_AFTER:%.+]] = llhd.prb [[SIG]]
+// CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:    [[CMP_A:%.+]] = comb.icmp eq [[PRB_BEFORE]], [[FALSE]]
+// CHECK-NEXT:    [[CMP_B:%.+]] = comb.icmp ne [[PRB_AFTER]], [[FALSE]]
+// CHECK-NEXT:    [[COND:%.+]] = comb.and [[CMP_A]], [[CMP_B]]
+// CHECK-NEXT:    cond_br [[COND]], [[BB_INIT]], [[BB_EXIT:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    hw.constant 42
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `@(negedge x)` event control statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    br [[BB_INIT:\^.+]]
+// CHECK-NEXT:  [[BB_INIT]]:
+// CHECK-NEXT:    [[PRB_BEFORE:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    llhd.wait ([[SIG]] : !llhd.sig<i1>), [[BB_CHECK:\^.+]]
+// CHECK-NEXT:  [[BB_CHECK]]:
+// CHECK-NEXT:    [[PRB_AFTER:%.+]] = llhd.prb [[SIG]]
+// CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:    [[CMP_A:%.+]] = comb.icmp ne [[PRB_BEFORE]], [[FALSE]]
+// CHECK-NEXT:    [[CMP_B:%.+]] = comb.icmp eq [[PRB_AFTER]], [[FALSE]]
+// CHECK-NEXT:    [[COND:%.+]] = comb.and [[CMP_A]], [[CMP_B]]
+// CHECK-NEXT:    cond_br [[COND]], [[BB_INIT]], [[BB_EXIT:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    hw.constant 42
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `@(x iff a)` event control statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    br [[BB_INIT:\^.+]]
+// CHECK-NEXT:  [[BB_INIT]]:
+// CHECK-NEXT:    [[PRB_BEFORE:%.+]] = llhd.prb [[SIG:%.+]] :
+// CHECK-NEXT:    llhd.wait ([[SIG]] : !llhd.sig<i1>), [[BB_CHECK:\^.+]]
+// CHECK-NEXT:  [[BB_CHECK]]:
+// CHECK-NEXT:    [[PRB_AFTER:%.+]] = llhd.prb [[SIG]]
+// CHECK-NEXT:    [[TMP:%.+]] = comb.icmp ne [[PRB_BEFORE]], [[PRB_AFTER]]
+// CHECK-NEXT:    [[PRB_IFF:%.+]] = llhd.prb
+// CHECK-NEXT:    [[COND:%.+]] = comb.and [[TMP]], [[PRB_IFF]]
+// CHECK-NEXT:    cond_br [[COND]], [[BB_INIT]], [[BB_EXIT:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    hw.constant 42
+// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }

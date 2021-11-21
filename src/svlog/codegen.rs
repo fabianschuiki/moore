@@ -2286,29 +2286,29 @@ where
                     HirNode::EventExpr(x) => x,
                     _ => unreachable!(),
                 };
-                trace!("would now emit event checking code for {:#?}", expr_hir);
+                trace!("emit event checking code for {:#?}", expr_hir);
 
                 // Store initial values of the expressions the event is
                 // sensitive to.
-                let init_blk = self.add_named_block("init");
-                self.builder.ins().br(init_blk);
-                self.builder.append_to(init_blk);
+                let init_blk = self.mk_block(Some("init"));
+                self.mk_br(init_blk);
+                self.append_to(init_blk);
                 let mut init_values = vec![];
                 for event in &expr_hir.events {
-                    init_values.push(self.emit_rvalue(event.expr, env)?);
+                    init_values.push(self.emit_rvalue_both(event.expr, env)?);
                 }
 
                 // Wait for any of the inputs to those expressions to change.
-                let check_blk = self.add_named_block("check");
+                let check_blk = self.mk_block(Some("check"));
                 let mut trigger_on = vec![];
                 for event in &expr_hir.events {
                     let acc = self.accessed_nodes(event.expr, env)?;
                     for &id in &acc.read {
-                        trigger_on.push(self.emitted_value(id).clone());
+                        trigger_on.push(self.emitted_value_both(id).clone());
                     }
                 }
-                self.builder.ins().wait(check_blk, trigger_on);
-                self.builder.append_to(check_blk);
+                self.mk_wait(check_blk, trigger_on, None);
+                self.append_to(check_blk);
                 self.flush_mir(); // ensure we don't reuse earlier expr probe
                 self.emit_shadow_update();
 
@@ -2317,21 +2317,21 @@ where
                 let mut event_cond = None;
                 for (event, init_value) in expr_hir.events.iter().zip(init_values.into_iter()) {
                     trace!(
-                        "would now emit check if {:?} changed according to {:#?}",
+                        "emit check if {:?} changed according to {:#?}",
                         init_value,
                         event
                     );
-                    let now_value = self.emit_rvalue(event.expr, env)?;
+                    let now_value = self.emit_rvalue_both(event.expr, env)?;
                     let mut trigger = self.emit_event_trigger(event.edge, init_value, now_value)?;
                     for &iff in &event.iff {
-                        let iff_value = self.emit_rvalue_bool(iff, env)?;
-                        trigger = self.builder.ins().and(trigger, iff_value);
-                        self.builder.set_name(trigger, "iff".to_string());
+                        let iff_value = self.emit_rvalue_bool_both(iff, env)?;
+                        trigger = self.mk_and(trigger, iff_value);
+                        self.builder.set_name(trigger.0, "iff".to_string());
                     }
                     event_cond = Some(match event_cond {
                         Some(chain) => {
-                            let value = self.builder.ins().or(chain, trigger);
-                            self.builder.set_name(value, "event_or".to_string());
+                            let value = self.mk_or(chain, trigger);
+                            self.builder.set_name(value.0, "event_or".to_string());
                             value
                         }
                         None => trigger,
@@ -2342,9 +2342,9 @@ where
                 // contain the subsequent statements. Otherwise jump back up to
                 // the initial block.
                 if let Some(event_cond) = event_cond {
-                    let event_blk = self.add_named_block("event");
-                    self.builder.ins().br_cond(event_cond, init_blk, event_blk);
-                    self.builder.append_to(event_blk);
+                    let event_blk = self.mk_block(Some("event"));
+                    self.mk_cond_br(event_cond, init_blk, event_blk);
+                    self.append_to(event_blk);
                 }
 
                 // Emit the actual statement.
@@ -2584,19 +2584,19 @@ where
     fn emit_event_trigger(
         &mut self,
         edge: ast::EdgeIdent,
-        prev: llhd::ir::Value,
-        now: llhd::ir::Value,
-    ) -> Result<llhd::ir::Value> {
-        let ty = self.llhd_type(now);
+        prev: HybridValue,
+        now: HybridValue,
+    ) -> Result<HybridValue> {
+        let ty = (self.llhd_type(now.0), now.1.ty());
 
         // Check if a posedge happened.
         let posedge = match edge {
             ast::EdgeIdent::Posedge | ast::EdgeIdent::Edge => {
-                let zero = self.emit_zero_for_type(&ty);
-                let prev_eq_0 = self.builder.ins().eq(prev, zero);
-                let now_neq_0 = self.builder.ins().neq(now, zero);
-                let value = self.builder.ins().and(prev_eq_0, now_neq_0);
-                self.builder.set_name(value, "posedge".to_string());
+                let zero = self.emit_zero_for_type_both(ty.clone());
+                let prev_eq_0 = self.mk_cmp(CmpPred::Eq, prev, zero);
+                let now_neq_0 = self.mk_cmp(CmpPred::Neq, now, zero);
+                let value = self.mk_and(prev_eq_0, now_neq_0);
+                self.builder.set_name(value.0, "posedge".to_string());
                 Some(value)
             }
             _ => None,
@@ -2605,11 +2605,11 @@ where
         // Check if a negedge happened.
         let negedge = match edge {
             ast::EdgeIdent::Negedge | ast::EdgeIdent::Edge => {
-                let zero = self.emit_zero_for_type(&ty);
-                let prev_neq_0 = self.builder.ins().neq(prev, zero);
-                let now_eq_0 = self.builder.ins().eq(now, zero);
-                let value = self.builder.ins().and(now_eq_0, prev_neq_0);
-                self.builder.set_name(value, "negedge".to_string());
+                let zero = self.emit_zero_for_type_both(ty.clone());
+                let prev_neq_0 = self.mk_cmp(CmpPred::Neq, prev, zero);
+                let now_eq_0 = self.mk_cmp(CmpPred::Eq, now, zero);
+                let value = self.mk_and(prev_neq_0, now_eq_0);
+                self.builder.set_name(value.0, "negedge".to_string());
                 Some(value)
             }
             _ => None,
@@ -2619,15 +2619,15 @@ where
         // of the above edges was checked.
         Ok(match (posedge, negedge) {
             (Some(a), Some(b)) => {
-                let value = self.builder.ins().or(a, b);
-                self.builder.set_name(value, "edge".to_string());
+                let value = self.mk_or(a, b);
+                self.builder.set_name(value.0, "edge".to_string());
                 value
             }
             (Some(a), None) => a,
             (None, Some(b)) => b,
             (None, None) => {
-                let value = self.builder.ins().neq(prev, now);
-                self.builder.set_name(value, "impledge".to_string());
+                let value = self.mk_cmp(CmpPred::Neq, prev, now);
+                self.builder.set_name(value.0, "impledge".to_string());
                 value
             }
         })
