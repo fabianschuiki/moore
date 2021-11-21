@@ -69,6 +69,7 @@ module Foo (
   initial begin c <= #1ns 42; c; end
 
   initial #1ns 42;
+  initial @* begin x; c; end
 
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
@@ -260,5 +261,14 @@ endmodule
 // CHECK-NEXT:    llhd.wait for [[DELAY]], [[BB:\^.+]]
 // CHECK-NEXT:  [[BB]]:
 // CHECK-NEXT:    hw.constant 42
+// CHECK-NEXT:    llhd.halt
+// CHECK-NEXT:  }
+
+// `@*` implicit event statement
+// CHECK-LABEL: llhd.proc @Foo.initial.
+// CHECK-NEXT:    llhd.wait ([[X:%.+]], [[C:%.+]] : !llhd.sig<i1>, !llhd.sig<i32>), [[BB:\^.+]]
+// CHECK-NEXT:  [[BB]]:
+// CHECK-NEXT:    llhd.prb [[X:%.+]] :
+// CHECK-NEXT:    llhd.prb [[C:%.+]] :
 // CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }

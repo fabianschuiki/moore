@@ -2367,14 +2367,15 @@ where
                 stmt,
             } => {
                 // Wait for any of the inputs to the statement to change.
-                let trigger_blk = self.add_named_block("trigger");
-                let mut trigger_on = vec![];
+                let trigger_blk = self.mk_block(Some("trigger"));
                 let acc = self.accessed_nodes(stmt, env)?;
-                for &id in &acc.read {
-                    trigger_on.push(self.emitted_value(id).clone());
-                }
-                self.builder.ins().wait(trigger_blk, trigger_on);
-                self.builder.append_to(trigger_blk);
+                let trigger_on: Vec<_> = acc
+                    .read
+                    .iter()
+                    .map(|&id| self.emitted_value_both(id).clone())
+                    .collect();
+                self.mk_wait(trigger_blk, trigger_on, None);
+                self.append_to(trigger_blk);
                 self.flush_mir(); // ensure we don't reuse earlier expr probe
                 self.emit_shadow_update();
 
@@ -2758,6 +2759,28 @@ where
     fn append_to(&mut self, block: HybridBlock) {
         self.builder.append_to(block.0);
         self.mlir_builder.set_insertion_point_to_end(block.1);
+    }
+
+    fn mk_wait(
+        &mut self,
+        block: HybridBlock,
+        on: impl IntoIterator<Item = HybridValue>,
+        time: Option<HybridValue>,
+    ) {
+        let mut on_llhd = vec![];
+        let mut on_mlir = vec![];
+        for v in on {
+            on_llhd.push(v.0);
+            on_mlir.push(v.1);
+        }
+        (
+            if let Some(time) = time {
+                self.builder.ins().wait_time(block.0, time.0, on_llhd);
+            } else {
+                self.builder.ins().wait(block.0, on_llhd);
+            },
+            circt::llhd::WaitOp::new(self.mlir_builder, block.1, on_mlir, time.map(|x| x.1)),
+        );
     }
 
     fn mk_ext_slice(&mut self, arg: HybridValue, offset: usize, length: usize) -> HybridValue {
