@@ -25,9 +25,9 @@ endmodule
 
 // CHECK: entity @top () -> () {
 // CHECK:     %bus_inst0.clk = sig i1 %0
-// CHECK:     %bus_inst0.data = sig i1 %0
-// CHECK:     %bus_inst1.clk = sig i1 %0
-// CHECK:     %bus_inst1.data = sig i1 %0
+// CHECK:     %bus_inst0.data = sig i1 %1
+// CHECK:     %bus_inst1.clk = sig i1 %2
+// CHECK:     %bus_inst1.data = sig i1 %3
 // CHECK:     inst @testcase.param3 (i1$ %bus_inst0.clk, i1$ %bus_inst0.data) -> (i1$ %test_inst0.result.default)
 // CHECK:     inst @testcase.param4 (i1$ %bus_inst1.clk, i1$ %bus_inst1.data) -> (i1$ %test_inst1.result.default)
 // CHECK: }
