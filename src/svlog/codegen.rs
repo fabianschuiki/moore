@@ -187,7 +187,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             if driven {
                 continue;
             }
-            let default_value = gen.emit_const_both(
+            let default_value = gen.emit_const(
                 if let Some(default) = port.default {
                     gen.constant_value_of(default, env)
                 } else {
@@ -504,7 +504,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             interned_rvalues: Default::default(),
             shadows: Default::default(),
         };
-        let entry_blk = pg.add_nameless_block();
+        let entry_blk = pg.builder.block();
         pg.builder.append_to(entry_blk);
 
         // Determine which values are both read and written. These require
@@ -535,7 +535,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 pg.append_to(check_blk);
                 let trigger_on: Vec<_> = inputs
                     .iter()
-                    .map(|&id| pg.emitted_value_both(id).clone())
+                    .map(|&id| pg.emitted_value(id).clone())
                     .collect();
                 pg.mk_wait(body_blk, trigger_on, None);
                 pg.append_to(body_blk);
@@ -804,11 +804,7 @@ impl<'a, 'b, 'gcx, C> UnitGenerator<'a, 'gcx, &'b C>
 where
     C: Context<'gcx> + 'b,
 {
-    fn emitted_value(&self, src: impl Into<AccessedNode>) -> llhd::ir::Value {
-        self.emitted_value_both(src).0
-    }
-
-    fn emitted_value_both(&self, src: impl Into<AccessedNode>) -> HybridValue {
+    fn emitted_value(&self, src: impl Into<AccessedNode>) -> HybridValue {
         let src = src.into();
         match self.values.get(&src) {
             Some(&v) => v,
@@ -955,8 +951,8 @@ where
             // Emit the assignments.
             let delay = self.mk_const_time(&num::zero(), 0, 1);
             for &assign in &simplified {
-                let lhs = self.emit_mir_lvalue_both(assign.lhs)?;
-                let rhs = self.emit_mir_rvalue_both(assign.rhs)?;
+                let lhs = self.emit_mir_lvalue(assign.lhs)?;
+                let rhs = self.emit_mir_rvalue(assign.rhs)?;
                 self.mk_drv(lhs.0, rhs, delay);
             }
         }
@@ -1173,7 +1169,7 @@ where
                             })
                         }
                     };
-                    self.emit_mir_lvalue_both(mir).map(|x| x.0)
+                    self.emit_mir_lvalue(mir).map(|x| x.0)
                 } else {
                     let mir = self.mir_rvalue(mapping.id(), mapping.env());
                     if mir.is_error() {
@@ -1205,7 +1201,7 @@ where
                     }
                     None => {
                         let v = self.type_default_value(ty);
-                        let v = self.emit_const_both(v, inst.inner_env, port.port.span)?;
+                        let v = self.emit_const(v, inst.inner_env, port.port.span)?;
                         (
                             self.builder.ins().sig(v.0),
                             circt::llhd::SignalOp::new(self.mlir_builder, "", v.1).into(),
@@ -1229,22 +1225,7 @@ where
     }
 
     /// Map a value to an LLHD constant (interned).
-    fn emit_const(
-        &mut self,
-        value: Value<'gcx>,
-        env: ParamEnv,
-        span: Span,
-    ) -> Result<llhd::ir::Value> {
-        self.emit_const_both(value, env, span).map(|x| x.0)
-    }
-
-    /// Map a value to an LLHD constant (interned).
-    fn emit_const_both(
-        &mut self,
-        value: Value<'gcx>,
-        env: ParamEnv,
-        span: Span,
-    ) -> Result<HybridValue> {
+    fn emit_const(&mut self, value: Value<'gcx>, env: ParamEnv, span: Span) -> Result<HybridValue> {
         if let Some(x) = self.interned_consts.get(value) {
             x.clone()
         } else {
@@ -1284,7 +1265,7 @@ where
                 let mut ll_fields = vec![];
                 let mut mlir_fields = vec![];
                 for field in v {
-                    let field = self.emit_const_both(field, env, span)?;
+                    let field = self.emit_const(field, env, span)?;
                     ll_fields.push(field.0);
                     mlir_fields.push(field.1);
                 }
@@ -1393,12 +1374,7 @@ where
     }
 
     /// Emit the code for an rvalue.
-    fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
-        self.emit_rvalue_both(expr_id, env).map(|x| x.0)
-    }
-
-    /// Emit the code for an rvalue.
-    fn emit_rvalue_both(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
+    fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
         self.emit_rvalue_mode(expr_id, env, Mode::Value)
     }
 
@@ -1414,12 +1390,7 @@ where
     }
 
     /// Emit the code for an MIR rvalue.
-    fn emit_mir_rvalue(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<llhd::ir::Value> {
-        self.emit_mir_rvalue_both(mir).map(|x| x.0)
-    }
-
-    /// Emit the code for an MIR rvalue.
-    fn emit_mir_rvalue_both(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<HybridValue> {
+    fn emit_mir_rvalue(&mut self, mir: &'gcx mir::Rvalue<'gcx>) -> Result<HybridValue> {
         self.emit_mir_rvalue_mode(mir, Mode::Value)
     }
 
@@ -1505,7 +1476,7 @@ where
         if mir.is_const() {
             let value = self.const_mir_rvalue(mir.into());
             return self
-                .emit_const_both(value, mir.env, mir.span)
+                .emit_const(value, mir.env, mir.span)
                 .map(|v| (v, Mode::Value));
         }
 
@@ -1515,7 +1486,7 @@ where
                     .shadows
                     .get(&id.into())
                     .cloned()
-                    .unwrap_or_else(|| self.emitted_value_both(id));
+                    .unwrap_or_else(|| self.emitted_value(id));
                 if mode_hint == Mode::Signal && self.llhd_type(sig.0).is_signal() {
                     return Ok((sig, Mode::Signal));
                 } else {
@@ -1553,14 +1524,14 @@ where
             }
 
             mir::RvalueKind::CastToBool(value) => {
-                let value = self.emit_mir_rvalue_both(value)?;
+                let value = self.emit_mir_rvalue(value)?;
                 let ty = self.llhd_type(value.0);
                 let zero = self.emit_zero_for_type_both((ty, value.1.ty()));
                 self.mk_cmp(CmpPred::Neq, value, zero)
             }
 
             mir::RvalueKind::Truncate(target_width, value) => {
-                let llvalue = self.emit_mir_rvalue_both(value)?;
+                let llvalue = self.emit_mir_rvalue(value)?;
                 self.mk_ext_slice(llvalue, 0, target_width)
             }
 
@@ -1568,7 +1539,7 @@ where
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let llty = self.emit_type_both(mir.ty)?;
                 let result = self.emit_zero_for_type_both(llty);
-                let value = self.emit_mir_rvalue_both(value)?;
+                let value = self.emit_mir_rvalue(value)?;
                 let result = self.mk_ins_slice(result, value, 0, width);
                 self.builder.set_name(result.0, "zext".to_string());
                 result
@@ -1577,7 +1548,7 @@ where
             mir::RvalueKind::SignExtend(_, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let llty = self.emit_type_both(mir.ty)?;
-                let value = self.emit_mir_rvalue_both(value)?;
+                let value = self.emit_mir_rvalue(value)?;
                 let sign = self.mk_ext_slice(value, width - 1, 1);
                 let zeros = self.emit_zero_for_type_both(llty);
                 let ones = self.mk_not(zeros);
@@ -1589,7 +1560,7 @@ where
 
             mir::RvalueKind::ConstructArray(ref indices) => {
                 let values = (0..indices.len())
-                    .map(|i| self.emit_mir_rvalue_both(indices[&i]))
+                    .map(|i| self.emit_mir_rvalue(indices[&i]))
                     .collect::<Result<Vec<_>>>()?;
                 let llty = self.emit_type_both(mir.ty)?;
                 self.mk_array(llty, &values)
@@ -1598,39 +1569,39 @@ where
             mir::RvalueKind::ConstructStruct(ref members) => {
                 let members = members
                     .iter()
-                    .map(|&v| self.emit_mir_rvalue_both(v))
+                    .map(|&v| self.emit_mir_rvalue(v))
                     .collect::<Result<Vec<_>>>()?;
                 let llty = self.emit_type_both(mir.ty)?;
                 self.mk_struct(llty, &members)
             }
 
-            mir::RvalueKind::Const(k) => self.emit_const_both(k, mir.env, mir.span)?,
+            mir::RvalueKind::Const(k) => self.emit_const(k, mir.env, mir.span)?,
 
             mir::RvalueKind::Index {
                 value,
                 base,
                 length,
             } => {
-                let target = self.emit_mir_rvalue_both(value)?;
+                let target = self.emit_mir_rvalue(value)?;
                 self.emit_rvalue_index(value.ty, target, base, length)?
             }
 
             mir::RvalueKind::Member { value, field } => {
-                let target = self.emit_mir_rvalue_both(value)?;
+                let target = self.emit_mir_rvalue(value)?;
                 let value = self.mk_ext_field(target, field);
                 value
             }
 
             mir::RvalueKind::UnaryBitwise { op, arg } => {
-                let arg = self.emit_mir_rvalue_both(arg)?;
+                let arg = self.emit_mir_rvalue(arg)?;
                 match op {
                     mir::UnaryBitwiseOp::Not => self.mk_not(arg),
                 }
             }
 
             mir::RvalueKind::BinaryBitwise { op, lhs, rhs } => {
-                let lhs = self.emit_mir_rvalue_both(lhs)?;
-                let rhs = self.emit_mir_rvalue_both(rhs)?;
+                let lhs = self.emit_mir_rvalue(lhs)?;
+                let rhs = self.emit_mir_rvalue(rhs)?;
                 match op {
                     mir::BinaryBitwiseOp::And => self.mk_and(lhs, rhs),
                     mir::BinaryBitwiseOp::Or => self.mk_or(lhs, rhs),
@@ -1641,8 +1612,8 @@ where
             mir::RvalueKind::IntComp {
                 op, lhs, rhs, sign, ..
             } => {
-                let lhs = self.emit_mir_rvalue_both(lhs)?;
-                let rhs = self.emit_mir_rvalue_both(rhs)?;
+                let lhs = self.emit_mir_rvalue(lhs)?;
+                let rhs = self.emit_mir_rvalue(rhs)?;
                 let signed = sign.is_signed();
                 match op {
                     mir::IntCompOp::Eq => self.mk_cmp(CmpPred::Eq, lhs, rhs),
@@ -1659,7 +1630,7 @@ where
             }
 
             mir::RvalueKind::IntUnaryArith { op, arg, .. } => {
-                let arg = self.emit_mir_rvalue_both(arg)?;
+                let arg = self.emit_mir_rvalue(arg)?;
                 match op {
                     mir::IntUnaryArithOp::Neg => self.mk_neg(arg),
                 }
@@ -1668,8 +1639,8 @@ where
             mir::RvalueKind::IntBinaryArith {
                 op, lhs, rhs, sign, ..
             } => {
-                let lhs_ll = self.emit_mir_rvalue_both(lhs)?;
-                let rhs_ll = self.emit_mir_rvalue_both(rhs)?;
+                let lhs_ll = self.emit_mir_rvalue(lhs)?;
+                let rhs_ll = self.emit_mir_rvalue(rhs)?;
                 let signed = sign.is_signed();
                 match op {
                     mir::IntBinaryArithOp::Add => self.mk_add(lhs_ll, rhs_ll),
@@ -1747,7 +1718,7 @@ where
                 let mut result = self.emit_zero_for_type_both(llty);
                 for value in values.iter().rev() {
                     let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                    let llval = self.emit_mir_rvalue_both(value)?;
+                    let llval = self.emit_mir_rvalue(value)?;
                     trace!(
                         " - Value has width {}, type `{}`, in LLHD `{}`",
                         width,
@@ -1763,7 +1734,7 @@ where
 
             mir::RvalueKind::Repeat(times, value) => {
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                let value = self.emit_mir_rvalue_both(value)?;
+                let value = self.emit_mir_rvalue(value)?;
                 let llty = self.emit_type_both(mir.ty)?;
                 let mut result = self.emit_zero_for_type_both(llty);
                 for i in 0..times {
@@ -1779,8 +1750,8 @@ where
                 value,
                 amount,
             } => {
-                let value = self.emit_mir_rvalue_both(value)?;
-                let amount = self.emit_mir_rvalue_both(amount)?;
+                let value = self.emit_mir_rvalue(value)?;
+                let amount = self.emit_mir_rvalue(amount)?;
                 let value_ty = self.builder.unit().value_type(value.0);
                 let hidden = self.emit_zero_for_type_both((value_ty.clone(), value.1.ty()));
                 let hidden = if arith && op == mir::ShiftOp::Right {
@@ -1801,15 +1772,15 @@ where
                 true_value,
                 false_value,
             } => {
-                let cond = self.emit_mir_rvalue_both(cond)?;
-                let true_value = self.emit_mir_rvalue_both(true_value)?;
-                let false_value = self.emit_mir_rvalue_both(false_value)?;
+                let cond = self.emit_mir_rvalue(cond)?;
+                let true_value = self.emit_mir_rvalue(true_value)?;
+                let false_value = self.emit_mir_rvalue(false_value)?;
                 self.mk_mux(cond, true_value, false_value)
             }
 
             mir::RvalueKind::Reduction { op, arg } => {
                 let width = arg.ty.simple_bit_vector(self.cx, arg.span).size;
-                let arg = self.emit_mir_rvalue_both(arg)?;
+                let arg = self.emit_mir_rvalue(arg)?;
                 let mut value = self.mk_ext_slice(arg, 0, 1);
                 for i in 1..width {
                     let bit = self.mk_ext_slice(arg, i, 1);
@@ -1828,7 +1799,7 @@ where
                 result,
             } => {
                 self.emit_mir_blocking_assign(lvalue, rvalue)?;
-                self.emit_mir_rvalue_both(result)?
+                self.emit_mir_rvalue(result)?
             }
 
             mir::RvalueKind::PackString(value) | mir::RvalueKind::UnpackString(value) => bug_span!(
@@ -1870,7 +1841,7 @@ where
     }
 
     /// Emit the code for an rvalue converted to a boolean..
-    fn emit_rvalue_bool_both(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
+    fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
         let mir = self.mir_rvalue(expr_id, env);
         assert_span!(
             mir.ty
@@ -1882,11 +1853,7 @@ where
             "value of type `{}` should be a bool",
             mir.ty
         );
-        self.emit_mir_rvalue_both(mir)
-    }
-
-    fn emit_rvalue_bool(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<llhd::ir::Value> {
-        self.emit_rvalue_bool_both(expr_id, env).map(|x| x.0)
+        self.emit_mir_rvalue(mir)
     }
 
     /// Emit the code for an MIR rvalue interface.
@@ -1907,7 +1874,7 @@ where
                     .shadows
                     .get(&id)
                     .cloned()
-                    .unwrap_or_else(|| self.emitted_value_both(id));
+                    .unwrap_or_else(|| self.emitted_value(id));
                 debug!(
                     "{:?} emitted value is {:?} (type {})",
                     id,
@@ -1949,7 +1916,7 @@ where
         base: &'gcx mir::Rvalue<'gcx>,
         length: usize,
     ) -> Result<HybridValue> {
-        let base = self.emit_mir_rvalue_both(base)?;
+        let base = self.emit_mir_rvalue(base)?;
         let hidden = self.emit_zero_for_type_both((self.llhd_type(value.0), base.1.ty()));
         // TODO(fschuiki): make the above a constant of all `x`.
         let shifted = self.mk_shr(value, hidden, base);
@@ -1967,15 +1934,6 @@ where
 
     /// Emit the code for an MIR lvalue.
     fn emit_mir_lvalue(
-        &mut self,
-        mir: &mir::Lvalue<'gcx>,
-    ) -> Result<(llhd::ir::Value, Option<llhd::ir::Value>)> {
-        self.emit_mir_lvalue_both(mir)
-            .map(|(x, y)| (x.0, y.map(|y| y.0)))
-    }
-
-    /// Emit the code for an MIR lvalue.
-    fn emit_mir_lvalue_both(
         &mut self,
         mir: &mir::Lvalue<'gcx>,
     ) -> Result<(HybridValue, Option<HybridValue>)> {
@@ -2041,13 +1999,13 @@ where
     ) -> Result<(HybridValue, Option<HybridValue>)> {
         match mir.kind {
             // Transmutes are no-ops in code generation.
-            mir::LvalueKind::Transmute(value) => self.emit_mir_lvalue_both(value),
+            mir::LvalueKind::Transmute(value) => self.emit_mir_lvalue(value),
 
             // Variables and ports trivially return their declaration value.
             // This is either the `var` or `sig` instruction which introduced
             // them.
             mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => Ok((
-                self.emitted_value_both(id).clone(),
+                self.emitted_value(id).clone(),
                 self.shadows.get(&id.into()).cloned(),
             )),
 
@@ -2058,7 +2016,7 @@ where
             // Member accesses simply look up their inner lvalue and extract the
             // signal or pointer to the respective subfield.
             mir::LvalueKind::Member { value, field } => {
-                let target = self.emit_mir_lvalue_both(value)?;
+                let target = self.emit_mir_lvalue(value)?;
                 let value_real = self.mk_ext_field(target.0, field);
                 let value_shadow = target.1.map(|target| self.mk_ext_field(target, field));
                 Ok((value_real, value_shadow))
@@ -2071,7 +2029,7 @@ where
                 base,
                 length,
             } => {
-                let inner = self.emit_mir_lvalue_both(value)?;
+                let inner = self.emit_mir_lvalue(value)?;
                 self.emit_lvalue_index(value.ty, inner, base, length)
             }
 
@@ -2112,7 +2070,7 @@ where
             mir::LvalueKind::Intf(intf) => {
                 let id = AccessedNode::Intf(intf, signal);
                 Ok((
-                    self.emitted_value_both(id).clone(),
+                    self.emitted_value(id).clone(),
                     self.shadows.get(&id).cloned(),
                 ))
             }
@@ -2145,7 +2103,7 @@ where
         length: usize,
     ) -> Result<(HybridValue, Option<HybridValue>)> {
         let (target_real, target_shadow) = value;
-        let base = self.emit_mir_rvalue_both(base)?;
+        let base = self.emit_mir_rvalue(base)?;
         let shifted_real = {
             let hidden =
                 self.emit_zero_for_type_both((self.llhd_type(target_real.0), target_real.1.ty()));
@@ -2174,18 +2132,6 @@ where
                 ))
             }
         }
-    }
-
-    /// Add a nameless block.
-    fn add_nameless_block(&mut self) -> llhd::ir::Block {
-        self.builder.block()
-    }
-
-    /// Add a named block.
-    fn add_named_block(&mut self, name: impl Into<String>) -> llhd::ir::Block {
-        let bb = self.builder.block();
-        self.builder.set_block_name(bb, name.into());
-        bb
     }
 
     /// Emit the code for a statement.
@@ -2240,24 +2186,24 @@ where
                 match kind {
                     hir::AssignKind::Block(_) => {
                         for &assign in &simplified {
-                            let lhs_lv = self.emit_mir_lvalue_both(assign.lhs)?;
-                            let rhs_rv = self.emit_mir_rvalue_both(assign.rhs)?;
+                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
                             self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
                         }
                     }
                     hir::AssignKind::Nonblock => {
                         let delay = self.mk_const_time(&num::zero(), 1, 0);
                         for &assign in &simplified {
-                            let lhs_lv = self.emit_mir_lvalue_both(assign.lhs)?;
-                            let rhs_rv = self.emit_mir_rvalue_both(assign.rhs)?;
+                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
                             self.mk_drv(lhs_lv.0, rhs_rv, delay);
                         }
                     }
                     hir::AssignKind::NonblockDelay(delay) => {
-                        let delay = self.emit_rvalue_both(delay, env)?;
+                        let delay = self.emit_rvalue(delay, env)?;
                         for &assign in &simplified {
-                            let lhs_lv = self.emit_mir_lvalue_both(assign.lhs)?;
-                            let rhs_rv = self.emit_mir_rvalue_both(assign.rhs)?;
+                            let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
+                            let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
                             self.mk_drv(lhs_lv.0, rhs_rv, delay);
                         }
                     }
@@ -2268,7 +2214,7 @@ where
                 stmt,
             } => {
                 let resume_blk = self.mk_block(None);
-                let duration = self.emit_rvalue_both(expr_id, env)?;
+                let duration = self.emit_rvalue(expr_id, env)?;
                 self.builder
                     .ins()
                     .wait_time(resume_blk.0, duration.0, vec![]);
@@ -2295,7 +2241,7 @@ where
                 self.append_to(init_blk);
                 let mut init_values = vec![];
                 for event in &expr_hir.events {
-                    init_values.push(self.emit_rvalue_both(event.expr, env)?);
+                    init_values.push(self.emit_rvalue(event.expr, env)?);
                 }
 
                 // Wait for any of the inputs to those expressions to change.
@@ -2304,7 +2250,7 @@ where
                 for event in &expr_hir.events {
                     let acc = self.accessed_nodes(event.expr, env)?;
                     for &id in &acc.read {
-                        trigger_on.push(self.emitted_value_both(id).clone());
+                        trigger_on.push(self.emitted_value(id).clone());
                     }
                 }
                 self.mk_wait(check_blk, trigger_on, None);
@@ -2321,10 +2267,10 @@ where
                         init_value,
                         event
                     );
-                    let now_value = self.emit_rvalue_both(event.expr, env)?;
+                    let now_value = self.emit_rvalue(event.expr, env)?;
                     let mut trigger = self.emit_event_trigger(event.edge, init_value, now_value)?;
                     for &iff in &event.iff {
-                        let iff_value = self.emit_rvalue_bool_both(iff, env)?;
+                        let iff_value = self.emit_rvalue_bool(iff, env)?;
                         trigger = self.mk_and(trigger, iff_value);
                         self.builder.set_name(trigger.0, "iff".to_string());
                     }
@@ -2360,7 +2306,7 @@ where
                 let trigger_on: Vec<_> = acc
                     .read
                     .iter()
-                    .map(|&id| self.emitted_value_both(id).clone())
+                    .map(|&id| self.emitted_value(id).clone())
                     .collect();
                 self.mk_wait(trigger_blk, trigger_on, None);
                 self.append_to(trigger_blk);
@@ -2371,7 +2317,7 @@ where
                 self.emit_stmt(stmt, env)?;
             }
             hir::StmtKind::Expr(expr_id) => {
-                self.emit_rvalue_both(expr_id, env)?;
+                self.emit_rvalue(expr_id, env)?;
             }
             hir::StmtKind::If {
                 cond,
@@ -2380,7 +2326,7 @@ where
             } => {
                 let main_blk = self.mk_block(Some("if_true"));
                 let else_blk = self.mk_block(Some("if_false"));
-                let cond = self.emit_rvalue_bool_both(cond, env)?;
+                let cond = self.emit_rvalue_bool(cond, env)?;
                 self.mk_cond_br(cond, main_blk, else_blk);
                 let final_blk = self.mk_block(Some("if_exit"));
                 self.append_to(main_blk);
@@ -2402,7 +2348,7 @@ where
                     hir::LoopKind::Forever => None,
                     hir::LoopKind::Repeat(count) => {
                         let ty = self.type_of(count, env)?;
-                        let count = self.emit_rvalue_both(count, env)?;
+                        let count = self.emit_rvalue(count, env)?;
                         let var = self.mk_var(count);
                         self.builder.set_name(var.0, "loop_count".to_string());
                         Some((var, ty))
@@ -2427,9 +2373,9 @@ where
                         let zero = self.emit_zero_for_type_both(lty);
                         Some(self.mk_cmp(CmpPred::Neq, value, zero))
                     }
-                    hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool_both(cond, env)?),
+                    hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool(cond, env)?),
                     hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool_both(cond, env)?),
+                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool(cond, env)?),
                 };
                 if let Some(enter_cond) = enter_cond {
                     let entry_blk = self.mk_block(Some("loop_continue"));
@@ -2452,9 +2398,9 @@ where
                         None
                     }
                     hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool_both(cond, env)?),
+                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool(cond, env)?),
                     hir::LoopKind::For(_, _, step) => {
-                        self.emit_rvalue_both(step, env)?;
+                        self.emit_rvalue(step, env)?;
                         None
                     }
                 };
@@ -2476,7 +2422,7 @@ where
                 default,
                 kind,
             } => {
-                let expr = self.emit_rvalue_both(expr, env)?;
+                let expr = self.emit_rvalue(expr, env)?;
                 let final_blk = self.mk_block(Some("case_exit"));
                 for &(ref way_exprs, stmt) in ways {
                     let mut last_check = None;
@@ -2487,7 +2433,7 @@ where
                             ValueKind::Int(v, s, x) => (v, s, x),
                             _ => panic!("case constant evaluates to non-integer"),
                         };
-                        let way_expr = self.emit_const_both(way_const, env, self.span(way_expr))?;
+                        let way_expr = self.emit_const(way_const, env, self.span(way_expr))?;
                         let way_width = self.llhd_type(way_expr.0).unwrap_int();
 
                         // Generate the comparison mask based on the case kind.
@@ -2571,7 +2517,7 @@ where
         );
         let ty = self.emit_type_both(ty)?;
         let init = match hir.init {
-            Some(expr) => self.emit_rvalue_both(expr, env)?,
+            Some(expr) => self.emit_rvalue(expr, env)?,
             None => self.emit_zero_for_type_both(ty),
         };
         let value = self.mk_var(init);
@@ -2639,8 +2585,8 @@ where
         lvalue: &'gcx mir::Lvalue<'gcx>,
         rvalue: &'gcx mir::Rvalue<'gcx>,
     ) -> Result<()> {
-        let lv = self.emit_mir_lvalue_both(lvalue)?;
-        let rv = self.emit_mir_rvalue_both(rvalue)?;
+        let lv = self.emit_mir_lvalue(lvalue)?;
+        let rv = self.emit_mir_rvalue(rvalue)?;
         self.emit_blocking_assign_llhd(lv, rv)
     }
 
@@ -2694,7 +2640,7 @@ where
         if is_var {
             // For variables we require that the initial value is a
             // constant.
-            let init = self.emit_const_both(
+            let init = self.emit_const(
                 match default {
                     Some(expr) => self.constant_value_of(expr, env),
                     None => self.type_default_value(ty),
@@ -2709,8 +2655,7 @@ where
         } else {
             // For nets we simply emit the initial value as a signal, then
             // short-circuit it with the net declaration.
-            let zero =
-                self.emit_const_both(self.type_default_value(ty), env, self.span(decl_id))?;
+            let zero = self.emit_const(self.type_default_value(ty), env, self.span(decl_id))?;
             let net = (
                 self.builder.ins().sig(zero.0),
                 circt::llhd::SignalOp::new(self.mlir_builder, &name, zero.1).into(),
