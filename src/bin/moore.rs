@@ -8,7 +8,7 @@ extern crate log;
 use circt::{mlir, prelude::*};
 use clap::{App, Arg, ArgMatches};
 use llhd;
-use llhd::opt::{Pass, PassContext};
+// use llhd::opt::{Pass, PassContext};
 use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
@@ -505,16 +505,17 @@ fn elaborate_name(
 
             let mut cg = svlog::CodeGenerator::new(ctx.svlog, mlir_module);
             cg.emit_module(m)?;
-            let mut module = cg.finalize();
-            let pass_ctx = PassContext;
-            if ctx.sess.opts.opt_level > 0 {
-                llhd::pass::ConstFolding::run_on_module(&pass_ctx, &mut module);
-                // llhd::pass::VarToPhiPromotion::run_on_module(&pass_ctx, &mut module); // broken in llhd 0.13
-                llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
-                llhd::pass::GlobalCommonSubexprElim::run_on_module(&pass_ctx, &mut module);
-                llhd::pass::InstSimplification::run_on_module(&pass_ctx, &mut module);
-                llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
-            }
+            let module = cg.finalize();
+            // let mut module = cg.finalize();
+            // let pass_ctx = PassContext;
+            // if ctx.sess.opts.opt_level > 0 {
+            //     llhd::pass::ConstFolding::run_on_module(&pass_ctx, &mut module);
+            //     llhd::pass::VarToPhiPromotion::run_on_module(&pass_ctx, &mut module); // broken in llhd 0.13
+            //     llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
+            //     llhd::pass::GlobalCommonSubexprElim::run_on_module(&pass_ctx, &mut module);
+            //     llhd::pass::InstSimplification::run_on_module(&pass_ctx, &mut module);
+            //     llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
+            // }
 
             // Decide what format to use for the output.
             emit_output(matches, ctx, &module, mlir_module)?
