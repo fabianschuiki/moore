@@ -51,6 +51,9 @@ jobs:
         id: env
         run: |
           echo "CIRCT_SYS_CIRCT_DIR=$GITHUB_WORKSPACE/circt" >> $GITHUB_ENV
+          echo "CIRCT_SYS_CIRCT_BUILD_DIR=$GITHUB_WORKSPACE/circt/install" >> $GITHUB_ENV
+          echo "CIRCT_SYS_LLVM_DIR=$GITHUB_WORKSPACE/circt/llvm" >> $GITHUB_ENV
+          echo "CIRCT_SYS_LLVM_BUILD_DIR=$GITHUB_WORKSPACE/circt/llvm/install" >> $GITHUB_ENV
           echo "::set-output name=circt-hash::$(git rev-parse @:./circt)"
           echo "::set-output name=llvm-hash::$(cd circt && git rev-parse @:./llvm)"
 
@@ -59,7 +62,7 @@ jobs:
         id: cache-llvm
         uses: martijnhols/actions-cache/restore@v3
         with:
-          path: circt/llvm/build
+          path: circt/llvm/install
           key: ${{ runner.os }}-llvm-${{ hashFiles('.github/build-llvm.sh') }}-${{ steps.env.outputs.llvm-hash }}
 
       - name: Rebuild LLVM
@@ -70,7 +73,7 @@ jobs:
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         uses: martijnhols/actions-cache/save@v3
         with:
-          path: circt/llvm/build
+          path: circt/llvm/install
           key: ${{ steps.cache-llvm.outputs.primary-key }}
 
       # Fetch CIRCT from the cache if possible, otherwise rebuild it.
@@ -78,7 +81,7 @@ jobs:
         id: cache-circt
         uses: martijnhols/actions-cache/restore@v3
         with:
-          path: circt/build
+          path: circt/install
           key: ${{ runner.os }}-circt-${{ hashFiles('.github/build-circt.sh') }}-${{ steps.env.outputs.circt-hash }}
 
       - name: Rebuild CIRCT
@@ -89,7 +92,7 @@ jobs:
         if: steps.cache-circt.outputs.cache-hit != 'true'
         uses: martijnhols/actions-cache/save@v3
         with:
-          path: circt/build
+          path: circt/install
           key: ${{ steps.cache-circt.outputs.primary-key }}
 
       # Run the quick check build.
@@ -114,7 +117,7 @@ jobs:
 
       # Run the tests.
       - name: Run lit tests
-        run: circt/llvm/build/bin/llvm-lit test -v
+        run: circt/llvm/install/bin/llvm-lit test -v
       - name: Run regression tests (old)
         run: env TERM=xterm-color test/run.sh
       - name: Run regression tests (new)
