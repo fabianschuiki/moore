@@ -12,9 +12,61 @@ Moore is a compiler for hardware description languages that outputs [llhd] assem
 
 ### Installation
 
-You need a working [Rust installation](https://rustup.rs/). Use cargo to install moore:
+You need a working [Rust installation](https://rustup.rs/) to build Moore. The project also depends on the [CIRCT project](https://github.com/llvm/circt) and transitively on MLIR and LLVM. To get a working binary, you generally want to ensure you have the `circt` and `circt/llvm` submodules checked out:
+
+    git submodule update --init --recursive
+
+And then follow these steps:
+
+#### Build LLVM and MLIR
+
+    mkdir -p circt/llvm/build
+    pushd circt/llvm/build
+    cmake ../llvm \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=../install \
+        -DLLVM_BUILD_EXAMPLES=OFF \
+        -DLLVM_ENABLE_ASSERTIONS=ON \
+        -DLLVM_ENABLE_BINDINGS=OFF \
+        -DLLVM_ENABLE_OCAMLDOC=OFF \
+        -DLLVM_ENABLE_PROJECTS=mlir \
+        -DLLVM_INSTALL_UTILS=ON \
+        -DLLVM_OPTIMIZED_TABLEGEN=ON \
+        -DLLVM_TARGETS_TO_BUILD=""
+    cmake --build . --target install
+    popd
+
+#### Build CIRCT
+
+    mkdir -p circt/build
+    pushd circt/build
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=../install \
+        -DMLIR_DIR=$PWD/../llvm/install/lib/cmake/mlir \
+        -DLLVM_DIR=$PWD/../llvm/install/lib/cmake/llvm \
+        -DLLVM_ENABLE_ASSERTIONS=ON
+    cmake --build . --target install
+    popd
+
+#### Build Moore
+
+Set the following environment variables to indicate where your LLVM and CIRCT build is:
+
+    export CIRCT_SYS_CIRCT_DIR=$PWD/circt
+    export CIRCT_SYS_CIRCT_BUILD_DIR=$PWD/circt/install
+    export CIRCT_SYS_LLVM_DIR=$PWD/circt/llvm
+    export CIRCT_SYS_LLVM_BUILD_DIR=$PWD/circt/llvm/install
+
+Use cargo to install Moore:
 
     cargo install moore
+
+#### Development
+
+For active development, you'll want to use the usual `check`, `build`, `run`, and `test` subcommands.
+
+You may also find it useful to point the `*_BUILD_DIR` environment variables at the actual build directories (usually `circt/llvm/build` and `circt/build`), such that you don't need to re-install on every change to CIRCT or LLVM.
 
 ### Example
 
