@@ -72,7 +72,7 @@ fn main() {
     // System libraries
     let system_libraries = [
         "stdc++", // llvm-config --system-libs --link-static
-        "rt", "dl", "pthread", "m", "z", "tinfo", "xml2",
+        "rt", "dl", "pthread", "m", "z", "tinfo",
     ];
     for name in &system_libraries {
         println!("cargo:rustc-link-lib=dylib={}", name);
