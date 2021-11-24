@@ -63,7 +63,7 @@ pub fn get_pointer_type_element(ty: Type) -> Option<Type> {
     }
 }
 
-/// Create a new integer attribute.
+/// Create a new time attribute.
 pub fn get_time_attr(
     cx: Context,
     seconds: &BigRational,
@@ -115,7 +115,7 @@ pub trait EntityLike: SingleRegionOp {
         self.port(index)
     }
 
-    /// Get an input port by index.
+    /// Get an output port by index.
     fn output(&self, index: usize) -> Value {
         assert!(index < self.num_outputs());
         self.port(index + self.num_inputs())
@@ -247,8 +247,6 @@ def_operation_single_result!(LoadOp, "llhd.load");
 def_operation!(StoreOp, "llhd.store");
 def_operation!(HaltOp, "llhd.halt");
 def_operation!(WaitOp, "llhd.wait");
-def_simple_unary_operation!(NotOp, "llhd.not");
-def_simple_unary_operation!(NegOp, "llhd.neg");
 def_operation_single_result!(ShlOp, "llhd.shl");
 def_operation_single_result!(ShrOp, "llhd.shr");
 def_operation_single_result!(SigArrayGetOp, "llhd.sig.array_get");
