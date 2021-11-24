@@ -38,6 +38,7 @@ macro_rules! def_operation_single_result {
 }
 
 /// Define a unary operation with the result type inherited from the operand.
+#[allow(unused_macros)]
 macro_rules! def_simple_unary_operation {
     ($name:ident, $operation_name:expr) => {
         def_operation_single_result!($name, $operation_name);
