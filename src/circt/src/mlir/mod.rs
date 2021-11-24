@@ -108,6 +108,11 @@ pub trait OperationExt: WrapRaw<RawType = MlirOperation> {
         }
     }
 
+    /// Verify the operation.
+    fn verify(&self) -> bool {
+        unsafe { mlirOperationVerify(self.raw()) }
+    }
+
     /// Return the MLIR context for this operation.
     fn context(&self) -> Context {
         unsafe { Context::from_raw(mlirOperationGetContext(self.raw())) }

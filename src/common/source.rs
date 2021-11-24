@@ -369,6 +369,27 @@ impl Location {
         }
     }
 
+    /// Create a new location given a human-readable line and column.
+    pub fn with_line_and_column(source: Source, line: usize, column: usize) -> Location {
+        let mut current_line = 1;
+        let content = source.get_content();
+        let mut iter = content
+            .bytes()
+            .iter()
+            .enumerate()
+            .skip_while(|&(_, &c)| {
+                if c == '\n' as u8 {
+                    current_line += 1;
+                }
+                current_line != line
+            })
+            .skip_while(|&(_, &c)| c == '\n' as u8 || c == '\r' as u8);
+        match iter.next() {
+            Some((line_offset, _)) => Location::new(source, line_offset + column - 1),
+            None => Location::new(source, 0),
+        }
+    }
+
     /// Obtain an iterator into the source file at this location.
     pub fn iter<'a>(self, content: &'a Rc<dyn SourceContent>) -> Box<CharIter<'a>> {
         content.iter_from(self.offset)

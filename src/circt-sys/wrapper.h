@@ -36,6 +36,15 @@ extern "C" {
 MLIR_CAPI_EXPORTED MlirAttribute
 mlirIntegerAttrGetFromString(MlirType type, MlirStringRef value);
 
+//===----------------------------------------------------------------------===//
+// Location API Extensions
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool mlirLocationIsFileLineCol(MlirLocation);
+MLIR_CAPI_EXPORTED MlirStringRef mlirFileLineColLocGetFilename(MlirLocation);
+MLIR_CAPI_EXPORTED unsigned mlirFileLineColLocGetLine(MlirLocation);
+MLIR_CAPI_EXPORTED unsigned mlirFileLineColLocGetColumn(MlirLocation);
+
 #ifdef __cplusplus
 }
 #endif
