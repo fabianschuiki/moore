@@ -1078,7 +1078,7 @@ where
             );
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
-                "",
+                &format!("{}_inst", prok.mlir_symbol),
                 &prok.mlir_symbol,
                 inputs.iter().map(|x| x.1),
                 outputs.iter().map(|x| x.1),
