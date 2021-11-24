@@ -5,7 +5,7 @@
 #[macro_use]
 extern crate log;
 
-use circt::{mlir, prelude::*};
+use circt::{mlir, prelude::*, sys::*};
 use clap::{App, Arg, ArgMatches};
 use llhd;
 // use llhd::opt::{Pass, PassContext};
@@ -13,6 +13,7 @@ use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
 use moore::score::{ScoreBoard, ScoreContext};
+use moore::source::Span;
 use moore::svlog::{hir::Visitor as _, QueryDatabase as _};
 use moore::*;
 use std::path::Path;
@@ -494,6 +495,7 @@ fn elaborate_name(
                 svlog::InstVerbosityVisitor::new(ctx.svlog).visit_node_with_id(m, false);
             }
 
+            // Create an MLIR context and load the dialects we need.
             let mlir_cx = mlir::OwnedContext::new();
             mlir_cx.load_dialect(circt::std::dialect());
             mlir_cx.load_dialect(circt::hw::dialect());
@@ -501,6 +503,22 @@ fn elaborate_name(
             mlir_cx.load_dialect(circt::llhd::dialect());
             mlir_cx.load_dialect(circt::seq::dialect());
 
+            // Attach a custom diagnostic handler to the context such that we
+            // can print MLIR diagnostics through Moore's own diagnostics
+            // engine.
+            unsafe {
+                mlirContextAttachDiagnosticHandler(
+                    mlir_cx.raw(),
+                    Some(moore_mlir_diagnostic_handler),
+                    // SAFETY: The session reference in the context must outlive
+                    // the MLIR context, which is the case since that context
+                    // is dropped at the end of this function.
+                    ctx.sess as *const _ as *mut _,
+                    None,
+                );
+            }
+
+            // Create the top-level MLIR module.
             let mlir_module = circt::ModuleOp::new(*mlir_cx);
 
             let mut cg = svlog::CodeGenerator::new(ctx.svlog, mlir_module);
@@ -522,6 +540,93 @@ fn elaborate_name(
         }
     }
     Ok(())
+}
+
+/// A custom handler for MLIR diagnostics, which prints them through Moore's own
+/// diagnostic engine.
+unsafe extern "C" fn moore_mlir_diagnostic_handler(
+    diag: MlirDiagnostic,
+    sess: *mut std::ffi::c_void,
+) -> MlirLogicalResult {
+    let sess: &Session = (sess as *const Session).as_ref().unwrap();
+
+    // Map the severity from MLIR to Moore.
+    #[allow(non_upper_case_globals)]
+    let severity = match mlirDiagnosticGetSeverity(diag) {
+        MlirDiagnosticSeverity_MlirDiagnosticError => Severity::Error,
+        MlirDiagnosticSeverity_MlirDiagnosticWarning => Severity::Warning,
+        MlirDiagnosticSeverity_MlirDiagnosticNote | MlirDiagnosticSeverity_MlirDiagnosticRemark => {
+            Severity::Note
+        }
+        _ => panic!("unsupported MLIR diagnostic severity"),
+    };
+
+    // Create the main diagnostic message and attach location information if
+    // possible.
+    let mut d = DiagBuilder2::new(severity, mlir_diagnostic_to_string(diag));
+    let main_loc = mlirDiagnosticGetLocation(diag);
+    if let Some(main_span) = mlir_location_to_span(main_loc) {
+        d = d.span(main_span);
+    }
+
+    // Add additional notes.
+    let mut notes_todo = vec![diag];
+    while let Some(note) = notes_todo.pop() {
+        if note.ptr != diag.ptr {
+            let msg = mlir_diagnostic_to_string(note);
+            let loc = mlirDiagnosticGetLocation(note);
+            d = d.add_note(msg);
+            if !loc.ptr.is_null() && main_loc.ptr != loc.ptr {
+                if let Some(span) = mlir_location_to_span(loc) {
+                    d = d.span(span);
+                }
+            }
+        }
+        let num_notes = mlirDiagnosticGetNumNotes(note);
+        for i in (0..num_notes).rev() {
+            notes_todo.push(mlirDiagnosticGetNote(note, i));
+        }
+    }
+
+    sess.emit(d);
+    MlirLogicalResult { value: 1 }
+}
+
+/// Convert the message in an MLIR diagnostic to a string.
+unsafe fn mlir_diagnostic_to_string(diag: MlirDiagnostic) -> String {
+    unsafe extern "C" fn stringify_callback(string: MlirStringRef, to: *mut std::ffi::c_void) {
+        let to: &mut String = (to as *mut String).as_mut().unwrap();
+        to.push_str(
+            std::str::from_utf8(std::slice::from_raw_parts(
+                string.data as *const _,
+                string.length as usize,
+            ))
+            .expect("utf8 string"),
+        );
+    }
+    let mut string = String::new();
+    mlirDiagnosticPrint(
+        diag,
+        Some(stringify_callback),
+        &mut string as *mut _ as *mut _,
+    );
+    string
+}
+
+unsafe fn mlir_location_to_span(loc: MlirLocation) -> Option<Span> {
+    if loc.ptr.is_null() {
+        return None;
+    }
+    if mlirLocationIsFileLineCol(loc) {
+        let filename = mlirStringRefToStr(mlirFileLineColLocGetFilename(loc), String::from);
+        let line = mlirFileLineColLocGetLine(loc) as usize;
+        let column = mlirFileLineColLocGetColumn(loc) as usize;
+        let source = source::get_source_manager().open(&filename).unwrap();
+        let loc = source::Location::with_line_and_column(source, line, column);
+        Some(loc.into())
+    } else {
+        None
+    }
 }
 
 #[derive(Debug)]

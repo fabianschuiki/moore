@@ -14,3 +14,19 @@ MlirAttribute mlirIntegerAttrGetFromString(MlirType type, MlirStringRef value) {
   return wrap(IntegerAttr::get(
       intType, APInt(tmpWidth, valueStr, 10).truncOrSelf(intWidth)));
 }
+
+bool mlirLocationIsFileLineCol(MlirLocation loc) {
+  return unwrap(loc).isa<FileLineColLoc>();
+}
+
+MlirStringRef mlirFileLineColLocGetFilename(MlirLocation loc) {
+  return wrap(unwrap(loc).cast<FileLineColLoc>().getFilename().strref());
+}
+
+unsigned mlirFileLineColLocGetLine(MlirLocation loc) {
+  return unwrap(loc).cast<FileLineColLoc>().getLine();
+}
+
+unsigned mlirFileLineColLocGetColumn(MlirLocation loc) {
+  return unwrap(loc).cast<FileLineColLoc>().getColumn();
+}
