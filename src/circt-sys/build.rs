@@ -26,10 +26,8 @@ fn main() {
         .unwrap_or_else(|_| llvm_dir.join("build"));
 
     // CIRCT/LLVM/MLIR libraries
-    for name in &[circt_build_dir.join("lib"), llvm_build_dir.join("lib")] {
-        println!("cargo:rustc-link-search=native={}", name.display());
-    }
-    for name in &[
+    let lib_dirs = [circt_build_dir.join("lib"), llvm_build_dir.join("lib")];
+    let lib_names = [
         "CIRCTCAPIComb",
         "CIRCTCAPIHW",
         "CIRCTCAPILLHD",
@@ -65,8 +63,20 @@ fn main() {
         "MLIRTransformUtils",
         "MLIRTransforms",
         "MLIRTranslation",
-    ] {
+    ];
+    for name in &lib_dirs {
+        println!("cargo:rustc-link-search=native={}", name.display());
+    }
+    for name in &lib_names {
         println!("cargo:rustc-link-lib=static={}", name);
+    }
+    for lib_dir in &lib_dirs {
+        for name in &lib_names {
+            let path = lib_dir.join(format!("lib{}.a", name));
+            if path.exists() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
     }
 
     // System libraries
