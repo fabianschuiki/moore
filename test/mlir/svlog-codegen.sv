@@ -81,6 +81,12 @@ module Foo (
   initial @(negedge x) 42; // neg edge
   initial @(x iff a) 42;
 
+  initial begin
+    int x;
+    byte [2:0] y;
+    x = y;
+  end
+
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time

@@ -10,7 +10,6 @@ module foo;
     int      v5;
     longint  v6;
     integer  v7;
-    time     v8;
 
     // Packed Structs
     struct packed { bit x; bit y; } v1984;

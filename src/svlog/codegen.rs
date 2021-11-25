@@ -1962,7 +1962,7 @@ where
         length: usize,
     ) -> Result<HybridValue> {
         let base = self.emit_mir_rvalue(base)?;
-        let hidden = self.emit_zero_for_type_both((self.llhd_type(value.0), base.1.ty()));
+        let hidden = self.emit_zero_for_type_both((self.llhd_type(value.0), value.1.ty()));
         // TODO(fschuiki): make the above a constant of all `x`.
         let shifted = self.mk_shr(value, hidden, base);
         if ty.coalesces_to_llhd_scalar() {

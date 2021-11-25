@@ -120,7 +120,7 @@ pub(crate) fn type_clog2(ty: Type) -> usize {
 }
 
 pub(crate) fn trunc_or_zext_to_clog2(builder: &mut Builder, index: Value, into_ty: Type) -> Value {
-    let target_width = type_clog2(into_ty);
+    let target_width = std::cmp::max(type_clog2(into_ty), 1);
     let actual_width = integer_type_width(index.ty());
     if target_width < actual_width {
         ExtractOp::with_sizes(builder, index, 0, target_width).into()
