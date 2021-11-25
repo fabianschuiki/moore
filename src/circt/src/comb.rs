@@ -58,7 +58,7 @@ impl ICmpOp {
                 },
             );
             state.add_attribute("predicate", attr);
-            state.add_result(lhs.ty());
+            state.add_result(get_integer_type(builder.cx, 1));
         })
     }
 }
@@ -80,7 +80,7 @@ impl ExtractOp {
     pub fn new(builder: &mut Builder, ty: Type, value: Value, offset: usize) -> Self {
         builder.build_with(|builder, state| {
             state.add_operand(value);
-            let attr = get_integer_attr(get_integer_type(builder.cx, 64), offset as _);
+            let attr = get_integer_attr(get_integer_type(builder.cx, 32), offset as _);
             state.add_attribute("lowBit", attr);
             state.add_result(ty);
         })
