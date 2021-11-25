@@ -1515,6 +1515,8 @@ where
         mir: &'gcx mir::Rvalue<'gcx>,
         mode_hint: Mode,
     ) -> Result<(HybridValue, Mode)> {
+        self.mlir_builder.set_loc(span_to_loc(self.mcx, mir.span));
+
         // If the value is a constant, emit the fully folded constant value.
         if mir.is_const() {
             let value = self.const_mir_rvalue(mir.into());
@@ -1997,6 +1999,7 @@ where
         &mut self,
         mir: &mir::Lvalue<'gcx>,
     ) -> Result<(HybridValue, Option<HybridValue>)> {
+        self.mlir_builder.set_loc(span_to_loc(self.mcx, mir.span));
         let result = self.emit_mir_lvalue_inner(mir);
         match result {
             Ok((sig, var)) => {
@@ -2179,6 +2182,8 @@ where
 
     /// Emit the code for a statement.
     fn emit_stmt(&mut self, stmt_id: NodeId, env: ParamEnv) -> Result<()> {
+        self.mlir_builder
+            .set_loc(span_to_loc(self.mcx, self.span(stmt_id)));
         self.flush_mir();
         match self.hir_of(stmt_id)? {
             HirNode::Stmt(x) => self.emit_stmt_regular(stmt_id, x, env),
