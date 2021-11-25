@@ -1,5 +1,6 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
+use crate::comb::trunc_or_zext_to_clog2;
 use crate::crate_prelude::*;
 
 pub fn dialect() -> DialectHandle {
@@ -111,6 +112,7 @@ impl StructCreateOp {
 
 impl ArraySliceOp {
     pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        let offset = trunc_or_zext_to_clog2(builder, offset, value.ty());
         Self::new(
             builder,
             get_array_type(array_type_element(value.ty()), length),
@@ -148,6 +150,7 @@ impl ArrayConcatOp {
 
 impl ArrayGetOp {
     pub fn new(builder: &mut Builder, value: Value, offset: Value) -> Self {
+        let offset = trunc_or_zext_to_clog2(builder, offset, value.ty());
         builder.build_with(|_, state| {
             state.add_operand(value);
             state.add_operand(offset);

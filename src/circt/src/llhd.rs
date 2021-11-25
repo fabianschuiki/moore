@@ -1,5 +1,6 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
+use crate::comb::trunc_or_zext_to_clog2;
 use crate::crate_prelude::*;
 use crate::hw::{array_type_element, get_array_type, struct_type_field};
 
@@ -420,6 +421,8 @@ impl ShrOp {
 
 impl SigExtractOp {
     pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        let inner_ty = signal_type_element(value.ty());
+        let offset = trunc_or_zext_to_clog2(builder, offset, inner_ty);
         Self::new(
             builder,
             get_signal_type(get_integer_type(builder.cx, length)),
@@ -441,6 +444,8 @@ impl SigExtractOp {
 
 impl PtrExtractOp {
     pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        let inner_ty = pointer_type_element(value.ty());
+        let offset = trunc_or_zext_to_clog2(builder, offset, inner_ty);
         Self::new(
             builder,
             get_pointer_type(get_integer_type(builder.cx, length)),
@@ -462,12 +467,11 @@ impl PtrExtractOp {
 
 impl SigArraySliceOp {
     pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        let inner_ty = signal_type_element(value.ty());
+        let offset = trunc_or_zext_to_clog2(builder, offset, inner_ty);
         Self::new(
             builder,
-            get_signal_type(get_array_type(
-                array_type_element(signal_type_element(value.ty())),
-                length,
-            )),
+            get_signal_type(get_array_type(array_type_element(inner_ty), length)),
             value,
             offset,
         )
@@ -486,12 +490,11 @@ impl SigArraySliceOp {
 
 impl PtrArraySliceOp {
     pub fn with_sizes(builder: &mut Builder, value: Value, offset: Value, length: usize) -> Self {
+        let inner_ty = pointer_type_element(value.ty());
+        let offset = trunc_or_zext_to_clog2(builder, offset, inner_ty);
         Self::new(
             builder,
-            get_pointer_type(get_array_type(
-                array_type_element(pointer_type_element(value.ty())),
-                length,
-            )),
+            get_pointer_type(get_array_type(array_type_element(inner_ty), length)),
             value,
             offset,
         )
@@ -510,12 +513,12 @@ impl PtrArraySliceOp {
 
 impl SigArrayGetOp {
     pub fn new(builder: &mut Builder, value: Value, offset: Value) -> Self {
+        let inner_ty = signal_type_element(value.ty());
+        let offset = trunc_or_zext_to_clog2(builder, offset, inner_ty);
         builder.build_with(|_, state| {
             state.add_operand(value);
             state.add_operand(offset);
-            state.add_result(get_signal_type(array_type_element(signal_type_element(
-                value.ty(),
-            ))));
+            state.add_result(get_signal_type(array_type_element(inner_ty)));
         })
     }
 
@@ -527,12 +530,12 @@ impl SigArrayGetOp {
 
 impl PtrArrayGetOp {
     pub fn new(builder: &mut Builder, value: Value, offset: Value) -> Self {
+        let inner_ty = pointer_type_element(value.ty());
+        let offset = trunc_or_zext_to_clog2(builder, offset, inner_ty);
         builder.build_with(|_, state| {
             state.add_operand(value);
             state.add_operand(offset);
-            state.add_result(get_pointer_type(array_type_element(pointer_type_element(
-                value.ty(),
-            ))));
+            state.add_result(get_pointer_type(array_type_element(inner_ty)));
         })
     }
 
