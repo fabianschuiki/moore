@@ -144,6 +144,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
             shadows: Default::default(),
+            unique_names: Default::default(),
         };
 
         // Assign proper port names and collect ports into a lookup table.
@@ -503,6 +504,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
             shadows: Default::default(),
+            unique_names: Default::default(),
         };
         let entry_blk = pg.builder.block();
         pg.builder.append_to(entry_blk);
@@ -765,6 +767,34 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
     }
 }
 
+/// A name uniquifier.
+#[derive(Default)]
+struct NameUniquifier {
+    names: HashSet<String>,
+}
+
+impl NameUniquifier {
+    pub fn add(&mut self, name: &str) -> String {
+        if !self.names.contains(name) {
+            let name = name.to_string();
+            self.names.insert(name.clone());
+            name
+        } else {
+            for i in 0.. {
+                let current_name = format!("{}_{}", name, i);
+                if self.names.insert(current_name.clone()) {
+                    return current_name;
+                }
+            }
+            unreachable!()
+        }
+    }
+
+    pub fn add_tmp(&mut self) -> String {
+        self.add("_tmp")
+    }
+}
+
 /// A code generator for functions, processes, and entities.
 struct UnitGenerator<'a, 'gcx, C> {
     /// The global code generator.
@@ -784,6 +814,8 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// The shadow variables introduced to handle signals which are both read
     /// and written in a process.
     shadows: HashMap<AccessedNode, HybridValue>,
+    /// The emitted signal and instance names.
+    unique_names: NameUniquifier,
 }
 
 impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
@@ -1078,7 +1110,7 @@ where
             );
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
-                &format!("{}_inst", prok.mlir_symbol),
+                &self.unique_names.add(&format!("{}_inst", prok.mlir_symbol)),
                 &prok.mlir_symbol,
                 inputs.iter().map(|x| x.1),
                 outputs.iter().map(|x| x.1),
@@ -1204,7 +1236,12 @@ where
                         let v = self.emit_const(v, inst.inner_env, port.port.span)?;
                         (
                             self.builder.ins().sig(v.0),
-                            circt::llhd::SignalOp::new(self.mlir_builder, "", v.1).into(),
+                            circt::llhd::SignalOp::new(
+                                self.mlir_builder,
+                                &self.unique_names.add_tmp(),
+                                v.1,
+                            )
+                            .into(),
                         )
                     }
                 };
@@ -1345,7 +1382,8 @@ where
             circt::llhd::VariableOp::new(self.mlir_builder, inner).into()
         } else if circt::llhd::is_signal_type(ty) {
             let inner = self.emit_zero_for_type_mlir(circt::llhd::signal_type_element(ty));
-            circt::llhd::SignalOp::new(self.mlir_builder, "", inner).into()
+            circt::llhd::SignalOp::new(self.mlir_builder, &self.unique_names.add_tmp(), inner)
+                .into()
         } else if circt::llhd::is_time_type(ty) {
             circt::llhd::ConstantTimeOp::with_delta(self.mlir_builder, 0).into()
         } else if mlir::is_integer_type(ty) {
@@ -1414,7 +1452,12 @@ where
                 let init = self.emit_zero_for_type_both(ty);
                 let sig = (
                     self.builder.ins().sig(init.0),
-                    circt::llhd::SignalOp::new(self.mlir_builder, "", init.1).into(),
+                    circt::llhd::SignalOp::new(
+                        self.mlir_builder,
+                        &self.unique_names.add_tmp(),
+                        init.1,
+                    )
+                    .into(),
                 );
                 let delay = self.mk_const_time(&num::zero(), 1, 0);
                 self.mk_drv(sig, value, delay);
@@ -2650,7 +2693,12 @@ where
             )?;
             Ok((
                 self.builder.ins().sig(init.0),
-                circt::llhd::SignalOp::new(self.mlir_builder, &name, init.1).into(),
+                circt::llhd::SignalOp::new(
+                    self.mlir_builder,
+                    &self.unique_names.add(&name),
+                    init.1,
+                )
+                .into(),
             ))
         } else {
             // For nets we simply emit the initial value as a signal, then
@@ -2658,7 +2706,12 @@ where
             let zero = self.emit_const(self.type_default_value(ty), env, self.span(decl_id))?;
             let net = (
                 self.builder.ins().sig(zero.0),
-                circt::llhd::SignalOp::new(self.mlir_builder, &name, zero.1).into(),
+                circt::llhd::SignalOp::new(
+                    self.mlir_builder,
+                    &self.unique_names.add(&name),
+                    zero.1,
+                )
+                .into(),
             );
             if let Some(default) = default {
                 let init = self.emit_rvalue_mode(default, env, Mode::Signal)?;
