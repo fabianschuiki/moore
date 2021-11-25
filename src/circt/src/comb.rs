@@ -1,6 +1,7 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
 use crate::crate_prelude::*;
+use crate::hw::{array_type_size, is_array_type, ConstantOp};
 
 pub fn dialect() -> DialectHandle {
     DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__comb__() })
@@ -101,5 +102,32 @@ impl ConcatOp {
             }
             state.add_result(get_integer_type(builder.cx, width));
         })
+    }
+}
+
+pub(crate) fn clog2(value: usize) -> usize {
+    usize::BITS as usize - value.next_power_of_two().leading_zeros() as usize - 1
+}
+
+pub(crate) fn type_clog2(ty: Type) -> usize {
+    clog2(if is_array_type(ty) {
+        array_type_size(ty)
+    } else if is_integer_type(ty) {
+        integer_type_width(ty)
+    } else {
+        panic!("unsupported indexing target type {}", ty)
+    })
+}
+
+pub(crate) fn trunc_or_zext_to_clog2(builder: &mut Builder, index: Value, into_ty: Type) -> Value {
+    let target_width = type_clog2(into_ty);
+    let actual_width = integer_type_width(index.ty());
+    if target_width < actual_width {
+        ExtractOp::with_sizes(builder, index, 0, target_width).into()
+    } else if target_width > actual_width {
+        let zero = ConstantOp::new(builder, target_width - actual_width, &BigInt::zero()).into();
+        ConcatOp::new(builder, [zero, index].iter().copied()).into()
+    } else {
+        index
     }
 }
