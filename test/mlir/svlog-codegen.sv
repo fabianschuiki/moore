@@ -39,12 +39,12 @@ module Foo (
   always_comb;
   always_latch;
   always_ff;
-  // CHECK: llhd.inst "" @Foo.initial.
-  // CHECK-NEXT: llhd.inst "" @Foo.final.
-  // CHECK-NEXT: llhd.inst "" @Foo.always.
-  // CHECK-NEXT: llhd.inst "" @Foo.always_comb.
-  // CHECK-NEXT: llhd.inst "" @Foo.always_latch.
-  // CHECK-NEXT: llhd.inst "" @Foo.always_ff.
+  // CHECK: llhd.inst "{{[^"]*}}" @Foo.initial.
+  // CHECK-NEXT: llhd.inst "{{[^"]*}}" @Foo.final.
+  // CHECK-NEXT: llhd.inst "{{[^"]*}}" @Foo.always.
+  // CHECK-NEXT: llhd.inst "{{[^"]*}}" @Foo.always_comb.
+  // CHECK-NEXT: llhd.inst "{{[^"]*}}" @Foo.always_latch.
+  // CHECK-NEXT: llhd.inst "{{[^"]*}}" @Foo.always_ff.
 
   //===--------------------------------------------------------------------===//
   // Statements and Expressions
