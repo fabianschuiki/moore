@@ -6,9 +6,11 @@
 
 use crate::name::RcStr;
 use memmap::Mmap;
+use once_cell::sync::OnceCell;
 use std;
 use std::borrow::Borrow;
 use std::cell::RefCell;
+use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -131,6 +133,9 @@ pub trait SourceContent {
     /// fastest way of getting at the file's contents, since no parsing or
     /// character encoding is performed or assumed.
     fn bytes(&self) -> &[u8];
+
+    /// Return a list of byte offsets indicating the start of lines.
+    fn lines(&self) -> &[usize];
 }
 
 /// A manager for source files and their assigned IDs.
@@ -212,7 +217,7 @@ impl SourceManager {
         vect.push(Box::new(VirtualSourceFile {
             id: new_id,
             filename: v,
-            content: Rc::new(VirtualSourceContent(content.to_string())),
+            content: Rc::new(VirtualSourceContent(content.to_string(), OnceCell::new())),
         }));
         new_id
     }
@@ -230,7 +235,7 @@ impl SourceManager {
         vect.push(Box::new(VirtualSourceFile {
             id: new_id,
             filename: RcStr::new("<anonymous>"),
-            content: Rc::new(VirtualSourceContent(content.into())),
+            content: Rc::new(VirtualSourceContent(content.into(), OnceCell::new())),
         }));
         new_id
     }
@@ -244,6 +249,12 @@ pub fn get_source_manager() -> Rc<SourceManager> {
     MNGR.with(|x| x.clone())
 }
 
+fn line_starts(iter: impl Iterator<Item = (usize, char)>) -> impl Iterator<Item = usize> {
+    Some(0)
+        .into_iter()
+        .chain(iter.filter(|(_i, c)| *c == '\n').map(|(i, _c)| i + 1))
+}
+
 /// A virtual source file that has no correspondence in the file system. Useful
 /// for unit tests.
 struct VirtualSourceFile {
@@ -252,7 +263,7 @@ struct VirtualSourceFile {
     content: Rc<VirtualSourceContent>,
 }
 
-struct VirtualSourceContent(pub String);
+struct VirtualSourceContent(pub String, OnceCell<Vec<usize>>);
 
 impl SourceFile for VirtualSourceFile {
     fn get_id(&self) -> Source {
@@ -288,6 +299,10 @@ impl SourceContent for VirtualSourceContent {
     fn bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
+
+    fn lines(&self) -> &[usize] {
+        self.1.get_or_init(|| line_starts(self.iter()).collect())
+    }
 }
 
 /// A source file on disk.
@@ -298,7 +313,7 @@ struct DiskSourceFile {
 }
 
 #[derive(Debug)]
-struct DiskSourceContent(pub Mmap);
+struct DiskSourceContent(pub Mmap, OnceCell<Vec<usize>>);
 
 impl SourceFile for DiskSourceFile {
     fn get_id(&self) -> Source {
@@ -312,9 +327,10 @@ impl SourceFile for DiskSourceFile {
     fn get_content(&self) -> Rc<dyn SourceContent> {
         let is_none = self.content.borrow().is_none();
         if is_none {
-            let c = Rc::new(DiskSourceContent(unsafe {
-                Mmap::map(&File::open(&*self.filename).unwrap()).unwrap()
-            }));
+            let c = Rc::new(DiskSourceContent(
+                unsafe { Mmap::map(&File::open(&*self.filename).unwrap()).unwrap() },
+                OnceCell::new(),
+            ));
             *self.content.borrow_mut() = Some(c.clone());
             c
         } else {
@@ -347,6 +363,10 @@ impl SourceContent for DiskSourceContent {
     fn bytes(&self) -> &[u8] {
         &self.0[..]
     }
+
+    fn lines(&self) -> &[usize] {
+        self.1.get_or_init(|| line_starts(self.iter()).collect())
+    }
 }
 
 /// An iterator that yields the characters from an input file together with the
@@ -371,22 +391,12 @@ impl Location {
 
     /// Create a new location given a human-readable line and column.
     pub fn with_line_and_column(source: Source, line: usize, column: usize) -> Location {
-        let mut current_line = 1;
-        let content = source.get_content();
-        let mut iter = content
-            .bytes()
-            .iter()
-            .enumerate()
-            .skip_while(|&(_, &c)| {
-                if c == '\n' as u8 {
-                    current_line += 1;
-                }
-                current_line != line
-            })
-            .skip_while(|&(_, &c)| c == '\n' as u8 || c == '\r' as u8);
-        match iter.next() {
-            Some((line_offset, _)) => Location::new(source, line_offset + column - 1),
-            None => Location::new(source, 0),
+        let c = source.get_content();
+        let lines = c.lines();
+        if line > 0 && line <= lines.len() {
+            Location::new(source, lines[line - 1] + column - 1)
+        } else {
+            Location::new(source, 0)
         }
     }
 
@@ -400,33 +410,12 @@ impl Location {
     /// Returns a tuple `(line, column, line_offset)`.
     pub fn human(self) -> (usize, usize, usize) {
         let c = self.source.get_content();
-        let mut iter = c.extract_iter(0, self.offset);
-
-        // Look for the start of the line.
-        let mut col = 1;
-        let mut line = 1;
-        let mut line_offset = self.offset;
-        while let Some(c) = iter.next_back() {
-            match c.1 {
-                '\n' => {
-                    line += 1;
-                    break;
-                }
-                '\r' => continue,
-                _ => {
-                    col += 1;
-                    line_offset = c.0;
-                }
-            }
-        }
-
-        // Count the number of lines.
-        while let Some(c) = iter.next_back() {
-            if c.1 == '\n' {
-                line += 1;
-            }
-        }
-
+        let lines = c.lines();
+        let index = lines.partition_point(|&x| x <= self.offset) - 1;
+        let line = index + 1;
+        let line_offset = lines[index];
+        assert!(line_offset <= self.offset);
+        let col = self.offset - line_offset + 1;
         (line, col, line_offset)
     }
 
@@ -480,7 +469,6 @@ impl Span {
     /// Create a new span that covers two spans, i.e. represents the smallest
     /// possible span that fully contains both input spans `a` and `b`.
     pub fn union<S: Into<Span>>(a: S, b: S) -> Span {
-        use std::cmp::{max, min};
         let sa = a.into();
         let sb = b.into();
         // assert_eq!(sa.source, sb.source);
@@ -497,7 +485,6 @@ impl Span {
     /// Modify this range to also cover the entirety of the `other` range. The
     /// `other` range must lie in the same source as `self`.
     pub fn expand<S: Into<Span>>(&mut self, other: S) -> &mut Self {
-        use std::cmp::{max, min};
         let o = other.into();
         // assert_eq!(self.source, o.source);
         if self.source == o.source {
