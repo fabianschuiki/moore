@@ -535,6 +535,15 @@ fn elaborate_name(
             //     llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
             // }
 
+            // Verify the module.
+            if !mlir_module.verify() {
+                ctx.sess.emit(DiagBuilder2::bug(
+                    "verification failed for emitted MLIR module",
+                ));
+                // mlir_module.dump();
+                return Err(());
+            }
+
             // Decide what format to use for the output.
             emit_output(matches, ctx, &module, mlir_module)?
         }
