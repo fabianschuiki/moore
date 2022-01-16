@@ -1032,7 +1032,7 @@ where
             );
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
-                &inst.hir.name.value.to_string(),
+                &self.unique_names.add(&inst.hir.name.value.to_string()),
                 &target.mlir_symbol,
                 inputs.iter().map(|x| x.1),
                 outputs.iter().map(|x| x.1),

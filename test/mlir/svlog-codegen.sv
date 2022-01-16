@@ -29,6 +29,11 @@ module Foo (
   Bar bar();
   // CHECK: llhd.inst "bar" @Bar
 
+  for (genvar i = 0; i < 2; i++)
+    Bar manyBar();
+  // CHECK: llhd.inst "manyBar" @Bar
+  // CHECK: llhd.inst "manyBar_0" @Bar
+
   //===--------------------------------------------------------------------===//
   // Procedures
   //===--------------------------------------------------------------------===//
