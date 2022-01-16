@@ -99,6 +99,9 @@ module Foo (
     @(structSignal);
   end
 
+  // Empty repetitions should not generate `i0` signals.
+  initial int x = {a, {0{1'b0}}};
+
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time

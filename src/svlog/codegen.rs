@@ -1288,7 +1288,7 @@ where
                 let size = value.ty.simple_bit_vector(self.cx, span).size;
                 Ok((
                     self.builder.ins().const_int((size, k.clone())),
-                    circt::hw::ConstantOp::new(self.mlir_builder, size, k).into(),
+                    circt::hw::ConstantOp::new(self.mlir_builder, std::cmp::max(size, 1), k).into(),
                 ))
             }
             ValueKind::Time(ref k) => Ok((
@@ -1389,7 +1389,7 @@ where
         } else if mlir::is_integer_type(ty) {
             circt::hw::ConstantOp::new(
                 self.mlir_builder,
-                mlir::integer_type_width(ty),
+                std::cmp::max(mlir::integer_type_width(ty), 1),
                 &BigInt::zero(),
             )
             .into()
@@ -1770,8 +1770,10 @@ where
                         value.ty,
                         self.llhd_type(llval.0)
                     );
-                    result = self.mk_ins_slice(result, llval, offset, width);
-                    offset += width;
+                    if width > 0 {
+                        result = self.mk_ins_slice(result, llval, offset, width);
+                        offset += width;
+                    }
                 }
                 self.builder.set_name(result.0, "concat".to_string());
                 result
