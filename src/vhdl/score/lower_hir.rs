@@ -966,10 +966,7 @@ impl<'lazy, 'sb, 'ast, 'ctx> ScoreContext<'lazy, 'sb, 'ast, 'ctx> {
                     into.push(id.into());
                 }
                 ast::IntfDecl::ObjDecl(
-                    ref
-                    decl
-                    @
-                    ast::IntfObjDecl {
+                    ref decl @ ast::IntfObjDecl {
                         kind: ast::IntfObjKind::Const,
                         ..
                     },
