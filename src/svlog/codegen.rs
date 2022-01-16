@@ -3102,7 +3102,12 @@ where
         )
     }
 
-    fn mk_cmp(&mut self, pred: CmpPred, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
+    fn mk_cmp(&mut self, pred: CmpPred, mut lhs: HybridValue, mut rhs: HybridValue) -> HybridValue {
+        if (pred == CmpPred::Eq || pred == CmpPred::Neq) && !mlir::is_integer_type(lhs.1.ty()) {
+            let ty = mlir::get_integer_type(self.mcx, circt::hw::bit_width(lhs.1.ty()).unwrap());
+            lhs.1 = circt::hw::BitcastOp::new(self.mlir_builder, ty, lhs.1).into();
+            rhs.1 = circt::hw::BitcastOp::new(self.mlir_builder, ty, rhs.1).into();
+        }
         let mut ins = self.builder.ins();
         let old = match pred {
             CmpPred::Eq => ins.eq(lhs.0, rhs.0),

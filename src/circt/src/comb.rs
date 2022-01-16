@@ -8,6 +8,7 @@ pub fn dialect() -> DialectHandle {
 }
 
 /// Predicate for a comparison operation.
+#[derive(PartialEq, Eq)]
 pub enum CmpPred {
     Eq,
     Neq,

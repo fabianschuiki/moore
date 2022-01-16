@@ -87,6 +87,13 @@ module Foo (
     x = y;
   end
 
+  // This used to cause an issue during emission where the `@(...)` statement
+  // would not emit a proper aggregate comparison.
+  struct packed { int a; int b; int c; } structSignal;
+  initial begin
+    @(structSignal);
+  end
+
   // Undriven outputs are driven with a default value.
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i4
   // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time

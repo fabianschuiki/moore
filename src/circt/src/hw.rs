@@ -2,9 +2,15 @@
 
 use crate::comb::trunc_or_zext_to_clog2;
 use crate::crate_prelude::*;
+use std::convert::TryInto;
 
 pub fn dialect() -> DialectHandle {
     DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__hw__() })
+}
+
+/// Get the bit width of an HW type.
+pub fn bit_width(ty: Type) -> Option<usize> {
+    unsafe { hwGetBitWidth(ty.raw()) }.try_into().ok()
 }
 
 /// Check if a type is an HW array type.
@@ -74,6 +80,7 @@ def_operation_single_result!(ArrayConcatOp, "hw.array_concat");
 def_operation_single_result!(ArrayGetOp, "hw.array_get");
 def_operation_single_result!(StructExtractOp, "hw.struct_extract");
 def_operation_single_result!(StructInjectOp, "hw.struct_inject");
+def_operation_single_result!(BitcastOp, "hw.bitcast");
 
 impl ConstantOp {
     /// Create a new constant value.
@@ -183,6 +190,16 @@ impl StructInjectOp {
             let (field_name, _) = struct_type_field(value.ty(), offset);
             state.add_attribute("field", get_string_attr(builder.cx, &field_name));
             state.add_result(value.ty());
+        })
+    }
+}
+
+impl BitcastOp {
+    /// Create a new bitcast.
+    pub fn new(builder: &mut Builder, ty: Type, value: Value) -> Self {
+        builder.build_with(move |_, state| {
+            state.add_operand(value);
+            state.add_result(ty);
         })
     }
 }
