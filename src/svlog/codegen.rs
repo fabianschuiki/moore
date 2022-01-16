@@ -1859,6 +1859,12 @@ where
                 "runtime string comparisons not implemented"
             ),
 
+            mir::RvalueKind::ApplyTimescale(..) => bug_span!(
+                mir.span,
+                self.cx,
+                "runtime int-to-time conversion not implemented"
+            ),
+
             mir::RvalueKind::Error => return Err(()),
         };
 

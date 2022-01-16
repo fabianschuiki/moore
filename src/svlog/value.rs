@@ -403,6 +403,17 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
             cx.intern_value(make_int(mir.ty, (value.is_true() as usize).into()))
         }
 
+        mir::RvalueKind::ApplyTimescale(value, ref scale) => {
+            let value = cx.const_mir_rvalue(value.into());
+            if value.is_error() {
+                return cx.intern_value(make_error(mir.ty));
+            }
+            let int = value
+                .get_int()
+                .expect("value to be timescaled should be int");
+            cx.intern_value(make_time(BigRational::from(int.clone()) * scale).into())
+        }
+
         mir::RvalueKind::ConstructArray(ref values) => cx.intern_value(make_array(
             mir.ty,
             (0..values.len())

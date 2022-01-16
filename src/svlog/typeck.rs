@@ -2645,6 +2645,12 @@ fn type_context_imposed_by_stmt<'gcx>(
             }
         }
 
+        // Time control statements require time arguments.
+        hir::StmtKind::Timed {
+            control: hir::TimingControl::Delay(expr),
+            ..
+        } if expr == onto => Some(UnpackedType::make_time().into()),
+
         _ => None,
     }
 }

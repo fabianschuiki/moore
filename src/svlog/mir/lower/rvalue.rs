@@ -12,7 +12,7 @@ use crate::{
     value::{self, ValueData, ValueKind},
     ParamEnv,
 };
-use num::{BigInt, One, Signed, ToPrimitive, Zero};
+use num::{BigInt, BigRational, One, Signed, ToPrimitive, Zero};
 use std::{cmp::max, collections::HashMap};
 
 /// An internal builder for rvalue lowering.
@@ -857,6 +857,18 @@ fn unpack_simple_bit_vector<'a>(
     }
     if to.coalesces_to_llhd_scalar() {
         builder.build(to, RvalueKind::Transmute(value))
+    } else if to.get_packed().map(|ty| ty.is_time()).unwrap_or(false) {
+        builder.cx.emit(
+            DiagBuilder2::warning(format!(
+                "assuming `1ns` timescale for conversion from `{}` to `time`",
+                value.ty
+            ))
+            .span(value.span),
+        );
+        builder.build(
+            to,
+            RvalueKind::ApplyTimescale(value, BigRational::new(1.into(), 1_000_000_000.into())),
+        )
     } else if let Some(dim) = to.outermost_dim() {
         unpack_array(builder, value, to, dim)
     } else if let Some(strukt) = to.get_struct() {

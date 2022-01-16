@@ -31,6 +31,7 @@ impl<'a> WalkVisitor<'a> for ty::UnpackedType<'a> {}
 impl<'a> WalkVisitor<'a> for ty::Sign {}
 impl<'a> WalkVisitor<'a> for ty::Domain {}
 impl<'a> WalkVisitor<'a> for value::Value<'_> {}
+impl<'a> WalkVisitor<'a> for num::BigRational {}
 
 impl<'a, T: WalkVisitor<'a>> WalkVisitor<'a> for &'_ T {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {

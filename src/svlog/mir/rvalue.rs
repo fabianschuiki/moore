@@ -15,6 +15,7 @@ use crate::{
     ty::{Domain, Sign, UnpackedType},
     ParamEnv,
 };
+use num::BigRational;
 use std::collections::HashMap;
 use std::fmt::Write;
 
@@ -90,6 +91,12 @@ impl<'a> Print for Rvalue<'a> {
                 write!(inner, "CastSign({}, {})", sign, ctx.print(outer, arg))?
             }
             RvalueKind::CastToBool(arg) => write!(inner, "CastToBool({})", ctx.print(outer, arg))?,
+            RvalueKind::ApplyTimescale(arg, ref scale) => write!(
+                inner,
+                "ApplyTimescale({}, {})",
+                ctx.print(outer, arg),
+                scale
+            )?,
             RvalueKind::Truncate(size, arg) => {
                 write!(inner, "Truncate({}, {})", size, ctx.print(outer, arg))?
             }
@@ -407,6 +414,8 @@ pub enum RvalueKind<'a> {
         lhs: &'a Rvalue<'a>,
         rhs: &'a Rvalue<'a>,
     },
+    /// Convert an integer to a time value by applying the currently active timescale.
+    ApplyTimescale(&'a Rvalue<'a>, BigRational),
     /// An error occurred during lowering.
     Error,
 }
@@ -433,7 +442,8 @@ impl<'a> RvalueKind<'a> {
             | RvalueKind::Repeat(_, value)
             | RvalueKind::Member { value, .. }
             | RvalueKind::PackString(value)
-            | RvalueKind::UnpackString(value) => value.is_const(),
+            | RvalueKind::UnpackString(value)
+            | RvalueKind::ApplyTimescale(value, _) => value.is_const(),
             RvalueKind::ConstructArray(values) => values.values().all(|v| v.is_const()),
             RvalueKind::ConstructStruct(values) => values.iter().all(|v| v.is_const()),
             RvalueKind::Const(_) => true,
