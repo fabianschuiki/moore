@@ -784,6 +784,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             sig,
         );
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut func);
+        let mut mlir_builder = mlir::Builder::new(self.mcx);
+        mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
 
         // Create a unit generator that we will use to populate the function
         // with instructions.
@@ -791,14 +793,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             gen: self,
             builder: &mut builder,
             values: &mut Default::default(),
+            mlir_builder: &mut mlir_builder,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
             interned_rvalues: Default::default(),
             shadows: Default::default(),
+            unique_names: Default::default(),
         };
-        let entry_blk = gen.add_nameless_block();
-        gen.builder.append_to(entry_blk);
-        gen.builder.ins().ret();
+        let entry_blk = gen.mk_block(None);
+        gen.append_to(entry_blk);
+        // gen.builder.ins().ret();
 
         // Add the function to the LLHD module and return a handle.
         let x = Ok(Rc::new(EmittedFunction {
@@ -1923,7 +1927,7 @@ where
                         self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
                     }
                 }
-                self.emit_mir_rvalue(result)
+                self.emit_mir_rvalue(result)?
             }
             mir::RvalueKind::BareCall { target, ref args } => {
                 assert_span!(
@@ -1944,7 +1948,10 @@ where
                     self.into.unit(func.unit).name().clone(),
                     self.into.unit(func.unit).sig().clone(),
                 );
-                Ok(self.builder.ins().call(ext_unit, vec![]))
+                (
+                    self.builder.ins().call(ext_unit, vec![]),
+                    todo!("mlir function call"),
+                )
             }
 
             // Propagate tombstones.
