@@ -21,3 +21,11 @@ pub unsafe fn mlirStringRefToStr<'a, R>(s: MlirStringRef, f: impl Fn(&'a str) ->
     ))
     .expect("utf8 string"))
 }
+
+pub unsafe fn mlirIdentifierGetFromStr(cx: MlirContext, s: impl AsRef<str>) -> MlirIdentifier {
+    mlirIdentifierGet(cx, mlirStringRefCreateFromStr(s))
+}
+
+pub unsafe fn mlirIdentifierToStr<'a, R>(i: MlirIdentifier, f: impl Fn(&'a str) -> R + 'a) -> R {
+    mlirStringRefToStr(mlirIdentifierStr(i), f)
+}

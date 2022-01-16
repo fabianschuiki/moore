@@ -46,7 +46,7 @@ pub fn get_struct_type(
     let raw_fields: Vec<_> = fields
         .into_iter()
         .map(|(name, ty)| HWStructFieldInfo {
-            name: unsafe { mlirStringRefCreateFromStr(name.as_ref()) },
+            name: unsafe { mlirIdentifierGetFromStr(cx.raw(), name.as_ref()) },
             type_: ty.raw(),
         })
         .collect();
@@ -62,7 +62,7 @@ pub fn struct_type_size(ty: Type) -> usize {
 pub fn struct_type_field(ty: Type, offset: usize) -> (String, Type) {
     let info = unsafe { hwStructTypeGetFieldNum(ty.raw(), offset as _) };
     (
-        unsafe { mlirStringRefToStr(info.name, String::from) },
+        unsafe { mlirIdentifierToStr(info.name, String::from) },
         Type::from_raw(info.type_),
     )
 }
