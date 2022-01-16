@@ -1170,15 +1170,7 @@ fn lower_expr_inner<'gcx>(
             lhs: lhs.as_ref(),
             rhs: rhs.as_ref(),
         },
-        _ => {
-            error!("{:#1?}", expr);
-            bug_span!(
-                expr.span,
-                cx,
-                "lowering of {:?} to hir not implemented",
-                expr
-            );
-        }
+        _ => hir::ExprKind::Ast(expr),
     })
 }
 

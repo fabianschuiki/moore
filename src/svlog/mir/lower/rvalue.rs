@@ -509,6 +509,10 @@ fn lower_expr_inner<'gcx>(
         }
 
         hir::ExprKind::Assign { op, lhs, rhs } => Ok(lower_assign(&builder, ty, op, lhs, rhs)),
+
+        hir::ExprKind::Ast(expr) => {
+            bug_span!(span, cx, "unsupported raw AST expr {:#?}", expr)
+        }
     }
 }
 

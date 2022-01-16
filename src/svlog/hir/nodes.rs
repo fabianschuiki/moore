@@ -686,6 +686,8 @@ pub enum ExprKind<'a> {
         lhs: &'a ast::Expr<'a>,
         rhs: &'a ast::Expr<'a>,
     },
+    /// An expression in the AST that requires no representational change.
+    Ast(&'a ast::Expr<'a>),
 }
 
 /// The different unary operators.

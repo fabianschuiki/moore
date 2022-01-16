@@ -1175,6 +1175,8 @@ pub(crate) fn type_of_expr<'a>(
         hir::ExprKind::PositionalPattern(..)
         | hir::ExprKind::NamedPattern(..)
         | hir::ExprKind::RepeatPattern(..) => cx.need_type_context(Ref(expr), env).ty(),
+
+        hir::ExprKind::Ast(expr) => bug_span!(expr.span(), cx, "unsupported raw AST expr in HIR"),
     }
 }
 
