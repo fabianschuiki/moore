@@ -1114,7 +1114,6 @@ impl_make!(self, id: TypeMarkRef => &Ty {
 });
 
 /// Determine the type of a subtype indication.
-#[deprecated]
 impl_make!(self, id: SubtypeIndRef => &Ty {
     self.lazy_typeval(id)
     // let hir = self.hir(id)?;
