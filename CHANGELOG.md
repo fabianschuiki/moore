@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Add [CIRCT](https://github.com/llvm/circt) dependency
+- Add `circt` and `circt-sys` crates
+- Add `--format=mlir-native` option to use CIRCT for output emission
+- Add implicit cast from integer to time types
+
+### Changed
+- Migrate code generation to use CIRCT in parallel to LLHD crate
+
+### Fixed
+- Fix equality and inequality comparisons of non-integer types
 
 ## 0.13.2 - 2021-11-11
 ### Fixed
