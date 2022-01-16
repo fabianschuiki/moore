@@ -12,6 +12,6 @@ cmake ../llvm \
     -DLLVM_ENABLE_PROJECTS=mlir \
     -DLLVM_INSTALL_UTILS=ON \
     -DLLVM_OPTIMIZED_TABLEGEN=ON \
-    -DLLVM_TARGETS_TO_BUILD=""
+    -DLLVM_TARGETS_TO_BUILD="host"
 
 cmake --build . -- -j$(nproc)
