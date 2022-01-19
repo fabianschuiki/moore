@@ -232,7 +232,9 @@ endmodule
 // CHECK-NEXT:    br [[BB_CHECK:\^.+]]
 // CHECK-NEXT:  [[BB_CHECK]]:
 // CHECK-NEXT:    [[TMP:%.+]] = llhd.prb
-// CHECK-NEXT:    cond_br [[TMP]], [[BB_BODY:\^.+]], [[BB_EXIT:\^.+]]
+// CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:    [[CMP:%.+]] = comb.icmp ne [[TMP]], [[FALSE]]
+// CHECK-NEXT:    cond_br [[CMP]], [[BB_BODY:\^.+]], [[BB_EXIT:\^.+]]
 // CHECK-NEXT:  [[BB_EXIT]]:
 // CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  [[BB_BODY]]:

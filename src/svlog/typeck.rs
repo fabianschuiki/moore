@@ -2322,6 +2322,21 @@ pub(crate) fn type_context<'a>(
                 .find(|x| x.call == CallArgSource::Call(arg))?;
             return Some(cx.type_of_func_arg(Ref(mapped_arg.decl), env).into());
         }
+        ast::AllNode::PortConn(port) => {
+            let inst = cx.hir_of(port.get_parent().unwrap().id()).ok()?;
+            let inst = match &inst {
+                HirNode::Inst(inst) => inst,
+                _ => bug_span!(
+                    port.span(),
+                    cx,
+                    "port conn parent bust be inst, got {:#?}",
+                    inst
+                ),
+            };
+            let details = cx.inst_details(Ref(inst), env).ok()?;
+            let port = details.ports.reverse_find(onto.id())?;
+            return Some(cx.type_of_ext_port(Ref(port), details.inner_env).into());
+        }
         _ => (),
     }
 
@@ -2372,22 +2387,6 @@ pub(crate) fn type_context<'a>(
             } else {
                 None
             }
-        }
-        HirNode::Inst(inst) => {
-            let details = cx.inst_details(Ref(inst), env).ok()?;
-            details
-                .ports
-                .reverse_find(onto)
-                .map(|id| {
-                    trace!(
-                        "Need to look up type of port {:?} {:?}, imposed on {:?}",
-                        id,
-                        details.inner_env,
-                        onto
-                    );
-                    cx.type_of_ext_port(Ref(id), details.inner_env)
-                })
-                .map(Into::into)
         }
         HirNode::InstTarget(inst) => {
             let details = cx.inst_target_details(Ref(inst), env).ok()?;
