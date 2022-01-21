@@ -778,14 +778,26 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Create process and entry block.
         let mut sig = llhd::ir::Signature::new();
         sig.set_return_type(llhd::void_ty());
+        let func_name = ast.prototype.name.to_string();
         let mut func = llhd::ir::UnitData::new(
             llhd::ir::UnitKind::Function,
-            llhd::ir::UnitName::Local(ast.prototype.name.to_string()),
+            llhd::ir::UnitName::Local(func_name.clone()),
             sig,
         );
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut func);
         let mut mlir_builder = mlir::Builder::new(self.mcx);
         mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
+        mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
+        let mut func_op = circt::builtin::FunctionBuilder::new(&func_name);
+        // TODO(fschuiki): Add arguments and results.
+        // for port in ports.inputs.iter() {
+        //     func_op.add_input(&port.name, port.mty);
+        // }
+        // for port in ports.outputs.iter() {
+        //     func_op.add_output(&port.name, port.mty);
+        // }
+        let func_op = func_op.build(&mut mlir_builder);
+        // mlir_builder.set_insertion_point_to_start(func_op.first_block());
 
         // Create a unit generator that we will use to populate the function
         // with instructions.
@@ -800,13 +812,16 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             shadows: Default::default(),
             unique_names: Default::default(),
         };
-        let entry_blk = gen.mk_block(None);
+        let entry_blk = (gen.builder.block(), func_op.first_block());
         gen.append_to(entry_blk);
         // gen.builder.ins().ret();
+        // TODO(fschuiki): Support return values.
+        gen.mk_ret(None);
 
         // Add the function to the LLHD module and return a handle.
         let x = Ok(Rc::new(EmittedFunction {
             unit: self.into.add_unit(func),
+            mlir_symbol: func_name,
         }));
         self.tables.function_defs.insert(id.env(env), x.clone());
         x
@@ -1948,9 +1963,12 @@ where
                     self.into.unit(func.unit).name().clone(),
                     self.into.unit(func.unit).sig().clone(),
                 );
+                // TODO(fschuiki): Figure out how to deal with the multiple return values here.
+                circt::std::CallOp::new(self.mlir_builder, &func.mlir_symbol, None, None);
+                let ty = self.emit_type_both(mir.ty)?.1;
                 (
                     self.builder.ins().call(ext_unit, vec![]),
-                    todo!("mlir function call"),
+                    self.emit_zero_for_type_mlir(ty),
                 )
             }
 
@@ -2843,6 +2861,17 @@ where
         circt::std::CondBranchOp::new(self.mlir_builder, cond.1, true_block.1, false_block.1);
     }
 
+    fn mk_ret(&mut self, values: impl IntoIterator<Item = HybridValue>) {
+        let mut values_llhd = vec![];
+        let mut values_mlir = vec![];
+        for v in values {
+            values_llhd.push(v.0);
+            values_mlir.push(v.1);
+        }
+        self.builder.ins().ret();
+        circt::std::ReturnOp::new(self.mlir_builder, values_mlir);
+    }
+
     fn append_to(&mut self, block: HybridBlock) {
         self.builder.append_to(block.0);
         self.mlir_builder.set_insertion_point_to_end(block.1);
@@ -3379,6 +3408,8 @@ pub struct EmittedProcedure {
 pub struct EmittedFunction {
     /// The emitted LLHD unit.
     unit: llhd::ir::UnitId,
+    /// The emitted MLIR symbol name.
+    mlir_symbol: String,
 }
 
 /// A module's port interface.
