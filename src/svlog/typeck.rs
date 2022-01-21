@@ -2332,6 +2332,11 @@ pub(crate) fn type_context<'a>(
             let port = details.ports.reverse_find(onto.id())?;
             return Some(cx.type_of_ext_port(Ref(port), details.inner_env).into());
         }
+        ast::AllNode::PatternField(field) => {
+            let pattern = field.get_parent().unwrap().as_all().get_expr().unwrap();
+            let pattern = cx.hir_of_expr(Ref(pattern)).ok()?;
+            return type_context_imposed_by_expr(cx, onto.id(), pattern, env);
+        }
         _ => (),
     }
 
