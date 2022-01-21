@@ -2306,12 +2306,7 @@ pub(crate) fn type_context<'a>(
             let call = cx.hir_of_expr(Ref(call)).ok()?;
             let (target, call_args) = match &call.kind {
                 hir::ExprKind::FunctionCall(target, args) => (target, args),
-                _ => bug_span!(
-                    arg.span(),
-                    cx,
-                    "call arg parent must be a call, got {:#?}",
-                    call
-                ),
+                _ => return type_context_imposed_by_expr(cx, onto.id(), call, env),
             };
             // TODO(fschuiki): This should rather be some `call_details` query.
             let decl_args = cx.canonicalize_func_args(Ref(target));
