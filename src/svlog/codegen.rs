@@ -78,6 +78,22 @@ impl<'gcx, C> Deref for CodeGenerator<'gcx, C> {
 }
 
 impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
+    /// Emit the global unparametrized things which are unambiguous, like free
+    /// functions.
+    pub fn emit_globals(&mut self, ast: &ast::Root) -> Result<()> {
+        for file in &ast.files {
+            for item in &file.items {
+                match &item.data {
+                    ast::ItemData::SubroutineDecl(decl) => {
+                        self.emit_function(decl.id(), self.default_param_env())?;
+                    }
+                    _ => (),
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Emit the code for a module and all its dependent modules.
     pub fn emit_module(&mut self, id: NodeId) -> Result<Rc<EmittedModule<'gcx>>> {
         self.emit_module_with_env(id, self.default_param_env())

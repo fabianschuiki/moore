@@ -546,6 +546,9 @@ fn elaborate_name(
             let mlir_module = circt::ModuleOp::new(*mlir_cx);
 
             let mut cg = svlog::CodeGenerator::new(ctx.svlog, mlir_module);
+            for root in ctx.svlog.roots() {
+                cg.emit_globals(root)?;
+            }
             cg.emit_module(m)?;
             let module = cg.finalize();
             // let mut module = cg.finalize();
