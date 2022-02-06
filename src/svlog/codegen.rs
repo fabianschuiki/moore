@@ -152,17 +152,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             .module_signatures
             .insert(id.env(env), (name, ports.sig.clone()));
         let mut values = HashMap::new();
-        let mut gen = UnitGenerator {
-            gen: self,
-            builder: &mut builder,
-            values: &mut values,
-            mlir_builder: &mut mlir_builder,
-            interned_consts: Default::default(),
-            interned_lvalues: Default::default(),
-            interned_rvalues: Default::default(),
-            shadows: Default::default(),
-            unique_names: Default::default(),
-        };
+        let mut gen = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
 
         // Assign proper port names and collect ports into a lookup table.
         for (index, port) in ports.inputs.iter().enumerate() {
@@ -512,17 +502,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         {
             values.insert(id.into(), (arg, mlir_port));
         }
-        let mut pg = UnitGenerator {
-            gen: self,
-            builder: &mut builder,
-            values: &mut values,
-            mlir_builder: &mut mlir_builder,
-            interned_consts: Default::default(),
-            interned_lvalues: Default::default(),
-            interned_rvalues: Default::default(),
-            shadows: Default::default(),
-            unique_names: Default::default(),
-        };
+        let mut pg = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
         let entry_blk = pg.builder.block();
         pg.builder.append_to(entry_blk);
 
@@ -788,7 +768,6 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         if let Some(x) = self.tables.function_defs.get(&id.env(env)) {
             return x.clone();
         }
-
         let ast = self.ast_for_id(id).as_all().get_subroutine_decl().unwrap();
 
         // Gather the port details and return type of the function.
@@ -825,17 +804,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create a unit generator that we will use to populate the function
         // with instructions.
-        let mut gen = UnitGenerator {
-            gen: self,
-            builder: &mut builder,
-            values: &mut Default::default(),
-            mlir_builder: &mut mlir_builder,
-            interned_consts: Default::default(),
-            interned_lvalues: Default::default(),
-            interned_rvalues: Default::default(),
-            shadows: Default::default(),
-            unique_names: Default::default(),
-        };
+        let mut values = Default::default();
+        let mut gen = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
         let entry_blk = (gen.builder.block(), func_op.first_block());
         gen.append_to(entry_blk);
 
@@ -921,6 +891,27 @@ impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
 impl<'a, 'gcx, C> DerefMut for UnitGenerator<'a, 'gcx, C> {
     fn deref_mut(&mut self) -> &mut CodeGenerator<'gcx, C> {
         &mut self.gen
+    }
+}
+
+impl<'a, 'gcx, C> UnitGenerator<'a, 'gcx, C> {
+    fn new(
+        gen: &'a mut CodeGenerator<'gcx, C>,
+        builder: &'a mut llhd::ir::UnitBuilder<'a>,
+        values: &'a mut HashMap<AccessedNode, HybridValue>,
+        mlir_builder: &'a mut mlir::Builder,
+    ) -> Self {
+        Self {
+            gen,
+            builder,
+            values,
+            mlir_builder,
+            interned_consts: Default::default(),
+            interned_lvalues: Default::default(),
+            interned_rvalues: Default::default(),
+            shadows: Default::default(),
+            unique_names: Default::default(),
+        }
     }
 }
 
