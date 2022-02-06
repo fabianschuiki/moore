@@ -213,6 +213,7 @@ pub fn walk_stmt<'a>(visitor: &mut impl Visitor<'a>, stmt: &'a Stmt) {
                 visitor.visit_node_with_id(default, false);
             }
         }
+        StmtKind::Ast(ast) => visitor.visit_node_with_id(ast.id(), false),
     }
 }
 
@@ -340,7 +341,7 @@ pub fn walk_expr<'a>(visitor: &mut impl Visitor<'a>, expr: &'a Expr, lvalue: boo
             visitor.visit_node_with_id(lhs.id, true);
             visitor.visit_node_with_id(rhs.id, false);
         }
-        ExprKind::Ast(..) => (),
+        ExprKind::Ast(x) => visitor.visit_node_with_id(x.id(), lvalue),
     }
 }
 

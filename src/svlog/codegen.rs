@@ -2678,9 +2678,29 @@ where
                 self.append_to(final_blk);
             }
 
+            hir::StmtKind::Ast(ast) => {
+                self.emit_stmt_ast(ast, env)?;
+            }
+
             _ => {
                 error!("{:#?}", hir);
                 return self.unimp_msg("code generation for", hir);
+            }
+        }
+        Ok(())
+    }
+
+    /// Emit the code for a statement for which no HIR node exists.
+    fn emit_stmt_ast(&mut self, stmt: &ast::Stmt, env: ParamEnv) -> Result<()> {
+        match &stmt.kind {
+            _ => {
+                error!("{:#?}", stmt);
+                bug_span!(
+                    stmt.span(),
+                    self.cx,
+                    "code generation for {} not implemented",
+                    stmt.format_indefinite()
+                );
             }
         }
         Ok(())

@@ -1179,7 +1179,7 @@ fn lower_expr_inner<'gcx>(
 pub(crate) fn hir_of_stmt<'a>(
     cx: &impl Context<'a>,
     Ref(ast): Ref<'a, ast::Stmt<'a>>,
-) -> Result<&'a hir::Stmt> {
+) -> Result<&'a hir::Stmt<'a>> {
     let kind = lower_stmt_inner(cx, ast)?;
     let hir = hir::Stmt {
         id: ast.id(),
@@ -1190,7 +1190,10 @@ pub(crate) fn hir_of_stmt<'a>(
     Ok(cx.arena().alloc_hir(hir))
 }
 
-fn lower_stmt_inner<'a>(cx: &impl Context<'a>, stmt: &'a ast::Stmt<'a>) -> Result<hir::StmtKind> {
+fn lower_stmt_inner<'a>(
+    cx: &impl Context<'a>,
+    stmt: &'a ast::Stmt<'a>,
+) -> Result<hir::StmtKind<'a>> {
     let node_id = stmt.id();
     Ok(match stmt.kind {
         ast::NullStmt => hir::StmtKind::Null,
@@ -1348,15 +1351,7 @@ fn lower_stmt_inner<'a>(cx: &impl Context<'a>, stmt: &'a ast::Stmt<'a>) -> Resul
             );
             hir::StmtKind::Null
         }
-        _ => {
-            error!("{:#?}", stmt);
-            bug_span!(
-                stmt.span(),
-                cx,
-                "lowering of {:?} to hir not implemented",
-                stmt
-            );
-        }
+        _ => hir::StmtKind::Ast(stmt),
     })
 }
 

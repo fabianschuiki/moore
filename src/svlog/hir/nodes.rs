@@ -25,7 +25,7 @@ pub enum HirNode<'a> {
     ValueParam(&'a ValueParam),
     VarDecl(&'a VarDecl),
     Proc(&'a Proc),
-    Stmt(&'a Stmt),
+    Stmt(&'a Stmt<'a>),
     EventExpr(&'a EventExpr),
     Gen(&'a Gen),
     GenvarDecl(&'a GenvarDecl),
@@ -949,14 +949,14 @@ impl HasDesc for Proc {
 
 /// A variable declaration.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Stmt {
+pub struct Stmt<'a> {
     pub id: NodeId,
     pub label: Option<Spanned<Name>>,
     pub span: Span,
-    pub kind: StmtKind,
+    pub kind: StmtKind<'a>,
 }
 
-impl HasSpan for Stmt {
+impl HasSpan for Stmt<'_> {
     fn span(&self) -> Span {
         self.span
     }
@@ -966,7 +966,7 @@ impl HasSpan for Stmt {
     }
 }
 
-impl HasDesc for Stmt {
+impl HasDesc for Stmt<'_> {
     fn desc(&self) -> &'static str {
         #[allow(unreachable_patterns)]
         match self.kind {
@@ -980,7 +980,7 @@ impl HasDesc for Stmt {
 
 /// The different forms a statement can take.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StmtKind {
+pub enum StmtKind<'a> {
     /// A null statement.
     Null,
     /// A sequential block.
@@ -1024,6 +1024,8 @@ pub enum StmtKind {
         default: Option<NodeId>,
         kind: ast::CaseKind,
     },
+    /// A statement in the AST that requires no representational change.
+    Ast(&'a ast::Stmt<'a>),
 }
 
 /// The different forms an assignment can take.

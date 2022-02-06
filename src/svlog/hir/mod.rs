@@ -31,7 +31,7 @@ make_arenas!(
         value_params: ValueParam,
         var_decls: VarDecl,
         procs: Proc,
-        stmts: Stmt,
+        stmts: Stmt<'hir>,
         event_exprs: EventExpr,
         gens: Gen,
         genvar_decls: GenvarDecl,
