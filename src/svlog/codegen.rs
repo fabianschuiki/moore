@@ -878,6 +878,11 @@ struct UnitGenerator<'a, 'gcx, C> {
     shadows: HashMap<AccessedNode, HybridValue>,
     /// The emitted signal and instance names.
     unique_names: NameUniquifier,
+    /// Whether the last emitted statement was a terminator. This indicates
+    /// whether additional fall-through control flow ops are necessary, and
+    /// whether a new (unreachable) block needs to be inserted to capture
+    /// additional ops after a terminator.
+    terminated: bool,
 }
 
 impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
@@ -911,6 +916,7 @@ impl<'a, 'gcx, C> UnitGenerator<'a, 'gcx, C> {
             interned_rvalues: Default::default(),
             shadows: Default::default(),
             unique_names: Default::default(),
+            terminated: false,
         }
     }
 }
@@ -2320,6 +2326,13 @@ where
 
     /// Emit the code for a statement.
     fn emit_stmt(&mut self, stmt_id: NodeId, env: ParamEnv) -> Result<()> {
+        // If we attempt to emit additional statements after a terminator,
+        // create a new block to emit into.
+        if self.terminated {
+            let block = self.mk_block(None);
+            self.append_to(block);
+        }
+
         self.mlir_builder
             .set_loc(span_to_loc(self.mcx, self.span(stmt_id)));
         self.flush_mir();
@@ -2590,10 +2603,12 @@ where
                         None
                     }
                 };
-                match continue_cond {
-                    Some(cond) => self.mk_cond_br(cond, body_blk, exit_blk),
-                    None => self.mk_br(body_blk),
-                };
+                if !self.terminated {
+                    match continue_cond {
+                        Some(cond) => self.mk_cond_br(cond, body_blk, exit_blk),
+                        None => self.mk_br(body_blk),
+                    };
+                }
                 self.append_to(exit_blk);
             }
             hir::StmtKind::InlineGroup { ref stmts, .. } => {
@@ -2896,6 +2911,7 @@ where
     fn mk_br(&mut self, target: HybridBlock) {
         self.builder.ins().br(target.0);
         circt::std::BranchOp::new(self.mlir_builder, target.1);
+        self.terminated = true;
     }
 
     fn mk_cond_br(&mut self, cond: HybridValue, true_block: HybridBlock, false_block: HybridBlock) {
@@ -2903,6 +2919,7 @@ where
             .ins()
             .br_cond(cond.0, false_block.0, true_block.0);
         circt::std::CondBranchOp::new(self.mlir_builder, cond.1, true_block.1, false_block.1);
+        self.terminated = true;
     }
 
     fn mk_ret(&mut self, values: impl IntoIterator<Item = HybridValue>) {
@@ -2914,11 +2931,13 @@ where
         }
         self.builder.ins().ret();
         circt::std::ReturnOp::new(self.mlir_builder, values_mlir);
+        self.terminated = true;
     }
 
     fn append_to(&mut self, block: HybridBlock) {
         self.builder.append_to(block.0);
         self.mlir_builder.set_insertion_point_to_end(block.1);
+        self.terminated = false;
     }
 
     fn mk_wait(
