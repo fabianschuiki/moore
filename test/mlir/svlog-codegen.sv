@@ -191,14 +191,14 @@ endmodule
 // CHECK-NEXT:    [[ZERO:%.+]] = hw.constant 0
 // CHECK-NEXT:    [[CMP:%.+]] = comb.icmp ne [[TMP]], [[ZERO]]
 // CHECK-NEXT:    cond_br [[CMP]], [[BB_BODY:\^.+]], [[BB_EXIT:\^.+]]
-// CHECK-NEXT:  [[BB_EXIT]]:
-// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  [[BB_BODY]]:
 // CHECK-NEXT:    [[TMP:%.+]] = llhd.load [[VAR]]
 // CHECK-NEXT:    [[ONE:%.+]] = hw.constant 1
 // CHECK-NEXT:    [[REST:%.+]] = comb.sub [[TMP]], [[ONE]]
 // CHECK-NEXT:    llhd.store [[VAR]], [[REST]]
 // CHECK-NEXT:    br [[BB_CHECK]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }
 
 // `while` loop
@@ -209,10 +209,10 @@ endmodule
 // CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
 // CHECK-NEXT:    [[CMP:%.+]] = comb.icmp ne [[TMP]], [[FALSE]]
 // CHECK-NEXT:    cond_br [[CMP]], [[BB_BODY:\^.+]], [[BB_EXIT:\^.+]]
-// CHECK-NEXT:  [[BB_EXIT]]:
-// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  [[BB_BODY]]:
 // CHECK-NEXT:    br [[BB_CHECK]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }
 
 // `do-while` loop
@@ -235,11 +235,11 @@ endmodule
 // CHECK-NEXT:    [[FALSE:%.+]] = hw.constant false
 // CHECK-NEXT:    [[CMP:%.+]] = comb.icmp ne [[TMP]], [[FALSE]]
 // CHECK-NEXT:    cond_br [[CMP]], [[BB_BODY:\^.+]], [[BB_EXIT:\^.+]]
-// CHECK-NEXT:  [[BB_EXIT]]:
-// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  [[BB_BODY]]:
 // CHECK-NEXT:    {{%.+}} = hw.constant 42
 // CHECK-NEXT:    br [[BB_CHECK:\^.+]]
+// CHECK-NEXT:  [[BB_EXIT]]:
+// CHECK-NEXT:    llhd.halt
 // CHECK-NEXT:  }
 
 // `forever` loop
