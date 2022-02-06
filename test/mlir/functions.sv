@@ -1,8 +1,15 @@
 // RUN: moore -e foo --format=mlir-native %s | FileCheck %s
 
+// CHECK-LABEL: func @VoidFunc() {
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
 function void VoidFunc;
 endfunction
 
+// CHECK-LABEL: func @RetOnlyFunc() -> i32 {
+// CHECK-NEXT:    [[TMP:%.+]] = hw.constant 42 :
+// CHECK-NEXT:    return [[TMP]]
+// CHECK-NEXT:  }
 function int RetOnlyFunc;
     return 42;
 endfunction
@@ -17,13 +24,5 @@ endmodule
 
 // CHECK-LABEL: llhd.proc @foo.initial
 // CHECK: call @VoidFunc() : () -> ()
-// CHECK: [[RETVAL:%.+]] = call @RetOnlyFunc() : () -> (i32)
-
-// CHECK-LABEL: func @VoidFunc() {
-// CHECK-NEXT:    return
-// CHECK-NEXT:  }
-
-// CHECK-LABEL: func @RetOnlyFunc() {
-// CHECK-NEXT:    return
-// CHECK-NEXT:  }
+// CHECK: call @RetOnlyFunc() : () -> i32
 

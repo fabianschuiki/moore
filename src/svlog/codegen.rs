@@ -809,14 +809,24 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let entry_blk = (gen.builder.block(), func_op.first_block());
         gen.append_to(entry_blk);
 
-        // Add a default return.
-        if return_ty.is_void() {
-            gen.mk_ret(None);
-        } else {
-            let mut return_values = vec![];
-            let zero = gen.emit_zero_for_type_both(lowered_return_ty);
-            return_values.push(zero);
-            gen.mk_ret(return_values);
+        // Emit the body of the function.
+        for item in &ast.items {
+            if let ast::SubroutineItem::Stmt(stmt) = item {
+                gen.emit_stmt(stmt.id(), env)?;
+            }
+        }
+
+        // If the function body did not provide proper termination, add a
+        // default return.
+        if !gen.terminated {
+            if return_ty.is_void() {
+                gen.mk_ret(None);
+            } else {
+                let mut return_values = vec![];
+                let zero = gen.emit_zero_for_type_both(lowered_return_ty);
+                return_values.push(zero);
+                gen.mk_ret(return_values);
+            }
         }
 
         // Add the function to the module and return a handle.
@@ -883,6 +893,12 @@ struct UnitGenerator<'a, 'gcx, C> {
     /// whether a new (unreachable) block needs to be inserted to capture
     /// additional ops after a terminator.
     terminated: bool,
+    /// A stack of blocks, the last of which will be branched to by a `continue`
+    /// statement.
+    continue_stack: Vec<HybridBlock>,
+    /// A stack of blocks, the last of which will be branched to by a `break`
+    /// statement.
+    break_stack: Vec<HybridBlock>,
 }
 
 impl<'a, 'gcx, C> Deref for UnitGenerator<'a, 'gcx, C> {
@@ -917,6 +933,8 @@ impl<'a, 'gcx, C> UnitGenerator<'a, 'gcx, C> {
             shadows: Default::default(),
             unique_names: Default::default(),
             terminated: false,
+            break_stack: Default::default(),
+            continue_stack: Default::default(),
         }
     }
 }
@@ -2541,75 +2559,12 @@ where
             hir::StmtKind::Loop { kind, body } => {
                 let body_blk = self.mk_block(Some("loop_body"));
                 let exit_blk = self.mk_block(Some("loop_exit"));
-
-                // Emit the loop initialization.
-                let repeat_var = match kind {
-                    hir::LoopKind::Forever => None,
-                    hir::LoopKind::Repeat(count) => {
-                        let ty = self.type_of(count, env)?;
-                        let count = self.emit_rvalue(count, env)?;
-                        let var = self.mk_var(count);
-                        self.builder.set_name(var.0, "loop_count".to_string());
-                        Some((var, ty))
-                    }
-                    hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(init, _, _) => {
-                        self.emit_stmt(init, env)?;
-                        None
-                    }
-                };
-
-                // Emit the loop prologue.
-                self.mk_br(body_blk);
-                self.append_to(body_blk);
-                let enter_cond = match kind {
-                    hir::LoopKind::Forever => None,
-                    hir::LoopKind::Repeat(_) => {
-                        let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let lty = self.emit_type_both(ty)?;
-                        let value = self.mk_ld(repeat_var);
-                        let zero = self.emit_zero_for_type_both(lty);
-                        Some(self.mk_cmp(CmpPred::Neq, value, zero))
-                    }
-                    hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool(cond, env)?),
-                    hir::LoopKind::Do(_) => None,
-                    hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool(cond, env)?),
-                };
-                if let Some(enter_cond) = enter_cond {
-                    let entry_blk = self.mk_block(Some("loop_continue"));
-                    self.mk_cond_br(enter_cond, entry_blk, exit_blk);
-                    self.append_to(entry_blk);
-                }
-
-                // Emit the loop body.
-                self.emit_stmt(body, env)?;
-
-                // Emit the epilogue.
-                let continue_cond = match kind {
-                    hir::LoopKind::Forever => None,
-                    hir::LoopKind::Repeat(_) => {
-                        let (repeat_var, ty) = repeat_var.clone().unwrap();
-                        let value = self.mk_ld(repeat_var);
-                        let one = self.mk_const_int(ty.get_bit_size().unwrap(), &BigInt::one());
-                        let value = self.mk_sub(value, one);
-                        self.mk_st(repeat_var, value);
-                        None
-                    }
-                    hir::LoopKind::While(_) => None,
-                    hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool(cond, env)?),
-                    hir::LoopKind::For(_, _, step) => {
-                        self.emit_rvalue(step, env)?;
-                        None
-                    }
-                };
-                if !self.terminated {
-                    match continue_cond {
-                        Some(cond) => self.mk_cond_br(cond, body_blk, exit_blk),
-                        None => self.mk_br(body_blk),
-                    };
-                }
-                self.append_to(exit_blk);
+                self.continue_stack.push(body_blk);
+                self.break_stack.push(exit_blk);
+                let result = self.emit_loop_stmt(env, kind, body, body_blk, exit_blk);
+                assert_eq!(self.continue_stack.pop(), Some(body_blk));
+                assert_eq!(self.break_stack.pop(), Some(exit_blk));
+                result?;
             }
             hir::StmtKind::InlineGroup { ref stmts, .. } => {
                 for &stmt in stmts {
@@ -2708,6 +2663,37 @@ where
     /// Emit the code for a statement for which no HIR node exists.
     fn emit_stmt_ast(&mut self, stmt: &ast::Stmt, env: ParamEnv) -> Result<()> {
         match &stmt.kind {
+            ast::ReturnStmt(None) => {
+                self.mk_ret(None);
+            }
+            ast::ReturnStmt(Some(expr)) => {
+                let expr = self.emit_rvalue(expr.id(), env)?;
+                self.mk_ret(Some(expr));
+            }
+            ast::BreakStmt => match self.break_stack.last() {
+                Some(&block) => {
+                    self.mk_br(block);
+                }
+                None => {
+                    self.emit(
+                        DiagBuilder2::error("break statement outside of loop")
+                            .span(stmt.human_span()),
+                    );
+                    return Err(());
+                }
+            },
+            ast::ContinueStmt => match self.continue_stack.last() {
+                Some(&block) => {
+                    self.mk_br(block);
+                }
+                None => {
+                    self.emit(
+                        DiagBuilder2::error("continue statement outside of loop")
+                            .span(stmt.human_span()),
+                    );
+                    return Err(());
+                }
+            },
             _ => {
                 error!("{:#?}", stmt);
                 bug_span!(
@@ -2718,6 +2704,86 @@ where
                 );
             }
         }
+        Ok(())
+    }
+
+    /// Emit the code for a loop statement.
+    fn emit_loop_stmt(
+        &mut self,
+        env: ParamEnv,
+        kind: hir::LoopKind,
+        body: NodeId,
+        body_blk: HybridBlock,
+        exit_blk: HybridBlock,
+    ) -> Result<()> {
+        // Emit the loop initialization.
+        let repeat_var = match kind {
+            hir::LoopKind::Forever => None,
+            hir::LoopKind::Repeat(count) => {
+                let ty = self.type_of(count, env)?;
+                let count = self.emit_rvalue(count, env)?;
+                let var = self.mk_var(count);
+                self.builder.set_name(var.0, "loop_count".to_string());
+                Some((var, ty))
+            }
+            hir::LoopKind::While(_) => None,
+            hir::LoopKind::Do(_) => None,
+            hir::LoopKind::For(init, _, _) => {
+                self.emit_stmt(init, env)?;
+                None
+            }
+        };
+
+        // Emit the loop prologue.
+        self.mk_br(body_blk);
+        self.append_to(body_blk);
+        let enter_cond = match kind {
+            hir::LoopKind::Forever => None,
+            hir::LoopKind::Repeat(_) => {
+                let (repeat_var, ty) = repeat_var.clone().unwrap();
+                let lty = self.emit_type_both(ty)?;
+                let value = self.mk_ld(repeat_var);
+                let zero = self.emit_zero_for_type_both(lty);
+                Some(self.mk_cmp(CmpPred::Neq, value, zero))
+            }
+            hir::LoopKind::While(cond) => Some(self.emit_rvalue_bool(cond, env)?),
+            hir::LoopKind::Do(_) => None,
+            hir::LoopKind::For(_, cond, _) => Some(self.emit_rvalue_bool(cond, env)?),
+        };
+        if let Some(enter_cond) = enter_cond {
+            let entry_blk = self.mk_block(Some("loop_continue"));
+            self.mk_cond_br(enter_cond, entry_blk, exit_blk);
+            self.append_to(entry_blk);
+        }
+
+        // Emit the loop body.
+        self.emit_stmt(body, env)?;
+
+        // Emit the epilogue.
+        let continue_cond = match kind {
+            hir::LoopKind::Forever => None,
+            hir::LoopKind::Repeat(_) => {
+                let (repeat_var, ty) = repeat_var.clone().unwrap();
+                let value = self.mk_ld(repeat_var);
+                let one = self.mk_const_int(ty.get_bit_size().unwrap(), &BigInt::one());
+                let value = self.mk_sub(value, one);
+                self.mk_st(repeat_var, value);
+                None
+            }
+            hir::LoopKind::While(_) => None,
+            hir::LoopKind::Do(cond) => Some(self.emit_rvalue_bool(cond, env)?),
+            hir::LoopKind::For(_, _, step) => {
+                self.emit_rvalue(step, env)?;
+                None
+            }
+        };
+        if !self.terminated {
+            match continue_cond {
+                Some(cond) => self.mk_cond_br(cond, body_blk, exit_blk),
+                None => self.mk_br(body_blk),
+            };
+        }
+        self.append_to(exit_blk);
         Ok(())
     }
 
