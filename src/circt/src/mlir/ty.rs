@@ -6,23 +6,13 @@ use crate::crate_prelude::*;
 use std::fmt::{Debug, Display};
 
 /// An MLIR type.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Type(MlirType);
 
 impl Type {
     /// Get the type's MLIR context.
     pub fn context(&self) -> Context {
         Context::from_raw(unsafe { mlirTypeGetContext(self.raw()) })
-    }
-}
-
-impl PartialEq for Type {
-    fn eq(&self, other: &Self) -> bool {
-        match (self.raw().ptr.is_null(), other.raw().ptr.is_null()) {
-            (true, true) => true,
-            (false, false) => unsafe { mlirTypeEqual(self.raw(), other.raw()) },
-            _ => false,
-        }
     }
 }
 

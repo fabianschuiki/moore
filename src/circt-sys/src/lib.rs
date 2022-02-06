@@ -29,3 +29,27 @@ pub unsafe fn mlirIdentifierGetFromStr(cx: MlirContext, s: impl AsRef<str>) -> M
 pub unsafe fn mlirIdentifierToStr<'a, R>(i: MlirIdentifier, f: impl Fn(&'a str) -> R + 'a) -> R {
     mlirStringRefToStr(mlirIdentifierStr(i), f)
 }
+
+impl Eq for MlirType {}
+
+impl PartialEq for MlirType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.ptr.is_null(), other.ptr.is_null()) {
+            (true, true) => true,
+            (false, false) => unsafe { mlirTypeEqual(*self, *other) },
+            _ => false,
+        }
+    }
+}
+
+impl Eq for MlirBlock {}
+
+impl PartialEq for MlirBlock {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.ptr.is_null(), other.ptr.is_null()) {
+            (true, true) => true,
+            (false, false) => unsafe { mlirBlockEqual(*self, *other) },
+            _ => false,
+        }
+    }
+}
