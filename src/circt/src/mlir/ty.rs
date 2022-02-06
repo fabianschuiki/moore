@@ -16,6 +16,16 @@ impl Type {
     }
 }
 
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.raw().ptr.is_null(), other.raw().ptr.is_null()) {
+            (true, true) => true,
+            (false, false) => unsafe { mlirTypeEqual(self.raw(), other.raw()) },
+            _ => false,
+        }
+    }
+}
+
 impl WrapRaw for Type {
     type RawType = MlirType;
     fn from_raw(raw: MlirType) -> Self {

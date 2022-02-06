@@ -775,9 +775,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         let ast = self.ast_for_id(id).as_all().get_subroutine_decl().unwrap();
 
+        // Gather the port details and return type of the function.
+        let args = self.canonicalize_func_args(Ref(ast));
+        let return_ty = typeck::return_type_of_function(self.cx, &ast.prototype, env);
+        let lowered_return_ty = self.emit_type_both(return_ty)?;
+
         // Create process and entry block.
         let mut sig = llhd::ir::Signature::new();
-        sig.set_return_type(llhd::void_ty());
+        sig.set_return_type(lowered_return_ty.0.clone());
         let func_name = ast.prototype.name.to_string();
         let mut func = llhd::ir::UnitData::new(
             llhd::ir::UnitKind::Function,
@@ -793,6 +798,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // for port in ports.inputs.iter() {
         //     func_op.add_input(&port.name, port.mty);
         // }
+        if !return_ty.is_void() {
+            func_op.add_result("ret", lowered_return_ty.1);
+        }
         // for port in ports.outputs.iter() {
         //     func_op.add_output(&port.name, port.mty);
         // }
@@ -814,11 +822,18 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         };
         let entry_blk = (gen.builder.block(), func_op.first_block());
         gen.append_to(entry_blk);
-        // gen.builder.ins().ret();
-        // TODO(fschuiki): Support return values.
-        gen.mk_ret(None);
 
-        // Add the function to the LLHD module and return a handle.
+        // Add a default return.
+        if return_ty.is_void() {
+            gen.mk_ret(None);
+        } else {
+            let mut return_values = vec![];
+            let zero = gen.emit_zero_for_type_both(lowered_return_ty);
+            return_values.push(zero);
+            gen.mk_ret(return_values);
+        }
+
+        // Add the function to the module and return a handle.
         let x = Ok(Rc::new(EmittedFunction {
             unit: self.into.add_unit(func),
             mlir_symbol: func_name,
@@ -1946,12 +1961,6 @@ where
             }
             mir::RvalueKind::BareCall { target, ref args } => {
                 assert_span!(
-                    mir.ty.is_void(),
-                    mir.span,
-                    self.cx,
-                    "non-void calls not implemented"
-                );
-                assert_span!(
                     args.is_empty(),
                     mir.span,
                     self.cx,
@@ -1964,7 +1973,15 @@ where
                     self.into.unit(func.unit).sig().clone(),
                 );
                 // TODO(fschuiki): Figure out how to deal with the multiple return values here.
-                circt::std::CallOp::new(self.mlir_builder, &func.mlir_symbol, None, None);
+                let return_ty =
+                    typeck::return_type_of_function(self.cx, &target.prototype, mir.env);
+                let mut result_tys = vec![];
+                if !return_ty.is_void() {
+                    result_tys.push(self.emit_type_both(return_ty)?.1);
+                }
+                let call_op =
+                    circt::std::CallOp::new(self.mlir_builder, &func.mlir_symbol, None, result_tys);
+                let value = call_op.result(0);
                 let ty = self.emit_type_both(mir.ty)?.1;
                 (
                     self.builder.ins().call(ext_unit, vec![]),
@@ -2765,7 +2782,7 @@ where
         } else if circt::llhd::is_pointer_type(ty) {
             self.mk_st(lvalue.0, rvalue);
         } else {
-            panic!("value of type `{}1 cannot be assigned to", ty);
+            panic!("value of type `{}` cannot be assigned to", ty);
         }
         if let Some(lv) = lvalue.1 {
             self.mk_st(lv, rvalue);

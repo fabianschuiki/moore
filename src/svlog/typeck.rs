@@ -1954,15 +1954,9 @@ fn self_determined_expr_type<'gcx>(
         }
 
         // Function calls resolve to the function's return type.
-        hir::ExprKind::FunctionCall(target, _) => Some(match &target.prototype.retty {
-            Some(ty) => cx.packed_type_from_ast(Ref(ty), env, Some(IntVecType::Logic.into())),
-            None => {
-                cx.emit(
-                    DiagBuilder2::error(format!("no return type: {}", target)).span(expr.span()),
-                );
-                UnpackedType::make_error()
-            }
-        }),
+        hir::ExprKind::FunctionCall(target, _) => {
+            Some(return_type_of_function(cx, &target.prototype, env))
+        }
 
         // Assignment expressions produce the value of the assigned variable as
         // their own value, which is basically the self-determined type of the
@@ -2911,4 +2905,20 @@ fn range_from_bounds_exprs<'a>(
     };
     let offset = lo.to_isize().unwrap();
     Ok(ty::Range { size, dir, offset })
+}
+
+pub fn return_type_of_function<'a>(
+    cx: &impl Context<'a>,
+    node: &'a ast::SubroutinePrototype<'a>,
+    env: ParamEnv,
+) -> &'a UnpackedType<'a> {
+    match &node.retty {
+        Some(ty) => cx.packed_type_from_ast(Ref(ty), env, Some(IntVecType::Logic.into())),
+        None => {
+            cx.emit(
+                DiagBuilder2::error(format!("no return type: {}", node)).span(node.name.span()),
+            );
+            UnpackedType::make_error()
+        }
+    }
 }
