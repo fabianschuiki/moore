@@ -80,6 +80,7 @@ impl<'a> Print for Lvalue<'a> {
             LvalueKind::Genvar(arg) => write!(inner, "Genvar({:?})", arg)?,
             LvalueKind::Var(arg) => write!(inner, "Var({:?})", arg)?,
             LvalueKind::Port(arg) => write!(inner, "Port({:?})", arg)?,
+            LvalueKind::Arg(arg) => write!(inner, "Arg({:?})", arg)?,
             LvalueKind::Intf(arg) => write!(inner, "Intf({:?})", arg)?,
             LvalueKind::IntfSignal(arg, sig) => {
                 write!(inner, "IntfSignal({}, {:?})", ctx.print(outer, arg), sig)?
@@ -140,6 +141,8 @@ pub enum LvalueKind<'a> {
     Var(NodeId),
     /// A reference to a port declaration.
     Port(NodeId),
+    /// A reference to a subroutine argument.
+    Arg(NodeId),
     /// A reference to an interface.
     Intf(NodeId),
     /// A reference to an interface's signal.

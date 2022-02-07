@@ -140,6 +140,7 @@ fn lower_expr_inner<'a>(
                 HirNode::Inst(inst) if ty.resolve_full().core.get_interface().is_some() => {
                     Ok(builder.build(ty, LvalueKind::Intf(inst.id)))
                 }
+                HirNode::SubroutinePort(port) => Ok(builder.build(ty, LvalueKind::Arg(port.id))),
                 x => {
                     cx.emit(
                         DiagBuilder2::error(format!(

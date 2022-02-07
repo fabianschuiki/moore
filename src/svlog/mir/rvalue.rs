@@ -8,7 +8,6 @@
 use crate::crate_prelude::*;
 use crate::{
     mir::{
-        assign::Assignment,
         lvalue::Lvalue,
         print::{Context, Print},
         visit::{AcceptVisitor, Visitor, WalkVisitor},
@@ -179,6 +178,7 @@ impl<'a> Print for Rvalue<'a> {
             }
             RvalueKind::Var(arg) => write!(inner, "Var({:?})", arg)?,
             RvalueKind::Port(arg) => write!(inner, "Port({:?})", arg)?,
+            RvalueKind::Arg(arg) => write!(inner, "Arg({:?})", arg)?,
             RvalueKind::Intf(arg) => write!(inner, "Intf({:?})", arg)?,
             RvalueKind::IntfSignal(arg, sig) => {
                 write!(inner, "IntfSignal({}, {:?})", ctx.print(outer, arg), sig)?
@@ -257,22 +257,14 @@ impl<'a> Print for Rvalue<'a> {
                 op,
                 ctx.print(outer, rhs)
             )?,
-            RvalueKind::Call {
-                result,
-                ref post_assigns,
-                ..
-            } => {
-                for pa in post_assigns {
-                    ctx.print(outer, pa);
-                }
-                write!(inner, "{}", ctx.print(outer, result))?;
+            RvalueKind::Call { target, ref args } => {
+                write!(
+                    inner,
+                    "Call {} ({})",
+                    target.prototype.name,
+                    ctx.print_comma_separated(outer, args),
+                )?;
             }
-            RvalueKind::BareCall { target, ref args } => write!(
-                inner,
-                "Call {} ({})",
-                target.prototype.name,
-                ctx.print_comma_separated(outer, args),
-            )?,
             RvalueKind::Error => write!(inner, "<error>")?,
         }
         write!(inner, " : {}", self.ty)?;
@@ -381,6 +373,8 @@ pub enum RvalueKind<'a> {
     Var(NodeId),
     /// A reference to a port declaration.
     Port(NodeId),
+    /// A reference to a subroutine argument.
+    Arg(NodeId),
     /// A reference to an interface.
     Intf(NodeId),
     /// A reference to a locally instantiated interface signal.
@@ -435,20 +429,11 @@ pub enum RvalueKind<'a> {
     ApplyTimescale(&'a Rvalue<'a>, BigRational),
     /// A function or task call.
     Call {
-        /// The bare call.
-        bare: &'a Rvalue<'a>,
-        /// The returned value.
-        result: &'a Rvalue<'a>,
-        /// The post-call assignments for output and inout arguments.
-        post_assigns: Vec<&'a Assignment<'a>>,
-    },
-    /// The core operation of a function or task call.
-    BareCall {
         /// The called function.
         #[dont_visit]
         target: &'a ast::SubroutineDecl<'a>,
         /// The call arguments.
-        args: Vec<CallInput<'a>>,
+        args: Vec<CallArg<'a>>,
     },
     /// An error occurred during lowering.
     Error,
@@ -491,6 +476,7 @@ impl<'a> RvalueKind<'a> {
             RvalueKind::Concat(values) => values.iter().all(|v| v.is_const()),
             RvalueKind::Var(_) => false,
             RvalueKind::Port(_) => false,
+            RvalueKind::Arg(_) => false,
             RvalueKind::Intf(_) => false,
             RvalueKind::IntfSignal(..) => false,
             RvalueKind::Index { .. } => false, // TODO(fschuiki): reactivate once impl
@@ -504,7 +490,7 @@ impl<'a> RvalueKind<'a> {
             RvalueKind::Assignment { .. } => false,
             // TODO(fschuiki): This is wrong; function calls *may* be constant
             // under certain circumstances.
-            RvalueKind::Call { .. } | RvalueKind::BareCall { .. } => false,
+            RvalueKind::Call { .. } => false,
             RvalueKind::Error => true,
         }
     }
@@ -600,6 +586,55 @@ impl<'a> Print for CallInput<'a> {
         match self {
             Self::ByValue(x) => x.print_context(outer, inner, ctx),
             Self::ByRef(x) => x.print_context(outer, inner, ctx),
+        }
+    }
+}
+
+/// A call argument.
+#[moore_derive::visit_without_foreach]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallArg<'a> {
+    /// An input argument. Passed to the function by value.
+    Input(&'a Rvalue<'a>),
+    /// An output argument. Passed as a temporary variable to the function. The
+    /// after the function returns, a post-assignment in the `RvalueKind::Call`
+    /// is responsible for transfering the value from the temporary variable to
+    /// the actual `Lvalue` listed here, if any. This ensures signals passed as
+    /// output arguments get a proper blocking assignment.
+    Output(&'a UnpackedType<'a>, Option<&'a Lvalue<'a>>),
+    /// An inout argument. Same as `CallArg::Output`, but the variable is
+    /// initialized to the provided value.
+    Inout(&'a Rvalue<'a>, Option<&'a Lvalue<'a>>),
+    /// A by-ref argument. Passed into the function as-is.
+    Ref(&'a Lvalue<'a>),
+}
+
+impl<'a> Print for CallArg<'a> {
+    fn print_context(
+        &self,
+        outer: &mut impl Write,
+        inner: &mut impl Write,
+        ctx: &mut Context,
+    ) -> std::fmt::Result {
+        match self {
+            Self::Input(x) => {
+                write!(inner, "in:")?;
+                x.print_context(outer, inner, ctx)
+            }
+            Self::Output(_, x) => {
+                write!(inner, "out:")?;
+                x.print_context(outer, inner, ctx)
+            }
+            Self::Inout(x, y) => {
+                write!(inner, "in:")?;
+                x.print_context(outer, inner, ctx)?;
+                write!(inner, "/")?;
+                y.print_context(outer, inner, ctx)
+            }
+            Self::Ref(x) => {
+                write!(inner, "ref:")?;
+                x.print_context(outer, inner, ctx)
+            }
         }
     }
 }

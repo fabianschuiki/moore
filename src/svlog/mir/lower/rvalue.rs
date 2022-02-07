@@ -304,6 +304,7 @@ fn lower_expr_inner<'gcx>(
                     let k = builder.cx.constant_value_of(binding, env);
                     Ok(builder.build(ty, RvalueKind::Const(k)))
                 }
+                HirNode::SubroutinePort(port) => Ok(builder.build(ty, RvalueKind::Arg(port.id))),
                 x => {
                     builder.cx.emit(
                         DiagBuilder2::error(format!(
@@ -1697,74 +1698,46 @@ fn lower_function_call<'a>(
     // Decide how we are going to pass values in and out of the called function.
     // This must match how the function code generator will eventually emit the
     // function in
-    let mut inputs = vec![];
-    let mut outputs = vec![];
+    let mut args = vec![];
     for arg in &mapping.args {
         trace!("Lowering call argument `{}`", arg.span.extract());
         match arg.decl.dir {
             ast::SubroutinePortDir::Input => {
-                inputs.push(CallInput::ByValue(cx.mir_rvalue(arg.expr.id(), arg.env)))
+                let rv = cx.mir_rvalue(arg.expr.id(), arg.env);
+                args.push(CallArg::Input(rv));
             }
-            // Output arguments with a default value have no place to copy
-            // the data out to after the call.
-            ast::SubroutinePortDir::Output => match arg.call {
-                CallArgSource::Call(..) => {
-                    outputs.push(Some(cx.mir_lvalue(arg.expr.id(), arg.env)))
-                }
-                CallArgSource::Default(..) => outputs.push(None),
-            },
+            ast::SubroutinePortDir::Output => {
+                // Output arguments with a default value have no place to copy
+                // the data out to after the call.
+                let ty = cx.type_of_func_arg(Ref(arg.decl), arg.env);
+                let lv = match arg.call {
+                    CallArgSource::Call(..) => Some(cx.mir_lvalue(arg.expr.id(), arg.env)),
+                    CallArgSource::Default(..) => None,
+                };
+                args.push(CallArg::Output(ty, lv));
+            }
             ast::SubroutinePortDir::Inout => {
-                inputs.push(CallInput::ByValue(cx.mir_rvalue(arg.expr.id(), arg.env)));
                 // Output arguments with a default value have no place to
                 // copy the data out to after the call.
-                match arg.call {
-                    CallArgSource::Call(..) => {
-                        outputs.push(Some(cx.mir_lvalue(arg.expr.id(), arg.env)))
-                    }
-                    CallArgSource::Default(..) => outputs.push(None),
-                }
+                let lv = match arg.call {
+                    CallArgSource::Call(..) => Some(cx.mir_lvalue(arg.expr.id(), arg.env)),
+                    CallArgSource::Default(..) => None,
+                };
+                let rv = cx.mir_rvalue(arg.expr.id(), arg.env);
+                args.push(CallArg::Inout(rv, lv));
             }
             ast::SubroutinePortDir::Ref | ast::SubroutinePortDir::ConstRef => {
-                inputs.push(CallInput::ByRef(cx.mir_lvalue(arg.expr.id(), arg.env)));
+                let lv = cx.mir_lvalue(arg.expr.id(), arg.env);
+                args.push(CallArg::Ref(lv));
             }
         }
     }
 
-    trace!("Call input args:");
-    for input in &inputs {
-        trace!("  - {:?}", input);
+    trace!("Call args:");
+    for arg in &args {
+        trace!("  - {:?}", arg);
     }
-    trace!("Call output args:");
-    for output in &outputs {
-        trace!("  - {:?}", output);
-    }
-
-    // Construct the compound return type.
-    let bare_retty = retty; // TODO(fschuiki): Implement this!
-
-    // Build the bare call that will produce an aggregate result of the actual
-    // return value, and the output arguments.
-    let bare = builder.build(
-        bare_retty, // TODO(fschuiki): This should be an aggregate with the retty and the inout/output arguments.
-        RvalueKind::BareCall {
-            target,
-            args: inputs,
-        },
-    );
-
-    // TODO(fschuiki): Dissect the returned struct and create `Assignment` nodes
-    // to the `Some(..)` entries in `outputs`. Then extract the actual return
-    // type and produce that as the result of the function.
-    let result = bare; // TODO(fschuiki): This should be a field in the bare aggregate
-    let post_assigns = vec![]; // TODO(fschuiki): This should be assignments!
 
     // Package things up into a call.
-    builder.build(
-        retty,
-        RvalueKind::Call {
-            bare,
-            result,
-            post_assigns,
-        },
-    )
+    builder.build(retty, RvalueKind::Call { target, args })
 }

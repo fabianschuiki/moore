@@ -79,3 +79,29 @@ impl<'a, T: Print> Print for &'a T {
         (**self).print_context(outer, inner, ctx)
     }
 }
+
+/// Implement `Print` for all `Option`s around something that can `Print`.
+impl<T: Print> Print for Option<T> {
+    fn id(&self) -> *const u8 {
+        match self {
+            Some(x) => (*x).id(),
+            None => std::ptr::null(),
+        }
+    }
+
+    fn print_context(
+        &self,
+        outer: &mut impl Write,
+        inner: &mut impl Write,
+        ctx: &mut Context,
+    ) -> std::fmt::Result {
+        match self {
+            Some(x) => {
+                write!(inner, "Some(")?;
+                (*x).print_context(outer, inner, ctx)?;
+                write!(inner, ")")
+            }
+            None => write!(inner, "None"),
+        }
+    }
+}

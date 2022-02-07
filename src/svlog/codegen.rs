@@ -769,38 +769,52 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             return x.clone();
         }
         let ast = self.ast_for_id(id).as_all().get_subroutine_decl().unwrap();
+        info!("Emit function `{}` with {:?}", ast.prototype.name, env);
 
         // Gather the port details and return type of the function.
         let args = self.canonicalize_func_args(Ref(ast));
         let return_ty = typeck::return_type_of_function(self.cx, &ast.prototype, env);
         let lowered_return_ty = self.emit_type_both(return_ty)?;
 
-        // Create process and entry block.
+        // Create the function signature and function builder.
         let mut sig = llhd::ir::Signature::new();
         sig.set_return_type(lowered_return_ty.0.clone());
         let func_name = ast.prototype.name.to_string();
+        let mut mlir_builder = mlir::Builder::new(self.mcx);
+        mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
+        mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
+        let mut func_op = circt::builtin::FunctionBuilder::new(&func_name);
+
+        // Gather up the arguments.
+        let mut arguments = vec![];
+        for arg in &args.args {
+            let ty = self.type_of_func_arg(Ref(arg), env);
+            let ty = self.emit_type_both(ty)?;
+            let ty = match arg.dir {
+                ast::SubroutinePortDir::Input => ty,
+                ast::SubroutinePortDir::Output
+                | ast::SubroutinePortDir::Inout
+                | ast::SubroutinePortDir::Ref
+                | ast::SubroutinePortDir::ConstRef => pointer_ty(ty),
+            };
+            func_op.add_arg(arg.name.map(|x| x.value.as_str().to_string()), ty.1);
+            sig.add_input(ty.0);
+            arguments.push(arg);
+        }
+
+        // Gather up the results.
+        if !return_ty.is_void() {
+            func_op.add_result(None, lowered_return_ty.1);
+        }
+
+        // Create the function itself.
+        let func_op = func_op.build(&mut mlir_builder);
         let mut func = llhd::ir::UnitData::new(
             llhd::ir::UnitKind::Function,
             llhd::ir::UnitName::Local(func_name.clone()),
             sig,
         );
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut func);
-        let mut mlir_builder = mlir::Builder::new(self.mcx);
-        mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
-        mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
-        let mut func_op = circt::builtin::FunctionBuilder::new(&func_name);
-        // TODO(fschuiki): Add arguments and results.
-        // for port in ports.inputs.iter() {
-        //     func_op.add_input(&port.name, port.mty);
-        // }
-        if !return_ty.is_void() {
-            func_op.add_result("ret", lowered_return_ty.1);
-        }
-        // for port in ports.outputs.iter() {
-        //     func_op.add_output(&port.name, port.mty);
-        // }
-        let func_op = func_op.build(&mut mlir_builder);
-        // mlir_builder.set_insertion_point_to_start(func_op.first_block());
 
         // Create a unit generator that we will use to populate the function
         // with instructions.
@@ -808,6 +822,29 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut gen = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
         let entry_blk = (gen.builder.block(), func_op.first_block());
         gen.append_to(entry_blk);
+
+        // Add entries for the function arguments to the value table such that
+        // things we emit know how to use them. Apply the default values for
+        // output operands.
+        for (value, arg) in gen
+            .builder
+            .input_args()
+            .zip(func_op.arguments())
+            .zip(args.args.iter())
+        {
+            gen.values.insert(arg.ast.id().into(), value);
+            if arg.dir == ast::SubroutinePortDir::Output {
+                let default = match arg.default {
+                    Some(expr) => gen.emit_rvalue(expr.id(), env)?,
+                    None => {
+                        let ty = gen.type_of_func_arg(Ref(arg), env);
+                        let ty = gen.emit_type_both(ty)?;
+                        gen.emit_zero_for_type_both(ty)
+                    }
+                };
+                gen.emit_blocking_assign_llhd((value, None), default)?;
+            }
+        }
 
         // Emit the body of the function.
         for item in &ast.items {
@@ -1518,6 +1555,11 @@ where
         self.builder.value_type(value)
     }
 
+    /// Get the type of an emitted value.
+    fn value_type(&self, value: HybridValue) -> HybridType {
+        (self.builder.value_type(value.0), value.1.ty())
+    }
+
     /// Emit the code for an rvalue.
     fn emit_rvalue(&mut self, expr_id: NodeId, env: ParamEnv) -> Result<HybridValue> {
         self.emit_rvalue_mode(expr_id, env, Mode::Value)
@@ -1555,7 +1597,7 @@ where
 
         match (mode, actual_mode) {
             (Mode::Signal, Mode::Value) => {
-                let ty = (self.llhd_type(value.0), value.1.ty());
+                let ty = self.value_type(value);
                 let init = self.emit_zero_for_type_both(ty);
                 let sig = (
                     self.builder.ins().sig(init.0),
@@ -1633,7 +1675,7 @@ where
         }
 
         let value: HybridValue = match mir.kind {
-            mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) => {
+            mir::RvalueKind::Var(id) | mir::RvalueKind::Port(id) | mir::RvalueKind::Arg(id) => {
                 let sig = self
                     .shadows
                     .get(&id.into())
@@ -1677,8 +1719,8 @@ where
 
             mir::RvalueKind::CastToBool(value) => {
                 let value = self.emit_mir_rvalue(value)?;
-                let ty = self.llhd_type(value.0);
-                let zero = self.emit_zero_for_type_both((ty, value.1.ty()));
+                let ty = self.value_type(value);
+                let zero = self.emit_zero_for_type_both(ty);
                 self.mk_cmp(CmpPred::Neq, value, zero)
             }
 
@@ -1974,50 +2016,102 @@ where
                 "runtime int-to-time conversion not implemented"
             ),
 
-            mir::RvalueKind::Call {
-                bare,
-                result,
-                ref post_assigns,
-            } => {
-                self.emit_mir_rvalue(bare)?;
-                for pa in post_assigns {
-                    let simplified = self.mir_simplify_assignment(Ref(pa));
-                    for assign in simplified {
-                        let lhs_lv = self.emit_mir_lvalue(assign.lhs)?;
-                        let rhs_rv = self.emit_mir_rvalue(assign.rhs)?;
-                        self.emit_blocking_assign_llhd(lhs_lv, rhs_rv)?;
-                    }
-                }
-                self.emit_mir_rvalue(result)?
-            }
-            mir::RvalueKind::BareCall { target, ref args } => {
-                assert_span!(
-                    args.is_empty(),
-                    mir.span,
-                    self.cx,
-                    "calls with arguments not implemented"
-                );
+            mir::RvalueKind::Call { target, ref args } => {
+                // Ensure the function is emitted.
                 let func_env = self.default_param_env();
                 let func = self.emit_function(target.id(), func_env)?;
                 let ext_unit = self.builder.add_extern(
                     self.into.unit(func.unit).name().clone(),
                     self.into.unit(func.unit).sig().clone(),
                 );
-                // TODO(fschuiki): Figure out how to deal with the multiple return values here.
+
+                // Assemble the arguments passed into the function.
+                let mut input_args = vec![];
+                for arg in args {
+                    match arg {
+                        mir::CallArg::Input(rv) => {
+                            input_args.push(self.emit_mir_rvalue(rv)?);
+                        }
+                        mir::CallArg::Output(ty, _) => {
+                            let ty = self.emit_type_both(ty)?;
+                            let zero = self.emit_zero_for_type_both(ty);
+                            let var = self.mk_var(zero);
+                            input_args.push(var);
+                        }
+                        mir::CallArg::Inout(rv, _) => {
+                            let init = self.emit_mir_rvalue(rv)?;
+                            let var = self.mk_var(init);
+                            input_args.push(var);
+                        }
+                        mir::CallArg::Ref(lv) => {
+                            input_args.push(self.emit_mir_lvalue(lv)?.0);
+                        }
+                    }
+                }
+
+                // Determine the return types of the function.
                 let return_ty =
                     typeck::return_type_of_function(self.cx, &target.prototype, mir.env);
                 let mut result_tys = vec![];
                 if !return_ty.is_void() {
                     result_tys.push(self.emit_type_both(return_ty)?.1);
                 }
-                let call_op =
-                    circt::std::CallOp::new(self.mlir_builder, &func.mlir_symbol, None, result_tys);
-                let value = call_op.result(0);
-                let ty = self.emit_type_both(mir.ty)?.1;
-                (
-                    self.builder.ins().call(ext_unit, vec![]),
-                    self.emit_zero_for_type_mlir(ty),
-                )
+
+                // Emit the call.
+                let call_op = circt::std::CallOp::new(
+                    self.mlir_builder,
+                    &func.mlir_symbol,
+                    input_args.iter().map(|&(_, mlir)| mlir),
+                    result_tys,
+                );
+
+                // Perform assignments for arguments that copy back out of the
+                // function.
+                for (arg, &value) in args.iter().zip(input_args.iter()) {
+                    match arg {
+                        mir::CallArg::Output(_, Some(lv)) | mir::CallArg::Inout(_, Some(lv)) => {
+                            let rvid = self.alloc_id(lv.span);
+                            self.set_emitted_value(rvid, value);
+                            let rv = self.arena().alloc_mir_rvalue(mir::Rvalue {
+                                id: rvid,
+                                origin: lv.id,
+                                env: mir.env,
+                                span: lv.span,
+                                ty: lv.ty,
+                                kind: mir::RvalueKind::Var(rvid),
+                                konst: false,
+                            });
+                            let assign = self.arena().alloc_mir_assignment(mir::Assignment {
+                                id: lv.id,
+                                env: mir.env,
+                                span: lv.span,
+                                ty: lv.ty,
+                                lhs: lv,
+                                rhs: rv,
+                            });
+                            let simplified = self.mir_simplify_assignment(Ref(assign));
+                            for assign in simplified {
+                                let lhs = self.emit_mir_lvalue(assign.lhs)?;
+                                let rhs = self.emit_mir_rvalue(assign.rhs)?;
+                                self.emit_blocking_assign_llhd(lhs, rhs)?;
+                            }
+                        }
+                        mir::CallArg::Output(_, None)
+                        | mir::CallArg::Inout(_, None)
+                        | mir::CallArg::Input(..)
+                        | mir::CallArg::Ref(..) => (),
+                    }
+                }
+
+                // Unpack the results.
+                let result = if !return_ty.is_void() {
+                    call_op.result(0)
+                } else {
+                    mlir::Value::from_raw(circt::sys::MlirValue {
+                        ptr: std::ptr::null_mut(),
+                    })
+                };
+                (self.builder.ins().call(ext_unit, vec![]), result)
             }
 
             // Propagate tombstones.
@@ -2124,7 +2218,7 @@ where
         length: usize,
     ) -> Result<HybridValue> {
         let base = self.emit_mir_rvalue(base)?;
-        let hidden = self.emit_zero_for_type_both((self.llhd_type(value.0), value.1.ty()));
+        let hidden = self.emit_zero_for_type_both(self.value_type(value));
         // TODO(fschuiki): make the above a constant of all `x`.
         let shifted = self.mk_shr(value, hidden, base);
         if ty.coalesces_to_llhd_scalar() {
@@ -2212,10 +2306,12 @@ where
             // Variables and ports trivially return their declaration value.
             // This is either the `var` or `sig` instruction which introduced
             // them.
-            mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) => Ok((
-                self.emitted_value(id).clone(),
-                self.shadows.get(&id.into()).cloned(),
-            )),
+            mir::LvalueKind::Var(id) | mir::LvalueKind::Port(id) | mir::LvalueKind::Arg(id) => {
+                Ok((
+                    self.emitted_value(id).clone(),
+                    self.shadows.get(&id.into()).cloned(),
+                ))
+            }
 
             // Interface signals require special care, because they are emitted
             // in a transposed fashion.
@@ -2241,7 +2337,10 @@ where
                 self.emit_lvalue_index(value.ty, inner, base, length)
             }
 
-            mir::LvalueKind::Repeat(..) | mir::LvalueKind::Concat(..) => {
+            mir::LvalueKind::Repeat(..)
+            | mir::LvalueKind::Concat(..)
+            | mir::LvalueKind::DestructArray(..)
+            | mir::LvalueKind::DestructStruct(..) => {
                 bug_span!(
                     mir.span,
                     self.cx,
@@ -2253,11 +2352,11 @@ where
             // Errors from MIR lowering have already been reported. Just abort.
             mir::LvalueKind::Error => Err(()),
 
-            _ => {
+            mir::LvalueKind::Genvar(..) | mir::LvalueKind::Intf(..) => {
                 bug_span!(
                     mir.span,
                     self.cx,
-                    "codegen not implemented for mir lvalue {:#?}",
+                    "cannot codegen assignment to interface or genvar; {:#?}",
                     mir
                 );
             }
@@ -2313,12 +2412,11 @@ where
         let (target_real, target_shadow) = value;
         let base = self.emit_mir_rvalue(base)?;
         let shifted_real = {
-            let hidden =
-                self.emit_zero_for_type_both((self.llhd_type(target_real.0), target_real.1.ty()));
+            let hidden = self.emit_zero_for_type_both(self.value_type(target_real));
             self.mk_shr(target_real, hidden, base)
         };
         let shifted_shadow = target_shadow.map(|target| {
-            let hidden = self.emit_zero_for_type_both((self.llhd_type(target.0), target.1.ty()));
+            let hidden = self.emit_zero_for_type_both(self.value_type(target));
             self.mk_shr(target, hidden, base)
         });
         if ty.coalesces_to_llhd_scalar() {
@@ -2820,7 +2918,7 @@ where
         prev: HybridValue,
         now: HybridValue,
     ) -> Result<HybridValue> {
-        let ty = (self.llhd_type(now.0), now.1.ty());
+        let ty = self.value_type(now);
 
         // Check if a posedge happened.
         let posedge = match edge {
@@ -3607,8 +3705,16 @@ fn span_to_loc(cx: mlir::Context, span: Span) -> mlir::Location {
 
 /// Make a type a signal type.
 ///
-/// This is a convenience function that process old LLHD types and the newer
+/// This is a convenience function that processes old LLHD types and the newer
 /// MLIR types in parallel.
 fn signal_ty(ty: HybridType) -> HybridType {
     (llhd::signal_ty(ty.0), circt::llhd::get_signal_type(ty.1))
+}
+
+/// Make a type a pointer type.
+///
+/// This is a convenience function that processes old LLHD types and the newer
+/// MLIR types in parallel.
+fn pointer_ty(ty: HybridType) -> HybridType {
+    (llhd::pointer_ty(ty.0), circt::llhd::get_pointer_type(ty.1))
 }

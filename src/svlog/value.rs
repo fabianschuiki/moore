@@ -562,6 +562,7 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
         mir::RvalueKind::Assignment { .. }
         | mir::RvalueKind::Var(_)
         | mir::RvalueKind::Port(_)
+        | mir::RvalueKind::Arg(_)
         | mir::RvalueKind::IntfSignal(..)
         | mir::RvalueKind::Intf(..) => {
             cx.emit(DiagBuilder2::error("value is not constant").span(mir.span));
@@ -747,9 +748,7 @@ fn const_mir_rvalue_inner<'a>(cx: &impl Context<'a>, mir: &'a mir::Rvalue<'a>) -
         }
 
         // TODO(fschuiki): Fix this once we support constant function calls.
-        mir::RvalueKind::Call { .. } | mir::RvalueKind::BareCall { .. } => {
-            cx.intern_value(make_error(mir.ty))
-        }
+        mir::RvalueKind::Call { .. } => cx.intern_value(make_error(mir.ty)),
 
         // Propagate tombstones.
         mir::RvalueKind::Error => cx.intern_value(make_error(mir.ty)),

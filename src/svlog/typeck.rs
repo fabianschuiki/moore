@@ -64,6 +64,7 @@ pub(crate) fn type_of<'a>(
             x => bug_span!(ast.span(), cx, "VarDeclName with weird parent {:?}", x),
         },
         ast::AllNode::ParamValueDecl(x) => return Ok(cx.type_of_value_param(Ref(x), env)),
+        ast::AllNode::SubroutinePort(x) => return Ok(cx.type_of_subroutine_port(x, env)),
         _ => (),
     };
 
@@ -421,7 +422,7 @@ pub(crate) fn type_of_subroutine_port<'a>(
         .expect("no corresponding canonicalized arg");
 
     // Package everything up in a type.
-    cx.unpacked_type_from_ast(Ref(arg.ty), Ref(arg.unpacked_dims), env, None)
+    cx.type_of_func_arg(Ref(arg), env)
 }
 
 /// Determine the type of a function argument.
@@ -431,10 +432,7 @@ pub(crate) fn type_of_func_arg<'a>(
     arg: Ref<'a, func_args::FuncArg<'a>>,
     env: ParamEnv,
 ) -> &'a UnpackedType<'a> {
-    match arg.ast.as_all() {
-        ast::AllNode::SubroutinePort(port) => cx.type_of_subroutine_port(port, env),
-        _ => bug_span!(arg.span, cx, "unsupported func arg decl {:#?}", arg.ast),
-    }
+    cx.unpacked_type_from_ast(Ref(arg.ty), Ref(arg.unpacked_dims), env, None)
 }
 
 /// Map an AST node to the type it represents.
