@@ -82,3 +82,11 @@ pub fn get_flat_symbol_ref_attr(cx: Context, symbol: &str) -> Attribute {
         mlirFlatSymbolRefAttrGet(cx.raw(), mlirStringRefCreateFromStr(symbol))
     })
 }
+
+/// Create a new array attribute.
+pub fn get_array_attr(cx: Context, elements: impl IntoIterator<Item = Attribute>) -> Attribute {
+    let elements: Vec<_> = elements.into_iter().map(|x| x.raw()).collect();
+    Attribute::from_raw(unsafe {
+        mlirArrayAttrGet(cx.raw(), elements.len() as _, elements.as_ptr())
+    })
+}

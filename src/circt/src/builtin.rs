@@ -26,11 +26,28 @@ impl SingleBlockOp for ModuleOp {}
 
 pub struct FunctionBuilder<'a> {
     name: &'a str,
-    args: Vec<(&'a str, Type)>,
-    results: Vec<(&'a str, Type)>,
+    args: Vec<(String, Type)>,
+    results: Vec<(String, Type)>,
 }
 
 impl SingleRegionOp for FuncOp {}
+
+impl FuncOp {
+    /// Get the number of arguments.
+    pub fn num_arguments(&self) -> usize {
+        unsafe { mlirBlockGetNumArguments(self.first_block()) as usize }
+    }
+
+    /// Get an argument by index.
+    pub fn argument(&self, index: usize) -> Value {
+        unsafe { Value::from_raw(mlirBlockGetArgument(self.first_block(), index as _)) }
+    }
+
+    /// Get an iterator over all arguments.
+    pub fn arguments(&self) -> Box<dyn Iterator<Item = Value> + '_> {
+        Box::new((0..self.num_arguments()).map(move |i| self.argument(i)))
+    }
+}
 
 impl<'a> FunctionBuilder<'a> {
     pub fn new(name: &'a str) -> Self {
@@ -42,14 +59,14 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     /// Add an argument.
-    pub fn add_arg(&mut self, name: &'a str, ty: Type) -> &mut Self {
-        self.args.push((name, ty));
+    pub fn add_arg(&mut self, name: Option<String>, ty: Type) -> &mut Self {
+        self.args.push((name.unwrap_or("".to_string()), ty));
         self
     }
 
     /// Add a result.
-    pub fn add_result(&mut self, name: &'a str, ty: Type) -> &mut Self {
-        self.results.push((name, ty));
+    pub fn add_result(&mut self, name: Option<String>, ty: Type) -> &mut Self {
+        self.results.push((name.unwrap_or("".to_string()), ty));
         self
     }
 
@@ -60,12 +77,18 @@ impl<'a> FunctionBuilder<'a> {
             let result_types = self.results.iter().map(|(_, ty)| *ty);
             let mlir_arg_types: Vec<MlirType> = arg_types.clone().map(|x| x.raw()).collect();
             // let mlir_result_types: Vec<MlirType> = result_types.clone().map(|x| x.raw()).collect();
+            // let arg_names: Vec<Attribute> = self
+            //     .args
+            //     .iter()
+            //     .map(|(name, _)| get_string_attr(builder.cx, name))
+            //     .collect();
 
             state.add_attribute("sym_name", get_string_attr(builder.cx, self.name));
             state.add_attribute(
                 "type",
                 get_type_attr(get_function_type(builder.cx, arg_types, result_types)),
             );
+            // state.add_attribute("arg_names", get_array_attr(builder.cx, arg_names));
 
             unsafe {
                 let region = mlirRegionCreate();
