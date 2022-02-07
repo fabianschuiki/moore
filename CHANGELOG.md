@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add `--format=mlir-native` option to use CIRCT for output emission
 - Add implicit cast from integer to time types
 - Add `-Vfunc-args` and `-Vcall-args` verbosity option
+- Add support for functions and function calls
+- Add support for `return`, `continue`, `break` statements
 
 ### Changed
 - Migrate code generation to use CIRCT in parallel to LLHD crate
