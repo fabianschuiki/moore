@@ -1,9 +1,13 @@
 [package]
 name = "moore-circt"
-version = "0.1.0"
+version = "0.14.0"
 authors = ["Fabian Schuiki <fabian@schuiki.ch>"]
 edition = "2018"
 
+description = "Rust wrappers around the CIRCT API."
+repository = "https://github.com/fabianschuiki/moore"
+license = "Apache-2.0 OR MIT"
+
 [dependencies]
-moore-circt-sys = { path = "../circt-sys" }
+moore-circt-sys = { path = "../circt-sys", version = "0.14.0" }
 num = "0.3"
