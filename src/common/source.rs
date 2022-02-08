@@ -5,7 +5,7 @@
 //! simple querying of information.
 
 use crate::name::RcStr;
-use memmap::Mmap;
+use memmap2::Mmap;
 use once_cell::sync::OnceCell;
 use std;
 use std::borrow::Borrow;
