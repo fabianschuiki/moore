@@ -4,13 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## 0.14.0 - 2022-02-08
 ### Added
 - Add [CIRCT](https://github.com/llvm/circt) dependency
 - Add `circt` and `circt-sys` crates
 - Add `--format=mlir-native` option to use CIRCT for output emission
 - Add implicit cast from integer to time types
 - Add `-Vfunc-args` and `-Vcall-args` verbosity option
-- Add support for functions and function calls
+- Add support for functions and function calls (#168)
 - Add support for `return`, `continue`, `break` statements
 
 ### Changed

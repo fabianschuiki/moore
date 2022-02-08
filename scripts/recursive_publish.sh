@@ -2,6 +2,8 @@
 set -e
 (cd src/common && cargo publish "$@") &&
 (cd src/derive && cargo publish "$@") &&
+(cd src/circt-sys && cargo publish "$@") &&
+(cd src/circt && cargo publish "$@") &&
 sleep 30 && (cargo install lazy_static > /dev/null 2>&1 || true)
 (cd src/svlog/syntax && cargo publish "$@") &&
 (cd src/vhdl/syntax && cargo publish "$@")
