@@ -4,7 +4,7 @@ use crate::crate_prelude::*;
 use crate::hw::{array_type_size, is_array_type, ConstantOp};
 
 pub fn dialect() -> DialectHandle {
-    DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__comb__() })
+    DialectHandle::from_raw(unsafe { crate::sys::mlirGetDialectHandle__comb__() })
 }
 
 /// Predicate for a comparison operation.

@@ -1,9 +1,9 @@
 [package]
-name = "circt"
+name = "moore-circt"
 version = "0.1.0"
 authors = ["Fabian Schuiki <fabian@schuiki.ch>"]
 edition = "2018"
 
 [dependencies]
-circt-sys = { path = "../circt-sys" }
+moore-circt-sys = { path = "../circt-sys" }
 num = "0.3"

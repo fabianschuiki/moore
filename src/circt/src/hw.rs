@@ -5,7 +5,7 @@ use crate::crate_prelude::*;
 use std::convert::TryInto;
 
 pub fn dialect() -> DialectHandle {
-    DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__hw__() })
+    DialectHandle::from_raw(unsafe { crate::sys::mlirGetDialectHandle__hw__() })
 }
 
 /// Get the bit width of an HW type.

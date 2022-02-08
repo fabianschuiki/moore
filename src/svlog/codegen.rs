@@ -12,9 +12,7 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv,
 };
-use circt::comb::CmpPred;
-use circt::mlir;
-use circt::prelude::*;
+use moore_circt::{self as circt, comb::CmpPred, mlir, prelude::*};
 use num::{BigInt, FromPrimitive, One, ToPrimitive, Zero};
 use std::{
     collections::{HashMap, HashSet},

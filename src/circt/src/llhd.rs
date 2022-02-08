@@ -5,7 +5,7 @@ use crate::crate_prelude::*;
 use crate::hw::{array_type_element, get_array_type, struct_type_field};
 
 pub fn dialect() -> DialectHandle {
-    DialectHandle::from_raw(unsafe { circt_sys::mlirGetDialectHandle__llhd__() })
+    DialectHandle::from_raw(unsafe { crate::sys::mlirGetDialectHandle__llhd__() })
 }
 
 /// Check if a type is an LLHD time type.

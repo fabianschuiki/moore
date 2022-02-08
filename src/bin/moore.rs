@@ -5,9 +5,9 @@
 #[macro_use]
 extern crate log;
 
-use circt::{mlir, prelude::*, sys::*};
 use clap::{App, Arg, ArgMatches};
 use llhd;
+use moore_circt::{self as circt, mlir, prelude::*, sys::*};
 // use llhd::opt::{Pass, PassContext};
 use moore::common::score::NodeRef;
 use moore::errors::*;

@@ -1,6 +1,6 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
-use circt_sys::*;
+use crate::sys::*;
 use std::convert::TryInto;
 
 pub mod attr;

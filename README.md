@@ -96,6 +96,8 @@ Moore is developed in this repository, but is separated into the following crate
 - `moore-svlog-syntax`: SystemVerilog parser and AST implementation
 - `moore-vhdl`: VHDL implementation
 - `moore-vhdl-syntax`: VHDL parser and AST implementation
+- `moore-circt`: Rust wrappers around the CIRCT API
+- `moore-circt-sys`: Low-level language bindings to CIRCT
 
 Some useful commands when working on moore:
 
@@ -106,6 +108,7 @@ Some useful commands when working on moore:
     cargo run -- foo.sv -e foo
     scripts/test.py --debug -v
     scripts/test.py --debug -v <path-to-test-case>
+    lit test -v
 
 ## Making a new Release
 

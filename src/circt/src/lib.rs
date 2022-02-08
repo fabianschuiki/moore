@@ -100,7 +100,7 @@ pub mod std;
 pub use builtin::*;
 
 pub mod sys {
-    pub use circt_sys::*;
+    pub use moore_circt_sys::*;
 }
 
 pub mod prelude {
