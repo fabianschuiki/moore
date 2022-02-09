@@ -6,7 +6,7 @@ use crate::crate_prelude::*;
 use std::fmt::{Debug, Display};
 
 /// An MLIR type.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Type(MlirType);
 
 impl Type {

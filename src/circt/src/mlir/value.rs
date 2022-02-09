@@ -6,7 +6,7 @@ use crate::crate_prelude::*;
 use std::fmt::{Debug, Display};
 
 /// An MLIR value.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Value(MlirValue);
 
 impl Value {
