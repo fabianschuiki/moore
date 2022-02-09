@@ -12,7 +12,13 @@ use crate::{
     value::{Value, ValueKind},
     ParamEnv,
 };
-use moore_circt::{self as circt, comb::CmpPred, mlir, prelude::*};
+use moore_circt::{
+    self as circt,
+    comb::CmpPred,
+    llhd::{is_pointer_type, is_signal_type},
+    mlir::{self, integer_type_width},
+    prelude::*,
+};
 use num::{BigInt, FromPrimitive, One, ToPrimitive, Zero};
 use std::{
     collections::{HashMap, HashSet},
@@ -21,7 +27,7 @@ use std::{
     rc::Rc,
 };
 
-pub type HybridValue = (llhd::ir::Value, mlir::Value);
+pub type HybridValue = ((), mlir::Value);
 pub type HybridType = (llhd::Type, mlir::Type);
 pub type HybridBlock = (llhd::ir::Block, mlir::Block);
 
@@ -154,26 +160,23 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Assign proper port names and collect ports into a lookup table.
         for (index, port) in ports.inputs.iter().enumerate() {
-            let arg = gen.builder.input_arg(index);
-            gen.builder.set_name(arg, port.name.clone());
+            let arg = ();
+            // let arg = gen.builder.input_arg(index);
+            // gen.builder.set_name(arg, port.name.clone());
             gen.values
                 .insert(port.accnode, (arg, entity_op.input(index)));
         }
         for (index, port) in ports.outputs.iter().enumerate() {
-            let arg = gen.builder.output_arg(index);
-            gen.builder.set_name(arg, port.name.clone());
+            let arg = ();
+            // let arg = gen.builder.output_arg(index);
+            // gen.builder.set_name(arg, port.name.clone());
             gen.values
                 .insert(port.accnode, (arg, entity_op.output(index)));
         }
 
         debug!("  Ports:");
         for (node, value) in gen.values.iter() {
-            debug!(
-                "    {:?} = {:?} (type {})",
-                node,
-                value,
-                gen.llhd_type(value.0),
-            );
+            debug!("    {:?} = {:?} (type {})", node, value, value.1.ty(),);
         }
 
         // Emit the actual contents of the entity.
@@ -182,14 +185,15 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Assign default values to undriven output ports.
         for port in ports.outputs.iter() {
             let value = gen.values[&port.accnode];
-            let driven = gen
-                .builder
-                .all_insts()
-                .any(|inst| match gen.builder[inst].opcode() {
-                    llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value.0,
-                    llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value.0),
-                    _ => false,
-                });
+            let driven = todo!("check MLIR value users for drv/inst");
+            // let driven = gen
+            //     .builder
+            //     .all_insts()
+            //     .any(|inst| match gen.builder[inst].opcode() {
+            //         llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value.0,
+            //         llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value.0),
+            //         _ => false,
+            //     });
             if driven {
                 continue;
             }
@@ -206,9 +210,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             gen.mk_drv(value, default_value, zero_time);
         }
 
-        let unit = self.into.add_unit(ent);
+        // let unit = self.into.add_unit(ent);
         let result = Ok(Rc::new(EmittedModule {
-            unit,
+            // unit,
             mlir_symbol: entity_name.clone(),
             ports,
         }));
@@ -437,42 +441,42 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         );
         let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
 
-        // Assign names to inputs and outputs.
-        let guess_name = |id| {
-            let (prefix, id) = match id {
-                AccessedNode::Regular(id) => (None, id),
-                AccessedNode::Intf(inst_id, id) => {
-                    let inst_name = match self.hir_of(inst_id).ok()? {
-                        HirNode::IntPort(x) => Some(x.name),
-                        HirNode::Inst(x) => Some(x.name),
-                        _ => None,
-                    };
-                    (inst_name, id)
-                }
-            };
-            let name = match self.hir_of(id).ok()? {
-                HirNode::VarDecl(x) => Some(x.name),
-                HirNode::IntPort(x) => Some(x.name),
-                _ => None,
-            };
-            match (prefix, name) {
-                (Some(prefix), Some(name)) => Some(format!("{}.{}", prefix, name)),
-                (None, Some(name)) => Some(format!("{}", name)),
-                _ => None,
-            }
-        };
-        for (i, &id) in inputs.iter().enumerate() {
-            if let Some(name) = guess_name(id) {
-                let value = builder.input_arg(i);
-                builder.set_name(value, name);
-            }
-        }
-        for (i, &id) in outputs.iter().enumerate() {
-            if let Some(name) = guess_name(id) {
-                let value = builder.output_arg(i);
-                builder.set_name(value, name);
-            }
-        }
+        // // Assign names to inputs and outputs.
+        // let guess_name = |id| {
+        //     let (prefix, id) = match id {
+        //         AccessedNode::Regular(id) => (None, id),
+        //         AccessedNode::Intf(inst_id, id) => {
+        //             let inst_name = match self.hir_of(inst_id).ok()? {
+        //                 HirNode::IntPort(x) => Some(x.name),
+        //                 HirNode::Inst(x) => Some(x.name),
+        //                 _ => None,
+        //             };
+        //             (inst_name, id)
+        //         }
+        //     };
+        //     let name = match self.hir_of(id).ok()? {
+        //         HirNode::VarDecl(x) => Some(x.name),
+        //         HirNode::IntPort(x) => Some(x.name),
+        //         _ => None,
+        //     };
+        //     match (prefix, name) {
+        //         (Some(prefix), Some(name)) => Some(format!("{}.{}", prefix, name)),
+        //         (None, Some(name)) => Some(format!("{}", name)),
+        //         _ => None,
+        //     }
+        // };
+        // for (i, &id) in inputs.iter().enumerate() {
+        //     if let Some(name) = guess_name(id) {
+        //         let value = builder.input_arg(i);
+        //         builder.set_name(value, name);
+        //     }
+        // }
+        // for (i, &id) in outputs.iter().enumerate() {
+        //     if let Some(name) = guess_name(id) {
+        //         let value = builder.output_arg(i);
+        //         builder.set_name(value, name);
+        //     }
+        // }
 
         // Create MLIR process.
         let mut mlir_builder = mlir::Builder::new(self.mcx);
@@ -494,8 +498,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         mlir_builder.set_loc(span_to_loc(self.mcx, hir.span()));
         for ((&id, arg), mlir_port) in inputs
             .iter()
-            .zip(builder.input_args())
-            .chain(outputs.iter().zip(builder.output_args()))
+            // .zip(builder.input_args())
+            .zip(std::iter::repeat(()))
+            .chain(
+                outputs
+                    .iter()
+                    .zip(std::iter::repeat(()) /*builder.output_args()*/),
+            )
             .zip(proc_op.ports())
         {
             values.insert(id.into(), (arg, mlir_port));
@@ -513,13 +522,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             let value = pg.values[&id.into()];
             let init = pg.mk_prb(value);
             let shadow = pg.mk_var(init);
-            if let Some(name) = pg
-                .builder
-                .get_name(value.0)
-                .map(|name| format!("{}.shadow", name))
-            {
-                pg.builder.set_name(shadow.0, name);
-            }
+            // if let Some(name) = pg
+            //     .builder
+            //     .get_name(value.0)
+            //     .map(|name| format!("{}.shadow", name))
+            // {
+            //     pg.builder.set_name(shadow.0, name);
+            // }
             pg.shadows.insert(id.into(), shadow);
         }
 
@@ -544,11 +553,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 // TODO(fschuiki): Replace this with a cleverer way to implement a trigger-on-end.
                 let body_blk = pg.mk_block(Some("body"));
                 let endtimes = (
-                    pg.builder.ins().const_time(llhd::TimeValue::new(
-                        "9001".parse().unwrap(),
-                        0,
-                        0,
-                    )),
+                    (),
+                    // pg.builder.ins().const_time(llhd::TimeValue::new(
+                    //     "9001".parse().unwrap(),
+                    //     0,
+                    //     0,
+                    // )),
                     circt::llhd::ConstantTimeOp::with_seconds(
                         pg.mlir_builder,
                         &BigInt::from_i64(std::i64::MAX / 1_000_000_000_000)
@@ -557,7 +567,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     )
                     .into(),
                 );
-                pg.builder.set_name(endtimes.0, "endtimes".to_string());
+                // pg.builder.set_name(endtimes.0, "endtimes".to_string());
                 pg.mk_wait(body_blk, None, Some(endtimes));
                 pg.append_to(body_blk);
                 pg.flush_mir(); // ensure we don't reuse earlier expr probe
@@ -592,17 +602,17 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         }
 
         Ok(EmittedProcedure {
-            unit: self.into.add_unit(prok),
+            // unit: self.into.add_unit(prok),
             mlir_symbol: proc_name.clone(),
             inputs,
             outputs,
         })
     }
 
-    /// Map a type to an LLHD type (interned).
-    fn emit_type(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<llhd::Type> {
-        self.emit_type_both(ty).map(|x| x.0)
-    }
+    // /// Map a type to an LLHD type (interned).
+    // fn emit_type(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<llhd::Type> {
+    //     self.emit_type_both(ty).map(|x| x.0)
+    // }
 
     /// Map a type to an LLHD type (interned).
     fn emit_type_both(&mut self, ty: &'gcx UnpackedType<'gcx>) -> Result<HybridType> {
@@ -824,11 +834,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Add entries for the function arguments to the value table such that
         // things we emit know how to use them. Apply the default values for
         // output operands.
-        for (value, arg) in gen
+        for (value, arg) in /*gen
             .builder
-            .input_args()
-            .zip(func_op.arguments())
-            .zip(args.args.iter())
+            .input_args()*/
+            std::iter::repeat(())
+                .zip(func_op.arguments())
+                .zip(args.args.iter())
         {
             gen.values.insert(arg.ast.id().into(), value);
             if arg.dir == ast::SubroutinePortDir::Output {
@@ -866,7 +877,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Add the function to the module and return a handle.
         let x = Ok(Rc::new(EmittedFunction {
-            unit: self.into.add_unit(func),
+            // unit: self.into.add_unit(func),
             mlir_symbol: func_name,
         }));
         self.tables.function_defs.insert(id.env(env), x.clone());
@@ -1024,7 +1035,7 @@ where
             };
             let ty = self.type_of(decl_id, env)?;
             let value = self.emit_varnet_decl(decl_id, ty, env, hir.init)?;
-            self.builder.set_name(value.0, hir.name.value.into());
+            // self.builder.set_name(value.0, hir.name.value.into());
             self.values.insert(decl_id.into(), value);
         }
 
@@ -1056,8 +1067,8 @@ where
             for signal in signals {
                 let value =
                     self.emit_varnet_decl(signal.decl_id, signal.ty, intf_ty.env, signal.default)?;
-                self.builder
-                    .set_name(value.0, format!("{}.{}", inst.hir.name, signal.name));
+                // self.builder
+                //     .set_name(value.0, format!("{}.{}", inst.hir.name, signal.name));
                 let src = AccessedNode::Intf(inst_id, signal.decl_id);
                 trace!(
                     "Emitted value for {:?} {}.{}",
@@ -1093,7 +1104,7 @@ where
                     assigned
                 );
                 let sig = signal_lookup[&port.port.id];
-                self.builder.ins().con(sig.0, assigned.0);
+                // self.builder.ins().con(sig.0, assigned.0);
                 circt::llhd::ConnectOp::new(self.mlir_builder, sig.1, assigned.1);
             }
         }
@@ -1156,10 +1167,10 @@ where
             )?;
 
             // Instantiate the module.
-            let ext_unit = self.builder.add_extern(
-                self.into.unit(target.unit).name().clone(),
-                self.into.unit(target.unit).sig().clone(),
-            );
+            // let ext_unit = self.builder.add_extern(
+            //     self.into.unit(target.unit).name().clone(),
+            //     self.into.unit(target.unit).sig().clone(),
+            // );
             if !inst.hir.ast.dims.is_empty() {
                 bug_span!(
                     inst.hir.ast.span(),
@@ -1167,11 +1178,11 @@ where
                     "instance arrays of modules not supported"
                 );
             }
-            self.builder.ins().inst(
-                ext_unit,
-                inputs.iter().map(|x| x.0).collect(),
-                outputs.iter().map(|x| x.0).collect(),
-            );
+            // self.builder.ins().inst(
+            //     ext_unit,
+            //     inputs.iter().map(|x| x.0).collect(),
+            //     outputs.iter().map(|x| x.0).collect(),
+            // );
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
                 &self.unique_names.add(&inst.hir.name.value.to_string()),
@@ -1241,15 +1252,15 @@ where
             };
             let inputs: Vec<_> = prok.inputs.iter().map(lookup_value).collect();
             let outputs: Vec<_> = prok.outputs.iter().map(lookup_value).collect();
-            let ext_unit = self.builder.add_extern(
-                self.into.unit(prok.unit).name().clone(),
-                self.into.unit(prok.unit).sig().clone(),
-            );
-            self.builder.ins().inst(
-                ext_unit,
-                inputs.iter().map(|x| x.0).collect(),
-                outputs.iter().map(|x| x.0).collect(),
-            );
+            // let ext_unit = self.builder.add_extern(
+            //     self.into.unit(prok.unit).name().clone(),
+            //     self.into.unit(prok.unit).sig().clone(),
+            // );
+            // self.builder.ins().inst(
+            //     ext_unit,
+            //     inputs.iter().map(|x| x.0).collect(),
+            //     outputs.iter().map(|x| x.0).collect(),
+            // );
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
                 &self.unique_names.add(&format!("{}_inst", prok.mlir_symbol)),
@@ -1377,7 +1388,7 @@ where
                         let v = self.type_default_value(ty);
                         let v = self.emit_const(v, inst.inner_env, port.port.span)?;
                         (
-                            self.builder.ins().sig(v.0),
+                            (), // self.builder.ins().sig(v.0),
                             circt::llhd::SignalOp::new(
                                 self.mlir_builder,
                                 &self.unique_names.add_tmp(),
@@ -1387,8 +1398,8 @@ where
                         )
                     }
                 };
-                self.builder
-                    .set_name(value.0, format!("{}.{}.default", inst.hir.name, port.name));
+                // self.builder
+                //     .set_name(value.0, format!("{}.{}.default", inst.hir.name, port.name));
                 Ok(value)
             }
         };
@@ -1429,14 +1440,15 @@ where
             ValueKind::Int(ref k, ..) => {
                 let size = value.ty.simple_bit_vector(self.cx, span).size;
                 Ok((
-                    self.builder.ins().const_int((size, k.clone())),
+                    (), //self.builder.ins().const_int((size, k.clone())),
                     circt::hw::ConstantOp::new(self.mlir_builder, std::cmp::max(size, 1), k).into(),
                 ))
             }
             ValueKind::Time(ref k) => Ok((
-                self.builder
-                    .ins()
-                    .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0)),
+                (),
+                // self.builder
+                // .ins()
+                // .const_time(llhd::value::TimeValue::new(k.clone(), 0, 0)),
                 circt::llhd::ConstantTimeOp::with_seconds(self.mlir_builder, k).into(),
             )),
             ValueKind::StructOrArray(ref v) => {
@@ -1450,12 +1462,12 @@ where
                 }
                 if let Some(_dim) = value.ty.outermost_dim() {
                     Ok((
-                        self.builder.ins().array(ll_fields),
+                        (), //self.builder.ins().array(ll_fields),
                         circt::hw::ArrayCreateOp::new(self.mlir_builder, ty.1, mlir_fields).into(),
                     ))
                 } else if let Some(_strukt) = value.ty.get_struct() {
                     Ok((
-                        self.builder.ins().strukt(ll_fields),
+                        (), //self.builder.ins().strukt(ll_fields),
                         circt::hw::StructCreateOp::new(self.mlir_builder, ty.1, mlir_fields).into(),
                     ))
                 } else {
@@ -1473,36 +1485,36 @@ where
         }
     }
 
-    /// Emit the zero value for an LLHD type.
-    ///
-    /// This function is ultimately expected to be moved into LLHD.
-    fn emit_zero_for_type(&mut self, ty: &llhd::Type) -> llhd::ir::Value {
-        match **ty {
-            llhd::TimeType => {
-                self.builder
-                    .ins()
-                    .const_time(llhd::value::TimeValue::new(num::zero(), 0, 0))
-            }
-            llhd::IntType(w) => self.builder.ins().const_int((w, 0)),
-            llhd::SignalType(ref ty) => {
-                let inner = self.emit_zero_for_type(ty);
-                self.builder.ins().sig(inner)
-            }
-            llhd::PointerType(ref ty) => {
-                let inner = self.emit_zero_for_type(ty);
-                self.builder.ins().var(inner)
-            }
-            llhd::ArrayType(l, ref ty) => {
-                let inner = self.emit_zero_for_type(ty);
-                self.builder.ins().array_uniform(l, inner)
-            }
-            llhd::StructType(ref tys) => {
-                let inner = tys.iter().map(|ty| self.emit_zero_for_type(ty)).collect();
-                self.builder.ins().strukt(inner)
-            }
-            _ => panic!("no zero-value for type {}", ty),
-        }
-    }
+    // /// Emit the zero value for an LLHD type.
+    // ///
+    // /// This function is ultimately expected to be moved into LLHD.
+    // fn emit_zero_for_type(&mut self, ty: &llhd::Type) -> llhd::ir::Value {
+    //     match **ty {
+    //         llhd::TimeType => {
+    //             self.builder
+    //                 .ins()
+    //                 .const_time(llhd::value::TimeValue::new(num::zero(), 0, 0))
+    //         }
+    //         llhd::IntType(w) => self.builder.ins().const_int((w, 0)),
+    //         llhd::SignalType(ref ty) => {
+    //             let inner = self.emit_zero_for_type(ty);
+    //             self.builder.ins().sig(inner)
+    //         }
+    //         llhd::PointerType(ref ty) => {
+    //             let inner = self.emit_zero_for_type(ty);
+    //             self.builder.ins().var(inner)
+    //         }
+    //         llhd::ArrayType(l, ref ty) => {
+    //             let inner = self.emit_zero_for_type(ty);
+    //             self.builder.ins().array_uniform(l, inner)
+    //         }
+    //         llhd::StructType(ref tys) => {
+    //             let inner = tys.iter().map(|ty| self.emit_zero_for_type(ty)).collect();
+    //             self.builder.ins().strukt(inner)
+    //         }
+    //         _ => panic!("no zero-value for type {}", ty),
+    //     }
+    // }
 
     /// Emit the zero value for an MLIR type.
     fn emit_zero_for_type_mlir(&mut self, ty: mlir::Type) -> mlir::Value {
@@ -1543,19 +1555,19 @@ where
     /// Emit the zero value for a type.
     fn emit_zero_for_type_both(&mut self, ty: HybridType) -> HybridValue {
         (
-            self.emit_zero_for_type(&ty.0),
+            (), //self.emit_zero_for_type(&ty.0),
             self.emit_zero_for_type_mlir(ty.1),
         )
     }
 
-    /// Get the type of an LLHD value.
-    fn llhd_type(&self, value: llhd::ir::Value) -> llhd::Type {
-        self.builder.value_type(value)
-    }
+    // /// Get the type of an LLHD value.
+    // fn llhd_type(&self, value: llhd::ir::Value) -> llhd::Type {
+    //     self.builder.value_type(value)
+    // }
 
     /// Get the type of an emitted value.
     fn value_type(&self, value: HybridValue) -> HybridType {
-        (self.builder.value_type(value.0), value.1.ty())
+        (self.builder.value_type(todo!() /*value.0*/), value.1.ty())
     }
 
     /// Emit the code for an rvalue.
@@ -1598,7 +1610,7 @@ where
                 let ty = self.value_type(value);
                 let init = self.emit_zero_for_type_both(ty);
                 let sig = (
-                    self.builder.ins().sig(init.0),
+                    (), //self.builder.ins().sig(init.0),
                     circt::llhd::SignalOp::new(
                         self.mlir_builder,
                         &self.unique_names.add_tmp(),
@@ -1627,20 +1639,20 @@ where
         let result = self.emit_mir_rvalue_inner(mir, mode_hint);
         match result {
             Ok((result, actual_mode)) => {
-                let llty_exp = self.emit_type(mir.ty)?;
+                let llty_exp = self.emit_type_both(mir.ty)?;
                 let llty_exp = match actual_mode {
                     Mode::Value => llty_exp,
-                    Mode::Signal => llhd::signal_ty(llty_exp),
+                    Mode::Signal => signal_ty(llty_exp),
                 };
-                let llty_act = self.llhd_type(result.0);
+                let llty_act = self.value_type(result);
                 assert_span!(
-                    llty_exp == llty_act,
+                    llty_exp.1 == llty_act.1,
                     mir.span,
                     self.cx,
                     "codegen for MIR rvalue `{}` should produce `{}`, but got `{}`; {:#?}",
                     mir.span.extract(),
-                    llty_exp,
-                    llty_act,
+                    llty_exp.1,
+                    llty_act.1,
                     mir
                 );
             }
@@ -1679,7 +1691,7 @@ where
                     .get(&id.into())
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
-                if mode_hint == Mode::Signal && self.llhd_type(sig.0).is_signal() {
+                if mode_hint == Mode::Signal && is_signal_type(sig.1.ty()) {
                     return Ok((sig, Mode::Signal));
                 } else {
                     self.emit_prb_or_var(sig)
@@ -1733,7 +1745,7 @@ where
                 let result = self.emit_zero_for_type_both(llty);
                 let value = self.emit_mir_rvalue(value)?;
                 let result = self.mk_ins_slice(result, value, 0, width);
-                self.builder.set_name(result.0, "zext".to_string());
+                // self.builder.set_name(result.0, "zext".to_string());
                 result
             }
 
@@ -1746,7 +1758,7 @@ where
                 let ones = self.mk_not(zeros);
                 let mux = self.mk_mux(sign, ones, zeros);
                 let result = self.mk_ins_slice(mux, value, 0, width);
-                self.builder.set_name(result.0, "sext".to_string());
+                // self.builder.set_name(result.0, "sext".to_string());
                 result
             }
 
@@ -1871,19 +1883,17 @@ where
                             });
                             // `y * log2(base)`
                             let rhs_ll = lg2.map(|lg2| {
-                                let width = self.llhd_type(rhs_ll.0).len();
+                                let width = integer_type_width(rhs_ll.1.ty());
                                 let lg2 = self.mk_const_int(width, &BigInt::from(lg2));
                                 self.mk_umul(lg2, rhs_ll)
                             });
                             if let Some(rhs_ll) = rhs_ll {
                                 // `1`
-                                let width = self.llhd_type(lhs_ll.0).len();
+                                let width = integer_type_width(lhs_ll.1.ty());
                                 let lhs_ll = self.mk_const_int(width, &BigInt::one());
                                 // `1 << (y * log2(base))`
-                                let zeros = self.emit_zero_for_type_both((
-                                    self.llhd_type(lhs_ll.0),
-                                    lhs_ll.1.ty(),
-                                ));
+                                let ty = self.value_type(lhs_ll);
+                                let zeros = self.emit_zero_for_type_both(ty);
                                 return Ok((self.mk_shl(lhs_ll, zeros, rhs_ll), Mode::Value));
                             }
                         }
@@ -1915,14 +1925,14 @@ where
                         " - Value has width {}, type `{}`, in LLHD `{}`",
                         width,
                         value.ty,
-                        self.llhd_type(llval.0)
+                        llval.1.ty()
                     );
                     if width > 0 {
                         result = self.mk_ins_slice(result, llval, offset, width);
                         offset += width;
                     }
                 }
-                self.builder.set_name(result.0, "concat".to_string());
+                // self.builder.set_name(result.0, "concat".to_string());
                 result
             }
 
@@ -1934,7 +1944,7 @@ where
                 for i in 0..times {
                     result = self.mk_ins_slice(result, value, i * width, width);
                 }
-                self.builder.set_name(result.0, "repeat".to_string());
+                // self.builder.set_name(result.0, "repeat".to_string());
                 result
             }
 
@@ -1946,11 +1956,11 @@ where
             } => {
                 let value = self.emit_mir_rvalue(value)?;
                 let amount = self.emit_mir_rvalue(amount)?;
-                let value_ty = self.builder.unit().value_type(value.0);
-                let hidden = self.emit_zero_for_type_both((value_ty.clone(), value.1.ty()));
+                let value_ty = self.value_type(value);
+                let hidden = self.emit_zero_for_type_both(value_ty.clone());
                 let hidden = if arith && op == mir::ShiftOp::Right {
                     let ones = self.mk_not(hidden);
-                    let sign = self.mk_ext_slice(value, value_ty.unwrap_int() - 1, 1);
+                    let sign = self.mk_ext_slice(value, integer_type_width(value_ty.1) - 1, 1);
                     self.mk_mux(sign, ones, hidden)
                 } else {
                     hidden
@@ -2018,10 +2028,10 @@ where
                 // Ensure the function is emitted.
                 let func_env = self.default_param_env();
                 let func = self.emit_function(target.id(), func_env)?;
-                let ext_unit = self.builder.add_extern(
-                    self.into.unit(func.unit).name().clone(),
-                    self.into.unit(func.unit).sig().clone(),
-                );
+                // let ext_unit = self.builder.add_extern(
+                //     self.into.unit(func.unit).name().clone(),
+                //     self.into.unit(func.unit).sig().clone(),
+                // );
 
                 // Assemble the arguments passed into the function.
                 let mut input_args = vec![];
@@ -2109,7 +2119,10 @@ where
                         ptr: std::ptr::null_mut(),
                     })
                 };
-                (self.builder.ins().call(ext_unit, vec![]), result)
+                (
+                    (), // self.builder.ins().call(ext_unit, vec![]),
+                    result,
+                )
             }
 
             // Propagate tombstones.
@@ -2120,22 +2133,21 @@ where
     }
 
     fn emit_prb_or_var(&mut self, sig: HybridValue) -> HybridValue {
-        match *self.llhd_type(sig.0) {
-            llhd::SignalType(_) => {
-                let value = self.mk_prb(sig);
-                if let Some(name) = self.builder.get_name(sig.0) {
-                    self.builder.set_name(value.0, format!("{}.prb", name));
-                }
-                value
-            }
-            llhd::PointerType(_) => {
-                let value = self.mk_ld(sig);
-                if let Some(name) = self.builder.get_name(sig.0) {
-                    self.builder.set_name(value.0, format!("{}.ld", name));
-                }
-                value
-            }
-            _ => sig,
+        let ty = sig.1.ty();
+        if is_signal_type(ty) {
+            let value = self.mk_prb(sig);
+            // if let Some(name) = self.builder.get_name(sig.0) {
+            //     self.builder.set_name(value.0, format!("{}.prb", name));
+            // }
+            value
+        } else if is_pointer_type(ty) {
+            let value = self.mk_ld(sig);
+            // if let Some(name) = self.builder.get_name(sig.0) {
+            //     self.builder.set_name(value.0, format!("{}.ld", name));
+            // }
+            value
+        } else {
+            sig
         }
     }
 
@@ -2174,13 +2186,8 @@ where
                     .get(&id)
                     .cloned()
                     .unwrap_or_else(|| self.emitted_value(id));
-                debug!(
-                    "{:?} emitted value is {:?} (type {})",
-                    id,
-                    sig,
-                    self.llhd_type(sig.0)
-                );
-                if mode_hint == Mode::Signal && self.llhd_type(sig.0).is_signal() {
+                debug!("{:?} emitted value is {:?} (type {})", id, sig, sig.1.ty(),);
+                if mode_hint == Mode::Signal && is_signal_type(sig.1.ty()) {
                     Ok((sig, Mode::Signal))
                 } else {
                     Ok((self.emit_prb_or_var(sig), Mode::Value))
@@ -2257,30 +2264,30 @@ where
         let result = self.emit_mir_lvalue_inner(mir);
         match result {
             Ok((sig, var)) => {
-                let llty_exp1 = llhd::signal_ty(self.emit_type(mir.ty)?);
-                let llty_exp2 = llhd::pointer_ty(self.emit_type(mir.ty)?);
-                let llty_act = self.llhd_type(sig.0);
+                let llty_exp1 = signal_ty(self.emit_type_both(mir.ty)?);
+                let llty_exp2 = pointer_ty(self.emit_type_both(mir.ty)?);
+                let llty_act = self.value_type(sig);
                 assert_span!(
-                    llty_exp1 == llty_act || llty_exp2 == llty_act,
+                    llty_exp1.1 == llty_act.1 || llty_exp2.1 == llty_act.1,
                     mir.span,
                     self.cx,
                     "codegen for MIR lvalue `{}` should produce `{}` or `{}`, but got `{}`",
                     mir.span.extract(),
-                    llty_exp1,
-                    llty_exp2,
-                    llty_act
+                    llty_exp1.1,
+                    llty_exp2.1,
+                    llty_act.1
                 );
                 if let Some(var) = var {
-                    let llty_exp = llhd::pointer_ty(self.emit_type(mir.ty)?);
-                    let llty_act = self.llhd_type(var.0);
+                    let llty_exp = pointer_ty(self.emit_type_both(mir.ty)?);
+                    let llty_act = self.value_type(var);
                     assert_span!(
-                        llty_exp == llty_act,
+                        llty_exp.1 == llty_act.1,
                         mir.span,
                         self.cx,
                         "codegen for MIR lvalue `{}` should produce `{}`, but got `{}`",
                         mir.span.extract(),
-                        llty_exp,
-                        llty_act
+                        llty_exp.1,
+                        llty_act.1
                     );
                 }
             }
@@ -2528,9 +2535,9 @@ where
             } => {
                 let resume_blk = self.mk_block(None);
                 let duration = self.emit_rvalue(expr_id, env)?;
-                self.builder
-                    .ins()
-                    .wait_time(resume_blk.0, duration.0, vec![]);
+                // self.builder
+                //     .ins()
+                //     .wait_time(resume_blk.0, duration.0, vec![]);
                 circt::llhd::WaitOp::new(self.mlir_builder, resume_blk.1, vec![], Some(duration.1));
                 self.append_to(resume_blk);
                 self.flush_mir(); // ensure we don't reuse earlier expr probe
@@ -2585,12 +2592,12 @@ where
                     for &iff in &event.iff {
                         let iff_value = self.emit_rvalue_bool(iff, env)?;
                         trigger = self.mk_and(trigger, iff_value);
-                        self.builder.set_name(trigger.0, "iff".to_string());
+                        // self.builder.set_name(trigger.0, "iff".to_string());
                     }
                     event_cond = Some(match event_cond {
                         Some(chain) => {
                             let value = self.mk_or(chain, trigger);
-                            self.builder.set_name(value.0, "event_or".to_string());
+                            // self.builder.set_name(value.0, "event_or".to_string());
                             value
                         }
                         None => trigger,
@@ -2686,7 +2693,7 @@ where
                             _ => panic!("case constant evaluates to non-integer"),
                         };
                         let way_expr = self.emit_const(way_const, env, self.span(way_expr))?;
-                        let way_width = self.llhd_type(way_expr.0).unwrap_int();
+                        let way_width = integer_type_width(way_expr.1.ty());
 
                         // Generate the comparison mask based on the case kind.
                         let mask = match kind {
@@ -2819,7 +2826,7 @@ where
                 let ty = self.type_of(count, env)?;
                 let count = self.emit_rvalue(count, env)?;
                 let var = self.mk_var(count);
-                self.builder.set_name(var.0, "loop_count".to_string());
+                // self.builder.set_name(var.0, "loop_count".to_string());
                 Some((var, ty))
             }
             hir::LoopKind::While(_) => None,
@@ -2904,7 +2911,7 @@ where
             None => self.emit_zero_for_type_both(ty),
         };
         let value = self.mk_var(init);
-        self.builder.set_name(value.0, hir.name.value.to_string());
+        // self.builder.set_name(value.0, hir.name.value.to_string());
         self.set_emitted_value(decl_id, value);
         Ok(())
     }
@@ -2925,7 +2932,7 @@ where
                 let prev_eq_0 = self.mk_cmp(CmpPred::Eq, prev, zero);
                 let now_neq_0 = self.mk_cmp(CmpPred::Neq, now, zero);
                 let value = self.mk_and(prev_eq_0, now_neq_0);
-                self.builder.set_name(value.0, "posedge".to_string());
+                // self.builder.set_name(value.0, "posedge".to_string());
                 Some(value)
             }
             _ => None,
@@ -2938,7 +2945,7 @@ where
                 let prev_neq_0 = self.mk_cmp(CmpPred::Neq, prev, zero);
                 let now_eq_0 = self.mk_cmp(CmpPred::Eq, now, zero);
                 let value = self.mk_and(prev_neq_0, now_eq_0);
-                self.builder.set_name(value.0, "negedge".to_string());
+                // self.builder.set_name(value.0, "negedge".to_string());
                 Some(value)
             }
             _ => None,
@@ -2949,14 +2956,14 @@ where
         Ok(match (posedge, negedge) {
             (Some(a), Some(b)) => {
                 let value = self.mk_or(a, b);
-                self.builder.set_name(value.0, "edge".to_string());
+                // self.builder.set_name(value.0, "edge".to_string());
                 value
             }
             (Some(a), None) => a,
             (None, Some(b)) => b,
             (None, None) => {
                 let value = self.mk_cmp(CmpPred::Neq, prev, now);
-                self.builder.set_name(value.0, "impledge".to_string());
+                // self.builder.set_name(value.0, "impledge".to_string());
                 value
             }
         })
@@ -3032,7 +3039,7 @@ where
                 self.span(default.unwrap_or(decl_id)),
             )?;
             Ok((
-                self.builder.ins().sig(init.0),
+                (), // self.builder.ins().sig(init.0),
                 circt::llhd::SignalOp::new(
                     self.mlir_builder,
                     &self.unique_names.add(&name),
@@ -3045,7 +3052,7 @@ where
             // short-circuit it with the net declaration.
             let zero = self.emit_const(self.type_default_value(ty), env, self.span(decl_id))?;
             let net = (
-                self.builder.ins().sig(zero.0),
+                (), // self.builder.ins().sig(zero.0),
                 circt::llhd::SignalOp::new(
                     self.mlir_builder,
                     &self.unique_names.add(&name),
@@ -3055,7 +3062,7 @@ where
             );
             if let Some(default) = default {
                 let init = self.emit_rvalue_mode(default, env, Mode::Signal)?;
-                self.builder.ins().con(net.0, init.0);
+                // self.builder.ins().con(net.0, init.0);
                 circt::llhd::ConnectOp::new(self.mlir_builder, net.1, init.1);
             }
             Ok(net)
@@ -3071,33 +3078,33 @@ where
     }
 
     fn mk_br(&mut self, target: HybridBlock) {
-        self.builder.ins().br(target.0);
+        // self.builder.ins().br(target.0);
         circt::std::BranchOp::new(self.mlir_builder, target.1);
         self.terminated = true;
     }
 
     fn mk_cond_br(&mut self, cond: HybridValue, true_block: HybridBlock, false_block: HybridBlock) {
-        self.builder
-            .ins()
-            .br_cond(cond.0, false_block.0, true_block.0);
+        // self.builder
+        //     .ins()
+        //     .br_cond(cond.0, false_block.0, true_block.0);
         circt::std::CondBranchOp::new(self.mlir_builder, cond.1, true_block.1, false_block.1);
         self.terminated = true;
     }
 
     fn mk_ret(&mut self, values: impl IntoIterator<Item = HybridValue>) {
-        let mut values_llhd = vec![];
+        // let mut values_llhd = vec![];
         let mut values_mlir = vec![];
         for v in values {
-            values_llhd.push(v.0);
+            // values_llhd.push(v.0);
             values_mlir.push(v.1);
         }
-        self.builder.ins().ret();
+        // self.builder.ins().ret();
         circt::std::ReturnOp::new(self.mlir_builder, values_mlir);
         self.terminated = true;
     }
 
     fn append_to(&mut self, block: HybridBlock) {
-        self.builder.append_to(block.0);
+        // self.builder.append_to(block.0);
         self.mlir_builder.set_insertion_point_to_end(block.1);
         self.terminated = false;
     }
@@ -3115,18 +3122,19 @@ where
             on_mlir.push(v.1);
         }
         (
-            if let Some(time) = time {
-                self.builder.ins().wait_time(block.0, time.0, on_llhd);
-            } else {
-                self.builder.ins().wait(block.0, on_llhd);
-            },
+            (),
+            // if let Some(time) = time {
+            //     self.builder.ins().wait_time(block.0, time.0, on_llhd);
+            // } else {
+            //     self.builder.ins().wait(block.0, on_llhd);
+            // },
             circt::llhd::WaitOp::new(self.mlir_builder, block.1, on_mlir, time.map(|x| x.1)),
         );
     }
 
     fn mk_ext_slice(&mut self, arg: HybridValue, offset: usize, length: usize) -> HybridValue {
         (
-            self.builder.ins().ext_slice(arg.0, offset, length),
+            (), // self.builder.ins().ext_slice(arg.0, offset, length),
             if mlir::is_integer_type(arg.1.ty()) {
                 circt::comb::ExtractOp::with_sizes(self.mlir_builder, arg.1, offset, length).into()
             } else {
@@ -3239,9 +3247,10 @@ where
         length: usize,
     ) -> HybridValue {
         (
-            self.builder
-                .ins()
-                .ins_slice(into.0, value.0, offset, length),
+            (),
+            // self.builder
+            //     .ins()
+            //     .ins_slice(into.0, value.0, offset, length),
             self.mk_ins_slice_mlir(into.1, value.1, offset, length),
         )
     }
@@ -3272,7 +3281,10 @@ where
         } else {
             panic!("unsupported type {}", arg.1.ty());
         };
-        (self.builder.ins().ext_field(arg.0, offset), mlir)
+        (
+            (), // self.builder.ins().ext_field(arg.0, offset),
+            mlir,
+        )
     }
 
     #[allow(dead_code)]
@@ -3293,45 +3305,54 @@ where
             .into();
             self.mk_ins_slice_mlir(into.1, value, offset, 1)
         };
-        (self.builder.ins().ins_field(into.0, value.0, offset), mlir)
+        (
+            (), // self.builder.ins().ins_field(into.0, value.0, offset),
+            mlir,
+        )
     }
 
     fn mk_not(&mut self, arg: HybridValue) -> HybridValue {
-        (self.builder.ins().not(arg.0), {
-            let ones = circt::hw::ConstantOp::new(
-                self.mlir_builder,
-                mlir::integer_type_width(arg.1.ty()),
-                &(-1).into(),
-            )
-            .into();
-            circt::comb::XorOp::new(self.mlir_builder, ones, arg.1).into()
-        })
+        (
+            (), // self.builder.ins().not(arg.0),
+            {
+                let ones = circt::hw::ConstantOp::new(
+                    self.mlir_builder,
+                    mlir::integer_type_width(arg.1.ty()),
+                    &(-1).into(),
+                )
+                .into();
+                circt::comb::XorOp::new(self.mlir_builder, ones, arg.1).into()
+            },
+        )
     }
 
     fn mk_neg(&mut self, arg: HybridValue) -> HybridValue {
-        (self.builder.ins().neg(arg.0), {
-            let zero = self.emit_zero_for_type_mlir(arg.1.ty());
-            circt::comb::SubOp::new(self.mlir_builder, zero, arg.1).into()
-        })
+        (
+            (), // self.builder.ins().neg(arg.0),
+            {
+                let zero = self.emit_zero_for_type_mlir(arg.1.ty());
+                circt::comb::SubOp::new(self.mlir_builder, zero, arg.1).into()
+            },
+        )
     }
 
     fn mk_and(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().and(lhs.0, rhs.0),
+            (), // self.builder.ins().and(lhs.0, rhs.0),
             circt::comb::AndOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_or(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().or(lhs.0, rhs.0),
+            (), // self.builder.ins().or(lhs.0, rhs.0),
             circt::comb::OrOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_xor(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().xor(lhs.0, rhs.0),
+            (), // self.builder.ins().xor(lhs.0, rhs.0),
             circt::comb::XorOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
@@ -3342,9 +3363,9 @@ where
         true_value: HybridValue,
         false_value: HybridValue,
     ) -> HybridValue {
-        let array = self.builder.ins().array(vec![false_value.0, true_value.0]);
+        //let array = self.builder.ins().array(vec![false_value.0, true_value.0]);
         (
-            self.builder.ins().mux(array, cond.0),
+            (), // self.builder.ins().mux(array, cond.0),
             circt::comb::MuxOp::new(self.mlir_builder, cond.1, true_value.1, false_value.1).into(),
         )
     }
@@ -3356,7 +3377,7 @@ where
         amount: HybridValue,
     ) -> HybridValue {
         (
-            self.builder.ins().shl(value.0, hidden.0, amount.0),
+            (), // self.builder.ins().shl(value.0, hidden.0, amount.0),
             circt::llhd::ShlOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
         )
     }
@@ -3368,70 +3389,70 @@ where
         amount: HybridValue,
     ) -> HybridValue {
         (
-            self.builder.ins().shr(value.0, hidden.0, amount.0),
+            (), // self.builder.ins().shr(value.0, hidden.0, amount.0),
             circt::llhd::ShrOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
         )
     }
 
     fn mk_add(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().add(lhs.0, rhs.0),
+            (), // self.builder.ins().add(lhs.0, rhs.0),
             circt::comb::AddOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_sub(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().sub(lhs.0, rhs.0),
+            (), // self.builder.ins().sub(lhs.0, rhs.0),
             circt::comb::SubOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_smul(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().smul(lhs.0, rhs.0),
+            (), // self.builder.ins().smul(lhs.0, rhs.0),
             circt::comb::MulOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_umul(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().umul(lhs.0, rhs.0),
+            (), // self.builder.ins().umul(lhs.0, rhs.0),
             circt::comb::MulOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_sdiv(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().sdiv(lhs.0, rhs.0),
+            (), // self.builder.ins().sdiv(lhs.0, rhs.0),
             circt::comb::DivSOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_udiv(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().udiv(lhs.0, rhs.0),
+            (), // self.builder.ins().udiv(lhs.0, rhs.0),
             circt::comb::DivUOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_smod(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().smod(lhs.0, rhs.0),
+            (), // self.builder.ins().smod(lhs.0, rhs.0),
             circt::comb::ModSOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_umod(&mut self, lhs: HybridValue, rhs: HybridValue) -> HybridValue {
         (
-            self.builder.ins().umod(lhs.0, rhs.0),
+            (), // self.builder.ins().umod(lhs.0, rhs.0),
             circt::comb::ModUOp::new(self.mlir_builder, lhs.1, rhs.1).into(),
         )
     }
 
     fn mk_const_int(&mut self, width: usize, value: &BigInt) -> HybridValue {
         (
-            self.builder.ins().const_int((width, value.clone())),
+            (), // self.builder.ins().const_int((width, value.clone())),
             circt::hw::ConstantOp::new(self.mlir_builder, width, value).into(),
         )
     }
@@ -3443,11 +3464,12 @@ where
         epsilon: usize,
     ) -> HybridValue {
         (
-            self.builder.ins().const_time(llhd::value::TimeValue::new(
-                seconds.clone(),
-                delta,
-                epsilon,
-            )),
+            (),
+            // self.builder.ins().const_time(llhd::value::TimeValue::new(
+            //     seconds.clone(),
+            //     delta,
+            //     epsilon,
+            // )),
             circt::llhd::ConstantTimeOp::new(self.mlir_builder, seconds, delta, epsilon).into(),
         )
     }
@@ -3458,19 +3480,20 @@ where
             lhs.1 = circt::hw::BitcastOp::new(self.mlir_builder, ty, lhs.1).into();
             rhs.1 = circt::hw::BitcastOp::new(self.mlir_builder, ty, rhs.1).into();
         }
-        let mut ins = self.builder.ins();
-        let old = match pred {
-            CmpPred::Eq => ins.eq(lhs.0, rhs.0),
-            CmpPred::Neq => ins.neq(lhs.0, rhs.0),
-            CmpPred::Slt => ins.slt(lhs.0, rhs.0),
-            CmpPred::Sle => ins.sle(lhs.0, rhs.0),
-            CmpPred::Sgt => ins.sgt(lhs.0, rhs.0),
-            CmpPred::Sge => ins.sge(lhs.0, rhs.0),
-            CmpPred::Ult => ins.ult(lhs.0, rhs.0),
-            CmpPred::Ule => ins.ule(lhs.0, rhs.0),
-            CmpPred::Ugt => ins.ugt(lhs.0, rhs.0),
-            CmpPred::Uge => ins.uge(lhs.0, rhs.0),
-        };
+        // let mut ins = self.builder.ins();
+        // let old = match pred {
+        //     CmpPred::Eq => ins.eq(lhs.0, rhs.0),
+        //     CmpPred::Neq => ins.neq(lhs.0, rhs.0),
+        //     CmpPred::Slt => ins.slt(lhs.0, rhs.0),
+        //     CmpPred::Sle => ins.sle(lhs.0, rhs.0),
+        //     CmpPred::Sgt => ins.sgt(lhs.0, rhs.0),
+        //     CmpPred::Sge => ins.sge(lhs.0, rhs.0),
+        //     CmpPred::Ult => ins.ult(lhs.0, rhs.0),
+        //     CmpPred::Ule => ins.ule(lhs.0, rhs.0),
+        //     CmpPred::Ugt => ins.ugt(lhs.0, rhs.0),
+        //     CmpPred::Uge => ins.uge(lhs.0, rhs.0),
+        // };
+        let old = ();
         (
             old,
             circt::comb::ICmpOp::new(self.mlir_builder, pred, lhs.1, rhs.1).into(),
@@ -3479,9 +3502,10 @@ where
 
     fn mk_array(&mut self, ty: HybridType, elements: &[HybridValue]) -> HybridValue {
         (
-            self.builder
-                .ins()
-                .array(elements.iter().map(|v| v.0.clone()).collect()),
+            (),
+            // self.builder
+            //     .ins()
+            //     .array(elements.iter().map(|v| v.0.clone()).collect()),
             circt::hw::ArrayCreateOp::new(self.mlir_builder, ty.1, elements.iter().map(|v| v.1))
                 .into(),
         )
@@ -3489,9 +3513,10 @@ where
 
     fn mk_struct(&mut self, ty: HybridType, elements: &[HybridValue]) -> HybridValue {
         (
-            self.builder
-                .ins()
-                .strukt(elements.iter().map(|v| v.0.clone()).collect()),
+            (),
+            // self.builder
+            //     .ins()
+            //     .strukt(elements.iter().map(|v| v.0.clone()).collect()),
             circt::hw::StructCreateOp::new(self.mlir_builder, ty.1, elements.iter().map(|v| v.1))
                 .into(),
         )
@@ -3499,37 +3524,33 @@ where
 
     fn mk_prb(&mut self, value: HybridValue) -> HybridValue {
         (
-            self.builder.ins().prb(value.0),
+            (), // self.builder.ins().prb(value.0),
             circt::llhd::ProbeOp::new(self.mlir_builder, value.1).into(),
         )
     }
 
     fn mk_drv(&mut self, lhs: HybridValue, rhs: HybridValue, delay: HybridValue) {
-        (
-            self.builder.ins().drv(lhs.0, rhs.0, delay.0),
-            circt::llhd::DriveOp::new(self.mlir_builder, lhs.1, rhs.1, delay.1),
-        );
+        // self.builder.ins().drv(lhs.0, rhs.0, delay.0);
+        circt::llhd::DriveOp::new(self.mlir_builder, lhs.1, rhs.1, delay.1);
     }
 
     fn mk_var(&mut self, init: HybridValue) -> HybridValue {
         (
-            self.builder.ins().var(init.0),
+            (), // self.builder.ins().var(init.0),
             circt::llhd::VariableOp::new(self.mlir_builder, init.1).into(),
         )
     }
 
     fn mk_ld(&mut self, var: HybridValue) -> HybridValue {
         (
-            self.builder.ins().ld(var.0),
+            (), // self.builder.ins().ld(var.0),
             circt::llhd::LoadOp::new(self.mlir_builder, var.1).into(),
         )
     }
 
     fn mk_st(&mut self, var: HybridValue, value: HybridValue) {
-        (
-            self.builder.ins().st(var.0, value.0),
-            circt::llhd::StoreOp::new(self.mlir_builder, var.1, value.1),
-        );
+        // self.builder.ins().st(var.0, value.0),
+        circt::llhd::StoreOp::new(self.mlir_builder, var.1, value.1);
     }
 }
 
@@ -3609,8 +3630,8 @@ fn emit_port_details<'gcx>(cx: &impl Context<'gcx>, hir: &hir::Module<'gcx>, env
 
 /// Result of emitting a module.
 pub struct EmittedModule<'a> {
-    /// The emitted LLHD unit.
-    unit: llhd::ir::UnitId,
+    // /// The emitted LLHD unit.
+    // unit: llhd::ir::UnitId,
     /// The emitted MLIR symbol name.
     mlir_symbol: String,
     /// The module's ports.
@@ -3619,8 +3640,8 @@ pub struct EmittedModule<'a> {
 
 /// Result of emitting a procedure.
 pub struct EmittedProcedure {
-    /// The emitted LLHD unit.
-    unit: llhd::ir::UnitId,
+    // /// The emitted LLHD unit.
+    // unit: llhd::ir::UnitId,
     /// The emitted MLIR symbol name.
     mlir_symbol: String,
     /// The nodes used exclusively as rvalues.
@@ -3631,8 +3652,8 @@ pub struct EmittedProcedure {
 
 /// Result of emitting a function.
 pub struct EmittedFunction {
-    /// The emitted LLHD unit.
-    unit: llhd::ir::UnitId,
+    // /// The emitted LLHD unit.
+    // unit: llhd::ir::UnitId,
     /// The emitted MLIR symbol name.
     mlir_symbol: String,
 }
