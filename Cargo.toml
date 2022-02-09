@@ -23,8 +23,6 @@ moore-svlog = { path = "src/svlog", version = "0.14.0" }
 moore-vhdl = { path = "src/vhdl", version = "0.14.0" }
 moore-circt = { path = "src/circt", version = "0.14.0" }
 clap = "2"
-llhd = "0.16"
-# llhd = { git = "https://github.com/fabianschuiki/llhd" }
 num = "0.3"
 serde = "1"
 typed-arena = "2.0.1"

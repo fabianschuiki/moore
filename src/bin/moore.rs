@@ -6,9 +6,6 @@
 extern crate log;
 
 use clap::{App, Arg, ArgMatches};
-use llhd;
-use moore_circt::{self as circt, mlir, prelude::*, sys::*};
-// use llhd::opt::{Pass, PassContext};
 use moore::common::score::NodeRef;
 use moore::errors::*;
 use moore::name::Name;
@@ -16,6 +13,7 @@ use moore::score::{ScoreBoard, ScoreContext};
 use moore::source::Span;
 use moore::svlog::{ast::AcceptVisitor as _, hir::Visitor as _, QueryDatabase as _};
 use moore::*;
+use moore_circt::{self as circt, mlir, prelude::*, sys::*};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -550,17 +548,6 @@ fn elaborate_name(
                 cg.emit_globals(root)?;
             }
             cg.emit_module(m)?;
-            let module = cg.finalize();
-            // let mut module = cg.finalize();
-            // let pass_ctx = PassContext;
-            // if ctx.sess.opts.opt_level > 0 {
-            //     llhd::pass::ConstFolding::run_on_module(&pass_ctx, &mut module);
-            //     llhd::pass::VarToPhiPromotion::run_on_module(&pass_ctx, &mut module); // broken in llhd 0.13
-            //     llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
-            //     llhd::pass::GlobalCommonSubexprElim::run_on_module(&pass_ctx, &mut module);
-            //     llhd::pass::InstSimplification::run_on_module(&pass_ctx, &mut module);
-            //     llhd::pass::DeadCodeElim::run_on_module(&pass_ctx, &mut module);
-            // }
 
             // Verify the module.
             if !mlir_module.verify() {
@@ -572,7 +559,7 @@ fn elaborate_name(
             }
 
             // Decide what format to use for the output.
-            emit_output(matches, ctx, &module, mlir_module)?
+            emit_output(matches, ctx, mlir_module)?
         }
     }
     Ok(())
@@ -675,7 +662,6 @@ enum OutputFormat {
 fn emit_output(
     matches: &ArgMatches,
     ctx: &ScoreContext,
-    module: &llhd::ir::Module,
     mlir_module: circt::ModuleOp,
 ) -> Result<(), ()> {
     // Check if the user has provided an explicit output format.
@@ -725,8 +711,13 @@ fn emit_output(
 
     // Emit the appropriate output.
     match fmt {
-        OutputFormat::Llhd => llhd::assembly::write_module(output, &module),
-        OutputFormat::Mlir => llhd::mlir::write_module(output, &module),
+        OutputFormat::Llhd | OutputFormat::Mlir => {
+            ctx.sess.emit(
+                DiagBuilder2::fatal("only `mlir-native` output format supported")
+                    .add_note("`llhd` and `mlir` have been removed"),
+            );
+            return Err(());
+        }
         OutputFormat::MlirNative => mlir_module.print(output, matches.is_present("debug-info")),
     };
     Ok(())

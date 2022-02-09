@@ -1,7 +1,6 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
 //! This module implements LLHD code generation.
-#![allow(unreachable_code)]
 
 use crate::{
     crate_prelude::*,
@@ -28,8 +27,8 @@ use std::{
 };
 
 pub type HybridValue = ((), mlir::Value);
-pub type HybridType = (llhd::Type, mlir::Type);
-pub type HybridBlock = (llhd::ir::Block, mlir::Block);
+pub type HybridType = ((), mlir::Type);
+pub type HybridBlock = ((), mlir::Block);
 
 /// A code generator.
 ///
@@ -39,9 +38,7 @@ pub struct CodeGenerator<'gcx, C> {
     cx: C,
     /// The MLIR compilation context.
     mcx: mlir::Context,
-    /// The LLHD module to be populated.
-    into: llhd::ir::Module,
-    /// THe MLIR module to be populated.
+    /// The MLIR module to be populated.
     into_mlir: circt::ModuleOp,
     /// Tables holding mappings and interned values.
     tables: Tables<'gcx>,
@@ -53,22 +50,16 @@ impl<'gcx, C> CodeGenerator<'gcx, C> {
         CodeGenerator {
             cx,
             mcx: into_mlir.context(),
-            into: llhd::ir::Module::new(),
             into_mlir,
             tables: Default::default(),
         }
-    }
-
-    /// Finalize code generation and return the generated LLHD module.
-    pub fn finalize(self) -> llhd::ir::Module {
-        self.into
     }
 }
 
 #[derive(Default)]
 struct Tables<'gcx> {
     module_defs: HashMap<NodeEnvId, Result<Rc<EmittedModule<'gcx>>>>,
-    module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
+    // module_signatures: HashMap<NodeEnvId, (llhd::ir::UnitName, llhd::ir::Signature)>,
     interned_types: HashMap<&'gcx UnpackedType<'gcx>, Result<HybridType>>,
     function_defs: HashMap<NodeEnvId, Result<Rc<EmittedFunction>>>,
 }
@@ -131,7 +122,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         if env != self.default_param_env() {
             entity_name.push_str(&format!(".param{}", env.0));
         }
-        let name = llhd::ir::UnitName::Global(entity_name.clone());
+        // let name = llhd::ir::UnitName::Global(entity_name.clone());
 
         // Create MLIR entity.
         let mlir_cx = self.into_mlir.context();
@@ -149,14 +140,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         mlir_builder.set_insertion_point_to_start(entity_op.block());
 
         // Create entity.
-        let mut ent =
-            llhd::ir::UnitData::new(llhd::ir::UnitKind::Entity, name.clone(), ports.sig.clone());
-        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut ent);
-        self.tables
-            .module_signatures
-            .insert(id.env(env), (name, ports.sig.clone()));
+        // let mut ent =
+        //     llhd::ir::UnitData::new(llhd::ir::UnitKind::Entity, name.clone(), ports.sig.clone());
+        // let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut ent);
+        // self.tables
+        //     .module_signatures
+        //     .insert(id.env(env), (name, ports.sig.clone()));
         let mut values = HashMap::new();
-        let mut gen = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
+        let mut gen = UnitGenerator::new(self, &mut values, &mut mlir_builder);
 
         // Assign proper port names and collect ports into a lookup table.
         for (index, port) in ports.inputs.iter().enumerate() {
@@ -185,16 +176,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Assign default values to undriven output ports.
         for port in ports.outputs.iter() {
             let value = gen.values[&port.accnode];
-            let driven = todo!("check MLIR value users for drv/inst");
-            // let driven = gen
-            //     .builder
-            //     .all_insts()
-            //     .any(|inst| match gen.builder[inst].opcode() {
-            //         llhd::ir::Opcode::Drv => gen.builder[inst].args()[0] == value.0,
-            //         llhd::ir::Opcode::Inst => gen.builder[inst].output_args().contains(&value.0),
-            //         _ => false,
-            //     });
-            if driven {
+            if gen.driven.contains(&value) {
                 continue;
             }
             let default_value = gen.emit_const(
@@ -226,7 +208,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         env: ParamEnv,
     ) -> Result<ModuleIntf<'gcx>> {
         debug!("Determining ports with {:?}", env);
-        let mut sig = llhd::ir::Signature::new();
+        // let sig = llhd::ir::Signature::new();
         let mut inputs = vec![];
         let mut outputs = vec![];
 
@@ -258,15 +240,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
                 let signals = self.determine_interface_signals(intf, &ty.dims)?;
                 for signal in signals {
-                    let (llty, mty) = signal_ty(self.emit_type_both(signal.ty)?);
+                    let (_llty, mty) = signal_ty(self.emit_type_both(signal.ty)?);
                     let name = format!("{}.{}", port.name, signal.name);
-                    trace!(
-                        "    Signal `{}` of type `{}` / `{}` / `{}`",
-                        name,
-                        signal.ty,
-                        llty,
-                        mty
-                    );
+                    trace!("    Signal `{}` of type `{}` / `{}`", name, signal.ty, mty);
                     let port = ModulePort {
                         port,
                         ty: signal.ty,
@@ -282,18 +258,18 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     };
                     match dirs.get(&signal.name.value).copied() {
                         Some(ast::PortDir::Input) | Some(ast::PortDir::Ref) => {
-                            sig.add_input(llty);
+                            // sig.add_input(llty);
                             inputs.push(port);
                         }
                         Some(ast::PortDir::Output) | Some(ast::PortDir::Inout) | None => {
-                            sig.add_output(llty);
+                            // sig.add_output(llty);
                             outputs.push(port);
                         }
                     }
                 }
             } else {
                 trace!("    Regular port");
-                let (llty, mty) = signal_ty(self.emit_type_both(ty)?);
+                let (_llty, mty) = signal_ty(self.emit_type_both(ty)?);
                 let name = port.name.to_string();
                 let mp = ModulePort {
                     port,
@@ -306,21 +282,21 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 };
                 match port.dir {
                     ast::PortDir::Input | ast::PortDir::Ref => {
-                        sig.add_input(llty);
+                        // sig.add_input(llty);
                         inputs.push(mp);
                     }
                     ast::PortDir::Inout | ast::PortDir::Output => {
-                        sig.add_output(llty);
+                        // sig.add_output(llty);
                         outputs.push(mp);
                     }
                 }
             }
         }
 
-        debug!("  Signature: {}", sig);
+        // debug!("  Signature: {}", sig);
 
         Ok(ModuleIntf {
-            sig,
+            // sig,
             inputs,
             outputs,
         })
@@ -377,7 +353,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Find the accessed nodes.
         let acc = self.accessed_nodes(hir.stmt, env)?;
         trace!("Process accesses {:#?}", acc);
-        let mut sig = llhd::ir::Signature::new();
+        // let sig = llhd::ir::Signature::new();
         let mut inputs = vec![];
         let mut outputs = vec![];
         let mut mlir_inputs = vec![];
@@ -393,7 +369,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     sig_ty.intern(self.cx)
                 }
             })?;
-            sig.add_input(llhd::signal_ty(ty.0));
+            // sig.add_input(llhd::signal_ty(ty.0));
             mlir_inputs.push(ty.1);
             inputs.push(id);
         }
@@ -408,13 +384,13 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                     sig_ty.intern(self.cx)
                 }
             })?;
-            sig.add_output(llhd::signal_ty(ty.0));
+            // sig.add_output(llhd::signal_ty(ty.0));
             mlir_outputs.push(ty.1);
             outputs.push(id);
         }
-        trace!("Process Inputs: {:?}", inputs);
-        trace!("Process Outputs: {:?}", outputs);
-        trace!("Process Signature: {}", sig);
+        // trace!("Process Inputs: {:?}", inputs);
+        // trace!("Process Outputs: {:?}", outputs);
+        // trace!("Process Signature: {}", sig);
         trace!("Process MLIR Inputs: {:?}", mlir_inputs);
         trace!("Process MLIR Outputs: {:?}", mlir_outputs);
         trace!("Process Env: {:?}", self.param_env_data(env));
@@ -434,12 +410,12 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             id.as_usize(),
             env.0,
         );
-        let mut prok = llhd::ir::UnitData::new(
-            llhd::ir::UnitKind::Process,
-            llhd::ir::UnitName::Local(proc_name.clone()),
-            sig,
-        );
-        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
+        // let mut prok = llhd::ir::UnitData::new(
+        //     llhd::ir::UnitKind::Process,
+        //     llhd::ir::UnitName::Local(proc_name.clone()),
+        //     sig,
+        // );
+        // let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut prok);
 
         // // Assign names to inputs and outputs.
         // let guess_name = |id| {
@@ -509,9 +485,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         {
             values.insert(id.into(), (arg, mlir_port));
         }
-        let mut pg = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
-        let entry_blk = pg.builder.block();
-        pg.builder.append_to(entry_blk);
+        let mut pg = UnitGenerator::new(self, &mut values, &mut mlir_builder);
+        // let entry_blk = pg.builder.block();
+        // pg.builder.append_to(entry_blk);
 
         // Determine which values are both read and written. These require
         // shadow variables to emulate the expected behaviour under blocking
@@ -579,7 +555,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 let mlir_entry_blk = pg.mlir_builder.add_block();
                 circt::std::BranchOp::new(pg.mlir_builder, mlir_entry_blk);
                 pg.mlir_builder.set_insertion_point_to_end(mlir_entry_blk);
-                Some((entry_blk, mlir_entry_blk))
+                Some((() /*entry_blk*/, mlir_entry_blk))
             }
         };
 
@@ -589,14 +565,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Emit epilogue.
         match hir.kind {
             ast::ProcedureKind::Initial | ast::ProcedureKind::Final => {
-                pg.builder.ins().halt();
+                // pg.builder.ins().halt();
                 circt::llhd::HaltOp::new(pg.mlir_builder);
             }
             ast::ProcedureKind::Always
             | ast::ProcedureKind::AlwaysComb
             | ast::ProcedureKind::AlwaysLatch
             | ast::ProcedureKind::AlwaysFf => {
-                pg.builder.ins().br(head_blk.unwrap().0);
+                // pg.builder.ins().br(head_blk.unwrap().0);
                 circt::std::BranchOp::new(pg.mlir_builder, head_blk.unwrap().1);
             }
         }
@@ -635,7 +611,10 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         // Handle things that coalesce easily to scalars.
         if ty.coalesces_to_llhd_scalar() {
             let bits = ty.get_bit_size().unwrap();
-            return Ok((llhd::int_ty(bits), mlir::get_integer_type(self.mcx, bits)));
+            return Ok((
+                (), // llhd::int_ty(bits),
+                mlir::get_integer_type(self.mcx, bits),
+            ));
         }
 
         // Handle arrays.
@@ -645,9 +624,9 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 None => panic!("cannot map unsized array `{}` to LLHD", ty),
             };
             let inner = ty.pop_dim(self.cx).unwrap();
-            let (llty, mty) = self.emit_type_both(inner)?;
+            let (_llty, mty) = self.emit_type_both(inner)?;
             return Ok((
-                llhd::array_ty(size, llty),
+                (), // llhd::array_ty(size, llty),
                 circt::hw::get_array_type(mty, size),
             ));
         }
@@ -662,7 +641,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 mtypes.push((member.name.value.as_str(), mty));
             }
             return Ok((
-                llhd::struct_ty(types),
+                (), // llhd::struct_ty(types),
                 circt::hw::get_struct_type(self.mcx, mtypes),
             ));
         }
@@ -674,11 +653,14 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 // CAVEAT: We just use an empty HW dialect struct type as a
                 // stand-in for an error or void type.
                 ty::PackedCore::Void | ty::PackedCore::Error => Ok((
-                    llhd::void_ty(),
+                    (), // llhd::void_ty(),
                     circt::hw::get_struct_type(self.mcx, Option::<(String, mlir::Type)>::None),
                 )),
                 ty::PackedCore::IntAtom(ty::IntAtomType::Time) => {
-                    Ok((llhd::time_ty(), circt::llhd::get_time_type(self.mcx)))
+                    Ok((
+                        (), // llhd::time_ty(),
+                        circt::llhd::get_time_type(self.mcx),
+                    ))
                 }
                 ty::PackedCore::Enum(ref enm) => self.emit_type_both(enm.base.to_unpacked(self.cx)),
                 _ => unreachable!("emitting `{}` should have been handled above", packed),
@@ -785,8 +767,8 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let lowered_return_ty = self.emit_type_both(return_ty)?;
 
         // Create the function signature and function builder.
-        let mut sig = llhd::ir::Signature::new();
-        sig.set_return_type(lowered_return_ty.0.clone());
+        // let sig = llhd::ir::Signature::new();
+        // sig.set_return_type(lowered_return_ty.0.clone());
         let func_name = ast.prototype.name.to_string();
         let mut mlir_builder = mlir::Builder::new(self.mcx);
         mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
@@ -806,7 +788,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
                 | ast::SubroutinePortDir::ConstRef => pointer_ty(ty),
             };
             func_op.add_arg(arg.name.map(|x| x.value.as_str().to_string()), ty.1);
-            sig.add_input(ty.0);
+            // sig.add_input(ty.0);
             arguments.push(arg);
         }
 
@@ -817,18 +799,18 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
 
         // Create the function itself.
         let func_op = func_op.build(&mut mlir_builder);
-        let mut func = llhd::ir::UnitData::new(
-            llhd::ir::UnitKind::Function,
-            llhd::ir::UnitName::Local(func_name.clone()),
-            sig,
-        );
-        let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut func);
+        // let mut func = llhd::ir::UnitData::new(
+        //     llhd::ir::UnitKind::Function,
+        //     llhd::ir::UnitName::Local(func_name.clone()),
+        //     sig,
+        // );
+        // let mut builder = llhd::ir::UnitBuilder::new_anonymous(&mut func);
 
         // Create a unit generator that we will use to populate the function
         // with instructions.
         let mut values = Default::default();
-        let mut gen = UnitGenerator::new(self, &mut builder, &mut values, &mut mlir_builder);
-        let entry_blk = (gen.builder.block(), func_op.first_block());
+        let mut gen = UnitGenerator::new(self, &mut values, &mut mlir_builder);
+        let entry_blk = (() /*gen.builder.block()*/, func_op.first_block());
         gen.append_to(entry_blk);
 
         // Add entries for the function arguments to the value table such that
@@ -917,10 +899,13 @@ impl NameUniquifier {
 struct UnitGenerator<'a, 'gcx, C> {
     /// The global code generator.
     gen: &'a mut CodeGenerator<'gcx, C>,
-    /// The builder into which instructions are emitted.
-    builder: &'a mut llhd::ir::UnitBuilder<'a>,
+    // /// The builder into which instructions are emitted.
+    // builder: &'a mut llhd::ir::UnitBuilder<'a>,
     /// The emitted LLHD values for various nodes.
     values: &'a mut HashMap<AccessedNode, HybridValue>,
+    /// The signals being driven by an explicit drive or through a connectino to
+    /// an output port.
+    driven: HashSet<HybridValue>,
     /// The MLIR builder which is used to create new operations.
     mlir_builder: &'a mut mlir::Builder,
     /// The constant values emitted into the unit.
@@ -964,14 +949,15 @@ impl<'a, 'gcx, C> DerefMut for UnitGenerator<'a, 'gcx, C> {
 impl<'a, 'gcx, C> UnitGenerator<'a, 'gcx, C> {
     fn new(
         gen: &'a mut CodeGenerator<'gcx, C>,
-        builder: &'a mut llhd::ir::UnitBuilder<'a>,
+        // builder: &'a mut llhd::ir::UnitBuilder<'a>,
         values: &'a mut HashMap<AccessedNode, HybridValue>,
         mlir_builder: &'a mut mlir::Builder,
     ) -> Self {
         Self {
             gen,
-            builder,
+            // builder,
             values,
+            driven: Default::default(),
             mlir_builder,
             interned_consts: Default::default(),
             interned_lvalues: Default::default(),
@@ -1183,6 +1169,9 @@ where
             //     inputs.iter().map(|x| x.0).collect(),
             //     outputs.iter().map(|x| x.0).collect(),
             // );
+            for &output in &outputs {
+                self.driven.insert(output);
+            }
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
                 &self.unique_names.add(&inst.hir.name.value.to_string()),
@@ -1261,6 +1250,9 @@ where
             //     inputs.iter().map(|x| x.0).collect(),
             //     outputs.iter().map(|x| x.0).collect(),
             // );
+            for &output in &outputs {
+                self.driven.insert(output);
+            }
             circt::llhd::InstanceOp::new(
                 self.mlir_builder,
                 &self.unique_names.add(&format!("{}_inst", prok.mlir_symbol)),
@@ -1567,7 +1559,10 @@ where
 
     /// Get the type of an emitted value.
     fn value_type(&self, value: HybridValue) -> HybridType {
-        (self.builder.value_type(todo!() /*value.0*/), value.1.ty())
+        (
+            (), //self.builder.value_type(value.0),
+            value.1.ty(),
+        )
     }
 
     /// Emit the code for an rvalue.
@@ -3069,11 +3064,12 @@ where
         }
     }
 
-    fn mk_block(&mut self, name: Option<&str>) -> HybridBlock {
-        let bb = self.builder.block();
-        if let Some(name) = name {
-            self.builder.set_block_name(bb, name.into());
-        }
+    fn mk_block(&mut self, _name: Option<&str>) -> HybridBlock {
+        let bb = ();
+        // let bb = self.builder.block();
+        // if let Some(name) = name {
+        //     self.builder.set_block_name(bb, name.into());
+        // }
         (bb, self.mlir_builder.add_block())
     }
 
@@ -3530,6 +3526,7 @@ where
     }
 
     fn mk_drv(&mut self, lhs: HybridValue, rhs: HybridValue, delay: HybridValue) {
+        self.driven.insert(lhs);
         // self.builder.ins().drv(lhs.0, rhs.0, delay.0);
         circt::llhd::DriveOp::new(self.mlir_builder, lhs.1, rhs.1, delay.1);
     }
@@ -3661,8 +3658,8 @@ pub struct EmittedFunction {
 /// A module's port interface.
 #[derive(Debug)]
 pub struct ModuleIntf<'a> {
-    /// The signature of the module.
-    pub sig: llhd::ir::Signature,
+    // /// The signature of the module.
+    // pub sig: llhd::ir::Signature,
     /// The inputs to the module.
     pub inputs: Vec<ModulePort<'a>>,
     /// The outputs of the module.
@@ -3727,7 +3724,11 @@ fn span_to_loc(cx: mlir::Context, span: Span) -> mlir::Location {
 /// This is a convenience function that processes old LLHD types and the newer
 /// MLIR types in parallel.
 fn signal_ty(ty: HybridType) -> HybridType {
-    (llhd::signal_ty(ty.0), circt::llhd::get_signal_type(ty.1))
+    (
+        (),
+        // llhd::signal_ty(ty.0),
+        circt::llhd::get_signal_type(ty.1),
+    )
 }
 
 /// Make a type a pointer type.
@@ -3735,5 +3736,8 @@ fn signal_ty(ty: HybridType) -> HybridType {
 /// This is a convenience function that processes old LLHD types and the newer
 /// MLIR types in parallel.
 fn pointer_ty(ty: HybridType) -> HybridType {
-    (llhd::pointer_ty(ty.0), circt::llhd::get_pointer_type(ty.1))
+    (
+        (), // llhd::pointer_ty(ty.0),
+        circt::llhd::get_pointer_type(ty.1),
+    )
 }
