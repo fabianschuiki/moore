@@ -1899,31 +1899,15 @@ where
             }
 
             mir::RvalueKind::Concat(ref values) => {
-                let mut offset = 0;
                 let llty = self.emit_type_both(mir.ty)?;
-                trace!(
-                    "Concatenating {} values into `{}` (as {:?})",
-                    values.len(),
-                    mir.ty,
-                    llty
-                );
-                let mut result = self.emit_zero_for_type_both(llty);
-                for value in values.iter().rev() {
-                    let width = value.ty.simple_bit_vector(self.cx, value.span).size;
-                    let llval = self.emit_mir_rvalue(value)?;
-                    trace!(
-                        " - Value has width {}, type `{}`, in LLHD `{}`",
-                        width,
-                        value.ty,
-                        self.llhd_type(llval.0)
-                    );
-                    if width > 0 {
-                        result = self.mk_ins_slice(result, llval, offset, width);
-                        offset += width;
-                    }
+                let mut fields = vec![];
+                for value in values.iter() {
+                    fields.push(self.emit_mir_rvalue(value)?.1);
                 }
-                self.builder.set_name(result.0, "concat".to_string());
-                result
+                (
+                    self.emit_zero_for_type(&llty.0),
+                    circt::moore::ConcatOp::new(self.mlir_builder, fields).into(),
+                )
             }
 
             mir::RvalueKind::Repeat(times, value) => {

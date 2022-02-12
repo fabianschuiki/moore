@@ -13,5 +13,13 @@ function void ShiftExpressions(bit signed [21:0] x, bit [5:0] y);
     bit signed [21:0] d = x >>> y;
 endfunction
 
+// CHECK-LABEL: func @Concat(
+// CHECK-SAME: [[X:%.+]]: i4, [[Y:%.+]]: i2, [[Z:%.+]]: i1) -> i7 {
+function bit [6:0] Concat(bit [3:0] x, bit [1:0] y, bit z);
+    // CHECK-NEXT: [[TMP:%.+]] = moore.mir.concat [[X]], [[Y]], [[Z]]
+    // CHECK-NEXT: return [[TMP]]
+    return {x, y, z};
+endfunction
+
 module foo;
 endmodule
