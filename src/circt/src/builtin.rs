@@ -14,7 +14,10 @@ impl ModuleOp {
                 mlirLocationUnknownGet(cx.raw()),
             );
             let region = mlirRegionCreate();
-            mlirRegionAppendOwnedBlock(region, mlirBlockCreate(0, std::ptr::null()));
+            mlirRegionAppendOwnedBlock(
+                region,
+                mlirBlockCreate(0, std::ptr::null(), std::ptr::null()),
+            );
             mlirOperationStateAddOwnedRegions(&mut state, 1, [region].as_ptr());
             Self(mlirOperationCreate(&mut state))
         }
@@ -92,9 +95,14 @@ impl<'a> FunctionBuilder<'a> {
 
             unsafe {
                 let region = mlirRegionCreate();
+                let locations = vec![Location::unknown(builder.cx).raw(); mlir_arg_types.len()];
                 mlirRegionAppendOwnedBlock(
                     region,
-                    mlirBlockCreate(mlir_arg_types.len() as _, mlir_arg_types.as_ptr()),
+                    mlirBlockCreate(
+                        mlir_arg_types.len() as _,
+                        mlir_arg_types.as_ptr(),
+                        locations.as_ptr(),
+                    ),
                 );
                 state.add_region(region);
             }

@@ -203,9 +203,14 @@ impl<'a> EntityLikeBuilder<'a> {
 
             unsafe {
                 let region = mlirRegionCreate();
+                let locations = vec![Location::unknown(builder.cx).raw(); mlir_types.len()];
                 mlirRegionAppendOwnedBlock(
                     region,
-                    mlirBlockCreate(mlir_types.len() as _, mlir_types.as_ptr()),
+                    mlirBlockCreate(
+                        mlir_types.len() as _,
+                        mlir_types.as_ptr(),
+                        locations.as_ptr(),
+                    ),
                 );
                 state.add_region(region);
             }

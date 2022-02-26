@@ -11,6 +11,7 @@
 #include "mlir-c/Debug.h"
 #include "mlir-c/Diagnostics.h"
 #include "mlir-c/Dialect/Async.h"
+#include "mlir-c/Dialect/ControlFlow.h"
 #include "mlir-c/Dialect/GPU.h"
 #include "mlir-c/Dialect/LLVM.h"
 #include "mlir-c/Dialect/Linalg.h"

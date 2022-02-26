@@ -90,6 +90,7 @@ macro_rules! def_binary_operation_explicit_result {
 }
 
 pub mod builtin;
+pub mod cf;
 pub mod comb;
 pub mod hw;
 pub mod llhd;
