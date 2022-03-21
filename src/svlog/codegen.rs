@@ -781,7 +781,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut mlir_builder = mlir::Builder::new(self.mcx);
         mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
         mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
-        let mut func_op = circt::builtin::FunctionBuilder::new(&func_name);
+        let mut func_op = circt::func::FunctionBuilder::new(&func_name);
 
         // Gather up the arguments.
         let mut arguments = vec![];
@@ -2056,7 +2056,7 @@ where
                 }
 
                 // Emit the call.
-                let call_op = circt::std::CallOp::new(
+                let call_op = circt::func::CallOp::new(
                     self.mlir_builder,
                     &func.mlir_symbol,
                     input_args.iter().map(|&(_, mlir)| mlir),
@@ -3092,7 +3092,7 @@ where
             values_mlir.push(v.1);
         }
         self.builder.ins().ret();
-        circt::std::ReturnOp::new(self.mlir_builder, values_mlir);
+        circt::func::ReturnOp::new(self.mlir_builder, values_mlir);
         self.terminated = true;
     }
 

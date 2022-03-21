@@ -193,7 +193,7 @@ impl<'a> EntityLikeBuilder<'a> {
 
             state.add_attribute("sym_name", get_string_attr(builder.cx, self.name));
             state.add_attribute(
-                "type",
+                "function_type",
                 get_type_attr(get_function_type(builder.cx, types, None)),
             );
             state.add_attribute(

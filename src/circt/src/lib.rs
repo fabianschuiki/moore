@@ -92,11 +92,11 @@ macro_rules! def_binary_operation_explicit_result {
 pub mod builtin;
 pub mod cf;
 pub mod comb;
+pub mod func;
 pub mod hw;
 pub mod llhd;
 pub mod mlir;
 pub mod seq;
-pub mod std;
 
 pub use builtin::*;
 
