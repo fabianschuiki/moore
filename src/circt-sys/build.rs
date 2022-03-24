@@ -64,7 +64,6 @@ fn main() {
         "MLIRSupport",
         "MLIRTransformUtils",
         "MLIRTransforms",
-        "MLIRTranslation",
     ];
     for name in &lib_dirs {
         println!("cargo:rustc-link-search=native={}", name.display());
