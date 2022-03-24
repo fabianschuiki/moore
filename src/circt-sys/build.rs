@@ -45,10 +45,13 @@ fn main() {
         "LLVMSupport",
         "MLIRAnalysis",
         "MLIRArithmetic",
+        "MLIRCAPIFunc",
         "MLIRCAPIIR",
-        "MLIRCAPIStandard",
+        "MLIRCAPIControlFlow",
         "MLIRCallInterfaces",
+        "MLIRControlFlow",
         "MLIRControlFlowInterfaces",
+        "MLIRFunc",
         "MLIRIR",
         "MLIRInferTypeOpInterface",
         "MLIRPDL",
@@ -58,11 +61,9 @@ fn main() {
         "MLIRPass",
         "MLIRRewrite",
         "MLIRSideEffectInterfaces",
-        "MLIRStandard",
         "MLIRSupport",
         "MLIRTransformUtils",
         "MLIRTransforms",
-        "MLIRTranslation",
     ];
     for name in &lib_dirs {
         println!("cargo:rustc-link-search=native={}", name.display());

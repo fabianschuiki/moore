@@ -521,7 +521,8 @@ fn elaborate_name(
 
             // Create an MLIR context and load the dialects we need.
             let mlir_cx = mlir::OwnedContext::new();
-            mlir_cx.load_dialect(circt::std::dialect());
+            mlir_cx.load_dialect(circt::func::dialect());
+            mlir_cx.load_dialect(circt::cf::dialect());
             mlir_cx.load_dialect(circt::hw::dialect());
             mlir_cx.load_dialect(circt::comb::dialect());
             mlir_cx.load_dialect(circt::llhd::dialect());

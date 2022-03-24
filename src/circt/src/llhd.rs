@@ -193,7 +193,7 @@ impl<'a> EntityLikeBuilder<'a> {
 
             state.add_attribute("sym_name", get_string_attr(builder.cx, self.name));
             state.add_attribute(
-                "type",
+                "function_type",
                 get_type_attr(get_function_type(builder.cx, types, None)),
             );
             state.add_attribute(
@@ -203,9 +203,14 @@ impl<'a> EntityLikeBuilder<'a> {
 
             unsafe {
                 let region = mlirRegionCreate();
+                let locations = vec![Location::unknown(builder.cx).raw(); mlir_types.len()];
                 mlirRegionAppendOwnedBlock(
                     region,
-                    mlirBlockCreate(mlir_types.len() as _, mlir_types.as_ptr()),
+                    mlirBlockCreate(
+                        mlir_types.len() as _,
+                        mlir_types.as_ptr(),
+                        locations.as_ptr(),
+                    ),
                 );
                 state.add_region(region);
             }

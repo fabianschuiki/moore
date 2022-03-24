@@ -567,7 +567,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             ast::ProcedureKind::Initial => None,
             _ => {
                 let mlir_entry_blk = pg.mlir_builder.add_block();
-                circt::std::BranchOp::new(pg.mlir_builder, mlir_entry_blk);
+                circt::cf::BranchOp::new(pg.mlir_builder, mlir_entry_blk);
                 pg.mlir_builder.set_insertion_point_to_end(mlir_entry_blk);
                 Some((entry_blk, mlir_entry_blk))
             }
@@ -587,7 +587,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
             | ast::ProcedureKind::AlwaysLatch
             | ast::ProcedureKind::AlwaysFf => {
                 pg.builder.ins().br(head_blk.unwrap().0);
-                circt::std::BranchOp::new(pg.mlir_builder, head_blk.unwrap().1);
+                circt::cf::BranchOp::new(pg.mlir_builder, head_blk.unwrap().1);
             }
         }
 
@@ -781,7 +781,7 @@ impl<'a, 'gcx, C: Context<'gcx>> CodeGenerator<'gcx, &'a C> {
         let mut mlir_builder = mlir::Builder::new(self.mcx);
         mlir_builder.set_loc(span_to_loc(self.mcx, ast.span()));
         mlir_builder.set_insertion_point_to_end(self.into_mlir.block());
-        let mut func_op = circt::builtin::FunctionBuilder::new(&func_name);
+        let mut func_op = circt::func::FunctionBuilder::new(&func_name);
 
         // Gather up the arguments.
         let mut arguments = vec![];
@@ -2056,7 +2056,7 @@ where
                 }
 
                 // Emit the call.
-                let call_op = circt::std::CallOp::new(
+                let call_op = circt::func::CallOp::new(
                     self.mlir_builder,
                     &func.mlir_symbol,
                     input_args.iter().map(|&(_, mlir)| mlir),
@@ -3072,7 +3072,7 @@ where
 
     fn mk_br(&mut self, target: HybridBlock) {
         self.builder.ins().br(target.0);
-        circt::std::BranchOp::new(self.mlir_builder, target.1);
+        circt::cf::BranchOp::new(self.mlir_builder, target.1);
         self.terminated = true;
     }
 
@@ -3080,7 +3080,7 @@ where
         self.builder
             .ins()
             .br_cond(cond.0, false_block.0, true_block.0);
-        circt::std::CondBranchOp::new(self.mlir_builder, cond.1, true_block.1, false_block.1);
+        circt::cf::CondBranchOp::new(self.mlir_builder, cond.1, true_block.1, false_block.1);
         self.terminated = true;
     }
 
@@ -3092,7 +3092,7 @@ where
             values_mlir.push(v.1);
         }
         self.builder.ins().ret();
-        circt::std::ReturnOp::new(self.mlir_builder, values_mlir);
+        circt::func::ReturnOp::new(self.mlir_builder, values_mlir);
         self.terminated = true;
     }
 

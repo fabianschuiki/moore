@@ -107,7 +107,7 @@ impl Builder {
         let block = self.insert_block.expect("insertion block not set");
         let after = self.insert_block_after.expect("insertion block not set");
         unsafe {
-            let new_block = mlirBlockCreate(0, [].as_ptr());
+            let new_block = mlirBlockCreate(0, [].as_ptr(), [].as_ptr());
             mlirRegionInsertOwnedBlockAfter(mlirBlockGetParentRegion(block), after, new_block);
             self.insert_block_after = Some(new_block);
             new_block
