@@ -13,12 +13,14 @@ macro_rules! def_shift_operation {
                 builder: &mut Builder,
                 value: Value,
                 amount: Value,
-                arithmetic: bool
+                arithmetic: bool,
             ) -> Self {
                 builder.build_with(|builder, state| {
                     state.add_operand(value);
                     state.add_operand(amount);
-                    if arithmetic { state.add_attribute("arithmetic", get_unit_attr(builder.cx)); }
+                    if arithmetic {
+                        state.add_attribute("arithmetic", get_unit_attr(builder.cx));
+                    }
                     state.add_result(value.ty());
                 })
             }
@@ -42,8 +44,15 @@ pub fn is_four_valued(ty: Type) -> bool {
 }
 
 /// Create a new simple bit-vector type.
-pub fn get_simple_bitvector_type(cx: Context, four_valued: bool, signed: bool, size: usize) -> Type {
-    Type::from_raw(unsafe { mooreSimpleBitVectorTypeGet(cx.raw(), four_valued, signed, size as u32) })
+pub fn get_simple_bitvector_type(
+    cx: Context,
+    four_valued: bool,
+    signed: bool,
+    size: usize,
+) -> Type {
+    Type::from_raw(unsafe {
+        mooreSimpleBitVectorTypeGet(cx.raw(), four_valued, signed, size as u32)
+    })
 }
 
 def_shift_operation!(ShlOp, "moore.mir.shl");
@@ -57,10 +66,17 @@ impl ConcatOp {
             let mut four_valued = false;
             for value in values {
                 state.add_operand(value);
-                if is_four_valued(value.ty()) { four_valued = true; }
+                if is_four_valued(value.ty()) {
+                    four_valued = true;
+                }
                 width += get_simple_bitvector_size(value.ty());
             }
-            state.add_result(get_simple_bitvector_type(builder.cx, four_valued, false, width));
+            state.add_result(get_simple_bitvector_type(
+                builder.cx,
+                four_valued,
+                false,
+                width,
+            ));
         })
     }
 }

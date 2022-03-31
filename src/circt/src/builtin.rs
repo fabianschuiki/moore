@@ -3,7 +3,10 @@
 use crate::crate_prelude::*;
 
 def_operation!(ModuleOp, "builtin.module");
-def_operation!(UnrealizedConversionCastOp, "builtin.unrealized_conversion_cast");
+def_operation!(
+    UnrealizedConversionCastOp,
+    "builtin.unrealized_conversion_cast"
+);
 
 impl ModuleOp {
     /// Create a new module.
@@ -29,7 +32,11 @@ impl SingleBlockOp for ModuleOp {}
 
 impl UnrealizedConversionCastOp {
     /// Create a new unrealized conversion cast operation.
-    pub fn new(builder: &mut Builder, values: impl IntoIterator<Item = Value>, result_tys: impl IntoIterator<Item = Type>) -> Self {
+    pub fn new(
+        builder: &mut Builder,
+        values: impl IntoIterator<Item = Value>,
+        result_tys: impl IntoIterator<Item = Type>,
+    ) -> Self {
         builder.build_with(|_, state| {
             for value in values {
                 state.add_operand(value);
