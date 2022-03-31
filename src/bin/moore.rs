@@ -526,6 +526,7 @@ fn elaborate_name(
             mlir_cx.load_dialect(circt::hw::dialect());
             mlir_cx.load_dialect(circt::comb::dialect());
             mlir_cx.load_dialect(circt::llhd::dialect());
+            mlir_cx.load_dialect(circt::moore::dialect());
             mlir_cx.load_dialect(circt::seq::dialect());
 
             // Attach a custom diagnostic handler to the context such that we

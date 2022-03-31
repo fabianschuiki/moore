@@ -95,6 +95,7 @@ pub mod comb;
 pub mod func;
 pub mod hw;
 pub mod llhd;
+pub mod moore;
 pub mod mlir;
 pub mod seq;
 

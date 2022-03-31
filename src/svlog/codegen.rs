@@ -1956,8 +1956,8 @@ where
                     hidden
                 };
                 match op {
-                    mir::ShiftOp::Left => self.mk_shl(value, hidden, amount),
-                    mir::ShiftOp::Right => self.mk_shr(value, hidden, amount),
+                    mir::ShiftOp::Left => self.mk_moore_shl(value, hidden, amount, arith),
+                    mir::ShiftOp::Right => self.mk_moore_shr(value, hidden, amount, arith),
                 }
             }
 
@@ -3349,6 +3349,26 @@ where
         )
     }
 
+    fn mk_moore_shl(
+        &mut self,
+        value: HybridValue,
+        hidden: HybridValue,
+        amount: HybridValue,
+        arithmetic: bool,
+    ) -> HybridValue {
+        let value_moore_type = circt::moore::get_simple_bitvector_type(self.mcx, false, false, circt::mlir::integer_type_width(value.1.ty()));
+        let amount_moore_type = circt::moore::get_simple_bitvector_type(self.mcx, false, false, circt::mlir::integer_type_width(amount.1.ty()));
+        let value_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(self.mlir_builder, std::iter::once(value.1), std::iter::once(value_moore_type)).result(0);
+        let amount_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(self.mlir_builder, std::iter::once(amount.1), std::iter::once(amount_moore_type)).result(0);
+        let shift = circt::moore::ShlOp::new(self.mlir_builder, value_cast_to_moore, amount_cast_to_moore, arithmetic).into();
+        let cast_to_llhd = circt::builtin::UnrealizedConversionCastOp::new(self.mlir_builder, std::iter::once(shift), std::iter::once(value.1.ty())).result(0);
+
+        (
+            self.builder.ins().shl(value.0, hidden.0, amount.0),
+            cast_to_llhd
+        )
+    }
+
     fn mk_shl(
         &mut self,
         value: HybridValue,
@@ -3358,6 +3378,26 @@ where
         (
             self.builder.ins().shl(value.0, hidden.0, amount.0),
             circt::llhd::ShlOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
+        )
+    }
+
+    fn mk_moore_shr(
+        &mut self,
+        value: HybridValue,
+        hidden: HybridValue,
+        amount: HybridValue,
+        arithmetic: bool,
+    ) -> HybridValue {
+        let value_moore_type = circt::moore::get_simple_bitvector_type(self.mcx, false, false, circt::mlir::integer_type_width(value.1.ty()));
+        let amount_moore_type = circt::moore::get_simple_bitvector_type(self.mcx, false, false, circt::mlir::integer_type_width(amount.1.ty()));
+        let value_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(self.mlir_builder, std::iter::once(value.1), std::iter::once(value_moore_type)).result(0);
+        let amount_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(self.mlir_builder, std::iter::once(amount.1), std::iter::once(amount_moore_type)).result(0);
+        let shift = circt::moore::ShrOp::new(self.mlir_builder, value_cast_to_moore, amount_cast_to_moore, arithmetic).into();
+        let cast_to_llhd = circt::builtin::UnrealizedConversionCastOp::new(self.mlir_builder, std::iter::once(shift), std::iter::once(value.1.ty())).result(0);
+
+        (
+            self.builder.ins().shr(value.0, hidden.0, amount.0),
+            cast_to_llhd
         )
     }
 
