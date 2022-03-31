@@ -61,6 +61,11 @@ pub fn get_integer_attr_big(ty: Type, value: &BigInt) -> Attribute {
     }
 }
 
+/// Create a new unit attribute.
+pub fn get_unit_attr(cx: Context) -> Attribute {
+    Attribute::from_raw(unsafe { mlirUnitAttrGet(cx.raw()) })
+}
+
 /// Create a new integer attribute from an i64 value.
 pub fn get_integer_attr(ty: Type, value: i64) -> Attribute {
     Attribute::from_raw(unsafe { mlirIntegerAttrGet(ty.raw(), value) })
