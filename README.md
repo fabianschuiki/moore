@@ -58,9 +58,14 @@ Set the following environment variables to indicate where your LLVM and CIRCT bu
     export CIRCT_SYS_LLVM_DIR=$PWD/circt/llvm
     export CIRCT_SYS_LLVM_BUILD_DIR=$PWD/circt/llvm/install
 
-Use cargo to install Moore:
+Use cargo to install pre-build Moore:
 
     cargo install moore
+    
+To use the self-build Moore:
+
+    cargo build
+    cargo install --path .
 
 #### Development
 
@@ -84,6 +89,14 @@ You can use [llhd-sim] to simulate the compiled module:
 
     moore foo.sv -e hello_world > foo.llhd
     llhd-sim foo.llhd
+
+The -f parameter specifies the format of the output, and the options are `mlir|llhd`, 
+- llhd is the format supported by the simulator llhd-sim written in rust 
+- and mlir is the format supported by the simulator inherited from CIRCT
+
+the -e parameter specifies the top-level module The name of the top-level module in the testbench above is updowncounter_tb; 
+the -o parameter specifies the output file name; 
+the remaining parameters are used as input files.
 
 ## Development
 
