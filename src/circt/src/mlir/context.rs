@@ -25,6 +25,16 @@ impl Context {
     pub fn get_identifier(&self, ident: &str) -> MlirIdentifier {
         unsafe { mlirIdentifierGet(self.raw(), mlirStringRefCreateFromStr(ident)) }
     }
+
+    /// Change whether this MLIR context allows unregistered dialect ops.
+    pub fn set_allow_unregistered_dialects(&self, allow: bool) {
+        unsafe { mlirContextSetAllowUnregisteredDialects(self.raw(), allow) }
+    }
+
+    /// Change whether this MLIR context allows unregistered dialect ops.
+    pub fn are_unregistered_dialects_allowed(&self) -> bool {
+        unsafe { mlirContextGetAllowUnregisteredDialects(self.raw()) }
+    }
 }
 
 impl WrapRaw for Context {

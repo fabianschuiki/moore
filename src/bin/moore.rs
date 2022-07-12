@@ -528,6 +528,7 @@ fn elaborate_name(
             mlir_cx.load_dialect(circt::llhd::dialect());
             mlir_cx.load_dialect(circt::moore::dialect());
             mlir_cx.load_dialect(circt::seq::dialect());
+            mlir_cx.set_allow_unregistered_dialects(true);
 
             // Attach a custom diagnostic handler to the context such that we
             // can print MLIR diagnostics through Moore's own diagnostics
