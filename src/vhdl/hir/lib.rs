@@ -1,5 +1,7 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
+#![allow(dead_code)]
+
 use crate::hir::prelude::*;
 
 use crate::common::name::{get_name_table, Name};

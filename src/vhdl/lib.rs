@@ -4,6 +4,7 @@
 
 #![allow(bare_trait_objects)] // Remove this once fixed
 #![allow(unused_doc_comments)] // Remove this once fixed
+#![allow(dead_code)]
 
 #[macro_use]
 extern crate lazy_static;
