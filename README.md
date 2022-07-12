@@ -24,7 +24,6 @@ And then follow these steps:
     pushd circt/llvm/build
     cmake ../llvm \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=../install \
         -DLLVM_BUILD_EXAMPLES=OFF \
         -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_BINDINGS=OFF \
@@ -33,7 +32,7 @@ And then follow these steps:
         -DLLVM_INSTALL_UTILS=ON \
         -DLLVM_OPTIMIZED_TABLEGEN=ON \
         -DLLVM_TARGETS_TO_BUILD="host"
-    cmake --build . --target install
+    cmake --build .
     popd
 
 #### Build CIRCT
@@ -42,11 +41,10 @@ And then follow these steps:
     pushd circt/build
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=../install \
-        -DMLIR_DIR=$PWD/../llvm/install/lib/cmake/mlir \
-        -DLLVM_DIR=$PWD/../llvm/install/lib/cmake/llvm \
+        -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
+        -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
         -DLLVM_ENABLE_ASSERTIONS=ON
-    cmake --build . --target install
+    cmake --build .
     popd
 
 #### Build Moore
@@ -54,9 +52,9 @@ And then follow these steps:
 Set the following environment variables to indicate where your LLVM and CIRCT build is:
 
     export CIRCT_SYS_CIRCT_DIR=$PWD/circt
-    export CIRCT_SYS_CIRCT_BUILD_DIR=$PWD/circt/install
+    export CIRCT_SYS_CIRCT_BUILD_DIR=$PWD/circt/build
     export CIRCT_SYS_LLVM_DIR=$PWD/circt/llvm
-    export CIRCT_SYS_LLVM_BUILD_DIR=$PWD/circt/llvm/install
+    export CIRCT_SYS_LLVM_BUILD_DIR=$PWD/circt/llvm/build
 
 Use cargo to install Moore:
 
