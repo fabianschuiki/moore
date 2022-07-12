@@ -11,8 +11,8 @@ MlirAttribute mlirIntegerAttrGetFromString(MlirType type, MlirStringRef value) {
   auto intWidth = intType.getWidth();
   auto valueStr = unwrap(value);
   auto tmpWidth = std::max<size_t>(intWidth, (valueStr.size() - 1) * 64 / 22);
-  return wrap(IntegerAttr::get(
-      intType, APInt(tmpWidth, valueStr, 10).truncOrSelf(intWidth)));
+  return wrap(
+      IntegerAttr::get(intType, APInt(tmpWidth, valueStr, 10).trunc(intWidth)));
 }
 
 bool mlirLocationIsFileLineCol(MlirLocation loc) {
