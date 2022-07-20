@@ -16,8 +16,7 @@ endfunction
 // CHECK-LABEL: func @Concat(
 // CHECK-SAME: [[X:%.+]]: i4, [[Y:%.+]]: i2, [[Z:%.+]]: i1) -> i7 {
 function bit [6:0] Concat(bit [3:0] x, bit [1:0] y, bit z);
-    // CHECK-NEXT: [[TMP:%.+]] = moore.mir.concat [[X]], [[Y]], [[Z]]
-    // CHECK-NEXT: return [[TMP]]
+    // CHECK: moore.mir.concat %{{.+}}, %{{.+}}, %{{.+}} : (!moore.packed<range<bit, 3:0>>, !moore.packed<range<bit, 1:0>>, !moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 6:0>>
     return {x, y, z};
 endfunction
 

@@ -1902,11 +1902,13 @@ where
                 let llty = self.emit_type_both(mir.ty)?;
                 let mut fields = vec![];
                 for value in values.iter() {
-                    fields.push(self.emit_mir_rvalue(value)?.1);
+                    let emitted_value = self.emit_mir_rvalue(value)?.1;
+                    fields.push(self.cast_integer_to_sbv(emitted_value));
                 }
+                let concat = circt::moore::ConcatOp::new(self.mlir_builder, fields).into();
                 (
                     self.emit_zero_for_type(&llty.0),
-                    circt::moore::ConcatOp::new(self.mlir_builder, fields).into(),
+                    self.cast_sbv_to_integer(concat),
                 )
             }
 
@@ -3046,6 +3048,39 @@ where
         }
     }
 
+    fn cast_integer_to_sbv(&mut self, value: mlir::Value) -> mlir::Value {
+        assert!(mlir::is_integer_type(value.ty()));
+        self.one_op_ucc(
+            value,
+            circt::moore::get_simple_bitvector_type(
+                self.mcx,
+                false,
+                false,
+                mlir::integer_type_width(value.ty()),
+            ),
+        )
+    }
+
+    fn cast_sbv_to_integer(&mut self, value: mlir::Value) -> mlir::Value {
+        assert!(circt::moore::is_simple_bitvector_type(value.ty()));
+        self.one_op_ucc(
+            value,
+            mlir::get_integer_type(
+                self.mcx,
+                circt::moore::get_simple_bitvector_size(value.ty()),
+            ),
+        )
+    }
+
+    fn one_op_ucc(&mut self, value: mlir::Value, ty: mlir::Type) -> mlir::Value {
+        circt::builtin::UnrealizedConversionCastOp::new(
+            self.mlir_builder,
+            std::iter::once(value),
+            std::iter::once(ty),
+        )
+        .result(0)
+    }
+
     fn mk_block(&mut self, name: Option<&str>) -> HybridBlock {
         let bb = self.builder.block();
         if let Some(name) = name {
@@ -3340,47 +3375,14 @@ where
         amount: HybridValue,
         arithmetic: bool,
     ) -> HybridValue {
-        let value_moore_type = circt::moore::get_simple_bitvector_type(
-            self.mcx,
-            false,
-            false,
-            circt::mlir::integer_type_width(value.1.ty()),
-        );
-        let amount_moore_type = circt::moore::get_simple_bitvector_type(
-            self.mcx,
-            false,
-            false,
-            circt::mlir::integer_type_width(amount.1.ty()),
-        );
-        let value_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(
-            self.mlir_builder,
-            std::iter::once(value.1),
-            std::iter::once(value_moore_type),
-        )
-        .result(0);
-        let amount_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(
-            self.mlir_builder,
-            std::iter::once(amount.1),
-            std::iter::once(amount_moore_type),
-        )
-        .result(0);
-        let shift = circt::moore::ShlOp::new(
-            self.mlir_builder,
-            value_cast_to_moore,
-            amount_cast_to_moore,
-            arithmetic,
-        )
-        .into();
-        let cast_to_llhd = circt::builtin::UnrealizedConversionCastOp::new(
-            self.mlir_builder,
-            std::iter::once(shift),
-            std::iter::once(value.1.ty()),
-        )
-        .result(0);
-
+        let value_casted = self.cast_integer_to_sbv(value.1);
+        let amount_casted = self.cast_integer_to_sbv(amount.1);
+        let shift =
+            circt::moore::ShlOp::new(self.mlir_builder, value_casted, amount_casted, arithmetic)
+                .into();
         (
             self.builder.ins().shl(value.0, hidden.0, amount.0),
-            cast_to_llhd,
+            self.cast_sbv_to_integer(shift),
         )
     }
 
@@ -3403,47 +3405,14 @@ where
         amount: HybridValue,
         arithmetic: bool,
     ) -> HybridValue {
-        let value_moore_type = circt::moore::get_simple_bitvector_type(
-            self.mcx,
-            false,
-            false,
-            circt::mlir::integer_type_width(value.1.ty()),
-        );
-        let amount_moore_type = circt::moore::get_simple_bitvector_type(
-            self.mcx,
-            false,
-            false,
-            circt::mlir::integer_type_width(amount.1.ty()),
-        );
-        let value_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(
-            self.mlir_builder,
-            std::iter::once(value.1),
-            std::iter::once(value_moore_type),
-        )
-        .result(0);
-        let amount_cast_to_moore = circt::builtin::UnrealizedConversionCastOp::new(
-            self.mlir_builder,
-            std::iter::once(amount.1),
-            std::iter::once(amount_moore_type),
-        )
-        .result(0);
-        let shift = circt::moore::ShrOp::new(
-            self.mlir_builder,
-            value_cast_to_moore,
-            amount_cast_to_moore,
-            arithmetic,
-        )
-        .into();
-        let cast_to_llhd = circt::builtin::UnrealizedConversionCastOp::new(
-            self.mlir_builder,
-            std::iter::once(shift),
-            std::iter::once(value.1.ty()),
-        )
-        .result(0);
-
+        let value_casted = self.cast_integer_to_sbv(value.1);
+        let amount_casted = self.cast_integer_to_sbv(amount.1);
+        let shift =
+            circt::moore::ShrOp::new(self.mlir_builder, value_casted, amount_casted, arithmetic)
+                .into();
         (
             self.builder.ins().shr(value.0, hidden.0, amount.0),
-            cast_to_llhd,
+            self.cast_sbv_to_integer(shift),
         )
     }
 
