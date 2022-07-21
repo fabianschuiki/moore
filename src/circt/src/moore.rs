@@ -32,6 +32,11 @@ pub fn dialect() -> DialectHandle {
     DialectHandle::from_raw(unsafe { mlirGetDialectHandle__moore__() })
 }
 
+/// Check if the type is a simple bitvector type.
+pub fn is_simple_bitvector_type(ty: Type) -> bool {
+    unsafe { mooreIsSimpleBitVectorType(ty.raw()) }
+}
+
 /// Get the size of a simple bit-vector in bits.
 pub fn get_simple_bitvector_size(ty: Type) -> usize {
     assert!(unsafe { mooreIsSimpleBitVectorType(ty.raw()) });
