@@ -1724,7 +1724,7 @@ where
 
             mir::RvalueKind::Truncate(target_width, value) => {
                 let llvalue = self.emit_mir_rvalue(value)?;
-                self.mk_ext_slice(llvalue, 0, target_width)
+                self.mk_ext_slice_const_offset(llvalue, 0, target_width)
             }
 
             mir::RvalueKind::ZeroExtend(_, value) => {
@@ -1741,7 +1741,7 @@ where
                 let width = value.ty.simple_bit_vector(self.cx, value.span).size;
                 let llty = self.emit_type_both(mir.ty)?;
                 let value = self.emit_mir_rvalue(value)?;
-                let sign = self.mk_ext_slice(value, width - 1, 1);
+                let sign = self.mk_ext_slice_const_offset(value, width - 1, 1);
                 let zeros = self.emit_zero_for_type_both(llty);
                 let ones = self.mk_not(zeros);
                 let mux = self.mk_mux(sign, ones, zeros);
@@ -1780,7 +1780,7 @@ where
 
             mir::RvalueKind::Member { value, field } => {
                 let target = self.emit_mir_rvalue(value)?;
-                let value = self.mk_ext_field(target, field);
+                let value = self.mk_ext_field_const_offset(target, field);
                 value
             }
 
@@ -1880,11 +1880,19 @@ where
                                 let width = self.llhd_type(lhs_ll.0).len();
                                 let lhs_ll = self.mk_const_int(width, &BigInt::one());
                                 // `1 << (y * log2(base))`
-                                let zeros = self.emit_zero_for_type_both((
-                                    self.llhd_type(lhs_ll.0),
-                                    lhs_ll.1.ty(),
+                                let zeros = self.emit_zero_for_type(&self.llhd_type(lhs_ll.0));
+                                return Ok((
+                                    (
+                                        self.builder.ins().shl(lhs_ll.0, zeros, rhs_ll.0),
+                                        circt::comb::ShlOp::with_sizes(
+                                            self.mlir_builder,
+                                            lhs_ll.1,
+                                            rhs_ll.1,
+                                        )
+                                        .into(),
+                                    ),
+                                    Mode::Value,
                                 ));
-                                return Ok((self.mk_shl(lhs_ll, zeros, rhs_ll), Mode::Value));
                             }
                         }
 
@@ -1936,7 +1944,7 @@ where
                 let hidden = self.emit_zero_for_type_both((value_ty.clone(), value.1.ty()));
                 let hidden = if arith && op == mir::ShiftOp::Right {
                     let ones = self.mk_not(hidden);
-                    let sign = self.mk_ext_slice(value, value_ty.unwrap_int() - 1, 1);
+                    let sign = self.mk_ext_slice_const_offset(value, value_ty.unwrap_int() - 1, 1);
                     self.mk_mux(sign, ones, hidden)
                 } else {
                     hidden
@@ -1961,9 +1969,9 @@ where
             mir::RvalueKind::Reduction { op, arg } => {
                 let width = arg.ty.simple_bit_vector(self.cx, arg.span).size;
                 let arg = self.emit_mir_rvalue(arg)?;
-                let mut value = self.mk_ext_slice(arg, 0, 1);
+                let mut value = self.mk_ext_slice_const_offset(arg, 0, 1);
                 for i in 1..width {
-                    let bit = self.mk_ext_slice(arg, i, 1);
+                    let bit = self.mk_ext_slice_const_offset(arg, i, 1);
                     value = match op {
                         mir::BinaryBitwiseOp::And => self.mk_and(value, bit),
                         mir::BinaryBitwiseOp::Or => self.mk_or(value, bit),
@@ -2202,17 +2210,14 @@ where
         length: usize,
     ) -> Result<HybridValue> {
         let base = self.emit_mir_rvalue(base)?;
-        let hidden = self.emit_zero_for_type_both(self.value_type(value));
-        // TODO(fschuiki): make the above a constant of all `x`.
-        let shifted = self.mk_shr(value, hidden, base);
         if ty.coalesces_to_llhd_scalar() {
             let length = std::cmp::max(1, length);
-            Ok(self.mk_ext_slice(shifted, 0, length))
+            Ok(self.mk_ext_slice(value, base, length))
         } else {
             if length == 0 {
-                Ok(self.mk_ext_field(shifted, 0))
+                Ok(self.mk_ext_field(value, base))
             } else {
-                Ok(self.mk_ext_slice(shifted, 0, length))
+                Ok(self.mk_ext_slice(value, base, length))
             }
         }
     }
@@ -2305,8 +2310,10 @@ where
             // signal or pointer to the respective subfield.
             mir::LvalueKind::Member { value, field } => {
                 let target = self.emit_mir_lvalue(value)?;
-                let value_real = self.mk_ext_field(target.0, field);
-                let value_shadow = target.1.map(|target| self.mk_ext_field(target, field));
+                let value_real = self.mk_ext_field_const_offset(target.0, field);
+                let value_shadow = target
+                    .1
+                    .map(|target| self.mk_ext_field_const_offset(target, field));
                 Ok((value_real, value_shadow))
             }
 
@@ -2395,30 +2402,22 @@ where
     ) -> Result<(HybridValue, Option<HybridValue>)> {
         let (target_real, target_shadow) = value;
         let base = self.emit_mir_rvalue(base)?;
-        let shifted_real = {
-            let hidden = self.emit_zero_for_type_both(self.value_type(target_real));
-            self.mk_shr(target_real, hidden, base)
-        };
-        let shifted_shadow = target_shadow.map(|target| {
-            let hidden = self.emit_zero_for_type_both(self.value_type(target));
-            self.mk_shr(target, hidden, base)
-        });
         if ty.coalesces_to_llhd_scalar() {
             let length = std::cmp::max(1, length);
             Ok((
-                self.mk_ext_slice(shifted_real, 0, length),
-                shifted_shadow.map(|s| self.mk_ext_slice(s, 0, length)),
+                self.mk_ext_slice(target_real, base, length),
+                target_shadow.map(|s| self.mk_ext_slice(s, base, length)),
             ))
         } else {
             if length == 0 {
                 Ok((
-                    self.mk_ext_field(shifted_real, 0),
-                    shifted_shadow.map(|s| self.mk_ext_field(s, 0)),
+                    self.mk_ext_field(target_real, base),
+                    target_shadow.map(|s| self.mk_ext_field(s, base)),
                 ))
             } else {
                 Ok((
-                    self.mk_ext_slice(shifted_real, 0, length),
-                    shifted_shadow.map(|s| self.mk_ext_slice(s, 0, length)),
+                    self.mk_ext_slice(target_real, base, length),
+                    target_shadow.map(|s| self.mk_ext_slice(s, base, length)),
                 ))
             }
         }
@@ -3143,56 +3142,71 @@ where
         );
     }
 
-    fn mk_ext_slice(&mut self, arg: HybridValue, offset: usize, length: usize) -> HybridValue {
+    fn mk_ext_slice_const_offset(
+        &mut self,
+        arg: HybridValue,
+        offset: usize,
+        length: usize,
+    ) -> HybridValue {
+        let offset_value = self.mk_const_int(64, &BigInt::from_usize(offset).unwrap());
+        self.mk_ext_slice(arg, offset_value, length)
+    }
+
+    fn mk_ext_slice(
+        &mut self,
+        arg: HybridValue,
+        offset: HybridValue,
+        length: usize,
+    ) -> HybridValue {
+        let hidden = self.emit_zero_for_type(&self.value_type(arg).0);
+        let shifted = self.builder.ins().shr(arg.0, hidden, offset.0);
+
         (
-            self.builder.ins().ext_slice(arg.0, offset, length),
+            self.builder.ins().ext_slice(shifted, 0, length),
             if mlir::is_integer_type(arg.1.ty()) {
-                circt::comb::ExtractOp::with_sizes(self.mlir_builder, arg.1, offset, length).into()
+                let shifted =
+                    circt::comb::ShrUOp::with_sizes(self.mlir_builder, arg.1, offset.1).into();
+                circt::comb::ExtractOp::with_sizes(self.mlir_builder, shifted, 0, length).into()
             } else {
                 if let Some(ty) = circt::llhd::get_signal_type_element(arg.1.ty()) {
                     if mlir::is_integer_type(ty) {
-                        circt::llhd::SigExtractOp::with_const_offset(
+                        circt::llhd::SigExtractOp::with_sizes(
                             self.mlir_builder,
                             arg.1,
-                            offset,
+                            offset.1,
                             length,
                         )
                         .into()
                     } else {
-                        circt::llhd::SigArraySliceOp::with_const_offset(
+                        circt::llhd::SigArraySliceOp::with_sizes(
                             self.mlir_builder,
                             arg.1,
-                            offset,
+                            offset.1,
                             length,
                         )
                         .into()
                     }
                 } else if let Some(ty) = circt::llhd::get_pointer_type_element(arg.1.ty()) {
                     if mlir::is_integer_type(ty) {
-                        circt::llhd::PtrExtractOp::with_const_offset(
+                        circt::llhd::PtrExtractOp::with_sizes(
                             self.mlir_builder,
                             arg.1,
-                            offset,
+                            offset.1,
                             length,
                         )
                         .into()
                     } else {
-                        circt::llhd::PtrArraySliceOp::with_const_offset(
+                        circt::llhd::PtrArraySliceOp::with_sizes(
                             self.mlir_builder,
                             arg.1,
-                            offset,
+                            offset.1,
                             length,
                         )
                         .into()
                     }
                 } else {
-                    circt::hw::ArraySliceOp::with_const_offset(
-                        self.mlir_builder,
-                        arg.1,
-                        offset,
-                        length,
-                    )
-                    .into()
+                    circt::hw::ArraySliceOp::with_sizes(self.mlir_builder, arg.1, offset.1, length)
+                        .into()
                 }
             },
         )
@@ -3265,7 +3279,7 @@ where
         )
     }
 
-    fn mk_ext_field(&mut self, arg: HybridValue, offset: usize) -> HybridValue {
+    fn mk_ext_field_const_offset(&mut self, arg: HybridValue, offset: usize) -> HybridValue {
         let mlir = if circt::hw::is_array_type(arg.1.ty()) {
             circt::hw::ArrayGetOp::with_const_offset(self.mlir_builder, arg.1, offset).into()
         } else if circt::hw::is_struct_type(arg.1.ty()) {
@@ -3292,6 +3306,29 @@ where
             panic!("unsupported type {}", arg.1.ty());
         };
         (self.builder.ins().ext_field(arg.0, offset), mlir)
+    }
+
+    fn mk_ext_field(&mut self, arg: HybridValue, offset: HybridValue) -> HybridValue {
+        let mlir = if circt::hw::is_array_type(arg.1.ty()) {
+            circt::hw::ArrayGetOp::new(self.mlir_builder, arg.1, offset.1).into()
+        } else if let Some(ty) = circt::llhd::get_signal_type_element(arg.1.ty()) {
+            if circt::hw::is_array_type(ty) {
+                circt::llhd::SigArrayGetOp::new(self.mlir_builder, arg.1, offset.1).into()
+            } else {
+                panic!("unsupported type {}", ty);
+            }
+        } else if let Some(ty) = circt::llhd::get_pointer_type_element(arg.1.ty()) {
+            if circt::hw::is_array_type(ty) {
+                circt::llhd::PtrArrayGetOp::new(self.mlir_builder, arg.1, offset.1).into()
+            } else {
+                panic!("unsupported type {}", ty);
+            }
+        } else {
+            panic!("unsupported type {}", arg.1.ty());
+        };
+        let hidden = self.emit_zero_for_type(&self.value_type(arg).0);
+        let shifted = self.builder.ins().shr(arg.0, hidden, offset.0);
+        (self.builder.ins().ext_field(shifted, 0), mlir)
     }
 
     #[allow(dead_code)]
@@ -3386,18 +3423,6 @@ where
         )
     }
 
-    fn mk_shl(
-        &mut self,
-        value: HybridValue,
-        hidden: HybridValue,
-        amount: HybridValue,
-    ) -> HybridValue {
-        (
-            self.builder.ins().shl(value.0, hidden.0, amount.0),
-            circt::llhd::ShlOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
-        )
-    }
-
     fn mk_moore_shr(
         &mut self,
         value: HybridValue,
@@ -3413,18 +3438,6 @@ where
         (
             self.builder.ins().shr(value.0, hidden.0, amount.0),
             self.cast_sbv_to_integer(shift),
-        )
-    }
-
-    fn mk_shr(
-        &mut self,
-        value: HybridValue,
-        hidden: HybridValue,
-        amount: HybridValue,
-    ) -> HybridValue {
-        (
-            self.builder.ins().shr(value.0, hidden.0, amount.0),
-            circt::llhd::ShrOp::new(self.mlir_builder, value.1, hidden.1, amount.1).into(),
         )
     }
 

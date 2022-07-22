@@ -32,6 +32,9 @@ def_simple_binary_operation!(DivUOp, "comb.divu");
 def_simple_binary_operation!(DivSOp, "comb.divs");
 def_simple_binary_operation!(ModUOp, "comb.modu");
 def_simple_binary_operation!(ModSOp, "comb.mods");
+def_simple_binary_operation!(ShlOp, "comb.shl");
+def_simple_binary_operation!(ShrUOp, "comb.shru");
+def_simple_binary_operation!(ShrSOp, "comb.shrs");
 def_operation_single_result!(ICmpOp, "comb.icmp");
 def_operation_single_result!(MuxOp, "comb.mux");
 def_operation_single_result!(ExtractOp, "comb.extract");
@@ -106,22 +109,52 @@ impl ConcatOp {
     }
 }
 
+impl ShrUOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, amount: Value) -> Self {
+        let amount = trunc_or_zext(builder, amount, value.ty());
+        ShrUOp::new(builder, value, amount)
+    }
+}
+
+impl ShrSOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, amount: Value) -> Self {
+        let amount = trunc_or_zext(builder, amount, value.ty());
+        ShrSOp::new(builder, value, amount)
+    }
+}
+
+impl ShlOp {
+    pub fn with_sizes(builder: &mut Builder, value: Value, amount: Value) -> Self {
+        let amount = trunc_or_zext(builder, amount, value.ty());
+        ShlOp::new(builder, value, amount)
+    }
+}
+
 pub(crate) fn clog2(value: usize) -> usize {
     usize::BITS as usize - value.next_power_of_two().leading_zeros() as usize - 1
 }
 
-pub(crate) fn type_clog2(ty: Type) -> usize {
-    clog2(if is_array_type(ty) {
+pub(crate) fn type_width(ty: Type) -> usize {
+    if is_array_type(ty) {
         array_type_size(ty)
     } else if is_integer_type(ty) {
         integer_type_width(ty)
     } else {
         panic!("unsupported indexing target type {}", ty)
-    })
+    }
+}
+
+pub(crate) fn type_clog2(ty: Type) -> usize {
+    clog2(type_width(ty))
 }
 
 pub(crate) fn trunc_or_zext_to_clog2(builder: &mut Builder, index: Value, into_ty: Type) -> Value {
     let target_width = std::cmp::max(type_clog2(into_ty), 1);
+    trunc_or_zext(builder, index, get_integer_type(builder.cx, target_width))
+}
+
+pub(crate) fn trunc_or_zext(builder: &mut Builder, index: Value, into_ty: Type) -> Value {
+    let target_width = type_width(into_ty);
     let actual_width = integer_type_width(index.ty());
     if target_width < actual_width {
         ExtractOp::with_sizes(builder, index, 0, target_width).into()

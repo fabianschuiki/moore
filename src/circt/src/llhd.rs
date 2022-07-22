@@ -253,8 +253,6 @@ def_operation_single_result!(LoadOp, "llhd.load");
 def_operation!(StoreOp, "llhd.store");
 def_operation!(HaltOp, "llhd.halt");
 def_operation!(WaitOp, "llhd.wait");
-def_operation_single_result!(ShlOp, "llhd.shl");
-def_operation_single_result!(ShrOp, "llhd.shr");
 def_operation_single_result!(SigArrayGetOp, "llhd.sig.array_get");
 def_operation_single_result!(PtrArrayGetOp, "llhd.ptr.array_get");
 def_binary_operation_explicit_result!(SigArraySliceOp, "llhd.sig.array_slice");
@@ -396,30 +394,6 @@ impl WaitOp {
                 )
             });
             state.add_attribute("operand_segment_sizes", vector_attr);
-        })
-    }
-}
-
-impl ShlOp {
-    /// Shift a value to the left.
-    pub fn new(builder: &mut Builder, value: Value, hidden: Value, amount: Value) -> Self {
-        builder.build_with(|_, state| {
-            state.add_operand(value);
-            state.add_operand(hidden);
-            state.add_operand(amount);
-            state.add_result(value.ty());
-        })
-    }
-}
-
-impl ShrOp {
-    /// Shift a value to the right.
-    pub fn new(builder: &mut Builder, value: Value, hidden: Value, amount: Value) -> Self {
-        builder.build_with(|_, state| {
-            state.add_operand(value);
-            state.add_operand(hidden);
-            state.add_operand(amount);
-            state.add_result(value.ty());
         })
     }
 }
