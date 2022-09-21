@@ -60,6 +60,8 @@ Use cargo to install Moore:
 
     cargo install moore
 
+Note that on Linux systems you are very likely to need libstdc++ version 7 or newer for this to work.
+
 #### Development
 
 For active development, you'll want to use the usual `check`, `build`, `run`, and `test` subcommands.
