@@ -185,6 +185,7 @@ fn main() {
     cc::Build::new()
         .cpp(true)
         .file("wrapper.cpp")
+        .flag("-std=c++17")
         .includes(&include_dirs)
         .warnings(false)
         .extra_warnings(false)
