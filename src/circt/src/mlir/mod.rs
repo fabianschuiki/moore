@@ -96,7 +96,7 @@ pub trait OperationExt: WrapRaw<RawType = MlirOperation> {
         unsafe {
             let flags = mlirOpPrintingFlagsCreate();
             if with_debug_info {
-                mlirOpPrintingFlagsEnableDebugInfo(flags, false);
+                mlirOpPrintingFlagsEnableDebugInfo(flags, with_debug_info, false);
             }
             mlirOperationPrintWithFlags(
                 self.raw(),
