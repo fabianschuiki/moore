@@ -90,6 +90,7 @@ fn main() {
         "LLVMDemangle",
         "LLVMRemarks",
         "LLVMSupport",
+        "LLVMTargetParser",
         "MLIRAnalysis",
         "MLIRArithDialect",
         "MLIRArithValueBoundsOpInterfaceImpl",
@@ -112,6 +113,9 @@ fn main() {
         "MLIRSupport",
         "MLIRTransformUtils",
         "MLIRTransforms",
+        "MLIRBytecodeWriter",
+        "MLIRAsmParser",
+        "MLIRBytecodeReader",
     ];
     for name in &lib_names {
         println!("cargo:rustc-link-lib=static={}", name);
