@@ -1,4 +1,5 @@
 // RUN: moore %s -e foo -I ../third-party/common_cells/include ../third-party/common_cells/src/*.sv
+// IGNORE exp_backoff results in invalid signal widths
 
 module foo;
     typedef int unsigned addr_t;
