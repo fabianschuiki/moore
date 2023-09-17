@@ -11,7 +11,7 @@ pub struct Package2<'t> {
     id: NodeId,
     span: Span,
     name: Spanned<Name>,
-    decls: Vec<&'t LatentNode<'t, Decl2<'t>>>,
+    decls: Vec<&'t LatentNode<'t, Decl2<'t> + 't>>,
     scope: &'t ScopeData<'t>,
 }
 
@@ -22,7 +22,7 @@ impl<'t> Package2<'t> {
     }
 
     /// Return the declarations made in this package.
-    pub fn decls(&self) -> &[&'t LatentNode<'t, Decl2<'t>>] {
+    pub fn decls(&self) -> &[&'t LatentNode<'t, Decl2<'t> + 't>] {
         &self.decls
     }
 

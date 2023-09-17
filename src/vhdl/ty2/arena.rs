@@ -24,7 +24,7 @@ make_arenas!(
     }
 );
 
-impl<'t> AllocOwned<'t, 't, Type> for TypeArena<'t> {
+impl<'t> AllocOwned<'t, 't, Type + 't> for TypeArena<'t> {
     fn alloc_owned(&'t self, value: OwnedType<'t>) -> &'t Type {
         match value {
             OwnedType::IntegerBasetype(t) => self.alloc(t),

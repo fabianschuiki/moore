@@ -29,16 +29,16 @@ pub trait Expr2<'t>: Node<'t> {
 pub trait ExprContext<'t>:
     SessionContext
     + AllocInto<'t, IntegerConst<'t>>
-    + AllocOwnedInto<'t, Const2<'t>>
-    + AllocOwnedInto<'t, Type>
+    + AllocOwnedInto<'t, Const2<'t> + 't>
+    + AllocOwnedInto<'t, Type + 't>
 {
 }
 
 impl<'t, T> ExprContext<'t> for T where
     T: SessionContext
         + AllocInto<'t, IntegerConst<'t>>
-        + AllocOwnedInto<'t, Const2<'t>>
-        + AllocOwnedInto<'t, Type>
+        + AllocOwnedInto<'t, Const2<'t> + 't>
+        + AllocOwnedInto<'t, Type + 't>
 {
 }
 
