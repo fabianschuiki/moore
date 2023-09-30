@@ -5,7 +5,7 @@ name: CI
 jobs:
   lints:
     name: Lints
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -14,7 +14,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: 1.66
           override: true
           components: rustfmt, clippy
 
@@ -32,7 +32,7 @@ jobs:
 
   check:
     name: Checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -43,7 +43,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: 1.66
           override: true
           components: rustfmt, clippy
 
@@ -64,7 +64,9 @@ jobs:
 
       - name: Rebuild LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: .github/build-llvm.sh
+        run: |
+          sudo apt-get install ninja-build
+          .github/build-llvm.sh
 
       - name: Upload LLVM to cache
         if: steps.cache-llvm.outputs.cache-hit != 'true'
@@ -83,7 +85,9 @@ jobs:
 
       - name: Rebuild CIRCT
         if: steps.cache-circt.outputs.cache-hit != 'true'
-        run: .github/build-circt.sh
+        run: |
+          sudo apt-get install ninja-build
+          .github/build-circt.sh
 
       - name: Upload CIRCT to cache
         if: steps.cache-circt.outputs.cache-hit != 'true'

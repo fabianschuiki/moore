@@ -18,7 +18,7 @@ use crate::syntax::ast;
 #[derive(Debug)]
 pub struct Library<'t> {
     name: Name,
-    units: Vec<&'t LatentNode<'t, Node<'t>>>,
+    units: Vec<&'t LatentNode<'t, Node<'t> + 't>>,
     scope: &'t ScopeData<'t>,
 }
 
@@ -59,7 +59,7 @@ impl<'t> Library<'t> {
     }
 
     /// Return a slice of the design units in this library.
-    pub fn units(&self) -> &[&'t LatentNode<'t, Node<'t>>] {
+    pub fn units(&self) -> &[&'t LatentNode<'t, Node<'t> + 't>] {
         &self.units
     }
 

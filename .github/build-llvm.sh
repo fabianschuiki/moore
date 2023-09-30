@@ -3,7 +3,7 @@ set -e
 
 mkdir -p circt/llvm/build
 cd circt/llvm/build
-cmake ../llvm \
+cmake -G Ninja ../llvm \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_BUILD_EXAMPLES=OFF \
     -DLLVM_ENABLE_ASSERTIONS=ON \
@@ -14,4 +14,4 @@ cmake ../llvm \
     -DLLVM_OPTIMIZED_TABLEGEN=ON \
     -DLLVM_TARGETS_TO_BUILD="host"
 
-cmake --build . -- -j$(nproc)
+ninja -j$(nproc)

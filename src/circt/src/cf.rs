@@ -30,13 +30,10 @@ impl CondBranchOp {
             state.add_operand(condition);
             state.add_successor(true_dest);
             state.add_successor(false_dest);
-            let vector_ty = unsafe {
-                mlirVectorTypeGet(1, [3].as_ptr(), get_integer_type(builder.cx, 32).raw())
-            };
-            let vector_attr = Attribute::from_raw(unsafe {
-                mlirDenseElementsAttrInt32Get(vector_ty, 3, [1, 0, 0].as_ptr())
+            let dense_array_attr = Attribute::from_raw(unsafe {
+                mlirDenseI32ArrayGet(builder.cx.raw(), 3, [1, 0, 0].as_ptr())
             });
-            state.add_attribute("operand_segment_sizes", vector_attr);
+            state.add_attribute("operand_segment_sizes", dense_array_attr);
         })
     }
 }

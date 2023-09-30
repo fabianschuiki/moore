@@ -1,6 +1,5 @@
 // RUN: moore %s -e foo -Vcall-args
 // Default values for positional arguments from IEEE 1800-2017 section 13.5.3
-// IGNORE  part of #213
 
 function bar(int j = 0, int k, int data = 1);
 endfunction

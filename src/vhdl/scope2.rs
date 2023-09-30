@@ -23,7 +23,7 @@ use crate::score::ResolvableName;
 #[derive(Copy, Clone)]
 pub enum Def2<'t> {
     /// Any node.
-    Node(&'t hir::LatentNode<'t, Node<'t>>),
+    Node(&'t hir::LatentNode<'t, Node<'t> + 't>),
     /// A library.
     Lib(&'t hir::Library<'t>),
     /// A package.

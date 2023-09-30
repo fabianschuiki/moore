@@ -229,14 +229,14 @@ impl InstanceOp {
         builder.build_with(|builder, state| {
             let num_inputs = inputs.into_iter().map(|v| state.add_operand(v)).count();
             let num_outputs = outputs.into_iter().map(|v| state.add_operand(v)).count();
-            let vector_attr = Attribute::from_raw(unsafe {
-                mlirDenseElementsAttrInt32Get(
-                    mlirVectorTypeGet(1, [2].as_ptr(), get_integer_type(builder.cx, 32).raw()),
+            let dense_array_attr = Attribute::from_raw(unsafe {
+                mlirDenseI32ArrayGet(
+                    builder.cx.raw(),
                     2,
                     [num_inputs as _, num_outputs as _].as_ptr(),
                 )
             });
-            state.add_attribute("operand_segment_sizes", vector_attr);
+            state.add_attribute("operand_segment_sizes", dense_array_attr);
             state.add_attribute("name", get_string_attr(builder.cx, name));
             state.add_attribute("callee", get_flat_symbol_ref_attr(builder.cx, module));
         })
@@ -383,17 +383,14 @@ impl WaitOp {
             if let Some(time) = time {
                 state.add_operand(time);
             }
-            let vector_ty = unsafe {
-                mlirVectorTypeGet(1, [3].as_ptr(), get_integer_type(builder.cx, 32).raw())
-            };
-            let vector_attr = Attribute::from_raw(unsafe {
-                mlirDenseElementsAttrInt32Get(
-                    vector_ty,
+            let dense_array_attr = Attribute::from_raw(unsafe {
+                mlirDenseI32ArrayGet(
+                    builder.cx.raw(),
                     3,
                     [observed.len() as _, time.is_some() as _, 0].as_ptr(),
                 )
             });
-            state.add_attribute("operand_segment_sizes", vector_attr);
+            state.add_attribute("operand_segment_sizes", dense_array_attr);
         })
     }
 }

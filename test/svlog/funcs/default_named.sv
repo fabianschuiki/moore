@@ -1,6 +1,5 @@
 // RUN: moore %s -e foo
 // Default values for named arguments from IEEE 1800-2017 section 13.5.4
-// IGNORE  part of #213
 
 function bar(int j = 1, int s = 0);
 endfunction
