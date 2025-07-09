@@ -287,9 +287,7 @@ mod queries {
         value::*,
     };
     use std::{
-        cell::RefCell,
-        collections::{HashMap, HashSet},
-        sync::Arc,
+        cell::RefCell, collections::{HashMap, HashSet}, sync::Arc,
     };
 
     moore_derive::derive_query_db! {

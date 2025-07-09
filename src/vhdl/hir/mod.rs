@@ -33,7 +33,6 @@ pub use self::expr::*;
 pub use self::lib::*;
 pub use self::misc::*;
 pub use self::node::*;
-pub use self::obj_decl::*;
 pub use self::pkg::*;
 pub use self::slot::*;
 pub use self::subtype_decl::*;

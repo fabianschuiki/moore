@@ -67,12 +67,12 @@ impl<'t> Def2<'t> {
 impl<'t> PartialEq for Def2<'t> {
     fn eq(&self, other: &Self) -> bool {
         match (*self, *other) {
-            (Def2::Node(a), Def2::Node(b)) => (a as *const _ == b as *const _),
-            (Def2::Lib(a), Def2::Lib(b)) => (a as *const _ == b as *const _),
-            (Def2::Pkg(a), Def2::Pkg(b)) => (a as *const _ == b as *const _),
-            (Def2::Type(a), Def2::Type(b)) => (a as *const _ == b as *const _),
-            (Def2::Enum(a), Def2::Enum(b)) => (a == b),
-            (Def2::Unit(a), Def2::Unit(b)) => (a == b),
+            (Def2::Node(a), Def2::Node(b)) => std::ptr::addr_eq(a as *const _, b as *const _),
+            (Def2::Lib(a), Def2::Lib(b)) => a as *const _ == b as *const _,
+            (Def2::Pkg(a), Def2::Pkg(b)) => std::ptr::addr_eq(a as *const _, b as *const _),
+            (Def2::Type(a), Def2::Type(b)) => std::ptr::addr_eq(a as *const _, b as *const _),
+            (Def2::Enum(a), Def2::Enum(b)) => a == b,
+            (Def2::Unit(a), Def2::Unit(b)) => a == b,
             _ => false,
         }
     }
@@ -250,7 +250,7 @@ impl<'t> fmt::Debug for TypeVariantDef<'t> {
 
 impl<'t> PartialEq for TypeVariantDef<'t> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 as *const _ == other.0 as *const _ && self.1 == other.1
+        std::ptr::addr_eq(self.0 as *const _, other.0 as *const _) && self.1 == other.1
     }
 }
 

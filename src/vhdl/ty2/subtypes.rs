@@ -4,8 +4,6 @@
 
 use std::fmt::{Debug, Display};
 
-pub use num::BigInt;
-
 use crate::ty2::marks::*;
 use crate::ty2::range::*;
 use crate::ty2::types::*;

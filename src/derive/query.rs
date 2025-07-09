@@ -2,12 +2,13 @@
 
 use heck::CamelCase;
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::{format_ident, quote, ToTokens};
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashSet}, 
 };
-use syn::visit::Visit;
+use syn::{visit::Visit, Ident};
 
 // CAUTION: This is all wildly unstable and relies on the compiler maintaining
 // a certain order between proc macro expansions. So this could break any
@@ -155,9 +156,37 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
         let key_name = format_ident!("{}QueryKey", name.to_string().to_camel_case());
         let key_indices = (0..arg_types.len()).map(syn::Index::from);
         let doc = format!("The arguments passed to the `{}` query.", name);
+        // If there is one arg and it is a &dyn *Node then the default derived `PartialEq` and `Hash`
+        // traits aren't valid for the way nodes are used in the caches. They need to depend on 
+        // the node `id()` instead.
+        // let mut derive_list: Vec<proc_macro2::Literal> = Vec::new();
+        // derive_list.push(proc_macro2::Literal::string("Clone"));
+        // let mut derive_list: proc_macro2::TokenStream = "Clone, PartialEq, Eq, Hash".parse().unwrap();
+        let mut derive_list: Vec<proc_macro2::TokenTree> = 
+            vec!["Clone", "PartialEq", "Eq", "Hash"].into_iter().map(|i| Ident::new(i, Span::call_site()).into()).collect();
+        let mut derive_hash_eq = false;
+        if arg_types.len() == 1 {
+            if let syn::Type::Reference(ref_type) = &arg_types[0] {
+                if let syn::Type::TraitObject(t_obj) = ref_type.elem.as_ref() {
+                    if t_obj.dyn_token.is_some() {
+                        if t_obj.bounds.len() == 1 {
+                            if let syn::TypeParamBound::Trait(bound) = t_obj.bounds.first().unwrap() {
+                                let t_ident = bound.path.segments.last().unwrap().ident.to_string();
+                                if t_ident.contains("Node") {
+                                    derive_hash_eq = true;
+                                    derive_list = 
+                                        vec!["Clone", "Eq"].into_iter().map(|i| Ident::new(i, Span::call_site()).into()).collect();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } 
+        let derive_tokens = derive_list; //proc_macro2::TokenStream::from_iter(derive_list);
         keys.push(quote! {
             #[doc = #doc]
-            #[derive(Clone, PartialEq, Eq, Hash)]
+            #[derive (#(#derive_tokens),*) ]
             pub struct #key_name #key_generics (#(pub #arg_types),*);
 
             impl #key_generics std::fmt::Debug for #key_name #key_generics {
@@ -166,6 +195,20 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
                 }
             }
         });
+        if derive_hash_eq {
+            keys.push(quote! {
+                impl #key_generics PartialEq for #key_name #key_generics {
+                    fn eq(&self, other: &Self) -> bool {
+                        self.0.id() == other.0.id()
+                    }
+                }
+                impl #key_generics std::hash::Hash for #key_name #key_generics {
+                    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                        self.0.id().hash(state);
+                    }
+                }
+            });
+        }
 
         // Determine the cache field name.
         let cache_name = format_ident!("cached_{}", name);
@@ -304,6 +347,10 @@ pub(crate) fn derive_query_db(input: TokenStream) -> TokenStream {
     output.extend(quote! {
         #(#keys)*
     });
+
+    // Uncomment for debugging with procout
+    // let module_ident = syn::Ident::new("query", proc_macro2::Span::mixed_site());
+    // procout::procout(&output, Some(module_ident), Some("/tmp/query_procout.rs"));
 
     // Produce some output.
     // println!("{}", output);

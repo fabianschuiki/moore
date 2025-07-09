@@ -22,7 +22,7 @@ And then follow these steps:
 
     mkdir -p circt/llvm/build
     pushd circt/llvm/build
-    cmake ../llvm \
+    cmake -G Ninja ../llvm \
         -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_BUILD_EXAMPLES=OFF \
         -DLLVM_ENABLE_ASSERTIONS=ON \
@@ -32,19 +32,19 @@ And then follow these steps:
         -DLLVM_INSTALL_UTILS=ON \
         -DLLVM_OPTIMIZED_TABLEGEN=ON \
         -DLLVM_TARGETS_TO_BUILD="host"
-    cmake --build .
+    ninja -j$(nproc)
     popd
 
 #### Build CIRCT
 
     mkdir -p circt/build
     pushd circt/build
-    cmake .. \
+    cmake -G Ninja .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
         -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
         -DLLVM_ENABLE_ASSERTIONS=ON
-    cmake --build .
+    ninja -j$(nproc)
     popd
 
 #### Build Moore

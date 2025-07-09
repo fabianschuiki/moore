@@ -1,7 +1,5 @@
 // Copyright (c) 2016-2021 Fabian Schuiki
 
-use std;
-
 use crate::hir::prelude::*;
 
 pub fn apply_use_clauses<'a, I>(clauses: I, context: AllocContext)
@@ -9,8 +7,7 @@ where
     I: IntoIterator<Item = &'a ast::CompoundName>,
 {
     for u in clauses.into_iter() {
-        let e = apply_use_clause(u, context);
-        std::mem::forget(e);
+        let _ = apply_use_clause(u, context);
     }
 }
 

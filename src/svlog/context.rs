@@ -334,17 +334,17 @@ impl<'t> GlobalArenas<'t> {
     }
 
     /// Allocate an AST root.
-    pub fn alloc_ast_root(&'t self, ast: ast::Root<'t>) -> &'t ast::Root {
+    pub fn alloc_ast_root(&'t self, ast: ast::Root<'t>) -> &'t ast::Root<'t> {
         self.ast_roots.alloc(ast)
     }
 
     /// Allocate an AST type.
-    pub fn alloc_ast_type(&'t self, ast: ast::Type<'t>) -> &'t ast::Type {
+    pub fn alloc_ast_type(&'t self, ast: ast::Type<'t>) -> &'t ast::Type<'t> {
         self.ast_types.alloc(ast)
     }
 
     /// Allocate an AST expression.
-    pub fn alloc_ast_expr(&'t self, ast: ast::Expr<'t>) -> &'t ast::Expr {
+    pub fn alloc_ast_expr(&'t self, ast: ast::Expr<'t>) -> &'t ast::Expr<'t> {
         self.ast_exprs.alloc(ast)
     }
 

@@ -1109,12 +1109,25 @@ pub(crate) fn scope_location<'a>(
 }
 
 /// A location of a node within its enclosing scope.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct ScopeLocation<'a> {
     /// The node which generates the enclosing scope.
     pub scope: &'a dyn ScopedNode<'a>,
     /// The lexical order within that scope.
     pub order: usize,
+}
+
+impl<'a> PartialEq for ScopeLocation<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.scope.id() == other.scope.id() && self.order == other.order
+    }
+}
+
+impl<'a> Hash for ScopeLocation<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.scope.id().hash(state);
+        self.order.hash(state);
+    }
 }
 
 /// Resolve a local name in a scope.

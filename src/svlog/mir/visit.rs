@@ -49,7 +49,7 @@ impl<'a, T: WalkVisitor<'a>> WalkVisitor<'a> for Vec<T> {
 
 impl<'a, T: WalkVisitor<'a>> WalkVisitor<'a> for Option<T> {
     fn walk(&'a self, visitor: &mut dyn Visitor<'a>) {
-        for x in self {
+        if let Some(x) = self {
             x.walk(visitor);
         }
     }

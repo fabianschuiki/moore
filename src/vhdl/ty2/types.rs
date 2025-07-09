@@ -5,8 +5,6 @@
 use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
 
-pub use num::BigInt;
-
 use crate::ty2::access::*;
 use crate::ty2::enums::*;
 use crate::ty2::floats::*;

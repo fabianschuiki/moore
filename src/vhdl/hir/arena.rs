@@ -14,12 +14,12 @@ make_arenas!(
         package: Package2<'t>,
         type_decl: TypeDecl2<'t>,
         subtype_ind: SubtypeInd2<'t>,
-        const_decl: ConstDecl<'t>,
+        const_decl: crate::hir::obj_decl::ConstDecl<'t>,
         lit_expr: LitExpr,
 
         package_slot: Slot<'t, Package2<'t>>,
         type_decl_slot: Slot<'t, TypeDecl2<'t>>,
         subtype_ind_slot: Slot<'t, SubtypeInd2<'t>>,
-        const_decl_slot: Slot<'t, ConstDecl<'t>>,
+        const_decl_slot: Slot<'t, crate::hir::obj_decl::ConstDecl<'t>>,
     }
 );

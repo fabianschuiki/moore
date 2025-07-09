@@ -610,9 +610,7 @@ macro_rules! impl_typeck_err {
     ($slf:tt, $id:ident: $id_ty:ty => $blk:block) => {
         impl<'sbc, 'lazy, 'sb, 'ast, 'ctx> Typeck<$id_ty> for TypeckContext<'sbc, 'lazy, 'sb, 'ast, 'ctx> {
             fn typeck(&$slf, $id: $id_ty) {
-                use std;
-                let res = (move || -> Result<()> { $blk })();
-                std::mem::forget(res);
+                let _ = (move || -> Result<()> { $blk })();
             }
         }
     }

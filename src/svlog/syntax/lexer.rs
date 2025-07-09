@@ -20,7 +20,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: Preprocessor<'a>) -> Lexer {
+    pub fn new(input: Preprocessor<'a>) -> Lexer<'a> {
         Lexer {
             input: input,
             peek: [(CatTokenKind::Eof, INVALID_SPAN); 4],

@@ -3743,7 +3743,11 @@ pub enum ModulePortKind<'a> {
     Port,
     /// An interface signal.
     IntfSignal {
-        intf: &'a ast::Interface<'a>,
+        /* jack@greenbaum.org 20 June 2025
+         * Clippy says this is never read. That is sort of correct, only intf.ast is read. Grrr.
+         */
+        #[allow(dead_code)]
+        intf: &'a ast::Interface<'a>, 
         env: ParamEnv,
         decl_id: NodeId,
     },

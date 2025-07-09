@@ -590,7 +590,7 @@ unsafe extern "C" fn moore_mlir_diagnostic_handler(
     let sess: &Session = (sess as *const Session).as_ref().unwrap();
 
     // Map the severity from MLIR to Moore.
-    #[allow(non_upper_case_globals)]
+    #[allow(non_upper_case_globals,non_snake_case)]
     let severity = match mlirDiagnosticGetSeverity(diag) {
         MlirDiagnosticSeverity_MlirDiagnosticError => Severity::Error,
         MlirDiagnosticSeverity_MlirDiagnosticWarning => Severity::Warning,
